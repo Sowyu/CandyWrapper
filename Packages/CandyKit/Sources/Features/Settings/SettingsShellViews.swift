@@ -55,13 +55,6 @@ public enum SettingsSection: String, CaseIterable, Sendable {
     /// The nav lists Project only for a project scope (`isSettingsOverviewVisible`).
     static let navSections = allCases.filter { $0 != .diagnostics && $0 != .licenses }
 
-    /// Dither's nav groups (after Capy's labelled sidebar sections), in nav order; the first has no label.
-    static let ditherGroups: [(label: String?, sections: [SettingsSection])] = [
-        (nil, [.projects, .general, .appearance, .keybindings, .snapShots]),
-        ("Agents", [.providers, .integrations, .scheduledTasks, .sourceControl]),
-        ("System", [.storage, .connections, .archive]),
-    ]
-
     /// SettingsSidebarNav.tsx `SnapShotIcon` (a `createLucideIcon` glyph outside the generated set).
     static let snapShotIcon = IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
         IconElement(.path(d: "M8 3H6a3 3 0 0 0-3 3v2M16 3h2a3 3 0 0 1 3 3v2M21 16v2a3 3 0 0 1-3 3h-2M8 21H6a3 3 0 0 1-3-3v-2")),
@@ -83,7 +76,7 @@ public final class SettingsSidebarView: DSView {
     let back = SidebarMenuButtonView("Back", icon: .arrowLeft)
     /// Dither (after Capy): the "← Settings" row under the traffic lights, its nav rows and group labels.
     let ditherHeader = DitherSettingsNavRow("Settings", icon: .arrowLeft)
-    private(set) var ditherItems: [SettingsSection: DitherSettingsNavRow] = [:]
+    private(set) var ditherItems: [DitherSettingsSection: DitherSettingsNavRow] = [:]
     private var ditherLabels: [LabelView] = []
     let ditherBack = DitherSettingsNavRow("Back", icon: .arrowLeft)
     let ditherSignIn = DitherSettingsNavRow("Sign in to T3 Connect", icon: .logIn)
@@ -111,9 +104,13 @@ public final class SettingsSidebarView: DSView {
     public var selected: SettingsSection = .connections {
         didSet {
             for (section, item) in items { item.isActive = section == selected }
-            for (section, item) in ditherItems { item.isActive = section == selected }
         }
     }
+    /// Redesign's open section (`DitherSettingsSection`); its nav replaces T3's page list.
+    public var ditherSelected: DitherSettingsSection = .general {
+        didSet { for (section, item) in ditherItems { item.isActive = section == ditherSelected } }
+    }
+    public var onSelectDither: ((DitherSettingsSection) -> Void)?
     /// A project is picked in the scope: the nav lists Project first.
     public var showsProject = false {
         didSet { guard showsProject != oldValue else { return }; items[.projects]?.isHidden = !showsProject || isSearching; needsLayout = true }
@@ -178,7 +175,7 @@ public final class SettingsSidebarView: DSView {
         searchFill.cornerRadius = DitherChrome.controlRadius
         searchFill.borderWidth = 0.5
         layer?.insertSublayer(searchFill, at: 0)
-        for (label, sections) in SettingsSection.ditherGroups {
+        for (label, sections) in DitherSettingsSection.groups {
             if let label {
                 let l = LabelView(label, font: DSFont.ui(12, weight: .medium), color: Themed.color(\.sidebarMutedForeground, sidebar: true))
                 l.lineHeight = 16
@@ -187,9 +184,8 @@ public final class SettingsSidebarView: DSView {
             }
             for section in sections {
                 let row = DitherSettingsNavRow(section.label, icon: section.icon)
-                if section == .snapShots { row.iconDefinition = SettingsSection.snapShotIcon }
-                row.isActive = section == selected
-                row.action = { [weak self] in self?.select(section) }
+                row.isActive = section == ditherSelected
+                row.action = { [weak self] in self?.ditherSelected = section; self?.onSelectDither?(section) }
                 ditherItems[section] = row
                 addSubview(row)
             }
@@ -230,7 +226,7 @@ public final class SettingsSidebarView: DSView {
             row.isHidden = i >= results.count
             guard i < results.count else { continue }
             let item = results[i]
-            row.configure(item)
+            row.configure(item, dither: isDither)
             row.isActive = i == activeResult
             row.action = { [weak self] in self?.choose(item) }
             row.onHover = { [weak self] in self?.setActive(i) }
@@ -378,7 +374,7 @@ public final class SettingsSidebarView: DSView {
             }
         }
         var labels = ditherLabels.makeIterator()
-        for (label, sections) in SettingsSection.ditherGroups {
+        for (label, sections) in DitherSettingsSection.groups {
             if label != nil, let l = labels.next() {
                 l.isHidden = isSearching
                 if !isSearching {
@@ -390,7 +386,7 @@ public final class SettingsSidebarView: DSView {
             }
             for section in sections {
                 guard let row = ditherItems[section] else { continue }
-                row.isHidden = isSearching || (section == .projects && !showsProject)
+                row.isHidden = isSearching || (section == .project && !showsProject)
                 if row.isHidden { continue }
                 row.frame = NSRect(x: 8, y: y, width: max(0, w - 16), height: rowH)
                 y += rowH + 2
@@ -485,17 +481,21 @@ final class SettingsSearchResultRow: ControlView {
         restyle()
     }
 
-    func configure(_ item: SettingsSearchItem) {
+    /// Under Redesign the result names the section it opens in.
+    func configure(_ item: SettingsSearchItem, dither: Bool = false) {
+        let home = dither ? DitherSettingsSection.home(of: item.to, anchor: item.anchor) : nil
+        let label = home?.label ?? item.to.label
         title.text = item.title
-        subtitle.text = item.to.label
+        subtitle.text = label
         icon.removeFromSuperview()
         let color = Themed.color(\.sidebarMutedForeground, 0.6, sidebar: true)
-        icon = item.to == .snapShots ? IconView(definition: SettingsSection.snapShotIcon, size: 14, color: color)
-            : IconView(name: item.to.icon, size: 14, strokeColor: color)
+        icon = home.map { IconView(name: $0.icon, size: 14, strokeColor: color) }
+            ?? (item.to == .snapShots ? IconView(definition: SettingsSection.snapShotIcon, size: 14, color: color)
+                : IconView(name: item.to.icon, size: 14, strokeColor: color))
         addSubview(icon)
         restyle()
         needsLayout = true
-        setAccessibilityLabel("\(item.title), \(item.to.label)")
+        setAccessibilityLabel("\(item.title), \(label)")
     }
 
     override func stateDidChange(from old: State) {
@@ -608,6 +608,10 @@ public final class SettingsPageView: DSView {
     private let scroll: ScrollAreaView
     /// Dither (after Capy's settings): the page's own large title at the top of the column, in place of the breadcrumb.
     let ditherTitle = LabelView("", font: DSFont.ui(22, weight: .medium), color: Themed.color(\.foreground))
+    /// Capy's line under the title (`text-sm text-muted-foreground`), for a Redesign section.
+    let ditherSubtitle = LabelView("", font: DSFont.ui(13), color: Themed.color(\.mutedForeground))
+    /// A Redesign section's title and description; nil titles the page with its T3 label.
+    public var ditherHeading: (title: String, subtitle: String)? { didSet { needsLayout = true } }
     /// Escape goes back (`useEscapeToGoBack`).
     public var onEscape: (() -> Void)?
     /// `WorkspacePageContainer` width: `max-w-4xl` (readable), `max-w-5xl` (wide), `max-w-6xl` (expanded).
@@ -631,6 +635,9 @@ public final class SettingsPageView: DSView {
         ditherTitle.lineHeight = 28
         ditherTitle.isHidden = true
         document.addSubview(ditherTitle)
+        ditherSubtitle.lineHeight = 20
+        ditherSubtitle.isHidden = true
+        document.addSubview(ditherSubtitle)
         toasts.layer?.zPosition = 3
     }
 
@@ -669,10 +676,14 @@ public final class SettingsPageView: DSView {
         let x = gutter + (inner - container) / 2 + 24
         let pageHeight = page?.height(forWidth: contentWidth) ?? 0
         ditherTitle.isHidden = !dither || page == nil
-        ditherTitle.text = header.plainTitle ?? header.section?.label ?? ""
-        // Capy's title (`text-xl font-medium`), then 28pt to the first section.
-        let top: CGFloat = dither ? 8 + 28 + 28 : 24
+        ditherTitle.text = ditherHeading?.title ?? header.plainTitle ?? header.section?.label ?? ""
+        ditherSubtitle.text = ditherHeading?.subtitle ?? ""
+        ditherSubtitle.isHidden = ditherTitle.isHidden || ditherHeading == nil
+        // Capy's title (`text-xl font-medium`) and its description, then 28pt to the first section.
+        let subtitleHeight: CGFloat = ditherSubtitle.isHidden ? 0 : 2 + 20
+        let top: CGFloat = dither ? 8 + 28 + subtitleHeight + 28 : 24
         ditherTitle.frame = NSRect(x: (x + 16).rounded(), y: 8, width: max(0, contentWidth - 32), height: 28)
+        ditherSubtitle.frame = NSRect(x: (x + 16).rounded(), y: 8 + 28 + 2, width: max(0, contentWidth - 32), height: 20)
         document.frame = NSRect(x: 0, y: 0, width: scroll.bounds.width, height: max(scroll.bounds.height, top + pageHeight + 48))
         page?.frame = NSRect(x: x.rounded(), y: top, width: contentWidth, height: pageHeight)
         toasts.frame = ToastViewport.frame(in: bounds)

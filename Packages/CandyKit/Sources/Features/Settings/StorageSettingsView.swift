@@ -37,6 +37,8 @@ public final class StorageSettingsView: ScopedSettingsPage {
         artifacts = buildArtifacts()
         cleanup = buildCleanup()
         body = [notice, worktrees, artifacts, cleanup]
+        // Redesign splits this page in two; both halves keep the capability notice.
+        anchors["storage-notice"] = notice
         binder.add { [weak self] in self?.update() }
     }
 

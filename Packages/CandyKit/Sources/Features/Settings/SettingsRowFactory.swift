@@ -18,6 +18,9 @@ public class SettingsPageBase: SettingsStackView {
     /// The page was opened (again): pages that query the server load fresh data.
     public func didShow() {}
 
+    /// The scope picker and its boundary notice, which a Redesign section shows once.
+    var scopeItems: [NSView] { [] }
+
     /// Re-reads every control after the client settings, a server config or the scope changed.
     public func refresh() {
         binder.refresh()
