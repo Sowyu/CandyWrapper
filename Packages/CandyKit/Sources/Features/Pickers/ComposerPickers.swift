@@ -443,6 +443,7 @@ public final class PickerControlsView: DSView {
         overflow.showsChevron = false
         // The traits menu, the access select and the overflow menu open on press (TraitsPicker.tsx, CompactComposerControlsMenu.tsx).
         for trigger in [traits, access, overflow] { trigger.opensPopupOnPress = true; trigger.scalesWhenPressed = false }
+        for trigger in [model, traits, access, overflow] { trigger.followsCapy = true }
         overflow.setAccessibilityLabel("More composer controls")
         // A plain button, not a popup trigger: no chevron, and it scales when pressed. Its lucide
         // icon keeps the `-mx-0.5` margins the model glyph drops.
@@ -463,12 +464,15 @@ public final class PickerControlsView: DSView {
     public var traitsInOverflow: Bool { showsTraits && fit.hiddenCount >= 2 }
     public var accessInOverflow: Bool { fit.hiddenCount >= 1 }
 
-    /// Each block is its 5pt separator, `gap-1` and the trigger (`flex w-max gap-1`).
+    /// Capy's footer has no separators between its chips (Dither).
+    private var capy: Bool { model.capy }
+
+    /// Each block is its 5pt separator, `gap-1` and the trigger (`flex w-max gap-1`); under Dither just the trigger.
     var measurement: ComposerFooterLayout.Measurement {
-        let b = blocks.map(\.1)
+        let b = blocks.map(\.1), sep: CGFloat = capy ? 0 : 9
         return ComposerFooterLayout.Measurement(gap: 4, naturalFixedWidth: model.naturalWidth, minimumFixedWidth: model.minimumWidth,
-                                                blockWidths: b.map { 9 + $0.width(showingLabel: true) },
-                                                iconOnlyBlockWidths: b.map { 9 + $0.width(showingLabel: false) },
+                                                blockWidths: b.map { sep + $0.width(showingLabel: true) },
+                                                iconOnlyBlockWidths: b.map { sep + $0.width(showingLabel: false) },
                                                 overflowWidth: overflow.naturalWidth)
     }
 
@@ -476,6 +480,12 @@ public final class PickerControlsView: DSView {
         if unavailableTitle != nil { return NSSize(width: unavailable.naturalWidth, height: 28) }
         let m = measurement
         return NSSize(width: ComposerFooterLayout.width(m, hidden: 0, fixed: m.naturalFixedWidth, iconOnly: 0), height: 28)
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        invalidateIntrinsicContentSize()
+        needsLayout = true
     }
 
     // Empty space in the cluster is not a control.
@@ -507,7 +517,8 @@ public final class PickerControlsView: DSView {
         if !showsTraits { separators[0].isHidden = true; traits.isHidden = true }
         overflow.isHidden = fit.hiddenCount == 0
         var items: [NSView] = [model]
-        for (sep, trigger) in blocks.prefix(shown) { items += [sep, trigger] }
+        for (sep, trigger) in blocks.prefix(shown) { items += capy ? [trigger] : [sep, trigger] }
+        if capy { separators.forEach { $0.isHidden = true } }
         if !overflow.isHidden { items.append(overflow) }
         func natural(_ v: NSView) -> CGFloat { (v as? ComposerControlView)?.naturalWidth ?? 5 }
         let fixed = items.dropFirst().map(natural).reduce(0, +) + CGFloat(items.count - 1) * 4

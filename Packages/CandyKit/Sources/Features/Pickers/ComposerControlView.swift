@@ -22,6 +22,12 @@ public final class ComposerControlView: ControlView {
     public var showsLabel = true { didSet { if showsLabel != oldValue { label.isHidden = !showsLabel; invalidateIntrinsicContentSize(); needsLayout = true } } }
     /// False for the overflow trigger, which is just the ellipsis (CompactComposerControlsMenu.tsx:41-54).
     public var showsChevron = true { didSet { chevron.isHidden = !showsChevron; invalidateIntrinsicContentSize(); needsLayout = true } }
+    /// The composer footer's chips take Capy's look under Dither (measured in Capy 2026-10-22): 13pt text, 8pt
+    /// padding, a small quiet chevron and a faint fill on hover. Other uses of this control keep T3's.
+    public var followsCapy = false { didSet { if followsCapy != oldValue { restyle() } } }
+    var capy: Bool { followsCapy && ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    private var padding: CGFloat { capy ? 8 : Self.padding }
+    private var chevronSize: CGFloat { capy ? 11 : 14 }
 
     private let label = LabelView()
     private let chevron = IconView(definition: ComposerControlView.chevronDefinition, size: 14)
@@ -66,7 +72,7 @@ public final class ComposerControlView: ControlView {
     /// The width with or without the label, for the footer's fit decision.
     public func width(showingLabel: Bool) -> CGFloat {
         let parts = [icon == nil ? nil : 16 - 2 * iconOverhang, showingLabel ? label.textWidth : nil, showsChevron ? CGFloat(10) : nil].compactMap { $0 }
-        return 2 + 2 * Self.padding + parts.reduce(0, +) + CGFloat(max(0, parts.count - 1)) * Self.gap
+        return 2 + 2 * padding + parts.reduce(0, +) + CGFloat(max(0, parts.count - 1)) * Self.gap
     }
 
     public override var intrinsicContentSize: NSSize { NSSize(width: (naturalWidth * 2).rounded(.up) / 2, height: 28) }
@@ -75,20 +81,20 @@ public final class ComposerControlView: ControlView {
         super.layout()
         fill.frame = bounds
         ring.frame = bounds.insetBy(dx: -3, dy: -3)
-        var x = 1 + Self.padding
+        var x = 1 + padding
         if let icon {
             icon.frame = NSRect(x: x - iconOverhang, y: (bounds.height - 16) / 2, width: 16, height: 16)
             x += 16 - 2 * iconOverhang + Self.gap
         }
         guard showsLabel else {
-            chevron.frame = NSRect(x: x - 2, y: (bounds.height - 14) / 2, width: 14, height: 14)
+            chevron.frame = NSRect(x: x + 5 - chevronSize / 2, y: (bounds.height - chevronSize) / 2, width: chevronSize, height: chevronSize)
             return
         }
         // The chevron box is 10 wide in flow; the 14px glyph overhangs it by 2 on each side.
-        let chevronBox = bounds.width - 1 - Self.padding - 10
-        chevron.frame = NSRect(x: chevronBox - 2, y: (bounds.height - 14) / 2, width: 14, height: 14)
+        let chevronBox = bounds.width - 1 - padding - 10
+        chevron.frame = NSRect(x: chevronBox + 5 - chevronSize / 2, y: (bounds.height - chevronSize) / 2, width: chevronSize, height: chevronSize)
         // Frames snap to device pixels; a label that misses by less than that still fits, as in CSS.
-        let room = showsChevron ? chevronBox - Self.gap - x : bounds.width - 1 - Self.padding - x
+        let room = showsChevron ? chevronBox - Self.gap - x : bounds.width - 1 - padding - x
         label.frame = NSRect(x: x, y: (bounds.height - 20) / 2, width: max(0, label.textWidth <= room + 0.5 ? label.textWidth : room), height: 20)
     }
 
@@ -103,13 +109,16 @@ public final class ComposerControlView: ControlView {
     }
 
     public override func updateLayer() {
-        fill.backgroundColor = state.hoverOrPressed ? Themed.color(\.accent).cgColor(in: self) : nil
+        fill.backgroundColor = state.hoverOrPressed ? (capy ? Themed.color(\.foreground, 0.07) : Themed.color(\.accent)).cgColor(in: self) : nil
         // `focus-visible:ring-2 ring-ring ring-offset-1`: a 1px offset gap, then a 2px ring.
         ring.isHidden = !state.focusVisible
         ring.borderColor = Themed.color(\.ring).cgColor(in: self)
     }
 
     private func restyle() {
+        let font = capy ? DSFont.ui(13, weight: .medium) : DSFont.ui(14, weight: .medium)
+        if label.font != font { label.font = font; invalidateIntrinsicContentSize(); needsLayout = true }
+        chevron.alphaValue = capy ? 0.75 : 1
         label.color = state.hovered ? Themed.color(\.contrastForeground) : Themed.color(\.contrastSecondaryLabel)
         chevron.strokeColor = Themed.color(\.contrastIconMuted)
         if tintsIcon, let icon = icon as? IconView { icon.strokeColor = Themed.color(\.contrastMutedForeground) }
@@ -143,10 +152,22 @@ public final class ComposerControlSeparatorView: DSView {
 enum ProviderIcon {
     /// `model`: the glyph marks a model (the composer's model chip, a picker row), so Claude keeps its own logo under
     /// Dither; elsewhere it marks the provider and shows Anthropic's.
+    /// Claude's spark with its orange fill swapped for the current color.
+    static let monoClaude: IconDefinition = {
+        var d = IconName.brandClaudeAI.definition
+        d.elements = d.elements.map { var e = $0; e.paint.fill = .current; return e }
+        return d
+    }()
+
     static func make(driver: String, displayName: String, size: CGFloat, color: NSColor = Themed.color(\.contrastForeground),
                      model: Bool = false) -> NSView {
         switch driver {
-        case "claudeAgent": return IconView(name: .brandClaudeAI, size: size, strokeColor: color, providerMark: !model)
+        case "claudeAgent":
+            // Dither draws a model's Claude spark in the glyph color, like the chip's other glyphs, not orange.
+            if model, ThemeRuntime.isDither(dark: NSApp?.effectiveAppearance.isDark ?? true) {
+                return IconView(definition: monoClaude, size: size, color: color)
+            }
+            return IconView(name: .brandClaudeAI, size: size, strokeColor: color, providerMark: !model)
         case "codex": return IconView(name: .brandOpenAI, size: size, strokeColor: color)
         case "cursor": return IconView(name: .brandCursor, size: size, strokeColor: color)
         case "grok": return IconView(definition: ProviderPackageIcons.grok, size: size, color: ProviderPackageIcons.grokFill)

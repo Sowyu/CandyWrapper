@@ -28,4 +28,13 @@ struct BackgroundWorkBannerTests {
         #expect(value.items.map(\.childThreadId) == [ThreadId("c"), nil, nil, nil])
         #expect(BackgroundWorkPresentation.present([task(.command), task(.command)])?.title == "Running 2 commands")
     }
+
+    /// Redesign's indicator drops the titles.
+    @Test func shortTitles() throws {
+        func short(_ tasks: [PendingBackgroundTask]) throws -> String { BackgroundWorkPresentation.shortTitle(try #require(BackgroundWorkPresentation.present(tasks))) }
+        #expect(try short([task(.subagent, "Subagent: Fix the bug", child: "c1")]) == "Waiting on subagent")
+        #expect(try short([task(.subagent, "a"), task(.subagent, "b")]) == "Waiting on 2 subagents")
+        #expect(try short([task(.command, "npm test")]) == "Running a command")
+        #expect(try short([task(.subagent, "a"), task(.command, "b")]) == "Waiting")
+    }
 }

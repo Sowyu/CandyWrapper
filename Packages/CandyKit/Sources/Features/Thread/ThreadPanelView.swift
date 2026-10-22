@@ -326,6 +326,11 @@ public final class ThreadPanelView: DSView {
     public let lazyBackgroundWorkBanner = LazyView { ComposerNoticeBannerView() }
     public var backgroundWorkBanner: ComposerNoticeBannerView { lazyBackgroundWorkBanner.view }
     public var showsBackgroundWork = false { didSet { if showsBackgroundWork != oldValue { needsLayout = true } } }
+    /// Redesign shows the background work as this quiet indicator under the composer, at the right beside the
+    /// context ring, instead of the banner pill above it.
+    public let waitingIndicator = DitherWaitingView()
+    /// The pill behind the context ring under Redesign; the ring itself is the composer's meter, moved here.
+    private let ringPill = DitherPillSurface()
     /// "Branch changed — was <branch>" (ChatView.tsx:7801-7837), keyed like T3's `branch-mismatch:<key>`.
     public let lazyBranchBanner = LazyView { ComposerNoticeBannerView() }
     public var branchBanner: ComposerNoticeBannerView { lazyBranchBanner.view }
@@ -1305,8 +1310,14 @@ public final class ThreadPanelView: DSView {
         if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
             return layoutDitherComposer(chat: chat, chatHeight: chatHeight, x: x, width: width, height: height)
         }
-        // Back from Redesign: everything docks again.
+        // Back from Redesign: everything docks again, the ring in the composer's footer.
         contextStrip.floatsAsPills = false
+        waitingIndicator.isHidden = true
+        ringPill.isHidden = true
+        if composer.contextWindowMeter.superview !== composer {
+            composer.addSubview(composer.contextWindowMeter)
+            composer.needsLayout = true
+        }
         for case let view? in ditherDockViews { view.placement = .attached }
         ditherShown = []
         let y: CGFloat
@@ -1475,10 +1486,10 @@ public final class ThreadPanelView: DSView {
         let overlap = ComposerBannerView.overlap
         // Pill rows sit inside the composer's corners; cards keep its full width.
         let px = x + DitherPill.inset, pw = max(0, width - 2 * DitherPill.inset)
-        // The draft centers the composer alone, so pills coming and going never move it. A thread keeps the row
-        // under it whenever the setting can show the checkout and branch there, shown or not.
+        // The draft centers the composer alone, so pills coming and going never move it.
         let keepsStrip = !isDraft && ClientSettingsStore.shared.current.bool("persistComposerContextStrip")
-        let below = keepsStrip ? gap + pillH : 0
+        // A thread always keeps the row: the context ring and the waiting indicator sit at its right.
+        let below = isDraft ? 0 : gap + pillH
         let y = isDraft ? (chatTop + (chatHeight - chatTop - height - 20) / 2).rounded() : chatHeight - 20 - below - height
         let oldFrames = Dictionary(uniqueKeysWithValues: ditherShown.map { (ObjectIdentifier($0), $0.frame) })
         composer.frame = NSRect(x: x, y: y, width: width, height: height)
@@ -1510,10 +1521,39 @@ public final class ThreadPanelView: DSView {
         // The machine is a chip on the draft, so the strip carries only the checkout and branch there. They sit
         // under the composer, as T3's strip does.
         let strip = visible && showsContextStrip && (isDraft ? contextStrip.showsGitControls : keepsStrip)
+        // The row's right end, right to left: the context ring, then the waiting indicator. The checkout and branch
+        // pills get what is left, the indicator drops its label before anything overlaps.
+        let belowY = y + height + gap
+        var belowRight = px + pw
+        let meter = composer.contextWindowMeter
+        if meter.superview !== self { addSubview(meter, positioned: .above, relativeTo: queue) }
+        if ringPill.superview !== self { addSubview(ringPill, positioned: .below, relativeTo: meter) }
+        let ringOn = docked && (meter.usage != nil || meter.reserved)
+        meter.isHidden = !ringOn
+        ringPill.isHidden = !ringOn
+        if !ringOn { meter.closeDetails() }
+        if ringOn {
+            meter.frame = NSRect(x: belowRight - pillH, y: belowY, width: pillH, height: pillH)
+            ringPill.frame = meter.frame
+            belowRight -= pillH + spacing
+            shown += [ringPill, meter]
+        }
+        if waitingIndicator.superview !== self { addSubview(waitingIndicator, positioned: .above, relativeTo: queue) }
+        let waitingOn = docked && showsBackgroundWork
+        waitingIndicator.isHidden = !waitingOn
+        if waitingOn {
+            // ponytail: a fixed 150pt floor for the checkout and branch pills, measure the strip's compact width if it clips
+            let room = belowRight - px - (strip ? 150 + spacing : 0)
+            waitingIndicator.showsLabel = waitingIndicator.width(showingLabel: true) <= room
+            let w = min(waitingIndicator.width(showingLabel: waitingIndicator.showsLabel), max(0, belowRight - px))
+            waitingIndicator.frame = NSRect(x: belowRight - w, y: belowY, width: w, height: pillH)
+            belowRight -= w + spacing
+            shown.append(waitingIndicator)
+        }
         contextStrip.floatsAsPills = true
         contextStrip.isHidden = !strip
         if strip {
-            contextStrip.frame = NSRect(x: px, y: y + height + gap, width: pw, height: pillH)
+            contextStrip.frame = NSRect(x: px, y: belowY, width: max(0, belowRight - px), height: pillH)
             shown.append(contextStrip)
         }
 
@@ -1525,7 +1565,7 @@ public final class ThreadPanelView: DSView {
         var cards: [(ComposerBannerView, CGFloat)] = []
         if docked && showsActivity { pills.append((activityRow, activityRow.pillWidth)) }
         if docked && showsPlanFollowUp { pills.append((planFollowUpBanner, planFollowUpBanner.pillWidth)) }
-        for item in ordered {
+        for item in ordered where item.view !== lazyBackgroundWorkBanner.loaded {
             if let notice = item.view as? ComposerNoticeBannerView {
                 pills.append((notice, notice.pillWidth))
             } else {

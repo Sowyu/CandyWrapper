@@ -90,6 +90,8 @@ public final class ThreadContextWindowMeterView: ControlView {
         setAccessibilityValue(usage?.percentage.map { NSNumber(value: $0) })
         setAccessibilityElement(usage != nil)
         if usage == nil { closeDetails() } else { refreshDetails() }
+        // Under Dither the panel places the ring, so it lays out again when the ring comes or goes.
+        if (usage == nil) != (oldValue == nil) { superview?.needsLayout = true }
     } }
     /// Runs Compact context. The popup offers the button only while `compactOffered` (ChatComposer.tsx:7673:
     /// the selected provider has a `compact` command).
@@ -104,7 +106,12 @@ public final class ThreadContextWindowMeterView: ControlView {
     public var compactDisabledReason: String?
     /// `ContextWindowMeterPlaceholder` (ContextWindowMeter.tsx:177-180): with no usage yet, the composer
     /// still holds the meter's 28pt slot so the attach button does not move when it arrives.
-    public var reserved = false
+    public var reserved = false { didSet { if reserved != oldValue { superview?.needsLayout = true } } }
+    /// Dither: Capy's ring (measured in Capy 2026-10-22), a 13pt circle with a 1.5pt stroke in a 28pt pill under the
+    /// composer, opened by a click into Capy's Context popover.
+    var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    private var ringRadius: CGFloat { capy ? 5.75 : 9.75 * 20 / 24 }
+    private var ringWidth: CGFloat { capy ? 1.5 : 2.5 }
     public override var wantsUpdateLayer: Bool { false }
     public override var intrinsicContentSize: NSSize { NSSize(width: 28, height: 28) }
     public var summary: String {
@@ -116,7 +123,10 @@ public final class ThreadContextWindowMeterView: ControlView {
         setAccessibilityRole(.progressIndicator)
         setAccessibilityMinValue(0)
         setAccessibilityMaxValue(100)
-        action = { [weak self] in self?.showDetails() }
+        action = { [weak self] in
+            guard let self else { return }
+            if self.capy, self.detailsPopup != nil { self.closeDetails() } else { self.showDetails() }
+        }
         arc.actions = ["position": NSNull(), "bounds": NSNull(), "path": NSNull(), "strokeEnd": NSNull(), "strokeColor": NSNull(), "hidden": NSNull()]
         arc.fillColor = nil
         arc.lineWidth = 2.5
@@ -132,7 +142,7 @@ public final class ThreadContextWindowMeterView: ControlView {
 
     private func updateArc(animated: Bool) {
         let fraction = min(1, max(0, (usage?.percentage ?? 0) / 100))
-        let color = (fraction > 0.9 ? Themed.color(\.destructive) : Themed.color(\.mutedForeground, 0.72)).cgColor(in: self)
+        let color = (fraction > 0.9 ? Themed.color(\.destructive) : Themed.color(capy ? \.foreground : \.mutedForeground, capy ? 0.8 : 0.72)).cgColor(in: self)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         if animated, !arc.isHidden, fraction > 0, window != nil, !Motion.reduced {
@@ -140,6 +150,7 @@ public final class ThreadContextWindowMeterView: ControlView {
             Motion.animate(arc, keyPath: "strokeColor", to: color, duration: 0.5, timing: Self.easeOut)
         }
         arc.isHidden = fraction <= 0
+        arc.lineWidth = ringWidth
         arc.strokeEnd = fraction
         arc.strokeColor = color
         CATransaction.commit()
@@ -148,14 +159,26 @@ public final class ThreadContextWindowMeterView: ControlView {
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         updateArc(animated: false)
+        needsLayout = true
+        needsDisplay = true
+    }
+
+    public override func stateDidChange(from old: State) {
+        super.stateDidChange(from: old)
+        needsDisplay = true
     }
 
     public override func draw(_ dirtyRect: NSRect) {
-        guard let ctx = NSGraphicsContext.current?.cgContext, let usage else { return }
+        guard let ctx = NSGraphicsContext.current?.cgContext, usage != nil else { return }
+        if capy, state.hoverOrPressed || detailsPopup != nil {
+            ctx.addPath(CGPath(roundedRect: bounds, cornerWidth: DitherPill.radius, cornerHeight: DitherPill.radius, transform: nil))
+            ctx.setFillColor(Themed.color(\.foreground, 0.07).cgColor(in: self))
+            ctx.fillPath()
+        }
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
-        let radius: CGFloat = 9.75 * 20 / 24
-        ctx.setLineWidth(2.5)
-        ctx.setStrokeColor(Themed.color(\.mutedForeground, 0.24).cgColor(in: self))
+        let radius = ringRadius
+        ctx.setLineWidth(ringWidth)
+        ctx.setStrokeColor(Themed.color(\.mutedForeground, capy ? 0.35 : 0.24).cgColor(in: self))
         ctx.strokeEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
     }
 
@@ -164,7 +187,7 @@ public final class ThreadContextWindowMeterView: ControlView {
         // A full turn from the top, clockwise on screen (y grows downward here); `strokeEnd` is the share used.
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
         let path = CGMutablePath()
-        path.addArc(center: center, radius: 9.75 * 20 / 24, startAngle: -.pi / 2, endAngle: 3 * .pi / 2, clockwise: false)
+        path.addArc(center: center, radius: ringRadius, startAngle: -.pi / 2, endAngle: 3 * .pi / 2, clockwise: false)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         arc.frame = bounds
@@ -180,13 +203,13 @@ public final class ThreadContextWindowMeterView: ControlView {
     public override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
         hoverWork?.cancel()
-        guard usage != nil, detailsPopup == nil else { return }
+        guard usage != nil, detailsPopup == nil, !capy else { return }
         schedule(Self.openDelay) { $0.showDetails() }
     }
     public override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
         hoverWork?.cancel()
-        scheduleClose()
+        if !capy { scheduleClose() }
     }
     private func schedule(_ delay: TimeInterval, _ body: @escaping @MainActor (ThreadContextWindowMeterView) -> Void) {
         let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { if let self { body(self) } } }
@@ -211,6 +234,7 @@ public final class ThreadContextWindowMeterView: ControlView {
         guard let open = detailsPopup else { return }
         detailsPopup = nil
         pointerInDetails = false
+        needsDisplay = true
         open.content.popupHost?.close(open, returnFocus: false)
     }
     /// The open popup's content, for tests.
@@ -220,7 +244,7 @@ public final class ThreadContextWindowMeterView: ControlView {
     /// starts, as T3's popover re-renders while it stays open.
     private func refreshDetails() {
         guard let open = detailsPopup, let usage, let content = detailsView else { return }
-        guard content.configure(usage: usage, model: modelDisplayName, compactOffered: compactOffered,
+        guard content.configure(usage: usage, capy: capy, model: modelDisplayName, compactOffered: compactOffered,
                                 disabled: compactDisabled, reason: compactDisabledReason) else { return }
         open.content.invalidateIntrinsicContentSize()
         open.content.popupHost?.reposition(open)
@@ -230,17 +254,22 @@ public final class ThreadContextWindowMeterView: ControlView {
         hoverWork?.cancel()
         guard detailsPopup == nil, let usage, let host = popupHost else { return }
         let content = ThreadContextWindowDetailsView()
-        _ = content.configure(usage: usage, model: modelDisplayName, compactOffered: compactOffered,
+        let capy = self.capy
+        _ = content.configure(usage: usage, capy: capy, model: modelDisplayName, compactOffered: compactOffered,
                               disabled: compactDisabled, reason: compactDisabledReason)
         content.onPointerInside = { [weak self] inside in
-            self?.pointerInDetails = inside
-            if inside { self?.hoverWork?.cancel() } else { self?.scheduleClose() }
+            guard let self, !self.capy else { return }
+            self.pointerInDetails = inside
+            if inside { self.hoverWork?.cancel() } else { self.scheduleClose() }
         }
         content.onCompact = { [weak self] in self?.onCompact?() }
-        let popover = PopoverView(content: content, padding: .none, width: .sm, tooltipStyle: true)
-        detailsPopup = host.open(popover, trigger: self, placement: PopupPlacement(side: .top, align: .end, sideOffset: 4),
-                                 motion: .popover, pressesTrigger: false, returnsFocus: false, passive: true)
-        detailsPopup?.onClose = { [weak self] in self?.detailsPopup = nil; self?.pointerInDetails = false }
+        // Capy's popover opens on a click, sits 6pt above the ring with its right edge on the ring's, and closes on
+        // a click outside.
+        let popover = PopoverView(content: content, padding: .none, width: capy ? .auto : .sm, tooltipStyle: !capy)
+        detailsPopup = host.open(popover, trigger: self, placement: PopupPlacement(side: .top, align: .end, sideOffset: capy ? 6 : 4),
+                                 motion: .popover, pressesTrigger: capy, returnsFocus: false, passive: !capy)
+        detailsPopup?.onClose = { [weak self] in self?.detailsPopup = nil; self?.pointerInDetails = false; self?.needsDisplay = true }
+        needsDisplay = true
     }
 
     /// Settings the open popup reads; the controller sets them on every refresh.
@@ -267,9 +296,19 @@ final class ThreadContextWindowDetailsView: DSView {
     private var fraction: CGFloat = 0
     private var model: Model?
     static let inset: CGFloat = 12, width: CGFloat = 256 - 2 - 2 * 12
+    /// Dither: Capy's Context popover (measured in Capy 2026-10-22), 286 wide: "Context" with "used / max used (n%)"
+    /// at the right, the bar, rows of label and value, and a bordered "Compact at" box. Capy breaks the usage into
+    /// system prompt, tools and conversation; T3's wire carries no such split, so the rows are what it does carry.
+    private var capy = false
+    static let capyWidth: CGFloat = 286 - 2 - 2 * 12
+    private let compactBox = DSView()
+    private let compactLabel = LabelView("Compact at", font: DSFont.ui(13), color: Themed.color(\.contrastForeground))
+    private let compactValue = LabelView("", font: SB.tabular(13, .medium), color: Themed.color(\.contrastForeground))
+    private let compactMaximum = LabelView("", font: SB.tabular(13), color: Themed.color(\.contrastMutedForeground))
+    private var contentWidth: CGFloat { capy ? Self.capyWidth : Self.width }
 
     private struct Model: Equatable {
-        var usage: ThreadContextWindowUsage, model: String?, compactOffered: Bool, disabled: Bool, reason: String?
+        var usage: ThreadContextWindowUsage, capy: Bool, model: String?, compactOffered: Bool, disabled: Bool, reason: String?
     }
 
     override init(frame frameRect: NSRect) {
@@ -284,39 +323,77 @@ final class ThreadContextWindowDetailsView: DSView {
         reasonText.balanced = true
         button.action = { [weak self] in self?.onCompact?() }
         for v in [note, button, reasonText] as [NSView] { addSubview(v) }
+        compactBox.layer?.borderWidth = 1
+        compactBox.layer?.cornerRadius = DitherChrome.controlRadius
+        compactBox.isHidden = true
+        addSubview(compactBox)
+        for l in [compactLabel, compactValue, compactMaximum] { l.lineHeight = 18; l.isHidden = true; addSubview(l) }
+    }
+
+    override func updateLayer() {
+        super.updateLayer()
+        compactBox.layer?.borderColor = Themed.color(\.contrastForeground, 0.1).cgColor(in: self)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     /// Fills the popup; false when nothing changed.
-    func configure(usage: ThreadContextWindowUsage, model name: String?, compactOffered: Bool, disabled: Bool, reason: String?) -> Bool {
-        let next = Model(usage: usage, model: name, compactOffered: compactOffered, disabled: disabled, reason: reason)
+    func configure(usage: ThreadContextWindowUsage, capy: Bool = false, model name: String?, compactOffered: Bool, disabled: Bool, reason: String?) -> Bool {
+        let next = Model(usage: usage, capy: capy, model: name, compactOffered: compactOffered, disabled: disabled, reason: reason)
         guard next != model else { return false }
         model = next
-        let tokens = ThreadContextWindowUsage.tokens
-        if let maximum = usage.maximum, let percent = usage.percentageLabel {
+        self.capy = capy
+        // Capy writes token counts with capital units: 32.8K, 1.1M.
+        func tokens(_ value: Double) -> String {
+            let text = ThreadContextWindowUsage.tokens(value)
+            return capy ? text.uppercased() : text
+        }
+        title.text = capy ? "Context" : "Context Window"
+        title.font = capy ? DSFont.ui(13, weight: .medium) : DSFont.ui(12, weight: .medium)
+        title.color = Themed.color(capy ? \.contrastForeground : \.mutedForeground)
+        figure.font = capy ? SB.tabular(12) : SB.tabular(11)
+        figure.color = Themed.color(capy ? \.contrastMutedForeground : \.contrastSecondaryLabel)
+        for l in [title, figure] { l.lineHeight = capy ? 18 : 16 }
+        if capy {
+            figure.text = usage.maximum.map { "\(tokens(usage.used)) / \(tokens($0)) used" + (usage.percentageLabel.map { " (\($0))" } ?? "") }
+                ?? "\(tokens(usage.used)) used"
+        } else if let maximum = usage.maximum, let percent = usage.percentageLabel {
             figure.text = "\(percent) · \(tokens(usage.used))/\(tokens(maximum))"
         } else {
             figure.text = tokens(usage.used)
         }
+        track.fill = capy ? Themed.color(\.contrastForeground, 0.1) : Themed.color(\.muted, 0.6)
         fraction = CGFloat(min(100, max(0, usage.percentage ?? 0)) / 100)
         let showsBar = usage.maximum != nil
         track.isHidden = !showsBar
         bar.isHidden = !showsBar
-        bar.fill = (usage.percentage ?? 0) > 90 ? Themed.color(\.destructive) : Themed.color(\.mutedForeground, 0.72)
+        bar.fill = (usage.percentage ?? 0) > 90 ? Themed.color(\.destructive) : capy ? Themed.color(\.contrastForeground, 0.72) : Themed.color(\.mutedForeground, 0.72)
         track.setAccessibilityValue(NSNumber(value: Int((fraction * 100).rounded())))
         for (l, v) in rows { l.removeFromSuperview(); v.removeFromSuperview() }
         rows = []
         func row(_ name: String, _ value: String) {
-            let l = LabelView(name, font: DSFont.ui(11), color: Themed.color(\.contrastSecondaryLabel))
-            let v = LabelView(value, font: SB.tabular(11, .medium), color: Themed.color(\.contrastSecondaryLabel))
-            for x in [l, v] { x.lineHeight = 16; addSubview(x) }
+            let l = capy ? LabelView(name, font: DSFont.ui(13), color: Themed.color(\.contrastForeground))
+                : LabelView(name, font: DSFont.ui(11), color: Themed.color(\.contrastSecondaryLabel))
+            let v = capy ? LabelView(value, font: SB.tabular(12), color: Themed.color(\.contrastMutedForeground))
+                : LabelView(value, font: SB.tabular(11, .medium), color: Themed.color(\.contrastSecondaryLabel))
+            for x in [l, v] { x.lineHeight = capy ? 18 : 16; addSubview(x) }
             rows.append((l, v))
         }
         if let total = usage.total, total > 0 { row("Total processed", tokens(total)) }
         // `formatContextWindowCost` (ContextWindowMeter.logic.ts:139-145).
         if let cost = usage.cost { row("Cost", usage.currency + " " + String(format: abs(cost) > 0 && abs(cost) < 0.01 ? "%.4f" : "%.2f", cost)) }
-        note.isHidden = !usage.automatically
+        // Capy's "Compact at" box: the threshold, then the window it sits in.
+        let threshold = usage.autoCompactThreshold.flatMap { $0 > 0 && $0 < 9e15 ? $0 : nil }
+        let boxed = capy && threshold != nil
+        for v in [compactBox, compactLabel, compactValue, compactMaximum] as [NSView] { v.isHidden = !boxed }
+        compactBox.layer?.borderColor = Themed.color(\.contrastForeground, 0.1).cgColor(in: self)
+        if let threshold, boxed {
+            compactValue.text = tokens(threshold)
+            compactMaximum.text = usage.maximum.map { " / " + tokens($0) } ?? ""
+        }
+        note.font = capy ? DSFont.ui(12) : DSFont.ui(11, weight: .medium)
+        note.color = Themed.color(capy ? \.contrastMutedForeground : \.contrastSecondaryLabel)
+        note.isHidden = !usage.automatically || boxed
         // `formatContextWindowCompactionMessage` (ContextWindowMeter.logic.ts:100-110).
         if let threshold = usage.autoCompactThreshold, threshold > 0, threshold < 9e15 {
             note.text = "Compacts automatically at about " + Int(threshold).formatted(.number.locale(Locale(identifier: "en_US"))) + " tokens."
@@ -327,7 +404,8 @@ final class ThreadContextWindowDetailsView: DSView {
         button.isEnabled = !disabled
         reasonText.text = reason ?? ""
         reasonText.isHidden = !compactOffered || !disabled || reason == nil
-        frame.size = NSSize(width: Self.width + 2 * Self.inset, height: place(apply: false) + Self.inset)
+        needsDisplay = true
+        frame.size = NSSize(width: contentWidth + 2 * Self.inset, height: place(apply: false) + Self.inset)
         invalidateIntrinsicContentSize()
         needsLayout = true
         return true
@@ -342,25 +420,35 @@ final class ThreadContextWindowDetailsView: DSView {
 
     /// Lays the rows out top down and returns the bottom edge.
     private func place(apply: Bool) -> CGFloat {
-        let x = Self.inset, w = Self.width
+        let x = Self.inset, w = contentWidth
         var y = Self.inset
         func put(_ v: NSView, _ frame: NSRect) { if apply { v.frame = frame } }
-        let fw = ceil(figure.textWidth)
-        put(title, NSRect(x: x, y: y, width: max(0, w - fw - 12), height: 16))
-        put(figure, NSRect(x: x + w - fw, y: y, width: fw, height: 16))
-        y += 16
+        let fw = ceil(figure.textWidth), line: CGFloat = capy ? 18 : 16
+        put(title, NSRect(x: x, y: y, width: max(0, w - fw - 12), height: line))
+        put(figure, NSRect(x: x + w - fw, y: y, width: fw, height: line))
+        y += line
         if !track.isHidden {
-            y += 8
+            y += capy ? 10 : 8
             put(track, NSRect(x: x, y: y, width: w, height: 6))
             put(bar, NSRect(x: x, y: y, width: (w * fraction).rounded(), height: 6))
             y += 6
         }
+        if capy, !rows.isEmpty { y += 4 }
         for (l, v) in rows {
-            y += 8
+            y += capy ? 4 : 8
             let vw = ceil(v.textWidth)
-            put(l, NSRect(x: x, y: y, width: max(0, w - vw - 12), height: 16))
-            put(v, NSRect(x: x + w - vw, y: y, width: vw, height: 16))
-            y += 16
+            put(l, NSRect(x: x, y: y, width: max(0, w - vw - 12), height: line))
+            put(v, NSRect(x: x + w - vw, y: y, width: vw, height: line))
+            y += line
+        }
+        if !compactBox.isHidden {
+            y += 12
+            put(compactBox, NSRect(x: x, y: y, width: w, height: 30))
+            let mw = ceil(compactMaximum.textWidth), vw = ceil(compactValue.textWidth)
+            put(compactMaximum, NSRect(x: x + w - 10 - mw, y: y + 6, width: mw, height: 18))
+            put(compactValue, NSRect(x: x + w - 10 - mw - vw, y: y + 6, width: vw, height: 18))
+            put(compactLabel, NSRect(x: x + 10, y: y + 6, width: max(0, w - 30 - mw - vw), height: 18))
+            y += 30
         }
         // `mt-1` on top of the column's `gap-2` for the note and the button.
         if !note.isHidden {
