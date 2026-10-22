@@ -14,8 +14,7 @@ final class PlatformSignals: @unchecked Sendable {
         monitor.pathUpdateHandler = { [weak self, weak supervisor] path in
             let online = path.status == .satisfied
             let key = PathKey(path)
-            // The first update reports the network the session started on.
-            let moved = online && self?.lastPath.map { $0 != key } == true
+            let moved = PathKey.moved(from: self?.lastPath, to: key, online: online)
             self?.lastPath = key
             Task {
                 await supervisor?.networkChanged(online: online)
@@ -53,7 +52,18 @@ struct PathKey: Equatable {
     let gateways: [String]
 
     init(_ path: NWPath) {
-        interfaces = path.availableInterfaces.map(\.name)
-        gateways = path.gateways.map { "\($0)" }.sorted()
+        self.init(interfaces: path.availableInterfaces.map(\.name), gateways: path.gateways.map { "\($0)" })
+    }
+
+    /// Interfaces keep the system's preference order; gateways come in any order.
+    init(interfaces: [String], gateways: [String]) {
+        self.interfaces = interfaces
+        self.gateways = gateways.sorted()
+    }
+
+    /// Whether an online update put the socket on another network. The first update reports the
+    /// network the session started on, so it isn't a move.
+    static func moved(from last: PathKey?, to key: PathKey, online: Bool) -> Bool {
+        online && last.map { $0 != key } == true
     }
 }
