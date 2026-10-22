@@ -74,8 +74,8 @@ final class ComposerPrimaryButton: ControlView {
             art.layer?.cornerRadius = r
             let crescent = CGMutablePath()
             if capy {
-                crescent.addRoundedRect(in: bounds, cornerWidth: r, cornerHeight: r)
-                crescent.addRoundedRect(in: bounds.offsetBy(dx: 0, dy: 1), cornerWidth: r, cornerHeight: r)
+                crescent.addPath(SmoothCorners.path(bounds, r, flipped: false))
+                crescent.addPath(SmoothCorners.path(bounds.offsetBy(dx: 0, dy: 1), r, flipped: false))
             } else {
                 crescent.addEllipse(in: bounds)
                 crescent.addEllipse(in: bounds.offsetBy(dx: 0, dy: 1))
@@ -143,7 +143,7 @@ final class ComposerPrimaryButton: ControlView {
         layer?.shadowOpacity = shadowed ? 0.24 : 0
         layer?.shadowRadius = 1
         layer?.shadowOffset = CGSize(width: 0, height: -1)
-        layer?.shadowPath = capy ? CGPath(roundedRect: bounds, cornerWidth: Self.capyRadius, cornerHeight: Self.capyRadius, transform: nil)
+        layer?.shadowPath = capy ? SmoothCorners.path(bounds, Self.capyRadius, flipped: false)
             : CGPath(ellipseIn: bounds, transform: nil)
         // Enabled: the white top highlight; held: `inset 0 1px black/8%`.
         highlight.fillColor = state.active ? Themed.black(0.08).cgColor : Themed.white(0.16).cgColor

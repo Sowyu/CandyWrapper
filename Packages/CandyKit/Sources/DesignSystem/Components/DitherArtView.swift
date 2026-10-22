@@ -10,6 +10,10 @@ import ImageIO
 public final class DitherArtView: NSView {
     private let art = CALayer()
     private let scrim = CALayer()
+    /// The band's color over the panel's top, so the art meets the tab strip band with no edge.
+    private let blend = CAGradientLayer()
+    /// How far down the panel the band's color reaches: the band's height plus the thread header's fade overhang.
+    public static let topBlend: CGFloat = DitherChrome.band + 16
     private var shown: DitherArt.Request?
     private var pending: DitherArt.Request?
     private var debounce: DispatchWorkItem?
@@ -30,6 +34,8 @@ public final class DitherArtView: NSView {
         layer?.masksToBounds = true
         layer?.addSublayer(art)
         layer?.addSublayer(scrim)
+        blend.actions = ["bounds": NSNull(), "position": NSNull(), "colors": NSNull()]
+        layer?.addSublayer(blend)
         Self.arts.add(self)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(displayOptionsChanged),
                                                           name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
@@ -132,6 +138,8 @@ public final class DitherArtView: NSView {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         placeArt()
         scrim.frame = artRect
+        // This view isn't flipped: its top is maxY, and the gradient's unit space runs bottom to top.
+        blend.frame = CGRect(x: 0, y: bounds.height - Self.topBlend, width: bounds.width, height: Self.topBlend)
         CATransaction.commit()
         refresh()
     }
@@ -176,6 +184,13 @@ public final class DitherArtView: NSView {
         CATransaction.begin()
         CATransaction.setAnimationDuration(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.2)
         scrim.backgroundColor = background.withAlphaComponent(scrimAlpha).cgColor
+        CATransaction.commit()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        let band = DitherChrome.bandColor(in: self)
+        // Bottom (no band) to top (all band).
+        let stops = (0...10).reversed().map { Double($0) / 10 }
+        blend.locations = stops.map { NSNumber(value: 1 - $0) }
+        blend.colors = stops.map { band.copy(alpha: DitherChrome.bandBlend($0))! }
         CATransaction.commit()
     }
 

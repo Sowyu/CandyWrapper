@@ -175,13 +175,14 @@ enum BoxPainter {
 
     static func paint(_ style: BoxStyle, in ctx: CGContext, box: CGRect, flipped: Bool) {
         // Dither (after Capy) tightens every box's corners to its two radii.
+        // Its corners are continuous (SmoothCorners).
         var style = style
-        if ThemeRuntime.isDither(dark: NSAppearance.currentDrawing().bestMatch(from: [.aqua, .darkAqua]) == .darkAqua) {
-            style.radius = DitherChrome.radius(style.radius)
-        }
+        let smooth = ThemeRuntime.isDither(dark: NSAppearance.currentDrawing().bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
+        if smooth { style.radius = DitherChrome.radius(style.radius) }
         let ySign: CGFloat = flipped ? 1 : -1 // CSS +y is down
         let shape: (CGRect, CGFloat) -> CGPath = { rect, radius in
-            cornerRounded(rect, radius, corners: style.corners, flipped: flipped)
+            smooth ? SmoothCorners.path(rect, radius, corners: style.corners, flipped: flipped)
+                : cornerRounded(rect, radius, corners: style.corners, flipped: flipped)
         }
         let borderPath = shape(box, style.radius)
         let w = style.border == nil ? 0 : style.borderWidth
@@ -223,7 +224,8 @@ enum BoxPainter {
             ctx.addPath(paddingPath)
             ctx.clip()
             let (inner, innerRadius) = spreadRect(paddingBox, paddingRadius, -shadow.spread)
-            let hole = rounded(inner.offsetBy(dx: shadow.x, dy: shadow.y * ySign), innerRadius)
+            let holeRect = inner.offsetBy(dx: shadow.x, dy: shadow.y * ySign)
+            let hole = smooth ? SmoothCorners.path(holeRect, innerRadius, flipped: flipped) : rounded(holeRect, innerRadius)
             let frame = CGMutablePath()
             frame.addRect(paddingBox.insetBy(dx: -shadow.blur * 3 - 40, dy: -shadow.blur * 3 - 40))
             frame.addPath(hole)

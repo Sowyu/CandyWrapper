@@ -27,7 +27,7 @@ public final class ComposerView: DSView {
     /// `rounded-3xl`: `calc(var(--radius) + 12px)`.
     public static let radius: CGFloat = 22
     /// The card's corner: T3's 22, or Capy's tighter corner under Dither.
-    var cardRadius: CGFloat { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.cardRadius : Self.radius }
+    var cardRadius: CGFloat { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.panelRadius : Self.radius }
     /// Body `px-4 pt-4 pb-2`, footer `px-4 pb-4`, the 1px `p-px` of ComposerSurface.Main.
     static let inset: CGFloat = 1, pad: CGFloat = 16, footerHeight: CGFloat = 32
     /// `min-h-19.5` and `max-h-52` less the `p-1 -m-1` pair.
@@ -821,11 +821,13 @@ public final class ComposerView: DSView {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         shadowLayer.frame = box
         // Spread -18: the shadow shape is the box inset by 18.
-        shadowLayer.shadowPath = CGPath(roundedRect: box.insetBy(dx: 18, dy: 18), cornerWidth: max(0, cardRadius - 18),
-                                   cornerHeight: max(0, cardRadius - 18), transform: nil)
+        let shadowBox = box.insetBy(dx: 18, dy: 18), shadowRadius = max(0, cardRadius - 18)
+        shadowLayer.shadowPath = capy ? SmoothCorners.path(shadowBox, shadowRadius, flipped: false)
+            : CGPath(roundedRect: shadowBox, cornerWidth: shadowRadius, cornerHeight: shadowRadius, transform: nil)
         let maskPath = CGMutablePath()
         maskPath.addRect(box.insetBy(dx: -60, dy: -60))
-        maskPath.addRoundedRect(in: box, cornerWidth: cardRadius, cornerHeight: cardRadius)
+        if capy { maskPath.addPath(SmoothCorners.path(box, cardRadius, flipped: false)) }
+        else { maskPath.addRoundedRect(in: box, cornerWidth: cardRadius, cornerHeight: cardRadius) }
         shadowMask.frame = box
         shadowMask.path = maskPath
         CATransaction.commit()
