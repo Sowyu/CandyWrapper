@@ -38,7 +38,7 @@ struct PaletteBackdropTests {
         // The sidebar closes: the backdrop follows on the next turn.
         sidebar.frame.origin.x = -100
         main.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
-        try await Task.sleep(for: .milliseconds(50))
-        #expect(try Self.pixel(overlay.backdrop, x: 50, of: 400).blueComponent > 0.8)
+        let followed = await eventually { ((try? Self.pixel(overlay.backdrop, x: 50, of: 400))?.blueComponent ?? 0) > 0.8 }
+        #expect(followed, "\(String(describing: try? Self.pixel(overlay.backdrop, x: 50, of: 400)))")
     }
 }

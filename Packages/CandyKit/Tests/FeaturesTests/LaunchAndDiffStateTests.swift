@@ -42,7 +42,7 @@ struct LaunchAndDiffStateTests {
     }
 
     private func settle(_ panel: DiffPanelView) async throws {
-        for _ in 0..<100 where panel.message.text == "Loading checkpoint diff..." { try await Task.sleep(for: .milliseconds(10)) }
+        _ = await eventually { panel.message.text != "Loading checkpoint diff..." }
         panel.layoutSubtreeIfNeeded()
     }
 

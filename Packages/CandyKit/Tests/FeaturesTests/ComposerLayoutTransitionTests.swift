@@ -30,9 +30,9 @@ struct ComposerLayoutTransitionTests {
         composer.needsLayout = true
         panel.layoutSubtreeIfNeeded()
         // External chrome may change while the parent's layout is already running.
-        for _ in 0..<100 where composer.frame.height != composer.preferredHeight {
-            try await Task.sleep(for: .milliseconds(10))
+        _ = await eventually {
             panel.layoutSubtreeIfNeeded()
+            return composer.frame.height == composer.preferredHeight
         }
         #expect(!composer.isResting)
         #expect(composer.frame.height == composer.preferredHeight)

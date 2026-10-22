@@ -151,11 +151,8 @@ struct WallpaperBackdropTests {
         return ctx?.makeImage()
     }
 
+    /// Waits for the store's background render, which always finishes.
     private func waitUntilReady(_ store: WallpaperStore, _ display: CGDirectDisplayID, _ request: W.Request?) async throws {
-        for _ in 0..<200 {
-            if !store.isPending(display) { return }
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        Issue.record("render never finished")
+        if await !eventually({ !store.isPending(display) }) { Issue.record("render never finished") }
     }
 }
