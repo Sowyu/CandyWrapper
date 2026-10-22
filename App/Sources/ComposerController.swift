@@ -1619,7 +1619,7 @@ final class ComposerController {
     /// `background`: a draft starts in the background behind a fresh draft (`beginBackgroundDraftSubmission`,
     /// ChatView.tsx:9905-10032); a thread sends and then opens a new thread in its project.
     /// `redirecting`: the pending approvals were just declined for this send, which now goes.
-    private func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool = false, redirecting: Bool = false) {
+    private func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool = false, redirecting: Bool = false, compactConfirmed: Bool = false) {
         guard !threadRewindBusy, !declineInFlight else { return }
         let sentText = text
         // A send now would leave a still-compressing pasted image behind (ChatComposer.tsx:4222-4237).
@@ -1802,6 +1802,20 @@ final class ComposerController {
         if case .thread = target {
             compactFirst = ComposerCompaction.compactsBeforeSend(resumeTokens: composer.compactBeforeSendTokens,
                                                                  keepFullHistory: composer.keepFullHistory, text: trimmed)
+        }
+        // A compaction below 500k asks first; above it, it just goes (the user's call, a difference from T3).
+        if compactFirst, !compactConfirmed, ComposerCompaction.confirmsCompaction(tokens: composer.compactBeforeSendTokens),
+           let window = composer.window {
+            let alert = NSAlert()
+            alert.messageText = "Compact before sending?"
+            alert.informativeText = "This thread uses \(composer.compactBeforeSendTokens.map(ThreadContextWindowUsage.tokens) ?? "") tokens. Compacting summarizes the history first."
+            alert.addButton(withTitle: "Compact and send")
+            alert.addButton(withTitle: "Cancel")
+            alert.beginSheetModal(for: window) { [weak self] response in
+                guard response == .alertFirstButtonReturn else { return }
+                MainActor.assumeIsolated { self?.send(sentText, mode: mode, background: background, redirecting: redirecting, compactConfirmed: true) }
+            }
+            return
         }
         let mode: ComposerLogic.SendMode = compactFirst ? .queue : mode
         // Optimistic echo, then clear the composer before the command returns (ChatView.tsx:9763-9793).

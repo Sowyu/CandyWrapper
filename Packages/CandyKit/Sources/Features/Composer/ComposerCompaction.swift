@@ -8,7 +8,12 @@ import T3Store
 public enum ComposerCompaction {
     /// `CLAUDE_RESUME_COMPACTION_MINUTES` and `_TOKENS` (ContextWindowMeter.logic.ts:12-13).
     public static let resumeMinutes: Double = 70
-    public static let resumeTokens: Double = 100_000
+    /// T3 offers compact-and-send from 100k; CandyWrapper waits for 400k (the user's call, docs/decisions.md).
+    public static let resumeTokens: Double = 400_000
+    /// Below this a compact-and-send asks "are you sure?" first; above it, it just compacts.
+    public static let confirmBelowTokens: Double = 500_000
+
+    public static func confirmsCompaction(tokens: Double?) -> Bool { (tokens ?? 0) < confirmBelowTokens }
     /// `CLAUDE_RESUME_COMPACTION_NEVER_ANSWER` (claudeCompaction.ts:8).
     public static let neverAnswer = "Don't ask again"
 
