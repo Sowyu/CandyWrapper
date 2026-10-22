@@ -329,6 +329,13 @@ public final class TimelineView: DSView {
         reconfigureVisible()
     }
 
+    /// A hidden or closed timeline holds no web pages; its shown rows drop theirs themselves.
+    public override func viewDidHide() { super.viewDidHide(); context.releasePages() }
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { context.releasePages() }
+    }
+
     isolated deinit {
         if let clipObserver { NotificationCenter.default.removeObserver(clipObserver) }
     }
@@ -400,6 +407,8 @@ public final class TimelineView: DSView {
         }
         restore(anchor)
         OpenTiming.measure("timeline tile", "\(visible.count) row views") { tile() }
+        // The old thread's rows parked their pages while recycling just now.
+        if change == .thread { context.releasePages() }
         disclosureRowId = nil
         updateMinimapPosition()
         if OpenTiming.active, !new.isEmpty { markFirstFrame() }
@@ -486,7 +495,9 @@ public final class TimelineView: DSView {
         case .attemptFold: return 42
         case .contextCompaction: return 40
         case .event: return 48
-        case .htmlRender(let page): return CGFloat(page.frameHeight(width: Double(max(0, width - 8)), contentHeight: item.ui.webContentHeight)) + 8
+        case .htmlRender(let page):
+            let box = Double(max(0, width - 8))
+            return CGFloat(page.frameHeight(width: box, contentHeight: item.ui.htmlHeights.height(width: box))) + 8
         case .mcpApp: return CGFloat(item.ui.webContentHeight ?? McpAppReference.defaultHeight) + 8
         }
     }

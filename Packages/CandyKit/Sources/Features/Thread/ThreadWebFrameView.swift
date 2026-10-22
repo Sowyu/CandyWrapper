@@ -68,6 +68,8 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     private(set) var lastUserActivity = Date.distantPast
     /// An HTML render was told which app shortcuts it may pass on.
     var shortcutsPosted = false
+    /// The theme the page was loaded with or last told.
+    var dark = false
 
     override var isFlipped: Bool { true }
 
@@ -78,6 +80,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         if webView != nil, self.page == page { ThreadWebFrameBudget.touch(self); return }
         release()
         self.page = page
+        dark = page.dark
         let config = WKWebViewConfiguration()
         config.suppressesIncrementalRendering = false
         let controller = WKUserContentController()

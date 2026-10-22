@@ -76,8 +76,56 @@ extension WebFrameSuites {
             #expect(!t.scrollView.contentView.bounds.intersects(row.frame))
         }
 
-        @Test(arguments: [false, true])
-        func leavingTheViewportReleasesThePageAndReturningReloadsIt(mcp: Bool) async throws {
+        /// An HTML render never reloads on scroll: in overscan it hides its page, and a recycled row parks it for
+        /// the row that shows it next. The height holds throughout. A hidden timeline drops every page.
+        @Test func scrollingKeepsAnHtmlRendersPage() async throws {
+            let assets = Assets()
+            let (window, t, model, row, frame) = try Self.fixture(mcp: false, assets: assets)
+            defer { (t.view(forRow: "web") ?? row).prepareForReuse(); t.context.releasePages(); _ = (window, model) }
+            await Self.until { frame.isLive }
+            let web = try #require(frame.webView)
+            let height = row.frame.height
+            Self.scrollAway(t, row)
+            #expect(frame.webView === web && frame.isHidden, "in overscan the page stays, hidden")
+            TimelineTilingTests.userScroll(t, to: 0)
+            #expect(frame.webView === web && !frame.isHidden)
+            #expect(row.frame.height == height)
+            // Far enough that the row recycles.
+            TimelineTilingTests.userScroll(t, to: row.frame.maxY + 3000)
+            #expect(t.view(forRow: "web") == nil)
+            #expect(t.context.parkedPages == 1)
+            TimelineTilingTests.userScroll(t, to: 0)
+            let back = try #require(t.view(forRow: "web") as? HtmlRenderRowView)
+            #expect(back.frameView.webView === web, "the row that shows the render again gets the same page")
+            #expect(back.frame.height == height)
+            #expect(assets.calls == 1, "no reload, so no new URL")
+            t.isHidden = true
+            #expect(!back.frameView.isLive, "a hidden timeline holds no page")
+            #expect(t.context.parkedPages == 0)
+        }
+
+        /// The page reports its height at one width; a row recycled and shown again has it before any page loads.
+        @Test func aReportedHeightOutlivesTheRowsView() async throws {
+            let assets = Assets()
+            let (window, t, model, row, frame) = try Self.fixture(mcp: false, assets: assets)
+            defer { (t.view(forRow: "web") ?? row).prepareForReuse(); t.context.releasePages(); _ = (window, model) }
+            frame.onMessage?(.object(["jsonrpc": .string("2.0"), "method": .string("ui/notifications/size-changed"), "params": .object(["height": .number(150)])]))
+            // The fixture feeds the timeline directly, so it hands the model's updated row on itself.
+            let updated = model.item(try Self.webItem(mcp: false).row)
+            #expect(updated.ui.htmlHeights.height(width: Double(frame.frame.width)) == 150)
+            t.setItems([updated] + Array(try ThreadTimelineTests.manyItems(copies: 1).prefix(40)))
+            t.layoutSubtreeIfNeeded()
+            let reported = try #require(t.view(forRow: "web")).frame.height
+            #expect(reported == 158, "the page's 150 plus the row's 8 under it")
+            TimelineTilingTests.userScroll(t, to: row.frame.maxY + 3000)
+            t.context.releasePages()
+            TimelineTilingTests.userScroll(t, to: 0)
+            let back = try #require(t.view(forRow: "web"))
+            #expect(back.frame.height == reported)
+        }
+
+        @Test func leavingTheViewportReleasesAnAppAndReturningReloadsIt() async throws {
+            let mcp = true
             let assets = Assets()
             let (window, t, model, row, frame) = try Self.fixture(mcp: mcp, assets: assets)
             defer { row.prepareForReuse(); _ = (window, model) }

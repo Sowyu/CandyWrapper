@@ -68,6 +68,33 @@ public struct HtmlRenderReference: Sendable, Hashable {
     }
 }
 
+/// The heights one HTML render reported for itself, by frame width. T3 keeps the reported height in the frame's
+/// React state (HtmlRenderFrame.tsx:41-42), so a remount starts from the server's guess again. Here it outlives the
+/// row and the web view, so a row scrolled back in has its height before any page loads.
+public struct HtmlRenderHeights: Sendable, Hashable {
+    /// Widths this close together wrap the same page, so they share a height.
+    public static let bucket: Double = 8
+    private var byWidth: [Int: Double] = [:]
+    /// The last report at any width, for a width the page hasn't reported at yet.
+    private var latest: Double?
+
+    public init() {}
+
+    private static func key(_ width: Double) -> Int { Int((width / bucket).rounded()) }
+
+    /// Records a report; false when it changes nothing.
+    public mutating func set(_ height: Double, width: Double) -> Bool {
+        let k = Self.key(width)
+        guard byWidth[k] != height || latest != height else { return false }
+        byWidth[k] = height
+        latest = height
+        return true
+    }
+
+    /// The height reported at this width, else the last one reported.
+    public func height(width: Double) -> Double? { byWidth[Self.key(width)] ?? latest }
+}
+
 /// `McpAppReference` (mcpApp.ts:47-56).
 public struct McpAppReference: Sendable, Hashable {
     public let attachmentId: String

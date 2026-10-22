@@ -47,6 +47,18 @@ import Testing
         #expect(ThreadWebContent.htmlRender(tool("html_render", result, status: "running")) == nil)
     }
 
+    /// A render's reported heights are kept per width bucket; a width it never reported at gets the last report.
+    @Test func reportedHeightsArePerWidthBucket() {
+        var h = HtmlRenderHeights()
+        #expect(h.height(width: 720) == nil)
+        let first = h.set(300, width: 720), same = h.set(300, width: 722), other = h.set(500, width: 400)
+        #expect(first && other)
+        #expect(!same, "722 shares 720's bucket")
+        #expect(h.height(width: 720) == 300)
+        #expect(h.height(width: 401) == 500)
+        #expect(h.height(width: 1000) == 500, "an unreported width takes the last report")
+    }
+
     @Test func frameHeightFollowsTheMeasuredTable() {
         var m = reference.objectValue!
         m["height"] = .number(1500)
