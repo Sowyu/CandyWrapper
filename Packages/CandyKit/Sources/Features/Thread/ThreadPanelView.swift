@@ -429,6 +429,13 @@ public final class ThreadPanelView: DSView {
     /// The stash count tab on the dock's right (`ComposerStashBadge`); hidden at zero.
     public let stashBadge = ComposerStashBadgeView()
     public var showsStashBadge = false { didSet { if showsStashBadge != oldValue { needsLayout = true } } }
+    /// Redesign's Queued pill, left of Stash: it opens `queue` as a panel over the row (the user, 2026-10-22: "integrate
+    /// this to be the left of Stash"). Other themes dock the queue as T3's card and never show it.
+    public let queueBadge = ComposerStashBadgeView(icon: .listOrdered, title: "Queued",
+                                                   describe: { "Queued messages: \($0). Open queue." })
+    private var queueBadgeCount = 0
+    /// While the queue panel is open, a click outside it or its pill closes it, as the stash list does.
+    private var queueClickMonitor: Any?
     /// The stash list, docked where the `/` menu goes; the `/` menu wins when both are open.
     /// Built the first time it opens. Wire it and push entries through `lazyStashMenu`.
     public let lazyStashMenu = LazyView { ComposerStashMenuView() }
@@ -627,6 +634,9 @@ public final class ThreadPanelView: DSView {
         addSubview(activityRow)
         stashBadge.isHidden = true
         addSubview(stashBadge)
+        queueBadge.isHidden = true
+        queueBadge.onToggleMenu = { [weak self] in self?.queue.toggle() }
+        addSubview(queueBadge)
         // Above every attachment (`z-20`), under the drawers and menus.
         bannerStack.isHidden = true
         bannerStack.onLayoutChange = { [weak self] in self?.needsLayout = true }
@@ -1320,6 +1330,8 @@ public final class ThreadPanelView: DSView {
         deviceRow.isHidden = true
         waitingIndicator.isHidden = true
         ringPill.isHidden = true
+        queueBadge.isHidden = true
+        watchQueueClicks(false)
         if composer.contextWindowMeter.superview !== composer {
             composer.addSubview(composer.contextWindowMeter)
             composer.needsLayout = true
@@ -1475,7 +1487,7 @@ public final class ThreadPanelView: DSView {
     /// What the composer docks that is not in the banner stack.
     private var ditherDockViews: [ComposerBannerView?] {
         [approvalPanel, lazyQuestionPanel.loaded, tasksView, lazyPlanFollowUpBanner.loaded, activityRow, queue, stashBadge,
-         commandMenu, lazyStashMenu.loaded]
+         queueBadge, commandMenu, lazyStashMenu.loaded]
     }
     /// The pills and cards Redesign showed on the last pass, to animate what comes and goes.
     private var ditherShown: [NSView] = []
@@ -1514,15 +1526,13 @@ public final class ThreadPanelView: DSView {
             if w > 0 { left += w + spacing; top = rowY }
         }
         let badgeShown = showsStashBadge && visible
-        stashBadge.isHidden = !badgeShown
         stashBadge.placement = .floating
-        if badgeShown {
-            let w = stashBadge.preferredWidth
-            stashBadge.frame = NSRect(x: right - w, y: rowY, width: w, height: pillH)
-            right -= w + spacing
-            top = rowY
-            shown.append(stashBadge)
-        }
+        let queued = docked ? queue.state.items.count : 0
+        queueBadge.placement = .floating
+        queueBadge.count = queued
+        queueBadge.menuOpen = queue.expanded
+        if queued > queueBadgeCount, queueBadgeCount > 0 { queueBadge.animateCount() }
+        queueBadgeCount = queued
         // Capy's machine and workspace row takes the strip's place under the composer, in threads and on the draft;
         // its menu holds the strip's machine, workspace and ref.
         let deviceShown = visible && showsDeviceRow
@@ -1579,6 +1589,21 @@ public final class ThreadPanelView: DSView {
             }
         }
 
+        // Queued then Stash at the row's right. Both drop their labels to the glyph and count when that lets the hero
+        // or the first status pill fit beside them.
+        let rightPills = [(queueBadge, queued > 0), (stashBadge, badgeShown)].filter(\.1).map(\.0)
+        func cluster(_ titled: Bool) -> CGFloat { rightPills.reduce(0) { $0 + $1.width(showingTitle: titled) + spacing } }
+        let leftNeed = left > px ? left - px : pills.first.map { min($0.1, pw) + spacing } ?? 0
+        let titled = leftNeed + cluster(true) <= pw || (leftNeed + cluster(false) > pw && cluster(true) <= pw)
+        for view in rightPills.reversed() {
+            view.showsTitle = titled
+            let w = view.preferredWidth
+            view.frame = NSRect(x: right - w, y: rowY, width: w, height: pillH)
+            right -= w + spacing
+            top = rowY
+            shown.append(view)
+        }
+
         // Status pills fill rows from the left: beside Stash when the context row has no pills, else above it.
         var rowTop = left > px ? rowY - gap - pillH : rowY
         var rowRight = left > px ? px + pw : right
@@ -1607,13 +1632,23 @@ public final class ThreadPanelView: DSView {
             tasksView.frame.size.width = width
             cards.insert((tasksView, tasksView.height - overlap), at: request == nil ? 0 : 1)
         }
-        let queueHeight = docked ? queue.preferredHeight : 0
-        if queueHeight > 0 { cards.append((queue, queueHeight - overlap)) }
         for (view, h) in cards {
             view.frame = NSRect(x: x, y: top - gap - h, width: width, height: h)
             top = view.frame.minY
             shown.append(view)
         }
+
+        // The queue opens from its pill as a panel over everything above the row, floating over the timeline like the
+        // stash list. The `/` menu and the stash list win while open.
+        let menuShown = menus.isOpen && visible
+        let stashShown = !menuShown && stashMenuOpen && visible
+        let queueOpen = queued > 0 && queue.expanded && !menuShown && !stashShown
+        if queueOpen {
+            let h = min(queue.preferredHeight - overlap, max(96, top - gap - 24))
+            queue.frame = NSRect(x: x, y: top - gap - h, width: width, height: h)
+            shown.append(queue)
+        }
+        watchQueueClicks(queueOpen)
 
         // Show what is placed, hide the rest, all floating.
         let candidates: [ComposerBannerView?] = [environmentBanner, lazyNoticeBanner.loaded, lazyServerUpdateBanner.loaded,
@@ -1628,14 +1663,12 @@ public final class ThreadPanelView: DSView {
         }
 
         // The menus float as panels: `/` above the composer, the stash list above its pill.
-        let menuShown = menus.isOpen && visible
         commandMenu.isHidden = !menuShown
         commandMenu.placement = .floating
         if menuShown {
             let h = min(commandMenu.preferredHeight - overlap, max(96, y - gap - 24))
             commandMenu.frame = NSRect(x: x, y: y - gap - h, width: width, height: h)
         }
-        let stashShown = !menuShown && stashMenuOpen && visible
         lazyStashMenu.loaded?.isHidden = !stashShown
         if stashShown {
             stashMenu.isHidden = false
@@ -1654,6 +1687,22 @@ public final class ThreadPanelView: DSView {
             if terminalOpen { needsLayout = true }
         }
         if isDraft { timeline.isHidden = true }
+    }
+
+    private func watchQueueClicks(_ on: Bool) {
+        guard on != (queueClickMonitor != nil) else { return }
+        if let monitor = queueClickMonitor { NSEvent.removeMonitor(monitor); queueClickMonitor = nil; return }
+        queueClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            nonisolated(unsafe) let event = event
+            MainActor.assumeIsolated {
+                guard let self, event.window === self.window, self.queue.expanded else { return }
+                for view in [self.queue, self.queueBadge] as [NSView] where !view.isHidden {
+                    if view.bounds.contains(view.convert(event.locationInWindow, from: nil)) { return }
+                }
+                self.queue.toggle()
+            }
+            return event
+        }
     }
 
     /// New pills rise 4pt and fade in, leaving ones fade out where they were, and when the set changes the others slide

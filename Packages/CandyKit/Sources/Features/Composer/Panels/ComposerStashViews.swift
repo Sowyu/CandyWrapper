@@ -17,6 +17,11 @@ public final class ComposerStashBadgeView: ComposerBannerView {
     /// One animation per stash, nothing while idle.
     public func pulse() {
         pulsing = true
+        animateCount()
+    }
+
+    /// The count's lift alone, without the highlight: Redesign's Queued pill when a message joins the queue.
+    public func animateCount() {
         guard window != nil, !Motion.reduced, let layer = countLabel.layer else { return }
         let rise = CABasicAnimation(keyPath: "transform.translation.y")
         rise.fromValue = 2
@@ -33,14 +38,22 @@ public final class ComposerStashBadgeView: ComposerBannerView {
 
     static let padY: CGFloat = 5, padX: CGFloat = 4, row: CGFloat = 24
     private let row = BannerRowButton()
-    private let icon = IconView(name: .bookmark, size: 12, strokeColor: Themed.color(\.mutedForeground))
-    private let title = glassLabel("Stash", font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 16)
+    private let icon: IconView
+    private let title: LabelView
+    private let describe: (Int) -> String
+    /// Redesign drops the label to just the glyph and the count when the row is short of room.
+    public var showsTitle = true { didSet { if showsTitle != oldValue { title.isHidden = !showsTitle; needsLayout = true } } }
     private let countLabel = glassLabel("0", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.mutedForeground), lineHeight: 16)
 
-    public init() {
+    /// The stash's badge by default; Redesign's Queued pill passes the queue's glyph, title and spoken label.
+    public init(icon: IconName = .bookmark, title: String = "Stash",
+                describe: @escaping (Int) -> String = { "Stashed prompts: \($0). Open stash." }) {
+        self.icon = IconView(name: icon, size: 12, strokeColor: Themed.color(\.mutedForeground))
+        self.title = glassLabel(title, font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 16)
+        self.describe = describe
         super.init(variant: .neutral)
-        row.addSubview(icon)
-        row.addSubview(title)
+        row.addSubview(self.icon)
+        row.addSubview(self.title)
         row.addSubview(countLabel)
         row.action = { [weak self] in self?.onToggleMenu?() }
         row.onHover = { [weak self] _ in self?.restyle() }
@@ -49,9 +62,11 @@ public final class ComposerStashBadgeView: ComposerBannerView {
     }
 
     /// `w-fit`: padding, the 24pt icon column, `gap-x-1`, the label, `gap-x-1`, the count.
-    public var preferredWidth: CGFloat {
+    public var preferredWidth: CGFloat { width(showingTitle: showsTitle) }
+    public func width(showingTitle: Bool) -> CGFloat {
         sizeForPill()
-        return padX * 2 + Self.row + 4 + ceil(title.textWidth) + 4 + max(Self.row, ceil(countLabel.textWidth))
+        let label = showingTitle ? ceil(title.textWidth) + 4 : 0
+        return padX * 2 + Self.row + 4 + label + max(Self.row, ceil(countLabel.textWidth))
     }
     /// Redesign's 32pt pill: 13pt text and 6 a side, like the context pills beside it.
     private var padX: CGFloat { ditherFloating ? 6 : Self.padX }
@@ -71,7 +86,7 @@ public final class ComposerStashBadgeView: ComposerBannerView {
         }
         // The count has its own color class outside the row's `transition-colors`: it switches at once.
         countLabel.color = pulsing ? Themed.color(\.primary) : Themed.color(\.mutedForeground)
-        row.setAccessibilityLabel("Stashed prompts: \(count). Open stash.")
+        row.setAccessibilityLabel(describe(count))
     }
 
     public override func layout() {
