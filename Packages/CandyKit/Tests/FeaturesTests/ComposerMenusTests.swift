@@ -152,6 +152,12 @@ struct ComposerMenusTests {
         #expect(ComposerInlineTokens.collect("入力 @expo/ui\u{3000}を追加").isEmpty)
         #expect(ComposerInlineTokens.collect("Inspect [sub](@scope/pkg/sub) next").first?.kind == .mention(path: "@scope/pkg/sub"))
         #expect(ComposerInlineTokens.collect("Inspect @\"expo/ui\" next").first?.kind == .mention(path: "expo/ui"))
+        // Decorator calls stay text unless quoted (composerInlineTokens.ts:43, 79-83, T3 729924af29).
+        for decorator in ["@namespace.foo(bar)", "@écrire(option)", "@e\u{301}crire(option)"] {
+            #expect(ComposerInlineTokens.collect("\(decorator)\nclass Example {}").isEmpty)
+        }
+        #expect(ComposerInlineTokens.collect("@\"foo(bar)\" ").first?.kind == .mention(path: "foo(bar)"))
+        #expect(ComposerInlineTokens.collect("Inspect @README.md (notes)").first?.kind == .mention(path: "README.md"))
         let link = "[Fix login](t3-context://v1/thread/thread_abc)"
         let ctx = ComposerInlineTokens.collect("see \(link)")
         #expect(ctx.first?.kind == .context(kind: "thread", contextId: "thread_abc", label: "Fix login"))

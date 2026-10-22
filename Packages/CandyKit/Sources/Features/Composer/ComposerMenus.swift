@@ -499,6 +499,8 @@ public enum ComposerInlineTokens {
     private static let scheme = try! NSRegularExpression(pattern: "^[A-Za-z][A-Za-z0-9+.-]*:")
     private static let windowsDrive = try! NSRegularExpression(pattern: #"^[A-Za-z]:[\\/]"#)
     private static let scopedPackage = try! NSRegularExpression(pattern: #"^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*(?:/[^\s@"]+)*$"#)
+    /// `DECORATOR_CALL_REFERENCE_REGEX` (composerInlineTokens.ts:43): `@namespace.foo(bar)` stays text.
+    private static let decoratorCall = try! NSRegularExpression(pattern: #"^[\p{ID_Start}_$][\p{ID_Continue}.$\u200c\u200d]*\("#)
     private static let contextLink = try! NSRegularExpression(pattern: #"(!?)\[([^\]\n]{0,512})\]\((t3-context://v1/[^\s)]{1,200})\)"#)
     private static let escaped = try! NSRegularExpression(pattern: #"\\(.)"#)
 
@@ -557,7 +559,7 @@ public enum ComposerInlineTokens {
         for m in mention.matches(in: text, range: all) {
             let quoted = group(m, 2, in: ns)
             let path = quoted.map(unescape) ?? group(m, 3, in: ns) ?? ""
-            if path.isEmpty || (quoted == nil && ComposerTriggers.matches(scopedPackage, path)) { continue }
+            if path.isEmpty || (quoted == nil && (ComposerTriggers.matches(scopedPackage, path) || ComposerTriggers.matches(decoratorCall, path))) { continue }
             add(m, .mention(path: path))
         }
         for m in skill.matches(in: text, range: all) {
