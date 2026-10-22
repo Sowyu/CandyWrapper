@@ -5,6 +5,6 @@ import AppKit
 @MainActor public enum SettingsPanelMotion {
     public static var durationMs = 0
     public static var duration: TimeInterval {
-        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : Double(min(400, max(0, durationMs))) / 1000
+        Motion.reduced ? 0 : Double(min(400, max(0, durationMs))) / 1000
     }
 }

@@ -6,6 +6,9 @@ import Testing
 
 /// The right panel and the terminal drawer slide on `PanelSlide` like the sidebar: the chat column reflows
 /// every frame, a reversal starts where the panel is, and the last frame is the resting layout.
+///
+/// The slide tests set the global `SettingsPanelMotion.durationMs` and `Motion.reducedOverride`, so their bodies
+/// must stay synchronous on the main actor: no other test can run between the change and the `defer`.
 @MainActor
 struct PanelSlideTests {
     private func makePanel() -> (NSWindow, ThreadPanelView) {
@@ -55,8 +58,8 @@ struct PanelSlideTests {
 
     @Test func rightPanelSlidesAndLandsOnItsRestingFrame() {
         let previous = SettingsPanelMotion.durationMs
-        defer { SettingsPanelMotion.durationMs = previous }
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        Motion.reducedOverride = false
+        defer { SettingsPanelMotion.durationMs = previous; Motion.reducedOverride = nil }
         // The resting frames, without motion.
         SettingsPanelMotion.durationMs = 0
         let (_, still) = makePanel()
@@ -89,8 +92,8 @@ struct PanelSlideTests {
 
     @Test func terminalSlidesUnderTheChatColumn() {
         let previous = SettingsPanelMotion.durationMs
-        defer { SettingsPanelMotion.durationMs = previous }
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        Motion.reducedOverride = false
+        defer { SettingsPanelMotion.durationMs = previous; Motion.reducedOverride = nil }
         SettingsPanelMotion.durationMs = 200
         let (window, panel) = makePanel()
         _ = window
@@ -106,5 +109,26 @@ struct PanelSlideTests {
         panel.setTerminal(open: true, height: 300)
         panel.layoutSubtreeIfNeeded()
         #expect(!panel.terminalSlide.isRunning && panel.terminalDrawer.frame.minY == 500)
+    }
+
+    /// With Reduce Motion on, opening the panel lands on its resting frame at once.
+    @Test func reduceMotionOpensThePanelWithoutASlide() {
+        let previous = SettingsPanelMotion.durationMs
+        defer { SettingsPanelMotion.durationMs = previous; Motion.reducedOverride = nil }
+        Motion.reducedOverride = false
+        SettingsPanelMotion.durationMs = 0
+        let (_, still) = makePanel()
+        still.mutatePanel { $0.open(.diff); return [] }
+        let restPanel = still.rightPanel.frame, restHeader = still.header.frame
+
+        Motion.reducedOverride = true
+        SettingsPanelMotion.durationMs = 200
+        let (window, panel) = makePanel()
+        _ = window
+        panel.mutatePanel { $0.open(.diff); return [] }
+        #expect(!panel.panelSlide.isRunning)
+        #expect(panel.rightPanel.frame == restPanel && panel.header.frame == restHeader)
+        panel.setTerminal(open: true, height: 280)
+        #expect(!panel.terminalSlide.isRunning)
     }
 }

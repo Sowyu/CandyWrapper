@@ -397,7 +397,10 @@ public enum Motion {
     /// Tailwind's default curve, `cubic-bezier(.4, 0, .2, 1)`.
     public static let easeInOut = CAMediaTimingFunction(controlPoints: 0.4, 0, 0.2, 1)
 
-    public static var reduced: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    public static var reduced: Bool { reducedOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    /// Replaces the system's Reduce Motion setting while set. Tests set it from a synchronous main
+    /// actor body and clear it before returning, so a Mac with Reduce Motion on still runs them.
+    nonisolated(unsafe) public static var reducedOverride: Bool?
 
     /// Endless decorative loops (spinners, shimmers, pings, skeletons) draw at most 30 frames a second.
     /// Without a range Core Animation runs them at the display's rate, 120 Hz on ProMotion, and keeps
