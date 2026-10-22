@@ -93,14 +93,37 @@ public final class ComposerPickers {
         }
     }
 
+    private struct ControlsState: Equatable {
+        var catalog: ProviderCatalog
+        var entry: ProviderInstanceEntry?
+        var modelTitle: String
+        var triggerLabel: String
+        var traitsLabel: String
+        var showsTraits: Bool
+        var runtimeMode: RuntimeMode
+        var themeGeneration: Int
+        var appearance: NSAppearance.Name
+    }
+    private var controlsState: ControlsState?
+
     private func refresh(notify: Bool) {
         current = store.resolve(draftKey, context)
-        modelButton.title = current.triggerLabel
+        // Always resolve the latest send values, but only redraw changed controls.
+        defer { if notify { onChange?(current) } }
+        var modelTitle = current.triggerLabel
         if let multiple = currentMultiple {
-            modelButton.title = ModelFanout.triggerLabel(multiple.map { s in
+            modelTitle = ModelFanout.triggerLabel(multiple.map { s in
                 context.catalog.entry(s.instanceId)?.model(s.model).map(ModelNames.trigger) ?? s.model
             })
         }
+        let label = ModelTraits.triggerLabel(current.descriptors, ultrathink: ultrathinkControlled, provider: current.entry?.driver)
+        let state = ControlsState(catalog: context.catalog, entry: current.entry, modelTitle: modelTitle,
+                                  triggerLabel: current.triggerLabel, traitsLabel: label,
+                                  showsTraits: !current.descriptors.isEmpty, runtimeMode: current.runtimeMode,
+                                  themeGeneration: ThemeRuntime.generation, appearance: modelButton.effectiveAppearance.name)
+        guard state != controlsState else { return }
+        controlsState = state
+        modelButton.title = modelTitle
         // ProviderModelPicker.tsx:95-96, 248-262: the `h-3` badge two points past the 16pt glyph, ringed in `contrast-input`.
         let glyph = current.entry.map { e in
             ProviderIcon.make(driver: e.driver, displayName: e.displayName, size: 16, color: Themed.color(\.contrastMutedForeground),
@@ -108,7 +131,6 @@ public final class ComposerPickers {
         }
         modelButton.icon = glyph
         modelButton.toolTip = "\(current.triggerLabel) · ⇧⌘M"
-        let label = ModelTraits.triggerLabel(current.descriptors, ultrathink: ultrathinkControlled, provider: current.entry?.driver)
         traitsButton.title = label
         traitsButton.toolTip = label
         controlsView.showsTraits = !current.descriptors.isEmpty
@@ -118,7 +140,6 @@ public final class ComposerPickers {
         accessButton.toolTip = mode.description
         controlsView.needsLayout = true
         controlsView.invalidateIntrinsicContentSize()
-        if notify { onChange?(current) }
     }
 
     // MARK: Model picker
