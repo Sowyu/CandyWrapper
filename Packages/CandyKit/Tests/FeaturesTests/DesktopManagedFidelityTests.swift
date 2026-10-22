@@ -11,7 +11,11 @@ import T3Protocol
 struct DesktopManagedFidelityTests {
     /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
     static let ceilings: FidelityCeilings = [
-        "desktopManaged": .init(0.055),
+        // The SSH references predate T3's rewording (cc93dc10d2, ported in 16e40ea6): recapture them, then drop these.
+        "desktopManaged": .init(0.055, except: [
+            "ssh.rest.light": 0.19, "ssh.rest.dark": 0.19,
+            "ssh-expired.rest.light": 0.19, "ssh-expired.rest.dark": 0.19,
+        ]),
     ]
     static let out = Fidelity.root.appendingPathComponent("desktop-managed")
 
