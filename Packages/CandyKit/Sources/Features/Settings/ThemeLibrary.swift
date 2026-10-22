@@ -57,7 +57,7 @@ public final class ThemeLibrary {
     /// Applies the saved choice and follows the contrast and glass settings from then on.
     public func start() {
         ClientSettingsStore.shared.observe { [weak self] keys in
-            if keys.contains("appearanceContrast") || keys.contains("glassOpacity") || keys.contains("ditherBackgroundDim") || keys.contains("diffColorScheme") || keys.contains("hydration") || keys.contains("panelAnimationDurationMs") { self?.apply() }
+            if keys.contains("appearanceContrast") || keys.contains("glassOpacity") || keys.contains("ditherBackgroundDim") || keys.contains("ditherAccent") || keys.contains("diffColorScheme") || keys.contains("hydration") || keys.contains("panelAnimationDurationMs") { self?.apply() }
         }
         SettingsFontRuntime.start()
         apply()
@@ -329,6 +329,8 @@ public final class ThemeLibrary {
         var input = ThemeRuntimeInput(contrast: client.int("appearanceContrast"), glassOpacity: client.int("glassOpacity"))
         input.blueOrangeDiff = client.string("diffColorScheme") == "blue-orange"
         input.ditherDim = client.int("ditherBackgroundDim")
+        let accent = DitherAccent.named(client.string("ditherAccent"))
+        input.ditherAccent = accent.id
         if let preview {
             // `applyThemeColorPreview`: the draft on both sides, in its own appearance.
             input.light = ThemeRuntimeHalf(colors: preview.colors)
@@ -346,7 +348,10 @@ public final class ThemeLibrary {
                 // Dither wears its own palette (after Capy), with its picture in the main panel.
                 if a == .light { input.ditherLight = true } else { input.ditherDark = true }
                 input.ditherPicture = DitherPicture.path
-                let half = ThemeRuntimeHalf(colors: d.colors(for: a) ?? d.colors)
+                var colors = d.colors(for: a) ?? d.colors
+                // Teal is the palette's own; another accent replaces its roles once, so every accent use follows.
+                if accent != .teal { colors.merge(accent.colors(dark: a == .dark)) { $1 } }
+                let half = ThemeRuntimeHalf(colors: colors)
                 if a == .light { input.light = half } else { input.dark = half }
                 continue
             }

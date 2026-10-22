@@ -49,6 +49,28 @@ struct GlassThemeTests {
         #expect(glass.glassDark && !glass.ditherDark && glass.ditherPicture == nil)
     }
 
+    /// The "Accent color" setting recolors Dither's accent roles once, with readable text on top; teal leaves Capy's palette alone.
+    @Test func ditherAccentOverridesTheAccentRoles() {
+        let defaults = UserDefaults(suiteName: "cw.dither.tests.\(UUID().uuidString)")!
+        defaults.set(ThemeDefinition.dither.id, forKey: "theme.preference")
+        let library = ThemeLibrary(defaults: defaults)
+        #expect(ClientSettings.defaults.string("ditherAccent") == "teal")
+        let (teal, _) = library.runtimeInput(client: .defaults)
+        #expect(teal.ditherAccent == "teal" && teal.dark?.colors == ThemeDefinition.dither.colors(for: .dark))
+
+        let (violet, _) = library.runtimeInput(client: ClientSettings(decoding: .object(["ditherAccent": .string("violet")])))
+        let accent = DitherAccent.named("violet")
+        #expect(violet.ditherAccent == "violet")
+        for role in [ThemeColorRole.accent, .focus, .messageAction] {
+            #expect(violet.dark?.colors[role] == accent.dark && violet.light?.colors[role] == accent.light)
+        }
+        #expect(ThemeRuntime.resolve(violet).dark.primary != ThemeRuntime.resolve(teal).dark.primary)
+        // White on the darker accents, near black on amber, and an unknown id falls back to teal.
+        #expect(accent.foreground(dark: true) == "#ffffff" && DitherAccent.named("amber").foreground(dark: true) == "#111111")
+        #expect(DitherAccent.teal.foreground(dark: true) == "#ffffff" && DitherAccent.named("nope") == .teal)
+        #expect(DitherAccent.teal.dark == "#2b948b")
+    }
+
     /// Glass Native was removed on 2026-10-14 (docs/decisions.md): a stored choice of it, as the theme or one side of
     /// a light and dark mix, reads as Glass, and its id stays reserved.
     @Test func storedGlassNativeReadsAsGlass() {
