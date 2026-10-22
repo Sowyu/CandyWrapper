@@ -20,8 +20,6 @@ public enum DitherPill {
         return Themed.color(dark ? \.surfaceRaised : \.card).cgColor(in: view).copy(alpha: 0.62)!
     }
 
-    @MainActor public static func border(dark: Bool) -> CGColor { (dark ? Themed.white(0.08) : Themed.black(0.08)).cgColor }
-
     /// Under the product shadow ceiling in light; a little deeper in dark, where a lighter shadow vanishes.
     @MainActor public static func shadow(_ layer: CALayer, path: CGRect, radius: CGFloat, dark: Bool) {
         layer.shadowColor = Themed.black(1).cgColor
@@ -73,7 +71,7 @@ public final class DitherPillSurface: DSView {
     public override func updateLayer() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         face.layer?.backgroundColor = DitherPill.fill(in: self)
-        face.layer?.borderColor = DitherPill.border(dark: effectiveAppearance.isDark)
+        face.layer?.borderColor = DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor
         CATransaction.commit()
         needsLayout = true
     }

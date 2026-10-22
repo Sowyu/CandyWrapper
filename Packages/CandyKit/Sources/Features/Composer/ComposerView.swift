@@ -804,7 +804,8 @@ public final class ComposerView: DSView {
         glass.layer?.backgroundColor = ThemeRuntime.isDither(dark: dark)
             ? Themed.color(dark ? \.surfaceRaised : \.card).cgColor(in: self).copy(alpha: 0.62)
             : Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
-        outline.layer?.borderColor = (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
+        outline.layer?.borderColor = ThemeRuntime.isDither(dark: dark) ? DitherChrome.rim(dark: dark).cgColor
+            : (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
         dropHighlight.backgroundColor = Themed.color(\.accent, 0.45).cgColor(in: self)
         dropHighlight.borderColor = Themed.color(\.primary, 0.7).cgColor(in: self)
         // Classic Glass: depth from the pane's density and its highlight, not a soft drop shadow.
