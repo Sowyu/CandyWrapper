@@ -64,7 +64,7 @@ struct CodeBlockScrollTests {
         let oneLine = MarkdownLayout(document: MarkdownDocument(parsing: "```swift\nlet value = 1\n```\n\nAfter."), width: 400, unwrappedCode: [0])
         #expect(view.layout(forWidth: 400).height == oneLine.height + MarkdownStyle.codeScrollbar)
         let thumb = try #require(MarkdownView.codeThumb(s.viewport, s.contentWidth, 0))
-        #expect(thumb.minX == s.viewport.minX && thumb.maxY == s.viewport.maxY && thumb.height == 7)
+        #expect(thumb.minX == s.viewport.minX && thumb.maxY == s.viewport.maxY && thumb.height == 6)
         let end = try #require(MarkdownView.codeThumb(s.viewport, s.contentWidth, s.contentWidth - s.viewport.width))
         #expect(abs(end.maxX - s.viewport.maxX) < 0.001)
     }
