@@ -114,6 +114,7 @@ public enum ThemeRuntime {
             dither = (next.ditherLight, next.ditherDark)
             ditherFlags = dither
             ditherPicture = next.ditherPicture.map { URL(filePath: $0) }
+            if next.ditherLight || next.ditherDark { SmoothCorners.install() }
             changed = true
         }
         guard changed else { return }
@@ -126,10 +127,16 @@ public enum ThemeRuntime {
 
     /// Tells every view in the tree its colors changed, the same way AppKit tells them about light and dark.
     static func refresh(_ view: NSView) {
+        // Subviews' layers sit in this tree, so one walk turns every corner continuous, or back.
+        if let layer = view.layer { SmoothCorners.sync(layer, smooth: SmoothCorners.active) }
+        refreshViews(view)
+    }
+
+    private static func refreshViews(_ view: NSView) {
         view.viewDidChangeEffectiveAppearance()
         view.needsDisplay = true
         view.layer.map(redrawDecorations)
-        for sub in view.subviews { refresh(sub) }
+        for sub in view.subviews { refreshViews(sub) }
     }
 
     /// Redraws the box decorations in a view tree, for an appearance change AppKit doesn't pass on to them.

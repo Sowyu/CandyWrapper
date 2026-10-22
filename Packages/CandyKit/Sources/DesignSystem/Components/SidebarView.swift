@@ -84,6 +84,9 @@ public final class SidebarLayoutView: DSView {
     private var glassBackdrop: WallpaperBackdropView?
     /// The Dither theme's picture in the main panel, present only while it shows.
     private var ditherArt: DitherArtView?
+    /// Dither's hairline down the panel's sidebar edge and round its bottom left corner, faded in below the band.
+    private let panelRim = CAShapeLayer()
+    private let panelRimMask = CAGradientLayer()
     /// Dither's tab strip in the window's top band, over the framed content panel; the app fills its tabs.
     public let tabStrip = DitherTabStripView()
     /// Dither's history buttons, after Capy's: in the titlebar row at the sidebar's right, whatever the sidebar shows.
@@ -259,12 +262,16 @@ public final class SidebarLayoutView: DSView {
         CATransaction.commit()
         // Dither (after Capy): the content is a rounded panel framed by the chrome, under a tab strip band.
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-        let inset: CGFloat = dither ? DitherChrome.frameInset : 0, band: CGFloat = dither ? DitherChrome.band : 0
-        main.frame = NSRect(x: gap, y: band, width: max(0, bounds.width - gap - inset), height: max(0, bounds.height - band - inset))
+        // The panel runs flush to the window's right and bottom edges, where the window's own corner rounds it, and up
+        // to the band, whose color its top blends into (DitherArtView.topBlend). Only the sidebar side keeps its
+        // rounded corners and hairline.
+        let band: CGFloat = dither ? DitherChrome.band : 0
+        main.frame = NSRect(x: gap, y: band, width: max(0, bounds.width - gap), height: max(0, bounds.height - band))
         main.layer?.cornerRadius = dither ? DitherChrome.panelRadius : 0
-        main.layer?.borderWidth = dither ? 0.5 : 0
-        main.layer?.borderColor = Themed.color(\.contrastForeground, 0.08).cgColor(in: self)
-        layer?.backgroundColor = dither ? Themed.color(\.sidebar, sidebar: true).cgColor(in: self) : nil
+        main.layer?.maskedCorners = dither ? [.layerMinXMinYCorner, .layerMinXMaxYCorner]
+            : [.layerMinXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+        layoutPanelRim(dither: dither)
+        layer?.backgroundColor = dither ? DitherChrome.bandColor(in: self) : nil
         sidebar.showsBorder = !dither
         // The band and frame around the panel are flat, so the sidebar drops its grain to match them.
         if sidebar.surface.showsGrain == dither { sidebar.surface.showsGrain = !dither }
@@ -280,6 +287,32 @@ public final class SidebarLayoutView: DSView {
         rail.frame = NSRect(x: gap - 1 - SidebarMetrics.railWidth / 2, y: 0, width: SidebarMetrics.railWidth, height: bounds.height)
         rail.isHidden = !isOpen // collapsed offcanvas rail has `pointer-events: none`
         collapsedTrigger.frame = NSRect(x: SidebarMetrics.controlsLeft(windowedMac: true) + 1, y: (SidebarMetrics.topbarHeight - 28) / 2, width: 28, height: 28)
+    }
+
+    private func layoutPanelRim(dither: Bool) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        guard dither, let host = main.layer else { panelRim.removeFromSuperlayer(); return }
+        if panelRim.superlayer !== host {
+            host.addSublayer(panelRim)
+            panelRim.zPosition = 10
+            panelRim.fillColor = nil
+            panelRim.lineWidth = 0.5
+            panelRim.mask = panelRimMask
+        }
+        let r = DitherChrome.panelRadius, b = main.bounds
+        panelRim.frame = b
+        panelRim.strokeColor = Themed.color(\.contrastForeground, 0.08).cgColor(in: self)
+        panelRim.path = SmoothCorners.path(b.insetBy(dx: 0.25, dy: 0.25), r, corners: [.topLeft, .bottomLeft], flipped: main.isFlipped)
+        // Only the left edge and the bottom left curve, which ends 1.53 radii along the bottom edge.
+        panelRimMask.frame = CGRect(x: 0, y: 0, width: ceil(r * SmoothCorners.reach) + 1, height: b.height)
+        let fadeIn = min(1, DitherArtView.topBlend / max(1, b.height))
+        panelRimMask.colors = [NSColor.clear.cgColor, NSColor.black.cgColor]
+        panelRimMask.locations = [0, NSNumber(value: Double(fadeIn))]
+        // The mask's unit space follows the flipped panel: 0 is its top.
+        panelRimMask.startPoint = CGPoint(x: 0.5, y: 0)
+        panelRimMask.endPoint = CGPoint(x: 0.5, y: 1)
     }
 }
 
@@ -464,19 +497,29 @@ public final class SidebarTriggerView: ControlView {
     }
 }
 
-/// The Dither theme's metrics, after Capy's desktop app: tight corners.
+/// The Dither theme's metrics, after Capy's desktop app, with generous continuous corners (SmoothCorners).
 public enum DitherChrome {
-    /// Capy's corners: the composer and its banners 8, buttons and rows 6.
-    public static let cardRadius: CGFloat = 8
-    public static let controlRadius: CGFloat = 6
-    /// The main content panel inside the window frame.
-    public static let panelRadius: CGFloat = 12
-    /// The window frame's margin around the content panel, and the tab strip band above it.
-    public static let frameInset: CGFloat = 8
-    /// 52, the titlebar row everywhere else (traffic lights, sidebar header), so the tabs share their centre line.
+    /// Banners, cards, tabs and popovers.
+    public static let cardRadius: CGFloat = 12
+    /// Buttons, inputs and rows.
+    public static let controlRadius: CGFloat = 8
+    /// The main content panel inside the window frame, and the composer: its send button sits 9 in, so 16 keeps
+    /// the button's 8 close to concentric.
+    public static let panelRadius: CGFloat = 16
+    /// The tab strip band above the content panel: 52, the titlebar row everywhere else (traffic lights, sidebar header), so the tabs share their centre line.
     public static let band: CGFloat = 52
 
-    /// T3's radius for a box, Capy's under Dither: small controls 6, cards, popovers and bubbles 8; hairline
+    /// The band's color: the panel's top blends into it (DitherArtView, the thread's top fade).
+    @MainActor public static func bandColor(in view: NSView) -> CGColor { Themed.color(\.sidebar, sidebar: true).cgColor(in: view) }
+
+    /// How much of the band's color covers the panel at `t`, 0 at the panel's top to 1 at the blend's bottom: all of it at
+    /// the top edge, so band and panel meet in one color, easing to none.
+    public nonisolated static func bandBlend(_ t: Double) -> Double {
+        let x = min(1, max(0, t))
+        return 1 - x * x * (3 - 2 * x)
+    }
+
+    /// T3's radius for a box, under Dither: small controls 8, cards, popovers and bubbles 12; hairline
     /// rounding and full pills unchanged.
     public static func radius(_ stock: CGFloat) -> CGFloat {
         switch stock {

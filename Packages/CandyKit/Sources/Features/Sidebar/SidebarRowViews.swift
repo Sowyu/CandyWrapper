@@ -569,9 +569,11 @@ final class SidebarCardRowView: SidebarRowBase {
     }
 
     var row: SidebarRowModel? { if case .row(let r)? = item { r } else { nil } }
+    /// Dither rounds the 78pt card as a card, not a control.
+    private var cardRadius: CGFloat { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.cardRadius : 8 }
 
     override func refresh() {
-        surface.cornerRadius = rowRadius
+        surface.cornerRadius = cardRadius
         guard let r = row else { return }
         let hovered = state.hovered || isKeyboardFocused || snoozeButton.state.popupOpen
         CATransaction.begin()
@@ -580,7 +582,7 @@ final class SidebarCardRowView: SidebarRowBase {
         surface.backgroundColor = SidebarRowBase.surfaceColor(r, hovered: state.hovered || isFileDragOver)?.cgColor(in: self)
         applyRing(surface)
         applyLift(surface)
-        paneEdge = WindowGlass.syncEdge(paneEdge, on: surface, in: self, radius: 8, show: r.isActive || r.isSelected)
+        paneEdge = WindowGlass.syncEdge(paneEdge, on: surface, in: self, radius: cardRadius, show: r.isActive || r.isSelected)
         CATransaction.commit()
         // Background work fades as a whole row (`opacity-70 transition-opacity`, full on hover, Sidebar.tsx:1596-1598).
         HoverReveal.fade(self, to: r.recedes && r.status == .working && !hovered ? 0.7 : 1)
@@ -860,7 +862,7 @@ final class SidebarSlimRowView: SidebarRowBase {
         surface.backgroundColor = SidebarRowBase.surfaceColor(r, hovered: state.hovered || isFileDragOver)?.cgColor(in: self)
         applyRing(surface)
         applyLift(surface)
-        paneEdge = WindowGlass.syncEdge(paneEdge, on: surface, in: self, radius: 8, show: r.isActive || r.isSelected)
+        paneEdge = WindowGlass.syncEdge(paneEdge, on: surface, in: self, radius: rowRadius, show: r.isActive || r.isSelected)
         CATransaction.commit()
         let unsettle = r.action == .unsettle
         // Dimmed favicon at rest, restored on hover.

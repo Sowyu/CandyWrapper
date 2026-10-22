@@ -7,8 +7,13 @@ public final class IconView: NSView {
     /// Nil for an icon built from a definition, such as a file type icon.
     public let name: IconName?
     private var definition: IconDefinition
-    /// Dither draws Hugeicons' duotone glyph where one is mapped (IconDataHugeicons.generated.swift), lucide elsewhere.
+    /// The definition outside Dither: the name's lucide glyph, or the one passed in.
+    private let base: IconDefinition
+    /// Dither draws Hugeicons' glyph where one is mapped (IconDataHugeicons.generated.swift), lucide elsewhere.
     private var usesHugeicons = false
+    /// The icon whose Hugeicons glyph Dither draws: `name`, or the lucide icon a passed-in definition draws.
+    /// Looked up only once Dither shows, so other themes never build the lookup.
+    private lazy var hugeiconsName: IconName? = name ?? (isBrand ? IconName.lucide(drawing: base) : nil)
     /// Fixed-color glyph: unfilled shapes stay unfilled.
     private let isBrand: Bool
     private var shapes: [(layer: CAShapeLayer, element: IconElement, path: CGPath)] = []
@@ -28,6 +33,7 @@ public final class IconView: NSView {
     }
 
     /// An icon outside the generated set. `currentColor` resolves to `strokeColor` (or `fillColor` for fills).
+    /// A lucide icon's definition (a menu glyph, a restroked chevron) still swaps to its Hugeicons glyph under Dither.
     public convenience init(definition: IconDefinition, size: CGFloat = 16, color: NSColor = .labelColor) {
         self.init(name: nil, definition: definition, brand: true, size: size, strokeColor: color, fillColor: nil)
     }
@@ -35,6 +41,7 @@ public final class IconView: NSView {
     private init(name: IconName?, definition: IconDefinition, brand: Bool, size: CGFloat, strokeColor: NSColor, fillColor: NSColor?) {
         self.name = name
         self.definition = definition
+        self.base = definition
         self.isBrand = brand
         self.strokeColor = strokeColor
         self.fillColor = fillColor
@@ -43,7 +50,7 @@ public final class IconView: NSView {
         wantsLayer = true
         layerContentsRedrawPolicy = .never
         layer?.masksToBounds = false
-        if let name, ThemeRuntime.isDither(dark: NSApp?.effectiveAppearance.isDark ?? true), let alt = name.hugeiconsDefinition {
+        if ThemeRuntime.isDither(dark: NSApp?.effectiveAppearance.isDark ?? true), let alt = hugeiconsName?.hugeiconsDefinition {
             self.definition = alt
             usesHugeicons = true
         }
@@ -70,11 +77,10 @@ public final class IconView: NSView {
 
     /// Swaps between lucide and Hugeicons as the Dither theme turns on or off for this view.
     private func syncIconSet() {
-        guard let name else { return }
-        let alt = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? name.hugeiconsDefinition : nil
+        let alt = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? hugeiconsName?.hugeiconsDefinition : nil
         guard (alt != nil) != usesHugeicons else { return }
         usesHugeicons = alt != nil
-        definition = alt ?? name.definition
+        definition = alt ?? base
         buildShapes()
         relayout()
     }
@@ -117,11 +123,25 @@ public final class IconView: NSView {
         CATransaction.commit()
     }
 
+    /// Dither's glyph sizes: whatever box a call site gives, a row, menu or badge glyph draws at 14 and a toolbar glyph
+    /// at 16, centered on its box, so neighbours match. Other sizes (8, 10, 18 and up) keep their box.
+    nonisolated static func ditherGlyphSize(box: CGFloat) -> CGFloat {
+        switch box {
+        case 11...14: 14
+        case 14..<17: 16
+        default: box
+        }
+    }
+    /// Dither's one stroke, in points at every glyph size; per-call `strokeWidth` overrides don't apply.
+    nonisolated static let ditherStroke: CGFloat = 1.2
+
     private func relayout() {
         let vb = definition.viewBox
         let w = bounds.width, h = bounds.height
         guard w > 0, h > 0, vb.width > 0, vb.height > 0 else { return }
-        let scale = min(w / vb.width, h / vb.height)
+        let box = min(w, h)
+        let glyph = usesHugeicons ? Self.ditherGlyphSize(box: box) : box
+        let scale = usesHugeicons ? glyph / max(vb.width, vb.height) : min(w / vb.width, h / vb.height)
         let ox = (w - vb.width * scale) / 2, oy = (h - vb.height * scale) / 2
         withoutActions {
             for s in shapes {
@@ -133,9 +153,15 @@ public final class IconView: NSView {
                 s.layer.bounds = bounds
                 s.layer.position = CGPoint(x: bounds.midX, y: bounds.midY)
                 s.layer.path = s.path.copy(using: &t)
-                // A lucide stroke width override (2 is lucide's own) keeps its proportion on Hugeicons' 1.8.
-                let width = strokeWidth.map { usesHugeicons ? $0 * 0.9 : $0 } ?? s.element.paint.strokeWidth
-                s.layer.lineWidth = width * scale
+                if usesHugeicons {
+                    s.layer.lineWidth = Self.ditherStroke
+                    // The duotone tint only on large glyphs: at row and toolbar sizes it made closed shapes (a clock)
+                    // read heavier than open ones (a check).
+                    s.layer.isHidden = glyph <= 16 && s.element.paint.isTint
+                } else {
+                    s.layer.lineWidth = (strokeWidth ?? s.element.paint.strokeWidth) * scale
+                    s.layer.isHidden = false
+                }
             }
         }
     }

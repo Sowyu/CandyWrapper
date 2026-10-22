@@ -1450,8 +1450,14 @@ public final class ThreadPanelView: DSView {
     /// No fill of its own: the main panel's grain surface (`bg-background surface-grain`) shows
     /// through. Only the top fade uses the background color.
     public override func updateLayer() {
-        let bg = TL.c(\.background).cgColor(in: self)
-        fade.colors = Self.fadeStops.map { bg.copy(alpha: Self.topFade($0))! }
+        // Dither fades into the tab strip band above the panel, in its color and all of it at the top (DitherArtView).
+        if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
+            let band = DitherChrome.bandColor(in: self)
+            fade.colors = Self.fadeStops.map { band.copy(alpha: DitherChrome.bandBlend($0))! }
+        } else {
+            let bg = TL.c(\.background).cgColor(in: self)
+            fade.colors = Self.fadeStops.map { bg.copy(alpha: Self.topFade($0))! }
+        }
         needsLayout = true
     }
 
