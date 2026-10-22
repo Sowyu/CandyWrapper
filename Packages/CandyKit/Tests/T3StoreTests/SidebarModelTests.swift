@@ -449,7 +449,9 @@ private func pill(
         #expect(S.threadWokeAt(threads[4], nowMs: now) == nil)
     }
 
-    @Test func freshFailureAndCompletionRaiseAHand() {
+    /// threadSettled.ts:82-110 at T3 d2fb83a973 and 69ba80dfae.
+    @Test func onlyRequestsAndFreshFailuresRaiseAHand() {
+        let now = ms("2026-03-09T12:00:00.000Z")
         let failedLater = sidebarThread {
             $0.latestRunId = "r"; $0.status = .failed; $0.updatedAt = "2026-03-09T11:30:00.000Z"
             $0.snoozedAt = "2026-03-09T11:00:00.000Z"; $0.snoozedUntil = "2026-03-09T15:00:00.000Z"
@@ -458,11 +460,23 @@ private func pill(
         var failedBefore = failedLater.shell
         failedBefore.updatedAt = "2026-03-09T10:30:00.000Z"
         #expect(!S.threadRaisedHandWhileSnoozed(SidebarThread(failedBefore)))
+        // A metadata write bumps updatedAt after the snooze, but the run failed before it.
+        var touched = failedLater.shell
+        touched.latestRunCompletedAt = .value("2026-03-09T10:45:00.000Z")
+        #expect(!S.threadRaisedHandWhileSnoozed(SidebarThread(touched)))
+        touched.latestRunCompletedAt = .value("2026-03-09T11:20:00.000Z")
+        #expect(S.threadWokeAt(SidebarThread(touched), nowMs: now)?.raw == "2026-03-09T11:20:00.000Z")
+        // A run that finishes while snoozed keeps the thread hidden until its timer.
         let completed = sidebarThread {
             $0.latestRunId = "r"; $0.status = .completed; $0.latestRunCompletedAt = .value("2026-03-09T11:20:00.000Z")
             $0.snoozedAt = "2026-03-09T11:00:00.000Z"; $0.snoozedUntil = "2026-03-09T15:00:00.000Z"
         }
-        #expect(S.threadWokeAt(completed, nowMs: ms("2026-03-09T12:00:00.000Z"))?.raw == "2026-03-09T11:20:00.000Z")
+        #expect(!S.threadRaisedHandWhileSnoozed(completed))
+        #expect(S.effectiveSnoozed(completed, nowMs: now) && S.threadWokeAt(completed, nowMs: now) == nil)
+        // Any pending request wakes it, auth refresh included.
+        var auth = completed.shell
+        auth.pendingRuntimeRequest = PendingRuntimeRequestSummary(id: "q", kind: .authRefresh, createdAt: "2026-03-09T11:40:00.000Z")
+        #expect(S.threadRaisedHandWhileSnoozed(SidebarThread(auth)) && !S.effectiveSnoozed(SidebarThread(auth), nowMs: now))
     }
 
     @Test func presentLatestRunFallsBackForOldServers() {

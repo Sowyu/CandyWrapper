@@ -345,23 +345,29 @@ public enum SidebarModel {
 
     // MARK: - Snooze (packages/client-runtime/src/state/threadSettled.ts)
 
-    private static func completedAfterSnooze(_ thread: SidebarThread) -> T3Timestamp? {
-        guard let snoozedAt = thread.shell.snoozedAt, let run = thread.latestRun, run.status == .completed,
-            let completedAt = run.completedAt, let c = completedAt.epochMs, let s = snoozedAt.epochMs, c > s
-        else { return nil }
-        return completedAt
+    /// `failureEdgeAt` (threadSettled.ts:100-110, T3 69ba80dfae): when the failure that may end a snooze happened.
+    /// The outer nil means the runtime isn't failing. A failed run's completion wins over `updatedAt`, which every
+    /// metadata write bumps. `error` is the legacy session status.
+    private static func failureEdgeAt(_ thread: SidebarThread) -> T3Timestamp?? {
+        guard let runtime = thread.runtime, runtime.status == .failed || runtime.status.rawValue == "error" else {
+            return nil
+        }
+        if let run = thread.latestRun, run.status == .failed, let completedAt = run.completedAt { return .some(completedAt) }
+        return .some(runtime.updatedAt)
     }
 
-    /// Port of `threadRaisedHandWhileSnoozed` (threadSettled.ts:105-131).
+    /// Port of `threadRaisedHandWhileSnoozed` (threadSettled.ts:82-97). Only a request for the user or a fresh
+    /// failure ends a snooze early. A finished run never does (T3 d2fb83a973), so a snoozed thread that keeps
+    /// waking for background work stays hidden until its timer. Any pending request counts, auth refresh and a
+    /// nonblocking question included.
+    // ponytail: no pendingSubagentRequest yet (T3 f4df794777), add it with the subagent sidebar status
     public static func threadRaisedHandWhileSnoozed(_ thread: SidebarThread) -> Bool {
         if thread.hasPendingApprovals || thread.hasPendingUserInput { return true }
-        if let runtime = thread.runtime, runtime.status == .failed {
-            guard let snoozedAt = thread.shell.snoozedAt else { return true }
-            if let updated = runtime.updatedAt?.epochMs, let snoozed = snoozedAt.epochMs, updated > snoozed {
-                return true
-            }
-        }
-        return completedAfterSnooze(thread) != nil
+        if thread.shell.pendingRuntimeRequest != nil { return true }
+        guard let failedAt = failureEdgeAt(thread) else { return false }
+        guard let snoozedAt = thread.shell.snoozedAt else { return true }
+        guard let failed = failedAt?.epochMs, let snoozed = snoozedAt.epochMs else { return false }
+        return failed > snoozed
     }
 
     /// Port of `effectiveSnoozed` (threadSettled.ts:162-173). Malformed data never hides a thread.
@@ -374,7 +380,11 @@ public enum SidebarModel {
     public static func threadWokeAt(_ thread: SidebarThread, nowMs: Int64) -> T3Timestamp? {
         guard let snoozedUntil = thread.shell.snoozedUntil, let wakeAt = snoozedUntil.epochMs else { return nil }
         if threadRaisedHandWhileSnoozed(thread) {
-            if let completedAt = completedAfterSnooze(thread) { return completedAt }
+            // An old failure must not replace the activity time of an approval or input wake.
+            if let failedAt = failureEdgeAt(thread) ?? nil {
+                guard let snoozed = thread.shell.snoozedAt else { return failedAt }
+                if let f = failedAt.epochMs, let s = snoozed.epochMs, f > s { return failedAt }
+            }
             return thread.runtime?.updatedAt ?? thread.shell.snoozedAt
         }
         return wakeAt <= nowMs ? snoozedUntil : nil
