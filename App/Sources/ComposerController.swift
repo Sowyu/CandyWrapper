@@ -941,8 +941,6 @@ final class ComposerController {
     }
     private var lastRunOnInputs: RunOnInputs?
     private var loadBalanceTask: Task<Void, Never>?
-    /// The draft the last SnapShot went to and its reserved thread, which it becomes once sent.
-    private var snapShotTarget: (draftId: String, threadId: String)?
 
     /// Drafts whose automatic sample ran and found no machine (`loadBalancing.failed`), so they do not poll.
     private var loadBalanceFailed: Set<String> = []
@@ -2293,13 +2291,19 @@ fileprivate struct QuestionFile {
     /// The pending upload the server minted; it becomes the attachment id on submit.
     var attachmentId: String?
     var task: Task<Void, Never>?
+    /// A SnapShot: sent as an image with its source, and its local copy is the app's to delete.
+    var snapShot = false
+    var snapShotSource: JSONValue?
 
+    var type: String { snapShot ? "image" : "file" }
     var row: ComposerFileRow { ComposerFileRow(id: id, name: name, sizeBytes: sizeBytes, status: status) }
-    /// `ChatFileAttachment`: `{type, id, name, mimeType, sizeBytes}`.
+    /// `ChatFileAttachment`: `{type, id, name, mimeType, sizeBytes}`, or `ChatImageAttachment` with its `source`.
     var attachment: JSONValue? {
         guard status == .ready, let attachmentId else { return nil }
-        return .object(["type": .string("file"), "id": .string(attachmentId), "name": .string(name),
-                        "mimeType": .string(mimeType), "sizeBytes": .number(Double(sizeBytes))])
+        var fields: [String: JSONValue] = ["type": .string(type), "id": .string(attachmentId), "name": .string(name),
+                                           "mimeType": .string(mimeType), "sizeBytes": .number(Double(sizeBytes))]
+        if let snapShotSource { fields["source"] = snapShotSource }
+        return .object(fields)
     }
 }
 
@@ -2345,6 +2349,13 @@ extension ComposerController {
         return Self.questionKey(threadId, requestId, question.id)
     }
 
+    /// Files across one request's questions, against `maxQuestionAttachments` (`countQuestionRequestAttachments`).
+    private func questionRequestAttachmentCount(_ requestId: String) -> Int {
+        guard case .thread(let threadId) = target else { return 0 }
+        let prefix = Self.requestPrefix(threadId, requestId)
+        return questionFiles.filter { $0.key.hasPrefix(prefix) }.reduce(0) { $0 + $1.value.count }
+    }
+
     /// The question's file list and the attachment state the answer rules read. Files of requests
     /// that are no longer pending are released (ChatView.tsx:3374-3398).
     fileprivate func syncQuestionFiles() {
@@ -2377,6 +2388,7 @@ extension ComposerController {
     /// upload is no longer pending, so the delete is a no-op).
     private func discard(_ file: QuestionFile) {
         file.task?.cancel()
+        if file.snapShot { try? FileManager.default.removeItem(at: file.url) }
         guard let id = file.attachmentId, let supervisor = shell?.supervisor else { return }
         Task { _ = try? await supervisor.request("attachments.delete", payload: .object(["attachmentId": .string(id)])) }
     }
@@ -2447,7 +2459,7 @@ extension ComposerController {
         guard let shell else { updateFile(id, key: key) { $0.status = .failed("This connection cannot upload attachments.") }; return }
         let task = Task { [weak self] in
             let result = await Self.uploadAttachment(
-                supervisor: shell.supervisor, base: shell.http.baseURL, type: "file", name: file.name,
+                supervisor: shell.supervisor, base: shell.http.baseURL, type: file.type, name: file.name,
                 mimeType: file.mimeType, sizeBytes: file.sizeBytes, file: file.url,
                 onMinted: { minted in self?.updateFile(id, key: key) { $0.attachmentId = minted } },
                 onProgress: { p in
@@ -3137,21 +3149,29 @@ extension ComposerController {
     /// Files dropped on the open thread's sidebar row (`consumePendingFileDrop`, ChatView.tsx:10930-10950).
     func attachDroppedFiles(_ urls: [URL]) { addFiles(urls.map { ComposerIncomingFile(url: $0) }) }
 
-    /// `resolveTarget` (SnapShotCoordinator.tsx:39-58, 221-242): the last capture's draft while it exists, or the
-    /// thread it was sent as, else the open project's draft (`handleNewThread`, which opens it). Nil without a project.
-    var snapShotDestination: (key: String, environment: String)? {
-        if let last = snapShotTarget {
-            if let s = sessions.values.first(where: { $0.draftId == last.draftId }), let env = ThreadId(s.threadId).environmentId {
-                return (last.draftId, env)
-            }
-            if sidebar?.snapshot?.threads.contains(where: { $0.id.rawValue == last.threadId }) == true, let env = ThreadId(last.threadId).environmentId {
-                return (last.threadId, env)
-            }
-            snapShotTarget = nil
+    /// `resolveTarget` (SnapShotCoordinator.tsx:52-71, 251-299): the thread or draft on screen, or the thread
+    /// a sent draft became, else the open project's draft (`handleNewThread`, which opens it). Nil without a project.
+    /// `question` pins the open question that takes SnapShots at capture start, so a question that opens
+    /// later never claims the capture (`resolveSnapShotAttachmentTarget`, SnapShotCoordinator.tsx:73-83).
+    var snapShotDestination: (key: String, environment: String, question: String?)? {
+        switch target {
+        case .thread(let id):
+            if let env = id.environmentId { return (id.rawValue, env, snapShotQuestionKey) }
+        case .draft(let s):
+            guard let env = ThreadId(s.threadId).environmentId else { break }
+            if sessions.values.contains(where: { $0.draftId == s.draftId }) { return (s.draftId, env, nil) }
+            if sidebar?.snapshot?.threads.contains(where: { $0.id.rawValue == s.threadId }) == true { return (s.threadId, env, nil) }
+        case nil: break
         }
-        guard newThread(), questionRequestId == nil, case .draft(let session) = target, let env = targetEnvironmentId else { return nil }
-        snapShotTarget = (session.draftId, session.threadId)
-        return (session.draftId, env)
+        guard newThread(), case .draft(let session) = target, let env = targetEnvironmentId else { return nil }
+        return (session.draftId, env, nil)
+    }
+
+    /// The open question's key while it takes SnapShots (`questionTakesSnapShots`, ChatComposer.tsx:1715-1742).
+    private var snapShotQuestionKey: String? {
+        guard supportsQuestionAttachments, let requestId = questionRequestId, !responding.contains(requestId),
+              panel.lazyQuestionPanel.loaded?.session?.progress.activeQuestion?.allowsCustomAnswer != false else { return nil }
+        return activeQuestionKey
     }
 
     /// The capture's draft or thread comes forward after delivery, so its tile is on screen.
@@ -3170,11 +3190,18 @@ extension ComposerController {
     }
 
     /// Preserve the draft selected at capture start even if navigation changes during ScreenCaptureKit.
-    func attachSnapShot(_ data: Data, source: JSONValue? = nil, destination: (key: String, environment: String)) async throws -> String {
+    func attachSnapShot(_ data: Data, source: JSONValue? = nil, destination: (key: String, environment: String, question: String?)) async throws -> String {
         let key = destination.key, env = destination.environment
-        guard (draftAttachments[key]?.count ?? 0) + (preparingImages[key] ?? 0) < ComposerAttachmentRules.maxAttachments else { throw CancellationError() }
+        let composerFull = { (self.draftAttachments[key]?.count ?? 0) + (self.preparingImages[key] ?? 0) >= ComposerAttachmentRules.maxAttachments }
+        guard destination.question != nil || !composerFull() else { throw CancellationError() }
         preparingImages[key, default: 0] += 1
         defer { preparingImages[key, default: 1] -= 1 }
+        // The pinned question gets the capture while it is still the open one (SnapShotCoordinator.tsx:175-197).
+        var question: (key: String, requestId: String)? {
+            guard let pinned = destination.question, pinned == snapShotQuestionKey, draftKey == key,
+                  let requestId = questionRequestId else { return nil }
+            return (pinned, requestId)
+        }
         let work = URL.applicationSupportDirectory.appendingPathComponent(Bundle.main.bundleIdentifier ?? "CandyWrapper").appendingPathComponent("SnapShots")
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         let url = work.appendingPathComponent("snapshot-\(UUID().uuidString).png")
@@ -3184,11 +3211,31 @@ extension ComposerController {
         let prepared = try await ComposerImageIO.prepare(url, name: "Snapshot.png", mimeType: "image/png",
                                                         maxBytes: ComposerAttachmentRules.maxImageBytes, workDir: work)
         keepsSource = prepared.url == url
+        let snapShotSource = source.flatMap { source in
+            ComposerImageIO.pixelSize(prepared.url).map { SnapShotSource.resized(source, width: Int($0.width), height: Int($0.height)) }
+        }
+        if let question {
+            // Only question drafts skip the composer's own attachment checks; the request's cap still holds.
+            guard questionRequestAttachmentCount(question.requestId) < Self.maxQuestionAttachments else {
+                try? FileManager.default.removeItem(at: prepared.url)
+                throw CancellationError()
+            }
+            var file = QuestionFile(id: UUID().uuidString, url: prepared.url, name: prepared.name, mimeType: prepared.mimeType,
+                                    sizeBytes: prepared.sizeBytes, status: .uploading(0))
+            file.snapShot = true
+            file.snapShotSource = snapShotSource
+            questionFiles[question.key, default: []].append(file)
+            upload(file.id, key: question.key)
+            syncQuestion()
+            return file.id
+        }
+        // A question that closed during the capture hands it back to the composer, under the composer's cap.
+        if destination.question != nil, (draftAttachments[key]?.count ?? 0) + (preparingImages[key] ?? 0) > ComposerAttachmentRules.maxAttachments {
+            throw CancellationError()
+        }
         var attachment = ComposerAttachment(kind: .image, name: prepared.name, mimeType: prepared.mimeType,
                                             sizeBytes: prepared.sizeBytes, fileURL: prepared.url, environmentId: env)
-        if let source, let size = ComposerImageIO.pixelSize(prepared.url) {
-            attachment.snapShotSource = SnapShotSource.resized(source, width: Int(size.width), height: Int(size.height))
-        }
+        attachment.snapShotSource = snapShotSource
         draftAttachments[key, default: []].append(attachment)
         persistDraftAttachments()
         startUpload(attachment.id, key: key)
