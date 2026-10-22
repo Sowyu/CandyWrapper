@@ -70,4 +70,12 @@ struct DitherShapeTests {
         #expect(after.cornerCurve == .circular)
         #expect(plain.cornerCurve == .circular)
     }
+
+    @Test func cornersFollowOneScaleAndNestConcentrically() {
+        // T3's controls, cards and `rounded-3xl` surfaces (the composer's and the details card's 22) map to 8, 12, 16.
+        #expect([4, 6, 10, 18, 22, 24, 999].map(DitherChrome.radius) == [4, 8, 12, 12, 16, 16, 999])
+        // A shape `inset` inside another takes the outer corner less the inset, never under 4.
+        #expect(DitherChrome.nested(in: DitherChrome.windowRadius, inset: 8) == 8)
+        #expect(DitherChrome.nested(in: 8, inset: 8) == 4)
+    }
 }

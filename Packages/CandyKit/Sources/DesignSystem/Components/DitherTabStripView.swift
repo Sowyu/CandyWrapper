@@ -293,7 +293,7 @@ public final class DitherTabStripView: TopbarDragView {
         override func layout() {
             super.layout()
             frost.frame = bounds
-            frost.cornerRadius = DitherChrome.cardRadius
+            frost.cornerRadius = DitherChrome.controlRadius
             icon.frame = NSRect(x: 10, y: (bounds.height - 14) / 2, width: 14, height: 14)
             let closeX = bounds.width - 6 - 16
             close.frame = NSRect(x: closeX, y: (bounds.height - 16) / 2, width: 16, height: 16)
@@ -302,7 +302,7 @@ public final class DitherTabStripView: TopbarDragView {
         }
 
         override func updateLayer() {
-            layer?.cornerRadius = DitherChrome.cardRadius
+            layer?.cornerRadius = DitherChrome.controlRadius
             // Keyboard focus shows T3's ring (`focus-visible:ring-2 ring-ring`); the tabs drew none before.
             layer?.borderWidth = state.focusVisible ? 2 : isSelected ? 0.5 : 0
             layer?.borderColor = state.focusVisible ? Themed.color(\.ring).cgColor(in: self)

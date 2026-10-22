@@ -498,14 +498,15 @@ public final class SidebarTriggerView: ControlView {
 
 /// The Dither theme's metrics, after Capy's desktop app, with generous continuous corners (SmoothCorners).
 public enum DitherChrome {
-    /// Banners, cards, tabs and popovers.
+    /// Banners, cards and popovers.
     public static let cardRadius: CGFloat = 12
-    /// Buttons, inputs and rows.
+    /// Buttons, inputs, rows and tabs.
     public static let controlRadius: CGFloat = 8
-    /// The main content panel inside the window frame, and the composer: its send button sits 9 in, so 16 keeps
-    /// the button's 8 close to concentric.
+    /// The main content panel inside the window frame, and the surfaces T3 draws `rounded-3xl` (the composer, the
+    /// details card): controls sit 8 or 9 in, so their 8 stays close to concentric.
     public static let panelRadius: CGFloat = 16
-    /// The window's own corner, measured on macOS 27 for a titled window without a toolbar.
+    /// The window's own corner, measured on macOS 27 for a titled window without a toolbar: a continuous 16, on this
+    /// Mac at 1x and in the user's 2x capture (2026-10-22).
     /// ponytail: measured constant, read it from the window if a macOS release changes the frame's corner
     public static let windowRadius: CGFloat = 16
     /// The tab strip band above the content panel: 52, the titlebar row everywhere else (traffic lights, sidebar header), so the tabs share their centre line.
@@ -522,14 +523,19 @@ public enum DitherChrome {
         return (1 - x) * (1 - x)
     }
 
-    /// T3's radius for a box, under Dither: small controls 8, cards, popovers and bubbles 12; hairline
-    /// rounding and full pills unchanged.
+    /// T3's radius for a box, under Dither: small controls 8, cards, popovers and bubbles 12, `rounded-3xl`
+    /// surfaces 16 like the composer; hairline rounding and full pills unchanged.
     public static func radius(_ stock: CGFloat) -> CGFloat {
         switch stock {
         case ..<5: return stock
         case ..<9: return controlRadius
-        case ..<30: return cardRadius
+        case ..<20: return cardRadius
+        case ..<30: return panelRadius
         default: return stock
         }
     }
+
+    /// The corner for a shape `inset` inside one with corner `outer`: concentric, so both curves run parallel
+    /// (the user, 2026-10-22: "the corner radiuses for everything isnt consistent"). Never under 4.
+    public static func nested(in outer: CGFloat, inset: CGFloat) -> CGFloat { max(4, outer - inset) }
 }

@@ -444,7 +444,7 @@ public final class SidebarAccountRowView: ControlView {
     /// Its distance from the sidebar's left, right and bottom edges.
     public static let inset: CGFloat = 8
     /// Concentric with the window's bottom left corner, which it sits `inset` inside.
-    public static let radius: CGFloat = DitherChrome.windowRadius - inset
+    public static let radius: CGFloat = DitherChrome.nested(in: DitherChrome.windowRadius, inset: inset)
     private let avatar = CALayer()
     private let initials = LabelView("", font: SB.font(11, .semibold), color: SB.c(\.sidebarForeground))
     private let name = LabelView("", font: SB.font(13, .medium), color: SB.c(\.sidebarForeground))

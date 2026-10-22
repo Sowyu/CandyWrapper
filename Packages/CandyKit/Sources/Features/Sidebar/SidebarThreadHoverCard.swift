@@ -187,6 +187,9 @@ public final class SidebarThreadHoverCardView: DSView, PopupContent {
     }
 
     public override func updateLayer() {
+        // Redesign: a card, 12 like the popup blur under it; T3's 8 elsewhere.
+        let radius: CGFloat = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.cardRadius : 8
+        if decoration.boxStyle.radius != radius { decoration.boxStyle.radius = radius }
         decoration.setNeedsDisplay()
         title.color = Themed.color(\.foreground)
         for r in rows {
