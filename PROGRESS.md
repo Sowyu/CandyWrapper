@@ -13,6 +13,16 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+### Dither round 4, 2026-10-22: four agents plus a GPT-6.1 Sol audit (taken 2026-10-22, main agent)
+
+The user's feedback on 1.10.3. Each task applies only under Dither and owns the files named; ask the main agent before editing another task's files. The 3473 port agents (`port3473-*`, `fixw2-3473`, `undofix3473`) and `fix/sol-audit` are also running, so rebase often.
+
+- [ ] F. Tabs and quit (taken 2026-10-22, agent dither-tabs). Opening, closing, reordering and closing the tab you're in are buggy. Cmd-Q shows a confirmation with a working Cancel. Files: `App/Sources/DitherTabsController.swift`, `DesignSystem/Components/DitherTabStripView.swift`, the quit path in `App/Sources/AppDelegate.swift`.
+- [ ] G. Composer (taken 2026-10-22, agent dither-composer). A Capy prompt bar (rounded rectangle, not a pill), frosted glass on the thread details card, and the line count on stashed prompts. Files: `Features/Composer/**`, `Features/Thread/ThreadDetails*.swift`.
+- [ ] H. Sidebar and theme (taken 2026-10-22, agent dither-sidebar). Remove the trailing icons on thread rows, a white dot grid for Waiting, the project drag overlap bug, the color mismatch between the titlebar band and the sidebar strip, and rename the theme to "Redesign (Experimental)" with a beaker icon. Files: `Features/Sidebar/**`, theme names and icons, `SidebarLayoutView`.
+- [ ] I. Effects (taken 2026-10-22, agent dither-effects). Capy's API cost estimate in the tab bar, the ticking "Working for" counter, Capy's shimmer and dot-grid effects on work rows, and the dither art's reveal on the new-thread page back. Files: `Features/Thread/TimelineWorkRows.swift`, `DitherArtView`, a new cost label.
+- [ ] J. GPT-6.1 Sol audit of the Dither work since v1.9.0, read only (taken 2026-10-22, main agent).
+
 ### Dither (Capy look) round 3, 2026-10-21: two agents in parallel
 
 Split by files so nobody edits the same ones. Claim a task by adding your agent name after "taken". Each task applies only under the Dither theme (`ThemeRuntime.isDither`). Reference: `~/CandyWrapper-research/capy-design.md`, `~/CandyWrapper-research/capy-ui/` and the real Capy app in /Applications (signed in; leave its settings as they are). Ask the main agent before touching a file another task owns.
