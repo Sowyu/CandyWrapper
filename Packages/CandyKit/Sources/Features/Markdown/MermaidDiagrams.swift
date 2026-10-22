@@ -98,22 +98,38 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
     /// Retry after a load failure: drops the diagram's cached renders.
     public func retry(_ source: String, palette: Palette) {
         let base = Self.base(source.trimmingCharacters(in: .whitespacesAndNewlines), palette)
-        for key in cache.keys where key.hasPrefix(base + "\n") { cache[key] = nil }
-        order.removeAll { $0.hasPrefix(base + "\n") }
+        for key in cache.keys where Self.base(ofKey: key) == base { cache[key] = nil }
+        order.removeAll { Self.base(ofKey: $0) == base }
         latest[base] = nil
+        naturals[base] = nil
         NotificationCenter.default.post(name: Self.didRender, object: nil)
     }
 
-    private func store(_ next: (base: String, key: String, source: String, palette: Palette, width: CGFloat), _ result: Result, natural: (CGFloat, Bool)?) {
+    func store(_ next: (base: String, key: String, source: String, palette: Palette, width: CGFloat), _ result: Result, natural: (CGFloat, Bool)?) {
         if let natural { naturals[next.base] = natural }
         let key = natural == nil ? next.key : self.key(base: next.base, width: next.width)
         cache[key] = result
         order.removeAll { $0 == key }
         order.append(key)
         latest[next.base] = key
-        while order.count > 64 { cache[order.removeFirst()] = nil }
+        while order.count > 64 { evict(order.removeFirst()) }
         NotificationCenter.default.post(name: Self.didRender, object: nil)
     }
+
+    /// Drops a render, and the diagram's natural size and stand-in once its last render goes.
+    private func evict(_ key: String) {
+        cache[key] = nil
+        let base = Self.base(ofKey: key)
+        guard !order.contains(where: { Self.base(ofKey: $0) == base }) else { return }
+        naturals[base] = nil
+        latest[base] = nil
+    }
+
+    /// A key is the base, a newline and a width or `n`; the base holds newlines, the suffix none.
+    static func base(ofKey key: String) -> String { key.lastIndex(of: "\n").map { String(key[..<$0]) } ?? key }
+
+    /// For tests: diagrams with a natural size or a stand-in on record.
+    var metadataCount: (naturals: Int, latest: Int) { (naturals.count, latest.count) }
 
     private func pump() {
         idle?.cancel()
