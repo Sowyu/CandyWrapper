@@ -114,7 +114,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
         // ponytail: AppKit tooltips instead of T3's TooltipPopup (left side, 8pt offset, no delay); swap for TooltipView when tooltips get a shared host
         for (b, r) in zip(railButtons, sections.rail) { b.isDisabled = r.isDisabled; b.toolTip = r.tooltip }
         // Reuse unchanged rows while filtering (T3 74ca17b43, ModelListRow.tsx:18-43).
-        var previous = Dictionary(uniqueKeysWithValues: rowViews.map { (Self.rowKey($0.row), $0) })
+        var previous = Dictionary(rowViews.map { (Self.rowKey($0.row), $0) }, uniquingKeysWith: { first, _ in first })
         var modelIndex = 0
         rowViews = sections.rows.indices.map { i in
             let row = sections.rows[i]
