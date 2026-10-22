@@ -9,7 +9,15 @@ import T3Store
 public final class ThreadPullRequestsListView: DSView {
     private let document = PullRequestsPageView.Document()
     private let scroll: ScrollAreaView
-    private var rows: [PullRequestRowView] = []
+    private var rows: [Int: PullRequestRowView] = [:]
+    private var rowPool: [PullRequestRowView] = []
+    private var shownLinks: [ThreadPullRequestLink] = []
+    private var nowMs: Int64 = 0
+    private var clipObserver: NSObjectProtocol?
+    /// Counts actual row allocations so large-list tests catch eager mounting.
+    private(set) var createdRowViews = 0
+    var liveRowViews: Int { rows.count }
+    isolated deinit { if let clipObserver { NotificationCenter.default.removeObserver(clipObserver) } }
     private let footerRule = CALayer()
     private let footerLabel = LabelView("", font: DSFont.ui(11))
     private let linkButton = ButtonView("Link", icon: .plus, variant: .ghost, size: .xs)
@@ -43,19 +51,23 @@ public final class ThreadPullRequestsListView: DSView {
         [scroll, footerLabel, linkButton, emptyIcon, emptyTitle, emptyText, emptyButton].forEach(addSubview)
         linkButton.action = { [weak self] in self?.onLink?() }
         emptyButton.action = { [weak self] in self?.onLink?() }
+        let clip = scroll.scrollView.contentView
+        clip.postsBoundsChangedNotifications = true
+        clipObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateVisibleRows() }
+        }
     }
 
     public func set(_ links: [ThreadPullRequestLink], nowMs: Int64) {
         let shown = ThreadPullRequests.visible(links)
-        lines = ThreadPullRequests.lines(shown)
-        rows.forEach { $0.removeFromSuperview() }
-        rows = lines.map { line in
-            let row = PullRequestRowView()
-            row.configure(link: line, nowMs: nowMs)
-            row.onSelect = { [weak self] _ in self?.onOpen?(line.link) }
-            row.onNumberMenu = { [weak self, weak row] _, event in if let row { self?.showMenu(line.link, in: row, event: event) } }
-            document.addSubview(row)
-            return row
+        self.nowMs = nowMs
+        if shown != shownLinks {
+            shownLinks = shown
+            lines = ThreadPullRequests.lines(shown)
+        }
+        // Keep the mounted views on refresh; only the viewport ever owns rows.
+        for (index, row) in rows where lines.indices.contains(index) {
+            configure(row, at: index)
         }
         let open = shown.filter { $0.snapshot == nil || $0.snapshot?.state == .open }.count
         let synced = shown.compactMap { $0.snapshot?.syncedAt }.max { ($0.epochMs ?? 0) < ($1.epochMs ?? 0) }
@@ -88,8 +100,8 @@ public final class ThreadPullRequestsListView: DSView {
 
     public override func rightMouseDown(with event: NSEvent) {
         let p = document.convert(event.locationInWindow, from: nil)
-        guard let i = rows.firstIndex(where: { $0.frame.contains(p) }) else { return }
-        showMenu(lines[i].link, in: rows[i], event: event)
+        guard let (i, row) = rows.first(where: { $0.value.frame.contains(p) }), lines.indices.contains(i) else { return }
+        showMenu(lines[i].link, in: row, event: event)
     }
 
     public override func layout() {
@@ -97,15 +109,13 @@ public final class ThreadPullRequestsListView: DSView {
         let w = bounds.width, h = bounds.height
         let footer: CGFloat = 36
         scroll.frame = NSRect(x: 0, y: 0, width: w, height: max(0, h - footer))
-        var y: CGFloat = 6
-        for row in rows {
-            row.frame = NSRect(x: 6, y: y, width: max(0, scroll.bounds.width - 12), height: PullRequestRowView.panelHeight)
-            y += PullRequestRowView.panelHeight
-        }
-        document.frame = NSRect(x: 0, y: 0, width: scroll.bounds.width, height: max(scroll.bounds.height, y + 6))
+        document.frame = NSRect(x: 0, y: 0, width: scroll.bounds.width,
+                                height: max(scroll.bounds.height, 12 + CGFloat(lines.count) * PullRequestRowView.panelHeight))
+        scroll.layoutSubtreeIfNeeded()
+        updateVisibleRows()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         footerRule.frame = CGRect(x: 0, y: h - footer, width: w, height: 1)
-        footerRule.isHidden = rows.isEmpty
+        footerRule.isHidden = lines.isEmpty
         CATransaction.commit()
         let lw = ceil(linkButton.intrinsicContentSize.width)
         linkButton.frame = NSRect(x: w - 8 - lw, y: h - footer + 6, width: lw, height: 24)
@@ -120,6 +130,44 @@ public final class ThreadPullRequestsListView: DSView {
         emptyText.frame = NSRect(x: (w - tw) / 2, y: ey, width: tw, height: textH); ey += textH + 8
         let bw = ceil(emptyButton.intrinsicContentSize.width)
         emptyButton.frame = NSRect(x: (w - bw) / 2, y: ey, width: bw, height: 28)
+    }
+
+    private func configure(_ row: PullRequestRowView, at index: Int) {
+        let line = lines[index]
+        row.configure(link: line, nowMs: nowMs)
+        row.onSelect = { [weak self] _ in self?.onOpen?(line.link) }
+        row.onNumberMenu = { [weak self, weak row] _, event in
+            if let row { self?.showMenu(line.link, in: row, event: event) }
+        }
+    }
+
+    private func updateVisibleRows() {
+        // ThreadPullRequestsPanel.tsx at d5139979d: mount the viewport and a small overscan.
+        let clip = scroll.scrollView.contentView.bounds
+        let height = PullRequestRowView.panelHeight
+        let first = min(lines.count, max(0, Int(floor((clip.minY - 6 - 200) / height))))
+        let end = min(lines.count, max(first, Int(ceil((clip.maxY - 6 + 200) / height))))
+        for index in Array(rows.keys) where !(first..<end).contains(index) {
+            let row = rows.removeValue(forKey: index)!
+            row.removeFromSuperview()
+            rowPool.append(row)
+        }
+        for index in first..<end {
+            let row: PullRequestRowView
+            if let existing = rows[index] {
+                row = existing
+            } else {
+                if let reused = rowPool.popLast() { row = reused }
+                else { row = PullRequestRowView(); createdRowViews += 1 }
+                configure(row, at: index)
+                rows[index] = row
+                document.addSubview(row)
+            }
+            row.frame = NSRect(x: 6, y: 6 + CGFloat(index) * height,
+                               width: max(0, scroll.bounds.width - 12), height: height)
+        }
+        // A resize to a shorter viewport should release the excess, too.
+        rowPool.removeAll()
     }
 
     public override func updateLayer() {
