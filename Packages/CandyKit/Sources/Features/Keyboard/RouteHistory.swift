@@ -40,6 +40,16 @@ public final class RouteHistory {
         index = entries.count - 1
     }
 
+    /// Shows `route` as one navigation (a Dither tab switch): the pages it closes on the way record nothing.
+    @discardableResult
+    public func go(_ route: Route) -> Bool {
+        moving = true
+        let shown = apply(route)
+        moving = false
+        if shown { record(route) }
+        return shown
+    }
+
     /// `history.back()`: the nearest earlier route that still exists. Returns false at the start.
     @discardableResult
     public func back() -> Bool { move(by: -1) }
