@@ -45,8 +45,8 @@ struct DitherSettingsLayoutTests {
         #expect(view.anchor("default-model", page: .general) == nil)
         let behavior = general.anchor("behavior") as! SettingsSectionView
         #expect(behavior.title == "Alerts")
-        // Two rows and no scope picker: one short card.
-        #expect(view.height(forWidth: 800) < 250)
+        // Three rows and no scope picker: one short card.
+        #expect(view.height(forWidth: 800) < 330)
     }
 
     @Test func deepLinksLandInTheirSection() {

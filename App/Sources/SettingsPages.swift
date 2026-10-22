@@ -573,6 +573,7 @@ extension SettingsController {
         labels += server("addProjectBaseDirectory", "Add project base directory")
         labels += client("confirmThreadUnpin", "Unpin confirmation") + client("confirmThreadArchive", "Archive confirmation")
         labels += client("confirmThreadDelete", "Delete confirmation") + client("confirmQuit", "Quit shortcut")
+        labels += client("menuBarItemEnabled", "Menu bar icon")
         labels += server("textGenerationModelSelection", "Text generation model")
         return labels
     }
@@ -603,7 +604,8 @@ extension SettingsController {
                           "fontSizeInterface", "fontFamilyComposer", "fontSizePrompt", "fontFamilyCode", "fontSizeCode", "fontFamilyTerminal",
                           "fontSizeTerminal", "diffFilesCollapsed", "diffIgnoreWhitespace", "diffLayout", "proactivePanelsEnabled",
                           "showSkillsInSlashMenu", "composerCollapseOnScroll", "composerRichTextEnabled", "sendShortcut", "followUpBehavior",
-                          "contextWindowMeterEnabled", "confirmThreadUnpin", "confirmThreadArchive", "confirmThreadDelete", "confirmQuit"]
+                          "contextWindowMeterEnabled", "confirmThreadUnpin", "confirmThreadArchive", "confirmThreadDelete", "confirmQuit",
+                          "menuBarItemEnabled"]
         ClientSettingsStore.shared.update(Dictionary(uniqueKeysWithValues: clientKeys.map { ($0, ClientSettings.fields[$0]!.defaultValue) }))
         let s = pageContext.scope.values
         var patch: [String: JSONValue] = [:]

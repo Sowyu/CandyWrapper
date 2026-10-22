@@ -47,11 +47,11 @@ public class SettingsPageBase: SettingsStackView {
     // MARK: Client rows
 
     /// A client switch with the reset arrow when it differs from the default.
-    func clientSwitch(_ id: String, _ detail: String, key: String, reset: String? = nil, label: String? = nil,
+    func clientSwitch(_ id: String, _ detail: String, key: String, reset: String? = nil, label: String? = nil, title: String? = nil,
                       read: ((ClientSettings) -> Bool)? = nil, write: ((Bool) -> [String: JSONValue])? = nil) -> SettingsRowView {
         let sw = SwitchView(isOn: false)
-        sw.setAccessibilityLabel(label ?? SettingsSearch.title(id))
-        let r = row(id, detail: detail, control: sw)
+        sw.setAccessibilityLabel(label ?? title ?? SettingsSearch.title(id))
+        let r = row(id, title: title, detail: detail, control: sw)
         let slot = reset.map { ResetSlot(label: $0) }
         r.accessories = slot.map { [$0] } ?? [ResetSlot(label: "")]
         slot?.action = { [weak self] in self?.context.writeClient?([key: ClientSettings.fields[key]!.defaultValue]) }

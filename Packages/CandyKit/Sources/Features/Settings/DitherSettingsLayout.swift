@@ -94,7 +94,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
                                                             "quit-confirmation"])]),
         ]
         case .appearance: return [.init(.appearance)]
-        case .notifications: return [.init(.general, [G("behavior", "Alerts", rows: ["thread-notifications", "in-app-notifications"])])]
+        case .notifications: return [.init(.general, [G("behavior", "Alerts", rows: ["thread-notifications", "in-app-notifications", "menu-bar"])])]
         case .keyboard: return [.init(.keybindings)]
         case .models: return [
             .init(.general, scope: true, [G("project-defaults", "New threads", rows: ["default-model", "default-permissions"]),
