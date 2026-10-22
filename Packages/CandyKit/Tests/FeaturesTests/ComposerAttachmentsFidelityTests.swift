@@ -8,10 +8,14 @@ import T3Store
 /// The image shelf, the expanded image preview, the stash menu and the stash badge against T3's
 /// markup in Chromium (spec from scripts/gen-composer-attachments-spec.py, references in
 /// design/component-reference/composer-attachments). Writes ref, ours and diff PNGs plus
-/// report-composer-attachments.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// report-composer-attachments.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct ComposerAttachmentsFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/composer-attachments")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "composerAttachments": .init(0.07),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("composer-attachments")
     static var fixture: URL { SidebarFidelityTests.repo.appendingPathComponent("design/component-reference/composer-attachments-fixture.png") }
 
     /// 2026-10-10 12:00 UTC; the entries are 5 minutes and 2 hours older.
@@ -98,6 +102,7 @@ struct ComposerAttachmentsFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("composer-attachments", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("composerAttachments", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY composer-attachments: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Composer attachments</title><body style='font:13px -apple-system'>" + images

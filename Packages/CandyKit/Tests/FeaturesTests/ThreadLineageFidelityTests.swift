@@ -8,10 +8,17 @@ import T3Protocol
 /// The thread details card's Lineage section, the provider subagent bar and the secret request card against T3's
 /// markup in Chromium (specs from scripts/gen-thread-lineage-spec.py, references in
 /// design/component-reference/{thread-lineage,subagent-bar,secret-request}). Writes ref, ours and diff PNGs plus
-/// report-thread-lineage.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// report-thread-lineage.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct ThreadLineageFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/thread-lineage")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "lineageBarAndSecret": .init(0.055, except: [
+            "subagent-bar.completed.dark": 0.07,
+            "subagent-bar.completed.light": 0.065,
+        ]),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("thread-lineage")
 
     static func lineageRow(_ spec: [String], index: Int) -> ThreadRelationships.Lineage.Row {
         let (kind, status, title) = (spec[0], spec[1], spec[2])
@@ -113,6 +120,7 @@ struct ThreadLineageFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("thread-lineage", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("lineageBarAndSecret", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY thread-lineage: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Thread lineage</title><body style='font:13px -apple-system'>" + images

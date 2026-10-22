@@ -8,10 +8,14 @@ import T3Store
 /// WP7.9's sidebar states against T3's markup in Chromium (spec from scripts/gen-sidebar-leftovers-spec.py,
 /// references in design/component-reference/sidebar-leftovers): the empty list's Add project, the rename
 /// field, the provider update pill, the hover card and the drag ghost.
-/// Writes ref, ours and diff PNGs plus report-sidebar-leftovers.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// Writes ref, ours and diff PNGs plus report-sidebar-leftovers.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct SidebarLeftoversFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/sidebar-leftovers")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "sidebarLeftovers": .init(0.06, except: ["hover-card.rest.dark": 0.07]),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("sidebar-leftovers")
 
     static func make(_ n: [String: String], state: String, size: NSSize) -> NSView {
         func inBox(_ view: NSView, height: CGFloat) -> NSView {
@@ -93,6 +97,7 @@ struct SidebarLeftoversFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("sidebar-leftovers", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("sidebarLeftovers", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY sidebar-leftovers: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Sidebar leftovers</title><body style='font:13px -apple-system'>" + images

@@ -9,10 +9,14 @@ import T3Store
 /// Stop), 04 and 04n (the new-thread page). Compared at 2x in the main panel's coordinates.
 /// The footer's model, traits and access pickers belong to another work package, so the test
 /// fills the slots with stand-ins drawn like `ComposerControl` (icon, label, chevron).
-/// Writes ref, ours and diff PNGs plus report-composer.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// Writes ref, ours and diff PNGs plus report-composer.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct ComposerFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/composer")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "composer": .init(0.115, except: ["03a-kitchen-sink-top.light": 0.14]),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("composer")
     static let sidebar = 256
 
     /// A `ComposerControl size="sm"` look-alike: 28 tall, px 10, gap 6, 14px medium label.
@@ -85,7 +89,7 @@ struct ComposerFidelityTests {
             ("04-new-thread-draft", 844, 0, 780),
             ("04n-new-thread-narrow", 592, 0, 780),
         ]
-        var lines: [String] = [], images = ""
+        var lines: [String] = [], diffs: [(String, Double)] = [], images = ""
         for (reference, width, top, bottom) in cases {
             for theme in ["light", "dark"] {
                 let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
@@ -103,9 +107,11 @@ struct ComposerFidelityTests {
                 let line = "\(base): \(String(format: "%.2f", total * 100))% differ"
                 print("composer", line)
                 lines.append(line)
+                diffs.append((base, total))
                 images += "<p>\(line)<br>" + ["ref", "ours", "diff"].map { "<img style='zoom:.4' src='composer/\(base).\($0).png'>" }.joined() + "</p>"
             }
         }
+        Self.ceilings.check("composer", diffs)
         let html = "<!doctype html><meta charset=utf-8><title>Composer</title><body style='font:13px -apple-system'>" + images
         try html.write(to: Self.out.deletingLastPathComponent().appendingPathComponent("report-composer.html"), atomically: true, encoding: .utf8)
     }

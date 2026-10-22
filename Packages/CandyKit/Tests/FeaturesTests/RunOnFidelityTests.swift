@@ -5,10 +5,17 @@ import DesignSystem
 
 /// The draft composer's "Run on" control, its list and the context strip against T3's markup in Chromium
 /// (spec from scripts/gen-run-on-spec.py, references in design/component-reference/run-on). Writes ref,
-/// ours and diff PNGs plus report-run-on.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// ours and diff PNGs plus report-run-on.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct RunOnFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/run-on")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "runOn": .init(0.055, except: [
+            "strip.remote.hover.light": 0.15,
+            "strip.remote.rest.light": 0.15,
+        ]),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("run-on")
     static let options = [RunOnOption(environmentId: "local", label: "This Mac", machine: "mac-mini"),
                           RunOnOption(environmentId: "env2", label: "sandbox-env2", machine: "server")]
 
@@ -69,6 +76,7 @@ struct RunOnFidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("run-on", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("runOn", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY run-on: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Run on</title><body style='font:13px -apple-system'>" + images

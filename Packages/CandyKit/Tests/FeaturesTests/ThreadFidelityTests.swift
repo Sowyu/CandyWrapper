@@ -8,10 +8,14 @@ import T3Store
 /// Whole-panel comparison: our thread panel at 844x780 (the reference window minus the 256pt
 /// sidebar), 2x, against design/reference 03a-c (the markdown thread at scroll 0, 0.5 and the end)
 /// and 03d (the commands thread). Only the part above T3's composer is compared, since M4 has no
-/// composer. Writes ref, ours and diff PNGs plus report-thread-whole.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// composer. Writes ref, ours and diff PNGs plus report-thread-whole.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct ThreadFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/thread-whole")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "wholePanel": .init(0.055),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("thread-whole")
     static let size = NSSize(width: 844, height: 780)
     /// The composer's top edge in the references is at 617pt; compare above its shadow.
     static let compared: CGFloat = 600
@@ -81,7 +85,7 @@ struct ThreadFidelityTests {
             ("03d-kitchen-sink-commands", ThreadPreview.commandsThread, 0),
         ]
         let w = Int(Self.size.width * 2), h = Int(Self.compared * 2)
-        var lines: [String] = [], images = ""
+        var lines: [String] = [], diffs: [(String, Double)] = [], images = ""
         for (reference, title, fraction) in cases {
             for theme in ["light", "dark"] {
                 let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
@@ -98,9 +102,11 @@ struct ThreadFidelityTests {
                     + perBand.map { "\($0.0) \(String(format: "%.2f", $0.1 * 100))%" }.joined(separator: ", ")
                 print("thread-whole", line)
                 lines.append(line)
+                diffs.append((base, total))
                 images += "<p>\(line)<br>" + ["ref", "ours", "diff"].map { "<img style='zoom:.4' src='thread-whole/\(base).\($0).png'>" }.joined() + "</p>"
             }
         }
+        Self.ceilings.check("wholePanel", diffs)
         let html = "<!doctype html><meta charset=utf-8><title>Thread panel</title><body style='font:13px -apple-system'>"
             + "<p>T3 web client capture, ours, diff (red where a channel differs by more than \(SidebarFidelityTests.tolerance)/255). Region: the main panel above the composer.</p>"
             + images

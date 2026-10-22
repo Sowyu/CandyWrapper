@@ -7,11 +7,20 @@ import DesignSystem
 /// patch in Chromium with T3's CSS (spec from scripts/gen-diff-spec.py, references in
 /// design/component-reference/diff). `panel`: DiffPanelView against the right panel of
 /// design/reference/09-diff-split and 10-diff-unified, rebuilt from the file list those captures show.
-/// Writes ref, ours and diff PNGs plus /tmp/candywrapper-fidelity/report-diff.html.
-@MainActor
+/// Writes ref, ours and diff PNGs plus `Fidelity.root`/report-diff.html.
+@MainActor @Suite(.fidelity)
 struct DiffFidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "body": .init(0.07, except: [
+            "wrap.split.dark": 0.08,
+            "wrap.unified.dark": 0.085,
+        ]),
+        "panel 09-diff-split": .init(0.085),
+        "panel 10-diff-unified": .init(0.085),
+    ]
     static let repo = MarkdownFidelityTests.repo
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity")
+    static let out = Fidelity.root
 
     final class Canvas: DSView {
         override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
@@ -41,7 +50,7 @@ struct DiffFidelityTests {
     @Test func body() throws {
         let refDir = Self.repo.appendingPathComponent("design/component-reference/diff")
         let spec = try JSONSerialization.jsonObject(with: Data(contentsOf: Self.repo.appendingPathComponent("design/component-reference/diff.json"))) as! [String: Any]
-        var rows = "", total = 0.0, count = 0
+        var rows = "", cases: [(String, Double)] = []
         for c in spec["cases"] as! [[String: Any]] {
             let name = c["name"] as! String
             let native = c["native"] as! [String: Any]
@@ -57,13 +66,12 @@ struct DiffFidelityTests {
                 scroll.frame = NSRect(x: 8, y: 8, width: size.width - 16, height: size.height - 16)
                 list.setDiff(UnifiedDiff(native["patch"] as! String), collapsedByDefault: native["collapsed"] as? Bool ?? false)
                 let ours = Snapshot.image(of: canvas, size: size, scale: 2, dark: theme == "dark")
-                total += try Self.record("\(name).\(theme)", ref: ref, ours: ours, rows: &rows)
-                count += 1
+                cases.append(("\(name).\(theme)", try Self.record("\(name).\(theme)", ref: ref, ours: ours, rows: &rows)))
             }
         }
-        print(String(format: "FIDELITY Diff body: %d cases, mean differing %.2f%%", count, total / Double(max(count, 1)) * 100))
+        print(String(format: "FIDELITY Diff body: %d cases, mean differing %.2f%%", cases.count, cases.map(\.1).reduce(0, +) / Double(max(cases.count, 1)) * 100))
         try Self.writeReport(rows, file: "report-diff.html")
-        #expect(count > 0)
+        Self.ceilings.check("body", cases)
     }
 
     /// The panel area of the 2200x1560 captures: x from the panel's left border (1234 px) to the
@@ -73,7 +81,7 @@ struct DiffFidelityTests {
     /// and every file is collapsed, so the two differ only by capture noise.
     @Test(arguments: ["10-diff-unified", "09-diff-split"])
     func panel(_ reference: String) throws {
-        var rows = "", total = 0.0
+        var rows = "", cases: [(String, Double)] = []
         for theme in ["light", "dark"] {
             let full = try #require(NSBitmapImageRep(data: Data(contentsOf: Self.repo.appendingPathComponent("design/reference/\(reference).\(theme).png"))))
             let crop = CGRect(x: 1234, y: 103, width: 966, height: 1457)
@@ -85,14 +93,17 @@ struct DiffFidelityTests {
             panel.bodyOffset = 0.5
             panel.showPatch(DiffPreview.referencePatch(), scopeLabel: "Uncommitted")
             let ours = Snapshot.image(of: panel, size: NSSize(width: crop.width / 2, height: crop.height / 2), scale: 2, dark: theme == "dark")
-            total += try Self.record("\(reference).\(theme)", ref: ref, ours: ours, rows: &rows)
+            cases.append(("\(reference).\(theme)", try Self.record("\(reference).\(theme)", ref: ref, ours: ours, rows: &rows)))
         }
-        print(String(format: "FIDELITY Diff panel %@: mean differing %.2f%%", reference, total / 2 * 100))
+        print(String(format: "FIDELITY Diff panel %@: mean differing %.2f%%", reference, cases.map(\.1).reduce(0, +) / 2 * 100))
         try Self.writeReport(rows, file: "report-diff-panel-\(reference).html")
+        Self.ceilings.check("panel \(reference)", cases)
     }
 
-    /// The gallery panels, written for review (no reference: T3 shows no expanded file in 09 or 10).
-    @Test func gallery() throws {
+    /// The gallery panels, written for review (no reference: T3 shows no expanded file in 09 or 10). An export tool,
+    /// not a test: runs only with CW_EXPORT=1.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["CW_EXPORT"] != nil, "export tool, set CW_EXPORT=1"))
+    func gallery() throws {
         for (i, section) in DiffGallery.sections.enumerated() {
             for theme in ["light", "dark"] {
                 let view = section.make()

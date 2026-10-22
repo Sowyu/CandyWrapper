@@ -4,14 +4,19 @@ import Testing
 import DesignSystem
 import T3Protocol
 
-@MainActor struct SettingsRuntimeFidelityTests {
+@MainActor @Suite(.fidelity)
+struct SettingsRuntimeFidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "settingsRuntime": .init(0.105),
+    ]
     @Test func settingsRuntime() throws {
         let repo = SidebarFidelityTests.repo
         let refDir = repo.appendingPathComponent("design/component-reference/settings-runtime")
         let spec = try JSONSerialization.jsonObject(with: Data(contentsOf: repo.appendingPathComponent("design/component-reference/settings-runtime.json"))) as! [String: Any]
         let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: refDir.appendingPathComponent("manifest.json"))) as! [String: [String: Double]]
-        var totals: [Double] = []
-        let out = repo.appendingPathComponent(".wp713b-fidelity")
+        var totals: [(String, Double)] = []
+        let out = Fidelity.root.appendingPathComponent("wp713b")
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         for c in spec["cases"] as! [[String: Any]] {
             let name = c["name"] as! String, kind = (c["native"] as! [String: String])["kind"]!
@@ -42,13 +47,14 @@ import T3Protocol
                 let reference = try #require(NSBitmapImageRep(data: Data(contentsOf: refDir.appendingPathComponent(base + ".png"))))
                 let ours = Snapshot.image(of: canvas, size: NSSize(width: CGFloat(reference.pixelsWide) / 2, height: CGFloat(reference.pixelsHigh) / 2), scale: 2, dark: theme == "dark")
                 let (difference, _, diff) = SidebarFidelityTests.compare(reference, ours, bands: [])
-                totals.append(difference)
+                totals.append((base, difference))
                 try Snapshot.writePNG(ours, to: out.appendingPathComponent(base + ".ours.png"))
                 try Snapshot.writePNG(diff, to: out.appendingPathComponent(base + ".diff.png"))
                 print(String(format: "settings-runtime %@ %.2f%%", base, difference * 100))
             }
         }
-        let mean = totals.reduce(0, +) / Double(totals.count)
+        Self.ceilings.check("settingsRuntime", totals)
+        let mean = totals.map(\.1).reduce(0, +) / Double(totals.count)
         print(String(format: "FIDELITY settings-runtime: %d cases, mean differing %.2f%%", totals.count, mean * 100))
         #expect(mean < 0.08)
     }

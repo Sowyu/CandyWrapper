@@ -7,10 +7,14 @@ import T3Protocol
 /// Settings > Project (overview, Actions), Source Control (Repositories, Version Control) and the Providers list
 /// against T3's markup in Chromium (spec from scripts/gen-settings-pages2-spec.py, references in
 /// design/component-reference/settings-pages2). Writes ref, ours and diff PNGs plus report-settings-pages2.html
-/// to /tmp/candywrapper-fidelity.
-@MainActor
+/// to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct SettingsPages2FidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/settings-pages2")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "settingsPages2": .init(0.045),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("settings-pages2")
 
     static func json(_ text: String) -> JSONValue { try! JSONValue(parsing: Data(text.utf8)) }
 
@@ -154,6 +158,7 @@ struct SettingsPages2FidelityTests {
             }
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("settings-pages2", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("settingsPages2", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY settings-pages2: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Settings pages 2</title><body style='font:13px -apple-system'>" + images

@@ -10,10 +10,14 @@ import T3Store
 /// sidebar collapsed (31-sidebar-collapsed shows it open, so that case follows T3's source), against T3's markup in
 /// Chromium (spec from scripts/gen-reference-screens-spec.py, references in design/component-reference/reference-screens).
 /// The narrow window (03n-kitchen-sink-narrow) compares the thread panel at 800pt minus the 208pt sidebar directly.
-/// Writes ref, ours and diff PNGs plus report-reference-screens.html to /tmp/candywrapper-fidelity.
-@MainActor
+/// Writes ref, ours and diff PNGs plus report-reference-screens.html to `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct ReferenceScreensFidelityTests {
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity/reference-screens")
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "referenceScreens": .init(0.055),
+    ]
+    static let out = Fidelity.root.appendingPathComponent("reference-screens")
 
     static func view(_ native: [String: String], size: CGSize) -> NSView {
         let frame = NSRect(x: 8, y: 8, width: size.width, height: size.height)
@@ -116,6 +120,7 @@ struct ReferenceScreensFidelityTests {
             try record("03n-narrow.\(theme)", ref, ThreadFidelityTests.crop(image, x: image.pixelsWide - w, width: w, height: h))
         }
         for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("reference-screens", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("referenceScreens", lines)
         let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
         print(String(format: "FIDELITY reference-screens: %d cases, mean differing %.2f%%", lines.count, mean * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Reference screens</title><body style='font:13px -apple-system'>" + images
