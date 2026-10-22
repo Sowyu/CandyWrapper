@@ -167,11 +167,12 @@ public enum FileLinks {
                             basename: basename(position.path), line: position.line, column: position.column)
     }
 
-    /// `resolvePathLinkTarget` (fileLinks.ts): `~/` from the home inferred from cwd, else joined onto cwd.
+    /// `resolvePathLinkTarget` (fileLinks.ts:91-108): `~/`, or `~\` under a Windows cwd, from the home inferred
+    /// from cwd, else joined onto cwd.
     public static func resolveAgainst(_ raw: String, cwd: String) -> String {
         let position = splitPosition(raw)
         var path = position.path
-        if path.hasPrefix("~/") {
+        if path.hasPrefix("~/") || (isWindowsStyle(cwd) && path.hasPrefix("~\\")) {
             if let home = inferHome(cwd) { path = join(home, String(path.dropFirst(2)), windows: isWindowsStyle(home)) }
         } else if !isAbsolutePath(path) {
             path = join(cwd, path, windows: isWindowsStyle(cwd))
