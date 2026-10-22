@@ -4075,7 +4075,27 @@ extension ComposerController {
     }
 
     /// `deleteStashEntry`: the entry's file uploads go too.
+    /// The x and Cmd-Backspace ask first: a stashed prompt can be long and is gone for good once deleted. CandyWrapper's
+    /// own guard (the user lost a big prompt to one click); T3 deletes at once.
     private func deleteStash(_ entry: PromptStashEntry) {
+        // No window to ask in: keep the prompt.
+        guard let window = composer.window else { return }
+        let preview = entry.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let excerpt = preview.count > 80 ? String(preview.prefix(80)) + "…" : preview
+        let dialog = DialogView(kind: .alertDialog, title: "Delete this stashed prompt?",
+                                message: excerpt.isEmpty ? "It can't be restored." : "\u{201C}\(excerpt)\u{201D} can't be restored.")
+        let cancel = ButtonView("Cancel", variant: .outline)
+        let ok = ButtonView("Delete", variant: .destructive)
+        dialog.footerButtons = [cancel, ok]
+        let host = ModalHost.present(dialog, in: window)
+        cancel.action = { [weak host] in host?.close() }
+        ok.action = { [weak self, weak host] in
+            host?.close()
+            self?.deleteStashNow(entry)
+        }
+    }
+
+    private func deleteStashNow(_ entry: PromptStashEntry) {
         let (removed, durable) = stash.take(entry.id)
         if stash.entries.isEmpty { setStashMenu(false) }
         if let removed {

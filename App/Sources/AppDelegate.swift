@@ -183,6 +183,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = environments.observe { ScheduledTasksStore.shared.environmentsChanged() }
         let t3Connect = T3ConnectController(environments: environments, fake: fakeConnect)
         self.t3Connect = t3Connect
+        // Dither's account row follows the T3 Connect account, or this Mac's user when signed out.
+        let showAccount = { [weak sidebar, weak t3Connect] in
+            guard let sidebar, let t3Connect else { return }
+            let p = t3Connect.profile
+            let email = p?.identifier ?? ""
+            let name = [p?.firstName, p?.lastName].compactMap { $0 }.joined(separator: " ")
+            if t3Connect.account != nil {
+                sidebar.accountRow.set(name: name.isEmpty ? (email.isEmpty ? "T3 Connect" : email) : name,
+                                       detail: name.isEmpty || email.isEmpty ? "Signed in to T3 Connect" : email,
+                                       image: t3Connect.avatar, initials: p?.initials)
+            } else {
+                sidebar.accountRow.set(name: NSFullUserName(), detail: "This Mac", image: nil, initials: nil)
+            }
+        }
+        _ = t3Connect.observe(showAccount)
+        showAccount()
         let threads = ThreadController(sidebar: sidebar, window: window, environments: environments)
         self.threads = threads
         threads.files.serverConfig = { [weak composer = threads.composer] env in composer?.config(env) }

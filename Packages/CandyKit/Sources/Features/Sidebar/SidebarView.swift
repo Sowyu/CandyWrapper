@@ -79,6 +79,9 @@ public final class SidebarContentView: DSView {
     /// Dither (after Capy): nav rows under the search field.
     let navRows = [SidebarNavRowView(.squarePen, "New thread"), SidebarNavRowView(.gitPullRequestArrow, "Pull requests"),
                    SidebarNavRowView(.calendarClock, "Automations"), SidebarNavRowView(.settings, "Settings")]
+    /// Dither (after Capy): the account row at the foot of the sidebar, and the hairline over it.
+    public let accountRow = SidebarAccountRowView()
+    private let accountRule = CALayer()
     /// Dither: Capy's "Threads" section label between the nav rows and the list.
     let navSection = LabelView("Threads", font: SB.font(12, .medium), color: SB.c(\.sidebarMutedForeground))
     let backButton = SidebarMenuButtonView("Back", icon: .arrowLeft)
@@ -320,6 +323,8 @@ public final class SidebarContentView: DSView {
         navRows[1].action = { [weak self] in self?.actions.openPullRequests() }
         navRows[2].action = { [weak self] in self?.actions.openAutomations() }
         navRows[3].action = { [weak self] in self?.actions.openSettings() }
+        accountRow.onOpenSettings = { [weak self] in self?.actions.openSettings() }
+        accountRow.onOpenUsage = { [weak self] in self?.actions.openUsage() }
         usageButton.action = { [weak self] in self?.actions.openUsage() }
     }
 
@@ -809,8 +814,10 @@ public final class SidebarContentView: DSView {
         filterMonogram.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
         search.frame = NSRect(x: 8, y: rowY, width: max(0, right - 4 - 8), height: searchHeight)
         // Footer: `flex-col gap-2 px-2 py-1`: the undo notice, then 32px icon buttons 4px apart.
-        let menuTop = h - 36
-        var footerTop = h - 40
+        // Dither (after Capy): the account row takes the footer, 44pt over a hairline.
+        let accountFooter = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !isOnUtilityPage
+        let menuTop = accountFooter ? h - 8 - SidebarAccountRowView.height : h - 36
+        var footerTop = accountFooter ? menuTop - 8 : h - 40
         var stackTop = menuTop
         if !providerUpdatePill.isHidden {
             providerUpdatePill.frame = NSRect(x: 8, y: stackTop - 8 - 28, width: w - 16, height: 28)
@@ -852,11 +859,23 @@ public final class SidebarContentView: DSView {
             b.frame = NSRect(x: fx, y: menuTop, width: 32, height: 32)
             fx += 36
         }
+        if accountRow.superview == nil { addSubview(accountRow); layer?.addSublayer(accountRule) }
+        accountRow.isHidden = !accountFooter
+        accountRule.isHidden = !accountFooter
+        if accountFooter {
+            for b in [settingsButton, pullRequestsButton, usageButton] { b.isHidden = true }
+            let pill: CGFloat = updatePill.isHidden ? 0 : 32 + 4
+            accountRow.frame = NSRect(x: 8, y: menuTop, width: max(0, w - 16 - pill), height: SidebarAccountRowView.height)
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            accountRule.frame = CGRect(x: 0, y: menuTop - 8, width: w, height: 0.5)
+            accountRule.backgroundColor = SB.c(\.sidebarForeground, 0.08).cgColor(in: self)
+            CATransaction.commit()
+        }
         backButton.isHidden = !isOnUtilityPage
         // `SidebarMenu` is a `gap-1` row; Back is `flex-1`, the update pill `ml-auto shrink-0`.
         let pillRoom: CGFloat = updatePill.isHidden ? 0 : 32 + 4
         backButton.frame = NSRect(x: 8, y: menuTop, width: max(0, w - 16 - pillRoom), height: 32)
-        updatePill.frame = NSRect(x: w - 8 - 32, y: menuTop, width: 32, height: 32)
+        updatePill.frame = NSRect(x: w - 8 - 32, y: accountFooter ? menuTop + 6 : menuTop, width: 32, height: 32)
         scrollArea.frame = NSRect(x: 0, y: listTop, width: w, height: max(0, footerTop - listTop))
         list.frame.size.width = w
         list.needsLayout = true

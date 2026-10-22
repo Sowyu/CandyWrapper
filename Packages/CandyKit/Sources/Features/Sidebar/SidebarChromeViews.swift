@@ -435,3 +435,86 @@ final class SidebarNavRowView: ControlView {
     }
 }
 
+
+/// Dither (after Capy): the account row at the foot of the sidebar. A 28pt round avatar (the picture, or initials on a
+/// muted disc), the name and a muted second line, and a chevron. A click opens the account menu above it: Settings,
+/// Usage and Appearance.
+public final class SidebarAccountRowView: ControlView {
+    public static let height: CGFloat = 44
+    private let avatar = CALayer()
+    private let initials = LabelView("", font: SB.font(11, .semibold), color: SB.c(\.sidebarForeground))
+    private let name = LabelView("", font: SB.font(13, .medium), color: SB.c(\.sidebarForeground))
+    private let detail = LabelView("", font: SB.font(12), color: SB.c(\.sidebarMutedForeground))
+    private let chevron = IconView(name: .chevronUp, size: 12)
+    public var onOpenSettings: (() -> Void)?
+    public var onOpenUsage: (() -> Void)?
+
+    public override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        scalesWhenPressed = false
+        avatar.masksToBounds = true
+        avatar.contentsGravity = .resizeAspectFill
+        avatar.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        layer?.addSublayer(avatar)
+        initials.alignment = .center
+        for l in [initials, name, detail] { l.lineHeight = 16; addSubview(l) }
+        addSubview(chevron)
+        setAccessibilityRole(.button)
+        action = { [weak self] in self?.showMenu() }
+        set(name: NSFullUserName(), detail: "This Mac", image: nil, initials: nil)
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    public func set(name: String, detail: String, image: CGImage?, initials: String?) {
+        self.name.text = name
+        self.detail.text = detail
+        avatar.contents = image
+        let letters = initials ?? name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased()
+        self.initials.text = letters
+        self.initials.isHidden = image != nil
+        setAccessibilityLabel("\(name), account menu")
+        needsLayout = true
+        needsDisplay = true
+    }
+
+    public override func stateDidChange(from old: State) {
+        super.stateDidChange(from: old)
+        needsDisplay = true
+    }
+
+    public override func updateLayer() {
+        layer?.cornerRadius = DitherChrome.controlRadius
+        layer?.backgroundColor = state.hoverOrPressed ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
+        avatar.backgroundColor = SB.c(\.sidebarForeground, 0.12).cgColor(in: self)
+        chevron.strokeColor = SB.c(\.sidebarMutedForeground)
+    }
+
+    public override func layout() {
+        super.layout()
+        let h = bounds.height
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        avatar.frame = CGRect(x: 8, y: (h - 28) / 2, width: 28, height: 28)
+        avatar.cornerRadius = 14
+        CATransaction.commit()
+        initials.frame = NSRect(x: 8, y: (h - 16) / 2, width: 28, height: 16)
+        let tx: CGFloat = 8 + 28 + 10, right = bounds.width - 8 - 12 - 6
+        name.frame = NSRect(x: tx, y: h / 2 - 16, width: max(0, right - tx), height: 16)
+        detail.frame = NSRect(x: tx, y: h / 2, width: max(0, right - tx), height: 16)
+        chevron.frame = NSRect(x: bounds.width - 8 - 12, y: (h - 12) / 2, width: 12, height: 12)
+    }
+
+    private func showMenu() {
+        let lib = ThemeLibrary.shared
+        let mode = lib.appearanceMode
+        let appearance = [("light", "Light"), ("dark", "Dark"), ("system", "System")].map { key, title in
+            MenuItem.radio(title, checked: mode == key) { _ in lib.setAppearanceMode(key) }
+        }
+        let items: [MenuItem] = [
+            MenuItem("Settings", icon: .settings, shortcut: "⌘,") { [weak self] in self?.onOpenSettings?() },
+            MenuItem("Usage", icon: .chartNoAxesColumn) { [weak self] in self?.onOpenUsage?() },
+            .submenu("Appearance", icon: .moon, appearance),
+        ]
+        MenuPopupView.show(items, from: self, placement: PopupPlacement(side: .top, align: .start, sideOffset: 6, fallbackAxisSide: .none))
+    }
+}
