@@ -2,11 +2,11 @@ import AppKit
 import DesignSystem
 import T3Store
 
-/// A chip over the Dither composer, after Capy's new-thread page: a 28pt ghost button (`px-1.5`, 6pt corners) with a
-/// 14pt icon, 13pt medium text, an optional status dot and a 12pt chevron, `secondary` fill on hover and while open.
-/// Measured on Capy's 2x screenshot: text 24 from the chip's left, chevron 6 after the text, the dot 6 wide.
+/// A chip over the Dither composer, after Capy's new-thread page: a `DitherPill.height` floating pill with a 14pt icon,
+/// 13pt medium text, an optional status dot and a 12pt chevron, `secondary` fill on hover and while open. Capy's 28pt
+/// chip has the text 24 from its left and the chevron 6 after it; the 32pt pill pads 8 a side and 6 after the icon.
 public final class DitherChipView: ControlView {
-    static let height: CGFloat = 28
+    static var height: CGFloat { DitherPill.height }
     static var font: NSFont { DSFont.ui(13, weight: .medium) }
 
     private(set) var icon: NSView
@@ -36,7 +36,7 @@ public final class DitherChipView: ControlView {
         super.init(frame: .zero)
         scalesWhenPressed = false
         for l in [fill, dot] { l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()] }
-        fill.cornerRadius = DitherChrome.controlRadius
+        fill.cornerRadius = DitherPill.radius
         dot.cornerRadius = 3
         layer?.masksToBounds = false
         addSubview(pill)
@@ -73,18 +73,18 @@ public final class DitherChipView: ControlView {
     private var textWidth: CGFloat { min(240, ceil(label.textWidth)) }
 
     public override var intrinsicContentSize: NSSize {
-        var w = 6 + 14 + 4 + textWidth
+        var w = 8 + 14 + 6 + textWidth
         if online != nil { w += 5 + 6 }
         if interactive { w += 6 + 12 - 2 }
-        return NSSize(width: w + 6, height: Self.height)
+        return NSSize(width: w + 8, height: Self.height)
     }
 
     public override func layout() {
         super.layout()
         let midY = bounds.height / 2
         pill.frame = bounds
-        icon.frame = NSRect(x: 6, y: midY - 7, width: 14, height: 14)
-        label.frame = NSRect(x: 24, y: midY - 8, width: textWidth, height: 16)
+        icon.frame = NSRect(x: 8, y: midY - 7, width: 14, height: 14)
+        label.frame = NSRect(x: 28, y: midY - 8, width: textWidth, height: 16)
         var x = label.frame.maxX
         CATransaction.begin(); CATransaction.setDisableActions(true)
         fill.frame = bounds

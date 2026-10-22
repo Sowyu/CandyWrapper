@@ -100,7 +100,7 @@ public class ComposerBannerView: DSView {
         // CSS scales radii down to fit the box (a 34pt floating card gets 17); Core Animation does not.
         // Redesign: a pill's control corner, a panel's card corner.
         let dither = ditherFloating
-        let radius = top < 0 ? 0 : dither ? (h <= DitherPill.height ? DitherChrome.controlRadius : DitherChrome.cardRadius)
+        let radius = top < 0 ? 0 : dither ? (h <= DitherPill.height ? DitherPill.radius : DitherChrome.cardRadius)
             : floating ? min(cardRadius, h / 2) : cardRadius
         surface.layer?.cornerRadius = radius
         blur.cornerRadius = radius

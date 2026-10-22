@@ -1466,14 +1466,18 @@ public final class ThreadPanelView: DSView {
 
     /// Redesign (the user, 2026-10-22: "no more things sticking out of the prompt field, only floating rounded rectangle
     /// pills"): nothing touches the composer. What T3 docks on its top edge floats `DitherPill.gap` above it, in rows:
-    /// the context pills (project, machine, checkout, branch) from the left with Stash at the right, then the status
-    /// pills (sync, background work, server update and the other notices) filling rows from the left, then the cards
-    /// (the request panel, tasks, wide notices, the queue). The composer never moves for them; they fade in and out.
+    /// the draft's project and machine chips from the left with Stash at the right, then the status pills (sync,
+    /// background work, server update and the other notices) filling rows from the left, then the cards (the request
+    /// panel, tasks, wide notices, the queue). The checkout and branch pills float `DitherPill.gap` below it, from its
+    /// left edge, where T3's strip sits. The composer never moves for any of them; they fade in and out.
     private func layoutDitherComposer(chat: CGFloat, chatHeight: CGFloat, x: CGFloat, width: CGFloat, height: CGFloat) {
         let gap = DitherPill.gap, pillH = DitherPill.height, spacing = DitherPill.spacing
         let overlap = ComposerBannerView.overlap
-        // The draft centers the composer alone, so pills coming and going above it never move it.
-        let y = isDraft ? (chatTop + (chatHeight - chatTop - height - 20) / 2).rounded() : chatHeight - 20 - height
+        // The draft centers the composer alone, so pills coming and going never move it. A thread keeps the row
+        // under it whenever the setting can show the checkout and branch there, shown or not.
+        let keepsStrip = !isDraft && ClientSettingsStore.shared.current.bool("persistComposerContextStrip")
+        let below = keepsStrip ? gap + pillH : 0
+        let y = isDraft ? (chatTop + (chatHeight - chatTop - height - 20) / 2).rounded() : chatHeight - 20 - below - height
         let oldFrames = Dictionary(uniqueKeysWithValues: ditherShown.map { (ObjectIdentifier($0), $0.frame) })
         composer.frame = NSRect(x: x, y: y, width: width, height: height)
         composer.isHidden = !composerShown || chat == 0
@@ -1483,7 +1487,7 @@ public final class ThreadPanelView: DSView {
         var shown: [NSView] = []
         var top = y
 
-        // The context row: the draft's chips (the hero), checkout and branch, Stash at the right.
+        // The context row: the draft's chips (the hero), Stash at the right.
         let rowY = y - gap - pillH
         var left = x, right = x + width
         if isDraft {
@@ -1501,14 +1505,13 @@ public final class ThreadPanelView: DSView {
             top = rowY
             shown.append(stashBadge)
         }
-        // The machine is a chip on the draft, so the strip carries only the checkout and branch there.
-        let strip = visible && showsContextStrip && (isDraft ? contextStrip.showsGitControls : ClientSettingsStore.shared.current.bool("persistComposerContextStrip"))
+        // The machine is a chip on the draft, so the strip carries only the checkout and branch there. They sit
+        // under the composer, as T3's strip does.
+        let strip = visible && showsContextStrip && (isDraft ? contextStrip.showsGitControls : keepsStrip)
         contextStrip.floatsAsPills = true
         contextStrip.isHidden = !strip
         if strip {
-            contextStrip.frame = NSRect(x: left, y: rowY, width: max(0, right - left), height: pillH)
-            left += contextStrip.pillsWidth + spacing
-            top = rowY
+            contextStrip.frame = NSRect(x: x, y: y + height + gap, width: width, height: pillH)
             shown.append(contextStrip)
         }
 
@@ -1597,7 +1600,7 @@ public final class ThreadPanelView: DSView {
 
         animateDitherDock(shown: shown, oldFrames: oldFrames, exiting: exiting)
 
-        let inset = docked ? 8 + (y - top) + height + 20 : 0
+        let inset = docked ? 8 + (y - top) + height + below + 20 : 0
         if timeline.bottomInset != inset {
             timeline.bottomInset = inset
             if terminalOpen { needsLayout = true }

@@ -36,13 +36,26 @@ struct ComposerDitherPillsTests {
         let composer = panel.composer.frame, stash = panel.stashBadge.frame, work = panel.backgroundWorkBanner.frame
         #expect(!panel.stashBadge.isHidden && !panel.backgroundWorkBanner.isHidden)
         #expect(panel.stashBadge.placement == .floating && panel.backgroundWorkBanner.placement == .floating)
-        // One 28pt row, 8 above the composer: the work pill from the left, Stash at the right, apart.
+        // One pill row, 8 above the composer: the work pill from the left, Stash at the right, apart.
         for pill in [stash, work] {
             #expect(pill.height == DitherPill.height)
             #expect(pill.maxY == composer.minY - DitherPill.gap)
         }
         #expect(work.minX == composer.minX && stash.maxX == composer.maxX)
         #expect(work.maxX < stash.minX)
+    }
+
+    @Test func composerStaysPutAsPillsComeAndGo() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        let (panel, window) = try panel(dither: true)
+        defer { window.contentView = nil }
+        let before = panel.composer.frame
+        panel.showsStashBadge = false
+        panel.showsBackgroundWork = false
+        panel.layoutSubtreeIfNeeded()
+        // The leaving pills fade out where they were; the composer stays.
+        #expect(panel.composer.frame == before)
     }
 
     @Test func otherThemesKeepTheAttachedDock() throws {

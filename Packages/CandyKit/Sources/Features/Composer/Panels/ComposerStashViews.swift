@@ -50,7 +50,16 @@ public final class ComposerStashBadgeView: ComposerBannerView {
 
     /// `w-fit`: padding, the 24pt icon column, `gap-x-1`, the label, `gap-x-1`, the count.
     public var preferredWidth: CGFloat {
-        Self.padX * 2 + Self.row + 4 + ceil(title.textWidth) + 4 + max(Self.row, ceil(countLabel.textWidth))
+        sizeForPill()
+        return padX * 2 + Self.row + 4 + ceil(title.textWidth) + 4 + max(Self.row, ceil(countLabel.textWidth))
+    }
+    /// Redesign's 32pt pill: 13pt text and 6 a side, like the context pills beside it.
+    private var padX: CGFloat { ditherFloating ? 6 : Self.padX }
+    private func sizeForPill() {
+        let size: CGFloat = ditherFloating ? 13 : 12
+        guard title.font.pointSize != size else { return }
+        title.font = DSFont.ui(size)
+        countLabel.font = DSFont.ui(size, weight: .medium)
     }
     public var preferredHeight: CGFloat { Self.padY * 2 + Self.row + Self.overlap }
 
@@ -67,9 +76,10 @@ public final class ComposerStashBadgeView: ComposerBannerView {
 
     public override func layout() {
         super.layout()
-        // Floating (Redesign's 28pt pill) the row sits in the middle.
+        // Floating (Redesign's pill) the row sits in the middle.
+        sizeForPill()
         let padY = placement == .floating ? ((bounds.height - Self.row) / 2).rounded() : Self.padY
-        row.frame = NSRect(x: Self.padX, y: padY, width: max(0, bounds.width - 2 * Self.padX), height: Self.row)
+        row.frame = NSRect(x: padX, y: padY, width: max(0, bounds.width - 2 * padX), height: Self.row)
         icon.frame = NSRect(x: 6, y: 6, width: 12, height: 12)
         title.frame = NSRect(x: 28, y: 4, width: ceil(title.textWidth), height: 16)
         let cw = ceil(countLabel.textWidth), box = max(Self.row, cw)
