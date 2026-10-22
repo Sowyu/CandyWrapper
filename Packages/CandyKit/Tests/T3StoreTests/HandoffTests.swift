@@ -32,6 +32,14 @@ struct HandoffTests {
         #expect(pick("claude2", "claude-haiku-5-5") == nil)
         #expect(HandoffEndpoints.pending([Self.run("p", 1, "pi", "a")], selection: ModelSelection(instanceId: "pi", model: "b"), providers: providers) != nil)
         #expect(HandoffEndpoints.pending([], selection: ModelSelection(instanceId: "codex", model: "gpt-6"), providers: providers) == nil)
+        // A provider the next send would skip shows no handoff (ChatView.tsx:3974-3985).
+        var off = providers
+        off[1].enabled = false
+        #expect(HandoffEndpoints.pending(runs, selection: ModelSelection(instanceId: "codex", model: "gpt-6"), providers: off) == nil)
+        off[1].enabled = true
+        off[1].availability = "unavailable"
+        #expect(HandoffEndpoints.pending(runs, selection: ModelSelection(instanceId: "codex", model: "gpt-6"), providers: off) == nil)
+        #expect(HandoffEndpoints.pending(runs, selection: ModelSelection(instanceId: "gone", model: "x"), providers: providers) == nil)
     }
 
     @Test func legacyHandoffRecoversModelsFromRuns() throws {
