@@ -36,6 +36,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 ### Dither round 7, 2026-10-22 (taken 2026-10-22, main agent)
 
 - [ ] P. No middle bar: the thread scrim reads evenly across the panel, and the account row's email shows blurred (taken 2026-10-22, agent dither-scrim). Files: `DitherArtView`, `SidebarAccountRowView`.
+- [ ] R. Capy's thread row hover actions and context menu, with Settle and Snooze easy to reach, and bigger project header icons (taken 2026-10-22, agent dither-rowmenu). Files: `Features/Sidebar/SidebarRowViews.swift`, the sidebar row context menu in `App/Sources/SidebarCommands.swift`, `SidebarListView`.
 - [ ] Q. Nothing attached to the composer: chips, checkout and branch, Stash, the background work banner and the server update banner become floating pills (taken 2026-10-22, agent dither-pills). Files: `Features/Composer/**`, `DitherProjectChips.swift`, the composer banners.
 
 ### Dither round 6, 2026-10-22 (taken 2026-10-22, main agent)
