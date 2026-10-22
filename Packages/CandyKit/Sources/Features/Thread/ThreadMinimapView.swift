@@ -59,15 +59,8 @@ public final class ThreadMinimapView: DSView {
     public var items: [ThreadMinimapItem] = [] { didSet {
         guard !updatingPreview else { return }
         if let hovered, !items.indices.contains(hovered) { self.hovered = nil }
-        if items != oldValue { lengths = items.map(Self.lengthHint); needsDisplay = true }
+        if items != oldValue { needsDisplay = true }
     } }
-    /// Redesign: each tick's resting width, 4 to 12, from how much the turn says (user text plus the reply).
-    private var lengths: [CGFloat] = []
-    /// `utf8.count` is constant time on native strings, so a 2,500-turn thread measures in microseconds.
-    static func lengthHint(_ item: ThreadMinimapItem) -> CGFloat {
-        let chars = Double(item.userText.utf8.count + (item.assistantText?.utf8.count ?? 0))
-        return 4 + 8 * CGFloat(min(1, log2(1 + chars / 80) / 6))
-    }
     private var updatingPreview = false
     /// Wheel over the strip scrolls the chat (`forwardWheelToTimeline`, T3 3105 c9181d81a).
     var onWheel: ((NSEvent) -> Void)?
@@ -80,10 +73,6 @@ public final class ThreadMinimapView: DSView {
         updatingPreview = true
         if assistant { items[index].assistantText = text } else { items[index].userText = text }
         updatingPreview = false
-        if lengths.indices.contains(index) {
-            let width = Self.lengthHint(items[index])
-            if width != lengths[index] { lengths[index] = width; if dither { needsDisplay = true } }
-        }
         if hovered == index { showPreview() }
     }
     /// The turn at the reader's position, for the previous and next buttons (`resolveTimelineMinimapCurrentIndex`).
@@ -104,9 +93,9 @@ public final class ThreadMinimapView: DSView {
 
     // MARK: Redesign
 
-    /// Redesign (after Capy's chat minimap, which is T3's: one tick per user turn, the hovered one full width, a
-    /// preview card): ticks whose width hints at the turn's length, the viewport as a soft band, and a tinted backing
-    /// so it reads over bright and dark art. It rests almost faded and comes back while scrolling or hovered.
+    /// Redesign (after Capy's chat minimap, which is T3's, with a preview card): one tick per turn, all the same size
+    /// and evenly spaced (the user, 2026-10-22: "keep that bar the same"), the viewport as a soft band, and a tinted
+    /// backing so it reads over bright and dark art. It rests almost faded and comes back while scrolling or hovered.
     private var dither: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
     /// Room for the backing and the band around the ticks. TimelineView outsets the frame by it.
     public var padding: CGFloat { dither ? 8 : 0 }
@@ -277,6 +266,8 @@ public final class ThreadMinimapView: DSView {
 }
 
 extension ThreadMinimapView {
+    static let tickWidth: CGFloat = 10
+
     /// Redesign's column: the backing, the band over the turns on screen, then one tick per turn. Three colors
     /// resolved once and plain rect fills, so a 2,500-turn redraw stays as cheap as the stock strip.
     fileprivate func drawDither(_ ctx: CGContext, _ dirtyRect: NSRect) {
@@ -293,15 +284,13 @@ extension ThreadMinimapView {
             ctx.addPath(CGPath(roundedRect: rect, cornerWidth: r, cornerHeight: r, transform: nil))
             ctx.setFillColor(band); ctx.fillPath()
         }
+        // Every tick has the same size; the hovered tick and the turns on screen only draw brighter.
+        let width = min(Self.tickWidth, max(0, bounds.width - 2 * padding))
         for i in items.indices {
-            let rest = lengths.indices.contains(i) ? lengths[i] : 8
-            let distance = hovered.map { abs(i - $0) }
-            // Capy's magnifier: the hovered tick at full width, its neighbours stepping down to their resting width.
-            let width = distance == 0 ? 20 : distance == 1 ? max(rest, 14) : distance == 2 ? max(rest, 9) : rest
             let rect = CGRect(x: padding, y: tickY(i), width: width, height: 2)
             guard rect.intersects(dirtyRect) else { continue }
             ctx.addPath(CGPath(roundedRect: rect, cornerWidth: 1, cornerHeight: 1, transform: nil))
-            ctx.setFillColor(distance == 0 || inView.contains(i) ? bright : quiet)
+            ctx.setFillColor(hovered == i || inView.contains(i) ? bright : quiet)
             ctx.fillPath()
         }
     }
