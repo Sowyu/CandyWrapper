@@ -3231,6 +3231,7 @@ extension ComposerController {
         }
         // A question that closed during the capture hands it back to the composer, under the composer's cap.
         if destination.question != nil, (draftAttachments[key]?.count ?? 0) + (preparingImages[key] ?? 0) > ComposerAttachmentRules.maxAttachments {
+            try? FileManager.default.removeItem(at: prepared.url)
             throw CancellationError()
         }
         var attachment = ComposerAttachment(kind: .image, name: prepared.name, mimeType: prepared.mimeType,
