@@ -561,15 +561,10 @@ struct ClerkErrorTests {
 // MARK: Keychain
 
 struct ClerkKeychainStoreTests {
-    @Test func roundTripReplacesAndDeletes() throws {
+    /// The real login Keychain. A locked keychain fails here instead of passing silently.
+    @Test(.integration) func roundTripReplacesAndDeletes() throws {
         let store = ClerkKeychainStore(service: "dev.candywrapper.t3.test-clerk-\(UUID().uuidString)")
-        do {
-            try store.save(ClerkStoredSession(clientToken: "test-token-a"))
-        } catch let e as CredentialStore.KeychainError {
-            // A locked keychain with no GUI login can't be written. Not a code failure.
-            print("keychain unavailable, skipping: \(e.status)")
-            return
-        }
+        try store.save(ClerkStoredSession(clientToken: "test-token-a"))
         defer { try? store.delete() }
         #expect(try store.load() == ClerkStoredSession(clientToken: "test-token-a"))
         try store.save(ClerkFixture.signedIn)
