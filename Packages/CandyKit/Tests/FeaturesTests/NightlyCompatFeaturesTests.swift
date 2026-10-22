@@ -10,12 +10,12 @@ import DesignSystem
 struct NightlyCompatFeaturesTests {
     @Test func compactOfferWaitsThePromptCacheLife() {
         let at = Date(timeIntervalSince1970: 1_000_000)
-        #expect(ComposerCompaction.offerStart(driver: "claudeAgent", usedTokens: 120_000, updatedAt: at) == at.addingTimeInterval(70 * 60))
-        #expect(ComposerCompaction.offerStart(driver: "claudeAgent", usedTokens: 120_000, updatedAt: at, promptCacheTtlMs: 300_000)
+        #expect(ComposerCompaction.offerStart(driver: "claudeAgent", usedTokens: 420_000, updatedAt: at) == at.addingTimeInterval(70 * 60))
+        #expect(ComposerCompaction.offerStart(driver: "claudeAgent", usedTokens: 420_000, updatedAt: at, promptCacheTtlMs: 300_000)
             == at.addingTimeInterval(300))
-        #expect(ComposerCompaction.shouldOfferResume(driver: "claudeAgent", usedTokens: 120_000, updatedAt: at, promptCacheTtlMs: 300_000,
+        #expect(ComposerCompaction.shouldOfferResume(driver: "claudeAgent", usedTokens: 420_000, updatedAt: at, promptCacheTtlMs: 300_000,
                                                      now: at.addingTimeInterval(301)))
-        #expect(!ComposerCompaction.shouldOfferResume(driver: "claudeAgent", usedTokens: 120_000, updatedAt: at, now: at.addingTimeInterval(301)))
+        #expect(!ComposerCompaction.shouldOfferResume(driver: "claudeAgent", usedTokens: 420_000, updatedAt: at, now: at.addingTimeInterval(301)))
     }
 
     @Test func contextWindowTakesTheNewestReportAndItsTtl() throws {
