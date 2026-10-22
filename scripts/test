@@ -1,6 +1,20 @@
 #!/bin/zsh
 # Runs the CandyKit tests after any Origin energy run ends. Arguments go to `swift test`,
 # for example `scripts/test --filter SidebarFidelityTests`.
+# `scripts/test --fast` leaves out the pixel, web view and stress suites and the few big-fixture
+# tests that hold the main thread for seconds each. Run it after each change and the full suite
+# before a PR or a release.
 here="${0:A:h}"
 "$here/wait-origin"
-cd "$here/../Packages/CandyKit" && exec swift test "$@"
+slow=(
+  Fidelity WebFrameSuites Mermaid GalleryExport Stress
+  pagesMatchAFullPass streamedTurnsMatchAFullDeriveAtEveryStep offMainUpdatesMatchSynchronousOnes
+  incrementalBuildsMatchFreshBuilds contentViewPatchesTheList oneThreadChangeBuildsOneRow
+  everyThreadChangedInPlaceMatchesFreshBuild longLiveThreadKeepsTheContract failedProbeReconnectsWithoutWaiting
+  shippedTileMatchesTheGenerator stopKillsAServerAndADescendantThatIgnoreSigterm stallingCommandTimesOutAndIsReaped
+)
+args=("$@")
+if [[ "$1" == "--fast" ]]; then
+  args=(--skip "${(j:|:)slow}" "${@:2}")
+fi
+cd "$here/../Packages/CandyKit" && exec swift test "${args[@]}"

@@ -20,6 +20,7 @@ Run them from the repo root.
 | Check the disk before you build | `scripts/preflight` |
 | Run all tests | `scripts/test` |
 | Run some tests | `scripts/test --filter SidebarFidelityTests` |
+| Run the fast lane after each change, under a minute | `scripts/test --fast` |
 | Run the opt-in tests against a real `t3 serve`, the sandbox server and the Keychain | `scripts/test-integration`, after `scripts/sandbox-server` |
 | Build an app to test | `scripts/build-test-app <task>` |
 | Start the sandbox T3 server | `scripts/sandbox-server` |
