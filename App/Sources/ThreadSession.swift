@@ -309,6 +309,17 @@ final class ThreadSession {
 @MainActor
 final class ThreadController {
     let panel = ThreadPanelView()
+    /// Dither's tab bar figure, after Capy's: what the open thread would cost at API prices.
+    let costLabel: LabelView = {
+        let l = LabelView("", font: DSFont.ui(13), color: Themed.color(\.mutedForeground))
+        l.lineHeight = 18
+        l.isHidden = true
+        l.setAccessibilityLabel("Estimated cost at API prices")
+        return l
+    }()
+    private var costUSD: Double?
+    /// Whether the window shows a thread route; Settings and the utility pages hide the figure.
+    var costRouteShowsThread = true { didSet { syncCost() } }
     private(set) var terminal: TerminalController!
     private(set) var composer: ComposerController!
     private(set) var git: GitController!
@@ -733,6 +744,7 @@ final class ThreadController {
             guard let self, composer.openDraft(id) else { return }
             session?.end()
             session = nil
+            setCost(nil)
             lineage.update(threadId: nil, projection: nil)
             terminal.show(nil)
             scripts.show(nil)
@@ -845,6 +857,7 @@ final class ThreadController {
         hideNoActiveThread()
         let previousEnvironment = panel.isDraft ? nil : session?.environmentId
         session?.end()
+        setCost(nil)
         // The panel keeps painting until the new thread's first projection replaces it in one pass
         // (`beginThreadSwitch`); clearing it here showed an empty window for a frame or more.
         let snapshot = sidebar?.snapshot
@@ -882,6 +895,7 @@ final class ThreadController {
             }
             self?.composer.projectionChanged(projection, threadId: id)
             self?.lineage.update(threadId: id, projection: projection)
+            self?.setCost(projection)
         }
         session.onStatus = { [weak self] status in self?.composer.threadStatusChanged(status, threadId: id) }
         if let shell = environments.session(id.environmentId) { session.attach(shell) }
@@ -945,11 +959,28 @@ final class ThreadController {
         guard composer.newThread(in: project) else { return }
         previous?.end()
         session = nil
+        setCost(nil)
         lineage.update(threadId: nil, projection: nil)
         terminal.show(nil)
         scripts.show(nil)
         files.show(nil)
         keepAlive?.update()
+    }
+
+    private func setCost(_ projection: ThreadProjection?) {
+        let usd = ThemeRuntime.isDither(dark: true) || ThemeRuntime.isDither(dark: false) ? ThreadCostEstimate.usd(projection) : nil
+        guard usd != costUSD || projection == nil else { return }
+        costUSD = usd
+        syncCost()
+    }
+
+    private func syncCost() {
+        let text = costUSD.map(ThreadCostEstimate.label) ?? ""
+        let hidden = costUSD == nil || !costRouteShowsThread || panel.isDraft
+        guard text != costLabel.text || hidden != costLabel.isHidden else { return }
+        costLabel.text = text
+        costLabel.isHidden = hidden
+        costLabel.superview?.needsLayout = true
     }
 
     /// The thread the panel shows, nil on a draft (the route's thread in T3).
@@ -1017,6 +1048,7 @@ final class ThreadController {
     func close() {
         session?.end()
         session = nil
+        setCost(nil)
         lineage.update(threadId: nil, projection: nil)
         terminal.show(nil)
         scripts.show(nil)
@@ -1160,6 +1192,7 @@ final class ThreadController {
     func landOnIndex() {
         session?.end()
         session = nil
+        setCost(nil)
         lineage.update(threadId: nil, projection: nil)
         terminal.show(nil)
         scripts.show(nil)
@@ -1267,6 +1300,7 @@ final class ThreadController {
         }
         session?.end()
         session = nil
+        setCost(nil)
         lineage.update(threadId: nil, projection: nil)
         terminal.show(nil)
         scripts.show(nil)

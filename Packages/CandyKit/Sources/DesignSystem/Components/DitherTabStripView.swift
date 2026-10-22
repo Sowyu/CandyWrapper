@@ -19,6 +19,10 @@ public final class DitherTabStripView: TopbarDragView {
     public var onNew: (() -> Void)?
     /// A tab was dragged to a new index in strip order.
     public var onMove: ((String, Int) -> Void)?
+    /// A view at the strip's right end, such as the thread's cost estimate; it sizes itself with `intrinsicContentSize`.
+    public var trailingAccessory: NSView? {
+        didSet { oldValue?.removeFromSuperview(); trailingAccessory.map { addSubview($0) }; needsLayout = true }
+    }
 
     private var views: [TabView] = []
     private let plus = ButtonView(nil, icon: .plus, variant: .ghost, size: .iconSm)
@@ -63,7 +67,13 @@ public final class DitherTabStripView: TopbarDragView {
     public override func layout() {
         super.layout()
         let y = (bounds.height - Self.tabHeight) / 2
-        let room = max(0, bounds.width - contentStart - 40)
+        var trailing: CGFloat = 0
+        if let accessory = trailingAccessory {
+            let size = accessory.intrinsicContentSize
+            trailing = accessory.isHidden ? 0 : size.width + 12
+            accessory.frame = NSRect(x: bounds.width - 12 - size.width, y: ((bounds.height - size.height) / 2).rounded(), width: size.width, height: size.height)
+        }
+        let room = max(0, bounds.width - contentStart - 40 - trailing)
         let width = views.isEmpty ? 0 : min(Self.tabWidth, (room - Self.gap * CGFloat(views.count - 1)) / CGFloat(views.count))
         var x = contentStart - 12
         for v in views {

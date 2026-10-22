@@ -190,6 +190,8 @@ final class SubagentCardLinkView: ControlView {
     private let elapsed = LabelView("", font: SB.tabular(12))
     private let chevron = IconView(name: .chevronRight, size: 14)
     private var tooltip: TooltipController?
+    /// Dither, after Capy: a running agent's name follows a small teal dot grid instead of the status dot.
+    private var dotGrid: DotGridSpinnerView?
     var contentVisible = true { didSet { if contentVisible { tick() } else { stop() } } }
 
     override init(frame: NSRect) {
@@ -245,7 +247,14 @@ final class SubagentCardLinkView: ControlView {
         let tone = failed ? TL.c(\.destructive) : TL.c(\.mutedForeground)
         status.color = tone; detail.color = tone; plainDetail.color = tone; elapsed.color = TL.c(\.mutedForeground)
         avatar.fill = TL.c(\.muted); avatar.border = TL.c(\.border, 0.7)
-        dot.isHidden = presentation?.status == nil
+        let working = ["pending", "running", "waiting"].contains(presentation?.status ?? "")
+        if working, ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
+            if dotGrid == nil { let g = DotGridSpinnerView(); dotGrid = g; addSubview(g); needsLayout = true }
+            dotGrid?.color = TL.c(\.accent)
+        } else if let g = dotGrid {
+            g.removeFromSuperview(); dotGrid = nil; needsLayout = true
+        }
+        dot.isHidden = presentation?.status == nil || dotGrid != nil
         dot.fill = switch presentation?.status {
         case "pending", "running", "waiting": TL.c(\.info)
         case "completed": TL.c(\.success)
@@ -270,10 +279,12 @@ final class SubagentCardLinkView: ControlView {
         if !chevron.isHidden { chevron.frame = NSRect(x: right - 14, y: 16, width: 14, height: 14); right -= 24 }
         let ew = ceil(elapsed.textWidth)
         elapsed.frame = NSRect(x: right - ew, y: 15, width: ew, height: 16); right -= ew + 10
+        let lead: CGFloat = dotGrid == nil ? 0 : 16
+        dotGrid?.frame = NSRect(x: 40, y: 6, width: 14, height: 16)
         let available = max(0, right - 42), sw = status.text.isEmpty ? 0 : ceil(status.textWidth) + 8
-        let tw = min(ceil(title.textWidth), max(0, available - sw))
-        title.frame = NSRect(x: 42, y: 6, width: tw, height: 16)
-        status.frame = NSRect(x: 42 + tw + 8, y: 8, width: max(0, sw - 8), height: 14)
+        let tw = min(ceil(title.textWidth), max(0, available - sw - lead))
+        title.frame = NSRect(x: 42 + lead, y: 6, width: tw, height: 16)
+        status.frame = NSRect(x: 42 + lead + tw + 8, y: 8, width: max(0, sw - 8), height: 14)
         detail.frame = NSRect(x: 42, y: 22, width: available, height: 17.875)
         plainDetail.frame = detail.frame
     }

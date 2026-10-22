@@ -547,8 +547,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         let record: () -> Void = { [weak history, weak threads] in
-            history?.record(currentRoute())
+            let route = currentRoute()
+            history?.record(route)
             threads?.syncVisit()
+            if case .thread? = route { threads?.costRouteShowsThread = true } else { threads?.costRouteShowsThread = false }
         }
         threads.onRouteChange = record
         settings.onRouteChange = record
@@ -598,6 +600,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Capy's + opens the new-thread page for the current project; its project chip picks another.
         ditherTabs = DitherTabsController(layout: layout, sidebar: sidebar, history: history, current: currentRoute,
                                           newThread: { [weak palette] in palette?.newThreadFromSidebar(shift: true) })
+        layout.tabStrip.trailingAccessory = threads.costLabel
         commands.historyBack = { [weak history] in history?.back() ?? false }
         commands.closePalette = { [weak palette] in palette?.close() }
         // Escape drops a multi-selection (_chat.tsx:98-102). Settings and Usage sit outside the chat layout,
