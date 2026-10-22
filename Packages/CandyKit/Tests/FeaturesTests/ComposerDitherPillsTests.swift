@@ -71,6 +71,43 @@ struct ComposerDitherPillsTests {
             .init(taskId: "a", kind: .subagent, label: "Fix it", childThreadId: ThreadId("c"))], waiting: true)) == "Waiting on subagent")
     }
 
+    /// Capy's machine row takes the checkout and ref pills' place at the left of the same row, and nothing overlaps
+    /// the waiting indicator and ring at a narrow width.
+    @Test func deviceRowSitsLeftOfTheWaitingIndicatorWithoutOverlap() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        let (panel, window) = try panel(dither: true)
+        defer { window.contentView = nil }
+        panel.waitingIndicator.configure(title: "Waiting on subagent", waiting: true, header: "Waiting on subagent Fix it",
+                                         links: [.init("Show subagent") {}], stop: .init("Stop") {})
+        panel.composer.contextWindowMeter.usage = ThreadContextWindowUsage(used: 32_800, maximum: 400_000, automatically: true)
+        panel.deviceRow.configure(machine: "A rather long machine name of a MacBook Pro", kind: "laptop", workspace: "Worktree", online: true)
+        panel.showsDeviceRow = true
+        for width: CGFloat in [1000, 420] {
+            panel.frame.size.width = width
+            panel.layoutSubtreeIfNeeded()
+            let composer = panel.composer.frame, row = panel.deviceRow.frame, waiting = panel.waitingIndicator.frame
+            #expect(!panel.deviceRow.isHidden && panel.contextStrip.isHidden)
+            #expect(row.minY == composer.maxY + DitherPill.gap && row.minX == composer.minX + DitherPill.inset)
+            #expect(row.maxX <= waiting.minX)
+        }
+    }
+
+    /// The legend splits the live report into cached and new input, output and reasoning, which add up to the
+    /// tokens used, as the Claude adapter reports them (ClaudeAdapterV2.ts:248-266).
+    @Test func contextLegendSplitsTheReport() throws {
+        let report: JSONValue = .object(["usedTokens": .number(12_500), "inputTokens": .number(12_000), "cachedInputTokens": .number(9_000),
+                                         "outputTokens": .number(500), "reasoningOutputTokens": .number(100)])
+        let parts = try #require(ThreadContextWindowUsage.Parts(report, prefix: ""))
+        let legend = ThreadContextWindowDetailsView.legend(parts)
+        #expect(legend.map(\.name) == ["Cached input", "New input", "Output", "Reasoning"])
+        #expect(legend.map(\.value) == [9_000, 3_000, 400, 100])
+        #expect(legend.map(\.value).reduce(0, +) == 12_500)
+        #expect(ThreadContextWindowUsage.Parts(.object(["usedTokens": .number(1)]), prefix: "") == nil)
+        let snapshot: JSONValue = .object(["lastInputTokens": .number(10), "lastOutputTokens": .number(2), "inputTokens": .number(999)])
+        #expect(ThreadContextWindowUsage.Parts(snapshot, prefix: "last") == .init(cached: 0, input: 10, output: 2, reasoning: 0))
+    }
+
     @Test func composerStaysPutAsPillsComeAndGo() throws {
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous) }

@@ -15,6 +15,25 @@ public struct ThreadContextWindowUsage: Equatable, Sendable {
     public var updatedAt: Date? = nil
     /// The provider's prompt cache lifetime, on a live report from 2994 servers (c727d1219, orchestrationV2.ts:1066).
     public var promptCacheTtlMs: Double? = nil
+    /// What fills the window, from the same report: `cachedInputTokens` and the rest of `inputTokens` (Claude's
+    /// cache writes land there), then `outputTokens` less `reasoningOutputTokens` and the reasoning itself
+    /// (orchestrationV2.ts:166-177, ClaudeAdapterV2.ts:248-266). Provider snapshots carry it as `last*`. Nil when
+    /// the report has no input count.
+    public var parts: Parts? = nil
+    public struct Parts: Equatable, Sendable {
+        public var cached: Double, input: Double, output: Double, reasoning: Double
+        public init(cached: Double, input: Double, output: Double, reasoning: Double) {
+            self.cached = cached; self.input = input; self.output = output; self.reasoning = reasoning
+        }
+        init?(_ json: JSONValue, prefix: String) {
+            func n(_ key: String) -> Double { max(0, json[prefix.isEmpty ? key : prefix + key.prefix(1).uppercased() + key.dropFirst()]?.doubleValue ?? 0) }
+            let key = prefix.isEmpty ? "inputTokens" : prefix + "InputTokens"
+            guard json[key]?.doubleValue != nil else { return nil }
+            let input = n("inputTokens"), cached = min(n("cachedInputTokens"), input)
+            let output = n("outputTokens"), reasoning = min(n("reasoningOutputTokens"), output)
+            self.init(cached: cached, input: input - cached, output: output - reasoning, reasoning: reasoning)
+        }
+    }
     public var percentage: Double? { maximum.flatMap { $0 > 0 ? min(100, max(0, used / $0 * 100)) : nil } }
     public static func derive(_ projection: ThreadProjection?) -> Self? {
         guard let projection else { return nil }
@@ -26,7 +45,8 @@ public struct ThreadContextWindowUsage: Equatable, Sendable {
                         cost: live ? nil : (json["cost"]?.doubleValue ?? json["cost"]?["amount"]?.doubleValue),
                         currency: json["cost"]?["currency"]?.stringValue ?? "USD",
                         autoCompactThreshold: json["autoCompactThreshold"]?.doubleValue, automatically: live || json["compactsAutomatically"]?.boolValue == true,
-                        updatedAt: updatedAt, promptCacheTtlMs: live ? json["promptCacheTtlMs"]?.doubleValue : nil)
+                        updatedAt: updatedAt, promptCacheTtlMs: live ? json["promptCacheTtlMs"]?.doubleValue : nil,
+                        parts: Parts(json, prefix: live ? "" : "last"))
         }
         // `latestProviderTurnTokenUsage` (lib/contextWindow.ts:29-41 in 2994): the newest report by
         // `updatedAt`, ties to the later entry, since live upserts append.
@@ -297,9 +317,20 @@ final class ThreadContextWindowDetailsView: DSView {
     private var model: Model?
     static let inset: CGFloat = 12, width: CGFloat = 256 - 2 - 2 * 12
     /// Dither: Capy's Context popover (measured in Capy 2026-10-22), 286 wide: "Context" with "used / max used (n%)"
-    /// at the right, the bar, rows of label and value, and a bordered "Compact at" box. Capy breaks the usage into
-    /// system prompt, tools and conversation; T3's wire carries no such split, so the rows are what it does carry.
+    /// at the right, a 5pt bar split by category, a legend row per category (7pt dot, name, count at the right) and a
+    /// bordered "Compact at threshold / max" box. Capy splits by system prompt, tools and conversation; T3's report
+    /// splits by cached input, new input, output and reasoning (`ThreadContextWindowUsage.Parts`), so those are the
+    /// categories. Without a threshold the box reads "Max", and Compact context sits under it as a quiet button.
     private var capy = false
+    private var segments: [(view: FillView, share: CGFloat)] = []
+    private var dots: [FillView] = []
+    /// Capy's legend colors, sampled from its popover: gray, blue, teal, violet.
+    static let partColors: [NSColor] = [NSColor(srgbRed: 0.53, green: 0.53, blue: 0.55, alpha: 1), NSColor(srgbRed: 0.18, green: 0.51, blue: 0.96, alpha: 1),
+                                        NSColor(srgbRed: 0.29, green: 0.62, blue: 0.56, alpha: 1), NSColor(srgbRed: 0.55, green: 0.40, blue: 0.96, alpha: 1)]
+    static func legend(_ parts: ThreadContextWindowUsage.Parts) -> [(name: String, value: Double, color: NSColor)] {
+        [("Cached input", parts.cached, partColors[0]), ("New input", parts.input, partColors[1]),
+         ("Output", parts.output, partColors[2]), ("Reasoning", parts.reasoning, partColors[3])].filter { $0.1 > 0 }
+    }
     static let capyWidth: CGFloat = 286 - 2 - 2 * 12
     private let compactBox = DSView()
     private let compactLabel = LabelView("Compact at", font: DSFont.ui(13), color: Themed.color(\.contrastForeground))
@@ -323,7 +354,7 @@ final class ThreadContextWindowDetailsView: DSView {
         reasonText.balanced = true
         button.action = { [weak self] in self?.onCompact?() }
         for v in [note, button, reasonText] as [NSView] { addSubview(v) }
-        compactBox.layer?.borderWidth = 1
+        compactBox.layer?.borderWidth = 0.5
         compactBox.layer?.cornerRadius = DitherChrome.controlRadius
         compactBox.isHidden = true
         addSubview(compactBox)
@@ -343,10 +374,11 @@ final class ThreadContextWindowDetailsView: DSView {
         guard next != model else { return false }
         model = next
         self.capy = capy
-        // Capy writes token counts with capital units: 32.8K, 1.1M.
+        // Capy writes token counts with capital units and a decimal under 100K: 37.3K, 400K, 1.1M.
         func tokens(_ value: Double) -> String {
-            let text = ThreadContextWindowUsage.tokens(value)
-            return capy ? text.uppercased() : text
+            guard capy else { return ThreadContextWindowUsage.tokens(value) }
+            if value >= 1_000, value < 99_950 { return String(format: "%.1f", value / 1_000).replacingOccurrences(of: ".0", with: "") + "K" }
+            return ThreadContextWindowUsage.tokens(value).uppercased()
         }
         title.text = capy ? "Context" : "Context Window"
         title.font = capy ? DSFont.ui(13, weight: .medium) : DSFont.ui(12, weight: .medium)
@@ -371,29 +403,50 @@ final class ThreadContextWindowDetailsView: DSView {
         track.setAccessibilityValue(NSNumber(value: Int((fraction * 100).rounded())))
         for (l, v) in rows { l.removeFromSuperview(); v.removeFromSuperview() }
         rows = []
+        for v in segments.map(\.view) + dots { v.removeFromSuperview() }
+        segments = []; dots = []
         func row(_ name: String, _ value: String) {
             let l = capy ? LabelView(name, font: DSFont.ui(13), color: Themed.color(\.contrastForeground))
                 : LabelView(name, font: DSFont.ui(11), color: Themed.color(\.contrastSecondaryLabel))
-            let v = capy ? LabelView(value, font: SB.tabular(12), color: Themed.color(\.contrastMutedForeground))
+            let v = capy ? LabelView(value, font: SB.tabular(13), color: Themed.color(\.contrastMutedForeground))
                 : LabelView(value, font: SB.tabular(11, .medium), color: Themed.color(\.contrastSecondaryLabel))
             for x in [l, v] { x.lineHeight = capy ? 18 : 16; addSubview(x) }
             rows.append((l, v))
         }
-        if let total = usage.total, total > 0 { row("Total processed", tokens(total)) }
+        if capy {
+            // One segment and one legend row per category, each segment its share of the window.
+            let legend = usage.parts.map(Self.legend) ?? []
+            let maximum = usage.maximum ?? 0
+            for part in legend {
+                row(part.name, tokens(part.value))
+                let dot = FillView(), segment = FillView()
+                dot.radius = 3.5
+                for v in [dot, segment] { v.fill = part.color; v.setAccessibilityElement(false) }
+                addSubview(dot)
+                track.addSubview(segment)
+                dots.append(dot); segments.append((segment, maximum > 0 ? CGFloat(min(1, part.value / maximum)) : 0))
+            }
+            // A report without the split keeps the single bar.
+            bar.isHidden = !showsBar || !legend.isEmpty
+            track.clipsToBounds = true
+        }
+        if !capy, let total = usage.total, total > 0 { row("Total processed", tokens(total)) }
         // `formatContextWindowCost` (ContextWindowMeter.logic.ts:139-145).
-        if let cost = usage.cost { row("Cost", usage.currency + " " + String(format: abs(cost) > 0 && abs(cost) < 0.01 ? "%.4f" : "%.2f", cost)) }
+        if !capy, let cost = usage.cost { row("Cost", usage.currency + " " + String(format: abs(cost) > 0 && abs(cost) < 0.01 ? "%.4f" : "%.2f", cost)) }
         // Capy's "Compact at" box: the threshold, then the window it sits in.
         let threshold = usage.autoCompactThreshold.flatMap { $0 > 0 && $0 < 9e15 ? $0 : nil }
-        let boxed = capy && threshold != nil
+        let boxed = capy && (threshold != nil || usage.maximum != nil)
         for v in [compactBox, compactLabel, compactValue, compactMaximum] as [NSView] { v.isHidden = !boxed }
         compactBox.layer?.borderColor = Themed.color(\.contrastForeground, 0.1).cgColor(in: self)
-        if let threshold, boxed {
-            compactValue.text = tokens(threshold)
-            compactMaximum.text = usage.maximum.map { " / " + tokens($0) } ?? ""
+        if boxed {
+            compactLabel.text = threshold != nil ? "Compact at" : "Max"
+            compactValue.text = threshold.map(tokens) ?? ""
+            compactMaximum.text = usage.maximum.map { (threshold != nil ? " / " : "") + tokens($0) } ?? ""
+            compactMaximum.color = Themed.color(threshold != nil ? \.contrastMutedForeground : \.contrastForeground)
         }
         note.font = capy ? DSFont.ui(12) : DSFont.ui(11, weight: .medium)
         note.color = Themed.color(capy ? \.contrastMutedForeground : \.contrastSecondaryLabel)
-        note.isHidden = !usage.automatically || boxed
+        note.isHidden = !usage.automatically || capy
         // `formatContextWindowCompactionMessage` (ContextWindowMeter.logic.ts:100-110).
         if let threshold = usage.autoCompactThreshold, threshold > 0, threshold < 9e15 {
             note.text = "Compacts automatically at about " + Int(threshold).formatted(.number.locale(Locale(identifier: "en_US"))) + " tokens."
@@ -401,6 +454,7 @@ final class ThreadContextWindowDetailsView: DSView {
             note.text = name.map { "Context for " + $0 + " compacts automatically when needed." } ?? "Context compacts automatically when needed."
         }
         button.isHidden = !compactOffered
+        button.variant = capy ? .ghostMuted : .outline
         button.isEnabled = !disabled
         reasonText.text = reason ?? ""
         reasonText.isHidden = !compactOffered || !disabled || reason == nil
@@ -428,27 +482,37 @@ final class ThreadContextWindowDetailsView: DSView {
         put(figure, NSRect(x: x + w - fw, y: y, width: fw, height: line))
         y += line
         if !track.isHidden {
+            // Capy: the 5pt bar 10 under the title, its segments laid end to end from the left.
+            let h: CGFloat = capy ? 5 : 6
             y += capy ? 10 : 8
-            put(track, NSRect(x: x, y: y, width: w, height: 6))
-            put(bar, NSRect(x: x, y: y, width: (w * fraction).rounded(), height: 6))
-            y += 6
+            put(track, NSRect(x: x, y: y, width: w, height: h))
+            put(bar, NSRect(x: x, y: y, width: (w * fraction).rounded(), height: h))
+            var sx: CGFloat = 0
+            for s in segments {
+                let sw = (s.share * w).rounded()
+                if apply { s.view.frame = NSRect(x: sx, y: 0, width: sw, height: h) }
+                sx += sw
+            }
+            y += h
         }
-        if capy, !rows.isEmpty { y += 4 }
-        for (l, v) in rows {
-            y += capy ? 4 : 8
-            let vw = ceil(v.textWidth)
-            put(l, NSRect(x: x, y: y, width: max(0, w - vw - 12), height: line))
+        if capy, !rows.isEmpty { y += 8 }
+        for (i, (l, v)) in rows.enumerated() {
+            // Capy: 21.5pt rows, a 7pt dot, the name 16 in.
+            y += capy ? (i == 0 ? 0 : 3.5) : 8
+            let vw = ceil(v.textWidth), lead: CGFloat = i < dots.count ? 16 : 0
+            if i < dots.count { put(dots[i], NSRect(x: x, y: y + (line - 7) / 2, width: 7, height: 7)) }
+            put(l, NSRect(x: x + lead, y: y, width: max(0, w - vw - 12 - lead), height: line))
             put(v, NSRect(x: x + w - vw, y: y, width: vw, height: line))
             y += line
         }
         if !compactBox.isHidden {
             y += 12
-            put(compactBox, NSRect(x: x, y: y, width: w, height: 30))
+            put(compactBox, NSRect(x: x, y: y, width: w, height: 28))
             let mw = ceil(compactMaximum.textWidth), vw = ceil(compactValue.textWidth)
-            put(compactMaximum, NSRect(x: x + w - 10 - mw, y: y + 6, width: mw, height: 18))
-            put(compactValue, NSRect(x: x + w - 10 - mw - vw, y: y + 6, width: vw, height: 18))
-            put(compactLabel, NSRect(x: x + 10, y: y + 6, width: max(0, w - 30 - mw - vw), height: 18))
-            y += 30
+            put(compactMaximum, NSRect(x: x + w - 9 - mw, y: y + 5, width: mw, height: 18))
+            put(compactValue, NSRect(x: x + w - 9 - mw - vw, y: y + 5, width: vw, height: 18))
+            put(compactLabel, NSRect(x: x + 9, y: y + 5, width: max(0, w - 30 - mw - vw), height: 18))
+            y += 28
         }
         // `mt-1` on top of the column's `gap-2` for the note and the button.
         if !note.isHidden {
@@ -458,7 +522,7 @@ final class ThreadContextWindowDetailsView: DSView {
             y += h
         }
         if !button.isHidden {
-            y += 12
+            y += capy ? 6 : 12
             put(button, NSRect(x: x, y: y, width: w, height: 24))
             y += 24
         }
