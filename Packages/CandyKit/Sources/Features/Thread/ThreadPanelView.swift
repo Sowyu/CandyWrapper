@@ -57,6 +57,8 @@ public final class ThreadHeaderView: TopbarDragView {
     public let toggles: [ToggleView] = [IconName.squareMenu, .panelBottom, .panelRight].map {
         ToggleView(nil, icon: $0, variant: .ghost, size: .sm)
     }
+    /// Redesign's cost estimate, left of the toggles; other themes never show it.
+    public let cost = ThreadCostPillView()
 
     public var projectTitle: String {
         get { project.text }
@@ -144,6 +146,7 @@ public final class ThreadHeaderView: TopbarDragView {
         toggles[1].setAccessibilityLabel("Toggle terminal drawer")
         toggles[2].setAccessibilityLabel("Toggle right panel")
         toggles.forEach(addSubview)
+        addSubview(cost)
         toggleTips = toggles.map { TooltipController.attach(to: $0, text: "", placement: PopupPlacement(side: .bottom, align: .center, sideOffset: 4)) }
         refreshToggleTooltips()
         // The header lives as long as the window: the observer is never removed.
@@ -219,6 +222,9 @@ public final class ThreadHeaderView: TopbarDragView {
             toggle.frame = NSRect(x: x, y: midY - size.height / 2, width: size.width, height: size.height)
             x -= 4
         }
+        cost.isHidden = !plain || !threadVisible || cost.breakdown == nil
+        let costSize = cost.intrinsicContentSize
+        cost.frame = NSRect(x: x - costSize.width, y: midY - costSize.height / 2, width: costSize.width, height: costSize.height)
     }
 }
 

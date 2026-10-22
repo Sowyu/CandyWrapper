@@ -1,7 +1,7 @@
 import Foundation
 import T3Protocol
 
-/// What a thread would have cost at API prices, after Capy's tab bar figure. Each provider turn reports its token
+/// What a thread would have cost at API prices, after Capy's tab bar figure; Redesign shows it in the thread header. Each provider turn reports its token
 /// totals as `turnTokenUsage` when it ends (providerRuntime.ts:321-347, orchestrationV2.ts:989): input counts cache
 /// reads and writes, output counts reasoning. A turn without totals, such as one still running, counts its latest
 /// request's `tokenUsage` (orchestrationV2.ts:166-177).
@@ -54,21 +54,43 @@ public enum ThreadCostEstimate {
         }
     }
 
+    /// The estimate split by kind of token, with the models it was priced as.
+    public struct Breakdown: Equatable, Sendable {
+        /// Summed over turns; `input` counts cache reads and writes.
+        public var tokens = Tokens(input: 0, output: 0)
+        public var inputUSD = 0.0, cachedUSD = 0.0, cacheWriteUSD = 0.0, outputUSD = 0.0
+        /// In order of first use.
+        public var models: [String] = []
+        public var usd: Double { inputUSD + cachedUSD + cacheWriteUSD + outputUSD }
+        public init() {}
+        mutating func add(_ t: Tokens, _ p: Price, model: String) {
+            tokens.input += t.input; tokens.cached += t.cached; tokens.cacheWrite += t.cacheWrite; tokens.output += t.output
+            inputUSD += max(0, t.input - t.cached - t.cacheWrite) * p.input / 1_000_000
+            cachedUSD += t.cached * p.cachedInput / 1_000_000
+            cacheWriteUSD += t.cacheWrite * p.cacheWrite / 1_000_000
+            outputUSD += t.output * p.output / 1_000_000
+            if !models.contains(model) { models.append(model) }
+        }
+    }
+
     /// The thread's estimate in USD, or nil when it has no usage or any turn ran on a model without a price.
-    public static func usd(_ projection: ThreadProjection?) -> Double? {
+    public static func usd(_ projection: ThreadProjection?) -> Double? { breakdown(projection)?.usd }
+
+    /// The thread's estimate by kind of token, nil as `usd` is.
+    public static func breakdown(_ projection: ThreadProjection?) -> Breakdown? {
         guard let projection else { return nil }
         let runByAttempt = Dictionary(projection.attempts.map { ($0.id.rawValue, $0.runId) }, uniquingKeysWith: { a, _ in a })
         let modelByRun = Dictionary(projection.runs.compactMap { run in run.modelSelection.map { (run.id, $0.model) } }, uniquingKeysWith: { a, _ in a })
         let fallback = projection.runs.max { $0.ordinal < $1.ordinal }?.modelSelection?.model
-        var total = 0.0, counted = false
+        var result = Breakdown(), counted = false
         for turn in projection.providerTurns {
             guard let tokens = tokens(turn) else { continue }
             let run = turn["runAttemptId"]?.stringValue.flatMap { runByAttempt[$0] }
             guard let model = run.flatMap({ modelByRun[$0] }) ?? fallback, let price = price(model) else { return nil }
-            total += tokens.cost(price)
+            result.add(tokens, price, model: model)
             counted = true
         }
-        return counted ? total : nil
+        return counted ? result : nil
     }
 
     /// A turn's totals, else its latest request.
