@@ -262,13 +262,13 @@ public final class SidebarLayoutView: DSView {
         CATransaction.commit()
         // Dither (after Capy): the content is a rounded panel framed by the chrome, under a tab strip band.
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-        // The panel runs flush to the window's right and bottom edges, where the window's own corner rounds it, and up
-        // to the band, whose color its top blends into (DitherArtView.topBlend). Only the sidebar side keeps its
-        // rounded corners and hairline.
+        // The panel runs flush to the window's right, bottom and top edges, so the art and its top fade start at the
+        // window's top and the tab strip sits on the art (the user: "start AT THE VERY TOP OF THE WINDOW"). The page
+        // inside still starts below the band. Only the sidebar side keeps its rounded bottom corner and hairline.
         let band: CGFloat = dither ? DitherChrome.band : 0
-        main.frame = NSRect(x: gap, y: band, width: max(0, bounds.width - gap), height: max(0, bounds.height - band))
+        main.frame = NSRect(x: gap, y: 0, width: max(0, bounds.width - gap), height: bounds.height)
         main.layer?.cornerRadius = dither ? DitherChrome.panelRadius : 0
-        main.layer?.maskedCorners = dither ? [.layerMinXMinYCorner, .layerMinXMaxYCorner]
+        main.layer?.maskedCorners = dither ? [.layerMinXMaxYCorner]
             : [.layerMinXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMinYCorner, .layerMaxXMaxYCorner]
         layoutPanelRim(dither: dither)
         layer?.backgroundColor = dither ? DitherChrome.bandColor(in: self) : nil
@@ -282,7 +282,10 @@ public final class SidebarLayoutView: DSView {
             b.isHidden = !dither || !isOpen || sliding
             b.frame = NSRect(x: gap - 8 - 28 * CGFloat(2 - i) - 2 * CGFloat(1 - i), y: (DitherChrome.band - 28) / 2, width: 28, height: 28)
         }
-        for view in main.subviews { view.frame = main.bounds }
+        for view in main.subviews {
+            view.frame = view is DitherArtView ? main.bounds
+                : NSRect(x: 0, y: band, width: main.bounds.width, height: max(0, main.bounds.height - band))
+        }
         // The padding box ends at w - 1 (inside the 1px border); the rail is centred there.
         rail.frame = NSRect(x: gap - 1 - SidebarMetrics.railWidth / 2, y: 0, width: SidebarMetrics.railWidth, height: bounds.height)
         rail.isHidden = !isOpen // collapsed offcanvas rail has `pointer-events: none`
@@ -304,12 +307,12 @@ public final class SidebarLayoutView: DSView {
         let r = DitherChrome.panelRadius, b = main.bounds
         panelRim.frame = b
         panelRim.strokeColor = Themed.color(\.contrastForeground, 0.08).cgColor(in: self)
-        panelRim.path = SmoothCorners.path(b.insetBy(dx: 0.25, dy: 0.25), r, corners: [.topLeft, .bottomLeft], flipped: main.isFlipped)
-        // Only the left edge and the bottom left curve, which ends 1.53 radii along the bottom edge.
+        panelRim.path = SmoothCorners.path(b.insetBy(dx: 0.25, dy: 0.25), r, corners: [.bottomLeft], flipped: main.isFlipped)
+        // Only the left edge and the bottom left curve, which ends 1.53 radii along the bottom edge, fading in below the band.
         panelRimMask.frame = CGRect(x: 0, y: 0, width: ceil(r * SmoothCorners.reach) + 1, height: b.height)
-        let fadeIn = min(1, DitherArtView.topBlend / max(1, b.height))
-        panelRimMask.colors = [NSColor.clear.cgColor, NSColor.black.cgColor]
-        panelRimMask.locations = [0, NSNumber(value: Double(fadeIn))]
+        let start = min(1, DitherChrome.band / max(1, b.height)), end = min(1, (DitherChrome.band + DitherArtView.topBlend) / max(1, b.height))
+        panelRimMask.colors = [NSColor.clear.cgColor, NSColor.clear.cgColor, NSColor.black.cgColor]
+        panelRimMask.locations = [0, NSNumber(value: Double(start)), NSNumber(value: Double(end))]
         // The mask's unit space follows the flipped panel: 0 is its top.
         panelRimMask.startPoint = CGPoint(x: 0.5, y: 0)
         panelRimMask.endPoint = CGPoint(x: 0.5, y: 1)
@@ -512,7 +515,7 @@ public enum DitherChrome {
     /// The tab strip band above the content panel: 52, the titlebar row everywhere else (traffic lights, sidebar header), so the tabs share their centre line.
     public static let band: CGFloat = 52
 
-    /// The band's color: the panel's top blends into it (DitherArtView, the thread's top fade).
+    /// The band's color: the art's top fade starts from it at the window's top edge (DitherArtView).
     @MainActor public static func bandColor(in view: NSView) -> CGColor { Themed.color(\.sidebar, sidebar: true).cgColor(in: view) }
 
     /// How much of the band's color covers the panel at `t`, 0 at the panel's top to 1 at the blend's bottom: all of it at
