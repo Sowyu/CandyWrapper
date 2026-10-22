@@ -429,6 +429,10 @@ struct ComposerBlockLayoutTests {
         #expect(layout.lines[1].bullet == .circle)
         #expect(layout.lines[3].marginBefore == ComposerBlockLayout.blockMargin)
         #expect(layout.lines[5].textX == ComposerBlockLayout.taskGutter)
-        #expect(layout.top == ComposerBlockLayout.blockMargin)
+        // A leading list sits on the editor's first line (index.css:2003-2010, T3 3ec095bc8b).
+        #expect(layout.top == 0)
+        let quoted = ComposerBlockLayout.layout([.paragraph, .quote(">")])
+        #expect(quoted.bottom == 0 && quoted.lines[1].marginBefore == ComposerBlockLayout.blockMargin)
+        #expect(ComposerBlockLayout.layout([.list(.bullet, indent: "", marker: "-"), .list(.bullet, indent: "  ", marker: "-")]).bottom == ComposerBlockLayout.blockMargin)
     }
 }

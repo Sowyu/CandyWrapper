@@ -188,8 +188,10 @@ enum ComposerBlockLayout {
             let closed = boxes[i - 1].filter { !boxes[i].contains($0) }, opened = boxes[i].filter { !boxes[i - 1].contains($0) }
             geometry[i].marginBefore = (closed.map(bottom) + opened.map(top)).max() ?? 0
         }
+        // `.composer-tiptap > :first-child` and `> :last-child` drop the outer block's margins at the draft's
+        // edges (index.css:2003-2010); a nested list's margin still collapses through it.
         return Layout(lines: geometry, lists: lists,
-                      top: boxes.first.map { $0.map(top).max() ?? 0 } ?? 0,
-                      bottom: boxes.last.map { $0.map(bottom).max() ?? 0 } ?? 0)
+                      top: boxes.first.map { $0.dropFirst().map(top).max() ?? 0 } ?? 0,
+                      bottom: boxes.last.map { $0.dropFirst().map(bottom).max() ?? 0 } ?? 0)
     }
 }
