@@ -499,8 +499,10 @@ final class AssistantMessageRowView: TimelineRowView {
         markdown.inlineSkills = context.model?.inlineSkills ?? []
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
-        // Diagrams draw once the message stops streaming (`isStreaming={row.message.streaming}`, :2765).
-        markdown.diagramsEnabled = !m.streaming
+        // A closed fence draws its diagram while the message streams; only the fence still being written waits.
+        // ponytail: a diagram that appears mid-stream skips T3's 600ms fade (`.chat-markdown-mermaid`, index.css:2047-2049);
+        // give it a fade band if the switch from code reads as a jump.
+        markdown.streamsInOpenFence = m.streaming && MarkdownLayout.endsInOpenFence(m.text)
         // A streaming answer has no Run buttons (ChatMarkdown.tsx:3368-3372).
         markdown.onRunShellCommand = m.streaming ? nil : context.model?.runShellCommand
         markdown.citationSourceID = m.id.rawValue

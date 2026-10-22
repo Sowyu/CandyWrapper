@@ -7,7 +7,7 @@ for name, version, license, source, path in [
     ('T3 Code', None, 'MIT', 'https://github.com/pingdotgg/t3code', 'docs/research/settings-sweep/LICENSE-t3.txt'),
     ('SwiftTerm', '1.19.0', 'MIT', 'https://github.com/migueldeicaza/SwiftTerm', 'Packages/SwiftTerm/LICENSE'),
     ('Lucide', None, 'ISC', 'https://lucide.dev', 'Packages/CandyKit/Sources/DesignSystem/Icons/LICENSE-lucide.txt'),
-    ('Mermaid', None, 'MIT', 'https://github.com/mermaid-js/mermaid', 'Packages/CandyKit/Sources/Features/Resources/LICENSE-mermaid.txt'),
+    ('pele', '1.8.0', 'MIT', 'https://github.com/obsidianmd/pele', 'Packages/CandyKit/Sources/Features/Resources/LICENSE-pele.txt'),
 ]:
     entries.append(dict(bundles=['CandyWrapper'], kind='package', license=license, name=name,
                         noticeText=(root/path).read_text(), sourceUrl=source, version=version))

@@ -108,9 +108,14 @@ public final class MarkdownView: DSView {
     /// handler a click shows the chip's menu, as T3 does when no open action is available.
     public var onOpenFile: ((FileLinkMeta, _ inEditor: Bool) -> Void)?
 
-    /// Mermaid fences render as diagrams once the response settles (false while it streams).
+    /// Mermaid fences render as diagrams.
     public var diagramsEnabled = true {
         didSet { if diagramsEnabled != oldValue { invalidate() } }
+    }
+    /// The reply streams inside its last code fence, which stays code until it closes; every closed fence
+    /// already draws its diagram (`isStreaming && !isClosedCodeFence`, ChatMarkdown.tsx:1531, 48b486bd73).
+    public var streamsInOpenFence = false {
+        didSet { if streamsInOpenFence != oldValue, hasDiagrams { invalidate() } }
     }
     private var diagramCode: Set<Int> = []
     private var diagramObserver: NSObjectProtocol?
@@ -231,7 +236,8 @@ public final class MarkdownView: DSView {
             }
             return hit
         }
-        let diagrams = hasDiagrams ? MarkdownLayout.Diagrams(enabled: diagramsEnabled, dark: effectiveAppearance.isDark, showingCode: diagramCode) : nil
+        let diagrams = hasDiagrams ? MarkdownLayout.Diagrams(enabled: diagramsEnabled, palette: .current(dark: effectiveAppearance.isDark), showingCode: diagramCode,
+                                                             openIndex: streamsInOpenFence ? MarkdownLayout.codeBlockCount(document.blocks) - 1 : nil) : nil
         let made = MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: inlineSkills)), width: width,
                                   wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, expandedTables: expandedTables, diagrams: diagrams, contexts: contextChips,
                                   runsShell: onRunShellCommand != nil, fitsExpandedTables: chatLaneInset.map { width + $0 >= 576 } ?? false, reusing: reusable?.width == width ? reusable : nil)
@@ -384,7 +390,7 @@ public final class MarkdownView: DSView {
                 button.setAccessibilityLabel("Retry")
                 button.action = { [weak self] in
                     guard let self else { return }
-                    MermaidDiagrams.shared.retry(code, dark: self.effectiveAppearance.isDark)
+                    MermaidDiagrams.shared.retry(code, palette: .current(dark: self.effectiveAppearance.isDark))
                 }
             case .toggleTable(let index):
                 let label = expandedTables.contains(index) ? "Collapse table cells" : "Expand table cells"

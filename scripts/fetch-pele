@@ -1,0 +1,33 @@
+#!/bin/sh
+# Rebuilds Packages/CandyKit/Sources/Features/Resources/pele.global.js.lzma (and its MIT license) from the npm
+# package at the version T3 pins in apps/web/package.json. T3 renders Mermaid diagrams with pele and loads it
+# only when a diagram shows (MermaidDiagram.tsx); the app does the same from this LZMA copy of the package's
+# all-diagrams build (0.7 MB of script, about 0.2 MB packed). The 3473 desktop runtime ships the same pele 1.8.0
+# build split into chunks (client/assets, same chunk names as dist/esm), with the same license in
+# client/third-party-licenses.json.
+# Usage: scripts/fetch-pele [version]
+set -eu
+here="$(cd "$(dirname "$0")/.." && pwd)"
+src="$here/.t3code-src"
+[ -d "$src" ] || src="$here/../CandyWrapper-research/t3code"
+[ -d "$src" ] || src="$HOME/CandyWrapper-research/t3code"
+version="${1:-$(sed -n 's/.*"pele": "\^\{0,1\}\([0-9.]*\)".*/\1/p' "$src/apps/web/package.json")}"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+curl -sSf -m 120 -o "$work/pele.tgz" "https://registry.npmjs.org/pele/-/pele-$version.tgz"
+# The tarball must be the one T3's lockfile pins.
+want="$(sed -n "/^  pele@$version:/,/integrity/s/.*integrity: \(sha512-[^,}]*\).*/\1/p" "$src/pnpm-lock.yaml" | head -1)"
+got="sha512-$(openssl dgst -sha512 -binary "$work/pele.tgz" | base64)"
+[ -n "$want" ] && [ "$want" = "$got" ] || { echo "pele $version: integrity $got does not match T3's lockfile ($want)" >&2; exit 1; }
+mkdir "$work/x"
+tar -xzf "$work/pele.tgz" -C "$work/x" package/dist/pele.global.js package/LICENSE
+out="$here/Packages/CandyKit/Sources/Features/Resources"
+cp "$work/x/package/LICENSE" "$out/LICENSE-pele.txt"
+cat > "$work/pack.swift" <<'SWIFT'
+import Foundation
+let a = CommandLine.arguments
+let data = try Data(contentsOf: URL(fileURLWithPath: a[1])) as NSData
+try (data.compressed(using: .lzma) as Data).write(to: URL(fileURLWithPath: a[2]))
+SWIFT
+swift "$work/pack.swift" "$work/x/package/dist/pele.global.js" "$out/pele.global.js.lzma"
+echo "pele $version -> $out/pele.global.js.lzma ($(wc -c < "$out/pele.global.js.lzma") bytes)"
