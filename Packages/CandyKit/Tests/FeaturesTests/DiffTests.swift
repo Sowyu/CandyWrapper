@@ -197,12 +197,12 @@ struct DiffTests {
         }
         panel.open(runId: "run1", filePath: "notes.md") // before the summaries, like a fresh timeline
         panel.setSummaries([summary("run2", 2), summary("run1", 1)])
-        for _ in 0..<100 where panel.list.diff.files.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        _ = await eventually { !panel.list.diff.files.isEmpty }
         #expect(await requests.all.last == .fullThread(GetFullThreadDiffInput(threadId: "t1", toTurnCount: 1, ignoreWhitespace: true)))
         #expect(panel.list.diff.files.map(\.path) == ["hello.py", "notes.md"])
         #expect(panel.list.collapsed == [0]) // scrolled to and expanded
         panel.open(runId: "run2", filePath: nil)
-        for _ in 0..<100 where await requests.all.count < 2 { try await Task.sleep(for: .milliseconds(10)) }
+        _ = await eventually { await requests.all.count >= 2 }
         #expect(await requests.all.last == .turn(GetTurnDiffInput(threadId: "t1", fromTurnCount: 1, toTurnCount: 2, ignoreWhitespace: true)))
     }
 
@@ -224,11 +224,11 @@ struct DiffTests {
         panel.threadId = "t1"
         #expect(panel.gitScope == .branch)
         panel.setSummaries([])
-        for _ in 0..<100 where panel.list.diff.files.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        _ = await eventually { !panel.list.diff.files.isEmpty }
         #expect(panel.list.diff.files.map(\.path) == ["branch.txt"])
         #expect(await calls.all.first?.0 == "/repo")
         panel.selectGitScope(.unstaged)
-        for _ in 0..<100 where panel.list.diff.files.first?.path != "dirty.txt" { try await Task.sleep(for: .milliseconds(10)) }
+        _ = await eventually { panel.list.diff.files.first?.path == "dirty.txt" }
         #expect(panel.list.diff.files.map(\.path) == ["dirty.txt"])
         panel.open(runId: nil, filePath: nil)
         #expect(panel.gitScope == nil)
@@ -333,18 +333,13 @@ struct DiffTests {
     @Test func largeDiffStaysVirtual() throws {
         var patch = "diff --git a/big.ts b/big.ts\nnew file mode 100644\n--- /dev/null\n+++ b/big.ts\n@@ -0,0 +1,20000 @@\n"
         for i in 0..<20_000 { patch += "+export const value\(i) = \"\(String(repeating: "x", count: i % 90))\"; // line \(i)\n" }
-        let start = Date()
         let diff = UnifiedDiff(patch)
-        let parseTime = Date().timeIntervalSince(start)
         #expect(diff.lines.count == 20_000)
         let list = DiffListView()
         let scroll = ScrollAreaView(documentView: list)
         scroll.frame = NSRect(x: 0, y: 0, width: 460, height: 800)
         list.setDiff(diff, collapsedByDefault: false)
         scroll.layoutSubtreeIfNeeded()
-        let layoutStart = Date()
-        _ = DiffLayout(diff: diff, collapsed: [], style: .unified, width: 460, wrap: true, ch: DiffStyle.ch)
-        let layoutTime = Date().timeIntervalSince(layoutStart)
         #expect(list.rowLayout.rows.count == 20_002) // header, 20,000 lines, the 8px footer
         #expect(list.frame.height > 400_000) // wrapped rows are taller than 20px
         #expect(list.liveRowViews < 70, "\(list.liveRowViews) row views for an 800pt viewport")
@@ -352,7 +347,5 @@ struct DiffTests {
         list.tile()
         #expect(list.liveRowViews < 70)
         #expect(list.createdRowViews < 140)
-        print("20k-line diff: parse \(Int(parseTime * 1000)) ms, layout \(Int(layoutTime * 1000)) ms, \(list.createdRowViews) views made")
-        print("20k-line diff: patch \(patch.utf8.count / 1024) KB, lines \(diff.lines.count * MemoryLayout<UnifiedDiff.Line>.stride / 1024) KB, rows \(list.rowLayout.rows.count * MemoryLayout<DiffLayout.Row>.stride / 1024) KB")
     }
 }

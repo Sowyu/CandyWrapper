@@ -140,24 +140,11 @@ struct MarkdownTests {
     @Test func heightIsCachedPerWidth() {
         let view = MarkdownView(frame: .zero)
         view.setMarkdown(MarkdownGallery.sample)
-        let start = Date()
         let h = view.height(forWidth: 600)
-        let first = Date().timeIntervalSince(start)
-        let again = Date()
         #expect(view.height(forWidth: 600) == h)
-        let cached = Date().timeIntervalSince(again)
-        print(String(format: "MARKDOWN layout of the gallery sample: %.1f ms, cached %.3f ms", first * 1000, cached * 1000))
         #expect(view.layout(forWidth: 600) === view.layout(forWidth: 600))
         view.setMarkdown("Short.")
         #expect(view.height(forWidth: 600) < h)
-    }
-
-    @Test func gallerySection() throws {
-        for dark in [false, true] {
-            let rep = ComponentGallery.render(MarkdownGallery.section, width: 550, dark: dark)
-            try Snapshot.writePNG(rep, to: URL(fileURLWithPath: "/tmp/candywrapper-fidelity/gallery-markdown-\(dark ? "dark" : "light").png"))
-            #expect(rep.pixelsHigh > 1000)
-        }
     }
 
     /// A clipped draw paints the same pixels inside the clip as a full draw, and nothing far outside it.

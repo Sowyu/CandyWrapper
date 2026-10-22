@@ -15,21 +15,22 @@ struct MermaidDiagramsTests {
 
     @Test func diagramRendersAndFailsLikeT3() async throws {
         let palette = MermaidDiagrams.Palette.current(dark: false)
-        func wait(_ source: String, width: CGFloat) async throws -> MermaidDiagrams.Result? {
-            var result = MermaidDiagrams.shared.result(source, palette: palette, width: width)
-            for _ in 0..<1500 where result == nil {
-                try await Task.sleep(for: .milliseconds(10))
+        func wait(_ source: String, width: CGFloat) async -> MermaidDiagrams.Result? {
+            // A real WKWebView loads a 1 MB script first, which takes a while on a busy machine.
+            var result: MermaidDiagrams.Result?
+            _ = await eventually(seconds: 60) {
                 result = MermaidDiagrams.shared.result(source, palette: palette, width: width)
+                return result != nil
             }
             return result
         }
-        guard case .rendered(let image, let size)? = try await wait("graph TD\n  Candy --> Wrapper", width: 600) else {
+        guard case .rendered(let image, let size)? = await wait("graph TD\n  Candy --> Wrapper", width: 600) else {
             Issue.record("no render")
             return
         }
         #expect(image.width > 0 && size.width > 0 && size.width <= 600 && size.height > 0)
         // A parse error reports pele's message without Retry; only a renderer that failed to load offers it.
-        guard case .failed(let message, let retryable)? = try await wait("graph TD\n  A -->", width: 600) else {
+        guard case .failed(let message, let retryable)? = await wait("graph TD\n  A -->", width: 600) else {
             Issue.record("expected a failure")
             return
         }

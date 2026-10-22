@@ -23,10 +23,8 @@ struct RenderAuditTests {
         // The page exists before the main actor receives the detached discovery's result.
         #expect(picker.options.isEmpty)
         picker.setValue("Menlo")
-        let deadline = ContinuousClock.now + .seconds(5)
-        while picker.options.isEmpty, ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        // The font scan always finishes; a busy machine only makes it slower.
+        _ = await eventually { !picker.options.isEmpty }
         #expect(picker.options.contains("Menlo"))
         #expect(picker.selectedIndex == picker.options.firstIndex(of: "Menlo"))
         #expect(picker.input.text == "Menlo")

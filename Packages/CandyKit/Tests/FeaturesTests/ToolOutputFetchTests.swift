@@ -47,7 +47,7 @@ struct ToolOutputFetchTests {
     }
 
     static func settle(_ server: FakeServer, _ model: ThreadViewModel, _ id: String) async {
-        for _ in 0..<200 where state(model, id) == .loading { try? await Task.sleep(for: .milliseconds(5)) }
+        _ = await eventually { state(model, id) != .loading }
     }
 
     @Test func fetchesOnlyWhenTheRowOpens() async throws {
@@ -78,7 +78,7 @@ struct ToolOutputFetchTests {
         await Self.settle(server, model, entry.id)
         model.toggleEntry(entry.id)
         // Wait for the eviction itself: a busy main actor (the fidelity suites) delays it past any fixed sleep.
-        for _ in 0..<500 where model.holdsOutput(entry.id) { try await Task.sleep(for: .milliseconds(10)) }
+        _ = await eventually { !model.holdsOutput(entry.id) }
         #expect(!model.holdsOutput(entry.id))
         model.toggleEntry(entry.id)
         #expect(Self.state(model, entry.id) == .loading)

@@ -33,7 +33,7 @@ struct AsyncImageCacheTests {
     }
 
     func waitForImage(_ view: AsyncImageView) async {
-        for _ in 0..<400 where view.image == nil { try? await Task.sleep(for: .milliseconds(5)) }
+        _ = await eventually { view.image != nil }
     }
 
     /// Thread A, then B, then A again: the rebuilt cell shows A's image in the same pass, with no new decode.
@@ -88,7 +88,7 @@ struct AsyncImageCacheTests {
         big.set(key: key, fallbackText: "", loader: Self.loader(calls))
         window.contentView!.addSubview(big)
         #expect(big.image?.width == small.image?.width)
-        for _ in 0..<400 where (big.image?.width ?? 0) < 200 { try? await Task.sleep(for: .milliseconds(5)) }
+        _ = await eventually { (big.image?.width ?? 0) >= 200 }
         #expect((big.image?.width ?? 0) >= 200)
         #expect(calls.all.count == 2)
     }
@@ -99,7 +99,8 @@ struct AsyncImageCacheTests {
         let view = AsyncImageView()
         view.set(key: "frame-\(UUID().uuidString)", fallbackText: "", loader: Self.loader(calls))
         window.contentView!.addSubview(view)
-        try? await Task.sleep(for: .milliseconds(30))
+        // `start` needs a decode side, so no decode can be on its way yet.
+        #expect(view.decodeSide == nil)
         #expect(calls.all.isEmpty)
         view.frame = NSRect(x: 0, y: 0, width: 101, height: 76)
         await waitForImage(view)
