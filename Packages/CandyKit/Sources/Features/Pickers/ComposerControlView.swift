@@ -143,7 +143,7 @@ public final class ComposerControlSeparatorView: DSView {
 enum ProviderIcon {
     static func make(driver: String, displayName: String, size: CGFloat, color: NSColor = Themed.color(\.contrastForeground)) -> NSView {
         switch driver {
-        case "claudeAgent": return IconView(name: .brandClaudeAI, size: size)
+        case "claudeAgent": return IconView(name: .brandClaudeAI, size: size, strokeColor: color)
         case "codex": return IconView(name: .brandOpenAI, size: size, strokeColor: color)
         case "cursor": return IconView(name: .brandCursor, size: size, strokeColor: color)
         case "grok": return IconView(definition: ProviderPackageIcons.grok, size: size, color: ProviderPackageIcons.grokFill)
