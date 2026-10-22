@@ -6,10 +6,11 @@ import DesignSystem
 /// soft drop shadow, on continuous corners. Pills (chips, Stash, notices) are 28pt with control corners; panels
 /// (approvals, the queue, the stash list) use card corners. Nothing draws while idle: the shadow has a fixed path.
 public enum DitherPill {
-    public static let height: CGFloat = 32
-    /// The composer's continuous corner scaled to a pill: its 16 over the send button's 8 at 9 in, so a 32pt pill
-    /// takes 10 and reads as the same family (the user, 2026-10-22).
-    public static let radius: CGFloat = 10
+    public static let height: CGFloat = 28
+    /// Control corners. Rows of pills sit `inset` in from the composer's sides, so a pill's smaller corner stays
+    /// inside the composer's 16pt curve instead of looking like it hangs off it (the user, 2026-10-22).
+    public static let radius: CGFloat = DitherChrome.controlRadius
+    public static let inset: CGFloat = DitherChrome.panelRadius - DitherChrome.controlRadius
     /// Between the composer and the first row, between rows, and between pills in a row.
     public static let gap: CGFloat = 8
     public static let spacing: CGFloat = 6

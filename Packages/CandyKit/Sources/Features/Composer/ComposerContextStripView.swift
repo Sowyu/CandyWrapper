@@ -131,12 +131,12 @@ public final class ComposerContextStripView: DSView {
     /// `ps-1 pe-2 pt-5`: the 24px row starts 20 down.
     private func controlFrames(width w: CGFloat) -> [(ComposerContextControl, NSRect)] {
         if floatsAsPills {
-            // Left to right in `DitherPill.height` pills, the 28pt control 4 in from each side and 2 from top and bottom.
+            // Left to right in `DitherPill.height` pills, the 24pt control 4 in from each side and 2 from top and bottom.
             var x: CGFloat = 4
             return (showsGitControls ? [runContext, branch] : [runOn]).map { control in
                 let width = min(control.intrinsicContentSize.width, max(0, w - x - 4))
                 defer { x += width + 8 + DitherPill.spacing }
-                return (control, NSRect(x: x, y: ((bounds.height - 28) / 2).rounded(), width: width, height: 28))
+                return (control, NSRect(x: x, y: ((bounds.height - 24) / 2).rounded(), width: width, height: 24))
             }
         }
         guard showsGitControls else {
@@ -231,8 +231,8 @@ open class ComposerContextControl: ControlView {
     public var pillSized = false {
         didSet {
             guard pillSized != oldValue else { return }
-            label.font = DSFont.ui(pillSized ? 13 : 12)
-            middle.font = DSFont.ui(pillSized ? 13 : 12)
+            label.font = DSFont.ui(12)
+            middle.font = DSFont.ui(12)
             update()
         }
     }
@@ -328,12 +328,12 @@ open class ComposerContextControl: ControlView {
         }
     }
 
-    private var glyphGap: CGFloat { pillSized ? 6 : 4 }
+    private var glyphGap: CGFloat { 4 }
 
     open override var intrinsicContentSize: NSSize {
         let lead = glyphViews.isEmpty ? 0 : glyphAdvance + glyphGap
         let w = interactive ? 8 + lead + labelWidth + 4 + 8 + 8 : 8 + lead + labelWidth + 8
-        return NSSize(width: w, height: pillSized ? 28 : 24)
+        return NSSize(width: w, height: 24)
     }
 
     open override func layout() {

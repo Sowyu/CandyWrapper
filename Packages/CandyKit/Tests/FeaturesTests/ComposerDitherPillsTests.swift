@@ -41,7 +41,8 @@ struct ComposerDitherPillsTests {
             #expect(pill.height == DitherPill.height)
             #expect(pill.maxY == composer.minY - DitherPill.gap)
         }
-        #expect(work.minX == composer.minX && stash.maxX == composer.maxX)
+        // Inside the composer's corners: `DitherPill.inset` in from each side.
+        #expect(work.minX == composer.minX + DitherPill.inset && stash.maxX == composer.maxX - DitherPill.inset)
         #expect(work.maxX < stash.minX)
     }
 

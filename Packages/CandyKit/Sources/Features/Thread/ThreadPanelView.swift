@@ -1473,6 +1473,8 @@ public final class ThreadPanelView: DSView {
     private func layoutDitherComposer(chat: CGFloat, chatHeight: CGFloat, x: CGFloat, width: CGFloat, height: CGFloat) {
         let gap = DitherPill.gap, pillH = DitherPill.height, spacing = DitherPill.spacing
         let overlap = ComposerBannerView.overlap
+        // Pill rows sit inside the composer's corners; cards keep its full width.
+        let px = x + DitherPill.inset, pw = max(0, width - 2 * DitherPill.inset)
         // The draft centers the composer alone, so pills coming and going never move it. A thread keeps the row
         // under it whenever the setting can show the checkout and branch there, shown or not.
         let keepsStrip = !isDraft && ClientSettingsStore.shared.current.bool("persistComposerContextStrip")
@@ -1489,10 +1491,10 @@ public final class ThreadPanelView: DSView {
 
         // The context row: the draft's chips (the hero), Stash at the right.
         let rowY = y - gap - pillH
-        var left = x, right = x + width
+        var left = px, right = px + pw
         if isDraft {
             let w = hero.chipsWidth
-            hero.frame = NSRect(x: x, y: rowY, width: w, height: pillH)
+            hero.frame = NSRect(x: px, y: rowY, width: w, height: pillH)
             if w > 0 { left += w + spacing; top = rowY }
         }
         let badgeShown = showsStashBadge && visible
@@ -1511,7 +1513,7 @@ public final class ThreadPanelView: DSView {
         contextStrip.floatsAsPills = true
         contextStrip.isHidden = !strip
         if strip {
-            contextStrip.frame = NSRect(x: x, y: y + height + gap, width: width, height: pillH)
+            contextStrip.frame = NSRect(x: px, y: y + height + gap, width: pw, height: pillH)
             shown.append(contextStrip)
         }
 
@@ -1532,15 +1534,15 @@ public final class ThreadPanelView: DSView {
         }
 
         // Status pills fill rows from the left: beside Stash when the context row has no pills, else above it.
-        var rowTop = left > x ? rowY - gap - pillH : rowY
-        var rowRight = left > x ? x + width : right
-        var cursor = x
+        var rowTop = left > px ? rowY - gap - pillH : rowY
+        var rowRight = left > px ? px + pw : right
+        var cursor = px
         for (view, natural) in pills {
-            let w = min(natural, width)
-            if cursor + w > rowRight && (cursor > x || rowRight < x + width) {
+            let w = min(natural, pw)
+            if cursor + w > rowRight && (cursor > px || rowRight < px + pw) {
                 rowTop -= gap + pillH
-                rowRight = x + width
-                cursor = x
+                rowRight = px + pw
+                cursor = px
             }
             view.frame = NSRect(x: cursor, y: rowTop, width: w, height: pillH)
             cursor += w + spacing
