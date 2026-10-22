@@ -40,6 +40,8 @@ public final class GeneralSettingsView: SettingsPageBase {
         }
     }
 
+    override var scopeItems: [NSView] { [sentence, boundary] }
+
     /// Unfolds Legacy features for a search jump to one of its rows (`LEGACY_FEATURE_TARGET_IDS`).
     public override func anchor(_ id: String) -> NSView? {
         if ["legacy-plan-mode", "legacy-context-window-indicator", "legacy-sidebar"].contains(id) { legacy?.isOpen = true; onHeightChange?() }
@@ -493,6 +495,7 @@ final class VersionTitleView: DSView {
 final class SettingsFoldedSectionView: DSView, SettingsGroupRow {
     private let header = FoldHeaderButton()
     let group: SettingsGroupView
+    var title: String { header.title }
     var onToggle: (() -> Void)?
     var isOpen = false { didSet { header.isOpen = isOpen; group.isHidden = !isOpen; needsLayout = true } }
 

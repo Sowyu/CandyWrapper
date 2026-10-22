@@ -97,15 +97,32 @@ extension SettingsController {
         clientObserver = ClientSettingsStore.shared.observe { [weak self] _ in self?.refreshPages() }
         composer?.onConfigChange = { [weak self] _ in self?.refreshPages() }
         themeObserver = NotificationCenter.default.addObserver(forName: ThemeLibrary.didChange, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshPages() }
+            MainActor.assumeIsolated { self?.themeChanged() }
         }
     }
 
     // MARK: Pages
 
-    /// Opens a page (`handleSectionClick`).
+    /// Redesign is on in the window's current appearance.
+    var isDither: Bool { ThemeRuntime.isDither(dark: (window?.effectiveAppearance ?? NSApp.effectiveAppearance).isDark) }
+
+    /// Redesign came on or went off: the pages carry its filters, so they are built again for the new layout.
+    func themeChanged() {
+        guard isOpen, isDither != (ditherSection != nil) else { refreshPages(); return }
+        page.page = nil
+        general = nil; appearance = nil; keybindingsPage = nil; extraPages = [:]; ditherPages = [:]
+        ditherSection = nil
+        show(section)
+    }
+
+    /// Opens a page (`handleSectionClick`). Under Redesign a page opens in the section that holds it.
     func show(_ section: SettingsSection) {
         guard section.isAvailable else { return }
+        // A deep link while Settings is closed (the sidebar's Automations) opens it on that page.
+        guard isOpen else { self.section = section; open(); return }
+        if isDither, let home = DitherSettingsSection.home(of: section) { show(dither: home); return }
+        ditherSection = nil
+        page.ditherHeading = nil
         self.section = section
         nav.selected = section
         page.header.section = section
@@ -127,8 +144,65 @@ extension SettingsController {
         onRouteChange?()
     }
 
+    /// Opens a Redesign section: its slices of T3's pages in one column under its title and description.
+    func show(dither target: DitherSettingsSection) {
+        ditherSection = target
+        // The section's first page stands for it in the route history and the page-specific watches.
+        section = target.slices[0].page
+        nav.selected = section
+        nav.ditherSelected = target
+        page.header.section = section
+        page.header.restore.isHidden = target != .general
+        page.containerWidth = target.width
+        page.ditherHeading = (target.label, target.subtitle)
+        let view = ditherPage(target)
+        if page.page !== view { page.page = view; page.scrollToTop() }
+        refreshPages()
+        view.didShow()
+        updateLinkPoll()
+        onRouteChange?()
+    }
+
+    /// A section's view, built on first open. Whole pages are the shared ones; a part of a page gets its own copy.
+    private func ditherPage(_ target: DitherSettingsSection) -> DitherSettingsSectionView {
+        if let existing = ditherPages[target] { return existing }
+        let pages: [NSView & SettingsGroupRow] = target.slices.map { slice in
+            slice.needsOwnPage ? ownPage(slice.page) : pageView(slice.page)
+        }
+        let v = DitherSettingsSectionView(section: target, pages: pages)
+        ditherPages[target] = v
+        return v
+    }
+
+    /// The shared page of a section, as `show(_:)` builds it.
+    private func pageView(_ section: SettingsSection) -> NSView & SettingsGroupRow {
+        switch section {
+        case .general: generalPage()
+        case .appearance: appearancePage()
+        case .keybindings: keybindingsView()
+        case .connections: connectionsPage
+        default: extraPage(section)
+        }
+    }
+
+    /// A copy of a page for a section that shows part of it.
+    // ponytail: each slice builds a whole page and shows a few groups; build only the groups if General's copies cost too much
+    private func ownPage(_ section: SettingsSection) -> SettingsPageBase {
+        let v: SettingsPageBase = section == .storage ? StorageSettingsView(context: pageContext) : GeneralSettingsView(context: pageContext)
+        v.onHeightChange = { [weak self] in self?.page.pageChanged() }
+        return v
+    }
+
     /// A search result: open its page, then scroll its anchor into view and pulse it.
     func jump(to item: SettingsSearchItem) {
+        if isDither, let home = DitherSettingsSection.home(of: item.to, anchor: item.anchor) {
+            show(dither: home)
+            let target = ditherPages[home]?.anchor(item.anchor, page: item.to)
+            page.pageChanged()
+            if let target { page.reveal(target) }
+            window?.makeFirstResponder(page)
+            return
+        }
         show(item.to.isAvailable ? item.to : section)
         guard item.to.isAvailable else { return }
         let target: NSView? = switch item.to {
@@ -192,11 +266,15 @@ extension SettingsController {
         guard isOpen else { return }
         updateContext()
         nav.searchItems = SettingsSearch.available(searchAvailability())
-        switch section {
-        case .general: general?.refresh()
-        case .appearance: appearance?.refresh()
-        case .keybindings: keybindingsPage?.refresh()
-        default: extraPages[section]?.refresh()
+        if let d = ditherSection {
+            ditherPages[d]?.refresh()
+        } else {
+            switch section {
+            case .general: general?.refresh()
+            case .appearance: appearance?.refresh()
+            case .keybindings: keybindingsPage?.refresh()
+            default: extraPages[section]?.refresh()
+            }
         }
         nav.showsProject = pageContext.scope.selection.project != nil
         updateScheduledTaskWatch()

@@ -11,6 +11,7 @@ public class ScopedSettingsPage: SettingsPageBase {
     let boundary = SettingsNoticeView("")
     /// Pages that handle their own unavailable states (Project) skip the boundary.
     var usesBoundary = true
+    override var scopeItems: [NSView] { [sentence, boundary] }
 
     init(context: SettingsPageContext, sentence showsSentence: Bool = true) {
         sentence = SettingsScopeSentenceView(context: context)

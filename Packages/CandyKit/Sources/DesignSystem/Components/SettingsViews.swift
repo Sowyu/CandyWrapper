@@ -311,8 +311,11 @@ public final class SettingsGroupView: BoxView {
     private var inset: CGFloat { variant == .grouped ? 1 : 0 }
     private var gap: CGFloat { variant == .plain ? 4 : 1 }  // `space-y-1`, or the 1px top border
 
+    /// Redesign keeps some of a card's rows in a section (`DitherSettingsSectionView`); rows this refuses stay hidden.
+    public var rowFilter: ((NSView) -> Bool)? { didSet { needsLayout = true } }
+
     /// Rows that render; a hidden row leaves the card like T3's conditional rows.
-    private var shown: [any SettingsGroupRow] { rows.filter { !$0.isHidden } }
+    private var shown: [any SettingsGroupRow] { rows.filter { !$0.isHidden && rowFilter?($0) != false } }
 
     public func height(forWidth width: CGFloat) -> CGFloat {
         let shown = shown
@@ -325,6 +328,7 @@ public final class SettingsGroupView: BoxView {
 
     public override func layout() {
         super.layout()
+        if let rowFilter { for row in rows where !rowFilter(row) { row.isHidden = true } }
         var y = inset
         CATransaction.begin()
         CATransaction.setDisableActions(true)

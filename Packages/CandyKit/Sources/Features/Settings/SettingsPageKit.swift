@@ -125,15 +125,20 @@ public class SettingsStackView: DSView, SettingsGroupRow {
     /// Anchors for settings search: id to view.
     var anchors: [String: NSView] = [:]
 
+    /// Redesign shows part of a page (`DitherSettingsSectionView`): items this refuses stay hidden.
+    var itemFilter: ((NSView) -> Bool)? { didSet { needsLayout = true } }
+    private var shown: [NSView & SettingsGroupRow] { items.filter { !$0.isHidden && itemFilter?($0) != false } }
+
     public func height(forWidth width: CGFloat) -> CGFloat {
-        let visible = items.filter { !$0.isHidden }
+        let visible = shown
         return visible.reduce(0) { $0 + $1.height(forWidth: width) } + gap * CGFloat(max(0, visible.count - 1))
     }
 
     public override func layout() {
         super.layout()
+        if let itemFilter { for item in items where !itemFilter(item) { item.isHidden = true } }
         var y: CGFloat = 0
-        for item in items where !item.isHidden {
+        for item in shown {
             let h = item.height(forWidth: bounds.width)
             item.frame = NSRect(x: 0, y: y, width: bounds.width, height: h)
             item.needsLayout = true

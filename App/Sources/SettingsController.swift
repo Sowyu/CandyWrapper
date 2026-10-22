@@ -36,6 +36,9 @@ final class SettingsController {
     var keybindingsPage: KeybindingsSettingsView?
     /// Project, Providers, Integrations, Source Control, Storage, Archive, Diagnostics and SnapShots (WP7.7b), built on first open.
     var extraPages: [SettingsSection: SettingsPageBase] = [:]
+    /// Redesign's open section and its views; nil under other themes.
+    var ditherSection: DitherSettingsSection?
+    var ditherPages: [DitherSettingsSection: DitherSettingsSectionView] = [:]
     weak var composer: ComposerController?
     var clientObserver: Int?
     var themeObserver: NSObjectProtocol?
@@ -105,6 +108,7 @@ final class SettingsController {
         built = true
         page.onEscape = { [weak self] in self?.escape() }
         nav.onSelect = { [weak self] section in self?.show(section) }
+        nav.onSelectDither = { [weak self] section in self?.show(dither: section) }
         nav.onSearchResult = { [weak self] item in self?.jump(to: item) }
         page.header.restore.action = { [weak self] in self?.confirmRestoreDefaults() }
         setUpPageContext()
@@ -192,7 +196,10 @@ final class SettingsController {
     /// General first, as the user asked. A held key does nothing more (`event.repeat`).
     func escape() {
         guard isOpen, NSApp.currentEvent?.isARepeat != true else { return }
-        if let parent = section.parent {
+        if isDither, ditherSection == nil, let parent = DitherSettingsSection.parent(of: section) {
+            show(dither: parent)
+            window?.makeFirstResponder(page)
+        } else if let parent = section.parent {
             show(parent)
             window?.makeFirstResponder(page)
         } else {
@@ -211,7 +218,7 @@ final class SettingsController {
         page.removeFromSuperview()
         // A closed Settings gives back its pages (T3 unmounts the route); the next open builds the one it shows.
         page.page = nil
-        general = nil; appearance = nil; keybindingsPage = nil; extraPages = [:]
+        general = nil; appearance = nil; keybindingsPage = nil; extraPages = [:]; ditherPages = [:]; ditherSection = nil
         projectFiles = [:]; projectFileLoads = []
         layout.mainContent = threadPanel
         if record { onRouteChange?() }
