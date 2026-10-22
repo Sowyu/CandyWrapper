@@ -70,3 +70,46 @@ extension MermaidDiagramsTests {
         #expect(MermaidDiagrams.base(ofKey: "a\nb\nn") == "a\nb")
     }
 }
+
+extension MermaidDiagramsTests {
+    /// A diagram whose first column fit has not been tested for a narrower layout, so a narrower column renders
+    /// at its own width; once a narrower render finds it never adapts, every width shares the natural render.
+    @Test func narrowingAfterAFitRendersAgain() throws {
+        let diagrams = MermaidDiagrams()
+        let palette = MermaidDiagrams.Palette(css: "--pele-bg:red", font: "x")
+        let image = try #require(CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                           space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)?.makeImage())
+        let source = "graph LR\n  A --> B"
+        let base = MermaidDiagrams.base(source, palette)
+        let rendered = MermaidDiagrams.Result.rendered(image, CGSize(width: 1, height: 1))
+        diagrams.store((base, base + "\n800", source, palette, 800), rendered, natural: (500, nil))
+        #expect(diagrams.key(base: base, width: 900) == base + "\nn")
+        #expect(diagrams.key(base: base, width: 300) == base + "\n300")
+        diagrams.store((base, base + "\n300", source, palette, 300), rendered, natural: (500, false))
+        #expect(diagrams.key(base: base, width: 300) == base + "\nn")
+        // A later render that fit keeps what the narrower one found.
+        diagrams.store((base, base + "\nn", source, palette, 900), rendered, natural: (500, nil))
+        #expect(diagrams.key(base: base, width: 200) == base + "\nn")
+    }
+
+    /// End to end with pele: a wide diagram first shown in a wide column lays out again for a narrow one.
+    @Test func wideDiagramReflowsWhenTheColumnNarrows() async throws {
+        let palette = MermaidDiagrams.Palette.current(dark: false)
+        let diagrams = MermaidDiagrams()
+        func wait(_ source: String, width: CGFloat, until done: (CGSize) -> Bool) async throws -> CGSize? {
+            for _ in 0..<1500 {
+                switch diagrams.result(source, palette: palette, width: width) {
+                case .rendered(_, let size)? where done(size): return size
+                case .failed?: return nil
+                default: try await Task.sleep(for: .milliseconds(10))
+                }
+            }
+            return nil
+        }
+        let source = "graph LR\n  Alpha --> Bravo --> Charlie --> Delta --> Echo --> Foxtrot --> Golf --> Hotel"
+        guard let wide = try await wait(source, width: 4000, until: { _ in true }) else { Issue.record("no wide render"); return }
+        // The natural render stands in until the narrow one lands; before the fix it stood for good.
+        let reflowed = try await wait(source, width: (wide.width / 2).rounded(.down), until: { $0.width < wide.width })
+        #expect(reflowed != nil, "the diagram kept its \(wide) natural layout")
+    }
+}

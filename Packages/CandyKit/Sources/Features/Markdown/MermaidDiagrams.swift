@@ -51,8 +51,9 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
     private var cache: [String: Result] = [:]
     private var order: [String] = []
     /// Per source and palette: the diagram's natural width, and whether a narrower column lays it out again
-    /// (`adapts`, pele's mount); a diagram that fits or never adapts renders once for every width.
-    private var naturals: [String: (width: CGFloat, adapts: Bool)] = [:]
+    /// (`adapts`, pele's mount), nil until a column narrower than the diagram asks. A diagram that fits or never
+    /// adapts renders once for every width.
+    private var naturals: [String: (width: CGFloat, adapts: Bool?)] = [:]
     /// Per source and palette, the last key rendered, shown while another width renders.
     private var latest: [String: String] = [:]
     private var queue: [(base: String, key: String, source: String, palette: Palette, width: CGFloat)] = []
@@ -69,9 +70,9 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
 
     static func base(_ source: String, _ palette: Palette) -> String { palette.css + "\n" + palette.font + "\n" + source }
 
-    private func key(base: String, width: CGFloat) -> String {
+    func key(base: String, width: CGFloat) -> String {
         let w = max(0, width.rounded(.down))
-        if let natural = naturals[base], !natural.adapts || w >= natural.width { return base + "\nn" }
+        if let natural = naturals[base], natural.adapts == false || w >= natural.width { return base + "\nn" }
         return base + "\n" + String(Int(w))
     }
 
@@ -105,8 +106,9 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
         NotificationCenter.default.post(name: Self.didRender, object: nil)
     }
 
-    func store(_ next: (base: String, key: String, source: String, palette: Palette, width: CGFloat), _ result: Result, natural: (CGFloat, Bool)?) {
-        if let natural { naturals[next.base] = natural }
+    func store(_ next: (base: String, key: String, source: String, palette: Palette, width: CGFloat), _ result: Result, natural: (CGFloat, Bool?)?) {
+        // A render at a width that fits leaves adaptability untested; keep what a narrower one found.
+        if let natural { naturals[next.base] = (natural.0, natural.1 ?? naturals[next.base]?.adapts) }
         let key = natural == nil ? next.key : self.key(base: next.base, width: next.width)
         cache[key] = result
         order.removeAll { $0 == key }
@@ -150,7 +152,7 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
         }
     }
 
-    nonisolated static func decode(_ reply: Swift.Result<Any, Error>) -> (Result, (CGFloat, Bool)?) {
+    nonisolated static func decode(_ reply: Swift.Result<Any, Error>) -> (Result, (CGFloat, Bool?)?) {
         let failed = Result.failed(message: "The diagram could not be rendered.", retryable: false)
         switch reply {
         case .failure(let error): return (.failed(message: error.localizedDescription, retryable: true), nil)
@@ -161,7 +163,7 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
                   let data = Data(base64Encoded: String(png[png.index(after: comma)...])),
                   let source = CGImageSourceCreateWithData(data as CFData, nil), let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
                   let w = o["width"] as? Double, let h = o["height"] as? Double else { return (failed, nil) }
-            let natural = (o["natural"] as? Double).map { (CGFloat($0), o["adapts"] as? Bool ?? false) }
+            let natural = (o["natural"] as? Double).map { (CGFloat($0), o["adapts"] as? Bool) }
             return (.rendered(image, CGSize(width: w, height: h)), natural)
         }
     }
@@ -260,6 +262,7 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
 
     /// What pele's `mount` does for one width (MermaidDiagram.tsx:238-255 with pele's mount): the natural render, and
     /// when the column is narrower and the diagram lays out differently at `maxWidth: 1`, a render at the column's width.
+    /// `adapts` stays null while the column fits, so a later narrower column tests it.
     /// Then `sanitizeDiagramSvg` (:159-167) without DOMPurify: links, images, scripts, styles and foreign objects go, so
     /// do `href`, `src`, `srcset` and event handlers. The SVG gets the color variables inline, as `diagramImageUrl`
     /// (:206-220) does, and is drawn to a 2x canvas.
@@ -270,7 +273,7 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
       const options = { links: false, images: false, autoDirection: false, fontFamily: font,
                         idPrefix: "pele-" + (window.__n = (window.__n || 0) + 1) };
       const natural = pele.render(source, options);
-      let result = natural, adapts = false;
+      let result = natural, adapts = null;
       if (width > 0 && width < natural.width) {
         adapts = pele.render(source, { ...options, maxWidth: 1 }).svg !== natural.svg;
         if (adapts) result = pele.render(source, { ...options, maxWidth: width });
