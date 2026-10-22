@@ -8,6 +8,7 @@ import T3Store
 /// 360 wide, at most 346 tall. Spec: docs/research/J-composer-visuals.md 8.1, reference 13.
 final class ModelPickerView: DSView, PickerPopupBody {
     static let width: CGFloat = 360, maxHeight: CGFloat = 346, railWidth: CGFloat = 44
+    static let capyWidth: CGFloat = 420, capyHeight: CGFloat = 440
     static let searchHeight: CGFloat = 43, rowHeight: CGFloat = 45, rowGap: CGFloat = 2
 
     var catalog: ProviderCatalog { didSet { if catalog != oldValue { reload() } } }
@@ -266,10 +267,11 @@ final class ModelPickerView: DSView, PickerPopupBody {
 
     /// Search block plus the list (rows + 20) or the empty text (`p-2`, 36), then the ChatGPT footer.
     var naturalSize: CGSize {
+        // Redesign keeps Capy's roomy, steady size, so a short list (favorites, a search) doesn't squash it.
+        if capy { return CGSize(width: Self.capyWidth, height: Self.capyHeight + footerHeight) }
         if let frozenHeight { return CGSize(width: Self.width, height: frozenHeight) }
-        let list = sections.rows.isEmpty ? 36 + (capy ? listTop - 6 : 0) : listContentHeight + listTop + listBottom
-        // Redesign's card takes room, so its list may run taller.
-        return CGSize(width: Self.width, height: min(capy ? 420 : Self.maxHeight, searchH + list) + footerHeight)
+        let list = sections.rows.isEmpty ? 36 : listContentHeight + listTop + listBottom
+        return CGSize(width: Self.width, height: min(Self.maxHeight, searchH + list) + footerHeight)
     }
 
     /// `ChatGptSharingControl` (ProviderModelPicker.tsx:317-319): under the picker while the composer's instance
