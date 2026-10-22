@@ -16,8 +16,6 @@ final class TurnFoldRowView: TimelineRowView {
         super.init(frame: frameRect)
         label.lineHeight = TL.relaxed
         time.lineHeight = 16
-        label.halo = true
-        time.halo = true
         time.alphaValue = 0
         rule.fill = TL.c(\.border, 0.6)
         for v in [label, chevron, time, rule] as [NSView] { addSubview(v) }

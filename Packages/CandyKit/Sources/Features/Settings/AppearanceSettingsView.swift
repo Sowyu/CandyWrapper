@@ -209,7 +209,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
                                  options: [("comfortable", "Comfortable (default)"), ("wide", "Wide"), ("full", "Full")], width: 160,
                                  reset: "chat width", hideIndicator: false)
         (width.control as? SelectView)?.valueLabels = ["Comfortable", "Wide", "Full"]
-        let s = section("appearance-interface", "Interface", [contrast, glass, ditherRow(), identification, diff, strip, width])
+        let s = section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), identification, diff, strip, width])
         return s
     }
 
@@ -225,6 +225,25 @@ public final class AppearanceSettingsView: SettingsPageBase {
         binder.add { [weak group] in
             desktop.isHidden = DitherPicture.path == nil
             group?.invalidateIntrinsicContentSize()
+        }
+        return r
+    }
+
+    /// CandyWrapper's own: how much the Redesign theme dims its art behind an open thread (the user, 2026-10-22).
+    private func ditherDimRow() -> SettingsRowView {
+        let key = "ditherBackgroundDim"
+        let control = SettingsSliderControl(value: Double(client.int(key)), range: 0...90, step: 5, outputWidth: 48)
+        control.format = { "\(Int($0))%" }
+        control.slider.setAccessibilityLabel("Background dim")
+        let r = row(nil, title: "Background dim", detail: "How much the Redesign theme dims its picture behind an open thread.", control: control)
+        let slot = ResetSlot(label: "background dim")
+        r.accessories = [slot]
+        slot.action = { [weak self] in self?.context.writeClient?([key: ClientSettings.fields[key]!.defaultValue]) }
+        control.onChange = { [weak self] v in self?.context.writeClient?([key: .number(v)]) }
+        binder.add { [weak self, weak control] in
+            guard let self else { return }
+            control?.value = Double(self.client.int(key))
+            slot.isShown = !self.client.isDefault(key)
         }
         return r
     }

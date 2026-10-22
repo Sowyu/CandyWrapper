@@ -42,7 +42,6 @@ public final class DitherDeviceRowView: ControlView {
         layer?.addSublayer(dot)
         label.font = DSFont.ui(13)
         label.lineHeight = 16
-        label.halo = true
         for v in [icon, label, chevron] as [NSView] { addSubview(v) }
         setAccessibilityRole(.popUpButton)
         setAccessibilityLabel("Machine and workspace")
@@ -94,16 +93,6 @@ public final class DitherDeviceRowView: ControlView {
         label.color = lit ? Themed.color(\.foreground) : Themed.color(\.mutedForeground)
         icon.strokeColor = lit ? Themed.color(\.foreground, 0.85) : Themed.color(\.mutedForeground)
         chevron.strokeColor = lit ? Themed.color(\.foreground, 0.85) : Themed.color(\.mutedForeground)
-        // The label's halo for the glyphs too, so they read over bright or dark art alike.
-        let dark = effectiveAppearance.isDark
-        let glow = Themed.color(\.background).cgColor(in: self)
-        for v in [icon, chevron] as [NSView] {
-            v.wantsLayer = true
-            v.layer?.shadowColor = glow
-            v.layer?.shadowOpacity = ThemeRuntime.isDither(dark: dark) ? 1 : 0
-            v.layer?.shadowRadius = 2
-            v.layer?.shadowOffset = .zero
-        }
         needsDisplay = true
     }
 }

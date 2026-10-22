@@ -244,9 +244,9 @@ private struct DitherArtFrames: @unchecked Sendable { let images: [CGImage] }
 public enum DitherArt {
     /// Dot size in points.
     public nonisolated static let dot: CGFloat = 2
-    /// The background's share over an open thread: light, so the art shows in its own colors (the user: vivid art over
-    /// a dimmed one). Muted timeline labels carry their own soft halo instead (`LabelView.halo`).
-    nonisolated static let threadScrim: CGFloat = 0.2
+    /// The background's share over an open thread: the user's "Background dim" (35% by default), so the art keeps its
+    /// colors and text reads over it without halos (the user, 2026-10-22).
+    nonisolated static var threadScrim: CGFloat { ThemeRuntime.ditherDim }
     /// The background's share over Settings and every other page, whose cards and lists aren't frosted.
     nonisolated static let pageScrim: CGFloat = 0.92
 

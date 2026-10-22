@@ -60,7 +60,8 @@ public struct ClientSettings: Equatable, Sendable {
         "diffIgnoreWhitespace": SettingSpec(.bool, .bool(true)),
         "diffLayout": SettingSpec(.literals(["stacked", "split"]), .string("stacked")),
         "environmentIdentificationMode": SettingSpec(.literals(["artwork", "pill", "none"]), .string("artwork")),
-        "glassOpacity": SettingSpec(.int(10...100), .number(80)),  // T3 stops at 40 (settings.ts:94); CandyWrapper goes to 10, the value stays local
+        "glassOpacity": SettingSpec(.int(10...100), .number(80)),
+        "ditherBackgroundDim": SettingSpec(.int(0...90), .number(35)),  // CandyWrapper only: Redesign's dim over the art in threads  // T3 stops at 40 (settings.ts:94); CandyWrapper goes to 10, the value stays local
         "fontSizeInterface": SettingSpec(.int(12...20), .number(16)),
         "fontSizePrompt": SettingSpec(.int(12...20), .number(14)),
         "fontSizeCode": SettingSpec(.int(10...18), .number(13)),
