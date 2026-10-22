@@ -5,10 +5,10 @@ import T3Protocol
 import T3Store
 @testable import Features
 
-/// Dither rows: the Waiting dot grid, sections that follow the list state, and patches that keep rows in their section.
+/// Dither rows: the Waiting dot grid without its word, sections that follow the list state, and patches that keep rows in their section.
 @MainActor
 struct SidebarDitherRowTests {
-    @Test func waitingRowShowsTheDotGridBesideItsLabel() throws {
+    @Test func waitingRowShowsTheDotGridWithoutItsWord() throws {
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous) }
         var dither = previous
@@ -31,8 +31,11 @@ struct SidebarDitherRowTests {
         card.layoutSubtreeIfNeeded()
         let grid = try #require(card.subviews.compactMap { $0 as? DotGridSpinnerView }.first)
         #expect(!grid.isHidden)
-        let label = try #require(card.subviews.compactMap { $0 as? LabelView }.first { $0.text == "Waiting" })
-        #expect(grid.frame.maxX <= label.frame.minX)
+        // The grid stands in for the word, at the right of the title line.
+        let labels = card.subviews.compactMap { $0 as? LabelView }
+        #expect(!labels.contains { $0.text == "Waiting" })
+        let title = try #require(labels.first { $0.text == "Waits on a child" })
+        #expect(grid.frame.minX >= title.frame.maxX)
         window.contentView = nil
     }
 
