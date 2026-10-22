@@ -39,6 +39,13 @@ struct ComposerAttachmentsTests {
         #expect(R.matchesReattachMarker(video, name: "clip.mov", mimeType: "video/quicktime", sizeBytes: 9))
     }
 
+    @Test func stashLineCount() {
+        #expect(PromptStashEntry.lineCount("") == 0)
+        #expect(PromptStashEntry.lineCount("  \n ") == 0)
+        #expect(PromptStashEntry.lineCount("one") == 1)
+        #expect(PromptStashEntry.lineCount("\none\n\ntwo\r\nthree\n") == 4)
+    }
+
     @Test func classifiesLikeT3() {
         #expect(R.classify(name: "a.png", mimeType: "image/png") == .image)
         #expect(R.classify(name: "photo.jpg", mimeType: "") == .image)

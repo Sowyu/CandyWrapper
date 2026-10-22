@@ -523,6 +523,8 @@ public final class ThreadDetailsCardView: DSView {
     }
 
     private let decoration = BoxDecorationLayer()
+    /// Dither: the art behind the card blurs through its tinted fill, like the composer's frost.
+    private let blur = BackdropBlurView()
     private let divider = CALayer()
     /// Tasks bound to the thread (`ThreadAutomationsPanel`), separated by `border-t border-border/65`.
     public let automations = ThreadAutomationsView()
@@ -538,6 +540,8 @@ public final class ThreadDetailsCardView: DSView {
         scrollArea = ScrollAreaView(documentView: content, scrollFade: true)
         super.init(frame: frameRect)
         decoration.host = self
+        blur.isHidden = true
+        addSubview(blur)
         layer?.addSublayer(decoration)
         // `overflow-hidden rounded-3xl`: scrolled rows stay inside the border's rounded corners.
         scrollArea.wantsLayer = true
@@ -650,6 +654,7 @@ public final class ThreadDetailsCardView: DSView {
     public override func layout() {
         super.layout()
         decoration.layout(boxSize: bounds.size)
+        blur.frame = bounds
         scrollArea.frame = bounds.insetBy(dx: 1, dy: 1)
         let width = bounds.width - 2, height = preferredHeight - 2
         content.frame = NSRect(x: 0, y: 0, width: width, height: height)
@@ -696,9 +701,13 @@ public final class ThreadDetailsCardView: DSView {
     public override func updateLayer() {
         var box = BoxStyle()
         box.radius = 22
-        box.fill = PopupSurface.glassFill
+        let dark = effectiveAppearance.isDark
+        let frost = ThemeRuntime.isDither(dark: dark)
+        box.fill = frost ? Themed.color(dark ? \.surfaceRaised : \.card, 0.62) : PopupSurface.glassFill
         box.border = Themed.color(\.contrastForeground, 0.1)
         decoration.boxStyle = box
+        blur.isHidden = !frost || CommandLine.arguments.contains("--no-blur")
+        blur.cornerRadius = DitherChrome.radius(box.radius)
         divider.backgroundColor = Themed.color(\.contrastBorder, 0.65).cgColor(in: self)
         automationsDivider.backgroundColor = Themed.color(\.border, 0.65).cgColor(in: self)
     }

@@ -246,6 +246,8 @@ private final class StashRowView: DSView {
     private let fileIcon = IconView(name: .file, size: 12, strokeColor: Themed.color(\.mutedForeground))
     private let fileCount = glassLabel(font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 16)
     private let time = glassLabel(font: TL.tabular(12), color: Themed.color(\.mutedForeground), lineHeight: 16)
+    /// Dither: the prompt's line count beside the time, fainter than it.
+    private let lines = glassLabel(font: TL.tabular(12), color: Themed.color(\.mutedForeground, 0.7), lineHeight: 16)
     private let delete = ButtonView(nil, icon: .x, variant: .ghost, size: .iconXs)
     private var trackingArea: NSTrackingArea?
 
@@ -276,11 +278,13 @@ private final class StashRowView: DSView {
         fileCount.isHidden = files == 0
         fileCount.text = "\(files)"
         time.text = TimestampFormat.formatRelativeTimeLabel(entry.createdAt, nowMs: nowMs)
+        let lineCount = PromptStashEntry.lineCount(entry.prompt)
+        lines.text = lineCount == 0 ? "" : "\(lineCount) line\(lineCount == 1 ? "" : "s")"
         delete.iconSize = 14
         delete.smoothsFont = false
         delete.setAccessibilityLabel("Delete stashed prompt")
         delete.action = { [weak self] in self?.onDelete?() }
-        [icon, snippet, note, fileIcon, fileCount, time].forEach(addSubview)
+        [icon, snippet, note, fileIcon, fileCount, time, lines].forEach(addSubview)
         thumbs.forEach(addSubview)  // later markers paint over earlier ones
         addSubview(delete)
         setAccessibilityRole(.button)
@@ -305,6 +309,8 @@ private final class StashRowView: DSView {
             v.frame = NSRect(x: right, y: mid - height / 2, width: width, height: height)
         }
         place(time, ceil(time.textWidth))
+        lines.isHidden = lines.text.isEmpty || !ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        if !lines.isHidden { right -= 2; place(lines, ceil(lines.textWidth)) }
         if !fileCount.isHidden {
             let w = 12 + 4 + ceil(fileCount.textWidth)
             place(fileCount, w)

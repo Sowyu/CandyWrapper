@@ -55,6 +55,12 @@ public struct PromptStashEntry: Codable, Equatable, Sendable, Identifiable {
     /// Images that did not make it into the entry, whatever the reason.
     public var missingImageCount: Int { droppedImageNames.count + (unreadableImageNames?.count ?? 0) }
 
+    /// The prompt's lines, blank edges trimmed: 0 for an attachment-only entry.
+    public static func lineCount(_ prompt: String) -> Int {
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? 0 : trimmed.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).count
+    }
+
     /// `stashEntrySnippet`: the prompt on one line, at most 90 characters, or an attachment count.
     public var snippet: String {
         let collapsed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
