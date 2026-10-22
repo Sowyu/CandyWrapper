@@ -10,7 +10,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
     static let width: CGFloat = 360, maxHeight: CGFloat = 346, railWidth: CGFloat = 44
     static let searchHeight: CGFloat = 43, rowHeight: CGFloat = 45, rowGap: CGFloat = 2
 
-    var catalog: ProviderCatalog { didSet { reload() } }
+    var catalog: ProviderCatalog { didSet { if catalog != oldValue { reload() } } }
     var favorites: [ModelFavorite] { didSet { reload() } }
     /// `providerModelPreferences`: hidden models and order per instance.
     var preferences: JSONValue { didSet { reload() } }
@@ -21,7 +21,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
     private var expandedLegacy: Set<ProviderInstanceId> = []
     private(set) var sections: ModelPickerSections
     /// Keyboard highlight in the list (`data-highlighted`).
-    var highlightedRow: Int? { didSet { if highlightedRow != oldValue { rowViews.forEach { $0.restyle() }; scrollToHighlight() } } }
+    var highlightedRow: Int? { didSet { if highlightedRow != oldValue { restyleHighlight(from: oldValue); scrollToHighlight() } } }
     /// Keyboard focus in the rail (index into `railButtons`), nil while the search field has it.
     private(set) var railFocus: Int? { didSet { railButtons.forEach { $0.restyle() } } }
 
@@ -113,24 +113,51 @@ final class ModelPickerView: DSView, PickerPopupBody {
                                        rail: rail, query: query, expandedLegacy: expandedLegacy, selectedKeys: selectedKeys, preferences: preferences)
         // ponytail: AppKit tooltips instead of T3's TooltipPopup (left side, 8pt offset, no delay); swap for TooltipView when tooltips get a shared host
         for (b, r) in zip(railButtons, sections.rail) { b.isDisabled = r.isDisabled; b.toolTip = r.tooltip }
-        // ponytail: every row is a view, rebuilt on each change (about 15 here); recycle rows like the timeline past ~100 models
-        rowViews.forEach { $0.removeFromSuperview() }
+        // Reuse unchanged rows while filtering (T3 74ca17b43, ModelListRow.tsx:18-43).
+        var previous = Dictionary(uniqueKeysWithValues: rowViews.map { (Self.rowKey($0.row), $0) })
         var modelIndex = 0
         rowViews = sections.rows.indices.map { i in
+            let row = sections.rows[i]
             var label: String?
-            if case .model = sections.rows[i] {
+            if case .model = row {
                 if modelIndex < 9 { label = jumpLabel?(modelIndex) }
                 modelIndex += 1
             }
-            return ModelRowView(picker: self, row: sections.rows[i], index: i, jumpLabel: label)
+            if let view = previous.removeValue(forKey: Self.rowKey(row)) {
+                if view.row == row && view.jumpLabel == label {
+                    let wasHighlighted = highlightedRow == view.index
+                    view.index = i
+                    if wasHighlighted != (highlightedRow == i) { view.restyle() }
+                    return view
+                }
+                view.removeFromSuperview()
+            }
+            let view = ModelRowView(picker: self, row: row, index: i, jumpLabel: label)
+            list.addSubview(view)
+            return view
         }
-        rowViews.forEach(list.addSubview)
+        previous.values.forEach { $0.removeFromSuperview() }
+        // Keep accessibility traversal in the same order as the filtered results.
+        list.subviews = [emptyLabel] + rowViews
         emptyLabel.isHidden = !sections.rows.isEmpty
         if let h = highlightedRow, h >= rowViews.count { highlightedRow = nil }
         railButtons.forEach { $0.restyle() }
         favoritesButton.restyle()
         needsLayout = true
         needsDisplay = true
+    }
+
+    private static func rowKey(_ row: ModelPickerRow) -> String {
+        switch row {
+        case .model(let item): "model:\(item.key)"
+        case .legacy(let instance, _, _): "legacy:\(instance.rawValue)"
+        }
+    }
+
+    private func restyleHighlight(from old: Int?) {
+        for i in Set([old, highlightedRow].compactMap { $0 }) where rowViews.indices.contains(i) {
+            rowViews[i].restyle()
+        }
     }
 
     func isRailSelected(_ r: ModelPickerRail) -> Bool { rail == r }
@@ -479,7 +506,8 @@ final class RailButtonView: ControlView {
 final class ModelRowView: DSView {
     private unowned let picker: ModelPickerView
     let row: ModelPickerRow
-    let index: Int
+    var index: Int
+    let jumpLabel: String?
     private let fill = CALayer()
     private let name = LabelView()
     private let secondary = LabelView()
@@ -493,6 +521,7 @@ final class ModelRowView: DSView {
         self.picker = picker
         self.row = row
         self.index = index
+        self.jumpLabel = jumpLabel
         super.init(frame: .zero)
         fill.cornerRadius = 6
         fill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
