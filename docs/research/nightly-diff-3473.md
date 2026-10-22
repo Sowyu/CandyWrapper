@@ -63,7 +63,7 @@ Still open, roughly by how often a user meets them:
 - [ ] Workflow phases and member agents in the opening block, and the native coordinator status on the parent Lineage row. Both need the parent thread's projection, which CW doesn't load.
 - [ ] PR panel: review thread replies nested with "More replies" and "View on host" (70a869d262), the change breakdown tooltip through `pullRequests.changeBreakdown` (92a6f6d731), and checks popover columns (618c46478a).
 - [ ] Connection diagnosis: a failure model with hop, cause, trace id and the "Details" block with "What to try", "Retry now" and "Copy diagnostics" (packages/client-runtime/src/connection/diagnosis.ts). Large.
-- [ ] Add to another machine: the dialog, `projects.listIgnoredFiles` and the ignored file copy (AddProjectToMachineDialog.tsx, lib/addProjectToMachine.ts). Large.
+- [x] Add to another machine: the dialog, `projects.listIgnoredFiles` and the ignored file copy (AddProjectToMachineDialog.tsx, lib/addProjectToMachine.ts), with #22254's landing on the clone, no clone toasts and the favicon asked again once the clone lands. Done 2026-10-22 (`AddProjectToMachineController`, `Features/Composer/AddProjectToMachine*.swift`); checked on screen against two 3473 servers in dark and light. No fidelity reference exists for the dialog.
 - [ ] Scheduled task webhook filters and dedupe fields in the form (ScheduledTasksSettings.tsx:162-250, 1535-1603). Medium.
 - [ ] Usage: weekly-exhausted accounts and their refill estimate (`poolMember`, 5b72385065), the freshest snapshot for one account on two instances (780b62dd26).
 - [ ] Storage cleanup results as a Machine, Project, Folder and Thread grid (5803c8b299). It needs a width-dependent detail row in DesignSystem.

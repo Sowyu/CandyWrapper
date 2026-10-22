@@ -122,4 +122,23 @@ struct AddProjectToMachineTests {
         #expect(ComposerLogic.projectCloneSendBlockReason(running: false, done: false, copyingFiles: true) == "Repository not cloned")
     }
 
+    @MainActor @Test func runOnListOffersTheDialog() {
+        let runOn = RunOnControl()
+        runOn.options = [RunOnOption(environmentId: "local", label: "This Mac", machine: "laptop")]
+        runOn.selectedId = "local"
+        #expect(!runOn.interactive)
+        #expect(runOn.addToMachineMenuItem() == nil)
+        var opened: [String?] = []
+        runOn.onAddToMachine = { opened.append($0) }
+        runOn.addTargets = [.init(environmentId: "b", label: "Studio", machine: "server")]
+        #expect(runOn.interactive)
+        let items = runOn.listItems()
+        #expect(items.last?.title == "Add to another machine")
+        #expect(items.last?.mutedUntilHighlighted == true)
+        items.last?.action?()
+        guard let sub = runOn.addToMachineMenuItem(), case .submenu(let children) = sub.kind else { Issue.record("no submenu"); return }
+        #expect(children.map(\.title) == ["Studio"])
+        children[0].action?()
+        #expect(opened == [nil, "b"])
+    }
 }

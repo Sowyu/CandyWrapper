@@ -378,6 +378,12 @@ public final class RunOnControl: ComposerContextControl {
     public var offersAutoBalance = false
     public var autoBalanceLabel: String? { didSet { refresh() } }
     public var onAutoBalance: (@MainActor () -> Void)?
+    /// Machines the project could be cloned onto (`useAddProjectTargets`): the list ends with "Add to another
+    /// machine", and a project on one machine still gets the list (BranchToolbar.tsx:690-691).
+    public var addTargets: [AddProjectToMachine.Target] = [] { didSet { if addTargets != oldValue { refresh() } } }
+    /// Opens the dialog, with the machine picked in the Run on menu's submenu or nil from this list.
+    public var onAddToMachine: (@MainActor (String?) -> Void)?
+    public var offersAddToMachine: Bool { !addTargets.isEmpty }
     public func autoBalanceMenuItem() -> MenuItem? {
         guard offersAutoBalance else { return nil }
         var item = MenuItem.radio("Auto balance", checked: autoBalanceLabel != nil)
@@ -397,7 +403,7 @@ public final class RunOnControl: ComposerContextControl {
     private func refresh() {
         glyphs = [EnvironmentMachineIcon.definition(selected?.machine ?? "server")]
         text = autoBalanceLabel ?? selected?.label ?? "Run on"
-        interactive = !locked && options.count > 1
+        interactive = !locked && (options.count > 1 || offersAddToMachine)
     }
 
     public override func performAction() {
@@ -431,6 +437,29 @@ public final class RunOnControl: ComposerContextControl {
             }
             items.append(item)
         }
+        // BranchToolbarEnvironmentSelector.tsx:236-243: the last item of the group opens the dialog.
+        if offersAddToMachine {
+            var item = MenuItem("Add to another machine")
+            item.glyph = IconName.plus.definition
+            item.mutedUntilHighlighted = true
+            item.action = { [weak self] in self?.onAddToMachine?(nil) }
+            items.append(item)
+        }
         return items
+    }
+
+    /// The Run on menu's "Add to another machine" submenu (BranchToolbar.tsx:379-401): one item per machine.
+    public func addToMachineMenuItem() -> MenuItem? {
+        guard offersAddToMachine else { return nil }
+        let children = addTargets.map { target -> MenuItem in
+            var item = MenuItem(target.label)
+            item.glyph = EnvironmentMachineIcon.definition(target.machine)
+            item.action = { [weak self] in self?.onAddToMachine?(target.environmentId) }
+            return item
+        }
+        var item = MenuItem.submenu("Add to another machine", children)
+        item.glyph = IconName.plus.definition
+        item.mutedUntilHighlighted = true
+        return item
     }
 }

@@ -325,7 +325,7 @@ final class GitController {
         return (target.worktreePath != nil ? IconName.folderGit : IconName.folder).definition
     }
 
-    private var runOnChoices: Bool { panel.contextStrip.runOn.options.count > 1 }
+    private var runOnChoices: Bool { panel.contextStrip.runOn.options.count > 1 || panel.contextStrip.runOn.offersAddToMachine }
 
     /// After each render (the card's Open in row follows the target).
     var onRender: (() -> Void)?
@@ -344,6 +344,7 @@ final class GitController {
             runOn.options = [RunOnOption(environmentId: target.environmentId, label: environmentOption?.label ?? target.environmentId, machine: environmentOption?.machine ?? "")]
             runOn.selectedId = target.environmentId
             runOn.locked = true
+            runOn.addTargets = []
             runOn.autoBalanceLabel = nil
             runOn.offersAutoBalance = false
         }
@@ -467,7 +468,7 @@ final class GitController {
         let anchor: NSView = inPanel ? panel.detailsCard.runContext : panel.contextStrip.runContext
         var items: [MenuItem] = []
         let runOn = panel.contextStrip.runOn
-        if runOn.options.count > 1 {
+        if runOn.options.count > 1 || runOn.offersAddToMachine {
             items.append(.label("Run on"))
             if let item = runOn.autoBalanceMenuItem() { items.append(item) }
             for option in runOn.options {
@@ -477,6 +478,7 @@ final class GitController {
                 item.action = { [weak runOn] in if option.environmentId != runOn?.selectedId || runOn?.autoBalanceLabel != nil { runOn?.onChange?(option.environmentId) } }
                 items.append(item)
             }
+            if let add = runOn.addToMachineMenuItem() { items.append(add) }
             items.append(.separator)
         }
         items.append(.label("Workspace"))

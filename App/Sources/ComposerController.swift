@@ -1018,7 +1018,9 @@ final class ComposerController {
             DispatchQueue.main.async { [weak self] in self?.sampleLoadBalance() }
         }
         runOn.selectedId = env
-        runOn.locked = targets.count < 2 || pendingMessageId != nil
+        let project = sidebar?.snapshot?.projects.first { $0.id.rawValue == session.projectId }
+        runOn.addTargets = project.flatMap { addProjectTargets?($0, targets.map(\.option.environmentId)) } ?? []
+        runOn.locked = (targets.count < 2 && runOn.addTargets.isEmpty) || pendingMessageId != nil
         // `shouldShowComposerContextStrip`: a Git project, or a machine to show.
         panel.contextStrip.showsGitControls = draftIsGitRepo
         panel.showsContextStrip = draftIsGitRepo || targets.count > 1 || (env != nil && env != sidebarEnvironments.primaryId)
@@ -1027,6 +1029,32 @@ final class ComposerController {
         panel.hero.setMachine(label: runOn.autoBalanceLabel ?? machine?.label, kind: machine?.machine ?? "server",
                               online: env.flatMap { environments.state($0) }?.status == .connected, interactive: !runOn.locked)
         panel.needsLayout = true
+    }
+
+    /// `useAddProjectTargets` for the draft's project and the machines its group already runs on, set by the app.
+    var addProjectTargets: ((ProjectShell, [String]) -> [AddProjectToMachine.Target])?
+
+    /// A machine connected, dropped or changed its config: the draft's Add to another machine targets follow.
+    func addTargetsMayHaveChanged() { updateRunOn() }
+
+    /// After Add to another machine (AddProjectToMachineDialog.tsx:137-159): a draft open on the source project moves
+    /// to the clone with whatever was typed in it, dropping the source machine's branch and worktree
+    /// (`setDraftThreadContext` with a new project, composerDraftStore.ts:2637-2651). False when no such draft is open.
+    func moveOpenDraft(from source: ProjectId, to project: ProjectShell) -> Bool {
+        guard case .draft(var session) = target, session.projectId == source.rawValue, pendingMessageId == nil else { return false }
+        flushPrompt()
+        let key = sessions.first { $0.value.draftId == session.draftId }?.key ?? group(of: source)?.key ?? source.rawValue
+        loadBalanceTask?.cancel(); loadBalanceTask = nil
+        Self.retarget(&session, to: project)
+        session.environmentSelection = "manual"; session.loadBalancedEnvironmentId = nil
+        session.branch = nil; session.worktreePath = nil
+        sessions[key] = session
+        target = .draft(session)
+        scheduleSave()
+        refresh()
+        syncSidebarDrafts()
+        onTargetChange?()
+        return true
     }
 
     /// "Auto balance" picked (`onAutoEnvironment`, ChatView.tsx:4398-4428): the draft drops its machine, branch and
