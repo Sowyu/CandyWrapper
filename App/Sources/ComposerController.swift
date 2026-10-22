@@ -563,8 +563,8 @@ final class ComposerController {
         return SidebarModel.normalizeProjectPath(root) == SidebarModel.normalizeProjectPath(project.workspaceRoot)
     }
 
-    /// An environment's grants arrived: the send button may now say it can't change threads.
-    func grantsChanged() { syncSendBlock() }
+    /// An environment's grants arrived: the send button may now say it can't change threads, and background work may now be stoppable.
+    func grantsChanged() { syncSendBlock(); updateBackgroundWorkBanner(shellThread) }
 
     /// Applies the settings a `server.updateSettings` reply returned, before `settingsUpdated` arrives.
     func applySettings(_ environmentId: String, _ raw: JSONValue) {
