@@ -116,9 +116,13 @@ public enum WindowGlass {
         "--input", "--contrast-input", "--toolbar-border", "--contrast-toolbar-border",
     ]
 
-    /// The lines among them. Dither's dark palette paints them opaque, a step off the panel, so on a frosted pane over
-    /// the art they read near black; `lines` turns them into white overlays like the composer's border.
-    nonisolated static let lineMembers: Set<String> = ["--border", "--contrast-border", "--input", "--contrast-input"]
+    /// The lines among them. Dither's dark palette paints them opaque, a step off the panel (the sidebar and toolbar
+    /// borders a step darker), so on a frosted pane over the art they read near black; `lines` turns them into white
+    /// overlays like the composer's border, at any contrast.
+    nonisolated static let lineMembers: Set<String> = [
+        "--border", "--contrast-border", "--input", "--contrast-input", "--sidebar-border", "--contrast-sidebar-border",
+        "--toolbar-border", "--contrast-toolbar-border",
+    ]
 
     /// `palette` with its surfaces turned into frosted panes and its light fills into overlays.
     nonisolated static func frosted(_ palette: Palette, dark: Bool, sidebar: Bool, opacity: Double,
@@ -127,10 +131,16 @@ public enum WindowGlass {
         let base = sidebar ? palette.sidebar : palette.background
         return Palette(members: { i in
             let c = members[i], name = Palette.memberNames[i]
+            if lines, lineMembers.contains(name) {
+                // A contrast below 100 mixes the line toward transparent: overlay its color, then keep that alpha.
+                var line = overlay(c, over: base)
+                // A line darker than the panel would paint black; it takes the border's white instead.
+                if dark, line.srgb.x == 0 { line = overlay(palette.border, over: base) }
+                return line.withAlpha(c.srgb.w)
+            }
             guard c.srgb.w >= 1 else { return c }
             if let level = paneMembers[name] { return c.withAlpha(paneAlpha(level, dark: dark, opacity: opacity)) }
             if !dark, tintMembers.contains(name) { return overlay(c, over: base) }
-            if lines, lineMembers.contains(name) { return overlay(c, over: base) }
             return c
         })
     }
