@@ -264,11 +264,11 @@ public final class SidebarLayoutView: DSView {
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         // The panel runs flush to the window's right, bottom and top edges, so the art and its top fade start at the
         // window's top and the tab strip sits on the art (the user: "start AT THE VERY TOP OF THE WINDOW"). The page
-        // inside still starts below the band. Only the sidebar side keeps its rounded bottom corner and hairline.
+        // inside still starts below the band. The sidebar side rounds both corners and keeps a hairline.
         let band: CGFloat = dither ? DitherChrome.band : 0
         main.frame = NSRect(x: gap, y: 0, width: max(0, bounds.width - gap), height: bounds.height)
         main.layer?.cornerRadius = dither ? DitherChrome.panelRadius : 0
-        main.layer?.maskedCorners = dither ? [.layerMinXMaxYCorner]
+        main.layer?.maskedCorners = dither ? [.layerMinXMinYCorner, .layerMinXMaxYCorner]
             : [.layerMinXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMinYCorner, .layerMaxXMaxYCorner]
         layoutPanelRim(dither: dither)
         layer?.backgroundColor = dither ? DitherChrome.bandColor(in: self) : nil
@@ -307,15 +307,11 @@ public final class SidebarLayoutView: DSView {
         let r = DitherChrome.panelRadius, b = main.bounds
         panelRim.frame = b
         panelRim.strokeColor = Themed.color(\.contrastForeground, 0.08).cgColor(in: self)
-        panelRim.path = SmoothCorners.path(b.insetBy(dx: 0.25, dy: 0.25), r, corners: [.bottomLeft], flipped: main.isFlipped)
-        // Only the left edge and the bottom left curve, which ends 1.53 radii along the bottom edge, fading in below the band.
+        panelRim.path = SmoothCorners.path(b.insetBy(dx: 0.25, dy: 0.25), r, corners: [.topLeft, .bottomLeft], flipped: main.isFlipped)
+        // Only the left edge and its two curves, which end 1.53 radii along the top and bottom edges.
         panelRimMask.frame = CGRect(x: 0, y: 0, width: ceil(r * SmoothCorners.reach) + 1, height: b.height)
-        let start = min(1, DitherChrome.band / max(1, b.height)), end = min(1, (DitherChrome.band + DitherArtView.topBlend) / max(1, b.height))
-        panelRimMask.colors = [NSColor.clear.cgColor, NSColor.clear.cgColor, NSColor.black.cgColor]
-        panelRimMask.locations = [0, NSNumber(value: Double(start)), NSNumber(value: Double(end))]
-        // The mask's unit space follows the flipped panel: 0 is its top.
-        panelRimMask.startPoint = CGPoint(x: 0.5, y: 0)
-        panelRimMask.endPoint = CGPoint(x: 0.5, y: 1)
+        panelRimMask.colors = [NSColor.black.cgColor, NSColor.black.cgColor]
+        panelRimMask.locations = nil
     }
 }
 
