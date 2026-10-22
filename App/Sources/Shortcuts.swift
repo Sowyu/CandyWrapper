@@ -133,10 +133,39 @@ final class Shortcuts {
         // A focused agent page or file preview keeps its keys, as a focused iframe does in T3. An HTML render passes
         // app shortcuts back itself (`run(_:)`, BrowserDocumentFrame.tsx in 3105).
         if ThreadWebFrames.holdKeyboard(in: window) { return false }
+        // A held undo key undoes once. Its repeats stop here so they cannot fall through to an editor's own undo,
+        // even after the last notice is gone (`ThreadUndoShortcut`, AppSidebarLayout.tsx:264-317 in 3473).
+        if event.isARepeat {
+            if event.keyCode == heldUndoKey { return true }
+        } else {
+            heldUndoKey = nil
+        }
         let paletteOpen = paletteOpen()
         if !paletteOpen, keyHandlers.contains(where: { $0(event) }) { return true }
         guard let stroke = KeyStroke(event) else { return false }
-        return run(stroke, paletteOpen: paletteOpen)
+        let used = run(stroke, paletteOpen: paletteOpen)
+        if used, lastCommand == "thread.undo" { heldUndoKey = event.keyCode }
+        return used
+    }
+
+    /// Whether the sidebar's undo notice owns Mod+Z inside text fields (`threadUndoClaimsShortcut` while the sidebar shows).
+    var undoClaimsShortcut: () -> Bool = { false }
+    /// Hands Mod+Z back to text fields (`releaseThreadUndoShortcut`).
+    var releaseUndoShortcut: () -> Void = {}
+    private var heldUndoKey: UInt16?
+    private var lastCommand: String?
+    private var textChangeObserver: Any?
+
+    /// Pastes from a menu, dictation and drops edit text without a keypress, and release the claim too
+    /// (AppSidebarLayout.tsx:307-310 in 3473).
+    func observeTextEdits() {
+        textChangeObserver = NotificationCenter.default.addObserver(forName: NSText.didChangeNotification, object: nil, queue: .main) { [weak self] note in
+            nonisolated(unsafe) let note = note
+            MainActor.assumeIsolated {
+                guard let self, (note.object as? NSView)?.window === self.window else { return }
+                self.releaseUndoShortcut()
+            }
+        }
     }
 
     /// Runs the command a key resolves to: a key event, or a chord a focused HTML render replayed (the replay
@@ -144,7 +173,17 @@ final class Shortcuts {
     @discardableResult
     func run(_ stroke: KeyStroke, paletteOpen: Bool? = nil) -> Bool {
         let paletteOpen = paletteOpen ?? self.paletteOpen()
-        guard let command = ActiveKeymap.keymap.resolve(stroke, context: context()) else { return false }
+        var context = context()
+        var command = ActiveKeymap.keymap.resolve(stroke, context: context)
+        // Right after a thread action Mod+Z undoes it even from the composer: `thread.undo` resolves as if no
+        // text field had focus. Any other key hands the field its own undo back (AppSidebarLayout.tsx:286-299 in 3473).
+        if command != "thread.undo", context["editableFocus"], undoClaimsShortcut() {
+            context["editableFocus"] = false
+            if ActiveKeymap.keymap.resolve(stroke, context: context) == "thread.undo" { command = "thread.undo" }
+        }
+        if command != "thread.undo" { releaseUndoShortcut() }
+        lastCommand = command
+        guard let command else { return false }
         let invocation = Invocation(command: command, isRepeat: stroke.isRepeat)
         if paletteOpen {
             if !Self.commandsWhilePaletteOpen.contains(command) { return paletteCommand?(invocation) ?? false }

@@ -194,8 +194,9 @@ final class SidebarCommands {
 
     /// Thread lifecycle keybindings for the open thread (_chat.tsx:84-93, ChatView.tsx:8000-8063).
     func registerShortcuts(_ shortcuts: Shortcuts, modelPickerOpen: @escaping () -> Bool) {
-        // `thread.undo` (Mod+Z outside editable fields by default) only consumes the key when there
-        // is something to undo, and never on repeat or with the model picker open (_chat.tsx:84-93).
+        // `thread.undo` (Mod+Z outside editable fields by default, and inside them right after an action, see
+        // `Shortcuts.run`) only consumes the key when there is something to undo, and never on repeat or with the
+        // model picker open (`ThreadUndoShortcut`, AppSidebarLayout.tsx:264-317 in 3473).
         shortcuts.on("thread.undo") { [weak self] call in
             guard let self, !call.isRepeat, !modelPickerOpen(), self.sidebar?.window != nil, !self.isUsagePageOpen else { return false }
             return self.ledger.undoLatest()

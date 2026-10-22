@@ -629,6 +629,9 @@ public final class ThreadUndoLedger {
     private var nextToken = 0
     private var live: [Entry] = []
     /// What the notice shows, nil when there is nothing to undo.
+    /// A new notice owns Mod+Z even inside a text field until the user presses another key or edits text.
+    /// After that Mod+Z is the field's own undo again (showThreadUndoNotice.ts in 3473, 21da3061aa).
+    private var shortcutClaimed = false
     public private(set) var notice: (action: Action, count: Int)?
     public var onChange: (() -> Void)?
 
@@ -662,9 +665,16 @@ public final class ThreadUndoLedger {
         guard isCurrent(claim) else { return }
         live.append(Entry(action: action, claim: claim, undo: undo))
         refresh()
+        shortcutClaimed = true
     }
 
     /// Runs the shown group's undos; false when nothing is left to undo.
+    /// Whether Mod+Z should undo the notice's actions even while a text field has focus (`threadUndoClaimsShortcut`).
+    public var claimsShortcut: Bool { shortcutClaimed && notice != nil }
+
+    /// Any other keypress or text edit hands Mod+Z back to text fields (`releaseThreadUndoShortcut`).
+    public func releaseShortcut() { shortcutClaimed = false }
+
     @discardableResult
     public func undoLatest() -> Bool {
         guard let latest = live.last else { return false }

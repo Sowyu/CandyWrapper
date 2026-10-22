@@ -474,6 +474,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             values["usagePageOpen"] = commands?.isUsagePageOpen ?? false
             return KeybindingContext(values)
         }
+        // A collapsed sidebar hides the undo notice, so text fields keep their own undo (AppSidebarLayout.tsx:267-268 in 3473).
+        shortcuts.undoClaimsShortcut = { [weak layout, weak commands] in layout?.isOpen == true && commands?.ledger.claimsShortcut == true }
+        shortcuts.releaseUndoShortcut = { [weak commands] in commands?.ledger.releaseShortcut() }
+        shortcuts.observeTextEdits()
         // The theme editor floats above every page (ThemeEditorHost above the router).
         let editor = ThemeEditorController.shared
         editor.host = layout

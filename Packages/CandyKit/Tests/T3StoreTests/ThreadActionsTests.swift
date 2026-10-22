@@ -364,4 +364,22 @@ struct ThreadUndoLedgerTests {
         #expect(ledger.notice == nil)
         #expect(!ledger.undoLatest())
     }
+
+    /// showThreadUndoNotice.test.ts in 3473 (21da3061aa).
+    @Test func aNewNoticeClaimsModZFromTextFieldsUntilReleased() {
+        let ledger = ThreadUndoLedger()
+        #expect(!ledger.claimsShortcut)
+        ledger.show(.settled, claim: ledger.begin("settle", "a")) {}
+        #expect(ledger.claimsShortcut)
+        ledger.releaseShortcut()
+        #expect(!ledger.claimsShortcut)
+        ledger.show(.unpinned, claim: ledger.begin("pin", "b")) {}
+        #expect(ledger.claimsShortcut)
+        ledger.undoLatest()
+        ledger.undoLatest()
+        #expect(!ledger.claimsShortcut)
+        ledger.show(.settled, claim: ledger.begin("settle", "c")) {}
+        ledger.expireAll()
+        #expect(!ledger.claimsShortcut)
+    }
 }
