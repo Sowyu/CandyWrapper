@@ -56,47 +56,6 @@ struct DitherArtTests {
     }
 }
 
-/// An open thread's art keeps AA for its muted labels on every dot: dots past the limit ease into it, dots well
-/// inside pass untouched, and a text that misses AA on the plain background sets no limit.
-struct DitherArtCappedTests {
-    func hex(_ v: Int) -> [Double] { [Double(v >> 16 & 255) / 255, Double(v >> 8 & 255) / 255, Double(v & 255) / 255] }
-
-    func image(_ pixels: [[UInt8]]) -> CGImage {
-        let ctx = CGContext(data: nil, width: pixels.count, height: 1, bitsPerComponent: 8, bytesPerRow: pixels.count * 4,
-                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
-        let data = ctx.data!.bindMemory(to: UInt8.self, capacity: pixels.count * 4)
-        for (i, p) in pixels.enumerated() { for c in 0..<3 { data[i * 4 + c] = p[c] } }
-        return ctx.makeImage()!
-    }
-
-    func pixels(_ image: CGImage) -> [[Double]] {
-        let ctx = CGContext(data: nil, width: image.width, height: 1, bitsPerComponent: 8, bytesPerRow: image.width * 4,
-                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
-        ctx.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: 1))
-        let data = ctx.data!.bindMemory(to: UInt8.self, capacity: image.width * 4)
-        return (0..<image.width).map { i in (0..<3).map { Double(data[i * 4 + $0]) / 255 } }
-    }
-
-    @Test func everyDotHoldsAAForTheMutedLabels() {
-        // Dark: background, the reach's brightest gray, a bright warm dot, a faint dot. Light: the same, darker.
-        for (bg, texts, art) in [
-            (hex(0x131314), [hex(0xaaaaab), hex(0x848485)], [[19, 19, 20], [117, 117, 118], [117, 90, 40], [22, 22, 23]] as [[UInt8]]),
-            (hex(0xf9f9f9), [hex(0x6c6c6c), hex(0x898989)], [[249, 249, 249], [151, 151, 151], [151, 180, 230], [247, 247, 247]]),
-        ] {
-            let out = pixels(DitherArt.capped(image(art), background: bg, texts: texts)!)
-            for dot in out {
-                for text in texts where DitherArt.contrast(text, bg) >= 4.6 { #expect(DitherArt.contrast(text, dot) >= 4.5) }
-            }
-            // The bright dots dim but still show; the background and the faint dot stay as they were.
-            #expect(out[0] == art[0].map { Double($0) / 255 })
-            #expect(out[3] == art[3].map { Double($0) / 255 })
-            #expect(out[1] != bg && out[1] != art[1].map { Double($0) / 255 })
-            // The warm dot keeps its hue: red still above green above blue in dark.
-            if bg[0] < 0.5 { #expect(out[2][0] > out[2][1] && out[2][1] > out[2][2]) }
-        }
-    }
-}
-
 /// The art yields to the system display options: Reduce Transparency covers it with the solid background, and
 /// Increase Contrast keeps every page's scrim heavy enough that text sits on about the background.
 struct DitherArtDisplayOptionTests {
@@ -106,6 +65,8 @@ struct DitherArtDisplayOptionTests {
     @Test func standardScrimsMatchTheDesign() {
         #expect(DitherArt.scrim(.hero, standard) == 0)
         #expect(DitherArt.scrim(.thread, standard) == DitherArt.threadScrim)
+        // The user wants the thread's art vivid: a light veil, never a dimming one.
+        #expect(DitherArt.threadScrim <= 0.2)
         #expect(DitherArt.scrim(.page, standard) == DitherArt.pageScrim)
     }
 
