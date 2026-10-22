@@ -14,9 +14,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     var richTextEnabled = false {
         didSet {
             guard richTextEnabled != oldValue else { return }
-            let source = expandedText
-            setText(source)
-            undoManager?.removeAllActions()
+            setText(expandedText)
         }
     }
     private var lastEditKind = ""
@@ -147,8 +145,12 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     static var selectionColor: NSColor { NSColor.selectedTextBackgroundColor.withAlphaComponent(0.8) }
 
     /// Replaces the text with the editor's style (programmatic sets skip the typing attributes).
-    /// `text` is the expanded prompt; its tokens come back as chips.
+    /// `text` is the expanded prompt; its tokens come back as chips. One editor serves every thread, so a draft set in
+    /// code starts a fresh undo history: the old one holds offsets into the text it replaces, and Cmd+Z would replay
+    /// another draft's typing onto this one.
     func setText(_ text: String) {
+        breakUndoCoalescing()
+        undoManager?.removeAllActions()
         isChipifying = true
         textStorage?.setAttributedString(NSAttributedString(string: text, attributes: baseAttributes))
         applyStyle()
