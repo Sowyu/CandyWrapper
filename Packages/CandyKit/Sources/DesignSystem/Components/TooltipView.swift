@@ -149,8 +149,9 @@ public final class TooltipController: NSResponder, HoverSyncClient {
 
     public func show(instant: Bool = false) {
         guard popup == nil, (!text.isEmpty || content != nil), let view, !view.isHiddenOrHasHiddenAncestor, let host = view.popupHost else { return }
-        // No tooltip over the trigger's own open menu.
-        if host.popups.contains(where: { $0.trigger === view && !$0.isPassive }) { return }
+        // Redesign, after Capy: no tooltip over the trigger's own open menu. Other themes keep T3's, which shows it.
+        if ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark),
+           host.popups.contains(where: { $0.trigger === view && !$0.isPassive }) { return }
         let tip = content?() ?? TooltipView(text, variant: variant)
         popup = host.open(tip, trigger: view, placement: placement, motion: instant ? .none : .tooltip,
                           pressesTrigger: false, returnsFocus: false, passive: true)
