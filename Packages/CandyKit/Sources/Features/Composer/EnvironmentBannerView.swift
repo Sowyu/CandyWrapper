@@ -32,7 +32,7 @@ public final class EnvironmentBannerView: ComposerBannerView {
 
     public override func layout() {
         super.layout()
-        let rowY: CGFloat = 5
+        let rowY: CGFloat = placement == .floating ? ((bounds.height - 24) / 2).rounded() : 5
         // `px-1`, a 24pt icon column, `gap-x-1`.
         icon.frame = NSRect(x: 4 + 6, y: rowY + 6, width: 12, height: 12)
         var right = bounds.width - 4

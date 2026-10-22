@@ -27,7 +27,13 @@ public class ComposerBannerView: DSView {
     /// 17pt overlap masked off; `floating` is a whole rounded card with no overlap, used for the
     /// notices the banner stack shows above the column when it expands.
     public enum Placement { case attached, floating }
-    public var placement = Placement.attached { didSet { if placement != oldValue { needsLayout = true } } }
+    public var placement = Placement.attached { didSet { if placement != oldValue { needsLayout = true; needsDisplay = true } } }
+    /// Redesign floats every attachment as its own card: whole, frosted, with a drop shadow (`DitherPill`).
+    var ditherFloating: Bool { placement == .floating && ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    /// What the content leaves at the bottom for the composer to cover: the overlap when attached, nothing floating.
+    public var tail: CGFloat { placement == .attached ? Self.overlap : 0 }
+    /// The shadow under a Redesign card, built the first time one floats.
+    private var shade: CALayer?
     /// The `ComposerBanner.Dismiss` X, if this banner has one; the banner stack disables it while
     /// the banner leaves.
     public var dismissControl: ButtonView? { nil }
@@ -63,11 +69,12 @@ public class ComposerBannerView: DSView {
         needsLayout = true
         let dark = effectiveAppearance.isDark
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        surface.layer?.backgroundColor = Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
+        surface.layer?.backgroundColor = ditherFloating ? DitherPill.fill(in: self)
+            : Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
         switch variant {
         case .neutral:
             tint.backgroundColor = nil
-            surface.layer?.borderColor = (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
+            surface.layer?.borderColor = ditherFloating ? DitherPill.border(dark: dark) : (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
         case .warning:
             tint.backgroundColor = Themed.color(\.warning, 0.08).cgColor(in: self)
             surface.layer?.borderColor = Themed.color(\.warning, 0.28).cgColor(in: self)
@@ -75,7 +82,7 @@ public class ComposerBannerView: DSView {
             tint.backgroundColor = Themed.color(\.error, 0.08).cgColor(in: self)
             surface.layer?.borderColor = Themed.color(\.error, 0.32).cgColor(in: self)
         }
-        seam.isHidden = !dark
+        seam.isHidden = !dark || ditherFloating
         seam.colors = [Themed.black(0).cgColor, Themed.black(0.18).cgColor]
         CATransaction.commit()
     }
@@ -91,10 +98,24 @@ public class ComposerBannerView: DSView {
         surface.frame = NSRect(x: 0, y: top, width: w, height: floating ? h : h + cardRadius - top)
         blur.frame = surface.frame
         // CSS scales radii down to fit the box (a 34pt floating card gets 17); Core Animation does not.
-        let radius = top < 0 ? 0 : floating ? min(cardRadius, h / 2) : cardRadius
+        // Redesign: a pill's control corner, a panel's card corner.
+        let dither = ditherFloating
+        let radius = top < 0 ? 0 : dither ? (h <= DitherPill.height ? DitherChrome.controlRadius : DitherChrome.cardRadius)
+            : floating ? min(cardRadius, h / 2) : cardRadius
         surface.layer?.cornerRadius = radius
         blur.cornerRadius = radius
+        clipsToBounds = !dither
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        if dither {
+            let layer = shade ?? CALayer()
+            if shade == nil, let root = self.layer { root.insertSublayer(layer, at: 0); shade = layer }
+            layer.isHidden = false
+            layer.frame = bounds
+            DitherPill.shadow(layer, path: layer.bounds, radius: radius, dark: effectiveAppearance.isDark)
+            layer.mask = DitherPill.outsideMask(layer.bounds, radius: radius, existing: layer.mask)
+        } else {
+            shade?.isHidden = true
+        }
         tint.frame = surface.bounds
         // The shade sits just above the overlap line (the bottom edge when floating), darkest at the seam.
         seam.frame = CGRect(x: 0, y: h - (floating ? 0 : Self.overlap) - 10 - top, width: w, height: 10)

@@ -12,6 +12,8 @@ public final class DitherChipView: ControlView {
     private(set) var icon: NSView
     private let label = LabelView()
     private let chevron = IconView(name: .chevronDown, size: 12)
+    /// Redesign's floating pill under the chip, so it never reads as part of the composer.
+    private let pill = DitherPillSurface()
     private let fill = CALayer()
     private let dot = CALayer()
     var text = "" {
@@ -36,6 +38,8 @@ public final class DitherChipView: ControlView {
         for l in [fill, dot] { l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()] }
         fill.cornerRadius = DitherChrome.controlRadius
         dot.cornerRadius = 3
+        layer?.masksToBounds = false
+        addSubview(pill)
         layer?.addSublayer(fill)
         layer?.addSublayer(dot)
         label.font = Self.font
@@ -78,6 +82,7 @@ public final class DitherChipView: ControlView {
     public override func layout() {
         super.layout()
         let midY = bounds.height / 2
+        pill.frame = bounds
         icon.frame = NSRect(x: 6, y: midY - 7, width: 14, height: 14)
         label.frame = NSRect(x: 24, y: midY - 8, width: textWidth, height: 16)
         var x = label.frame.maxX
