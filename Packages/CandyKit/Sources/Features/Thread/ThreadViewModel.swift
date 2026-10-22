@@ -20,8 +20,10 @@ struct TimelineRowUI: Hashable {
     /// A secret request's answer in flight, and the error of the last one.
     var secretSubmitting = false
     var secretError: String?
-    /// The height an HTML render or MCP App reported for itself, in points.
+    /// The height an MCP App reported for itself, in points.
     var webContentHeight: Double?
+    /// The heights an HTML render reported for itself, by width.
+    var htmlHeights = HtmlRenderHeights()
     /// An MCP App asked to be closed; the row shows "Show app".
     var appClosed = false
     var subagentRecords: [JSONValue] = []
@@ -139,6 +141,14 @@ public final class ThreadViewModel {
     }
     private var webContentHeights: [String: Double] = [:]
     private var closedApps: Set<String> = []
+    /// By attachment id, so the height outlives the row view and its web view.
+    private var htmlHeights: [String: HtmlRenderHeights] = [:]
+
+    /// An HTML render reported its height at a frame width; the row re-measures when it changed.
+    func setHtmlRenderHeight(_ rowId: String, attachmentId: String, width: Double, _ height: Double) {
+        guard htmlHeights[attachmentId, default: .init()].set(height, width: width) else { return }
+        refreshRow(rowId)
+    }
 
     /// A framed page or app reported its height; the row re-measures when it changed.
     func setWebContentHeight(_ rowId: String, _ height: Double) {
@@ -431,7 +441,7 @@ public final class ThreadViewModel {
         }
         OpenTiming.measure("timeline apply", "\(items.count) rows") { onChange?(change) }
     }
-    private func item(_ row: TimelineRow) -> TimelineItem {
+    func item(_ row: TimelineRow) -> TimelineItem {
         var ui = TimelineRowUI()
         switch row.kind {
         case .work(let entries, _, _):
@@ -461,8 +471,8 @@ public final class ThreadViewModel {
         case .event(let p, let group, _) where p.item.type == .subagent:
             let ids = Set((group ?? [p]).compactMap { $0.string("subagentId") })
             ui.subagentRecords = projection?.subagents.filter { ids.contains($0["id"]?.stringValue ?? "") } ?? []
-        case .htmlRender:
-            ui.webContentHeight = webContentHeights[row.id]
+        case .htmlRender(let page):
+            ui.htmlHeights = htmlHeights[page.attachmentId] ?? .init()
         case .mcpApp:
             ui.webContentHeight = webContentHeights[row.id]
             ui.appClosed = closedApps.contains(row.id)

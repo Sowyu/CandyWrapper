@@ -6,15 +6,21 @@ import T3Store
 /// `HtmlRenderTimelineRow` (MessagesTimeline.tsx:2957-2971, HtmlRenderFrame.tsx): the agent's page in `px-1`, on the
 /// thread's own background, at the server's measured height for this width until the page reports its own.
 /// Loading and failure hold the same box. "Open full screen" shows on hover (T3 3105 aba3a6ddc). 8pt under it (`pb-2`).
+///
+/// Scrolling never reloads the page. Off the viewport the row hides its web view and keeps it; a recycled row parks
+/// it in `TimelineContext` for the next row that shows the same render. The page goes when the timeline hides or
+/// switches thread, or when `ThreadWebFrameBudget` needs the slot.
 final class HtmlRenderRowView: TimelineRowView {
-    private let frameView = ThreadWebFrameView()
+    private(set) var frameView = ThreadWebFrameView()
     private let failed = LabelView("", font: TL.font(12))
     private let open = ButtonView(nil, icon: .maximize2, variant: .glass, size: .iconXs)
     private var reference: HtmlRenderReference?
     private(set) var loading: Task<Void, Never>?
-    /// The timeline's viewport overlaps the row. Off it, even inside overscan, the row holds no web view.
+    /// The timeline's viewport overlaps the row. Off it, even inside overscan, the web view is hidden and nothing loads.
     private var contentVisible = true
-    private var wantsContent: Bool { contentVisible && window != nil && !isHiddenOrHasHiddenAncestor }
+    /// The row is in a shown timeline. Out of one, it holds no page.
+    private var onScreen: Bool { window != nil && !isHiddenOrHasHiddenAncestor }
+    private var wantsContent: Bool { contentVisible && onScreen }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -32,12 +38,30 @@ final class HtmlRenderRowView: TimelineRowView {
         frameView.onMessage = { [weak self] in self?.received($0) }
     }
 
+    /// Puts `page` in the row in place of the current frame view.
+    private func install(_ page: ThreadWebFrameView) {
+        frameView.removeFromSuperview()
+        frameView.onMessage = nil
+        page.onMessage = { [weak self] in self?.received($0) }
+        page.onEvicted = nil
+        page.isHidden = !contentVisible
+        addSubview(page, positioned: .below, relativeTo: failed)
+        frameView = page
+        needsLayout = true
+    }
+
     override func configure(_ item: TimelineItem) {
         super.configure(item)
         guard case .htmlRender(let ref) = item.row.kind else { return }
         if ref.attachmentId != reference?.attachmentId {
             frameView.release()
             failed.isHidden = true
+            if let page = context.takePage(ref.attachmentId) {
+                install(page)
+                ThreadWebFrameBudget.touch(page)
+                let dark = effectiveAppearance.isDark
+                if page.dark != dark { page.dark = dark; page.post(HtmlRenderTheme(dark: dark).message) }
+            }
         }
         reference = ref
         failed.text = "Unable to load \(ref.title)"
@@ -80,14 +104,15 @@ final class HtmlRenderRowView: TimelineRowView {
     override func viewDidHide() { super.viewDidHide(); syncContent() }
     override func viewDidUnhide() { super.viewDidUnhide(); syncContent() }
 
-    /// Off screen the page and any pending load go; back on screen the page loads again through `webAssetURL`, as
-    /// a kept signed URL may have expired. The row's height comes from the model's `webContentHeight`, so releasing
-    /// the page doesn't move the rows around it.
+    /// Off the viewport the page stays loaded but hidden, so WebKit stops drawing it, and a pending load stops.
+    /// Out of a shown timeline the page goes. A page loaded later asks `webAssetURL` again, as a kept signed URL
+    /// may have expired. The height comes from the model's `htmlHeights`, so none of this moves the rows around it.
     private func syncContent() {
+        frameView.isHidden = !contentVisible
         if !wantsContent {
             loading?.cancel()
             loading = nil
-            frameView.release()
+            if !onScreen { frameView.release() }
         } else { load() }
     }
 
@@ -95,20 +120,30 @@ final class HtmlRenderRowView: TimelineRowView {
         super.prepareForReuse()
         loading?.cancel()
         loading = nil
-        frameView.release()
+        if frameView.isLive, let id = reference?.attachmentId {
+            let page = frameView
+            install(ThreadWebFrameView())
+            context.park(page, for: id)
+        } else { frameView.release() }
         reference = nil
         contentVisible = true
+        frameView.isHidden = false
     }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         failed.color = TL.c(\.mutedForeground)
-        if frameView.isLive { frameView.post(HtmlRenderTheme(dark: effectiveAppearance.isDark).message) }
+        if frameView.isLive {
+            frameView.dark = effectiveAppearance.isDark
+            frameView.post(HtmlRenderTheme(dark: frameView.dark).message)
+        }
     }
 
     private func received(_ data: JSONValue) {
-        guard let item else { return }
-        if let h = HtmlRenderTheme.contentHeight(data) { context.model?.setWebContentHeight(item.id, h) }
+        guard let item, let ref = reference else { return }
+        if let h = HtmlRenderTheme.contentHeight(data) {
+            context.model?.setHtmlRenderHeight(item.id, attachmentId: ref.attachmentId, width: Double(frameView.frame.width), h)
+        }
         Self.handle(data, frame: frameView, model: context.model)
     }
 
@@ -164,7 +199,8 @@ final class HtmlRenderRowView: TimelineRowView {
 
     private func frameHeight(_ width: CGFloat) -> CGFloat {
         guard let ref = reference ?? item.flatMap({ if case .htmlRender(let r) = $0.row.kind { r } else { nil } }) else { return HtmlRenderReference.minHeight }
-        return ref.frameHeight(width: Double(max(0, width - 8)), contentHeight: item?.ui.webContentHeight)
+        let box = Double(max(0, width - 8))
+        return ref.frameHeight(width: box, contentHeight: item?.ui.htmlHeights.height(width: box))
     }
 
     override func height(forWidth width: CGFloat) -> CGFloat { frameHeight(width) + 8 }
