@@ -16,14 +16,20 @@ struct MarkdownThreadLinkTests {
     }
 
     @Test func linksFindWrittenAndDecodedIds() {
-        #expect(MarkdownContextChips.links(in: "no links here", thread: lookup) == nil)
-        let found = MarkdownContextChips.links(in: "See [x](t3-thread://v1/t1) and [y](t3-thread://v1/a%20b) and [z](t3-thread://v1/gone)", thread: lookup)
+        #expect(MarkdownContextChips.links(in: MarkdownDocument(parsing: "no links here"), thread: lookup) == nil)
+        let found = MarkdownContextChips.links(in: MarkdownDocument(parsing: "See [x](t3-thread://v1/t1) and [y](t3-thread://v1/a%20b) and [z](t3-thread://v1/gone)"), thread: lookup)
         #expect(found?.threads.keys.sorted() == ["a b", "t1"])
+        // A link with a title or in reference style resolves from its parsed destination, also inside lists and quotes.
+        let titled = "- [Review](t3-thread://v1/t1 \"Open review\")\n\n> [ref][r]\n\n[r]: t3-thread://v1/a%20b"
+        let resolved = MarkdownContextChips.links(in: MarkdownDocument(parsing: titled), thread: lookup)
+        #expect(resolved?.threads.keys.sorted() == ["a b", "t1"])
+        let chips = MarkdownLayout(document: MarkdownDocument(parsing: titled), width: 680, contexts: resolved).contextChips
+        #expect(chips.map(\.look.label) == ["Fix login", "Spaced id"] && chips.allSatisfy { $0.tooltip == "Open thread" })
     }
 
     @Test func linkDrawsAsChip() {
         let text = "See [old title](t3-thread://v1/t1), [y](t3-thread://v1/a%20b), [gone](t3-thread://v1/gone) and `[c](t3-thread://v1/t1)`."
-        let contexts = MarkdownContextChips.links(in: text, thread: lookup)
+        let contexts = MarkdownContextChips.links(in: MarkdownDocument(parsing: text), thread: lookup)
         let chips = MarkdownLayout(document: MarkdownDocument(parsing: text), width: 680, contexts: contexts).contextChips
         #expect(chips.map(\.look.label) == ["Fix login", "Spaced id", "gone"])
         guard chips.count == 3 else { return }

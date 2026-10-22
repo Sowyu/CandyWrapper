@@ -24,10 +24,10 @@ public struct MarkdownContextChips: Equatable {
     }
 
     /// The message's records by context id and its attachments by id; `thread` looks up live threads
-    /// by local id, nil once a thread is gone. `text` adds the threads its `t3-thread://` links name.
-    public static func message(context: JSONValue?, attachments: [JSONValue], text: String = "",
+    /// by local id, nil once a thread is gone. `document` adds the threads its `t3-thread://` links name.
+    public static func message(context: JSONValue?, attachments: [JSONValue], document: MarkdownDocument = MarkdownDocument(blocks: []),
                                thread: (String) -> LinkedThread?) -> MarkdownContextChips {
-        var out = links(in: text, thread: thread) ?? MarkdownContextChips()
+        var out = links(in: document, thread: thread) ?? MarkdownContextChips()
         if case .array(let records)? = context?["records"] {
             for record in records {
                 guard let id = record["contextId"]?.stringValue else { continue }
@@ -61,17 +61,32 @@ public struct MarkdownContextChips: Equatable {
         return decoded
     }
 
-    /// The threads a reply's `[title](t3-thread://v1/<id>)` links name, written and percent-decoded,
-    /// or nil when it has none (`hasThreadLinks`, threadLinks.ts:60-62), so plain replies carry no chips.
-    public static func links(in text: String, thread: (String) -> LinkedThread?) -> MarkdownContextChips? {
-        guard text.contains("](\(threadLinkPrefix)") else { return nil }
-        var out = MarkdownContextChips()
-        for match in text.matches(of: /\]\(t3-thread:\/\/v1\/([^\s)]+)\)/) {
-            let written = String(match.1)
-            for id in [written, percentDecoded(written)].compactMap({ $0 }) where out.threads[id] == nil {
-                if let live = thread(id) { out.threads[id] = live }
+    /// The threads a reply's `t3-thread://v1/<id>` links name, written and percent-decoded, or nil when it has
+    /// none (`hasThreadLinks`, threadLinks.ts:60-62), so plain replies carry no chips. It reads the parsed links,
+    /// as T3 dispatches on the parsed href (ChatMarkdown.tsx:1067), so titled and reference-style links resolve too.
+    public static func links(in document: MarkdownDocument, thread: (String) -> LinkedThread?) -> MarkdownContextChips? {
+        var out: MarkdownContextChips?
+        func visit(_ runs: [InlineRun]) {
+            for run in runs {
+                guard let url = run.link, let written = threadLinkId(url.absoluteString) else { continue }
+                if out == nil { out = MarkdownContextChips() }
+                for id in [written, percentDecoded(written)].compactMap({ $0 }) where out?.threads[id] == nil {
+                    if let live = thread(id) { out?.threads[id] = live }
+                }
             }
         }
+        func visit(_ blocks: [MarkdownBlock]) {
+            for block in blocks {
+                switch block {
+                case .paragraph(let r), .heading(_, let r): visit(r)
+                case .list(let list): list.items.forEach { visit($0.blocks) }
+                case .blockquote(let b), .alert(_, let b): visit(b)
+                case .table(let t): ([t.header] + t.rows).forEach { $0.forEach(visit) }
+                case .code, .rule, .image: break
+                }
+            }
+        }
+        visit(document.blocks)
         return out
     }
 
