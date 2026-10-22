@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import os
 import Security
 import T3Protocol
 
@@ -397,9 +398,10 @@ public enum LocalServerLauncher {
         return pid
     }
 
-    /// Runs a short CLI command to completion and returns its stdout. The deadline starts at spawn
-    /// and stdout drains alongside, so a child that stalls with stdout open is stopped, as it is
-    /// when the caller cancels. Only the child spawned here is ever signalled.
+    /// Runs a short CLI command to completion and returns its stdout. One deadline, starting at
+    /// spawn, covers both the child's exit and the end of stdout, so a child that stalls, or a
+    /// descendant that keeps stdout open after the child exits, can't hold the caller. Caller
+    /// cancellation ends both the same way. Only the child spawned here is ever signalled.
     static func run(executable: String, arguments: [String], environment: [String: String],
                     timeout: Duration = .seconds(30)) async throws -> Data {
         var fds: [Int32] = [-1, -1]
@@ -415,20 +417,22 @@ public enum LocalServerLauncher {
         close(fds[1])
         let watcher = ChildExitWatcher(pid: pid)
         let identity = ProcessIdentity.of(pid)
-        let reader = FileHandle(fileDescriptor: fds[0], closeOnDealloc: true)
-        let output = Task.detached { reader.readDataToEndOfFile() }
-        let exited = await withTaskCancellationHandler {
-            await watcher.waitForExit(timeout: timeout)
+        let drain = PipeDrain(fd: fds[0])
+        let deadline = Task {
+            do { try await Task.sleep(for: timeout); drain.stop() } catch {}
+        }
+        defer { deadline.cancel(); drain.stop() }
+        let output: Data? = await withTaskCancellationHandler {
+            guard await watcher.waitForExit(timeout: timeout) else { return nil }
+            return await drain.wait()
         } onCancel: {
+            drain.stop()
             Task { await stopChild(identity, watcher: watcher) }
         }
-        if !exited || Task.isCancelled {
-            await stopChild(identity, watcher: watcher)
-            // The read ends once the pipe closes. It is not awaited, in case something else holds stdout.
-            if Task.isCancelled { throw CancellationError() }
-            throw LocalServerLaunchError.commandTimedOut(arguments.dropFirst().joined(separator: " "))
-        }
-        return await output.value
+        if let output, !Task.isCancelled { return output }
+        await stopChild(identity, watcher: watcher)
+        if Task.isCancelled { throw CancellationError() }
+        throw LocalServerLaunchError.commandTimedOut(arguments.dropFirst().joined(separator: " "))
     }
 
     /// SIGTERM, then SIGKILL after a second, and wait for the reap.
@@ -438,5 +442,75 @@ public enum LocalServerLauncher {
         if await watcher.waitForExit(timeout: .seconds(1)) { return }
         identity.signal(SIGKILL)
         _ = await watcher.waitForExit(timeout: .seconds(2))
+    }
+}
+
+/// Reads a pipe to EOF on a dispatch source, with the fd nonblocking, so no thread ever blocks on
+/// it. `stop()` ends the drain at once and closes the fd, even while a descendant still holds the
+/// write end.
+final class PipeDrain: Sendable {
+    private struct State {
+        var data = Data()
+        /// Nil while draining. True after EOF, false after `stop()`.
+        var finished: Bool?
+        var waiter: CheckedContinuation<Data?, Never>?
+    }
+    private let state = OSAllocatedUnfairLock(initialState: State())
+    private let source: DispatchSourceRead
+    private let fd: Int32
+
+    init(fd: Int32) {
+        self.fd = fd
+        _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
+        source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: .global(qos: .utility))
+        source.setEventHandler { [weak self] in self?.read() }
+        // Dispatch runs this after any running event handler returns, so no read races the close.
+        source.setCancelHandler { close(fd) }
+        source.resume()
+    }
+
+    deinit { source.cancel() }
+
+    /// The whole output after EOF, or nil when `stop()` came first.
+    func wait() async -> Data? {
+        await withCheckedContinuation { continuation in
+            let result: Data?? = state.withLock { s in
+                guard let finished = s.finished else { s.waiter = continuation; return nil }
+                return .some(finished ? s.data : nil)
+            }
+            if let result { continuation.resume(returning: result) }
+        }
+    }
+
+    func stop() { finish(eof: false) }
+
+    private func read() {
+        var buffer = [UInt8](repeating: 0, count: 65_536)
+        while true {
+            let n = Darwin.read(fd, &buffer, buffer.count)
+            if n > 0 {
+                let chunk = Data(buffer[0..<n])
+                state.withLock { $0.data.append(chunk) }
+            } else if n < 0 && errno == EINTR {
+                continue
+            } else if n < 0 && errno == EAGAIN {
+                return
+            } else {
+                finish(eof: true)
+                return
+            }
+        }
+    }
+
+    private func finish(eof: Bool) {
+        let finished: (waiter: CheckedContinuation<Data?, Never>?, result: Data?)? = state.withLock { s in
+            guard s.finished == nil else { return nil }
+            s.finished = eof
+            defer { s.waiter = nil }
+            return (s.waiter, eof ? s.data : nil)
+        }
+        guard let finished else { return }
+        source.cancel()
+        finished.waiter?.resume(returning: finished.result)
     }
 }
