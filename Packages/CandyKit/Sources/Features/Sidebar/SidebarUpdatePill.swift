@@ -161,9 +161,9 @@ public final class SidebarUpdatePillView: ControlView {
         let fg = Themed.color(\.contrastSidebarForeground, sidebar: true)
         var color = Themed.color(\.sidebarIconColor, sidebar: true)
         if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
-            // Dither: one card with the account row beside it, the row's corner and fills (the user, 2026-10-22).
-            box.radius = DitherChrome.controlRadius
-            box.fill = Themed.color(enabled && (state.hovered || state.active) ? \.sidebarRowActive : \.sidebarRowHover, sidebar: true)
+            // Dither: a quiet control inside the account row, filled only under the pointer (the user, 2026-10-22).
+            box.radius = DitherChrome.controlRadius - 2
+            if enabled, state.hovered || state.active { box.fill = Themed.color(\.sidebarRowActive, sidebar: true) }
             if showUpdateIconState || enabled && state.hovered { color = fg }
         } else if showUpdateIconState {
             box.fill = Themed.color(\.sidebarControlSurface, sidebar: true)
