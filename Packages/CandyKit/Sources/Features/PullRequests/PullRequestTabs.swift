@@ -149,6 +149,7 @@ public final class PullRequestSummaryView: DSView {
         }
         for s in [descriptionSection, checks, comments] { s.onToggle = { [weak self] in self?.stack.reload() } }
         checkRows.onOpenURL = { [weak self] url in self?.onOpenURL?(url) }
+        commentList.onOpenURL = { [weak self] url in self?.onOpenURL?(url) }
         stack.document.items = [meta, descriptionSection, checks, comments]
         stack.document.insets = NSEdgeInsets(top: 0, left: 0, bottom: 56, right: 0)
     }
@@ -434,14 +435,16 @@ final class ChecksListItem: DSView, StackItem {
     }
 }
 
-/// The Comments section: the truncation notice, "No comments yet.", or the cards.
-// ponytail: every comment renders at once; T3 pages them by 20. Add the paging when a long review is
+/// The Comments section: the truncation notice, "No comments yet.", or the conversations. A review
+/// thread shows its finding with the replies under it (3473 PullRequestSummaryTab.tsx:623-659, 70a869d262).
+// ponytail: every conversation renders at once; T3 pages them by 20. Add the paging when a long review is
 // slow to open
 final class CommentsItem: DSView, StackItem {
+    private var rows: [StackItem] = []
     private var cards: [CommentCard] = []
     private var detail: PullRequestDetail?
-    /// The comments the filter lets through.
-    private var comments: [PullRequestComment] = []
+    /// The conversations the filter lets through.
+    private var items: [PullRequestDetailLogic.ConversationItem] = []
     /// Collapsed cards the reader opened.
     private var openIds: Set<String> = []
     private var nowMs: Int64 = 0
@@ -449,6 +452,7 @@ final class CommentsItem: DSView, StackItem {
     var saving = false { didSet { cards.forEach { $0.editor?.saving = saving } } }
     var onSave: ((PullRequestComment, String) -> Void)?
     var onReact: ((String, String, Bool, PullRequestReactionBarView) -> Void)?
+    var onOpenURL: ((String) -> Void)?
     var onResize: (() -> Void)?
     private let note = TextBlockView()
     var newestFirst = true { didSet { needsLayout = true } }
@@ -467,58 +471,78 @@ final class CommentsItem: DSView, StackItem {
         refilter(d, filter: filter)
     }
 
-    /// The filter changed, or the detail did: rebuild the cards from the comments it lets through.
+    /// The filter changed, or the detail did: rebuild the cards from the conversations it lets through.
     func refilter(_ d: PullRequestDetail, filter: PullRequestDetailLogic.CommentFilter) {
         if detail?.url != d.url { openIds = [] }
         detail = d
         let (shown, hidden) = PullRequestDetailLogic.filterComments(d, filter)
-        comments = shown
-        if editingId != nil, !shown.contains(where: { $0.id == editingId }) { editingId = nil }
+        items = shown
+        if editingId != nil, !shown.contains(where: { $0.comments.contains { $0.id == editingId } }) { editingId = nil }
         rebuildCards()
-        note.text = state.pending ? "Loading comments…" : state.error ?? (d.comments.isEmpty ? "No comments yet."
+        note.text = state.pending ? "Loading comments…" : state.error ?? (d.comments.isEmpty && d.reviewThreads.isEmpty ? "No comments yet."
             : shown.isEmpty ? PullRequestDetailLogic.allCommentsHiddenNote(hidden) : "")
         needsLayout = true
     }
 
-    private func rebuildCards() {
-        cards.forEach { $0.removeFromSuperview() }
-        guard let d = detail else { cards = []; return }
-        cards = state.pending || state.error != nil ? [] : comments.map { c in
-            let card = CommentCard(c, nowMs: nowMs, cwd: d.workspaceRoot,
-                                   canEdit: PullRequestWriteLogic.canEditComment(d, author: c.author?.login, kind: c.kind, hostAnswer: c.canEdit),
-                                   canReact: d.capabilities.reactions == true, editing: editingId == c.id,
-                                   collapsed: PullRequestDetailLogic.collapsed(c, in: d), open: openIds.contains(c.id))
-            // A rebuilt list keeps the cards the reader opened (T3 keys them by detail and comment).
-            card.onResize = { [weak self, weak card] in
-                guard let self, let card else { return }
-                if card.isOpen { self.openIds.insert(c.id) } else { self.openIds.remove(c.id) }
-                self.onResize?()
-            }
-            card.onEdit = { [weak self] in self?.editingId = c.id; self?.onResize?() }
-            card.onCancel = { [weak self] in self?.editingId = nil; self?.onResize?() }
-            card.onSave = { [weak self] body in self?.onSave?(c, body) }
-            card.reactionBar.onToggle = { [weak self, weak card] content, reacted in
-                guard let self, let card else { return }
-                self.onReact?(c.id, content, reacted, card.reactionBar)
-            }
-            card.editor?.saving = saving
-            card.editor?.onResize = { [weak self] in self?.onResize?() }
-            addSubview(card)
-            return card
+    private func card(_ c: PullRequestComment, _ d: PullRequestDetail, collapsed: PullRequestDetailLogic.Collapsed? = nil, reply: Bool = false,
+                      replyCount: Int = 0, replies: PullRequestReplyList? = nil, more: PullRequestMoreRepliesLine? = nil) -> CommentCard {
+        let card = CommentCard(c, nowMs: nowMs, cwd: d.workspaceRoot,
+                               canEdit: PullRequestWriteLogic.canEditComment(d, author: c.author?.login, kind: c.kind, hostAnswer: c.canEdit),
+                               canReact: d.capabilities.reactions == true, editing: editingId == c.id,
+                               collapsed: collapsed, open: openIds.contains(c.id), reply: reply,
+                               replyCount: replyCount, replies: replies, moreReplies: more)
+        // A rebuilt list keeps the cards the reader opened (T3 keys them by detail and comment).
+        card.onResize = { [weak self, weak card] in
+            guard let self, let card else { return }
+            if card.isOpen { self.openIds.insert(c.id) } else { self.openIds.remove(c.id) }
+            self.onResize?()
         }
+        card.onEdit = { [weak self] in self?.editingId = c.id; self?.onResize?() }
+        card.onCancel = { [weak self] in self?.editingId = nil; self?.onResize?() }
+        card.onSave = { [weak self] body in self?.onSave?(c, body) }
+        card.reactionBar.onToggle = { [weak self, weak card] content, reacted in
+            guard let self, let card else { return }
+            self.onReact?(c.id, content, reacted, card.reactionBar)
+        }
+        card.editor?.saving = saving
+        card.editor?.onResize = { [weak self] in self?.onResize?() }
+        cards.append(card)
+        return card
+    }
+
+    private func rebuildCards() {
+        rows.forEach { $0.removeFromSuperview() }
+        rows = []
+        cards = []
+        guard let d = detail, !state.pending, state.error == nil else { return }
+        rows = items.map { item -> StackItem in
+            guard case .thread(let root, let replies, let thread, let more) = item else {
+                return card(item.root, d, collapsed: PullRequestDetailLogic.collapsed(item.root, thread: nil))
+            }
+            // `ml-4 space-y-2 border-l-2 border-border/60 pl-3`.
+            let list = replies.isEmpty ? nil : PullRequestReplyList(replies.map { card($0, d, reply: true) }, indent: 16, rule: 2, spacing: 8)
+            let line = more.hasMoreReplies ? PullRequestMoreRepliesLine(more) : nil
+            line?.onOpenURL = { [weak self] url in self?.onOpenURL?(url) }
+            if let collapsed = PullRequestDetailLogic.collapsed(root, thread: thread) {
+                return card(root, d, collapsed: collapsed, replyCount: replies.count + more.moreReplies, replies: list, more: line)
+            }
+            // `space-y-2`: the finding, its replies, then what the host holds back.
+            return PullRequestConversationStack([card(root, d)] + [list, line].compactMap { $0 }, spacing: 8)
+        }
+        rows.forEach(addSubview)
         needsLayout = true
     }
 
-    private var ordered: [CommentCard] { newestFirst ? cards.reversed() : cards }
+    private var ordered: [StackItem] { newestFirst ? rows.reversed() : rows }
 
     func height(forWidth width: CGFloat) -> CGFloat {
-        if cards.isEmpty { return 8 + note.height(forWidth: width) + 8 }
-        return ordered.map { $0.height(forWidth: width) }.reduce(0, +) + CGFloat(cards.count - 1) * 12
+        if rows.isEmpty { return 8 + note.height(forWidth: width) + 8 }
+        return ordered.map { $0.height(forWidth: width) }.reduce(0, +) + CGFloat(rows.count - 1) * 12
     }
 
     override func layout() {
         super.layout()
-        note.isHidden = !cards.isEmpty
+        note.isHidden = !rows.isEmpty
         note.frame = NSRect(x: 0, y: 8, width: bounds.width, height: note.height(forWidth: bounds.width))
         var y: CGFloat = 0
         for c in ordered {
@@ -531,9 +555,111 @@ final class CommentsItem: DSView, StackItem {
     override func updateLayer() { note.color = Themed.color(\.mutedForeground) }
 }
 
+/// Views stacked top to bottom with a gap (`space-y-*`).
+final class PullRequestConversationStack: DSView, StackItem {
+    private let rows: [StackItem]
+    private let spacing: CGFloat
+    init(_ rows: [StackItem], spacing: CGFloat) {
+        self.rows = rows
+        self.spacing = spacing
+        super.init(frame: .zero)
+        rows.forEach(addSubview)
+    }
+    func height(forWidth width: CGFloat) -> CGFloat {
+        rows.map { $0.height(forWidth: width) }.reduce(0, +) + CGFloat(max(0, rows.count - 1)) * spacing
+    }
+    override func layout() {
+        super.layout()
+        var y: CGFloat = 0
+        for r in rows {
+            let h = r.height(forWidth: bounds.width)
+            r.frame = NSRect(x: 0, y: y, width: bounds.width, height: h)
+            y += h + spacing
+        }
+    }
+}
+
+/// A review thread's replies behind a rule (`ml-* border-l border-border/60 pl-3 space-y-*`).
+final class PullRequestReplyList: DSView, StackItem {
+    private let cards: [CommentCard]
+    private let indent: CGFloat
+    private let ruleWidth: CGFloat
+    private let spacing: CGFloat
+    private let rule = CALayer()
+
+    init(_ cards: [CommentCard], indent: CGFloat, rule ruleWidth: CGFloat, spacing: CGFloat) {
+        self.cards = cards
+        self.indent = indent
+        self.ruleWidth = ruleWidth
+        self.spacing = spacing
+        super.init(frame: .zero)
+        rule.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        layer?.addSublayer(rule)
+        cards.forEach(addSubview)
+    }
+
+    private var inset: CGFloat { indent + ruleWidth + 12 }
+
+    func height(forWidth width: CGFloat) -> CGFloat {
+        cards.map { $0.height(forWidth: width - inset) }.reduce(0, +) + CGFloat(max(0, cards.count - 1)) * spacing
+    }
+
+    override func layout() {
+        super.layout()
+        rule.frame = CGRect(x: indent, y: 0, width: ruleWidth, height: bounds.height)
+        var y: CGFloat = 0
+        for c in cards {
+            let h = c.height(forWidth: bounds.width - inset)
+            c.frame = NSRect(x: inset, y: y, width: bounds.width - inset, height: h)
+            y += h + spacing
+        }
+    }
+
+    override func updateLayer() { rule.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self) }
+}
+
+/// `PullRequestMoreReplies` (3473 PullRequestMoreReplies.tsx): "N more replies" where the host gave a
+/// count, else "More replies", and "View on host" (`hover:text-foreground hover:underline`) where a
+/// remark has a link; `py-1 text-xs text-muted-foreground gap-2`.
+final class PullRequestMoreRepliesLine: DSView, StackItem {
+    private let label = LabelView("", font: DSFont.ui(12))
+    private let link = LinkLabel()
+    private let url: String?
+    var onOpenURL: ((String) -> Void)?
+
+    init(_ more: PullRequestDetailLogic.ReplyAvailability) {
+        url = more.url
+        super.init(frame: .zero)
+        label.text = PullRequestDetailLogic.moreRepliesLabel(more.moreReplies)
+        label.lineHeight = 16
+        addSubview(label)
+        link.text = "View on host"
+        link.font = DSFont.ui(12)
+        link.isHidden = more.url == nil
+        link.setAccessibilityLabel("View on host")
+        link.onClick = { [weak self] in if let self, let url = self.url { self.onOpenURL?(url) } }
+        addSubview(link)
+    }
+
+    func height(forWidth width: CGFloat) -> CGFloat { 24 }
+
+    override func layout() {
+        super.layout()
+        let lw = ceil(label.textWidth) + 1
+        label.frame = NSRect(x: 0, y: 4, width: min(lw, bounds.width), height: 16)
+        link.frame = NSRect(x: lw + 8, y: 4, width: ceil(link.textWidth) + 1, height: 16)
+    }
+
+    override func updateLayer() {
+        label.color = Themed.color(\.mutedForeground)
+        link.color = Themed.color(\.mutedForeground)
+        link.hoverColor = Themed.color(\.foreground)
+    }
+}
+
 /// One comment card (`rounded-lg border border-border/60`): a `bg-muted/25` head with the author,
 /// the time and the verdict, then the body.
-final class CommentCard: DSView, FocusWithinObserver {
+final class CommentCard: DSView, StackItem, FocusWithinObserver {
     let reactionBar = PullRequestReactionBarView()
     /// The pencil fades in while the card (`article.group`) is hovered or holds keyboard focus
     /// (`PullRequestEditButton`, PullRequestEditButton.tsx:17, PullRequestSummaryTab.tsx:215).
@@ -563,10 +689,19 @@ final class CommentCard: DSView, FocusWithinObserver {
     private let location = LabelView("", font: DSFont.mono(12))
     private let outdated = LabelView("Outdated", font: DSFont.ui(12))
     private var summary: CollapsedSummaryLine?
+    /// A finished thread's reply count beside the identity, its replies in the opened panel (`mt-3`)
+    /// and what the host holds back below it (`px-3 pb-3`) (3473 PullRequestSummaryTab.tsx:236-281).
+    private let replyCount = LabelView("", font: DSFont.ui(12))
+    private let replies: PullRequestReplyList?
+    private let moreReplies: PullRequestMoreRepliesLine?
     var onResize: (() -> Void)?
 
+    /// `reply`: a review thread's answer, which names no file (the finding above it does).
     init(_ c: PullRequestComment, nowMs: Int64, cwd: String, canEdit: Bool = false, canReact: Bool = false, editing: Bool = false,
-         collapsed: PullRequestDetailLogic.Collapsed? = nil, open: Bool = false) {
+         collapsed: PullRequestDetailLogic.Collapsed? = nil, open: Bool = false, reply: Bool = false,
+         replyCount count: Int = 0, replies: PullRequestReplyList? = nil, moreReplies: PullRequestMoreRepliesLine? = nil) {
+        self.replies = replies
+        self.moreReplies = moreReplies
         // An empty verdict hides the body, unless this reader may rewrite it (the pencil lives there).
         hasBody = PullRequestDetailLogic.visibleBody(c.body) != nil || canEdit
         self.collapsed = collapsed
@@ -602,7 +737,7 @@ final class CommentCard: DSView, FocusWithinObserver {
         time.text = TimestampFormat.formatRelativeTimeLabel(c.createdAt, nowMs: nowMs)
         if let outcome = PullRequestDetailLogic.reviewOutcome(c.reviewState) {
             state.text = outcome == "approved" ? "Approved" : outcome == "changes-requested" ? "Changes requested" : "Review dismissed"
-        } else if c.kind == "review-comment", let path = c.path {
+        } else if c.kind == "review-comment", !reply, let path = c.path {
             state.text = path
         }
         for l in [login, time, state] { l.lineHeight = 16; addSubview(l) }
@@ -628,6 +763,13 @@ final class CommentCard: DSView, FocusWithinObserver {
             outdated.lineHeight = 16
             outdated.isHidden = !collapsed.outdated
             [location, outdated].forEach(addSubview)
+            if count > 0 {
+                replyCount.text = PullRequestDetailLogic.replyCountLabel(count)
+                replyCount.lineHeight = 16
+                addSubview(replyCount)
+            }
+            replies.map(addSubview)
+            moreReplies.map(addSubview)
             if let visible = PullRequestDetailLogic.visibleBody(c.body) {
                 let line = CollapsedSummaryLine(PullRequestDetailLogic.collapsedSummary(visible))
                 line.onClick = { [weak self] in self?.setOpen(true) }
@@ -657,12 +799,16 @@ final class CommentCard: DSView, FocusWithinObserver {
     /// The words shown in an opened card: none for a bare verdict nobody may rewrite.
     private var collapsedShowsBody: Bool { isOpen && (hasBody || editor != nil) }
 
+    /// What the host holds back, below the panel.
+    private var moreRepliesHeight: CGFloat { moreReplies == nil ? 0 : 24 + 12 }
+
     func height(forWidth w: CGFloat) -> CGFloat {
         if collapsed != nil {
-            guard isOpen else { return collapsedHead + 2 }
+            guard isOpen else { return collapsedHead + moreRepliesHeight + 2 }
             let ew: CGFloat = mayEdit && editor == nil ? 28 : 0
             let words = editor.map { $0.height(forWidth: w - 24) } ?? (collapsedShowsBody ? body.height(forWidth: w - 24 - ew) : 0)
-            return collapsedHead + (collapsedShowsBody ? 8 + words : 0) + 12 + 2
+            let replyBlock = replies.map { 12 + $0.height(forWidth: w - 26) } ?? 0
+            return collapsedHead + (collapsedShowsBody ? 8 + words : 0) + replyBlock + 12 + moreRepliesHeight + 2
         }
         if let editor { return 36 + 24 + editor.height(forWidth: w - 24) + 2 }
         return 36 + (hasBody ? 24 + body.height(forWidth: w - 24 - (editButton.isHidden ? 0 : 28)) : 0) + 2
@@ -700,6 +846,10 @@ final class CommentCard: DSView, FocusWithinObserver {
         login.frame = NSRect(x: x, y: top + 4, width: lw, height: 16); x += lw + 8
         let tw = ceil(time.textWidth) + 1
         time.frame = NSRect(x: x, y: top + 4, width: tw, height: 16); x += tw + 8
+        if !replyCount.text.isEmpty {
+            let cw = ceil(replyCount.textWidth) + 1
+            replyCount.frame = NSRect(x: x, y: top + 4, width: cw, height: 16); x += cw + 8
+        }
         if let toggle {
             let w = ceil(toggle.intrinsicContentSize.width)
             toggle.frame = NSRect(x: x, y: top, width: w, height: 24)
@@ -727,12 +877,19 @@ final class CommentCard: DSView, FocusWithinObserver {
             editButton.frame = NSRect(x: bounds.width - 13 - 24, y: bodyTop - 4, width: 24, height: 24)
         }
         if let editor { editor.frame = NSRect(x: 13, y: bodyTop, width: bounds.width - 26, height: editor.height(forWidth: bounds.width - 26)) }
+        replies?.isHidden = !isOpen
+        if let replies, isOpen {
+            let wordsBottom = editor.map { $0.frame.maxY } ?? (collapsedShowsBody ? body.frame.maxY : 1 + collapsedHead)
+            replies.frame = NSRect(x: 13, y: wordsBottom + 12, width: bounds.width - 26, height: replies.height(forWidth: bounds.width - 26))
+        }
+        moreReplies?.frame = NSRect(x: 13, y: bounds.height - 1 - 12 - 24, width: bounds.width - 26, height: 24)
     }
 
     override func updateLayer() {
         layer?.borderColor = Themed.color(\.border, 0.6).cgColor(in: self)
         chevron.strokeColor = Themed.color(\.mutedForeground)
         location.color = Themed.color(\.mutedForeground)
+        replyCount.color = Themed.color(\.mutedForeground)
         outdated.color = Themed.color(\.mutedForeground)
         layer?.backgroundColor = WindowGlass.paneFill.cgColor(in: self)
         headFill.backgroundColor = Themed.color(\.muted, 0.25).cgColor(in: self)
@@ -778,6 +935,7 @@ public final class PullRequestTimelineView: DSView {
     private let rail = CALayer()
     var newestFirst = true { didSet { rebuild() } }
     var onOpenCommit: ((String) -> Void)?
+    var onOpenURL: ((String) -> Void)?
     private var detail: PullRequestDetail?
     private var pending = true
     private var error: String?
@@ -814,6 +972,11 @@ public final class PullRequestTimelineView: DSView {
             switch row {
             case .comments(let events): return ConversationRow(events, nowMs: nowMs, cwd: d.workspaceRoot)
             case .event(let e):
+                if let thread = e.thread {
+                    let r = ReviewThreadRow(e, thread: thread, nowMs: nowMs, cwd: d.workspaceRoot)
+                    r.onOpenURL = { [weak self] url in self?.onOpenURL?(url) }
+                    return r
+                }
                 if e.kind == .commit {
                     let r = TimelineEventRow(commit: e, nowMs: nowMs)
                     r.onClick = { [weak self] in self?.onOpenCommit?(e.id) }
@@ -859,7 +1022,10 @@ public final class PullRequestTimelineView: DSView {
 final class TimelineMarker: DSView {
     private var icon: IconView?
     private var avatar: PullRequestAvatarView?
+    /// `opacity-45` on the avatar.
+    var muted = false { didSet { avatar?.alphaValue = muted ? 0.45 : 1 } }
     init(actor: PullRequestActor?, fallback: IconName, muted: Bool = false) {
+        self.muted = muted
         super.init(frame: NSRect(x: 0, y: 0, width: 32, height: 32))
         if let actor {
             let a = PullRequestAvatarView()
@@ -1057,6 +1223,158 @@ final class ConversationRow: DSView, StackItem {
         var v = superview
         while let s = v { if let stack = s as? StackScrollView { return stack }; v = s.superview }
         return nil
+    }
+}
+
+/// A review thread's finding on the timeline (`ReviewThreadEvent`, 3473 PullRequestTimelineTab.tsx:373-468,
+/// 70a869d262): a `px-2 py-2 text-2xs` toggle with the file and line, Resolved, Review dismissed and
+/// Outdated, and while closed the author and reply count; open, the finding and its replies behind a
+/// rule (`ml-2 border-l pl-3 space-y-1`). A finished thread starts closed with a muted marker.
+final class ReviewThreadRow: DSView, StackItem {
+    private let marker: TimelineMarker
+    private let head = Head()
+    private let root: CommentCard
+    private let replies: PullRequestReplyList?
+    private let more: PullRequestMoreRepliesLine?
+    private var expanded: Bool
+    var onOpenURL: ((String) -> Void)? { didSet { more?.onOpenURL = onOpenURL } }
+
+    init(_ e: PullRequestDetailLogic.TimelineEvent, thread t: PullRequestDetailLogic.TimelineThread, nowMs: Int64, cwd: String) {
+        let isDismissed = PullRequestDetailLogic.reviewOutcome(e.reviewState) == "dismissed"
+        expanded = !t.isResolved && !isDismissed
+        marker = TimelineMarker(actor: e.actor, fallback: .messageSquare, muted: !expanded)
+        let card = { (e: PullRequestDetailLogic.TimelineEvent) in
+            CommentCard(PullRequestComment(id: e.id, kind: e.kind == .review ? "review" : "review-comment", author: e.actor, body: e.body ?? "",
+                                           createdAt: e.at, url: e.url, path: e.path, reviewState: e.reviewState), nowMs: nowMs, cwd: cwd, reply: true)
+        }
+        root = card(e)
+        replies = t.replies.isEmpty ? nil : PullRequestReplyList(t.replies.map(card), indent: 8, rule: 1, spacing: 4)
+        more = t.more.hasMoreReplies ? PullRequestMoreRepliesLine(t.more) : nil
+        super.init(frame: .zero)
+        let replyCount = t.replies.count + t.more.moreReplies
+        head.set(location: t.line.map { "\(t.path):\($0)" } ?? t.path, resolved: t.isResolved, dismissed: isDismissed, outdated: t.isOutdated,
+                 closedSummary: "· \(e.actor?.login ?? "ghost")" + (replyCount > 0 ? " · \(PullRequestDetailLogic.replyCountLabel(replyCount))" : ""))
+        head.onToggle = { [weak self] in self?.toggle() }
+        [marker, head, root].forEach(addSubview)
+        replies.map(addSubview)
+        more.map(addSubview)
+        sync(motion: .none)
+    }
+
+    private func sync(motion: IconView.RotationMotion = .ease(0.15)) {
+        root.isHidden = !expanded
+        replies?.isHidden = !expanded
+        marker.muted = !expanded
+        head.setExpanded(expanded, motion: motion)
+    }
+
+    func height(forWidth width: CGFloat) -> CGFloat {
+        let w = width - 48
+        let open = expanded ? root.height(forWidth: w) + (replies.map { $0.height(forWidth: w) } ?? 0) : 0
+        return 32 + open + (more == nil ? 0 : 24) + 20
+    }
+
+    override func layout() {
+        super.layout()
+        marker.frame = NSRect(x: 0, y: 24 - 16, width: 32, height: 32)
+        head.frame = NSRect(x: 48, y: 0, width: bounds.width - 48, height: 32)
+        var y: CGFloat = 32
+        if expanded {
+            let w = bounds.width - 48
+            let h = root.height(forWidth: w)
+            root.frame = NSRect(x: 48, y: y, width: w, height: h); y += h
+            if let replies {
+                let rh = replies.height(forWidth: w)
+                replies.frame = NSRect(x: 48, y: y, width: w, height: rh); y += rh
+            }
+        }
+        // `px-2`.
+        more?.frame = NSRect(x: 48 + 8, y: y, width: bounds.width - 48 - 16, height: 24)
+    }
+
+    private func toggle() {
+        // `{expanded ? … : null}`: the finding comes and goes at once, as T3 renders it.
+        expanded.toggle()
+        sync()
+        needsLayout = true
+        var v = superview
+        while let s = v { if let stack = s as? StackScrollView { stack.reload(); break }; v = s.superview }
+    }
+
+    /// The toggle: `flex items-center gap-2 px-2 py-2 text-2xs text-muted-foreground hover:text-foreground`.
+    final class Head: DSView {
+        private let fileIcon = IconView(name: .fileCode2, size: 12)
+        private let location = LabelView("", font: DSFont.mono(11))
+        private let resolvedIcon = IconView(name: .circleCheck, size: 12)
+        private let resolved = LabelView("Resolved", font: DSFont.ui(11, weight: .medium))
+        private let dismissed = LabelView("Review dismissed", font: DSFont.ui(11, weight: .medium))
+        private let outdated = LabelView("Outdated", font: DSFont.ui(11, weight: .medium))
+        private let closedSummary = LabelView("", font: DSFont.ui(11))
+        private let chevron = IconView(name: .chevronDown, size: 14)
+        private var hover: HoverGroup?
+        private var expanded = false
+        var onToggle: (() -> Void)?
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            location.truncates = true
+            for l in [location, resolved, dismissed, outdated, closedSummary] { l.lineHeight = 16 }
+            [fileIcon, location, resolvedIcon, resolved, dismissed, outdated, closedSummary, chevron].forEach(addSubview)
+            hover = HoverGroup(self) { [weak self] _ in self?.redisplay(transitioning: .color) }
+            setAccessibilityRole(.button)
+        }
+
+        func set(location text: String, resolved isResolved: Bool, dismissed isDismissed: Bool, outdated isOutdated: Bool, closedSummary summary: String) {
+            location.text = text
+            resolved.isHidden = !isResolved
+            resolvedIcon.isHidden = !isResolved
+            dismissed.isHidden = !isDismissed
+            outdated.isHidden = !isOutdated
+            closedSummary.text = summary
+            setAccessibilityLabel(text)
+        }
+
+        func setExpanded(_ open: Bool, motion: IconView.RotationMotion) {
+            expanded = open
+            closedSummary.isHidden = open
+            chevron.setRotation(open ? 180 : 0, motion: motion)
+            setAccessibilityExpanded(open)
+            needsLayout = true
+        }
+
+        override func layout() {
+            super.layout()
+            let right = bounds.width - 8
+            chevron.frame = NSRect(x: right - 14, y: 9, width: 14, height: 14)
+            // `gap-2` between parts, `gap-1` inside Resolved.
+            var tail: [(NSView, CGFloat, CGFloat)] = []
+            if !resolved.isHidden { tail += [(resolvedIcon, 12, 8), (resolved, ceil(resolved.textWidth) + 1, 4)] }
+            for l in [dismissed, outdated, closedSummary] where !l.isHidden { tail.append((l, ceil(l.textWidth) + 1, 8)) }
+            let tailWidth = tail.reduce(CGFloat(0)) { $0 + $1.1 + $1.2 }
+            var x: CGFloat = 8
+            fileIcon.frame = NSRect(x: x, y: 10, width: 12, height: 12); x += 12 + 8
+            let lw = min(ceil(location.textWidth) + 1, max(0, right - 14 - 8 - x - tailWidth))
+            location.frame = NSRect(x: x, y: 8, width: lw, height: 16); x += lw
+            for (v, w, gap) in tail {
+                x += gap
+                v.frame = v === resolvedIcon ? NSRect(x: x, y: 10, width: 12, height: 12) : NSRect(x: x, y: 8, width: w, height: 16)
+                x += w
+            }
+        }
+
+        override func updateLayer() {
+            let c = Themed.color(hover?.hovered == true ? \.foreground : \.mutedForeground)
+            fileIcon.strokeColor = c
+            chevron.strokeColor = c
+            [location, dismissed, outdated, closedSummary].forEach { $0.color = c }
+            resolved.color = Themed.color(\.successForeground)
+            resolvedIcon.strokeColor = Themed.color(\.successForeground)
+        }
+
+        override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+        override func mouseDown(with event: NSEvent) {}
+        override func mouseUp(with event: NSEvent) { if bounds.contains(convert(event.locationInWindow, from: nil)) { onToggle?() } }
+        override func accessibilityPerformPress() -> Bool { onToggle?(); return true }
     }
 }
 

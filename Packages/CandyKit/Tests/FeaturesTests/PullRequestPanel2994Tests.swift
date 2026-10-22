@@ -19,7 +19,7 @@ struct PullRequestCommentFilterTests {
         thread.comments = [PullRequestThreadComment(id: "d", author: human, body: "nit", createdAt: "2026-10-11T00:00:03Z")]
         d.reviewThreads = [thread]
         typealias F = PullRequestDetailLogic.CommentFilter
-        let ids = { (f: F) in PullRequestDetailLogic.filterComments(d, f).shown.map(\.id) }
+        let ids = { (f: F) in PullRequestDetailLogic.filterComments(d, f).shown.map(\.root.id) }
         #expect(ids(F()) == ["a"])
         #expect(PullRequestDetailLogic.filterComments(d, F()).hidden == 4)
         #expect(ids(F(bots: true)) == ["a", "b", "c"])
@@ -29,10 +29,10 @@ struct PullRequestCommentFilterTests {
         thread.line = 12
         thread.isOutdated = true
         d.reviewThreads = [thread]
-        #expect(PullRequestDetailLogic.collapsed(d.comments[3], in: d)
+        #expect(PullRequestDetailLogic.collapsed(d.comments[3], thread: thread)
                 == .init(label: "Resolved", location: "a:12", outdated: true))
-        #expect(PullRequestDetailLogic.collapsed(d.comments[4], in: d) == .init(label: "Review dismissed", location: nil, outdated: false))
-        #expect(PullRequestDetailLogic.collapsed(d.comments[0], in: d) == nil)
+        #expect(PullRequestDetailLogic.collapsed(d.comments[4], thread: nil) == .init(label: "Review dismissed", location: nil, outdated: false))
+        #expect(PullRequestDetailLogic.collapsed(d.comments[0], thread: nil) == nil)
         #expect(PullRequestDetailLogic.collapsedSummary("<!-- x -->\n> [!NOTE]\n## Use **this** [link](http://a) and `code`\n- item")
                 == "Use this link and code item")
         #expect(PullRequestDetailLogic.allCommentsHiddenNote(1) == "The only comment is hidden by the filter.")
@@ -51,8 +51,8 @@ struct PullRequestCommentFilterTests {
 struct InlineActionConfirmTests {
     @Test func gallerySampleDecodes() throws {
         let d = try #require(PullRequestsGallery.sample)
-        #expect(d.state == "open" && d.comments.count == 3)
-        #expect(PullRequestDetailLogic.filterComments(d, .init()).shown.map(\.id) == ["IC_2"])
+        #expect(d.state == "open" && d.comments.count == 5)
+        #expect(PullRequestDetailLogic.filterComments(d, .init()).shown.map(\.id) == ["IC_2", "RT_2"])
     }
 
     @Test func armsThenConfirms() async throws {

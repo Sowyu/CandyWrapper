@@ -201,6 +201,14 @@ public enum PullRequestDetailLogic {
     }
 
     /// `groupPullRequestChecks`: attention, running, completed (the checks popover's sections).
+    /// The count trigger's words (3473 PullRequestChecksPopover.tsx:154-196, 618c46478a): the finished
+    /// checks out of all while any is running or awaits action, else how many failed, else nothing.
+    public static func checksCountLabel(_ checks: [PullRequestCheck]) -> String {
+        let incomplete = checks.filter { $0.status == "pending" || $0.status == "action-required" }.count
+        let failed = checks.filter { $0.status == "failure" || $0.status == "cancelled" }.count
+        return incomplete > 0 ? "\(checks.count - incomplete)/\(checks.count)" : failed > 0 ? "\(failed) failed" : ""
+    }
+
     public static func groupChecks(_ checks: [PullRequestCheck]) -> (attention: [PullRequestCheck], running: [PullRequestCheck], completed: [PullRequestCheck]) {
         (checks.filter { ["failure", "cancelled", "action-required"].contains($0.status) },
          checks.filter { $0.status == "pending" },
@@ -242,18 +250,95 @@ public enum PullRequestDetailLogic {
         public func save(_ defaults: UserDefaults = .standard) { defaults.set(["bots": bots, "resolved": resolved], forKey: Self.key) }
     }
 
-    /// The comments the filter lets through, in their order, and how many it holds back. One count:
-    /// a resolved bot comment is both kinds, so per-kind counts would overlap.
-    public static func filterComments(_ d: PullRequestDetail, _ filter: CommentFilter) -> (shown: [PullRequestComment], hidden: Int) {
-        var resolvedIds = Set<String>()
-        for t in d.reviewThreads where t.isResolved { t.comments.forEach { resolvedIds.insert($0.id) } }
-        let shown = d.comments.filter { c in
-            let finished = resolvedIds.contains(c.id) || reviewOutcome(c.reviewState) == "dismissed"
-            let bot = c.author?.isBot == true || c.author?.login.hasSuffix("[bot]") == true
-            return (filter.bots || !bot) && (filter.resolved || !finished)
-        }
-        return (shown, d.comments.count - shown.count)
+    // MARK: Conversations (3473 pullRequestDetail.logic.ts:542-670, 70a869d262)
+
+    /// What a review thread's reply list leaves on the host: the count it says it holds beyond the
+    /// replies read, whether there are more at all, and the first remark's link (`PullRequestReplyAvailability`).
+    public struct ReplyAvailability: Equatable, Sendable {
+        public var moreReplies: Int
+        public var hasMoreReplies: Bool
+        public var url: String?
     }
+
+    /// A loose remark, or a review thread's finding with its replies under it (`PullRequestConversationItem`).
+    public enum ConversationItem: Equatable, Sendable {
+        case comment(PullRequestComment)
+        case thread(root: PullRequestComment, replies: [PullRequestComment], thread: PullRequestReviewThread, more: ReplyAvailability)
+
+        public var id: String {
+            switch self { case .comment(let c): c.id; case .thread(_, _, let t, _): t.id }
+        }
+        public var root: PullRequestComment {
+            switch self { case .comment(let c): c; case .thread(let r, _, _, _): r }
+        }
+        public var thread: PullRequestReviewThread? {
+            if case .thread(_, _, let t, _) = self { return t }
+            return nil
+        }
+        /// `pullRequestConversationItemComments`.
+        public var comments: [PullRequestComment] {
+            switch self { case .comment(let c): [c]; case .thread(let r, let replies, _, _): [r] + replies }
+        }
+    }
+
+    /// `pullRequestConversationItems`: each review thread's remarks gathered under its first one, and
+    /// the thread placed at that remark's time among the loose remarks, which keep their order.
+    public static func conversationItems(_ comments: [PullRequestComment], _ reviewThreads: [PullRequestReviewThread]) -> [ConversationItem] {
+        let byId = Dictionary(comments.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var claimed = Set<String>()
+        var threads: [(at: Double, item: ConversationItem)] = []
+        for t in reviewThreads {
+            // The conversation's copy where it has one; some hosts list a remark only in its thread.
+            let ordered = t.comments.map { c in
+                byId[c.id] ?? PullRequestComment(id: c.id, kind: "review-comment", author: c.author, body: c.body, createdAt: c.createdAt,
+                                                 url: c.url, path: t.path, reviewState: nil, reactions: c.reactions, canEdit: c.canEdit)
+            }.stableSorted { (instant($0.createdAt) ?? 0) < (instant($1.createdAt) ?? 0) }
+            guard let root = ordered.first else { continue }
+            ordered.forEach { claimed.insert($0.id) }
+            let more = max(0, (t.commentCount ?? ordered.count) - ordered.count)
+            threads.append((instant(root.createdAt) ?? 0, .thread(root: root, replies: Array(ordered.dropFirst()), thread: t,
+                                                                  more: ReplyAvailability(moreReplies: more, hasMoreReplies: more > 0 || t.nextCommentsCursor != nil,
+                                                                                          url: ordered.first { $0.url != nil }?.url))))
+        }
+        threads = threads.stableSorted { $0.at < $1.at }
+        var items: [ConversationItem] = []
+        var next = 0
+        for c in comments where !claimed.contains(c.id) {
+            let at = instant(c.createdAt) ?? 0
+            while next < threads.count, threads[next].at < at { items.append(threads[next].item); next += 1 }
+            items.append(.comment(c))
+        }
+        items += threads[next...].map(\.item)
+        return items
+    }
+
+    /// `isPullRequestCommentFinished`: in a resolved thread, or a dismissed verdict.
+    public static func isFinished(_ c: PullRequestComment, thread: PullRequestReviewThread?) -> Bool {
+        thread?.isResolved == true || reviewOutcome(c.reviewState) == "dismissed"
+    }
+
+    /// The conversations the filter lets through, in their order, and how many remarks it holds back.
+    /// A conversation stays when any of its remarks passes, so a person's reply keeps a bot's finding
+    /// in view (`filterPullRequestConversationItems`, PullRequestSummaryTab.tsx:415-427).
+    public static func filterComments(_ d: PullRequestDetail, _ filter: CommentFilter) -> (shown: [ConversationItem], hidden: Int) {
+        let items = conversationItems(d.comments, d.reviewThreads)
+        let shown = items.filter { item in
+            item.comments.contains { c in
+                let bot = c.author?.isBot == true || c.author?.login.hasSuffix("[bot]") == true
+                return (filter.bots || !bot) && (filter.resolved || !isFinished(c, thread: item.thread))
+            }
+        }
+        let count: ([ConversationItem]) -> Int = { $0.reduce(0) { $0 + $1.comments.count } }
+        return (shown, count(items) - count(shown))
+    }
+
+    /// `PullRequestMoreReplies`: "N more replies" where the host gave a count, else "More replies".
+    public static func moreRepliesLabel(_ more: Int) -> String {
+        more > 0 ? "\(more.formatted()) more \(more == 1 ? "reply" : "replies")" : "More replies"
+    }
+
+    /// "1 reply", "3 replies".
+    public static func replyCountLabel(_ n: Int) -> String { "\(n.formatted()) \(n == 1 ? "reply" : "replies")" }
 
     /// The one-line preview of a collapsed remark: comments, callout markers, link targets, list and
     /// heading marks, emphasis and runs of space stripped (2994 PullRequestSummaryTab.tsx:248-255).
@@ -282,8 +367,7 @@ public enum PullRequestDetailLogic {
     }
 
     /// The collapsed card for a resolved or dismissed comment, nil for one still open.
-    public static func collapsed(_ c: PullRequestComment, in d: PullRequestDetail) -> Collapsed? {
-        let thread = d.reviewThreads.first { t in t.comments.contains { $0.id == c.id } }
+    public static func collapsed(_ c: PullRequestComment, thread: PullRequestReviewThread?) -> Collapsed? {
         let resolved = thread?.isResolved == true
         guard resolved || reviewOutcome(c.reviewState) == "dismissed" else { return nil }
         let location = (thread?.path ?? c.path).map { path in path + (thread?.line.map { ":\($0)" } ?? "") }
@@ -364,6 +448,23 @@ public enum PullRequestDetailLogic {
         public var path: String?
         public var reviewState: String?
         public var reactions: [PullRequestReaction]
+        /// A review thread's finding: its replies and where it sits (`PullRequestTimelineThread`).
+        public var thread: TimelineThread?
+    }
+
+    public struct TimelineThread: Equatable, Sendable {
+        public var path: String
+        public var line: Int?
+        public var isResolved: Bool
+        public var isOutdated: Bool
+        public var replies: [TimelineEvent]
+        public var more: ReplyAvailability
+    }
+
+    static func commentEvent(_ c: PullRequestComment) -> TimelineEvent {
+        TimelineEvent(id: c.id, at: c.createdAt, kind: c.kind == "review" ? .review : .comment, title: c.kind == "review" ? "reviewed" : "commented",
+                      body: visibleBody(c.body), markdown: true, url: c.url, actor: c.author, additions: nil, deletions: nil,
+                      path: c.path, reviewState: c.reviewState, reactions: c.reactions ?? [])
     }
 
     public enum TimelineRow: Equatable, Sendable {
@@ -386,10 +487,13 @@ public enum PullRequestDetailLogic {
                           body: c.messageHeadline.isEmpty ? nil : c.messageHeadline, markdown: false, url: nil,
                           actor: c.authors?.first, additions: c.additions, deletions: c.deletions, path: nil, reviewState: nil, reactions: [])
         }
-        events += d.comments.map { c in
-            TimelineEvent(id: c.id, at: c.createdAt, kind: c.kind == "review" ? .review : .comment, title: c.kind == "review" ? "reviewed" : "commented",
-                          body: visibleBody(c.body), markdown: true, url: c.url, actor: c.author, additions: nil, deletions: nil,
-                          path: c.path, reviewState: c.reviewState, reactions: c.reactions ?? [])
+        events += conversationItems(d.comments, d.reviewThreads).map { item in
+            var e = commentEvent(item.root)
+            if case .thread(_, let replies, let t, let more) = item {
+                e.thread = TimelineThread(path: t.path, line: t.line, isResolved: t.isResolved, isOutdated: t.isOutdated,
+                                          replies: replies.map(commentEvent), more: more)
+            }
+            return e
         }
         if let merged = d.mergedAt {
             events.append(TimelineEvent(id: "merged", at: merged, kind: .merged, title: "Pull request merged", body: nil, markdown: false,
@@ -406,7 +510,7 @@ public enum PullRequestDetailLogic {
     public static func groupConversations(_ events: [TimelineEvent]) -> [TimelineRow] {
         var rows: [TimelineRow] = []
         for e in events {
-            if (e.kind == .comment || e.kind == .review) && reviewOutcome(e.reviewState) == nil {
+            if (e.kind == .comment || e.kind == .review) && e.thread == nil && reviewOutcome(e.reviewState) == nil {
                 if case .comments(let prior)? = rows.last { rows[rows.count - 1] = .comments(prior + [e]) } else { rows.append(.comments([e])) }
             } else {
                 rows.append(.event(e))

@@ -335,3 +335,82 @@ public final class CheckStatusGlyph: DSView {
     }
     public override func accessibilityPerformPress() -> Bool { onClick?(self); return onClick != nil }
 }
+
+/// `PullRequestChangeBreakdownStat`'s tooltip (3473 PullRequestChangeBreakdownStat.tsx:60-131, 92a6f6d731,
+/// 962428df10): a `grid-cols-[auto_auto_auto] gap-x-4 gap-y-1 py-0.5 font-mono tabular-nums` of each kind
+/// with lines, its name in `font-sans`, then a `border-t` rule and the Total, on the tooltip surface.
+public final class PullRequestChangeBreakdownTooltipView: DSView, PopupContent {
+    private let surface = TooltipView("")
+    private var cells: [[LabelView]] = []
+    /// A view of its own so it stays above the surface's layers.
+    private let rule = NSView()
+    public var frostRadius: CGFloat { 8 }
+
+    public init(_ breakdown: PullRequestChangeBreakdown, additions: Int, deletions: Int) {
+        super.init(frame: .zero)
+        addSubview(surface)
+        let f = NumberFormatter(); f.numberStyle = .decimal
+        let count = { (n: Int) in f.string(from: NSNumber(value: n)) ?? "\(n)" }
+        let rows = breakdown.rows.map { ($0.label, $0.count.additions, $0.count.deletions) } + [("Total", additions, deletions)]
+        cells = rows.map { label, a, d in
+            let name = LabelView(label, font: DSFont.ui(12))
+            let plus = LabelView("+" + count(a), font: DSFont.mono(12))
+            let minus = LabelView("-" + count(d), font: DSFont.mono(12))
+            plus.alignment = .right
+            minus.alignment = .right
+            for l in [name, plus, minus] { l.lineHeight = 16.5; addSubview(l) }
+            return [name, plus, minus]
+        }
+        rule.wantsLayer = true
+        addSubview(rule)
+    }
+
+    private var columns: [CGFloat] {
+        (0..<3).map { i in cells.map { ceil($0[i].textWidth) + 1 }.max() ?? 0 }
+    }
+
+    /// Rows of 16.5pt with `gap-y-1`, and the 1pt rule as a row of its own before the Total.
+    public var popupSize: CGSize {
+        let c = columns
+        let rowsHeight = CGFloat(cells.count) * 16.5 + 1 + CGFloat(cells.count) * 4
+        return CGSize(width: c.reduce(0, +) + 32 + 18, height: rowsHeight + 4 + 10)
+    }
+
+    public override var intrinsicContentSize: NSSize { popupSize }
+
+    public override func layout() {
+        super.layout()
+        surface.frame = bounds
+        let c = columns
+        var y: CGFloat = 5 + 2
+        for (i, row) in cells.enumerated() {
+            if i == cells.count - 1 {
+                rule.frame = CGRect(x: 9, y: y, width: c.reduce(0, +) + 32, height: 1)
+                y += 1 + 4
+            }
+            var x: CGFloat = 9
+            for (j, l) in row.enumerated() {
+                l.frame = NSRect(x: x, y: y, width: c[j], height: 16.5)
+                x += c[j] + 16
+            }
+            y += 16.5 + 4
+        }
+    }
+
+    public override func updateLayer() {
+        rule.layer?.backgroundColor = Themed.color(\.border).cgColor(in: self)
+        for row in cells {
+            row[0].color = Themed.color(\.contrastPopoverForeground)
+            row[1].color = PullRequestStyle.addition
+            row[2].color = PullRequestStyle.deletion
+        }
+    }
+}
+
+/// What the stat's hover shows: nothing before the first read or after a failed one, "Loading
+/// breakdown" while it's on its way, then the split.
+public enum PullRequestChangeBreakdownState: Equatable, Sendable {
+    case none
+    case loading
+    case loaded(PullRequestChangeBreakdown)
+}
