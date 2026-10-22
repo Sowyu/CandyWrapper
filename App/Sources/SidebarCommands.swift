@@ -68,6 +68,12 @@ final class SidebarCommands {
             self.threads.acknowledgeWake(id, at: wake)
         }
         sidebar.actions.contextMenu = { [weak self] id, event, view in self?.showThreadMenu(id, event: event, view: view) }
+        sidebar.actions.pin = { [weak self] in self?.pin($0) }
+        sidebar.actions.archive = { [weak self] in self?.archive($0) }
+        sidebar.actions.moreMenu = { [weak self] id, button in
+            guard let event = NSApp.currentEvent else { return }
+            self?.showThreadMenu(id, event: event, view: button, from: button)
+        }
         sidebar.actions.undo = { [weak self] in self?.ledger.undoLatest() }
         sidebar.actions.addProject = { [weak self] in self?.addProject() }
         sidebar.actions.openPullRequests = { [weak self] in self?.openUtilityPage(.pullRequests) }
@@ -543,9 +549,10 @@ final class SidebarCommands {
     // MARK: Thread menu (Sidebar.tsx:4566-4840)
 
     /// `anchor` (in `view`) places the menu's top left there instead of at the pointer.
-    func showThreadMenu(_ id: ThreadId, event: NSEvent, view: NSView, anchor: NSPoint? = nil, rename: (() -> Void)? = nil) {
+    /// Under Dither, `button` (the row's ⋯) places the menu under itself.
+    func showThreadMenu(_ id: ThreadId, event: NSEvent, view: NSView, anchor: NSPoint? = nil, rename: (() -> Void)? = nil, from button: NSView? = nil) {
         guard let thread = shell(id), let sidebar else { return }
-        if rename == nil, sidebar.selectedThreadIds.contains(id) {
+        if rename == nil, button == nil, sidebar.selectedThreadIds.contains(id) {
             showSelectionMenu(event: event, view: view)
             return
         }
@@ -570,10 +577,19 @@ final class SidebarCommands {
         state.isRunning = !SidebarModel.runtimeCanArchive(presented.runtime)
         state.snoozePresets = presets
         let items = ThreadActionMenu.removing(Self.unbuiltMenuItems, from: ThreadActionMenu.items(state))
-        let menu = Self.nativeMenu(items) { [weak self] choice in
+        let choose: @MainActor (String) -> Void = { [weak self, weak sidebar] choice in
             if choice == "rename", let rename { rename(); return }
+            if choice == "open-new-tab" { sidebar?.onOpenInNewTab?(id); return }
             self?.perform(choice, id: id, thread: thread, group: group, presets: presets)
         }
+        if ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) {
+            // Dither (after Capy): the themed menu with icons and key hints. The thread header's menu has no new tab to offer.
+            let built = DitherThreadMenu.items(items, presets: presets, openInNewTab: rename == nil && sidebar.onOpenInNewTab != nil, choose: choose)
+            let point = anchor ?? view.convert(event.locationInWindow, from: nil)
+            DitherThreadMenu.show(built, from: button, in: view, at: point)
+            return
+        }
+        let menu = Self.nativeMenu(items, choose: choose)
         if let anchor { menu.popUp(positioning: nil, at: anchor, in: view) } else { NSMenu.popUpContextMenu(menu, with: event, for: view) }
     }
 

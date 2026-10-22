@@ -374,7 +374,7 @@ public final class SidebarListView: DSView {
 
     private func showHoverCard(_ id: ThreadId, over row: SidebarRowBase, instant: Bool = false) {
         // The snooze menu's open state disables the card (`disabled={snoozeMenuOpen}`).
-        if let card = row as? SidebarCardRowView, card.snoozeButton.state.popupOpen { return }
+        if let card = row as? SidebarCardRowView, card.rowMenuOpen { return }
         // Nothing under a dialog or the palette shows a card (their backdrops cover the rows).
         if window?.contentView?.subviews.contains(where: { $0 is ModalHost || $0 is CommandPaletteOverlay }) == true { return }
         guard let model = hoverCard?(id), let host = row.popupHost else { return }

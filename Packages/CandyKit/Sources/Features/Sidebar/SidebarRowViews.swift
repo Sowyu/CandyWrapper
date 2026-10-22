@@ -499,6 +499,32 @@ struct SidebarRowActions {
     /// A row of the badge's hover mini list: that pull request, beside the thread.
     var pullRequestURL: (ThreadId, String) -> Void = { _, _ in }
     var contextMenu: (ThreadId, NSEvent, NSView) -> Void = { _, _, _ in }
+    /// Dither's hover group: pin, archive, the ⋯ menu under its button, and the row's jump shortcut label.
+    var pin: (ThreadId) -> Void = { _ in }
+    var archive: (ThreadId) -> Void = { _ in }
+    var moreMenu: (ThreadId, NSView) -> Void = { _, _ in }
+    var jumpHint: (ThreadId) -> String? = { _ in nil }
+}
+
+/// Dither's hover actions (after Capy): the jump shortcut, Settle and Snooze when the row can, then pin, archive and ⋯,
+/// all same-size icon buttons. Built on the first Dither row, so other themes never make it.
+@MainActor
+final class CapyHoverGroup {
+    let jump = KbdView()
+    let settle = RowActionButton(icon: .check, size: 14, accessibility: "Settle thread")
+    let snooze = RowActionButton(icon: .clock, size: 14, accessibility: "Snooze thread").menuTrigger()
+    let pin = RowActionButton(icon: .pin, size: 14, accessibility: "Pin thread")
+    let unpin = RowActionButton(icon: .pinOff, size: 14, accessibility: "Unpin thread")
+    let archive = RowActionButton(icon: .archive, size: 14, accessibility: "Archive thread")
+    let more = RowActionButton(icon: .ellipsis, size: 14, accessibility: "More actions").menuTrigger()
+    /// What the hovered row shows, left to right; placed while hidden too, so a fade-out stays put.
+    var shown: [NSView] = []
+    var all: [NSView] { [jump, settle, snooze, pin, unpin, archive, more] }
+    var menuOpen: Bool { snooze.state.popupOpen || more.state.popupOpen }
+
+    init() {
+        for b in [settle, snooze, pin, unpin, archive, more] { b.padding = 3 }
+    }
 }
 
 /// The card row (Sidebar.tsx:1955-2217): `li py-0.5`, a `rounded-md` surface 78px tall,
@@ -538,6 +564,9 @@ final class SidebarCardRowView: SidebarRowBase {
     private var showsActions = false
     private var showsSnooze = false
     private var hidForLift = false
+    private var capyGroup: CapyHoverGroup?
+    /// A menu from the row's own buttons is open, which keeps the actions and holds back the hover card.
+    var rowMenuOpen: Bool { snoozeButton.state.popupOpen || capyGroup?.menuOpen == true }
     /// Working duration ticks with the list's timer.
     var nowMs: Int64 = 0
 
@@ -579,7 +608,7 @@ final class SidebarCardRowView: SidebarRowBase {
     override func refresh() {
         surface.cornerRadius = cardRadius
         guard let r = row else { return }
-        let hovered = state.hovered || isKeyboardFocused || snoozeButton.state.popupOpen
+        let hovered = state.hovered || isKeyboardFocused || rowMenuOpen
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         // rowSurfaceClassName (Sidebar.tsx:1582-1605)
@@ -601,7 +630,8 @@ final class SidebarCardRowView: SidebarRowBase {
         project.text = r.projectLabel ?? ""
         project.font = capyRow ? SB.font(11) : SB.font(12, r.recedes ? .regular : .medium)
         project.color = SB.c(\.secondaryLabel)
-        pin.isHidden = !showsPin(r) || capyRow && r.inProjectSection
+        // Dither's hover group carries its own pin button.
+        pin.isHidden = !showsPin(r) || capyRow && (r.inProjectSection || hovered)
 
         let showActions = hovered
         if let top = r.topStatus {
@@ -654,12 +684,18 @@ final class SidebarCardRowView: SidebarRowBase {
         // the slot's width follows `showsActions` at once, as `absolute` and `static` flip without a transition.
         HoverReveal.fade([statusIcon, statusLabel, duration] + [rollingDuration].compactMap { $0 }, visible: !showActions || woke)
         let snoozes = r.action == .settle && r.canSnooze
-        if !snoozes { HoverReveal.snap([snoozeButton], visible: false, hides: true) }
-        HoverReveal.fade(snoozes ? [settleButton, snoozeButton] : [settleButton], visible: showActions, hides: true)
+        if capyRow {
+            HoverReveal.snap([settleButton, snoozeButton], visible: false, hides: true)
+            refreshCapyGroup(r, snoozes: snoozes, visible: showActions)
+        } else {
+            if let g = capyGroup { HoverReveal.snap(g.all, visible: false, hides: true) }
+            if !snoozes { HoverReveal.snap([snoozeButton], visible: false, hides: true) }
+            HoverReveal.fade(snoozes ? [settleButton, snoozeButton] : [settleButton], visible: showActions, hides: true)
+        }
         if showsActions != showActions || showsSnooze != snoozes { showsActions = showActions; showsSnooze = snoozes; needsLayout = true }
         // The lifted row trades the status slot for the drop verb (Sidebar.tsx:2011-2013).
         if lift != nil {
-            for v in [statusIcon, statusLabel, duration, settleButton, snoozeButton] as [NSView] { v.isHidden = true }
+            for v in [statusIcon, statusLabel, duration, settleButton, snoozeButton] + (capyGroup?.all ?? []) as [NSView] { v.isHidden = true }
             hidForLift = true
         } else if hidForLift {
             hidForLift = false
@@ -704,6 +740,46 @@ final class SidebarCardRowView: SidebarRowBase {
     /// project, branch and badges on a small gray line.
     private var capyRow: Bool { row?.dither == true }
 
+    private func refreshCapyGroup(_ r: SidebarRowModel, snoozes: Bool, visible: Bool) {
+        let g = capyGroup ?? {
+            let g = CapyHoverGroup()
+            g.all.forEach(addSubview)
+            HoverReveal.snap(g.all, visible: false, hides: true)
+            let id: () -> ThreadId? = { [weak self] in self?.row?.id }
+            g.settle.action = { [weak self] in if let i = id() { self?.actions.settle(i) } }
+            g.snooze.action = { [weak self, weak g] in if let i = id(), let g { self?.actions.snooze(i, g.snooze) } }
+            g.pin.action = { [weak self] in if let i = id() { self?.actions.pin(i) } }
+            g.unpin.action = { [weak self] in if let i = id() { self?.actions.unpin(i) } }
+            g.archive.action = { [weak self] in if let i = id() { self?.actions.archive(i) } }
+            g.more.action = { [weak self, weak g] in if let i = id(), let g { self?.actions.moreMenu(i, g.more) } }
+            capyGroup = g
+            return g
+        }()
+        // The jump label is read only while the actions show, so a resting list never asks for it.
+        let hint = visible ? actions.jumpHint(r.id) : nil
+        if let hint { g.jump.keys = hint }
+        // ponytail: archive shows on running rows too and the command refuses with a toast; hide it if that reads wrong
+        let shown: [NSView] = (hint == nil ? [] : [g.jump]) + [g.settle] + (snoozes ? [g.snooze] : [])
+            + [r.isPinned ? g.unpin : g.pin, g.archive, g.more]
+        let gone = g.all.filter { v in !shown.contains { $0 === v } }
+        HoverReveal.snap(gone, visible: false, hides: true)
+        HoverReveal.fade(shown, visible: visible, hides: true)
+        if g.shown.map(ObjectIdentifier.init) != shown.map(ObjectIdentifier.init) { g.shown = shown; needsLayout = true }
+    }
+
+    /// Places Dither's hover group from `right` leftward and returns its left edge.
+    private func layoutCapyGroup(_ g: CapyHoverGroup, right: CGFloat, top: CGFloat) -> CGFloat {
+        var x = right + 3
+        for v in g.shown.reversed() {
+            let w = v === g.jump ? ceil(g.jump.intrinsicContentSize.width) : (v as? RowActionButton)?.preferredWidth ?? 20
+            let h: CGFloat = v === g.jump ? min(20, g.jump.intrinsicContentSize.height) : 20
+            x -= w
+            v.frame = NSRect(x: x, y: top + (20 - h) / 2, width: w, height: h)
+            x -= v === g.jump ? 4 : 1
+        }
+        return x
+    }
+
     override func layout() {
         super.layout()
         let w = bounds.width
@@ -724,7 +800,8 @@ final class SidebarCardRowView: SidebarRowBase {
         settleButton.frame = NSRect(x: right + 4 - sw, y: top, width: sw, height: 20)
         let zw = snoozeButton.preferredWidth
         snoozeButton.frame = NSRect(x: settleButton.frame.minX - zw, y: top, width: zw, height: 20)
-        let actionsLeft = (showsSnooze ? snoozeButton : settleButton).frame.minX
+        var actionsLeft = (showsSnooze ? snoozeButton : settleButton).frame.minX
+        if capy, let g = capyGroup { actionsLeft = layoutCapyGroup(g, right: right, top: top) }
         if showsActions { slotLeft = actionsLeft }
         // Status label at rest (absolute and faded while actions show). Woke is itself an action, so it stays in
         // the flow beside the hover actions instead of under them (Sidebar.tsx:2023-2030).
@@ -1147,12 +1224,12 @@ final class TerminalStatusGlyph: DSView {
     }
 }
 
-/// Dither (after Capy): a section's header, quiet so the threads lead. A 14pt project icon (a pin for Pinned), the name
+/// Dither (after Capy): a section's header, quiet so the threads lead. A 16pt project icon (a pin for Pinned), the name
 /// in the muted 12pt of the "Threads" label, the count a step lighter, and a chevron after the count that shows on
 /// hover or while the section is folded. It sits on the lower part of its 32pt, so sections breathe above.
 final class SidebarProjectHeaderRowView: SidebarRowBase {
     private let icon = ProjectMonogramView()
-    private let pinIcon = IconView(name: .pin, size: 14)
+    private let pinIcon = IconView(name: .pin, size: 16)
     private let label = LabelView("", font: SB.font(12, .medium), color: SB.c(\.sidebarMutedForeground))
     private let count = LabelView("", font: SB.tabular(12), color: SB.c(\.sidebarMutedForeground, 0.6))
     private let chevron = IconView(name: .chevronRight, size: 12)
@@ -1162,7 +1239,6 @@ final class SidebarProjectHeaderRowView: SidebarRowBase {
         super.init(frame: frameRect)
         label.lineHeight = 16
         count.lineHeight = 16
-        icon.scale = 14 / 16
         [icon, pinIcon, label, count, chevron].forEach(addSubview)
     }
 
@@ -1196,7 +1272,8 @@ final class SidebarProjectHeaderRowView: SidebarRowBase {
         super.layout()
         // The content row is the bottom 22pt.
         let mid = bounds.height - 11
-        icon.frame = NSRect(x: 8, y: (mid - 7).rounded(), width: 14, height: 14)
+        // 16pt, flush with the rows' left edge (8) and centered on the name's line.
+        icon.frame = NSRect(x: 8, y: (mid - 8).rounded(), width: 16, height: 16)
         pinIcon.frame = icon.frame
         let lw = min(ceil(label.textWidth) + 1, max(0, bounds.width - 30 - 60))
         label.frame = NSRect(x: 30, y: (mid - 8).rounded(), width: lw, height: 16)
