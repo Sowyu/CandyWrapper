@@ -107,7 +107,8 @@ public final class ComposerView: DSView {
     /// A runtime request docked above (ChatComposer.tsx:6980, 7468, 7547-7553).
     public enum PendingState: Equatable, Sendable {
         case none
-        /// The editor shrinks to 32 (`min-h-10`), the body gets `pb-4`, and there is no footer: 66 tall empty.
+        /// The composer stays usable: a send declines the approvals and redirects the agent (a93b03c8a5).
+        /// Only the drawer keeps the composer expanded (`showComposerTopDrawer`).
         case approval
         /// The footer gets `pt-2` and shows Stop (while a run can stop), Previous and the pill.
         case question(QuestionFooter)
@@ -239,16 +240,15 @@ public final class ComposerView: DSView {
         }
     }
 
-    /// Composer box height for the current text: 144 to 274, 66 up with an approval, +8 with a question.
+    /// Composer box height for the current text: 144 to 274, +8 with a question.
     public var preferredHeight: CGFloat {
         // `py-2`, the files at their natural height, then the 32pt prompt row.
         if isResting { return 50 + fileList.preferredHeight }
         if let replacement { return Self.inset * 2 + max(48, replacement.intrinsicContentSize.height) }
         switch pending {
-        case .approval: return Self.inset * 2 + Self.pad + editorHeight + Self.pad
         // Without the 32px send button the footer row is the 28px controls (`h-7`): 148 empty (reference 06).
         case .question: return Self.inset * 2 + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + 8 + 8 + 28 + Self.pad
-        case .none:
+        case .none, .approval:
             if capy { return Self.inset + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + Self.capyGap + Self.capyRow + Self.capyEdge }
             return Self.inset * 2 + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + 8 + Self.footerHeight + Self.pad
         }
@@ -262,7 +262,7 @@ public final class ComposerView: DSView {
     /// The chip shows beside the round send button (ComposerPrimaryActions.tsx:274-277, 355): not for
     /// Stop, Resume, a queued edit, the plan pills or a question.
     private var showsCompactPill: Bool {
-        guard compactBeforeSendTokens != nil, questionFooter == nil, pending != .approval, !planFollowUp, !editingQueued else { return false }
+        guard compactBeforeSendTokens != nil, questionFooter == nil, !planFollowUp, !editingQueued else { return false }
         return [.send, .queue, .steer, .busy].contains(primary.face)
     }
     /// The next send compacts first: Enter and the button read "Compact and send".
@@ -486,15 +486,15 @@ public final class ComposerView: DSView {
         ComposerLogic.sendMode(running: runState.canInterrupt, alternate: alternateHeld, steerByDefault: steerByDefault, canSteer: !isCompacting)
     }
 
-    /// `insertComposerText` refuses outside text while an approval or any question is open, or no
+    /// `insertComposerText` refuses outside text while any question is open, or no
     /// project is chosen (ChatComposer.tsx:6149-6160).
     public var acceptsInsertion: Bool { !editorDisabled && placeholderInput.questionChoiceOnly == nil }
     /// A dropped file mention was refused: T3's "Unable to add to chat" toast (ChatComposer.tsx:6236-6243).
     public var onInsertRejected: (() -> Void)?
 
-    /// Editor disabled for approvals, choice-only questions and a missing project (ChatComposer.tsx:7500-7506).
+    /// Editor disabled for choice-only questions and a missing project (ChatComposer.tsx:6194-6200, a93b03c8a5).
     private var editorDisabled: Bool {
-        placeholderInput.approvalPending || placeholderInput.questionChoiceOnly == true || placeholderInput.projectRequired
+        placeholderInput.questionChoiceOnly == true || placeholderInput.projectRequired
             || questionFooter?.responding == true
     }
 
@@ -598,7 +598,7 @@ public final class ComposerView: DSView {
 
     /// `navigatePromptHistory` (ChatComposer.tsx:4393-4436).
     private func navigateHistory(backward: Bool) -> Bool {
-        if pending != .none { return false }
+        if questionFooter != nil { return false }
         if historyPosition == nil, !editor.string.isEmpty { return false }
         guard editor.isCaretOnVisualEdge(start: backward), let messages = historyMessages?() else { return false }
         guard let step = PromptHistory.step(backward ? .backward : .forward, entries: PromptHistory.entries(messages),
@@ -620,7 +620,7 @@ public final class ComposerView: DSView {
     }
 
     private func relayoutHeight() {
-        let minimum = pending == .approval ? 32 : editorMinimum
+        let minimum = editorMinimum
         let height = min(Self.editorMax, max(minimum, editor.contentHeight))
         // Most keystrokes keep the height; the text view grows itself, so only a new height
         // needs the composer (and its footer measuring) laid out again.
@@ -669,7 +669,6 @@ public final class ComposerView: DSView {
             onQuestionAdvance?()
             return true
         }
-        if pending == .approval { return true }
         let mode = ComposerLogic.sendMode(running: runState.canInterrupt, alternate: intent == .alternate, steerByDefault: steerByDefault, canSteer: !isCompacting)
         send(mode, background: intent == .background)
         // A send key never inserts a newline, even when nothing was sent.
@@ -895,10 +894,8 @@ public final class ComposerView: DSView {
         let right = w - edge
         let attachIcon: IconName = capyFooter ? .plus : .paperclip
         if attach.icon != attachIcon { attach.icon = attachIcon }
-        // No footer with an approval open.
-        let footerShown = pending != .approval
-        footerControls.forEach { $0.isHidden = !footerShown }
-        separators.forEach { $0.isHidden = !footerShown }
+        footerControls.forEach { $0.isHidden = false }
+        separators.forEach { $0.isHidden = false }
         var actionsLeft: CGFloat
         if let footer = questionFooter {
             // Right to left: the pill, Previous, Stop (28, only while a run can stop); `gap-1.5` compact, else `gap-2`.
@@ -926,12 +923,12 @@ public final class ComposerView: DSView {
             attach.isHidden = !footer.showsAttach
         } else {
             [questionPill, previousFull, previousCompact].forEach { $0.isHidden = true }
-            primary.isHidden = !footerShown
-            attach.isHidden = !footerShown
+            primary.isHidden = false
+            attach.isHidden = false
             primary.frame = NSRect(x: right - rowHeight, y: rowY, width: rowHeight, height: rowHeight)
             actionsLeft = primary.frame.minX
         }
-        let splitCompact = showsCompactPill && footerShown && primary.face == .send && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        let splitCompact = showsCompactPill && primary.face == .send && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         compactSend.isHidden = !splitCompact
         compactSendMenu.isHidden = !splitCompact
         if splitCompact {
@@ -945,14 +942,14 @@ public final class ComposerView: DSView {
             compactSend.frame = NSRect(x: compactSendMenu.frame.minX - w, y: midY - 16, width: w, height: 32)
             actionsLeft = compactSend.frame.minX
         }
-        compactPill.isHidden = !showsCompactPill || !footerShown || splitCompact
+        compactPill.isHidden = !showsCompactPill || splitCompact
         if !compactPill.isHidden {
             // `flex items-center gap-2` with the send button.
             let pw = compactPill.intrinsicContentSize.width
             compactPill.frame = NSRect(x: actionsLeft - 8 - pw, y: midY - 14, width: pw, height: 28)
             actionsLeft = compactPill.frame.minX
         }
-        planPill.isHidden = !planFollowUp || !footerShown || questionFooter != nil
+        planPill.isHidden = !planFollowUp || questionFooter != nil
         let implementing = !planPill.isHidden && planPill.title == "Implement"
         implementMenu.isHidden = !implementing
         if !planPill.isHidden {
@@ -971,7 +968,7 @@ public final class ComposerView: DSView {
             planPill.frame = NSRect(x: x - w, y: midY - 16, width: w, height: 32)
             actionsLeft = planPill.frame.minX
         }
-        contextWindowMeter.isHidden = (contextWindowMeter.usage == nil && !contextWindowMeter.reserved) || !footerShown || questionFooter != nil
+        contextWindowMeter.isHidden = (contextWindowMeter.usage == nil && !contextWindowMeter.reserved) || questionFooter != nil
         if !contextWindowMeter.isHidden {
             contextWindowMeter.frame = NSRect(x: actionsLeft - 8 - 28, y: midY - 14, width: 28, height: 28)
             actionsLeft = contextWindowMeter.frame.minX
