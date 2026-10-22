@@ -386,6 +386,14 @@ struct RelayErrorMappingTests {
         #expect(notLinked.hop == .relay && notLinked.cause == "not_linked" && notLinked.blocked && notLinked.reason == "permission")
         let clock = error(401, #"{"_tag":"RelayAuthInvalidError","code":"auth_invalid","reason":"invalid_dpop","dpopFailureReason":"time_window","traceId":"t"}"#).located
         #expect(clock.cause == "clock_skew" && clock.reason == "authentication")
+        // A status or tunnel count no Int holds is dropped, not trapped on (relay.ts:504 allows any number).
+        for odd in ["1e100", "-1e300", "502.5"] {
+            let e = error(502, #"{"_tag":"RelayEnvironmentEndpointUnavailableError","code":"environment_endpoint_unavailable","reason":"endpoint_request_failed","endpointStatus":"# + odd + #","traceId":"t"}"#).located
+            #expect(e.httpStatus == nil)
+            let limit = error(403, #"{"_tag":"RelayEnvironmentLinkLimitExceededError","code":"environment_link_limit_exceeded","maxTunnels":"# + odd + #","traceId":"t"}"#)
+            #expect(limit.failure == .blocked(.permission, "Relay refused the link: this account already has its maximum of ? managed tunnels. Unlink an environment to free one up."))
+        }
+        #expect(error(502, #"{"_tag":"RelayEnvironmentEndpointUnavailableError","code":"environment_endpoint_unavailable","reason":"endpoint_request_failed","endpointStatus":-1,"traceId":"t"}"#).located.httpStatus == -1)
         #expect(RelayError(.relay(status: 500, body: nil), action: .connect).located.cause == "relay_error")
         #expect(RelayError(.timedOut, action: .connect).located.hop == .relay)
         // Through the connector's wrapper, the supervisor still sees the plain failure.

@@ -334,7 +334,7 @@ final class SettingsController {
         let relay = r.isRelayOnly ? t3.machines?.first { $0.environmentId == r.environmentId }?.status : nil
         return ConnectionDiagnosis.Input(
             hostLabel: r.label, offline: state.phase == .offline, failure: state.failure, via: r.isRelayOnly ? .relay : .direct,
-            relayStatus: relay.map { .init(status: $0.status, endpointFailure: $0.endpointFailure, endpointStatus: $0.endpointStatus.map { Int($0) },
+            relayStatus: relay.map { .init(status: $0.status, endpointFailure: $0.endpointFailure, endpointStatus: $0.endpointStatus.flatMap { Int(exactly: $0) },
                                            offlineReason: $0.offlineReason) },
             attempt: state.attempt, retryAt: state.retryAt.map { Date(timeIntervalSinceNow: Self.seconds($0 - .now)) },
             clientVersion: ServerVersionSkewLogic.clientVersion,
