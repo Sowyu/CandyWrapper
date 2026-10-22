@@ -171,9 +171,9 @@ struct RPCConnectionTests {
 
     // MARK: Liveness while a reply is owed (the abuse test's half-closed socket, 2026-10-12)
 
-    func makeWatchedConnection() async -> (RPCConnection, FakeSocket) {
+    func makeWatchedConnection(interval: Duration = .milliseconds(60)) async -> (RPCConnection, FakeSocket) {
         let socket = FakeSocket()
-        let connection = RPCConnection(socket: socket, livenessInterval: .milliseconds(60))
+        let connection = RPCConnection(socket: socket, livenessInterval: interval)
         await connection.start()
         return (connection, socket)
     }
@@ -231,10 +231,11 @@ struct RPCConnectionTests {
 
     /// T3 allows 15 s, three of its 5 s ping intervals, without any frame (rpc/protocol.ts:10-12).
     @Test func aServerBusyForTwoIntervalsIsNotDropped() async throws {
-        let (c, socket) = await makeWatchedConnection()
+        // Longer intervals than the other tests: the 0.5 interval margin before the third must survive a loaded runner.
+        let (c, socket) = await makeWatchedConnection(interval: .milliseconds(200))
         let call = Task { try await c.request("server.getConfig") }
         // Silent for two and a half intervals: the old watchdog closed after two.
-        try await Task.sleep(for: .milliseconds(150))
+        try await Task.sleep(for: .milliseconds(500))
         #expect(await !c.isClosed)
         socket.deliver(.exit(requestId: .string("1"), exit: .success(.null)))
         _ = try await call.value
