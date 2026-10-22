@@ -513,10 +513,11 @@ public enum DitherChrome {
     @MainActor public static func bandColor(in view: NSView) -> CGColor { Themed.color(\.sidebar, sidebar: true).cgColor(in: view) }
 
     /// How much of the band's color covers the panel at `t`, 0 at the panel's top to 1 at the blend's bottom: all of it at
-    /// the top edge, so band and panel meet in one color, easing to none.
+    /// the top edge, so band and panel meet in one color, then falling off at once, so no solid strip shows under the
+    /// band (the user: "make the fade start from the very top and just remove the black part").
     public nonisolated static func bandBlend(_ t: Double) -> Double {
         let x = min(1, max(0, t))
-        return 1 - x * x * (3 - 2 * x)
+        return (1 - x) * (1 - x)
     }
 
     /// T3's radius for a box, under Dither: small controls 8, cards, popovers and bubbles 12; hairline

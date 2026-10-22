@@ -4,17 +4,22 @@ import ImageIO
 /// The Dither theme's art (CandyWrapper's own, after Capy's desktop app): the chosen picture, or the desktop picture,
 /// filling the main panel in its own colors at 2pt ordered-dither dots of brightness, held within a reach of the
 /// panel's background that keeps text readable anywhere on it. A new thread shows it fully, an open thread under a
-/// light scrim of the background, and every other page under a heavy one. It renders once per size and appearance
+/// scrim of the background that is heavy under its text column and light beside it, and every other page under a heavy one. It renders once per size and appearance
 /// off the main thread. Opening a new thread resolves the dots in, in Bayer order, for 0.75 s; otherwise it holds
 /// still and runs nothing.
 public final class DitherArtView: NSView {
     private let art = CALayer()
-    private let scrim = CALayer()
+    /// The background over the art, left to right: one share on most pages, heavier under a thread's text column.
+    private let scrim = CAGradientLayer()
     /// The band's color over the panel's top, so the art meets the tab strip band with no edge.
     private let blend = CAGradientLayer()
-    /// How far down the panel the band's color reaches: the band's height plus the thread header's fade overhang.
-    public static let topBlend: CGFloat = DitherChrome.band + 16
+    /// How far down the panel the band's color reaches: the thread header's height. The blend eases out from the top
+    /// edge (`DitherChrome.bandBlend`), so the art shows from the panel's top with no solid strip.
+    public static let topBlend: CGFloat = DitherChrome.band
     private var shown: DitherArt.Request?
+    /// The shown art's dot farthest in luminance from the background, sRGB 0...1; until it renders, the farthest the
+    /// reach allows.
+    private var worst: [Double]?
     private var pending: DitherArt.Request?
     private var debounce: DispatchWorkItem?
     /// A new thread opened before the art had rendered: the first render resolves in.
@@ -30,7 +35,9 @@ public final class DitherArtView: NSView {
         // exactly `dot` and every dot is the same whole number of device pixels.
         art.contentsGravity = .resize
         art.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
-        scrim.actions = ["bounds": NSNull(), "position": NSNull(), "backgroundColor": NSNull()]
+        scrim.actions = ["bounds": NSNull(), "position": NSNull(), "locations": NSNull()]
+        scrim.startPoint = CGPoint(x: 0, y: 0.5)
+        scrim.endPoint = CGPoint(x: 1, y: 0.5)
         layer?.masksToBounds = true
         layer?.addSublayer(art)
         layer?.addSublayer(scrim)
@@ -121,6 +128,16 @@ public final class DitherArtView: NSView {
             }
         }
     }
+    /// Where a thread's text runs, from the source's `setTextColumn`: the scrim is heavy there.
+    @MainActor private static let textColumns = NSMapTable<NSView, NSValue>.weakToStrongObjects()
+
+    /// The thread panel calls this from its layout with the timeline's text column in its own coordinates, or nil.
+    @MainActor
+    public static func setTextColumn(_ column: NSRect?, from source: NSView) {
+        guard textColumns.object(forKey: source)?.rectValue != column else { return }
+        if let column { textColumns.setObject(NSValue(rect: column), forKey: source) } else { textColumns.removeObject(forKey: source) }
+        for art in arts.allObjects where art.window === source.window { art.updateScrim() }
+    }
     @MainActor private static let heroSources = NSHashTable<NSView>.weakObjects()
     @MainActor private static let threadSources = NSHashTable<NSView>.weakObjects()
     @MainActor private static let arts = NSHashTable<DitherArtView>.weakObjects()
@@ -161,32 +178,51 @@ public final class DitherArtView: NSView {
         art.frame = CGRect(x: 0, y: bounds.height - h, width: w, height: h)
     }
 
-    var scrimAlpha: CGFloat {
+    /// The scrim's share across the panel, as gradient stops: x in this view's points and the background's share.
+    var scrimStops: [(x: CGFloat, alpha: CGFloat)] {
         let display = (reduceTransparency: NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency,
                        increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast)
-        guard let panel = superview, window != nil else { return DitherArt.scrim(.page, display) }
-        func shows(_ table: NSHashTable<NSView>) -> Bool {
-            table.allObjects.contains { $0.window === window && $0.isDescendant(of: panel) && !$0.isHiddenOrHasHiddenAncestor }
+        func flat(_ page: DitherArt.Page) -> [(x: CGFloat, alpha: CGFloat)] { [(0, DitherArt.scrim(page, display))] }
+        guard let panel = superview, window != nil else { return flat(.page) }
+        func showing(_ table: NSHashTable<NSView>) -> NSView? {
+            table.allObjects.first { $0.window === window && $0.isDescendant(of: panel) && !$0.isHiddenOrHasHiddenAncestor }
         }
-        if shows(Self.heroSources) { return DitherArt.scrim(.hero, display) }
-        if shows(Self.threadSources) { return DitherArt.scrim(.thread, display) }
-        return DitherArt.scrim(.page, display)
+        if showing(Self.heroSources) != nil { return flat(.hero) }
+        guard let thread = showing(Self.threadSources) else { return flat(.page) }
+        let edge = DitherArt.scrim(.thread, display)
+        guard let column = Self.textColumns.object(forKey: thread)?.rectValue, column.width > 0 else { return [(0, edge)] }
+        let palette = ThemeRuntime.palettes.palette(dark: effectiveAppearance.isDark, sidebar: false)
+        func rgb(_ c: TokenColor) -> [Double] { [c.srgb.x, c.srgb.y, c.srgb.z] }
+        let background = rgb(palette.background)
+        let worst = self.worst ?? DitherArt.farthest(from: background)
+        let heavy = max(edge, DitherArt.columnScrim(worst: worst, background: background,
+                                                    texts: [rgb(palette.mutedForeground), rgb(palette.secondaryLabel)]))
+        let x = convert(column, from: thread)
+        // The heavy share covers the column and a little past it, so the work rows' icons sit on it too, then eases
+        // back to the edge share over a wide ramp.
+        let pad: CGFloat = 16, ramp: CGFloat = 64
+        return [(0, edge), (x.minX - pad - ramp, edge), (x.minX - pad, heavy), (x.maxX + pad, heavy), (x.maxX + pad + ramp, edge)]
     }
 
     /// Main thread only, like every view method.
     func updateScrim() {
         let dark = effectiveAppearance.isDark
         let background = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background.nsColor
+        let stops = scrimStops, width = max(1, bounds.width)
         CATransaction.begin()
         CATransaction.setAnimationDuration(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.2)
-        scrim.backgroundColor = background.withAlphaComponent(scrimAlpha).cgColor
+        scrim.colors = stops.map { background.withAlphaComponent($0.alpha).cgColor } + [background.withAlphaComponent(stops.last!.alpha).cgColor]
+        CATransaction.commit()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        // A column near the panel's side clips its ramp at the edge.
+        scrim.locations = stops.map { NSNumber(value: Double(min(max($0.x / width, 0), 1))) } + [1]
         CATransaction.commit()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         let band = DitherChrome.bandColor(in: self)
         // Bottom (no band) to top (all band).
-        let stops = (0...10).reversed().map { Double($0) / 10 }
-        blend.locations = stops.map { NSNumber(value: 1 - $0) }
-        blend.colors = stops.map { band.copy(alpha: DitherChrome.bandBlend($0))! }
+        let ts = (0...10).reversed().map { Double($0) / 10 }
+        blend.locations = ts.map { NSNumber(value: 1 - $0) }
+        blend.colors = ts.map { band.copy(alpha: DitherChrome.bandBlend($0))! }
         CATransaction.commit()
     }
 
@@ -197,7 +233,7 @@ public final class DitherArtView: NSView {
         guard let window, rect.width >= 1, rect.height >= 1 else { return }
         let dark = effectiveAppearance.isDark
         guard let url = ThemeRuntime.ditherPicture ?? DitherArt.desktopPicture(for: window.screen) else {
-            art.contents = nil; shown = nil; return
+            art.contents = nil; shown = nil; worst = nil; return
         }
         let background = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background
         let scale = window.backingScaleFactor
@@ -210,13 +246,16 @@ public final class DitherArtView: NSView {
         // A live resize lands here every frame; the last size renders, the old art stretches meanwhile.
         let work = DispatchWorkItem { [weak self] in
             DispatchQueue.global(qos: .utility).async {
-                let image = DitherArtImage(image: DitherArt.render(request))
+                let (rendered, worst) = DitherArt.renderArt(request)
+                let image = DitherArtImage(image: rendered)
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated {
                         guard let self, self.pending == request else { return }
                         self.pending = nil
                         self.shown = request
                         self.art.contents = image.image
+                        self.worst = worst
+                        self.updateScrim()
                         CATransaction.begin(); CATransaction.setDisableActions(true)
                         self.placeArt()
                         CATransaction.commit()
@@ -239,7 +278,7 @@ private struct DitherArtFrames: @unchecked Sendable { let images: [CGImage] }
 public enum DitherArt {
     /// Dot size in points.
     public nonisolated static let dot: CGFloat = 2
-    /// The background's share over an open thread: the cap already keeps text readable, this calms it under messages.
+    /// The background's share over an open thread beside its text column. Under the column it is `columnScrim`.
     nonisolated static let threadScrim: CGFloat = 0.2
     /// The background's share over Settings and every other page, whose cards and lists aren't frosted.
     nonisolated static let pageScrim: CGFloat = 0.92
@@ -297,10 +336,48 @@ public enum DitherArt {
         return URL(filePath: path)
     }
 
+    nonisolated static func linear(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
+    /// WCAG relative luminance of an sRGB 0...1 color.
+    nonisolated static func luminance(_ c: [Double]) -> Double { 0.2126 * linear(c[0]) + 0.7152 * linear(c[1]) + 0.0722 * linear(c[2]) }
+    nonisolated static func contrast(_ a: [Double], _ b: [Double]) -> Double {
+        let la = luminance(a), lb = luminance(b)
+        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+    }
+
+    /// The farthest dot the reach allows from `background`: lighter on a dark one, darker on a light one.
+    nonisolated static func farthest(from background: [Double]) -> [Double] {
+        let lighter = luminance(background) < 0.18
+        return background.map { min(max($0 + (lighter ? 1 : -1) * reach / 255, 0), 1) }
+    }
+
+    /// The least share of `background` over the art's `worst` dot at which each text color that reaches 4.5:1 on the
+    /// plain background keeps it over the art. A thread's muted labels (`mutedForeground`, `secondaryLabel` in the work
+    /// rows) sit near that line already, so over a bright picture this comes out heavy, about 0.9 in dark, and over a
+    /// dark one it stays light. Core Animation mixes the scrim in gamma-encoded sRGB, so the mix here is too.
+    ///
+    /// Why a column, not a stronger scrim everywhere or a lower reach: the text needs the background's own contrast
+    /// only where text runs. The margins beside the column keep the light scrim, so the picture still reads at full
+    /// strength there, and a dark picture keeps it under the text as well.
+    nonisolated static func columnScrim(worst: [Double], background: [Double], texts: [[Double]]) -> CGFloat {
+        let goal = 4.6
+        let needed = texts.filter { contrast($0, background) >= goal }
+        guard !needed.isEmpty else { return 0 }
+        func mix(_ a: Double) -> [Double] { (0..<3).map { background[$0] * a + worst[$0] * (1 - a) } }
+        // Contrast only grows with the share, so the first step that holds is the least.
+        for step in 0...64 {
+            let a = Double(step) / 64
+            if needed.allSatisfy({ contrast($0, mix(a)) >= goal }) { return CGFloat(a) }
+        }
+        return 1
+    }
+
     /// The picture covering the canvas, centered, faded into the background and dithered, or nil if it can't be read.
-    nonisolated static func render(_ request: Request) -> CGImage? {
+    nonisolated static func render(_ request: Request) -> CGImage? { renderArt(request).image }
+
+    /// `render`, with the dot farthest in luminance from the background (sRGB 0...1), the scrim's worst case.
+    nonisolated static func renderArt(_ request: Request) -> (image: CGImage?, worst: [Double]?) {
         let w = request.width, h = request.height
-        guard w > 0, h > 0, let source = CGImageSourceCreateWithURL(request.url as CFURL, nil) else { return nil }
+        guard w > 0, h > 0, let source = CGImageSourceCreateWithURL(request.url as CFURL, nil) else { return (nil, nil) }
         let index = CGImageSourceGetPrimaryImageIndex(source)
         let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
                                         kCGImageSourceThumbnailMaxPixelSize: max(w, h) * 2]
@@ -308,7 +385,7 @@ public enum DitherArt {
               picture.width > 0, picture.height > 0,
               let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
                                   space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
-              let data = ctx.data?.bindMemory(to: UInt8.self, capacity: w * h * 4) else { return nil }
+              let data = ctx.data?.bindMemory(to: UInt8.self, capacity: w * h * 4) else { return (nil, nil) }
         let cover = max(Double(w) / Double(picture.width), Double(h) / Double(picture.height))
         let pw = Double(picture.width) * cover, ph = Double(picture.height) * cover
         ctx.interpolationQuality = .high
@@ -316,6 +393,9 @@ public enum DitherArt {
         let bg = request.background.count == 3 ? request.background.map { $0 * 255 } : [0, 0, 0]
         // Three strengths per hue (none, half the reach, the full reach): a clean halftone, not a mush of shades.
         let step = reach / 2
+        let lum = (0..<256).map { linear(Double($0) / 255) }
+        let bgLuminance = luminance(bg.map { $0 / 255 })
+        var worst = bg, worstDistance = 0.0
         // Row 0 of the buffer is the top of the picture.
         for y in 0..<h {
             let keep = 1 - fade((Double(y) + 0.5) / Double(h))
@@ -331,9 +411,11 @@ public enum DitherArt {
                 let scaled = m / step, low = scaled.rounded(.down)
                 let q = (scaled - low > threshold ? low + 1 : low) * step / m
                 for c in 0..<3 { data[i + c] = UInt8(min(max(bg[c] + d[c] * q, 0), 255).rounded()) }
+                let distance = abs(0.2126 * lum[Int(data[i])] + 0.7152 * lum[Int(data[i + 1])] + 0.0722 * lum[Int(data[i + 2])] - bgLuminance)
+                if distance > worstDistance { worstDistance = distance; worst = (0..<3).map { Double(data[i + $0]) } }
             }
         }
-        return ctx.makeImage()
+        return (ctx.makeImage(), worst.map { $0 / 255 })
     }
 
     /// The art partly resolved, one frame per reveal: a dot whose Bayer threshold is above the reveal shows the
