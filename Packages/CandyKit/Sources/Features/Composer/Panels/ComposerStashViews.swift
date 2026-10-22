@@ -56,7 +56,7 @@ public final class ComposerStashBadgeView: ComposerBannerView {
     /// Redesign's 32pt pill: 13pt text and 6 a side, like the context pills beside it.
     private var padX: CGFloat { ditherFloating ? 6 : Self.padX }
     private func sizeForPill() {
-        let size: CGFloat = ditherFloating ? 13 : 12
+        let size: CGFloat = 12
         guard title.font.pointSize != size else { return }
         title.font = DSFont.ui(size)
         countLabel.font = DSFont.ui(size, weight: .medium)

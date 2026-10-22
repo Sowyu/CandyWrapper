@@ -73,18 +73,18 @@ public final class DitherChipView: ControlView {
     private var textWidth: CGFloat { min(240, ceil(label.textWidth)) }
 
     public override var intrinsicContentSize: NSSize {
-        var w = 8 + 14 + 6 + textWidth
+        var w = 6 + 14 + 4 + textWidth
         if online != nil { w += 5 + 6 }
         if interactive { w += 6 + 12 - 2 }
-        return NSSize(width: w + 8, height: Self.height)
+        return NSSize(width: w + 6, height: Self.height)
     }
 
     public override func layout() {
         super.layout()
         let midY = bounds.height / 2
         pill.frame = bounds
-        icon.frame = NSRect(x: 8, y: midY - 7, width: 14, height: 14)
-        label.frame = NSRect(x: 28, y: midY - 8, width: textWidth, height: 16)
+        icon.frame = NSRect(x: 6, y: midY - 7, width: 14, height: 14)
+        label.frame = NSRect(x: 24, y: midY - 8, width: textWidth, height: 16)
         var x = label.frame.maxX
         CATransaction.begin(); CATransaction.setDisableActions(true)
         fill.frame = bounds
