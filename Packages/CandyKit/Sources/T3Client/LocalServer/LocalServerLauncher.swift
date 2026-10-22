@@ -346,6 +346,13 @@ public enum LocalServerLauncher {
             leftovers = leftovers.filter(\.isAlive)
         }
         for p in leftovers { p.signal(SIGKILL) }
+        // kill() returns before the process is gone, and an orphan lives on as a zombie until launchd
+        // reaps it. Wait for that, so a caller that stops a server sees none of its family left.
+        // ponytail: 50 ms checks for at most 5 s, only for descendants that ignored SIGTERM
+        for _ in 0..<100 where !leftovers.isEmpty {
+            try? await Task.sleep(for: .milliseconds(50))
+            leftovers = leftovers.filter(\.isAlive)
+        }
     }
 
     /// posix_spawn in a new session, with only fds 0 to 3 inherited. fd 3 is a pipe holding the
