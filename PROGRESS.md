@@ -6,7 +6,7 @@
 
 The current state and the open work. Before you stop, tick what you finished, add what the next agent must know, and keep this file short: finished work belongs in the git log, and the full history up to 2026-10-12 is in `docs/history/`.
 
-- [ ] Port upstream composer perf bucket b2, typing, pickers and drafts (taken 2026-10-22, perf-composer).
+- [x] Composer perf bucket b2 (2026-10-22): reuse unchanged search rows and picker controls; debounce long fence highlighting while keeping mapped colors and immediate short fences. Eleven counting/behavior tests and nine composer/picker fidelity tests passed via focused filters. Upstream sources and tests are cited in `771d430c`, `32638611` and `946e0ae8`. No full suite or perf-review, per the task brief.
 
 ## State on 2026-10-21
 
