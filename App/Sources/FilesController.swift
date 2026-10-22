@@ -275,16 +275,28 @@ final class FilesController {
         var model = panel.filesPanel.model
         model.loading.formUnion(dirs)
         panel.filesPanel.model = model
+        let supervisor = shell.supervisor, cwd = ws.cwd
         Task { [weak self] in
-            // `useDirectoryEntries` runs four listings at a time; folders here load in order.
-            for dir in dirs {
-                let entries = await Self.list(shell.supervisor, cwd: ws.cwd, directory: dir)
-                guard let self, self.workspace?.environmentId == ws.environmentId, self.workspace?.cwd == ws.cwd else { return }
-                var model = self.panel.filesPanel.model
-                model.loading.remove(dir)
-                if let entries { model.setChildren(entries, of: dir) }
-                self.panel.filesPanel.errorText = entries == nil && dir.isEmpty ? "Unable to load folder." : nil
-                self.panel.filesPanel.model = model
+            // `loadFileAncestors` (apps/web/src/components/files/loadFileAncestors.ts, 1ea378c6f4): four
+            // listings at a time, each applied as it returns.
+            await withTaskGroup(of: (String, [ProjectEntry]?).self) { group in
+                var next = 0
+                func start() {
+                    guard next < dirs.count else { return }
+                    let dir = dirs[next]
+                    next += 1
+                    group.addTask { (dir, await Self.list(supervisor, cwd: cwd, directory: dir)) }
+                }
+                for _ in 0..<min(4, dirs.count) { start() }
+                for await (dir, entries) in group {
+                    guard let self, self.workspace?.environmentId == ws.environmentId, self.workspace?.cwd == ws.cwd else { group.cancelAll(); return }
+                    var model = self.panel.filesPanel.model
+                    model.loading.remove(dir)
+                    if let entries { model.setChildren(entries, of: dir) }
+                    if dir.isEmpty { self.panel.filesPanel.errorText = entries == nil ? "Unable to load folder." : nil }
+                    self.panel.filesPanel.model = model
+                    start()
+                }
             }
             if let reveal, let self { self.panel.filesPanel.treeView.scrollToRow(reveal) }
         }
