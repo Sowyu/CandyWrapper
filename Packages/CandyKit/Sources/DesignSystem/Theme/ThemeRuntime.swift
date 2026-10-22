@@ -52,6 +52,8 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var ditherPicture: String?
     /// How much the background dims the art behind an open thread, 0 to 90 (percent).
     public var ditherDim = 35
+    /// Redesign's accent, a `DitherAccent` id.
+    public var ditherAccent = DitherAccent.teal.id
 
     public init(light: ThemeRuntimeHalf? = nil, dark: ThemeRuntimeHalf? = nil, contrast: Int = 100, glassOpacity: Int = 80) {
         self.light = light; self.dark = dark; self.contrast = contrast; self.glassOpacity = glassOpacity
@@ -73,6 +75,8 @@ public enum ThemeRuntime {
     nonisolated(unsafe) public private(set) static var glassOpacity: CGFloat = 0.8
     /// Redesign's dim over the art behind an open thread (the "Background dim" setting).
     nonisolated(unsafe) public private(set) static var ditherDim: CGFloat = 0.35
+    /// Redesign's accent (the "Accent color" setting). Its palette roles arrive through the Dither half's colors.
+    nonisolated(unsafe) public private(set) static var ditherAccent = DitherAccent.teal
     public private(set) static var input = ThemeRuntimeInput()
     /// Whether the Glass theme frosts the window in each appearance.
     nonisolated(unsafe) public private(set) static var glass = (light: false, dark: false)
@@ -112,6 +116,10 @@ public enum ThemeRuntime {
         }
         if next.ditherDim != old.ditherDim {
             ditherDim = CGFloat(min(max(next.ditherDim, 0), 90)) / 100
+            changed = true
+        }
+        if next.ditherAccent != old.ditherAccent {
+            ditherAccent = DitherAccent.named(next.ditherAccent)
             changed = true
         }
         if next.glassLight != old.glassLight || next.glassDark != old.glassDark {
