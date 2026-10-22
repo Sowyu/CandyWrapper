@@ -34,15 +34,30 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         public var iconIsError: Bool
         /// The buttons' `title` tooltip.
         public var actionTooltip: String?
+        /// A 6pt `bg-foreground` dot in place of the icon, pulsing with `status-pulse` when asked.
+        public var dot: Dot?
+        public enum Dot: Equatable, Sendable { case still, pulsing }
+        /// The description as text and `InlineButton tone="muted"` pieces, written whole into `description`
+        /// for the measure and the details popup. While it fits, the pieces show and the links answer `onLink`.
+        public var descriptionParts: [DescriptionPart]
+        public struct DescriptionPart: Equatable, Sendable {
+            public var text: String
+            /// The link's VoiceOver label; nil for plain text.
+            public var link: String?
+            public init(text: String, link: String? = nil) { self.text = text; self.link = link }
+        }
         public init(variant: Variant, icon: IconName, title: String, description: String? = nil, actions: [String] = [],
                     dismissLabel: String? = nil, dismissible: Bool? = nil, compact: Bool = false,
                     priority: ComposerBannerStackItem.Priority? = nil, titlePrefix: String? = nil, titleCode: Bool = false,
-                    titleTooltip: String? = nil, spinner: Bool = false, iconIsError: Bool = false, actionTooltip: String? = nil) {
-            self.variant = variant; self.icon = icon; self.title = title; self.description = description
+                    titleTooltip: String? = nil, spinner: Bool = false, iconIsError: Bool = false, actionTooltip: String? = nil,
+                    dot: Dot? = nil, descriptionParts: [DescriptionPart] = []) {
+            self.variant = variant; self.icon = icon; self.title = title
+            self.description = descriptionParts.isEmpty ? description : descriptionParts.map(\.text).joined()
             self.actions = actions; self.dismissLabel = dismissLabel; self.dismissible = dismissible ?? (dismissLabel != nil)
             self.compact = compact; self.priority = priority
             self.titlePrefix = titlePrefix; self.titleCode = titleCode; self.titleTooltip = titleTooltip
             self.spinner = spinner; self.iconIsError = iconIsError; self.actionTooltip = actionTooltip
+            self.dot = dot; self.descriptionParts = descriptionParts
         }
         /// `aria-label={item.dismissLabel ?? "Dismiss warning"}`.
         public var resolvedDismissLabel: String { dismissLabel ?? "Dismiss warning" }
@@ -59,6 +74,10 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
     public let titleDetailsButton = ButtonView(nil, icon: .info, variant: .ghostMuted, size: .iconXs)
     private var titleTip: TooltipController?
     private var buttons: [ButtonView] = []
+    private var dotView: WorkDotView?
+    private var partViews: [NSView] = []
+    /// A link in `content.descriptionParts`, by its index there.
+    public var onLink: ((Int) -> Void)?
     public var disabledActions: Set<Int> = [] { didSet { updateActionAvailability() } }
     private func updateActionAvailability() {
         for (index, button) in buttons.enumerated() { button.isEnabled = !disabledActions.contains(index) }
@@ -103,8 +122,33 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         iconView.removeFromSuperview()
         iconView = IconView(name: content.icon, size: 12)
         iconView.strokeColor = content.iconIsError ? Themed.base("error") : Themed.color(\.mutedForeground)
-        iconView.isHidden = content.spinner
+        iconView.isHidden = content.spinner || content.dot != nil
         addSubview(iconView)
+        if let dot = content.dot {
+            let view = dotView ?? WorkDotView()
+            view.pulses = dot == .pulsing
+            if view.superview == nil { addSubview(view) }
+            dotView = view
+        } else {
+            dotView?.removeFromSuperview()
+            dotView = nil
+        }
+        partViews.forEach { $0.removeFromSuperview() }
+        partViews = content.descriptionParts.enumerated().map { index, part in
+            guard let link = part.link else {
+                let label = glassLabel(part.text, font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 24)
+                addSubview(label)
+                return label
+            }
+            let button = ThreadStatusLineAction()
+            button.label.text = part.text
+            button.label.lineHeight = 24
+            button.label.smoothsFont = false
+            button.setAccessibilityLabel(link)
+            button.action = { [weak self] in self?.onLink?(index) }
+            addSubview(button)
+            return button
+        }
         if content.spinner {
             let spinner = spinnerView ?? SpinnerView(size: .xs)
             spinner.color = Themed.color(\.mutedForeground)
@@ -147,6 +191,7 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         let rowY: CGFloat = 5
         iconView.frame = NSRect(x: 4 + 6, y: rowY + 6, width: 12, height: 12)
         spinnerView?.frame = iconView.frame
+        dotView?.frame = NSRect(x: 4 + 9, y: rowY + 9, width: 6, height: 6)
         var right = bounds.width - 4
         for b in ([dismiss].filter { !$0.isHidden } + buttons.reversed()) {
             let s = b.intrinsicContentSize
@@ -172,6 +217,7 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
             // ponytail: T3 keeps a zero-width description with its own details button; add it if a cut title with a description shows up
             detail.isHidden = true
             detailsButton.isHidden = true
+            partViews.forEach { $0.isHidden = true }
             return
         }
         // `gap-1`; a compact banner hides the description under 400pt (`@max-[400px]:sr-only`).
@@ -188,6 +234,16 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
             detailsButton.frame = NSRect(x: bx, y: rowY, width: 24, height: 24)
         }
         detail.frame = NSRect(x: dx, y: rowY, width: showDetails ? max(0, room - 24 - 4) : room, height: 24)
+        // The pieces show while the whole description fits; a cut one reads as plain text.
+        let showParts = !partViews.isEmpty && !detail.isHidden && !showDetails
+        if showParts { detail.isHidden = true }
+        var px = dx
+        for view in partViews {
+            view.isHidden = !showParts
+            let width = (view as? ThreadStatusLineAction)?.preferredWidth ?? ceil((view as? LabelView)?.textWidth ?? 0)
+            view.frame = NSRect(x: px, y: rowY, width: width, height: 24)
+            px += width
+        }
     }
 }
 
@@ -244,4 +300,31 @@ final class NoticeDetailsPopupView: DSView, PopupContent {
         super.viewDidChangeEffectiveAppearance()
         decoration.setNeedsDisplay()
     }
+}
+
+/// `size-1.5 rounded-full bg-foreground`, with `motion-safe:animate-status-pulse` while the work holds the
+/// thread (ThreadActivityBanners.tsx:111-118). The pulse runs in the render server and stops off screen.
+final class WorkDotView: DSView {
+    var pulses = false {
+        didSet {
+            guard pulses != oldValue else { return }
+            if !pulses { layer?.removeAnimation(forKey: "pulse") }
+            loop.update()
+        }
+    }
+    private lazy var loop = LoopingAnimation(view: self, key: "pulse", layer: { [weak self] in self?.pulses == true ? self?.layer : nil }) {
+        TerminalStatusGlyph.pulse()
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        setAccessibilityElement(false)
+    }
+
+    override func layout() { super.layout(); layer?.cornerRadius = bounds.height / 2 }
+    override func updateLayer() { layer?.backgroundColor = Themed.color(\.foreground).cgColor }
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); loop.windowChanged() }
+    override func viewDidHide() { super.viewDidHide(); loop.update() }
+    override func viewDidUnhide() { super.viewDidUnhide(); loop.update() }
 }

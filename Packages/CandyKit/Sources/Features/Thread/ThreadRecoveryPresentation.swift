@@ -46,3 +46,58 @@ public enum ThreadUsageLimitRecovery {
         thread.limitRecovery?.runId == thread.latestRunId && thread.limitRecovery?.resetAt == thread.usageLimitResetAt && thread.limitRecovery?.autoResume == true
     }
 }
+
+/// `presentPendingBackgroundWork` (threadExecution.ts:281-357): the background work banner's title and items,
+/// subagents first, then commands, monitors and other tasks.
+public enum BackgroundWorkPresentation {
+    public struct Item: Equatable {
+        public var taskId: String
+        public var kind: BackgroundTaskKind
+        public var label: String
+        public var childThreadId: ThreadId?
+    }
+    public struct Value: Equatable {
+        public var title: String
+        public var items: [Item]
+        /// The work holds the thread's completion, so the dot pulses.
+        public var waiting: Bool
+    }
+
+    private static func noun(_ kind: BackgroundTaskKind) -> (order: Int, singular: String, plural: String) {
+        switch kind {
+        case .subagent: (0, "subagent", "subagents")
+        case .command: (1, "command", "commands")
+        case .monitor: (2, "monitor", "monitors")
+        // An unknown kind decodes as `background_task` in T3.
+        default: (3, "background task", "background tasks")
+        }
+    }
+
+    public static func present(_ tasks: [PendingBackgroundTask]) -> Value? {
+        guard !tasks.isEmpty else { return nil }
+        let waiting = SidebarModel.backgroundWorkHoldsCompletion(tasks)
+        let items = tasks.map { task -> Item in
+            let description = task.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let label = task.kind == .subagent && description != nil
+                ? ThreadRelationships.subagentDisplayTitle(description!).trimmingCharacters(in: .whitespacesAndNewlines) : description
+            return Item(taskId: task.taskId, kind: task.kind, label: label.flatMap { $0.isEmpty ? nil : $0 } ?? noun(task.kind).singular,
+                        childThreadId: task.kind == .subagent ? task.childThreadId : nil)
+        }.enumerated().sorted { (noun($0.element.kind).order, $0.offset) < (noun($1.element.kind).order, $1.offset) }.map(\.element)
+        if items.count == 1, let only = items.first {
+            let singular = noun(only.kind).singular
+            let named = only.label != singular
+            let title = waiting
+                ? named ? (only.kind == .monitor ? "" : "Waiting on \(singular) ") + only.label : "Waiting on a \(singular)"
+                : named ? "Running: \(only.label)" : "Running a \(singular)"
+            return Value(title: title, items: items, waiting: waiting)
+        }
+        var counts: [(kind: BackgroundTaskKind, count: Int)] = []
+        for item in items {
+            if let i = counts.firstIndex(where: { noun($0.kind).order == noun(item.kind).order }) { counts[i].count += 1 }
+            else { counts.append((item.kind, 1)) }
+        }
+        let groups = counts.map { "\($0.count) " + ($0.count == 1 ? noun($0.kind).singular : noun($0.kind).plural) }
+        let joined = groups.count <= 1 ? groups.joined() : groups.dropLast().joined(separator: ", ") + " and " + groups.last!
+        return Value(title: (waiting ? "Waiting on " : "Running ") + joined, items: items, waiting: waiting)
+    }
+}

@@ -44,6 +44,8 @@ final class ComposerController {
     /// The "Not connected" toasts on screen, at most three (`ENVIRONMENT_UNAVAILABLE_SEND_TOAST_TRAIL_SIZE`).
     private var environmentToastIds: [Int] = []
     private var recoveryPending: Set<ThreadId> = []
+    /// The thread whose background work Stop is stopping (`stoppingBackgroundWorkKey`, ChatView.tsx:3794).
+    private var stoppingBackgroundWork: ThreadId?
     private var recoveryErrors: [ThreadId: String] = [:]
     private var recoveryResetWork: DispatchWorkItem?
     private var recoveryResetKey: String?
@@ -2166,16 +2168,19 @@ final class ComposerController {
     /// `thread.stop` and finds what to stop itself, including background work and commands left
     /// from earlier turns. Older servers get `run.interrupt` with `holdQueue` on the active run
     /// (I-composer-flow 2.1). No local "stopping" state; the button stays until the run settles.
-    private func stop() {
-        guard let shell, case .thread(let threadId) = target, let projection else { return }
+    /// `done` runs once the server answered, or at once when there was nothing to send.
+    private func stop(done: (@MainActor () -> Void)? = nil) {
+        guard let shell, case .thread(let threadId) = target, let projection else { done?(); return }
         let commandId = JSONValue.string(UUID().uuidString.lowercased())
         let payload: JSONValue
         if let env = threadId.environmentId, capabilities[env]?.threadStop == true {
             payload = .object(["type": .string("thread.stop"), "commandId": commandId, "threadId": .string(threadId.localId.rawValue)])
         } else {
             let state = ComposerLogic.RunState(runs: projection.runs)
-            // The shell's activeRunId skips `waiting`; T3's helper falls back to the projection's last live run.
-            guard let runId = state.activeRunId ?? projection.runs.last(where: { $0.status == .waiting })?.id else { return }
+            // The shell's activeRunId skips `waiting`; T3's helper falls back to the projection's last live run, then
+            // to the latest run while background work is pending (commands.ts:813-835).
+            let background = shellThread?.backgroundTasks.isEmpty == false ? projection.runs.last?.id : nil
+            guard let runId = state.activeRunId ?? projection.runs.last(where: { $0.status == .waiting })?.id ?? background else { done?(); return }
             payload = .object([
                 "type": .string("run.interrupt"), "commandId": commandId,
                 "threadId": .string(threadId.localId.rawValue), "runId": .string(runId.rawValue), "holdQueue": .bool(true),
@@ -2184,6 +2189,7 @@ final class ComposerController {
         let supervisor = shell.supervisor
         let key = draftKey
         Task { [weak self] in
+            defer { done?() }
             do { _ = try await supervisor.request("orchestration.dispatchCommand", payload: payload) } catch {
                 if let rpc = error as? RPCClientError, rpc.isTransport { return }
                 self?.report(.interrupt(Self.message(error)), key: key)
@@ -4538,6 +4544,57 @@ extension ComposerController {
 
 
 extension ComposerController {
+    /// `backgroundWorkBannerItem` (ThreadActivityBanners.tsx:100-170, ChatView.tsx:3791-3819, 3930-3939): shown
+    /// only while the thread isn't working. One subagent gets "Show", several get their titles as links; Stop
+    /// sends what the composer's Stop sends and reads "Stopping..." until the server accepts it.
+    private func updateBackgroundWorkBanner(_ thread: ThreadShell?) {
+        let presentation = composer.runState.canInterrupt ? nil : thread.flatMap { BackgroundWorkPresentation.present($0.backgroundTasks) }
+        panel.showsBackgroundWork = presentation != nil
+        guard let thread, let presentation else { return }
+        typealias Part = ComposerNoticeBannerView.Content.DescriptionPart
+        var parts: [Part] = []
+        let items = presentation.items
+        if items.count > 1 || items.first?.childThreadId != nil {
+            for (index, item) in items.enumerated() {
+                let separator = index < items.count - 1 ? "," : ""
+                if index > 0 { parts.append(Part(text: " ")) }
+                if item.childThreadId == nil {
+                    parts.append(Part(text: item.label + separator))
+                } else {
+                    let single = items.count == 1
+                    parts.append(Part(text: single ? "Show" : item.label, link: (single ? "Show" : "Open") + " subagent " + item.label))
+                    if !separator.isEmpty { parts.append(Part(text: separator)) }
+                }
+            }
+        }
+        // Merge neighbouring text so each run measures as one label.
+        parts = parts.reduce(into: []) { merged, part in
+            if part.link == nil, let last = merged.last, last.link == nil { merged[merged.count - 1].text += part.text } else { merged.append(part) }
+        }
+        let stopping = stoppingBackgroundWork == thread.id
+        let banner = panel.backgroundWorkBanner
+        banner.apply(.init(variant: .neutral, icon: .info, title: presentation.title, actions: [stopping ? "Stopping..." : "Stop"],
+                           priority: .activity, dot: presentation.waiting ? .pulsing : .still, descriptionParts: parts))
+        banner.disabledActions = stopping || !environments.canOperate(thread.id.environmentId) ? [0] : []
+        let links = parts.enumerated().compactMap { $0.element.link == nil ? nil : $0.offset }
+        let children = items.compactMap(\.childThreadId)
+        banner.onLink = { [weak self] index in
+            guard let position = links.firstIndex(of: index), position < children.count else { return }
+            self?.openThread?(children[position])
+        }
+        banner.onAction = { [weak self] index in
+            guard let self, index == 0, self.stoppingBackgroundWork != thread.id, self.openThreadId == thread.id else { return }
+            self.stoppingBackgroundWork = thread.id
+            self.updateThreadBanners()
+            // Acceptance does not confirm termination: Stop comes back for a retry while the tasks wind down.
+            self.stop { [weak self] in
+                guard let self, self.stoppingBackgroundWork == thread.id else { return }
+                self.stoppingBackgroundWork = nil
+                self.updateThreadBanners()
+            }
+        }
+    }
+
     private func updateThreadBanners() {
         let thread = shellThread
         panel.showsGoal = thread?.goal != nil
@@ -4545,6 +4602,7 @@ extension ComposerController {
             let actions = composer.runState.canInterrupt ? [] : ThreadGoalPresentation.canResume(goal) ? ["Resume", "Clear"] : ["Clear"]
             panel.goalBanner.apply(.init(variant: .neutral, icon: .target, title: ThreadGoalPresentation.title(goal, working: composer.runState.canInterrupt), description: goal.objective, actions: actions))
         }
+        updateBackgroundWorkBanner(thread)
         let limited = thread?.status == .failed && thread?.lastErrorClass == .usageLimit
         panel.showsRecovery = limited
         if let thread, limited {
