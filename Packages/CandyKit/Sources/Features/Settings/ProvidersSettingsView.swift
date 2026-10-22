@@ -232,7 +232,7 @@ public enum ProvidersLogic {
 /// instances as a list beside the selected instance's editor, then the health check interval.
 public final class ProvidersSettingsView: ScopedSettingsPage {
     private let placeholder = SettingsNoticeView("")
-    private let providers = ProvidersSectionView()
+    let providers = ProvidersSectionView()
     private var healthRow: SettingsRowView!
     private let health = NumberFieldView(value: 300, size: .sm)
     private var selected: String?
@@ -251,6 +251,52 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
     private let usageProviders = SettingsSectionView(title: "Usage providers", rows: [])
     private let addHub = ButtonView("Add hub", icon: .plus, variant: .outline, size: .xs)
     private var updatingCursor = false
+
+    private struct ListInput: Equatable {
+        var row: ProvidersLogic.Row
+        var provider: ServerProvider?
+        var environment: SettingsScopeEnvironment
+        var projectIds: [String]
+        var projectOverride: Bool??
+        var selected: Bool
+        var updating: Bool
+    }
+    private struct EditorInput: Equatable {
+        var list: ListInput
+        var favorites: [ModelFavorite]
+        var preferences: JSONValue?
+        var addOpen: Bool
+        var drafts: [ProviderEnvironmentLogic.Draft]
+    }
+    private var listCache: [String: (ListInput, ProviderListRow)] = [:]
+    private var editorInput: EditorInput?
+    private struct ModelsInput: Equatable {
+        var row: ProvidersLogic.Row
+        var models: [ServerProviderModel]
+        var favorites: [ModelFavorite]
+        var preferences: JSONValue?
+        var environment: String
+        var canWrite: Bool
+        var shared: Bool
+    }
+    private var modelsCache: (ModelsInput, SettingsSectionView)?
+
+    /// The checked label reads the live timestamps; the cards do not display them.
+    private static func contentProvider(_ provider: ServerProvider?) -> ServerProvider? {
+        guard var provider else { return nil }
+        provider.checkedAt = nil
+        provider.workspaceSnapshots = provider.workspaceSnapshots?.map { snapshot in
+            var snapshot = snapshot
+            snapshot.checkedAt = ""
+            return snapshot
+        }
+        provider.usageLimits?.checkedAt = ""
+        if var advisory = provider.versionAdvisory?.objectValue {
+            advisory.removeValue(forKey: "checkedAt")
+            provider.versionAdvisory = .object(advisory)
+        }
+        return provider
+    }
 
     public init(context: SettingsPageContext) {
         super.init(context: context)
@@ -286,6 +332,9 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             setHidden(placeholder, false)
             setHidden(providers, true)
             for item in body.dropFirst(2) { setHidden(item, true) }
+            listCache = [:]
+            editorInput = nil
+            modelsCache = nil
             return
         }
         setHidden(placeholder, true)
@@ -306,7 +355,19 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         // `projectProviderInstanceOverrides` would drop the patch, so they keep the machine switch (ProviderSettingsPanel.tsx:588-593).
         let projectIds = scope.isProjectScope && env.capabilities.contains("projectProviderInstanceOverrides")
             ? scope.targets.filter { $0.environmentId == env.id }.compactMap(\.projectId) : []
+        var nextCache: [String: (ListInput, ProviderListRow)] = [:]
+        func input(_ row: ProvidersLogic.Row) -> ListInput {
+            ListInput(row: row, provider: Self.contentProvider(live.first { $0.instanceId.rawValue == row.instanceId }),
+                      environment: env, projectIds: projectIds,
+                      projectOverride: projectIds.first.map { ProjectSettings.providerOverride(settings, projectId: $0, instanceId: row.instanceId) },
+                      selected: row.instanceId == chosen?.instanceId, updating: updatingInstances.contains(row.instanceId))
+        }
         providers.list = rows.map { row in
+            let state = input(row)
+            if let cached = listCache[row.instanceId], cached.0 == state {
+                nextCache[row.instanceId] = cached
+                return cached.1
+            }
             let p = live.first { $0.instanceId.rawValue == row.instanceId }
             let override = projectIds.first.map { ProjectSettings.providerOverride(settings, projectId: $0, instanceId: row.instanceId) }
             let item = ProviderListRow(row: row, provider: p, enabled: override.map { $0 ?? row.enabled })
@@ -327,19 +388,30 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             if updatingInstances.contains(row.instanceId) || ProviderVersionAdvisoryLogic.isUpdating(p) {
                 item.updateProgress = (ProviderVersionAdvisoryLogic.isUpdating(p) ? p?.updateState?.message : nil) ?? "Starting update"
             }
+            nextCache[row.instanceId] = (state, item)
             return item
         }
+        listCache = nextCache
         if let chosen {
             // A server echo arriving while a field of the same editor has focus would drop what is being typed
             // (T3's inputs keep their draft across renders). Keep that editor; its writes read the live instance.
-            let editing = editorInstance == chosen.instanceId && providers.editor?.isFirstResponderInside == true
-            if !editing {
+            let editing = editorInstance == chosen.instanceId && editorInput?.list.environment.id == env.id
+                && providers.editor?.isFirstResponderInside == true
+            let preferences = context.modelPreferences?(env.id) ?? ([], .object([:]))
+            var state = EditorInput(list: input(chosen), favorites: preferences.favorites.filter { $0.provider.rawValue == chosen.instanceId },
+                                    preferences: preferences.providers[chosen.instanceId], addOpen: expandedModelAdd.contains(chosen.instanceId),
+                                    drafts: environmentDrafts[chosen.instanceId]?.rows ?? [])
+            if !editing, editorInput != state {
                 providers.editor = editor(chosen, provider: live.first { $0.instanceId.rawValue == chosen.instanceId }, env: env)
                 editorInstance = chosen.instanceId
+                state.drafts = environmentDrafts[chosen.instanceId]?.rows ?? []
+                editorInput = state
             }
         } else {
             providers.editor = nil
             editorInstance = nil
+            editorInput = nil
+            modelsCache = nil
         }
         providers.needsLayout = true
         // Health check interval: the resolved value against the profile's preset.
@@ -841,66 +913,76 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         variablesRow.footer = list.rows.isEmpty ? nil : list
         sections.append(SettingsSectionView(title: "Environment", rows: [variablesRow]))
 
-        // Models: favorites, visibility and order on the environment (2994) or this device; custom models on the environment.
+        // Provider health changes do not rebuild the model list or its search draft.
         let resolved = context.modelPreferences?(env.id) ?? ([], .object([:]))
         let prefs = resolved.providers[row.instanceId]
-        let hidden = (prefs?["hiddenModels"]?.arrayValue ?? []).compactMap(\.stringValue)
-        let order = (prefs?["modelOrder"]?.arrayValue ?? []).compactMap(\.stringValue)
-        let favorites = Set(resolved.favorites.filter { $0.provider.rawValue == row.instanceId }.map(\.model))
-        let custom = ProvidersLogic.customModels(row.instance)
-        let models = ProvidersLogic.displayModels(live: provider?.models ?? [], custom: custom, favorites: favorites, hidden: Set(hidden), order: order)
         let shared = context.configs[env.id].map { ModelPreferences.serverOwned($0.settings.raw) } ?? false
-        let modelsView = ProviderModelsView(models: models, favorites: favorites, hidden: Set(hidden), driver: row.driver, canManage: !readOnly,
-                                            sharedPreferences: shared)
-        modelsView.builtinModels = provider?.models ?? []
-        modelsView.addOpen = expandedModelAdd.contains(row.instanceId)
-        modelsView.onAddOpen = { [weak self] open in
-            if open { self?.expandedModelAdd.insert(row.instanceId) } else { self?.expandedModelAdd.remove(row.instanceId) }
-            self?.onHeightChange?()
+        let modelsInput = ModelsInput(row: row, models: provider?.models ?? [],
+                                      favorites: resolved.favorites.filter { $0.provider.rawValue == row.instanceId }, preferences: prefs,
+                                      environment: env.id, canWrite: env.canWrite, shared: shared)
+        let modelsSection: SettingsSectionView
+        if let cached = modelsCache, cached.0 == modelsInput {
+            modelsSection = cached.1
+        } else {
+            let hidden = (prefs?["hiddenModels"]?.arrayValue ?? []).compactMap(\.stringValue)
+            let order = (prefs?["modelOrder"]?.arrayValue ?? []).compactMap(\.stringValue)
+            let favorites = Set(resolved.favorites.filter { $0.provider.rawValue == row.instanceId }.map(\.model))
+            let custom = ProvidersLogic.customModels(row.instance)
+            let models = ProvidersLogic.displayModels(live: provider?.models ?? [], custom: custom, favorites: favorites, hidden: Set(hidden), order: order)
+            let modelsView = ProviderModelsView(models: models, favorites: favorites, hidden: Set(hidden), driver: row.driver, canManage: !readOnly,
+                                                sharedPreferences: shared)
+            modelsView.builtinModels = provider?.models ?? []
+            modelsView.addOpen = expandedModelAdd.contains(row.instanceId)
+            modelsView.onAddOpen = { [weak self] open in
+                if open { self?.expandedModelAdd.insert(row.instanceId) } else { self?.expandedModelAdd.remove(row.instanceId) }
+                self?.onHeightChange?()
+            }
+            modelsView.onFavorite = { [weak self] slug in self?.context.toggleFavorite?(env.id, ProviderInstanceId(rawValue: row.instanceId), slug); self?.refresh() }
+            // Read the other list live: a focused toggle keeps this editor across server echoes, so `hidden`
+            // and `order` above can be one write behind.
+            // Takes the page as an argument: a nested func reading `context` would capture self strongly through the
+            // closures below and keep every visited page alive.
+            func live(_ page: ProvidersSettingsView) -> (hidden: [String], order: [String]) {
+                let p = (page.context.modelPreferences?(env.id) ?? ([], .object([:]))).providers[row.instanceId]
+                return ((p?["hiddenModels"]?.arrayValue ?? []).compactMap(\.stringValue), (p?["modelOrder"]?.arrayValue ?? []).compactMap(\.stringValue))
+            }
+            modelsView.onHidden = { [weak self] next in
+                guard let self else { return }
+                self.writePreferences(env.id, row.instanceId, hidden: next, order: live(self).order)
+            }
+            modelsView.onOrder = { [weak self] next in
+                guard let self else { return }
+                self.writePreferences(env.id, row.instanceId, hidden: live(self).hidden, order: next)
+            }
+            modelsView.onAdd = { [weak self] slug in
+                var o = current().objectValue ?? [:]
+                var config = o["config"]?.objectValue ?? [:]
+                config["customModels"] = .array(custom.map(\.raw) + [.string(slug)])
+                o["config"] = .object(config)
+                self?.expandedModelAdd.remove(row.instanceId)
+                self?.upsert(row, .object(o), env: env.id)
+            }
+            modelsView.customDefinitions = Dictionary(uniqueKeysWithValues: custom.map { ($0.slug, $0.raw) })
+            modelsView.onEdit = { [weak self] definition in
+                var o = row.instance.objectValue ?? [:]
+                var config = o["config"]?.objectValue ?? [:]
+                config["customModels"] = .array(custom.map { $0.slug == definition["slug"]?.stringValue ? definition : $0.raw })
+                o["config"] = .object(config)
+                self?.upsert(row, .object(o), env: env.id)
+            }
+            modelsView.onRemove = { [weak self] slug in
+                var o = current().objectValue ?? [:]
+                var config = o["config"]?.objectValue ?? [:]
+                config["customModels"] = .array(custom.filter { $0.slug != slug }.map(\.raw))
+                o["config"] = .object(config)
+                self?.upsert(row, .object(o), env: env.id)
+                self?.writePreferences(env.id, row.instanceId, hidden: hidden, order: order.filter { $0 != slug })
+            }
+            modelsView.onHeightChange = { [weak self] in self?.onHeightChange?() }
+            modelsSection = SettingsSectionView(title: "Models", rows: [modelsView])
+            modelsCache = (modelsInput, modelsSection)
         }
-        modelsView.onFavorite = { [weak self] slug in self?.context.toggleFavorite?(env.id, ProviderInstanceId(rawValue: row.instanceId), slug); self?.refresh() }
-        // Read the other list live: a focused toggle keeps this editor across server echoes, so `hidden`
-        // and `order` above can be one write behind.
-        // Takes the page as an argument: a nested func reading `context` would capture self strongly through the
-        // closures below and keep every visited page alive.
-        func live(_ page: ProvidersSettingsView) -> (hidden: [String], order: [String]) {
-            let p = (page.context.modelPreferences?(env.id) ?? ([], .object([:]))).providers[row.instanceId]
-            return ((p?["hiddenModels"]?.arrayValue ?? []).compactMap(\.stringValue), (p?["modelOrder"]?.arrayValue ?? []).compactMap(\.stringValue))
-        }
-        modelsView.onHidden = { [weak self] next in
-            guard let self else { return }
-            self.writePreferences(env.id, row.instanceId, hidden: next, order: live(self).order)
-        }
-        modelsView.onOrder = { [weak self] next in
-            guard let self else { return }
-            self.writePreferences(env.id, row.instanceId, hidden: live(self).hidden, order: next)
-        }
-        modelsView.onAdd = { [weak self] slug in
-            var o = current().objectValue ?? [:]
-            var config = o["config"]?.objectValue ?? [:]
-            config["customModels"] = .array(custom.map(\.raw) + [.string(slug)])
-            o["config"] = .object(config)
-            self?.expandedModelAdd.remove(row.instanceId)
-            self?.upsert(row, .object(o), env: env.id)
-        }
-        modelsView.customDefinitions = Dictionary(uniqueKeysWithValues: custom.map { ($0.slug, $0.raw) })
-        modelsView.onEdit = { [weak self] definition in
-            var o = row.instance.objectValue ?? [:]
-            var config = o["config"]?.objectValue ?? [:]
-            config["customModels"] = .array(custom.map { $0.slug == definition["slug"]?.stringValue ? definition : $0.raw })
-            o["config"] = .object(config)
-            self?.upsert(row, .object(o), env: env.id)
-        }
-        modelsView.onRemove = { [weak self] slug in
-            var o = current().objectValue ?? [:]
-            var config = o["config"]?.objectValue ?? [:]
-            config["customModels"] = .array(custom.filter { $0.slug != slug }.map(\.raw))
-            o["config"] = .object(config)
-            self?.upsert(row, .object(o), env: env.id)
-            self?.writePreferences(env.id, row.instanceId, hidden: hidden, order: order.filter { $0 != slug })
-        }
-        modelsView.onHeightChange = { [weak self] in self?.onHeightChange?() }
-        sections.append(SettingsSectionView(title: "Models", rows: [modelsView]))
+        sections.append(modelsSection)
         e.sections = sections
         return e
     }
@@ -998,8 +1080,22 @@ final class ProvidersSectionView: DSView, SettingsGroupRow {
     private let listFill = CALayer()
     private let divider = CALayer()
     let addRow = SidebarStyleAddRow()
-    var list: [ProviderListRow] = [] { didSet { oldValue.forEach { $0.removeFromSuperview() }; list.forEach(card.addSubview); needsLayout = true } }
-    var editor: ProviderEditorView? { didSet { oldValue?.removeFromSuperview(); editor.map(card.addSubview); needsLayout = true } }
+    var list: [ProviderListRow] = [] {
+        didSet {
+            guard !oldValue.elementsEqual(list, by: { $0 === $1 }) else { return }
+            oldValue.filter { old in !list.contains { $0 === old } }.forEach { $0.removeFromSuperview() }
+            list.filter { $0.superview !== card }.forEach(card.addSubview)
+            needsLayout = true
+        }
+    }
+    var editor: ProviderEditorView? {
+        didSet {
+            guard oldValue !== editor else { return }
+            oldValue?.removeFromSuperview()
+            editor.map(card.addSubview)
+            needsLayout = true
+        }
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
