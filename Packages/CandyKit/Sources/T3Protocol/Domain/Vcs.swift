@@ -21,10 +21,15 @@ public struct VcsStatus: Codable, Hashable, Sendable {
         public init(path: String, insertions: Int, deletions: Int) { self.path = path; self.insertions = insertions; self.deletions = deletions }
     }
     public struct WorkingTree: Codable, Hashable, Sendable {
+        /// The repository's absolute root that every `files[].path` is relative to (git.ts:223-226,
+        /// 771fd93fc5). Absent from older servers and when the server could not resolve it.
+        public var rootPath: String?
         public var files: [File]
         public var insertions: Int
         public var deletions: Int
-        public init(files: [File] = [], insertions: Int = 0, deletions: Int = 0) { self.files = files; self.insertions = insertions; self.deletions = deletions }
+        public init(rootPath: String? = nil, files: [File] = [], insertions: Int = 0, deletions: Int = 0) {
+            self.rootPath = rootPath; self.files = files; self.insertions = insertions; self.deletions = deletions
+        }
     }
     public struct BranchChanges: Codable, Hashable, Sendable {
         public var baseRef: String?
