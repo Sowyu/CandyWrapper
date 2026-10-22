@@ -1337,7 +1337,7 @@ public final class ThreadPanelView: DSView {
     /// the spacer are centered in the column below the header, with the hero 16px above.
     private func layoutComposer(chat: CGFloat, height chatHeight: CGFloat) {
         let lane: CGFloat = viewportWidth < 640 ? 12 : 48
-        let placement = ThreadDetailsPlacement.lane(width: chat, maximum: ThreadChatWidth.maximum(ClientSettingsStore.shared.current.string("chatWidth")), padding: lane, cardLeft: timeline.detailsCardLeft)
+        let placement = ThreadDetailsPlacement.lane(width: chat, maximum: ThreadChatWidth.maximum(ClientSettingsStore.shared.current.string("chatWidth"), dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark)), padding: lane, cardLeft: timeline.detailsCardLeft)
         let width = placement.width
         let height = composer.preferredHeight
         let x = placement.x.rounded()
