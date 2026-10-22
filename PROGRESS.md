@@ -4,7 +4,9 @@
 
 - [ ] Keep composer typing out of the broad thread refresh (taken 2026-10-22, perf-typing).
 
-- [ ] Narrow Pull Requests Shift quick actions (taken 2026-10-22, perf-leftovers).
+- [x] Narrow Pull Requests Shift quick actions (2026-10-22, perf-leftovers): retain buttons and skip list derivation and row configuration on modifier changes. Counting and PullRequestsFidelityTests passed.
+
+- [ ] Retain provider model rows across favorite and filter changes (taken 2026-10-22, perf-leftovers).
 
 - [x] Port upstream timeline and streaming perf bucket b3 (taken 2026-10-22, perf-timeline): audited 17 commits. Visit marks and equal projections skip panel layout and row derivation; pending changed-turn opens still run. All 16 focused counting and thread/Markdown fidelity tests passed. Other timeline patterns already have native guards; fork clone URL belongs to the project/protocol area.
 

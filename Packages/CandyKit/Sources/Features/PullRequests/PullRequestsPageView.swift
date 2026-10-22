@@ -157,6 +157,13 @@ public final class PullRequestsPageView: DSView {
 
     private func apply(old: Model?) {
         let m = model
+        if var old {
+            old.speedMode = m.speedMode
+            if old == m {
+                rowViews.values.forEach { $0.setSpeedMode(m.speedMode) }
+                return
+            }
+        }
         search.leading = m.searchBusy ? .icon(.loaderCircle) : .icon(.search)
         filterCount.count = m.filterCount
         filtersButton.accessory = m.filterCount > 0 ? filterCount : nil
@@ -598,6 +605,7 @@ final class PullRequestRowView: DSView, NSDraggingSource {
     private var labelChips: [BadgeView] = []
     private let time = LabelView("", font: DSFont.ui(11))
     private var speedButtons: [ButtonView] = []
+    private(set) var configurationCount = 0
     private var tracking: NSTrackingArea?
     private var hovered = false { didSet { if hovered != oldValue { needsDisplay = true } } }
     private(set) var entry: PullRequestListEntry?
@@ -675,6 +683,7 @@ final class PullRequestRowView: DSView, NSDraggingSource {
 
     func configure(_ e: PullRequestListEntry, selected: Bool, showProvider: Bool, matchedElsewhere: Bool, speedMode: Bool,
                    hostActions: [String: Set<String>] = [:], nowMs: Int64) {
+        configurationCount += 1
         canDragContext = true
         watch.isHidden = true
         branches.text = ""
@@ -717,7 +726,7 @@ final class PullRequestRowView: DSView, NSDraggingSource {
         // Shift's quick actions (2994 PullRequestSpeedActions.tsx:76-78), the ones the row's host can take.
         speedButtons.forEach { $0.removeFromSuperview() }
         speedButtons = []
-        if speedMode {
+        do {
             let labels: [String: (String, IconName)] = ["close": ("Close", .gitPullRequestClosed), "merge": ("Merge", .gitMerge),
                                                         "ready": ("Ready for review", .gitPullRequestArrow), "reopen": ("Reopen", .gitPullRequestArrow)]
             let actions = PullRequestListLogic.quickActions(state: e.state, isDraft: e.isDraft, host: e.host, provider: e.provider, byHost: hostActions)
@@ -728,6 +737,7 @@ final class PullRequestRowView: DSView, NSDraggingSource {
                 b.toolTip = action == "merge" && e.stack != nil ? "Open this pull request to merge its stack" : "\(label) immediately"
                 b.setAccessibilityLabel("\(label) #\(e.number)")
                 b.action = { [weak self] in if let entry = self?.entry { self?.onSpeedAction?(entry, action) } }
+                b.isHidden = !speedMode
                 addSubview(b)
                 return b
             }
@@ -736,6 +746,13 @@ final class PullRequestRowView: DSView, NSDraggingSource {
         restyle()
         needsLayout = true
         needsDisplay = true
+    }
+
+    func setSpeedMode(_ visible: Bool) {
+        guard speedMode != visible else { return }
+        speedMode = visible
+        speedButtons.forEach { $0.isHidden = !visible }
+        needsLayout = true
     }
 
     private func restyle() {
@@ -752,7 +769,7 @@ final class PullRequestRowView: DSView, NSDraggingSource {
         super.layout()
         var right = bounds.width
         // Speed actions sit outside the row's button, `gap-1 pr-3`.
-        if !speedButtons.isEmpty {
+        if speedMode && !speedButtons.isEmpty {
             right -= 12
             for b in speedButtons.reversed() {
                 let bw = ceil(b.intrinsicContentSize.width)

@@ -159,7 +159,7 @@ final class PullRequestsPageController {
     private func setSpeedMode(_ on: Bool) {
         guard on != speedMode else { return }
         speedMode = on
-        render()
+        page.model.speedMode = on
     }
 
     // MARK: Environments and projects
