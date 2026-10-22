@@ -113,10 +113,11 @@ Git and secrets:
 
 ## If you run other agents
 
-- Run at most four Claude agents at once. Check that each shows signs of life within two minutes, and stop stalled ones.
-- Every brief says "Do not use the Agent tool". Nested agents once multiplied the cost.
-- Research and spelled-out edits go to `sonnet-medium`, judgement calls to `opus-medium`.
-- Give each agent its own worktree and task name, and run `scripts/preflight` before launching them.
+- Start them with T3 Code's `delegate_task`, so each shows up as a child thread, never with the Agent tool.
+- Run at most four at once. Check each with `task_status` within two minutes, and cancel stalled ones with `task_cancel`.
+- Every brief says "Do not start other agents". Nested agents once multiplied the cost.
+- Research and spelled-out edits go to `claude-sonnet-5-5` at effort `medium`, judgement calls to `claude-opus-5-5` at effort `medium`.
+- Give each agent `isolation: "worktree"` and its own task name, and run `scripts/preflight` before launching them.
 - The user pays per token. Read files in slices, and keep large JSON and whole files out of context.
 
 ## This Mac
