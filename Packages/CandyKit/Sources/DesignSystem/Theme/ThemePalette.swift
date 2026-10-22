@@ -57,7 +57,7 @@ public struct ThemeDefinition: Equatable, Sendable {
 
     /// CandyWrapper's own theme, not in T3: the stock look with a dithered picture the user chose (the desktop picture
     /// until they do) in the main panel (`DitherArtView`). Every other surface stays solid.
-    public static let dither = ThemeDefinition(id: "candywrapper-dither", label: "Dither", appearance: .light,
+    public static let dither = ThemeDefinition(id: "candywrapper-dither", label: "Redesign (Experimental)", appearance: .light,
                                                colors: capyLightColors, variants: [.dark: capyDarkColors])
 
     /// Dither's palette: Capy's default theme, its hover and selected fills translucent overlays like Capy's `--secondary`, from its stylesheet (`--bg`, `--panel`, `--card`, `--popover`, the text
