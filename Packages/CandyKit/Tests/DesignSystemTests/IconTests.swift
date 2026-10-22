@@ -35,7 +35,9 @@ struct IconTests {
         #expect(throws: SVGPathError.self) { try SVGPath.parse("M1") }
     }
 
-    @Test func contactSheet() throws {
+    /// An export tool, not a test: runs only with CW_EXPORT=1. Writes icons.png under `Fidelity.root`.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["CW_EXPORT"] != nil, "export tool, set CW_EXPORT=1"))
+    func contactSheet() throws {
         let names = IconName.allCases
         let cols = 24, cell = 28.0, scale = 2.0
         let rows = (names.count + cols - 1) / cols
@@ -58,9 +60,11 @@ struct IconTests {
             ctx.restoreGState()
         }
         let image = try #require(ctx.makeImage())
-        let url = URL(fileURLWithPath: "/tmp/candywrapper-icons.png")
+        try FileManager.default.createDirectory(at: Fidelity.root, withIntermediateDirectories: true)
+        let url = Fidelity.root.appendingPathComponent("icons.png")
         let dest = try #require(CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil))
         CGImageDestinationAddImage(dest, image, nil)
         #expect(CGImageDestinationFinalize(dest))
+        print("icon contact sheet:", url.path)
     }
 }
