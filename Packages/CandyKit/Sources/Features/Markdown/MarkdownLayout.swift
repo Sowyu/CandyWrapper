@@ -298,9 +298,45 @@ public final class MarkdownLayout {
     /// in the app's theme, except the blocks whose "Show code" toggle is on.
     public struct Diagrams: Equatable, Sendable {
         public var enabled: Bool
-        public var dark: Bool
+        /// The app's colors and font, which the diagram is drawn in.
+        public var palette: MermaidDiagrams.Palette
         public var showingCode: Set<Int>
-        public init(enabled: Bool, dark: Bool, showingCode: Set<Int> = []) { self.enabled = enabled; self.dark = dark; self.showingCode = showingCode }
+        /// The code block a streaming reply is still writing: it shows as code, without the view toggle.
+        public var openIndex: Int?
+        public init(enabled: Bool, palette: MermaidDiagrams.Palette, showingCode: Set<Int> = [], openIndex: Int? = nil) {
+            self.enabled = enabled; self.palette = palette; self.showingCode = showingCode; self.openIndex = openIndex
+        }
+    }
+
+    /// Code blocks in document order, nested ones included, as the layout numbers them.
+    static func codeBlockCount(_ blocks: [MarkdownBlock]) -> Int {
+        blocks.reduce(0) { n, b in
+            switch b {
+            case .code: n + 1
+            case .blockquote(let c), .alert(_, let c): n + codeBlockCount(c)
+            case .list(let l): n + l.items.reduce(0) { $0 + codeBlockCount($1.blocks) }
+            default: n
+            }
+        }
+    }
+
+    /// Whether `text` ends inside an open code fence (`isClosedCodeFence`, ChatMarkdown.tsx:474-496): a fence of
+    /// three or more backticks or tildes opens, and only a line of the same character, at least as long, closes it.
+    // ponytail: fences inside block quotes count as text; parse quote markers if replies stream diagrams in quotes
+    public static func endsInOpenFence(_ text: String) -> Bool {
+        var open: (Character, Int)?
+        for line in text.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r" }) {
+            let trimmed = line.drop { $0 == " " || $0 == "\t" }
+            guard let c = trimmed.first, c == "`" || c == "~" else { continue }
+            let run = trimmed.prefix { $0 == c }.count
+            guard run >= 3 else { continue }
+            if let (oc, ol) = open {
+                if c == oc, run >= ol, trimmed.dropFirst(run).allSatisfy({ $0 == " " || $0 == "\t" }) { open = nil }
+            } else if c == "~" || !trimmed.dropFirst(run).contains("`") {
+                open = (c, run)
+            }
+        }
+        return open != nil
     }
 
     private(set) var items: [Item] = []
@@ -530,17 +566,14 @@ private struct Builder {
         case .code(let language, let title, let code):
             let index = codeIndex
             codeIndex += 1
-            let mermaid = language.lowercased() == "mermaid" && diagrams?.enabled == true
+            // MarkdownMermaidCodeBlock.tsx:30, 42: a closed mermaid fence shows its diagram unless "Show code" is on;
+            // the fence a reply is still writing shows code without the toggle.
+            let mermaid = language.lowercased() == "mermaid" && diagrams?.enabled == true && diagrams?.openIndex != index
             if mermaid, let diagrams, !diagrams.showingCode.contains(index), !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return diagramBlock(code: code, index: index, dark: diagrams.dark, width: width)
+                return diagramBlock(code: code, index: index, palette: diagrams.palette, width: width)
             }
-            var box = codeBlock(language: language, title: title, code: code, width: width, wraps: wrapsCode != unwrapped.contains(index))
-            if mermaid {
-                // "Show diagram" leads the header's actions, before wrap and copy (`gap-0.5`).
-                box.controls.append(.init(frame: CGRect(x: width - 1 - 6 - 24 - 2 - 24 - 2 - 24, y: 1 + 6, width: 24, height: 24),
-                                          icon: .workflow, variant: .ghostMuted, action: .toggleDiagram(index)))
-            }
-            return box
+            return codeBlock(language: language, title: title, code: code, width: width, wraps: wrapsCode != unwrapped.contains(index),
+                             viewToggle: mermaid)
         case .table(let table):
             return self.table(table, width: width, context: context)
         case .rule:
@@ -817,7 +850,7 @@ private struct Builder {
     // MARK: Code blocks
 
     @MainActor
-    mutating func codeBlock(language: String, title: String?, code: String, width: CGFloat, wraps: Bool) -> Box {
+    mutating func codeBlock(language: String, title: String?, code: String, width: CGFloat, wraps: Bool, viewToggle: Bool = false) -> Box {
         let p = MarkdownStyle.codePadding
         let font = DSFont.mono(MarkdownStyle.codeFontSize)
         let string = Self.coloredCode(code, language: language, font: font)
@@ -849,18 +882,26 @@ private struct Builder {
             .font: titleFont, .foregroundColor: Themed.color(\.contrastForeground, 0.72), .markdownFindText: ""])
         let labelLine = 11 * 1.375
         let command = runsShell ? Self.runnableCommand(language: language, code: code) : nil
-        let actions: CGFloat = command == nil ? 50 : 76
+        let actions: CGFloat = 50 + (command == nil ? 0 : 26) + (viewToggle ? 26 : 0)
         if label.length > 0 {
             let titleBox = boxes.make(label, width: width - labelX - 6 - actions - 8, lineHeight: labelLine, strut: titleFont, wraps: false)
             box.items.append(.text(titleBox, CGPoint(x: labelX, y: 1 + 6 + (24 - labelLine) / 2)))
         }
         let copyX = width - 1 - 6 - 24
-        // Wrap, "Run in terminal", copy (ChatMarkdown.tsx:960-1010), 24px buttons 2px apart.
+        // Wrap, "Run in terminal", the mermaid view toggle, copy (MarkdownCodeBlock.tsx:240-284), 24px buttons 2px
+        // apart, so "Show diagram" sits where the diagram face has "Show code" (5a4e998053).
+        var x = copyX
+        if viewToggle {
+            x -= 26
+            box.controls.append(.init(frame: CGRect(x: x, y: 1 + 6, width: 24, height: 24), icon: .workflow, variant: .ghostMuted,
+                                      action: .toggleDiagram(codeIndex - 1)))
+        }
         if let command {
-            box.controls.append(.init(frame: CGRect(x: copyX - 2 - 24, y: 1 + 6, width: 24, height: 24), icon: .play, variant: .ghostMuted,
+            x -= 26
+            box.controls.append(.init(frame: CGRect(x: x, y: 1 + 6, width: 24, height: 24), icon: .play, variant: .ghostMuted,
                                       action: .runShell(command)))
         }
-        box.controls.append(.init(frame: CGRect(x: copyX - (command == nil ? 1 : 2) * 26, y: 1 + 6, width: 24, height: 24), icon: .textWrap,
+        box.controls.append(.init(frame: CGRect(x: x - 26, y: 1 + 6, width: 24, height: 24), icon: .textWrap,
                                   variant: wraps ? .secondary : .ghostMuted, action: .toggleWrap(codeIndex - 1)))
         box.controls.append(.init(frame: CGRect(x: copyX, y: 1 + 6, width: 24, height: 24), icon: .copy, variant: .ghostMuted, action: .copy(code)))
         let body = CGRect(x: 1, y: 1 + MarkdownStyle.codeHeader, width: width - 2, height: height - 2 - MarkdownStyle.codeHeader)
@@ -893,48 +934,49 @@ private struct Builder {
         return command
     }
 
-    /// The diagram face of `MarkdownCodeBlock` (ChatMarkdown.tsx:928-938): `my-[0.65rem]`, the diagram centered at
-    /// most the message's width (`max-w-full h-auto`), then a `mt-0.5` row with "Show code" and copy. While it renders,
-    /// "Rendering diagram" holds a 144pt box; a failure shows the parser message above the source.
+    /// The diagram face of `MarkdownCodeBlock` (MarkdownCodeBlock.tsx:223-232): `my-[0.65rem]` in a transparent 1px
+    /// border, a `pt-1.5 pr-1.5` row with "Show code" and copy at the right, then the diagram centered at most the
+    /// column's width (pele's `max-width:100%`, MermaidDiagram.tsx:271-290). While it first renders, the source holds
+    /// its space as an invisible `<pre>` (MarkdownMermaidCodeBlock.tsx:64-69); a failure shows the message above the
+    /// source, with Retry when the renderer failed to load (MermaidDiagram.tsx:257-269, 294-320).
     @MainActor
-    func diagramBlock(code: String, index: Int, dark: Bool, width: CGFloat) -> Box {
+    func diagramBlock(code: String, index: Int, palette: MermaidDiagrams.Palette, width: CGFloat) -> Box {
         var box = Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin)
-        var y: CGFloat = 0
-        // Find counts the source, not the diagram's own labels (MermaidDiagram.tsx:195-200).
+        // Find counts the source, not the diagram's own labels.
         box.items.append(.hiddenText(code, codeIndex: index))
         let ignored: [NSAttributedString.Key: Any] = [.markdownFindText: ""]
-        switch MermaidDiagrams.shared.result(code, dark: dark) {
+        box.controls.append(.init(frame: CGRect(x: width - 1 - 6 - 24 - 2 - 24, y: 1 + 6, width: 24, height: 24), icon: .code,
+                                  variant: .ghostMuted, action: .toggleDiagram(index)))
+        box.controls.append(.init(frame: CGRect(x: width - 1 - 6 - 24, y: 1 + 6, width: 24, height: 24), icon: .copy, variant: .ghostMuted,
+                                  action: .copy(code)))
+        let top: CGFloat = 1 + 6 + 24, inner = max(0, width - 2)
+        var y: CGFloat = 0
+        switch MermaidDiagrams.shared.result(code, palette: palette, width: inner) {
         case .rendered(let image, let size)?:
-            let w = min(size.width, width), h = size.width > 0 ? (size.height * w / size.width).rounded() : 0
-            box.items.append(.image(image, CGRect(x: ((width - w) / 2).rounded(), y: 0, width: w, height: h)))
+            let w = min(size.width, inner), h = size.width > 0 ? (size.height * w / size.width).rounded() : 0
+            box.items.append(.image(image, CGRect(x: 1 + ((inner - w) / 2).rounded(), y: top, width: w, height: h)))
             y = h
         case .failed(let message, let retryable)?:
             let font = DSFont.ui(12)
             let line = NSAttributedString(string: "Unable to render diagram: \(message)", attributes: [.font: font, .foregroundColor: Themed.color(\.destructive)].merging(ignored) { $1 })
-            let error = MarkdownTextBox(line, width: width - (retryable ? 64 : 0), lineHeight: 16, strut: font)
-            box.items.append(.text(error, .zero))
+            let error = MarkdownTextBox(line, width: inner - (retryable ? 64 : 0), lineHeight: 16, strut: font)
+            box.items.append(.text(error, CGPoint(x: 1, y: top)))
             if retryable {
-                box.controls.append(.init(frame: CGRect(x: width - 56, y: 0, width: 56, height: 24), icon: nil, variant: .ghost,
+                box.controls.append(.init(frame: CGRect(x: 1 + inner - 56, y: top, width: 56, height: 24), icon: nil, variant: .ghost,
                                           action: .retryDiagram(code), title: "Retry"))
             }
             let mono = DSFont.mono(12)
             let source = MarkdownTextBox(NSAttributedString(string: code, attributes: [.font: mono, .foregroundColor: MarkdownStyle.body].merging(ignored) { $1 }),
-                                         width: width, lineHeight: 16, strut: mono)
-            let top = max(error.height, retryable ? 24 : 0) + 8
-            box.items.append(.text(source, CGPoint(x: 0, y: top)))
-            y = top + source.height
+                                         width: inner, lineHeight: 16, strut: mono)
+            let sourceTop = max(error.height, retryable ? 24 : 0) + 8
+            box.items.append(.text(source, CGPoint(x: 1, y: top + sourceTop)))
+            y = sourceTop + source.height
         case nil:
-            let font = DSFont.ui(12)
-            let label = MarkdownTextBox(NSAttributedString(string: "Rendering diagram", attributes: [.font: font, .foregroundColor: MarkdownStyle.muted].merging(ignored) { $1 }),
-                                        width: width, lineHeight: 16, strut: font, wraps: false)
-            let lw = ceil(TextLine(NSAttributedString(string: "Rendering diagram", attributes: [.font: font])).width)
-            box.items.append(.text(label, CGPoint(x: ((width - lw) / 2).rounded(), y: 64)))
-            y = 144
+            // `.chat-markdown pre`: `0.65rem` margins, a 1px border and `0.8rem` padding around the code's lines.
+            let lines = CGFloat(code.split(separator: "\n", omittingEmptySubsequences: false).count)
+            y = 2 * MarkdownStyle.blockMargin + 2 + 2 * 12.8 + lines * MarkdownStyle.codeLineHeight
         }
-        y += 2
-        box.controls.append(.init(frame: CGRect(x: 0, y: y, width: 24, height: 24), icon: .code, variant: .ghostMuted, action: .toggleDiagram(index)))
-        box.controls.append(.init(frame: CGRect(x: width - 24, y: y, width: 24, height: 24), icon: .copy, variant: .ghostMuted, action: .copy(code)))
-        box.height = y + 24
+        box.height = top + y + 1
         return box
     }
 

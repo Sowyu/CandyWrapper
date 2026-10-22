@@ -1,11 +1,13 @@
 import AppKit
+import DesignSystem
 import WebKit
 
-/// Mermaid diagrams in chat Markdown (MermaidDiagram.tsx). T3 bundles mermaid 11 (apps/web/package.json) and loads it
-/// only once a diagram shows; so does this: the bundled script (LZMA, `Resources/mermaid.min.js.lzma`, MIT) runs in
-/// one offscreen web view that exists only while diagrams render, one at a time like T3's `renderQueue`. Each result
-/// is the sanitized SVG drawn to a 2x bitmap, cached by theme and source (64 entries, T3's `MAX_CACHED_RENDERS`);
-/// the Markdown view draws the bitmap, so nothing web stays alive once a diagram is on screen.
+/// Mermaid diagrams in chat Markdown (MermaidDiagram.tsx). Since fcb20e49aa T3 renders them with pele 1.8.0
+/// (apps/web/package.json) and loads it only once a diagram shows; so does this: the bundled build (LZMA,
+/// `Resources/pele.global.js.lzma`, MIT, `scripts/fetch-pele`) runs in one offscreen web view that exists only while
+/// diagrams render, one at a time. Each result is the sanitized SVG in the app's colors, drawn to a 2x bitmap and
+/// cached by colors, width and source (64 entries); the Markdown view draws the bitmap, so nothing web stays alive
+/// once a diagram is on screen.
 @MainActor
 public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
     public static let shared = MermaidDiagrams()
@@ -17,9 +19,43 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
         case failed(message: String, retryable: Bool)
     }
 
+    /// What pele reads from CSS: the `.pele` color variables (index.css:1734-1744) and the font.
+    public struct Palette: Hashable, Sendable {
+        public var css: String
+        public var font: String
+        public init(css: String, font: String) { self.css = css; self.font = font }
+
+        /// The `.pele` rule in an appearance: `--pele-bg` is `--background`, `--pele-border` the foreground at 28%, and so on.
+        @MainActor public static func current(dark: Bool) -> Palette {
+            var css = ""
+            NSAppearance(named: dark ? .darkAqua : .aqua)!.performAsCurrentDrawingAppearance {
+                func rgb(_ c: NSColor) -> String {
+                    let s = c.usingColorSpace(.sRGB) ?? c
+                    func v(_ x: CGFloat) -> String { String(Int((min(max(x, 0), 1) * 255).rounded())) }
+                    return "rgb(\(v(s.redComponent)) \(v(s.greenComponent)) \(v(s.blueComponent)) / \(String(format: "%.3f", s.alphaComponent)))"
+                }
+                let vars: [(String, NSColor)] = [
+                    ("bg", Themed.color(\.background)), ("fg", Themed.color(\.foreground)), ("muted", Themed.color(\.mutedForeground)),
+                    ("line", Themed.color(\.mutedForeground)), ("surface", Themed.color(\.secondary)), ("surface-alt", Themed.color(\.accent)),
+                    ("border", Themed.color(\.foreground, 0.28)), ("accent", Themed.color(\.primary)), ("critical", Themed.color(\.destructive)),
+                ]
+                css = vars.map { "--pele-\($0.0):\(rgb($0.1))" }.joined(separator: ";")
+            }
+            // The chat's font, which pele measures labels in. A font only this app registered falls back to the system's.
+            let family = DSFont.ui(14).familyName ?? ""
+            let font = (family.isEmpty || family.hasPrefix(".") ? "" : "\"\(family)\", ") + "-apple-system, system-ui, sans-serif"
+            return Palette(css: css, font: font)
+        }
+    }
+
     private var cache: [String: Result] = [:]
     private var order: [String] = []
-    private var queue: [(key: String, source: String, dark: Bool)] = []
+    /// Per source and palette: the diagram's natural width, and whether a narrower column lays it out again
+    /// (`adapts`, pele's mount); a diagram that fits or never adapts renders once for every width.
+    private var naturals: [String: (width: CGFloat, adapts: Bool)] = [:]
+    /// Per source and palette, the last key rendered, shown while another width renders.
+    private var latest: [String: String] = [:]
+    private var queue: [(base: String, key: String, source: String, palette: Palette, width: CGFloat)] = []
     private var rendering = false
     private var webView: WKWebView?
     private var ready = false
@@ -31,33 +67,50 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
     /// For the memory report and tests.
     public var isLive: Bool { webView != nil }
 
-    static func key(_ source: String, dark: Bool) -> String { (dark ? "dark\n" : "light\n") + source }
+    static func base(_ source: String, _ palette: Palette) -> String { palette.css + "\n" + palette.font + "\n" + source }
 
-    /// The finished render, or nil while it is queued (asking queues it).
-    public func result(_ source: String, dark: Bool) -> Result? {
+    private func key(base: String, width: CGFloat) -> String {
+        let w = max(0, width.rounded(.down))
+        if let natural = naturals[base], !natural.adapts || w >= natural.width { return base + "\nn" }
+        return base + "\n" + String(Int(w))
+    }
+
+    /// The render for `width`, or nil while the first one is queued (asking queues it). While another
+    /// width renders, the last render of the same diagram stands in.
+    public func result(_ source: String, palette: Palette, width: CGFloat) -> Result? {
         let source = source.trimmingCharacters(in: .whitespacesAndNewlines)
-        let key = Self.key(source, dark: dark)
+        let base = Self.base(source, palette)
+        let key = key(base: base, width: width)
         if let hit = cache[key] {
             order.removeAll { $0 == key }
             order.append(key)
             return hit
         }
-        if !queue.contains(where: { $0.key == key }) {
-            queue.append((key, source, dark))
-            pump()
+        if let i = queue.indices.last(where: { queue[$0].base == base }), !(rendering && i == 0) {
+            queue[i] = (base, key, source, palette, width) // only the newest width of a queued diagram renders
+        } else if !queue.contains(where: { $0.key == key }) {
+            queue.append((base, key, source, palette, width))
         }
-        return nil
+        pump()
+        return latest[base].flatMap { cache[$0] }
     }
 
-    /// Retry after a load failure: drops the cached failure.
-    public func retry(_ source: String, dark: Bool) {
-        cache[Self.key(source.trimmingCharacters(in: .whitespacesAndNewlines), dark: dark)] = nil
+    /// Retry after a load failure: drops the diagram's cached renders.
+    public func retry(_ source: String, palette: Palette) {
+        let base = Self.base(source.trimmingCharacters(in: .whitespacesAndNewlines), palette)
+        for key in cache.keys where key.hasPrefix(base + "\n") { cache[key] = nil }
+        order.removeAll { $0.hasPrefix(base + "\n") }
+        latest[base] = nil
         NotificationCenter.default.post(name: Self.didRender, object: nil)
     }
 
-    private func store(_ key: String, _ result: Result) {
+    private func store(_ next: (base: String, key: String, source: String, palette: Palette, width: CGFloat), _ result: Result, natural: (CGFloat, Bool)?) {
+        if let natural { naturals[next.base] = natural }
+        let key = natural == nil ? next.key : self.key(base: next.base, width: next.width)
         cache[key] = result
+        order.removeAll { $0 == key }
         order.append(key)
+        latest[next.base] = key
         while order.count > 64 { cache[order.removeFirst()] = nil }
         NotificationCenter.default.post(name: Self.didRender, object: nil)
     }
@@ -68,38 +121,36 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
         guard let next = queue.first else { scheduleRelease(); return }
         guard ready else { start(); return }
         rendering = true
-        webView?.callAsyncJavaScript(Self.renderCall, arguments: ["source": next.source, "dark": next.dark], in: nil, in: .page) { [weak self] reply in
+        webView?.callAsyncJavaScript(Self.renderCall, arguments: ["source": next.source, "vars": next.palette.css, "font": next.palette.font,
+                                                                  "width": Double(next.width)], in: nil, in: .page) { [weak self] reply in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.rendering = false
                 self.queue.removeFirst()
-                self.store(next.key, Self.decode(reply))
+                let (result, natural) = Self.decode(reply)
+                self.store(next, result, natural: natural)
                 self.pump()
             }
         }
     }
 
-    nonisolated static func decode(_ reply: Swift.Result<Any, Error>) -> Result {
+    nonisolated static func decode(_ reply: Swift.Result<Any, Error>) -> (Result, (CGFloat, Bool)?) {
+        let failed = Result.failed(message: "The diagram could not be rendered.", retryable: false)
         switch reply {
-        case .failure(let error): return .failed(message: error.localizedDescription, retryable: true)
+        case .failure(let error): return (.failed(message: error.localizedDescription, retryable: true), nil)
         case .success(let value):
-            guard let o = value as? [String: Any] else { return .failed(message: "The diagram could not be rendered.", retryable: false) }
-            if let message = o["error"] as? String {
-                let retryable = message.range(of: "dynamically imported module|importing a module script|failed to fetch", options: [.regularExpression, .caseInsensitive]) != nil
-                return .failed(message: message, retryable: retryable)
-            }
+            guard let o = value as? [String: Any] else { return (failed, nil) }
+            if let message = o["error"] as? String { return (.failed(message: message, retryable: o["retryable"] as? Bool ?? false), nil) }
             guard let png = o["png"] as? String, let comma = png.firstIndex(of: ","),
                   let data = Data(base64Encoded: String(png[png.index(after: comma)...])),
                   let source = CGImageSourceCreateWithData(data as CFData, nil), let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
-                  let w = o["width"] as? Double, let h = o["height"] as? Double else {
-                return .failed(message: "The diagram could not be rendered.", retryable: false)
-            }
-            return .rendered(image, CGSize(width: w, height: h))
+                  let w = o["width"] as? Double, let h = o["height"] as? Double else { return (failed, nil) }
+            let natural = (o["natural"] as? Double).map { (CGFloat($0), o["adapts"] as? Bool ?? false) }
+            return (.rendered(image, CGSize(width: w, height: h)), natural)
         }
     }
 
-    /// Mermaid is about 3.5 MB of script: it loads only now, into a page that can reach nothing. The
-    /// page and its web content process start at once while a background task reads and unpacks the
+    /// The page and its web content process start at once while a background task reads and unpacks the
     /// script; the script runs once both are there, so the main thread never decompresses it.
     private func start() {
         guard webView == nil else { return }
@@ -121,7 +172,7 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
 
     /// The bundled script, unpacked; nil when it is missing or damaged. Runs off the main thread.
     nonisolated static func loadScript() -> String? {
-        guard let url = Bundle.module.url(forResource: "mermaid.min", withExtension: "js.lzma"),
+        guard let url = Bundle.module.url(forResource: "pele.global", withExtension: "js.lzma"),
               let packed = try? Data(contentsOf: url), let script = try? (packed as NSData).decompressed(using: .lzma) as Data,
               let text = NSMutableString(data: script, encoding: String.Encoding.utf8.rawValue) else { return nil }
         // `;0` gives the evaluation a result WebKit can return. The string stays an NSString, so
@@ -138,7 +189,8 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
             release()
             let failed = queue
             queue.removeAll()
-            for q in failed { store(q.key, .failed(message: "Mermaid failed to load.", retryable: true)) }
+            // MermaidDiagram.tsx:257-268: a renderer that failed to load offers Retry.
+            for q in failed { store(q, .failed(message: "The diagram renderer failed to load.", retryable: true), natural: nil) }
             return
         }
         web.evaluateJavaScript(text) { [weak self, weak web] _, _ in
@@ -190,51 +242,52 @@ public final class MermaidDiagrams: NSObject, WKNavigationDelegate {
     </head><body></body></html>
     """
 
-    /// `renderMermaid` (MermaidDiagram.tsx:63-105) plus `sanitizeMermaidSvg` (:37-57) without DOMPurify: links,
-    /// images and scripts go, so do `href`, `src` and remote `url()`; then the SVG is drawn to a 2x canvas.
+    /// What pele's `mount` does for one width (MermaidDiagram.tsx:238-255 with pele's mount): the natural render, and
+    /// when the column is narrower and the diagram lays out differently at `maxWidth: 1`, a render at the column's width.
+    /// Then `sanitizeDiagramSvg` (:159-167) without DOMPurify: links, images, scripts, styles and foreign objects go, so
+    /// do `href`, `src`, `srcset` and event handlers. The SVG gets the color variables inline, as `diagramImageUrl`
+    /// (:206-220) does, and is drawn to a 2x canvas.
+    // ponytail: no KaTeX, so `$$...$$` labels show their TeX; load KaTeX here if math rendering is ported.
     static let renderCall = """
-    const id = "mermaid-diagram-" + (window.__n = (window.__n || 0) + 1);
+    if (typeof pele === "undefined") return { error: "The diagram renderer failed to load.", retryable: true };
     try {
-      mermaid.initialize({
-        startOnLoad: false, securityLevel: "strict", suppressErrorRendering: true,
-        secure: ["secure", "securityLevel", "startOnLoad", "maxTextSize", "suppressErrorRendering", "maxEdges", "htmlLabels", "themeCSS"],
-        htmlLabels: false, flowchart: { htmlLabels: false }, theme: dark ? "dark" : "default",
-        fontFamily: getComputedStyle(document.body).fontFamily,
-      });
-      const { svg } = await mermaid.render(id, source);
-      const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
-      const remote = /url\\(\\s*(?!['"]?#)[^)]*\\)/gi;
-      for (const bad of doc.querySelectorAll("a, img, image, script, foreignObject")) bad.remove();
-      for (const el of doc.querySelectorAll("*")) {
-        for (const name of ["href", "xlink:href", "src", "srcset"]) el.removeAttribute(name);
-        const style = el.getAttribute("style");
-        if (style) el.setAttribute("style", style.replace(remote, "none"));
-        if (el.tagName.toLowerCase() === "style") el.textContent = el.textContent.replace(remote, "none");
+      const options = { links: false, images: false, autoDirection: false, fontFamily: font,
+                        idPrefix: "pele-" + (window.__n = (window.__n || 0) + 1) };
+      const natural = pele.render(source, options);
+      let result = natural, adapts = false;
+      if (width > 0 && width < natural.width) {
+        adapts = pele.render(source, { ...options, maxWidth: 1 }).svg !== natural.svg;
+        if (adapts) result = pele.render(source, { ...options, maxWidth: width });
       }
+      const doc = new DOMParser().parseFromString(result.svg, "image/svg+xml");
       const root = doc.documentElement;
-      const box = (root.getAttribute("viewBox") || "").trim().split(/\\s+/).map(Number);
-      const width = box.length === 4 && box.every(Number.isFinite) ? box[2] : parseFloat(root.getAttribute("width")) || 600;
-      const height = box.length === 4 && box.every(Number.isFinite) ? box[3] : parseFloat(root.getAttribute("height")) || 400;
-      root.setAttribute("width", String(width));
-      root.setAttribute("height", String(height));
+      if (root.localName !== "svg") throw new Error("The diagram could not be rendered.");
+      for (const link of [...doc.querySelectorAll("a")]) link.replaceWith(...link.childNodes);
+      for (const bad of doc.querySelectorAll("image, img, script, style, foreignObject, iframe")) bad.remove();
+      for (const el of doc.querySelectorAll("*")) {
+        for (const attr of [...el.attributes]) {
+          const name = attr.name.toLowerCase();
+          if (name === "href" || name === "xlink:href" || name === "src" || name === "srcset" || name.startsWith("on")) el.removeAttribute(attr.name);
+        }
+      }
       root.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-      root.style.maxWidth = "none";
+      root.setAttribute("width", String(result.width));
+      root.setAttribute("height", String(result.height));
+      root.setAttribute("style", vars + ";--pele-font:" + font + ";" + (root.getAttribute("style") || "") + ";max-width:none");
       const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(root)], { type: "image/svg+xml" }));
       try {
         const image = new Image();
         await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = () => reject(new Error("The diagram could not be rendered.")); image.src = url; });
         const canvas = document.createElement("canvas");
-        canvas.width = Math.ceil(width * 2);
-        canvas.height = Math.ceil(height * 2);
+        canvas.width = Math.ceil(result.width * 2);
+        canvas.height = Math.ceil(result.height * 2);
         const context = canvas.getContext("2d");
         context.scale(2, 2);
-        context.drawImage(image, 0, 0, width, height);
-        return { png: canvas.toDataURL("image/png"), width, height };
+        context.drawImage(image, 0, 0, result.width, result.height);
+        return { png: canvas.toDataURL("image/png"), width: result.width, height: result.height, natural: natural.width, adapts };
       } finally { URL.revokeObjectURL(url); }
     } catch (error) {
       return { error: (error && error.message) || "The diagram could not be rendered." };
-    } finally {
-      document.getElementById("d" + id)?.remove();
     }
     """
 }

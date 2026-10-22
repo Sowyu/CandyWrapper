@@ -28,7 +28,7 @@ let package = Package(
         // Normalized state and reducers fed by T3Client streams.
         .target(name: "T3Store", dependencies: ["T3Protocol"], swiftSettings: sizeOptimized),
         // Screens built from DesignSystem components and fed by T3Store (sidebar, timeline, composer...).
-        .target(name: "Features", dependencies: ["DesignSystem", "T3Store", "T3Protocol", .product(name: "SwiftTerm", package: "SwiftTerm")], resources: [.copy("Resources/candy-town.gray"), .copy("Resources/mermaid.min.js.lzma"), .copy("Resources/LICENSE-mermaid.txt"), .copy("Resources/native-licenses.json"),
+        .target(name: "Features", dependencies: ["DesignSystem", "T3Store", "T3Protocol", .product(name: "SwiftTerm", package: "SwiftTerm")], resources: [.copy("Resources/candy-town.gray"), .copy("Resources/pele.global.js.lzma"), .copy("Resources/LICENSE-pele.txt"), .copy("Resources/native-licenses.json"),
                          .copy("Resources/SymbolsNerdFontMono-Regular.ttf"), .copy("Resources/LICENSE-symbols-nerd-font.txt")],
                 swiftSettings: sizeOptimized),
         .testTarget(name: "DesignSystemTests", dependencies: ["DesignSystem"]),
