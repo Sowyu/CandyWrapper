@@ -695,7 +695,14 @@ public final class ComposerView: DSView {
 
     private func showImplementMenu() {
         let item = MenuItem("Implement in a new thread", disabled: !planPill.isEnabled) { [weak self] in self?.onImplementInNewThread?() }
-        MenuPopupView.show([item], from: implementMenu, placement: PopupPlacement(side: .top, align: .end, sideOffset: 4, fallbackAxisSide: .none))
+        let menu = MenuPopupView.show([item], from: implementMenu, placement: PopupPlacement(side: .top, align: .end, sideOffset: 4, fallbackAxisSide: .none))
+        // A click keeps the prompt focused through the menu (`preventDefault` on mousedown,
+        // ComposerPrimaryActions.tsx:242-244, T3 232e930cd2); a keyboard open leaves focus on the trigger.
+        guard let type = NSApp.currentEvent?.type, type == .leftMouseDown || type == .leftMouseUp else { return }
+        menu?.hostPopup?.onClose = { [weak self] in
+            guard let self, window?.firstResponder === implementMenu else { return }
+            window?.makeFirstResponder(editor)
+        }
     }
 
     /// Sends the prompt as the primary button would without a modifier (`submitCitationAndSend`, ChatComposer.tsx:4305-4314).
