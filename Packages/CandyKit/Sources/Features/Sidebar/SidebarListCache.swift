@@ -19,6 +19,7 @@ public final class SidebarListCache {
         var snooze: Bool
         var environments: SidebarEnvironments
         var scratchRoots: [String: String]
+        var dither: Bool
     }
 
     /// A thread's place: its shelf and the part of it that shelf sorts by (the id tiebreak never changes).
@@ -83,6 +84,8 @@ public final class SidebarListCache {
         /// Per item: the row's thread id and when its labels next change; nil and `.max` for other items.
         var ids: [ThreadId?]
         var sections: [SidebarSection?]
+        /// Rows under a Dither project header: the builder sets that after the cache, so a patch sets it again.
+        var inProjectSection: [Bool]
         var validUntil: [Int64]
     }
     private var layout: Layout?
@@ -102,7 +105,7 @@ public final class SidebarListCache {
         let shared = Shared(projects: snapshot.projects, grouping: state.grouping, primaryId: state.environments.primaryId,
                             scopeKey: state.projectScopeKey, scopedProjectIds: state.scopedProjectIds,
                             settlement: state.capabilities.threadSettlement, snooze: state.capabilities.threadSnooze,
-                            environments: state.environments, scratchRoots: state.scratchRoots)
+                            environments: state.environments, scratchRoots: state.scratchRoots, dither: state.dither)
         // ponytail: the Working beta shelf orders by this client's return times, which move on their own; it rebuilds the shelves every time, make it incremental if the beta ships on by default
         guard shared == self.shared, var ctx = context, !state.workingShelfEnabled else {
             structural = true
@@ -280,17 +283,19 @@ public final class SidebarListCache {
     /// Notes where a full list put each row (`items` calls it).
     func record(_ items: [SidebarItem], state: SidebarListState, nowMs: Int64) {
         generation += 1
-        var layout = Layout(state: state, nowMs: nowMs, indexById: [:], ids: [], sections: [], validUntil: [])
+        var layout = Layout(state: state, nowMs: nowMs, indexById: [:], ids: [], sections: [], inProjectSection: [], validUntil: [])
         layout.ids.reserveCapacity(items.count)
         layout.sections.reserveCapacity(items.count)
         layout.validUntil.reserveCapacity(items.count)
         for (i, item) in items.enumerated() {
             guard case .row(let r) = item, let row = rows[r.id] else {
-                layout.ids.append(nil); layout.sections.append(nil); layout.validUntil.append(.max); continue
+                layout.ids.append(nil); layout.sections.append(nil); layout.inProjectSection.append(false)
+                layout.validUntil.append(.max); continue
             }
             layout.indexById[r.id] = i
             layout.ids.append(r.id)
             layout.sections.append(row.section)
+            layout.inProjectSection.append(r.inProjectSection)
             layout.validUntil.append(row.validUntil)
         }
         self.layout = layout
@@ -316,7 +321,8 @@ public final class SidebarListCache {
         var out: [(index: Int, item: SidebarItem)] = []
         for (at, thread) in due.sorted(by: { $0.key < $1.key }) {
             guard let section = layout.sections[at] else { return nil }
-            let model = row(thread, section: section, ctx: ctx, state: state, nowMs: nowMs)
+            var model = row(thread, section: section, ctx: ctx, state: state, nowMs: nowMs)
+            model.inProjectSection = layout.inProjectSection[at]
             layout.validUntil[at] = rows[thread.id]?.validUntil ?? .max
             out.append((at, .row(model)))
         }

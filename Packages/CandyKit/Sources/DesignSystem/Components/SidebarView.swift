@@ -266,6 +266,8 @@ public final class SidebarLayoutView: DSView {
         main.layer?.borderColor = Themed.color(\.contrastForeground, 0.08).cgColor(in: self)
         layer?.backgroundColor = dither ? Themed.color(\.sidebar, sidebar: true).cgColor(in: self) : nil
         sidebar.showsBorder = !dither
+        // The band and frame around the panel are flat, so the sidebar drops its grain to match them.
+        if sidebar.surface.showsGrain == dither { sidebar.surface.showsGrain = !dither }
         tabStrip.isHidden = !dither
         tabStrip.frame = NSRect(x: gap, y: 0, width: max(0, bounds.width - gap), height: band)
         // Over the sidebar's titlebar row, right-aligned, while the sidebar is open.

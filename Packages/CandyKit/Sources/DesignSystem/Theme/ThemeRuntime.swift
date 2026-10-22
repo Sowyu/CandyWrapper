@@ -78,10 +78,6 @@ public enum ThemeRuntime {
     public private(set) static var dither = (light: false, dark: false)
     public private(set) static var ditherPicture: URL?
     public nonisolated static func isDither(dark: Bool) -> Bool { dark ? ditherFlags.dark : ditherFlags.light }
-    // ponytail: one row style for both appearances, so a light theme paired with dark Dither shows Capy rows in light
-    // too; pass the appearance to item heights if mixed setups matter.
-    /// Whether the sidebar uses Dither's compact two-line rows: Dither on either side.
-    public nonisolated static var ditherRows: Bool { ditherFlags.dark || ditherFlags.light }
     /// Whether floating panes and bubbles are frosted glass over their own blur: Glass and Dither.
     public nonisolated static func framesPanes(dark: Bool) -> Bool {
         isGlass(dark: dark) || (dark ? ditherFlags.dark : ditherFlags.light)
