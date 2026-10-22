@@ -124,7 +124,8 @@ final class DiffReviewCommentCardView: DSView, DiffAnnotationContent, FocusWithi
     }
     override func layout() {
         super.layout()
-        icon.frame = NSRect(x: 14, y: 12, width: 14, height: 14)
+        // `size-3.5 h-5`: the glyph centers in a 20pt box, the message's first line (T3 26c6df72f8).
+        icon.frame = NSRect(x: 14, y: 13, width: 14, height: 14)
         message.frame = NSRect(x: 38, y: 10, width: max(0, bounds.width - 76), height: bounds.height - 20)
         remove.frame = NSRect(x: bounds.width - 32, y: 6, width: 24, height: 24)
     }
