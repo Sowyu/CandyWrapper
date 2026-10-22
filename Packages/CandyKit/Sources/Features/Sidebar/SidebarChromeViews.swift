@@ -448,11 +448,15 @@ public final class SidebarAccountRowView: ControlView {
     private let avatar = CALayer()
     private let initials = LabelView("", font: SB.font(11, .semibold), color: SB.c(\.sidebarForeground))
     private let name = LabelView("", font: SB.font(13, .medium), color: SB.c(\.sidebarForeground))
-    private let detail = LabelView("", font: SB.font(12), color: SB.c(\.sidebarMutedForeground))
+    let detail = LabelView("", font: SB.font(12), color: SB.c(\.sidebarMutedForeground))
     /// Redesign shows the e-mail as T3's blurred scramble (`RedactedSensitiveText`), for screen shares, and fades to
-    /// the real `detail` while the pointer is over the row.
-    private let redacted = LabelView("", font: SB.font(12), color: SB.c(\.sidebarMutedForeground))
+    /// the real `detail` once the user clicks it; a second click blurs it again (the user, 2026-10-22).
+    let redacted = LabelView("", font: SB.font(12), color: SB.c(\.sidebarMutedForeground))
     private let chevron = IconView(name: .chevronUp, size: 12)
+    /// The e-mail shows unblurred until it is clicked again or the account changes.
+    var revealed = false
+    /// The press began on the e-mail line, so the click toggles it instead of opening the menu.
+    var pressOnEmail = false
     public var onOpenSettings: (() -> Void)?
     public var onOpenUsage: (() -> Void)?
     /// The updates "Update all" would run now (`UpdateEverythingLogic.offered`); the item hides at 0.
@@ -480,7 +484,10 @@ public final class SidebarAccountRowView: ControlView {
         redacted.layer?.filters = [CIFilter(name: "CIGaussianBlur", parameters: [kCIInputRadiusKey: 2])].compactMap { $0 }
         addSubview(chevron)
         setAccessibilityRole(.button)
-        action = { [weak self] in self?.showMenu() }
+        action = { [weak self] in
+            guard let self else { return }
+            if self.pressOnEmail { self.revealed.toggle(); self.updateRedaction(animated: true) } else { self.showMenu() }
+        }
         set(name: NSFullUserName(), detail: "This Mac", image: nil, initials: nil)
     }
 
@@ -488,6 +495,7 @@ public final class SidebarAccountRowView: ControlView {
 
     public func set(name: String, detail: String, image: CGImage?, initials: String?) {
         self.name.text = name
+        if self.detail.text != detail { revealed = false }
         self.detail.text = detail
         redacted.text = UsageRedactedTextView.placeholder(detail)
         updateRedaction(animated: false)
@@ -504,15 +512,22 @@ public final class SidebarAccountRowView: ControlView {
 
     public override func stateDidChange(from old: State) {
         super.stateDidChange(from: old)
-        if old.hovered != state.hovered { updateRedaction(animated: true) }
         needsDisplay = true
     }
 
-    /// Under Redesign an e-mail rests blurred and shows while hovered; other themes and other lines show as they are.
+    public override func mouseDown(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        var email = redacted.frame
+        email.size.width = min(email.width, ceil(redacted.textWidth))
+        pressOnEmail = !redacted.isHidden && email.insetBy(dx: -4, dy: -3).contains(p)
+        super.mouseDown(with: event)
+    }
+
+    /// Under Redesign an e-mail rests blurred and shows once clicked; other themes and other lines show as they are.
     private func updateRedaction(animated: Bool) {
         let redacts = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && detail.text.contains("@")
         redacted.isHidden = !redacts
-        let hidden = redacts && !state.hovered
+        let hidden = redacts && !revealed
         guard detail.alphaValue != (hidden ? 0 : 1) else { return }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = animated && !Motion.reduced ? 0.15 : 0
