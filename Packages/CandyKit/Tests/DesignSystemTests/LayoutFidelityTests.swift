@@ -3,9 +3,32 @@ import Testing
 @testable import DesignSystem
 
 /// Layout batch fidelity against T3's markup in Chromium (specs from scripts/gen-layout-spec.py).
-/// Reports: /tmp/candywrapper-fidelity/report-<component>.html.
-@MainActor
+/// Reports: report-<component>.html under `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct LayoutFidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "discovery-list": .init(0.045),
+        "group": .init(0.08),
+        "middle-truncate": .init(0.1),
+        "number-field": .init(0.035, except: [
+            "default.increment.focus-visible.dark": 0.09,
+            "default.increment.focus-visible.light": 0.09,
+            "disabled.focus-visible.dark": 0.035, // FLAGGED: measured 0.184, median 0.009; wrong render? fails until someone decides
+            "disabled.focus-visible.light": 0.035, // FLAGGED: measured 0.184, median 0.009; wrong render? fails until someone decides
+        ]),
+        "panel-tab-close": .init(0.12, except: [
+            "tab.focus-visible.dark": 0.18,
+            "tab.focus-visible.light": 0.18,
+        ]),
+        "qr-code": .init(0.065),
+        "scroll-area": .init(0.025),
+        "settings": .init(0.035),
+        "standalone-page": .init(0.045),
+        "table": .init(0.045),
+        "wizard-steps": .init(0.04),
+    ]
+
     /// 32px rows with a bottom border, the ScrollArea test content.
     final class Rows: DSView {
         override var wantsUpdateLayer: Bool { false }
@@ -16,7 +39,7 @@ struct LayoutFidelityTests {
     }
 
     @Test func scrollArea() throws {
-        try FormsFidelityTests.run("scroll-area", title: "ScrollArea") { n, state, css in
+        try FormsFidelityTests.run("scroll-area", title: "ScrollArea", ceilings: Self.ceilings) { n, state, css in
             let rows = Rows(frame: NSRect(x: 0, y: 0, width: css.width, height: 384))
             let v = ScrollAreaView(documentView: rows, scrollFade: n["fade"] == "true")
             v.frame.size = css
@@ -28,7 +51,7 @@ struct LayoutFidelityTests {
     }
 
     @Test func settings() throws {
-        try FormsFidelityTests.run("settings", title: "Settings") { n, _, css in
+        try FormsFidelityTests.run("settings", title: "Settings", ceilings: Self.ceilings) { n, _, css in
             let all = [("Theme", "Choose how T3 Code looks on this device.", "System"),
                        ("Confirm thread deletion", "Ask before deleting a thread and its history.", "Enabled"),
                        ("Diff word wrap", nil, "Off")]
@@ -42,7 +65,7 @@ struct LayoutFidelityTests {
     }
 
     @Test func table() throws {
-        try FormsFidelityTests.run("table", title: "Table") { n, state, css in
+        try FormsFidelityTests.run("table", title: "Table", ceilings: Self.ceilings) { n, state, css in
             let v = DataTableView(headers: ["Process", "CPU", "Memory"],
                                   rows: [["t3 serve", "0.4%", "182 MB"], ["claude", "2.1%", "96 MB"], ["git status", "0.0%", "4 MB"]])
             if let s = n["selected"] { v.selectedRows = [Int(s)!] }
@@ -53,7 +76,7 @@ struct LayoutFidelityTests {
     }
 
     @Test func group() throws {
-        try FormsFidelityTests.run("group", title: "Group") { n, state, _ in
+        try FormsFidelityTests.run("group", title: "Group", ceilings: Self.ceilings) { n, state, _ in
             let variant = ButtonView.Variant(rawValue: n["variant"]!)!
             let buttons = n["titles"]!.split(separator: ",").map { ButtonView(String($0), variant: variant, size: .sm) }
             let target = variant == .outline ? buttons[1] : buttons[0]
@@ -63,7 +86,7 @@ struct LayoutFidelityTests {
     }
 
     @Test func standalonePage() throws {
-        try FormsFidelityTests.run("standalone-page", title: "StandalonePage") { n, _, css in
+        try FormsFidelityTests.run("standalone-page", title: "StandalonePage", ceilings: Self.ceilings) { n, _, css in
             let v = StandalonePageView(tone: StandalonePageView.Tone(rawValue: n["tone"]!)!, eyebrow: n["eyebrow"]!, title: n["title"]!, text: n["text"]!)
             v.frame.size = css
             return v
@@ -71,7 +94,7 @@ struct LayoutFidelityTests {
     }
 
     @Test func wizardSteps() throws {
-        try FormsFidelityTests.run("wizard-steps", title: "WizardSteps") { n, state, css in
+        try FormsFidelityTests.run("wizard-steps", title: "WizardSteps", ceilings: Self.ceilings) { n, state, css in
             let v = WizardStepsView(steps: n["steps"]!.split(separator: ",").map(String.init), currentStep: Int(n["current"]!)!)
             v.stepViews[2].previewState(FidelityTests.controlState(state))
             v.frame.size.width = css.width
@@ -80,7 +103,7 @@ struct LayoutFidelityTests {
     }
 
     @Test func discoveryList() throws {
-        try FormsFidelityTests.run("discovery-list", title: "DiscoveryList") { _, state, css in
+        try FormsFidelityTests.run("discovery-list", title: "DiscoveryList", ceilings: Self.ceilings) { _, state, css in
             let rows = [DiscoveryRowView(icon: .folder, title: "candywrapper", detail: "~/Projects/candywrapper"),
                         DiscoveryRowView(icon: .terminal, title: "t3code", detail: "~/Projects/t3code, a very long description that truncates")]
             rows[0].previewState(FidelityTests.controlState(state))
@@ -91,7 +114,7 @@ struct LayoutFidelityTests {
     }
 
     @Test func middleTruncate() throws {
-        try FormsFidelityTests.run("middle-truncate", title: "MiddleTruncate") { n, _, css in
+        try FormsFidelityTests.run("middle-truncate", title: "MiddleTruncate", ceilings: Self.ceilings) { n, _, css in
             // The reference box is the flex item's width; our intrinsic width is the untruncated text.
             let box = DSView(frame: NSRect(origin: .zero, size: css))
             let v = MiddleTruncateView(n["value"]!)
@@ -113,7 +136,7 @@ struct LayoutFidelityTests {
     }
 
     @Test func panelTabClose() throws {
-        try FormsFidelityTests.run("panel-tab-close", title: "PanelTabCloseButton") { n, state, _ in
+        try FormsFidelityTests.run("panel-tab-close", title: "PanelTabCloseButton", ceilings: Self.ceilings) { n, state, _ in
             let icon = IconView(name: .terminal, size: 12, strokeColor: Themed.color(\.contrastMutedForeground))
             let b = PanelTabCloseButton(identity: icon)
             let buttonTarget = n["buttonTarget"] == "true"
@@ -129,14 +152,14 @@ struct LayoutFidelityTests {
     }
 
     @Test func qrCode() throws {
-        try FormsFidelityTests.run("qr-code", title: "QRCode") { n, _, _ in
+        try FormsFidelityTests.run("qr-code", title: "QRCode", ceilings: Self.ceilings) { n, _, _ in
             let level: QRCode.Ecc = ["L": .low, "M": .medium, "Q": .quartile, "H": .high][n["level"]!]!
             return QRCodeView(value: n["value"]!, size: CGFloat(Double(n["size"]!)!), level: level, marginSize: Int(n["margin"]!)!)
         }
     }
 
     @Test func numberField() throws {
-        try FormsFidelityTests.run("number-field", title: "NumberField") { n, state, css in
+        try FormsFidelityTests.run("number-field", title: "NumberField", ceilings: Self.ceilings) { n, state, css in
             let v = NumberFieldView(value: Double(n["value"]!)!, size: NumberFieldView.Size(rawValue: n["size"]!)!)
             if n["disabled"] == "true" { v.isEnabled = false }
             else {

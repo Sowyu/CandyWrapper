@@ -5,8 +5,16 @@ import Testing
 /// Sidebar batch fidelity: SidebarMenuButton, SidebarMenuSub, CommandItem and the hue slider against T3's
 /// markup in Chromium (specs from scripts/gen-sidebar-spec.py), plus the sidebar background and grain
 /// against the real app's capture (design/reference/02-sidebar-populated.*.png, 2x of 1100x780).
-@MainActor
+@MainActor @Suite(.fidelity)
 struct SidebarFidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "command-item": .init(0.04),
+        "hue-slider": .init(0.045),
+        "sidebar-menu-button": .init(0.035),
+        "sidebar-menu-sub": .init(0.035),
+    ]
+
     typealias Native = [String: String]
 
     @Test func sidebarMenuButton() throws {
@@ -123,7 +131,7 @@ struct SidebarFidelityTests {
             for state in spec["states"] as! [String] {
                 for theme in spec["themes"] as! [String] {
                     let file = "\(name).\(state).\(theme).png"
-                    guard let ref = NSBitmapImageRep(data: try Data(contentsOf: refDir.appendingPathComponent(file))) else { continue }
+                    let ref = try #require(NSBitmapImageRep(data: Data(contentsOf: refDir.appendingPathComponent(file))))
                     let css = manifest[name]!
                     let view = make(native)
                     let canvas = FidelityTests.Canvas(frame: .zero)
@@ -160,7 +168,7 @@ struct SidebarFidelityTests {
         }
         let mean = results.map(\.differing).reduce(0, +) / Double(max(1, results.count))
         print(String(format: "FIDELITY %@: %d cases, mean differing %.2f%%", component, results.count, mean * 100))
-        #expect(!results.isEmpty)
+        Self.ceilings.check(component, results.map { ($0.name, $0.differing) })
     }
 }
 
