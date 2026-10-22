@@ -20,6 +20,25 @@ private func snap(_ sequence: Int, projects: [ProjectShell], threads: [ThreadShe
 
 /// Ports of packages/client-runtime/src/state/shellReducer.test.ts ("applyShellStreamEvent").
 @Suite struct ShellReducerPortTests {
+    @Test func unchangedIdentityRefreshesDoNotCopyProjects() {
+        var current = snap(5, projects: [project { $0.repositoryIdentity = repo }])
+        let incoming = snap(5, projects: [project { $0.repositoryIdentity = repo }])
+        var copies = 0
+        for _ in 0..<20 {
+            let next = merge(current, incoming, roots: [baseProject.workspaceRoot])
+            let sharesStorage = current.projects.withUnsafeBufferPointer { before in
+                next.projects.withUnsafeBufferPointer { after in before.baseAddress == after.baseAddress }
+            }
+            if !sharesStorage { copies += 1 }
+            #expect(next == current)
+            current = next
+        }
+        #expect(copies == 0)
+        let cleared = merge(current, snap(5, projects: [baseProject]), roots: [baseProject.workspaceRoot])
+        #expect(cleared.projects[0].repositoryIdentity == nil)
+        #expect(current.projects[0].repositoryIdentity == repo)
+    }
+
     @Test func updatesAThreadInPlaceWithoutMovingSiblings() {
         let threads = ["a", "b", "c"].map { thread($0) }
         var updated = threads[1]

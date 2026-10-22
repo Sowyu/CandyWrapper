@@ -70,16 +70,15 @@ public enum ShellReduction {
             let resolved = Set(roots)
             let nextById = Dictionary(next.projects.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
             var merged = previous
-            merged.projects = previous.projects.map { project in
-                guard let candidate = nextById[project.id], candidate.workspaceRoot == project.workspaceRoot
-                else { return project }
-                var patched = project
-                if resolved.contains(project.workspaceRoot) {
-                    patched.repositoryIdentity = candidate.repositoryIdentity
-                } else if project.repositoryIdentity == nil, candidate.repositoryIdentity != nil {
-                    patched.repositoryIdentity = candidate.repositoryIdentity
-                }
-                return patched
+            // Keep the array's shared storage until an identity actually changes. Refreshes often
+            // resolve every root to the same value (T3 3cb13308e, shellReducer.ts:102-108).
+            for i in previous.projects.indices {
+                let project = previous.projects[i]
+                guard let candidate = nextById[project.id], candidate.workspaceRoot == project.workspaceRoot,
+                      resolved.contains(project.workspaceRoot) || project.repositoryIdentity == nil,
+                      candidate.repositoryIdentity != project.repositoryIdentity
+                else { continue }
+                merged.projects[i].repositoryIdentity = candidate.repositoryIdentity
             }
             return merged
         }
