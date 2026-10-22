@@ -597,21 +597,23 @@ final class ComposerController {
         }
     }
 
-    private var migratingModelPreferences: Set<String> = []
+    /// The connection generation each environment's migration was last sent in (`attemptedMigrationGenerations`).
+    private var migrationGenerations: [String: Int] = [:]
 
-    /// `useMigrateModelPreferences` (useSettings.ts:335-358): copies this client's favorites and
-    /// model preferences to a 2994 server that has none yet, once. The local copies stay.
+    /// `useMigrateModelPreferences` (useSettings.ts:328-368): copies this client's favorites and model preferences
+    /// to a 2994 server that has none yet, once per connection. A server that predates the migration drops it and
+    /// keeps reporting no favorites, so a retry waits for the next connection (T3 b34501a466). The local copies stay.
     private func migrateModelPreferences(_ env: String) {
-        guard !migratingModelPreferences.contains(env), let raw = serverConfigs[env]?.settings.raw,
+        let generation = environments.state(env)?.generation ?? 0
+        guard migrationGenerations[env] != generation, let raw = serverConfigs[env]?.settings.raw,
               let patch = ModelPreferences.migrationPatch(raw, local: pickers.store.favorites,
                                                           localPreferences: ClientSettingsStore.shared.current["providerModelPreferences"])
         else { return }
-        migratingModelPreferences.insert(env)
+        migrationGenerations[env] = generation
         Task { [weak self] in
             if let result = try? await self?.environments.request(env, "server.updateSettings", .object(["patch": .object(patch)])) {
                 self?.applySettings(env, result)
             }
-            self?.migratingModelPreferences.remove(env)
         }
     }
 
@@ -629,6 +631,7 @@ final class ComposerController {
         capabilityTasks.removeValue(forKey: environmentId)?.cancel()
         serverConfigs[environmentId] = nil
         capabilities[environmentId] = nil
+        migrationGenerations[environmentId] = nil
         // Sessions are keyed by project group; the environment is in the session's project id.
         let removed = sessions.filter { ProjectId($0.value.projectId).environmentId == environmentId }
         let draftIds = Set(removed.values.map(\.draftId))
