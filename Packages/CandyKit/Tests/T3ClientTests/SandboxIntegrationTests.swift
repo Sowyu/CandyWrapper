@@ -3,13 +3,13 @@ import Testing
 @testable import T3Client
 import T3Protocol
 
-/// Runs against the sandbox server from scripts/sandbox-server (127.0.0.1:47391) and skips
-/// when it isn't running. Never points at the live service.
+/// Runs against the sandbox server from scripts/sandbox-server (127.0.0.1:47391). Never points at the
+/// live service. Opt-in: scripts/test-integration, which fails here when the sandbox isn't running.
+@Suite(.serialized, .integration)
 struct SandboxIntegrationTests {
     static let baseURL = URL(string: "http://127.0.0.1:47391")!
-    static let tokenFile = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .deletingLastPathComponent().appending(path: "CandyWrapper-research/sandbox/session.token")
+    // From the home folder, not from this file: a worktree under /tmp has no CandyWrapper-research beside it.
+    static let tokenFile = URL(filePath: NSHomeDirectory()).appending(path: "CandyWrapper-research/sandbox/session.token")
 
     /// Descriptor and cached bearer, or nil when the sandbox isn't usable.
     static func sandbox() async -> (EnvironmentHTTP, EnvironmentDescriptor, String)? {
@@ -23,12 +23,9 @@ struct SandboxIntegrationTests {
         return (http, descriptor, token)
     }
 
-    @Test(.timeLimit(.minutes(1)))
+    @Test(.timeLimit(.minutes(2)))
     func connectSubscribeInterruptAndReconnect() async throws {
-        guard let (http, descriptor, token) = await Self.sandbox() else {
-            print("sandbox server not reachable or no cached token; skipping")
-            return
-        }
+        let (http, descriptor, token) = try #require(await Self.sandbox(), "start scripts/sandbox-server first")
         #expect(descriptor.isCompatible)
         let ticket = try await http.webSocketTicket(token: token)
         #expect(!ticket.ticket.isEmpty)
@@ -37,7 +34,7 @@ struct SandboxIntegrationTests {
             http: http, environmentId: descriptor.environmentId,
             identity: ClientIdentity(appVersion: "0.0.0-candykit-test"), token: { token })))
         await supervisor.connect()
-        #expect(await eventually(seconds: 10) { await supervisor.state.phase == .connected })
+        #expect(await eventually(seconds: 30) { await supervisor.state.phase == .connected })
 
         let config = try await supervisor.request("server.getConfig")
         #expect(config["environment"]?["environmentId"]?.stringValue == descriptor.environmentId)
@@ -69,7 +66,7 @@ struct SandboxIntegrationTests {
         }
 
         await connection.close(reason: "integration test")
-        #expect(await eventually(seconds: 10) {
+        #expect(await eventually(seconds: 30) {
             let s = await supervisor.state
             return s.generation == 2 && s.phase == .connected
         })

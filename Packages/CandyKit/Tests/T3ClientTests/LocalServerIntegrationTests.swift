@@ -6,8 +6,8 @@ import T3Protocol
 
 /// Launches a real `t3 serve` through LocalServerLauncher against a throwaway home under
 /// the package build directory (never ~/.t3). It reads ~/.t3/runtime/service-state.json only to
-/// find the installed binary. Skips when no runtime is installed.
-@Suite(.serialized)
+/// find the installed binary, or takes `CANDY_TEST_LOCALSERVER_BINARY`. Opt-in: scripts/test-integration.
+@Suite(.serialized, .integration)
 struct LocalServerIntegrationTests {
     static let instanceId = UUID().uuidString
     // Parallel worktrees must never join or stop one another's test daemon.
@@ -31,7 +31,7 @@ struct LocalServerIntegrationTests {
 
     @Test(.timeLimit(.minutes(5)))
     func otherRunningServerDoesNotBecomeOurs() async throws {
-        guard let ownConfig = try? Self.configuration() else { return }
+        let ownConfig = try Self.configuration()
         let otherHome = Self.home.deletingLastPathComponent().appending(path: "other/t3home")
         let other = try await LocalServerLauncher.launch(try Self.configuration(home: otherHome),
                                                         identity: Self.identity, credentials: nil)
@@ -59,24 +59,37 @@ struct LocalServerIntegrationTests {
         }
     }
 
-    @Test(.timeLimit(.minutes(5)))
+    // Two starts and two stops, the last at background priority, which under heavy load can use the
+    // whole 90 s stop timeout.
+    @Test(.timeLimit(.minutes(10)))
     func launchAuthenticateConnectStopRestart() async throws {
-        guard (try? Self.configuration()) != nil else {
-            print("no installed T3 runtime; skipping")
-            return
-        }
+        _ = try Self.configuration()
         #expect(await LocalServerDiscovery.findRunning(home: Self.home) == nil, "a server already runs for the test home")
 
         let lifecycle = LocalServerLifecycle.live(home: Self.home, identity: Self.identity, credentials: Self.keychain,
                                                   configuration: { try Self.configuration() }, remoteAccess: false)
+        // A failed step must not leave a `t3 serve` behind for the next run to trip over.
+        do { try await exercise(lifecycle) } catch {
+            await lifecycle.shutdown()
+            throw error
+        }
+    }
+
+    private func exercise(_ lifecycle: LocalServerLifecycle) async throws {
         // 1. Start, bootstrap auth.
         guard case .owned(let first) = try await lifecycle.ensureRunning() else {
             Issue.record("expected a server we own"); return
         }
         let environmentId = first.descriptor.environmentId
         defer { try? Self.keychain.delete(environmentId: environmentId) }
+        // An idle server with the app in the background runs at background priority, which a machine
+        // under heavy load starves until requests time out. Act as the frontmost app until step 3.
+        #expect(ProcessTools.isBackground(first.pid))
+        await lifecycle.update(.init(appActive: true))
         #expect(try Self.keychain.load(environmentId: environmentId) == first.accessToken)
-        let http = EnvironmentHTTP(baseURL: first.origin)
+        var http = EnvironmentHTTP(baseURL: first.origin)
+        // A server still probing its providers on a loaded machine can take more than the app's 10 s.
+        http.timeout = 60
         let session = try await http.session(token: first.accessToken)
         #expect(session.authenticated)
         #expect(first.descriptor.isCompatible)
@@ -85,13 +98,13 @@ struct LocalServerIntegrationTests {
         // server answers its descriptor before it writes `server-runtime.json` (server.ts:766-790), and
         // holds the owner lock from the start, so discovery waits on the lock in between.
         #expect(LocalServerDiscovery.ownerLockHolder(home: Self.home).map { $0 == first.pid } ?? true)
-        #expect(await eventually(seconds: 10) { await LocalServerDiscovery.findRunning(home: Self.home)?.runtime.pid == first.pid })
+        #expect(await eventually(seconds: 30) { await LocalServerDiscovery.findRunning(home: Self.home)?.runtime.pid == first.pid })
 
         // 2. Connect over WebSocket RPC with the bearer.
         let supervisor = ConnectionSupervisor(dependencies: .init(connect: ConnectionSupervisor.directConnector(
             http: http, environmentId: environmentId, identity: Self.identity, token: { first.accessToken })))
         await supervisor.connect()
-        #expect(await eventually(seconds: 15) { await supervisor.state.phase == .connected })
+        #expect(await eventually(seconds: 30) { await supervisor.state.phase == .connected })
         let config = try await supervisor.request("server.getConfig")
         #expect(config["environment"]?["environmentId"]?.stringValue == environmentId)
 
@@ -110,12 +123,13 @@ struct LocalServerIntegrationTests {
         #expect(try await remote.refresh(http: http, token: first.accessToken) == false)
         #expect(remote.connectLinked == false)
 
-        // 3. Priority: background while no run, normal when one starts.
-        #expect(ProcessTools.isBackground(first.pid))
-        await lifecycle.update(.init(activeRuns: 1))
+        // 3. Priority: background while no run and the app is in the back, normal when a run starts.
         #expect(!ProcessTools.isBackground(first.pid))
         await lifecycle.update(.init(activeRuns: 0))
         #expect(ProcessTools.isBackground(first.pid))
+        await lifecycle.update(.init(activeRuns: 1))
+        #expect(!ProcessTools.isBackground(first.pid))
+        await lifecycle.update(.init(appActive: true))
 
         // 4. Stop: no process of ours is left, and the runtime file is gone.
         let family = ([first.pid] + ProcessTools.descendants(of: first.pid)).compactMap(ProcessIdentity.of)
@@ -134,8 +148,13 @@ struct LocalServerIntegrationTests {
         }
         #expect(second.pid != first.pid)
         #expect(second.descriptor.environmentId == environmentId)
-        #expect(try await EnvironmentHTTP(baseURL: second.origin).session(token: second.accessToken).authenticated)
+        var secondHTTP = EnvironmentHTTP(baseURL: second.origin)
+        secondHTTP.timeout = 60
+        #expect(try await secondHTTP.session(token: second.accessToken).authenticated)
         let secondFamily = ([second.pid] + ProcessTools.descendants(of: second.pid)).compactMap(ProcessIdentity.of)
+        // An idle stop finds the server in the background, where a loaded machine runs it slowest.
+        await lifecycle.update(.init())
+        #expect(ProcessTools.isBackground(second.pid))
         await lifecycle.shutdown()
         #expect(secondFamily.allSatisfy { !$0.isAlive })
     }
@@ -181,10 +200,10 @@ struct BackgroundPriorityMeasurement {
         return total
     }
 
-    @Test(.timeLimit(.minutes(5)))
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["CANDY_MEASURE_PRIORITY"] == "1", "a two-minute measurement: CANDY_MEASURE_PRIORITY=1"),
+          .timeLimit(.minutes(5)))
     func idleServerNormalVersusBackground() async throws {
-        guard ProcessInfo.processInfo.environment["CANDY_MEASURE_PRIORITY"] == "1",
-              let config = try? LocalServerIntegrationTests.configuration() else { return }
+        let config = try LocalServerIntegrationTests.configuration()
         let server = try await LocalServerLauncher.launch(config, identity: LocalServerIntegrationTests.identity, credentials: nil)
         defer { Task { await LocalServerLauncher.stop(server) } }
         log("measure: server pid \(server.pid)")

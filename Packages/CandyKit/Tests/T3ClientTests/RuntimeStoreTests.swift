@@ -135,9 +135,11 @@ struct RuntimeStoreTests {
         #expect(RuntimeStore.releaseDirectory("1.0.0", baseURL: URL(string: "https://mirror.example/rel")!).absoluteString == "https://mirror.example/rel/v1.0.0")
     }
 
-    /// The real download, verify and unpack. Runs only with `CANDY_RUNTIME_INSTALL_TEST=<folder under /tmp>`.
-    @Test func realInstallIntoATemporaryFolder() async throws {
-        guard let root = ProcessInfo.processInfo.environment["CANDY_RUNTIME_INSTALL_TEST"], root.hasPrefix("/tmp/") else { return }
+    /// The real download from GitHub, verify and unpack, into `CANDY_RUNTIME_INSTALL_TEST=<folder under /tmp>`.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["CANDY_RUNTIME_INSTALL_TEST"]?.hasPrefix("/tmp/") == true,
+                   "downloads a T3 runtime: set CANDY_RUNTIME_INSTALL_TEST to a folder under /tmp"))
+    func realInstallIntoATemporaryFolder() async throws {
+        let root = try #require(ProcessInfo.processInfo.environment["CANDY_RUNTIME_INSTALL_TEST"])
         let store = RuntimeStore(root: URL(filePath: root, directoryHint: .isDirectory))
         let version = "0.0.46-nightly.20261011.2994"
         let binary = try await store.install(version)
