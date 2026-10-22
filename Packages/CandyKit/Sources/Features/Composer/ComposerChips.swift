@@ -38,11 +38,14 @@ public struct ComposerChipLook: Equatable, Sendable {
     /// (a file that must be attached again), `invalid` the destructive colors (a failed upload).
     public enum State: Equatable, Sendable { case unresolved, invalid }
     public var state: State?
+    /// A thread chip's project: `ThreadContextChip` draws its `ProjectFavicon` in place of `messages-square`
+    /// once the thread's shell names a known project (ThreadContextChip.tsx:18, 32-36).
+    public var project: ProjectIconSource?
 
     public init(kind: Kind, label: String, detail: String? = nil, accentOverride: NSColor? = nil, foregroundOverride: NSColor? = nil,
-                state: State? = nil) {
+                state: State? = nil, project: ProjectIconSource? = nil) {
         self.kind = kind; self.label = label; self.detail = detail; self.accentOverride = accentOverride; self.foregroundOverride = foregroundOverride
-        self.state = state
+        self.state = state; self.project = project
     }
 
     /// Mentions and skills only; every context link shows as unavailable.
@@ -54,7 +57,8 @@ public struct ComposerChipLook: Equatable, Sendable {
     /// (`skillLabelFor`), a thread its live title, a pull request `#n` in its state's color, and a
     /// link whose record is missing the dashed `UnresolvedChip` (composerContextPresentation.tsx).
     public static func look(for token: ComposerInlineToken, skillLabel: (String) -> String,
-                            record: (String) -> JSONValue?, threadTitle: (JSONValue) -> String? = { _ in nil }) -> ComposerChipLook {
+                            record: (String) -> JSONValue?, threadTitle: (JSONValue) -> String? = { _ in nil },
+                            threadProject: (JSONValue) -> ProjectIconSource? = { _ in nil }) -> ComposerChipLook {
         switch token.kind {
         case .mention(let path):
             let base = path.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? path
@@ -66,7 +70,7 @@ public struct ComposerChipLook: Equatable, Sendable {
             guard let r = record(contextId), r["kind"]?.stringValue == kind else { return ComposerChipLook(kind: .unresolved, label: label) }
             switch kind {
             case "thread":
-                return ComposerChipLook(kind: .thread, label: threadTitle(r) ?? r["title"]?.stringValue ?? label)
+                return ComposerChipLook(kind: .thread, label: threadTitle(r) ?? r["title"]?.stringValue ?? label, project: threadProject(r))
             case "terminal":
                 return ComposerChipLook(kind: .terminal, label: r["label"]?.stringValue ?? label)
             case "review-comment":
@@ -281,6 +285,13 @@ final class ComposerChipAttachment: NSTextAttachment {
             ctx.scaleBy(x: 1, y: -1)
             ctx.interpolationQuality = .high
             ctx.draw(thumbnail, in: CGRect(x: 0, y: 0, width: w, height: h))
+            ctx.restoreGState()
+        } else if case .thread = look.kind, let project = look.project {
+            // `ProjectFavicon` at `size-[1.17em] self-center`: the 16px favicon scaled into the icon box.
+            ctx.saveGState()
+            ctx.translateBy(x: iconRect.minX, y: iconRect.minY)
+            ctx.scaleBy(x: iconSize / 16, y: iconSize / 16)
+            ProjectMonogramView.draw(project, identity: ProjectMonogramView.identity(project), ctx: ctx)
             ctx.restoreGState()
         } else {
             MarkdownView.drawIcon(icon, in: iconRect, color: (iconColor ?? look.foreground).cgColor, ctx: ctx)

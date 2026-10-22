@@ -3005,13 +3005,19 @@ extension ComposerController {
            let look = attachmentChipLook(kind: kind, contextId: contextId, label: label) { return look }
         let skills = menuProvider?.skills(cwd: menuCwd) ?? []
         let env = targetEnvironmentId ?? ""
-        let threads = sidebar?.snapshot?.threads ?? []
+        let threads = sidebar?.snapshot?.threads ?? [], projects = sidebar?.snapshot?.projects ?? []
         return ComposerChipLook.look(for: token, skillLabel: { name in
             skills.first { $0.name == name }.map(ProviderSkills.displayName) ?? ProviderSkills.displayName(name: name, displayName: nil)
         }, record: { id in menuState.records[id] ?? rebuiltThreadRecord(id) }, threadTitle: { record in
             // `ThreadContextChip` prefers the live title.
             guard let local = record["threadId"]?.stringValue else { return nil }
             return threads.first { $0.id.rawValue == EnvironmentScope.key(env, local) }?.title
+        }, threadProject: { record in
+            // `ThreadContextChip` shows the thread's project icon (ThreadContextChip.tsx:18, 32-36).
+            guard let local = record["threadId"]?.stringValue,
+                  let shell = threads.first(where: { $0.id.rawValue == EnvironmentScope.key(env, local) }),
+                  let project = projects.first(where: { $0.id == shell.projectId }) else { return nil }
+            return ProjectIconSource(project)
         })
     }
 }

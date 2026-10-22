@@ -198,8 +198,8 @@ final class UserMessageRowView: TimelineRowView {
         markdown.onOpenFile = context.model?.openFile
         // `renderContextReference` (MessagesTimeline.tsx:2305-2345): context links draw as chips.
         let model = context.model
-        markdown.contextChips = MarkdownContextChips.message(context: m.context, attachments: m.attachments,
-                                                             threadTitle: { model?.threadTitle?(ThreadId($0)) })
+        markdown.contextChips = MarkdownContextChips.message(context: m.context, attachments: m.attachments, text: text,
+                                                             thread: { model?.linkedThread?(ThreadId($0)) })
         if let load = model?.attachmentImage {
             markdown.contextImageLoader = { id, side in await load(id, side, true) }
         } else {
@@ -504,6 +504,10 @@ final class AssistantMessageRowView: TimelineRowView {
         // A streaming answer has no Run buttons (ChatMarkdown.tsx:3368-3372).
         markdown.onRunShellCommand = m.streaming ? nil : context.model?.runShellCommand
         markdown.citationSourceID = m.id.rawValue
+        // `MarkdownThreadLink` (ChatMarkdown.tsx:1067-1074): `t3-thread://` links draw as thread chips.
+        let model = context.model
+        markdown.contextChips = MarkdownContextChips.links(in: m.text, thread: { model?.linkedThread?(ThreadId($0)) })
+        markdown.onContextChip = { action, _ in if case .openThread(let id) = action { model?.onOpenThread?(ThreadId(id)) } }
         markdown.onCiteSelection = m.streaming ? nil : { [weak model = context.model] selection, anchor in
             model?.onCiteSelection?(m.id.rawValue, selection, anchor)
         }

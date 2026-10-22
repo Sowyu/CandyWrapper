@@ -441,7 +441,15 @@ public final class MarkdownView: DSView {
         }
         if let hovered = hoveredContextChip, hovered >= chips.count { hoveredContextChip = nil }
         loadContextThumbnails(chips)
+        if !observesProjectIcons, chips.contains(where: { $0.look.project != nil }) {
+            // A thread chip draws its project's monogram until the icon file arrives.
+            observesProjectIcons = true
+            NotificationCenter.default.addObserver(self, selector: #selector(projectIconsChanged), name: ProjectIconStore.didChange, object: nil)
+        }
     }
+
+    private var observesProjectIcons = false
+    @objc private func projectIconsChanged() { needsDisplay = true }
 
     /// Loads each image chip's thumbnail once, then redraws with the picture and its average color.
     private func loadContextThumbnails(_ chips: [MarkdownContextChip]) {

@@ -115,6 +115,9 @@ public final class ThreadViewModel {
     public var onOpenThread: (@MainActor (ThreadId) -> Void)?
     /// A live, unarchived thread's title by local id (`threadReadTargetTitle`): `t3_thread_read` rows name it.
     public var threadTitle: (@MainActor (ThreadId) -> String?)?
+    /// A thread this machine knows by local id, archived ones included (`useThreadShell`), with its project:
+    /// thread chips and `t3-thread://` links show its title and project icon (ThreadContextChip.tsx:17-19).
+    public var linkedThread: (@MainActor (ThreadId) -> MarkdownContextChips.LinkedThread?)?
     /// "Sent by automation": Settings > Scheduled Tasks with that task's editor.
     public var onOpenScheduledTask: (@MainActor (String) -> Void)?
     public var mcpApp: McpAppActions?
