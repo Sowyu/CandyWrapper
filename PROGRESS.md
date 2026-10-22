@@ -1,5 +1,7 @@
 # Progress
 
+- [ ] Port changed-file virtualization and audit Markdown thread chips (taken 2026-10-22, perf-thread-leftovers).
+
 - [ ] Keep composer typing out of the broad thread refresh (taken 2026-10-22, perf-typing).
 
 - [ ] Narrow Pull Requests Shift quick actions (taken 2026-10-22, perf-leftovers).
