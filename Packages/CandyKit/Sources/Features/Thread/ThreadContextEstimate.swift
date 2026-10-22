@@ -32,9 +32,10 @@ public struct ThreadContextEstimate: Equatable, Sendable {
         func date(_ s: String?) -> Date { s.flatMap { T3Timestamp($0).date } ?? .distantPast }
         func date(_ item: TurnItem) -> Date { (item.startedAt ?? item.updatedAt).date ?? .distantPast }
         var items = projection.visibleTurnItems.map(\.item)
-        // Only what is still in context: everything after the last compaction, plus its summary.
+        // Only what is still in context: everything after the last finished compaction, plus its summary.
+        // A failed, stopped or running compaction leaves the earlier history in context.
         var since = Date.distantPast
-        if let last = items.lastIndex(where: { $0.type == .compaction }) {
+        if let last = items.lastIndex(where: { $0.type == .compaction && $0.status == .completed }) {
             since = date(items[last])
             items = Array(items[last...])
         }

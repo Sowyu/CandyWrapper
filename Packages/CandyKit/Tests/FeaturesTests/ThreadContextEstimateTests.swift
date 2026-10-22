@@ -68,4 +68,13 @@ struct ThreadContextEstimateTests {
         #expect(e.system == 4_890)
         #expect(sum(e) == 5_000)
     }
+
+    @Test func aFailedCompactionKeepsTheEarlierHistory() throws {
+        let e = try estimate([
+            item("u1", "user_message", 1, ["text": text(4_000), "attachments": .array([])]),
+            item("k1", "compaction", 3, ["summary": text(400), "status": .string("failed")]),
+            item("u2", "user_message", 4, ["text": text(40), "attachments": .array([])]),
+        ], [], used: 100_000)
+        #expect(e.messages == 1_000 + 10)
+    }
 }
