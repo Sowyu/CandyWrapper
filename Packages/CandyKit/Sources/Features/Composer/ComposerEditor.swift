@@ -25,7 +25,8 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     private var keyObservers: [NSObjectProtocol] = []
     /// Chromium's selection bands, under the text.
     private let selectionView = ComposerSelectionView()
-    private var codeHighlightTask: Task<Void, Never>?
+    private(set) var codeHighlightTask: Task<Void, Never>?
+    var tokenizeCodeBlock: @Sendable (String, String) -> [CodeToken] = { CodeHighlighter.tokens($0, language: $1) }
     var clipboardEdit = false
     var applyingListEdit = false
 
@@ -178,7 +179,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     }
 
     /// Highlight whole code bodies off the main actor. Only the current document may receive tokens.
-    private func highlightCodeBlocks() {
+    private func highlightCodeBlocks(deferLong: Bool = false) {
         codeHighlightTask?.cancel()
         guard richTextEnabled, let storage = textStorage else { return }
         var blocks: [(range: NSRange, text: String, language: String)] = []
@@ -205,25 +206,41 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         }
         guard !blocks.isEmpty else { return }
         let snapshot = expandedText
-        let requests = blocks
+        let batches = deferLong
+            ? [blocks.filter { $0.text.utf16.count <= 2_000 }, blocks.filter { $0.text.utf16.count > 2_000 }]
+            : [blocks]
+        let tokenize = tokenizeCodeBlock
         codeHighlightTask = Task { [weak self] in
-            let worker = Task.detached(priority: .userInitiated) {
-                var result: [CodeToken] = []
-                for block in requests {
-                    guard !Task.isCancelled else { return [CodeToken]() }
-                    result += CodeHighlighter.tokens(block.text, language: block.language).map { token in
-                        CodeToken(range: NSRange(location: block.range.location + token.range.location, length: token.range.length), kind: token.kind)
-                    }
+            for (index, requests) in batches.enumerated() where !requests.isEmpty {
+                // T3 097922133, composerCodeBlockHighlight.ts:109-119: wait for a
+                // pause in long fences, while short fences still update immediately.
+                if index > 0 {
+                    do { try await Task.sleep(for: .milliseconds(300)) }
+                    catch { return }
                 }
-                return result
+                guard !Task.isCancelled else { return }
+                let worker = Task.detached(priority: .userInitiated) {
+                    var result: [CodeToken] = []
+                    for block in requests {
+                        guard !Task.isCancelled else { return [CodeToken]() }
+                        result += tokenize(block.text, block.language).map { token in
+                            CodeToken(range: NSRange(location: block.range.location + token.range.location, length: token.range.length), kind: token.kind)
+                        }
+                    }
+                    return result
+                }
+                let tokens = await withTaskCancellationHandler(operation: { await worker.value }, onCancel: { worker.cancel() })
+                guard !Task.isCancelled, let self, self.expandedText == snapshot, let storage = self.textStorage else { return }
+                storage.beginEditing()
+                // Discard mapped colors that the new token stream no longer covers.
+                for block in requests {
+                    storage.addAttribute(.foregroundColor, value: Themed.color(\.foreground), range: block.range)
+                }
+                for token in tokens where NSMaxRange(token.range) <= storage.length {
+                    storage.addAttribute(.foregroundColor, value: token.kind.color, range: token.range)
+                }
+                storage.endEditing()
             }
-            let tokens = await withTaskCancellationHandler(operation: { await worker.value }, onCancel: { worker.cancel() })
-            guard !Task.isCancelled, let self, self.expandedText == snapshot, let storage = self.textStorage else { return }
-            storage.beginEditing()
-            for token in tokens where NSMaxRange(token.range) <= storage.length {
-                storage.addAttribute(.foregroundColor, value: token.kind.color, range: token.range)
-            }
-            storage.endEditing()
         }
     }
 
@@ -310,7 +327,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             // Undo and IME composition skip the styler; the layout still follows the text.
             refreshBlockInfo()
         }
-        highlightCodeBlocks()
+        highlightCodeBlocks(deferLong: true)
         onTextChange?()
         updateCaret(restart: true)
     }
@@ -1033,7 +1050,9 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         super.viewDidMoveToWindow()
         keyObservers.forEach { NotificationCenter.default.removeObserver($0) }
         keyObservers = []
+        if window == nil { codeHighlightTask?.cancel() }
         if let window {
+            highlightCodeBlocks()
             keyObservers = [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification].map { name in
                 NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
                     MainActor.assumeIsolated { self?.focusChanged() }

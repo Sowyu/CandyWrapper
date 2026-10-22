@@ -235,7 +235,17 @@ enum ComposerRichTextStyler {
                 attrs[.backgroundColor] = Themed.color(\.muted)
                 attrs[.composerCodeBlock] = activeFence ?? ""
                 // A fence opened above existing blocks or chips takes their source as code.
-                result.append(NSAttributedString(string: source(input, range), attributes: attrs))
+                let rendered = NSMutableAttributedString(string: source(input, range), attributes: attrs)
+                // Keep mapped token colors while a long fence waits for highlighting.
+                // Newly converted chips have different source offsets and use plain code colors.
+                if !input.containsAttachments(in: range) {
+                    input.enumerateAttribute(.foregroundColor, in: range) { color, sub, _ in
+                        guard let color, input.attribute(.composerCodeBlock, at: sub.location, effectiveRange: nil) != nil else { return }
+                        rendered.addAttribute(.foregroundColor, value: color,
+                                              range: NSRange(location: sub.location - range.location, length: sub.length))
+                    }
+                }
+                result.append(rendered)
             } else {
                 // A typed pair stays literal while it is still one: backticks around plain text, no chips or marks.
                 var literalPairs: Set<Int> = []
