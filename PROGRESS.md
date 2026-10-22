@@ -1,6 +1,6 @@
 # Progress
 
-- [ ] Port changed-file virtualization and audit Markdown thread chips (taken 2026-10-22, perf-thread-leftovers).
+- [x] Thread performance leftovers (2026-10-22, perf-thread-leftovers): changed-file trees reuse viewport rows (`c3585b9b`), and repeated Markdown thread links resolve each id once per pass, including misses. Eleven focused counting, behavior and fidelity tests passed. Checked the 2,000-file tree at the top and mid-scroll in a real dark window. Thread chips already use project icons and cached icon decoding; cross-machine resolution remains an existing feature gap. No full suite or perf-review, per the task brief.
 
 - [x] Composer typing performance (2026-10-22, perf-typing): text edits skip thread derivation, picker resolution and controller layout; plan labels and branch notices update only when their inputs change. All 11 focused counting and composer/picker fidelity tests passed; isolated app build and dark sandbox typing, multiline input and command filtering passed. No Features/Thread changes, full suite or perf-review.
 

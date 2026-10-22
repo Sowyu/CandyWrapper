@@ -66,11 +66,14 @@ public struct MarkdownContextChips: Equatable {
     /// as T3 dispatches on the parsed href (ChatMarkdown.tsx:1067), so titled and reference-style links resolve too.
     public static func links(in document: MarkdownDocument, thread: (String) -> LinkedThread?) -> MarkdownContextChips? {
         var out: MarkdownContextChips?
+        // Remember misses too: repeated links to an unavailable or encoded id need one lookup.
+        // This stays local to the pass, so a later shell update can resolve a missing thread.
+        var visited = Set<String>()
         func visit(_ runs: [InlineRun]) {
             for run in runs {
                 guard let url = run.link, let written = threadLinkId(url.absoluteString) else { continue }
                 if out == nil { out = MarkdownContextChips() }
-                for id in [written, percentDecoded(written)].compactMap({ $0 }) where out?.threads[id] == nil {
+                for id in [written, percentDecoded(written)].compactMap({ $0 }) where visited.insert(id).inserted {
                     if let live = thread(id) { out?.threads[id] = live }
                 }
             }
