@@ -25,6 +25,7 @@ public final class QueuedRunsView: ComposerBannerView {
     public var onRemove: ((RunId) -> Void)?
     /// Move a run before another, or to the end (nil).
     public var onReorder: ((RunId, RunId?) -> Void)?
+    /// The height or the count changed (Redesign's pill shows the count while the list is closed).
     public var onHeightChange: (() -> Void)?
     /// `thread.editQueuedMessage` and `thread.steerQueuedMessage` labels for the last row's Edit and
     /// the first row's Steer tooltips (ChatView.tsx:11638-11647, QueuedRunsControl.tsx:442, :468).
@@ -69,7 +70,8 @@ public final class QueuedRunsView: ComposerBannerView {
     /// `setExpanded(true)` before editing the latest queued message.
     public func expand() { if !expanded { toggle() } }
 
-    private func toggle() {
+    /// Redesign shows the list as a panel over its Queued pill: open while expanded, the pill and the header toggle it.
+    public func toggle() {
         expanded.toggle()
         header.expanded = expanded
         scroll.isHidden = !expanded
@@ -80,7 +82,9 @@ public final class QueuedRunsView: ComposerBannerView {
     // MARK: Rows
 
     private func rebuild() {
-        let before = preferredHeight
+        let before = preferredHeight, count = rows.count
+        // Redesign's panel starts closed each time the queue fills; the pill shows the count (the user, 2026-10-22).
+        if rows.isEmpty, !state.items.isEmpty, placement == .floating, expanded { toggle() }
         header.count = state.items.count
         setAccessibilityLabel("\(state.items.count) queued message\(state.items.count == 1 ? "" : "s")")
         while rows.count < state.items.count {
@@ -108,7 +112,7 @@ public final class QueuedRunsView: ComposerBannerView {
             if focusedVisibly { var s = row.grip.state; s.focusVisible = true; row.grip.previewState(s) }
         }
         needsLayout = true
-        if preferredHeight != before { onHeightChange?() }
+        if preferredHeight != before || state.items.count != count { onHeightChange?() }
     }
 
     fileprivate func edit(_ i: Int) { if state.items.indices.contains(i) { onEdit?(state.items[i]) } }
