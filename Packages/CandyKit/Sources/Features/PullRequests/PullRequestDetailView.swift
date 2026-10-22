@@ -45,6 +45,11 @@ public final class PullRequestDetailView: DSView {
     /// The project's `pullRequestMergeMethod` setting (Settings > Source Control > Default merge method).
     public var projectDefaultMergeMethod: String? { didSet { rebuildActions() } }
 
+    /// The diff stats' hover split (`PullRequestChangeBreakdownStat` with `eager`): the caller reads
+    /// `pullRequests.changeBreakdown` once the detail shows.
+    public var changeBreakdown: PullRequestChangeBreakdownState = .none { didSet { if changeBreakdown != oldValue { updateBreakdownTips() } } }
+    private var breakdownTips: [TooltipController] = []
+
     // Callbacks.
     public var onTab: ((Tab) -> Void)?
     public var onOpenURL: ((String) -> Void)?
@@ -192,6 +197,9 @@ public final class PullRequestDetailView: DSView {
         checkoutCommand.font = DSFont.mono(12)
         diffStat.font = DSFont.mono(12)
         diffStat.lineHeight = 16
+        breakdownTips = [diffStat, condensedStat].map {
+            TooltipController.attach(to: $0, text: "", placement: PopupPlacement(side: .bottom, align: .center, sideOffset: 4))
+        }
         checkout.trailingIcon = .chevronDown
         checkout.iconSize = 14
         more.iconSize = 16
@@ -267,6 +275,7 @@ public final class PullRequestDetailView: DSView {
             self.needsLayout = true
         }
         summary.onOpenURL = { [weak self] url in self?.onOpenURL?(url) }
+        timeline.onOpenURL = { [weak self] url in self?.onOpenURL?(url) }
         summary.onReact = { [weak self] id, content, reacted, bar in self?.onReact?(id, content, reacted, bar) }
         timeline.onOpenCommit = { [weak self] oid in self?.tab = .code; self?.onTab?(.code); self?.onCommit?(oid) }
         code.onCommit = { [weak self] oid in self?.onCommit?(oid) }
@@ -316,8 +325,23 @@ public final class PullRequestDetailView: DSView {
             stack = nil
             stackNotice = nil
             stackFailed = false
+            changeBreakdown = .none
         }
         rebuild()
+        updateBreakdownTips()
+    }
+
+    private func updateBreakdownTips() {
+        for tip in breakdownTips {
+            switch changeBreakdown {
+            case .none: tip.text = ""; tip.content = nil; tip.hide()
+            case .loading: tip.text = "Loading breakdown"; tip.content = nil
+            case .loaded(let b):
+                tip.text = ""
+                let (a, d) = (detail?.additions ?? 0, detail?.deletions ?? 0)
+                tip.content = { PullRequestChangeBreakdownTooltipView(b, additions: a, deletions: d) }
+            }
+        }
     }
 
     /// The Code tab's slices so far, or its state; `nextCursor` says more is owed.
@@ -1172,13 +1196,23 @@ final class LinkLabel: DSView {
     private var tracking: NSTrackingArea?
     // A padded label is `PullRequestCopyableCode` (:35): `transition-colors hover:bg-accent/45`, so its fill fades.
     private var hovered = false {
-        didSet { label.isUnderlined = hovered && underlines; redisplay(transitioning: padding > 0 ? .background : []) }
+        didSet {
+            label.isUnderlined = hovered && underlines
+            if let hoverColor, let restColor { label.color = hovered ? hoverColor : restColor }
+            redisplay(transitioning: padding > 0 ? .background : [])
+        }
     }
     var underlines = true
+    /// `hover:text-foreground`: the text's color under the pointer.
+    var hoverColor: NSColor? { didSet { if hovered, let hoverColor { label.color = hoverColor } } }
+    private var restColor: NSColor?
     var padding: CGFloat = 0 { didSet { needsLayout = true } }
     var text: String { get { label.text } set { label.text = newValue; needsLayout = true } }
     var font: NSFont { get { label.font } set { label.font = newValue } }
-    var color: NSColor { get { label.color } set { label.color = newValue } }
+    var color: NSColor {
+        get { label.color }
+        set { restColor = newValue; if !(hovered && hoverColor != nil) { label.color = newValue } }
+    }
     var textWidth: CGFloat { label.textWidth }
     var onClick: (() -> Void)?
     var onMenu: ((NSEvent) -> Void)?

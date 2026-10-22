@@ -190,12 +190,30 @@ final class PullRequestDetailBinding {
                 self.loadStack()
                 self.onStatus?(target.surfaceId, PullRequestStateTone(state: d.state, isDraft: d.isDraft))
                 self.loadActivity(gen: gen)
+                self.loadChangeBreakdown(gen: gen)
                 if self.view.tab == .code { self.patchKey = nil; self.loadCode() }
             } catch {
                 guard let self, self.generation == gen else { return }
                 self.view.refreshing = false
                 let (title, message) = Self.failure(error, number: target.number)
                 self.view.showFailure(title: title, message: message)
+            }
+        }
+    }
+
+    /// The diff stats' code, tests, mocks, generated and docs split, read as soon as the detail shows
+    /// (`PullRequestChangeBreakdownStat eager`, 3473 PullRequestDetailPanel.tsx:1453-1460, 1540-1547).
+    /// A server before 3473 has no such method, and its stats keep no hover.
+    private func loadChangeBreakdown(gen: Int) {
+        guard let shell, let ref = reference, let d = detail, d.additions > 0 || d.deletions > 0 else { view.changeBreakdown = .none; return }
+        if case .none = view.changeBreakdown { view.changeBreakdown = .loading }
+        Task { [weak self] in
+            let reply = try? await shell.supervisor.request("pullRequests.changeBreakdown", payload: ref.payload)
+            guard let self, self.generation == gen else { return }
+            if let reply, reply != .null, let b = try? reply.decode(as: PullRequestChangeBreakdown.self) {
+                self.view.changeBreakdown = .loaded(b)
+            } else {
+                self.view.changeBreakdown = .none
             }
         }
     }
@@ -776,9 +794,7 @@ final class ThreadPullRequestsController {
             let (icon, color) = PullRequestStyle.checksState(rollup)
             r.checks.icon = icon.definition
             r.checks.iconColor = color
-            let running = d.checks.filter { $0.status == "pending" }.count
-            let failed = d.checks.filter { $0.status == "failure" || $0.status == "cancelled" }.count
-            r.checks.text = running > 0 ? "\(running)/\(d.checks.count)" : failed > 0 ? "\(failed) failed" : ""
+            r.checks.text = PullRequestDetailLogic.checksCountLabel(d.checks)
             r.checks.setAccessibilityLabel("Open checks: \(PullRequestDetailLogic.summarizeChecks(d.checks))")
             r.checks.action = { [weak r] in
                 guard let anchor = r?.checks else { return }

@@ -458,7 +458,9 @@ public struct PullRequestDetail: Codable, Hashable, Sendable {
         if let a = activity.author { author = a }
         if let r = activity.reviewers { reviewers = r }
         comments = activity.comments
-        commentCount = activity.commentCount
+        // Never fewer than the remarks in hand: a host's count can leave out review thread replies
+        // (3473 usePullRequestDetail.ts:156-165).
+        commentCount = max(activity.commentCount, Set(activity.comments.map(\.id) + activity.reviewThreads.flatMap { $0.comments.map(\.id) }).count)
         commentsTruncated = activity.commentsTruncated
         reviewThreads = activity.reviewThreads
         commits = activity.commits
@@ -711,5 +713,41 @@ public enum PullRequestErrors {
     /// `isPullRequestNotFound` (pullRequestDetail.logic.ts:1196-1202).
     public static func isNotFound(tag: String, fields: [String: JSONValue]) -> Bool {
         tag == "PullRequestOperationError" && fields["reason"]?.stringValue == "not-found"
+    }
+}
+
+/// `PullRequestChangeBreakdown` (pullRequest.ts:696-707), the reply of `pullRequests.changeBreakdown`
+/// (rpc.ts:543): the change's lines split by what the files are, judged from their paths. The reply
+/// is null when the host gives no per-file counts or has more files than one read covers.
+public struct PullRequestChangeBreakdown: Codable, Hashable, Sendable {
+    public struct LineCount: Codable, Hashable, Sendable {
+        public var additions: Int
+        public var deletions: Int
+        public init(additions: Int, deletions: Int) { self.additions = additions; self.deletions = deletions }
+    }
+    public var code: LineCount
+    public var tests: LineCount
+    public var mocks: LineCount
+    public var generated: LineCount
+    /// Servers from before the docs split send no key; their docs lines sit in `code`.
+    public var docs: LineCount
+
+    public init(code: LineCount, tests: LineCount, mocks: LineCount, generated: LineCount, docs: LineCount = .init(additions: 0, deletions: 0)) {
+        self.code = code; self.tests = tests; self.mocks = mocks; self.generated = generated; self.docs = docs
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        code = try c.decode(LineCount.self, forKey: .code)
+        tests = try c.decode(LineCount.self, forKey: .tests)
+        mocks = try c.decode(LineCount.self, forKey: .mocks)
+        generated = try c.decode(LineCount.self, forKey: .generated)
+        docs = try c.decodeIfPresent(LineCount.self, forKey: .docs) ?? .init(additions: 0, deletions: 0)
+    }
+
+    /// The rows in T3's order (`KIND_LABELS`), leaving out kinds with no lines.
+    public var rows: [(label: String, count: LineCount)] {
+        [("Code", code), ("Tests", tests), ("Mocks", mocks), ("Generated", generated), ("Docs", docs)]
+            .filter { $0.1.additions != 0 || $0.1.deletions != 0 }
     }
 }

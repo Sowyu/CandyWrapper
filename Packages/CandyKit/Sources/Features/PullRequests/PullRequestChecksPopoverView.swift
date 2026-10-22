@@ -176,22 +176,23 @@ final class PullRequestChecksListView: DSView {
         needsLayout = true
     }
 
+    /// One grid for every row (3473 PullRequestChecksPopover.tsx:79-114, 618c46478a): `grid-cols-[auto_minmax(0,1fr)_auto_auto]`
+    /// with `gap-x-2`, so the statuses end on one edge and the Details links start on one, and the
+    /// Details column only while some check has a link.
     override func layout() {
         super.layout()
         let w = bounds.width
+        let detailsWidth = rows.compactMap { $0.details.map { ceil($0.textWidth) + 1 } }.max()
+        let statusWidth = rows.map { ceil($0.status.textWidth) + 1 }.max() ?? 0
+        let statusRight = w - (detailsWidth.map { $0 + 8 } ?? 0)
         for (i, r) in rows.enumerated() {
             let y = CGFloat(i) * 20
             r.glyph.frame = NSRect(x: 0, y: y + 1, width: 14, height: 14)
-            var right = w
-            if let d = r.details {
-                let dw = ceil(d.textWidth) + 1
-                d.frame = NSRect(x: right - dw, y: y, width: dw, height: 16)
-                right -= dw + 8
-            }
+            if let d = r.details, let detailsWidth { d.frame = NSRect(x: w - detailsWidth, y: y, width: ceil(d.textWidth) + 1, height: 16) }
+            // `justify-self-end`.
             let sw = ceil(r.status.textWidth) + 1
-            r.status.frame = NSRect(x: right - sw, y: y, width: sw, height: 16)
-            right -= sw + 8
-            r.name.frame = NSRect(x: 22, y: y, width: max(0, right - 22), height: 16)
+            r.status.frame = NSRect(x: statusRight - sw, y: y, width: sw, height: 16)
+            r.name.frame = NSRect(x: 22, y: y, width: max(0, statusRight - statusWidth - 8 - 22), height: 16)
         }
     }
 
