@@ -56,11 +56,13 @@ public class SettingsPageBase: SettingsStackView {
         r.accessories = slot.map { [$0] } ?? [ResetSlot(label: "")]
         slot?.action = { [weak self] in self?.context.writeClient?([key: ClientSettings.fields[key]!.defaultValue]) }
         sw.onChange = { [weak self] on in self?.context.writeClient?(write?(on) ?? [key: .bool(on)]) }
-        binder.add { [weak self, weak sw] in
-            guard let self else { return }
-            sw?.isOn = read?(self.client) ?? self.client.bool(key)
-            slot?.isShown = !self.client.isDefault(key)
-        }
+        binder.add(read: { [weak self] in
+            self.map { [read?($0.client) ?? $0.client.bool(key), !$0.client.isDefault(key)] }
+        }, update: { [weak sw] state in
+            guard let state else { return }
+            sw?.isOn = state[0]
+            slot?.isShown = state[1]
+        })
         return r
     }
 
@@ -74,12 +76,12 @@ public class SettingsPageBase: SettingsStackView {
         r.accessories = slot.map { [$0] } ?? [ResetSlot(label: "")]
         slot?.action = { [weak self] in self?.context.writeClient?([key: ClientSettings.fields[key]!.defaultValue]) }
         select.onChange = { [weak self] i in self?.context.writeClient?([key: .string(options[i].value)]) }
-        binder.add { [weak self, weak select, weak r] in
-            guard let self else { return }
-            select?.selectedIndex = options.firstIndex { $0.value == self.client.string(key) }
-            slot?.isShown = !self.client.isDefault(key)
+        binder.add(read: { [weak self] in self?.client[key] }, update: { [weak select, weak r] value in
+            guard let value else { return }
+            select?.selectedIndex = options.firstIndex { $0.value == value.stringValue }
+            slot?.isShown = value != ClientSettings.fields[key]?.defaultValue
             r?.needsLayout = true
-        }
+        })
         return r
     }
 
