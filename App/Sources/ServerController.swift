@@ -292,8 +292,8 @@ final class ServerController {
     /// it: its runs go on, and the next launch adopts it. A normal quit stops it, and asks first only
     /// when that would stop something: our own server (not one we reused) with a run or a request
     /// on this Mac's environment. Remote and T3 Connect environments never count.
-    func shouldTerminate(installingUpdate: Bool = false) -> NSApplication.TerminateReply {
-        if !installingUpdate, quitStopsLocalWork {
+    func shouldTerminate(installingUpdate: Bool = false, asked: Bool = false) -> NSApplication.TerminateReply {
+        if !installingUpdate, !asked, quitStopsLocalWork {
             let alert = NSAlert()
             alert.messageText = "Quit while an agent is working?"
             alert.informativeText = "Quitting stops T3 Code's server on this Mac, which interrupts the running work."
@@ -315,7 +315,7 @@ final class ServerController {
         return .terminateLater
     }
 
-    private var quitStopsLocalWork: Bool {
+    var quitStopsLocalWork: Bool {
         guard ownsServer, latestIsLive, let threads = latest?.threads else { return false }
         return threads.contains { $0.activeRunId != nil || $0.pendingRuntimeRequest != nil }
     }

@@ -160,8 +160,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let installing = updater?.quitInstallsUpdate ?? false
+        let ask = askBeforeQuit && !installing
+        askBeforeQuit = false
+        var asked = false
+        if ask, let window = mainWindow, ThemeRuntime.isDither(dark: window.effectiveAppearance.isDark) {
+            guard confirmDitherQuit() else { returnFromCancelledQuit(); return .terminateCancel }
+            asked = true
+        }
         guard let server else { environments?.stopAll(); return .terminateNow }
-        return server.shouldTerminate(installingUpdate: updater?.quitInstallsUpdate ?? false)
+        let reply = server.shouldTerminate(installingUpdate: installing, asked: asked)
+        if reply == .terminateCancel { returnFromCancelledQuit() }
+        return reply
+    }
+
+    /// Set by Cmd-Q and the Quit menu item, so a logout, `kill` or a test snapshot quits without asking.
+    private var askBeforeQuit = false
+
+    @objc private func quitFromMenu(_ sender: Any?) {
+        askBeforeQuit = true
+        NSApp.terminate(sender)
+    }
+
+    /// Dither asks before every Cmd-Q, as Capy does while connected (its `capy/desktop/Quit` `decide`), in
+    /// place of T3's hold. Cancel keeps CandyWrapper running in front.
+    private func confirmDitherQuit() -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Quit CandyWrapper?"
+        if server?.quitStopsLocalWork == true {
+            alert.informativeText = "Quitting stops T3 Code's server on this Mac, which interrupts the running work."
+        }
+        alert.addButton(withTitle: "Quit")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate()
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    /// Hold-to-quit hides the window before it quits (`concealPendingQuitWindow`); a quit cancelled from the
+    /// confirmation must bring it back, or CandyWrapper keeps running with no window to see.
+    private func returnFromCancelledQuit() {
+        guard let window = mainWindow else { return }
+        window.alphaValue = 1
+        NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -189,7 +230,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let p = t3Connect.profile
             let email = p?.identifier ?? ""
             let name = [p?.firstName, p?.lastName].compactMap { $0 }.joined(separator: " ")
-            if t3Connect.account != nil {
+            // Sign-out keeps the account client, so only a signed-in Clerk session counts.
+            if t3Connect.signedIn != nil {
                 sidebar.accountRow.set(name: name.isEmpty ? (email.isEmpty ? "T3 Connect" : email) : name,
                                        detail: name.isEmpty || email.isEmpty ? "Signed in to T3 Connect" : email,
                                        image: t3Connect.avatar, initials: p?.initials)
@@ -382,7 +424,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func installQuitHold(window: NSWindow, layout: NSView) {
         var shownMode: QuitHoldController.Mode?
         let controller = QuitHoldController(
-            getMode: { QuitHoldController.Mode(rawValue: ClientSettingsStore.shared.current.string("confirmQuit")) ?? .hold },
+            // Dither confirms with a dialog instead (`confirmDitherQuit`), so the first press asks.
+            getMode: { [weak window] in
+                if let window, ThemeRuntime.isDither(dark: window.effectiveAppearance.isDark) { return .direct }
+                return QuitHoldController.Mode(rawValue: ClientSettingsStore.shared.current.string("confirmQuit")) ?? .hold
+            },
             notify: { [weak self, weak layout] hint in
                 guard let self else { return }
                 switch hint {
@@ -403,7 +449,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
                 window.alphaValue = 0
             },
-            quit: { NSApp.terminate(nil) })
+            quit: { [weak self] in self?.quitFromMenu(nil) })
         shortcuts?.quitHold = controller
         quitHold = controller
     }
@@ -549,7 +595,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
         self.routeHistory = history
-        ditherTabs = DitherTabsController(layout: layout, sidebar: sidebar, history: history, current: currentRoute)
+        // Capy's + opens the new-thread page for the current project; its project chip picks another.
+        ditherTabs = DitherTabsController(layout: layout, sidebar: sidebar, history: history, current: currentRoute,
+                                          newThread: { [weak palette] in palette?.newThreadFromSidebar(shift: true) })
         commands.historyBack = { [weak history] in history?.back() ?? false }
         commands.closePalette = { [weak palette] in palette?.close() }
         // Escape drops a multi-selection (_chat.tsx:98-102). Settings and Usage sit outside the chat layout,
@@ -774,7 +822,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Allow Remote Access", action: #selector(toggleRemoteAccess(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Quit CandyWrapper", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit CandyWrapper", action: #selector(quitFromMenu(_:)), keyEquivalent: "q")
         // Hidden: the gallery is a developer tool, reachable only by shortcut or --gallery.
         let gallery = NSMenuItem(title: "Component Gallery", action: #selector(showGallery(_:)), keyEquivalent: "g")
         gallery.keyEquivalentModifierMask = [.command, .option, .shift]
