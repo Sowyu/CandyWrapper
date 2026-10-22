@@ -35,6 +35,11 @@ final class ModelPickerView: DSView, PickerPopupBody {
     /// (ModelPickerContent.tsx:669-687, 751-767; ModelListRow.tsx:107). Nil draws none, as T3's web
     /// build does (the bindings need `isDesktop`), which the web reference captures show.
     var jumpLabel: (@MainActor (Int) -> String?)? { didSet { reload() } }
+    /// Redesign's card "Manage": opens the provider's settings. Nil hides the button.
+    var onManage: (@MainActor (ProviderInstanceId) -> Void)? { didSet { card = nil; reload() } }
+    /// Redesign follows Capy's picker (2026-10-22): search across the top over a hairline, a slim rail whose pick sits on
+    /// a rounded fill, the provider's card over a "Models" label, and one-line rows with a check at the right.
+    var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
 
     let search = InputView(placeholder: "Search models...", size: .sm)
     private let railFill = CALayer()
@@ -46,6 +51,9 @@ final class ModelPickerView: DSView, PickerPopupBody {
     private let searchIcon = IconView(name: .search, size: 16)
     private let list = DSView()
     private let emptyLabel = LabelView("No models found", font: DSFont.ui(14))
+    private var card: DitherProviderCardView?
+    private let cardLine = CALayer()
+    private let sectionLabel = LabelView("Models", font: DSFont.ui(12, weight: .medium))
     private let favoritesButton: RailButtonView
     private var railButtons: [RailButtonView] = []
     private(set) var rowViews: [ModelRowView] = []
@@ -69,7 +77,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
         favoritesButton = RailButtonView(kind: .favorites)
         super.init(frame: .zero)
         clipsToBounds = true
-        for l in [railFill, mainFill, mainBorder, divider, indicator, underline] {
+        for l in [railFill, mainFill, mainBorder, divider, indicator, underline, cardLine] {
             l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]
             layer?.addSublayer(l)
         }
@@ -87,6 +95,13 @@ final class ModelPickerView: DSView, PickerPopupBody {
         emptyLabel.smoothsFont = false
         emptyLabel.alignment = .center
         list.addSubview(emptyLabel)
+        sectionLabel.lineHeight = 16
+        sectionLabel.smoothsFont = false
+        if capy {
+            search.placeholder = "Search models"
+            search.paddingOverride = (0, 0)
+            searchIcon.isHidden = true
+        }
         favoritesButton.onPress = { [weak self] in self?.selectRail(.favorites) }
         addSubview(favoritesButton)
         reload()
@@ -137,14 +152,23 @@ final class ModelPickerView: DSView, PickerPopupBody {
             return view
         }
         previous.values.forEach { $0.removeFromSuperview() }
+        syncCard()
         // Keep accessibility traversal in the same order as the filtered results.
-        list.subviews = [emptyLabel] + rowViews
+        list.subviews = [emptyLabel] + [card, card == nil ? nil : sectionLabel].compactMap { $0 } + rowViews
         emptyLabel.isHidden = !sections.rows.isEmpty
         if let h = highlightedRow, h >= rowViews.count { highlightedRow = nil }
         railButtons.forEach { $0.restyle() }
         favoritesButton.restyle()
         needsLayout = true
         needsDisplay = true
+    }
+
+    /// Redesign's card for the rail's provider, while not searching. Rebuilt only when what it shows changes.
+    private func syncCard() {
+        guard capy, !searching, case .instance(let id) = rail, let entry = catalog.entry(id) else { card = nil; return }
+        let info = DitherProviderCardInfo(entry)
+        if card?.info == info { return }
+        card = DitherProviderCardView(info: info, onManage: onManage.map { open in { open(id) } })
     }
 
     private static func rowKey(_ row: ModelPickerRow) -> String {
@@ -228,15 +252,24 @@ final class ModelPickerView: DSView, PickerPopupBody {
 
     // MARK: Size and layout
 
+    private var rowH: CGFloat { capy ? 32 : Self.rowHeight }
+    private var rowGap: CGFloat { capy ? 0 : Self.rowGap }
+    private var searchH: CGFloat { capy ? 40 : Self.searchHeight }
+    private var railW: CGFloat { capy ? 40 : Self.railWidth }
+    /// The list's padding over the first row (Redesign: the card, its hairline and the "Models" label) and under the last.
+    private var listTop: CGFloat { capy ? (card.map { $0.preferredHeight + 1 + 28 } ?? 6) : 10 }
+    private var listBottom: CGFloat { capy ? 6 : 10 }
+
     private var listContentHeight: CGFloat {
-        sections.rows.isEmpty ? 0 : CGFloat(sections.rows.count) * Self.rowHeight + CGFloat(sections.rows.count - 1) * Self.rowGap
+        sections.rows.isEmpty ? 0 : CGFloat(sections.rows.count) * rowH + CGFloat(sections.rows.count - 1) * rowGap
     }
 
     /// Search block plus the list (rows + 20) or the empty text (`p-2`, 36), then the ChatGPT footer.
     var naturalSize: CGSize {
         if let frozenHeight { return CGSize(width: Self.width, height: frozenHeight) }
-        let list = sections.rows.isEmpty ? 36 : listContentHeight + 20
-        return CGSize(width: Self.width, height: min(Self.maxHeight, Self.searchHeight + list) + footerHeight)
+        let list = sections.rows.isEmpty ? 36 + (capy ? listTop - 6 : 0) : listContentHeight + listTop + listBottom
+        // Redesign's card takes room, so its list may run taller.
+        return CGSize(width: Self.width, height: min(capy ? 420 : Self.maxHeight, searchH + list) + footerHeight)
     }
 
     /// `ChatGptSharingControl` (ProviderModelPicker.tsx:317-319): under the picker while the composer's instance
@@ -267,6 +300,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
 
     override func layout() {
         super.layout()
+        if capy { layoutCapy(); return }
         let railShown = sections.showsRail
         let mainX = railShown ? Self.railWidth : 0
         railFill.isHidden = !railShown
@@ -314,12 +348,50 @@ final class ModelPickerView: DSView, PickerPopupBody {
         emptyLabel.frame = NSRect(x: 8, y: 8, width: list.bounds.width - 16, height: 20)
     }
 
-    private var maxScroll: CGFloat { max(0, listContentHeight + 20 - list.bounds.height) }
+    /// Redesign: search across the top over a full-width hairline, then the rail and the list under it.
+    private func layoutCapy() {
+        let railShown = sections.showsRail
+        let mainX = railShown ? railW : 0
+        for l in [railFill, mainFill, divider, indicator] { l.isHidden = true }
+        sharing?.frame = NSRect(x: 0, y: bodyHeight, width: bounds.width, height: footerHeight)
+        search.frame = NSRect(x: 14, y: 7, width: bounds.width - 28, height: 26)
+        underline.frame = CGRect(x: 0, y: searchH - 1, width: bounds.width, height: 1)
+        mainBorder.isHidden = !railShown
+        mainBorder.frame = CGRect(x: mainX, y: searchH, width: 1, height: max(0, bodyHeight - searchH))
+        for (i, b) in allRailButtons.enumerated() {
+            b.isHidden = !railShown
+            b.frame = NSRect(x: 4, y: searchH + 6 + CGFloat(i) * 36, width: 32, height: 32)
+        }
+        let listX = mainX + (railShown ? 1 : 0)
+        list.frame = NSRect(x: listX, y: searchH, width: bounds.width - listX, height: max(0, bodyHeight - searchH))
+        scrollOffset = min(scrollOffset, maxScroll)
+        let inner = list.bounds.width - 12
+        if let card {
+            let h = card.preferredHeight
+            card.frame = NSRect(x: 6, y: -scrollOffset, width: inner, height: h)
+            cardLine.frame = CGRect(x: list.frame.minX + 6, y: list.frame.minY + h - scrollOffset, width: inner, height: 1)
+            sectionLabel.frame = NSRect(x: 14, y: h + 1 + 8 - scrollOffset, width: inner - 16, height: 16)
+            // The hairline lives on the picker's layer, so it hides once it scrolls under the search.
+            cardLine.isHidden = h - scrollOffset < 0
+        } else {
+            cardLine.isHidden = true
+        }
+        var y = listTop - scrollOffset
+        for row in rowViews {
+            row.frame = NSRect(x: 6, y: y, width: inner, height: rowH)
+            y += rowH + rowGap
+        }
+        emptyLabel.frame = NSRect(x: 8, y: listTop + 2, width: list.bounds.width - 16, height: 20)
+    }
+
+    private var maxScroll: CGFloat { max(0, listContentHeight + listTop + listBottom - list.bounds.height) }
 
     private func scrollToHighlight() {
         guard let i = highlightedRow, list.bounds.height > 0 else { return }
-        let top = 10 + CGFloat(i) * (Self.rowHeight + Self.rowGap), bottom = top + Self.rowHeight
-        if top - 10 < scrollOffset { scrollOffset = top - 10 } else if bottom + 10 > scrollOffset + list.bounds.height { scrollOffset = bottom + 10 - list.bounds.height }
+        let top = listTop + CGFloat(i) * (rowH + rowGap), bottom = top + rowH
+        // The first row brings the whole top back, Redesign's card included.
+        if i == 0 { scrollOffset = 0 } else if top - listBottom < scrollOffset { scrollOffset = top - listBottom }
+        else if bottom + listBottom > scrollOffset + list.bounds.height { scrollOffset = bottom + listBottom - list.bounds.height }
         needsLayout = true
     }
 
@@ -336,6 +408,15 @@ final class ModelPickerView: DSView, PickerPopupBody {
     }
 
     override func updateLayer() {
+        if capy {
+            mainBorder.backgroundColor = Themed.color(\.contrastForeground, 0.08).cgColor(in: self)
+            underline.backgroundColor = Themed.color(\.contrastForeground, 0.08).cgColor(in: self)
+            cardLine.backgroundColor = Themed.color(\.contrastForeground, 0.08).cgColor(in: self)
+            sectionLabel.color = Themed.color(\.contrastMutedForeground)
+            emptyLabel.color = Themed.color(\.contrastMutedForeground)
+            return
+        }
+        cardLine.isHidden = true
         railFill.backgroundColor = Themed.color(\.muted, 0.3).cgColor(in: self)
         mainFill.backgroundColor = Themed.color(\.muted, 0.4).cgColor(in: self)
         mainBorder.backgroundColor = Themed.color(\.border, 0.7).cgColor(in: self)
@@ -431,14 +512,18 @@ final class RailButtonView: ControlView {
     final var onPress: (@MainActor () -> Void)?
     private let glyph: NSView
     private let fill = CALayer()
+    /// Redesign's rail: 16pt glyphs, an outline star.
+    private let capy = ThemeRuntime.isDither(dark: NSApp?.effectiveAppearance.isDark ?? true)
+    private var glyphSize: CGFloat { capy ? 16 : 20 }
 
     var entryId: ProviderInstanceId? { if case .instance(let e) = kind { e.id } else { nil } }
 
     init(kind: Kind, badge: ProviderBadge? = nil) {
         self.kind = kind
+        let size: CGFloat = capy ? 16 : 20
         switch kind {
-        case .favorites: glyph = IconView(name: .star, size: 20)
-        case .instance(let e): glyph = ProviderIcon.make(driver: e.driver, displayName: e.displayName, size: 20, badge: badge)
+        case .favorites: glyph = IconView(name: .star, size: size)
+        case .instance(let e): glyph = ProviderIcon.make(driver: e.driver, displayName: e.displayName, size: size, badge: badge)
         }
         super.init(frame: .zero)
         scalesWhenPressed = false
@@ -468,7 +553,7 @@ final class RailButtonView: ControlView {
     override func layout() {
         super.layout()
         fill.frame = bounds
-        glyph.frame = NSRect(x: (bounds.width - 20) / 2, y: (bounds.height - 20) / 2, width: 20, height: 20)
+        glyph.frame = NSRect(x: (bounds.width - glyphSize) / 2, y: (bounds.height - glyphSize) / 2, width: glyphSize, height: glyphSize)
     }
 
     override func stateDidChange(from old: State) {
@@ -478,8 +563,9 @@ final class RailButtonView: ControlView {
 
     func restyle() {
         if case .favorites = kind, let star = glyph as? IconView {
-            star.strokeColor = Themed.color(\.contrastForeground)
-            star.fillColor = Themed.color(\.contrastForeground)
+            let selected = (superview as? ModelPickerView)?.isRailSelected(.favorites) == true
+            star.strokeColor = capy && !selected ? Themed.color(\.contrastMutedForeground) : Themed.color(\.contrastForeground)
+            star.fillColor = capy ? nil : Themed.color(\.contrastForeground)
         }
         needsDisplay = true
     }
@@ -487,7 +573,15 @@ final class RailButtonView: ControlView {
     override func updateLayer() {
         let picker = superview as? ModelPickerView
         let lit = !isDisabled && (state.hovered || picker?.isRailFocused(self) == true)
-        Motion.setBackground(fill, lit ? Themed.color(\.foreground, 0.1).cgColor(in: self) : nil)
+        if capy {
+            // Capy's rail: the pick sits on a rounded fill, a hover on a fainter one.
+            let selected = picker?.isRailSelected(entryId.map { .instance($0) } ?? .favorites) == true
+            fill.cornerRadius = 8
+            let alpha: CGFloat? = selected ? 0.09 : lit ? 0.05 : nil
+            Motion.setBackground(fill, alpha.map { Themed.color(\.contrastForeground, $0).cgColor(in: self) })
+        } else {
+            Motion.setBackground(fill, lit ? Themed.color(\.foreground, 0.1).cgColor(in: self) : nil)
+        }
         // The badge's ring takes the surface under it (ModelPickerSidebar.tsx:206-212).
         if let badged = glyph as? ProviderBadgedIconView {
             let selected = picker?.isRailSelected(entryId.map { .instance($0) } ?? .favorites) == true
@@ -516,12 +610,16 @@ final class ModelRowView: DSView {
     private var star: StarButtonView?
     private var chevron: IconView?
     private var kbd: KbdView?
+    /// Redesign: one line, the model's glyph first, a check at the right on the selected model.
+    private let capy: Bool
+    private var check: IconView?
 
     init(picker: ModelPickerView, row: ModelPickerRow, index: Int, jumpLabel: String? = nil) {
         self.picker = picker
         self.row = row
         self.index = index
         self.jumpLabel = jumpLabel
+        capy = picker.capy
         super.init(frame: .zero)
         fill.cornerRadius = 6
         fill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
@@ -543,8 +641,8 @@ final class ModelRowView: DSView {
                 addSubview(b)
                 newBadge = b
             }
-            let icon = ProviderIcon.make(driver: item.entry.driver, displayName: item.entry.displayName, size: 12, color: Themed.color(\.contrastMutedForeground),
-                                         model: true)
+            let icon = ProviderIcon.make(driver: item.entry.driver, displayName: item.entry.displayName, size: capy ? 16 : 12,
+                                         color: capy ? Themed.color(\.contrastForeground) : Themed.color(\.contrastMutedForeground), model: true)
             addSubview(icon)
             providerIcon = icon
             if let jumpLabel {
@@ -567,6 +665,18 @@ final class ModelRowView: DSView {
             chevron = c
             setAccessibilityExpanded(expanded) // ModelPickerContent.tsx:1001
         }
+        if capy {
+            name.font = DSFont.ui(13)
+            name.lineHeight = 20
+            secondary.lineHeight = 20
+            // The provider line stays as the row's help text; a legacy group keeps its count beside the chevron.
+            secondary.isHidden = chevron == nil
+            if isSelected {
+                let v = IconView(name: .check, size: 14)
+                addSubview(v)
+                check = v
+            }
+        }
         restyle()
     }
 
@@ -583,6 +693,7 @@ final class ModelRowView: DSView {
     override func layout() {
         super.layout()
         fill.frame = bounds
+        if capy { layoutCapy(); return }
         // The trailing group is `gap-1.5`: the jump `Kbd`, then the star.
         let kbdWidth = kbd.map { $0.intrinsicContentSize.width + 6 } ?? 0
         let trailing: CGFloat = (star != nil ? 24 - 4 + 6 : 16 + 8) + kbdWidth
@@ -609,6 +720,44 @@ final class ModelRowView: DSView {
         }
     }
 
+    /// Redesign: glyph, name and badge on one line; at the right the check, then the star and jump key on hover.
+    private func layoutCapy() {
+        let mid = bounds.height / 2
+        var right = bounds.width - 8
+        if let check {
+            check.frame = NSRect(x: right - 14, y: mid - 7, width: 14, height: 14)
+            right = check.frame.minX - 4
+        }
+        if let chevron {
+            chevron.frame = NSRect(x: right - 16, y: mid - 8, width: 16, height: 16)
+            right = chevron.frame.minX - 6
+            let w = ceil(secondary.textWidth)
+            secondary.frame = NSRect(x: right - w, y: mid - 10, width: w, height: 20)
+            right = secondary.frame.minX - 8
+        }
+        if let star {
+            star.frame = NSRect(x: right + 4 - 24, y: mid - 12, width: 24, height: 24)
+            right = star.frame.minX - 2
+        }
+        if let kbd {
+            let w = kbd.intrinsicContentSize.width
+            kbd.frame = NSRect(x: right - w, y: mid - 10, width: w, height: 20)
+            right = kbd.frame.minX - 6
+        }
+        var x: CGFloat = 8
+        if let providerIcon {
+            providerIcon.frame = NSRect(x: x, y: mid - 8, width: 16, height: 16)
+            x += 16 + 10
+        }
+        let badgeW = newBadge.map { 8 + $0.intrinsicContentSize.width } ?? 0
+        let nameW = max(0, min(ceil(name.textWidth), right - x - badgeW))
+        name.frame = NSRect(x: x, y: mid - 10, width: nameW, height: 20)
+        if let newBadge {
+            let s = newBadge.intrinsicContentSize
+            newBadge.frame = NSRect(x: x + nameW + 8, y: mid - s.height / 2, width: s.width, height: s.height)
+        }
+    }
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         restyle()
@@ -619,6 +768,17 @@ final class ModelRowView: DSView {
 
     private func updateColors() {
         let highlighted = picker.highlightedRow == index
+        if capy {
+            // A faint fill on the highlighted row, as Redesign's menus; the star and jump key show only there.
+            fill.backgroundColor = highlighted ? Themed.color(\.contrastForeground, 0.07).cgColor(in: self) : nil
+            name.color = Themed.color(\.contrastForeground)
+            secondary.color = Themed.color(\.contrastMutedForeground)
+            chevron?.strokeColor = Themed.color(\.contrastMutedForeground)
+            check?.strokeColor = Themed.color(\.contrastForeground)
+            star?.isHidden = !highlighted && !(star?.state.hovered ?? false)
+            kbd?.isHidden = !highlighted
+            return
+        }
         // `data-selected` foreground/8%; highlighted (alone or with selected) `accent`.
         let color: NSColor? = highlighted ? Themed.color(\.accent) : (isSelected ? Themed.color(\.contrastForeground, 0.08) : nil)
         fill.backgroundColor = color?.cgColor(in: self)

@@ -357,11 +357,11 @@ public enum ComposerMenus {
 
     /// `matchComposerThreadItems` (client-runtime composerThreadItems.ts): up to five unarchived
     /// threads of the composer's environment whose title contains the query, newest first. A bare
-    /// `@` stays a file picker.
-    public static func threadItems(query: String, threads: [ThreadCandidate], excluding: String?) -> [ComposerMenuItem] {
+    /// `@` stays a file picker, unless `browse` (Redesign's "+" > Threads) asks for the newest threads.
+    public static func threadItems(query: String, threads: [ThreadCandidate], excluding: String?, browse: Bool = false) -> [ComposerMenuItem] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !q.isEmpty else { return [] }
-        return threads.filter { $0.id != excluding && !$0.archived && $0.title.lowercased().contains(q) }
+        guard !q.isEmpty || browse else { return [] }
+        return threads.filter { $0.id != excluding && !$0.archived && (q.isEmpty || $0.title.lowercased().contains(q)) }
             .sorted { $0.updatedAt > $1.updatedAt }
             .prefix(threadResultLimit)
             .map { ComposerMenuItem(id: "thread:\($0.id)", kind: .thread(id: $0.id, title: $0.title), label: $0.title, description: "Thread") }

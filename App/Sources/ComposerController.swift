@@ -222,6 +222,8 @@ final class ComposerController {
     /// Each environment's `questionAttachments` capability and upload limit (`fileAttachmentStagingLimit`),
     /// read from `/.well-known/t3/environment` when its session changes.
     fileprivate var capabilities: [String: (questionAttachments: Bool, uploadLimit: Int?, threadStop: Bool)] = [:]
+    /// Redesign's "+" > Threads set it: the bare `@` it inserts lists threads, not files.
+    fileprivate var browsingThreads = false
     fileprivate var supportsQuestionAttachments: Bool { targetEnvironmentId.flatMap { capabilities[$0]?.questionAttachments } ?? false }
     fileprivate var fileUploadLimit: Int? { targetEnvironmentId.flatMap { capabilities[$0]?.uploadLimit } }
     private var capabilityTasks: [String: Task<Void, Never>] = [:]
@@ -326,6 +328,8 @@ final class ComposerController {
         }
         pickers.focusComposer = { [weak self] in self?.composer.focus() }
         pickers.onBlocked = { [weak self] reason in self?.report(.modelChangeBlocked(reason), key: nil) }
+        // ponytail: Settings has no page per provider, so Manage lands on Providers; deep-link when it gets one
+        pickers.onManageProvider = { [weak self] _ in self?.openProviderSetup?() }
         panel.errorBanner.onDismiss = { [weak self] in self?.dismissThreadError() }
         composer.historyMessages = { [weak self] in self?.historyMessages() ?? [] }
         pickers.onChange = { [weak self] _ in
@@ -2702,7 +2706,10 @@ extension ComposerController {
         menus.itemsProvider = { [weak self] trigger in
             self?.menuContent(trigger) ?? ComposerMenuController.Content(items: [], emptyText: "")
         }
-        menus.onTriggerChange = { [weak self] trigger in self?.startSearches(trigger) }
+        menus.onTriggerChange = { [weak self] trigger in
+            if trigger?.kind != .path || trigger?.query.isEmpty == false { self?.browsingThreads = false }
+            self?.startSearches(trigger)
+        }
         menus.onPick = { [weak self] item in self?.picked(item) }
         composer.chipLook = { [weak self] token in self?.chipLook(token) ?? ComposerChipLook.basic(token) }
         composer.recordsForCopy = { [weak self] ids in
@@ -2798,7 +2805,11 @@ extension ComposerController {
             let items = ComposerMenus.skillItems(query: trigger.query, provider: providerKey, skills: provider?.skills(cwd: cwd) ?? [])
             return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .skill, loading: false))
         case .path:
-            let threads = ComposerMenus.threadItems(query: trigger.query, threads: menuThreads, excluding: currentThreadLocalId)
+            let threads = ComposerMenus.threadItems(query: trigger.query, threads: menuThreads, excluding: currentThreadLocalId, browse: browsingThreads)
+            // "+" > Threads: a bare `@` lists the newest threads alone, until the token changes.
+            if browsingThreads, trigger.query.isEmpty {
+                return .init(items: threads, emptyText: "No threads found.")
+            }
             let key = pathKey(trigger.query)
             let entries = menuState.paths.flatMap { $0.key == key ? $0.entries : nil } ?? []
             let loading = !trigger.query.isEmpty && key != nil && menuState.paths?.key != key
@@ -3289,6 +3300,33 @@ extension ComposerController {
     /// The paperclip: a question's answer takes the files while one is open, else the draft does.
     fileprivate func attachPressed() {
         if questionRequestId != nil { attachToQuestion(); return }
+        if ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark) { openPlusMenu(); return }
+        pickFiles()
+    }
+
+    /// Redesign's "+" menu, after Capy's: attach, then what the `@`, `#` and `$` menus insert, each hinted by
+    /// its trigger. Capy's side threads, environment variables, people, subagents and devices have no
+    /// composer action here, so they stay out.
+    private func openPlusMenu() {
+        func trigger(_ text: String, threads: Bool = false) -> @MainActor () -> Void {
+            { [weak self] in
+                guard let self else { return }
+                composer.focus()
+                browsingThreads = threads
+                composer.insertAtCaret(text)
+            }
+        }
+        var items = [ComposerPlusMenuItem("Upload attachment", icon: .paperclip) { [weak self] in self?.pickFiles() }]
+        items.append(ComposerPlusMenuItem("Threads", icon: .messagesSquare, shortcut: "@", startsGroup: true, action: trigger("@", threads: true)))
+        if menuProject != nil { items.append(ComposerPlusMenuItem("Pull requests", icon: .gitPullRequestArrow, shortcut: "#", action: trigger("#"))) }
+        if menuProvider?.skills(cwd: menuCwd).isEmpty == false {
+            items.append(ComposerPlusMenuItem("Skills", icon: .package, shortcut: "$", action: trigger("$")))
+        }
+        items.append(ComposerPlusMenuItem("Files", icon: .file, shortcut: "@", action: trigger("@")))
+        ComposerPlusMenu.toggle(from: composer.attach, items: items)
+    }
+
+    private func pickFiles() {
         guard let window = composer.window, target != nil else { return }
         let picker = NSOpenPanel()
         picker.allowsMultipleSelection = true

@@ -32,6 +32,8 @@ public final class ComposerPickers {
     public final var onPromptChange: (@MainActor (String) -> Void)?
     /// A started thread refused the model change; show the text as a toast.
     public final var onBlocked: (@MainActor (String) -> Void)?
+    /// Redesign's model picker card "Manage": open that provider's settings.
+    public final var onManageProvider: (@MainActor (ProviderInstanceId) -> Void)?
 
     /// Whether the draft may fan out to several models (a new thread on a server with
     /// `requiredWorktreeBootstrap`); the app sets it per draft.
@@ -152,6 +154,12 @@ public final class ComposerPickers {
                                    activeModel: current.model?.slug ?? current.modelSlug ?? "", preferences: modelPreferences())
         view.jumpLabel = { index in
             ActiveKeymap.label(for: Keymap.modelPickerJumpCommands[index], context: KeybindingContext(["modelPickerOpen": true]))
+        }
+        if let manage = onManageProvider {
+            view.onManage = { [weak self] id in
+                self?.closeOpenPopup()
+                manage(id)
+            }
         }
         view.onSelect = { [weak self] id, slug in
             guard let self else { return }

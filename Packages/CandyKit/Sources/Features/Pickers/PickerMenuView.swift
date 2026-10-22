@@ -47,6 +47,8 @@ struct PickerMenuEntry {
     var evenLabelPadding = false
     /// A radio item without `closeOnClick`: picking it updates the menu in place.
     var keepsOpen = false
+    /// A key hint drawn muted at the row's right edge (Redesign's "+" menu).
+    var shortcut: String?
     var onPick: (@MainActor () -> Void)?
 
     static func label(_ title: String, even: Bool = false) -> Self { Self(kind: .label, title: title, evenLabelPadding: even) }
@@ -180,6 +182,7 @@ final class PickerMenuRowView: DSView {
     private var line: CALayer?
     /// Dither's check at the row's right edge.
     private var check: IconView?
+    private var shortcut: LabelView?
 
     init(menu: PickerMenuView, index: Int) {
         self.owner = menu
@@ -223,6 +226,14 @@ final class PickerMenuRowView: DSView {
                 v.smoothsFont = false
                 addSubview(v)
                 detail = v
+            }
+            if let text = e.shortcut {
+                let v = LabelView(text, font: DSFont.ui(13))
+                v.lineHeight = 20
+                v.smoothsFont = false
+                v.alignment = .right
+                addSubview(v)
+                shortcut = v
             }
             if owner.capy, e.checked {
                 let v = IconView(name: .check, size: 14)
@@ -282,16 +293,20 @@ final class PickerMenuRowView: DSView {
         case .separator: return 16
         case .label: return 16 + title.textWidth
         case .option:
-            var first = title.textWidth + (icon == nil ? 0 : 14 + 6)
+            var first = title.textWidth + (icon == nil ? 0 : 14 + iconGap)
             if let badge { first += spaceWidth + badge.intrinsicContentSize.width }
             // The traits description wraps at `max-w-56` (224).
             let second = detail.map { d -> CGFloat in
                 let w = TextLine(NSAttributedString(string: d.text, attributes: [.font: d.font])).width
                 return owner.style == .menu ? min(224, w) : w
             } ?? 0
-            return 16 + max(first + (owner.capy ? 14 + 12 : 0), second)
+            let hint = shortcut.map { ceil($0.textWidth) + 24 } ?? 0
+            return 16 + max(first + max(owner.capy ? 14 + 12 : 0, hint), second)
         }
     }
+
+    /// Capy's menus leave more room after the icon.
+    private var iconGap: CGFloat { owner.capy ? 10 : 6 }
 
     private var spaceWidth: CGFloat { (" " as NSString).size(withAttributes: [.font: title.font]).width }
 
@@ -309,10 +324,14 @@ final class PickerMenuRowView: DSView {
             var x: CGFloat = 8
             if let icon {
                 icon.frame = NSRect(x: x, y: top + 3, width: 14, height: 14)
-                x += 14 + 6
+                x += 14 + iconGap
             }
             check?.frame = NSRect(x: bounds.width - 8 - 14, y: top + 3, width: 14, height: 14)
-            let checkRoom: CGFloat = owner.capy ? 14 + 12 : 0
+            if let shortcut {
+                let w = ceil(shortcut.textWidth)
+                shortcut.frame = NSRect(x: bounds.width - 8 - w, y: top, width: w, height: 20)
+            }
+            let checkRoom: CGFloat = max(owner.capy ? 14 + 12 : 0, shortcut.map { ceil($0.textWidth) + 24 } ?? 0)
             let w = min(title.textWidth, bounds.width - 8 - x - checkRoom - (badge.map { spaceWidth + $0.intrinsicContentSize.width } ?? 0))
             title.frame = NSRect(x: x, y: top, width: max(0, w), height: 20)
             if let badge {
@@ -356,6 +375,7 @@ final class PickerMenuRowView: DSView {
                 title.color = highlighted ? Themed.color(\.contrastAccentForeground) : Themed.color(\.contrastForeground)
             }
             icon?.strokeColor = Themed.color(\.contrastMutedForeground)
+            shortcut?.color = Themed.color(\.contrastMutedForeground)
             detail?.color = Themed.color(\.contrastMutedForeground, owner.style == .menu ? 0.8 : 1)
         }
     }
