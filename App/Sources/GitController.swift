@@ -778,9 +778,13 @@ final class GitController {
             host?.close()
             self?.runAction(.commit, commitMessage: commit.commitMessage, featureBranch: true, filePaths: commit.selection.filePaths, skipDefaultPrompt: true)
         }
+        // `openChangedFileInEditor` (GitActionsControl.tsx:1492-1502, 771fd93fc5): paths are relative to the
+        // repository root, which differs from the project folder when the project is a subfolder.
+        // ponytail: older servers send no root and get the project folder as before; T3 refuses then, match it when pre-3473 servers drop out
+        let root = status?.workingTree.rootPath
         commit.onOpenFile = { [weak self] path in
-            guard let cwd = self?.target?.cwd else { return }
-            NSWorkspace.shared.open(URL(fileURLWithPath: path.hasPrefix("/") ? path : cwd + "/" + path))
+            guard let base = root ?? self?.target?.cwd else { return }
+            NSWorkspace.shared.open(URL(fileURLWithPath: path.hasPrefix("/") ? path : base + "/" + path))
         }
         window.makeFirstResponder(commit.message)
     }

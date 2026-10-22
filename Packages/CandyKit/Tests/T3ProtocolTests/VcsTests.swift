@@ -18,6 +18,10 @@ struct VcsTests {
         s = VcsStatus.apply(local, to: s)
         // The local part replaces, the remote part stays.
         #expect(s?.refName == "dev" && s?.workingTree.files.count == 1 && s?.aheadCount == 2 && s?.branchChanges == nil)
+        #expect(s?.workingTree.rootPath == nil)
+        // 771fd93fc5: 3473 names the repository root the paths are relative to.
+        let rooted = Self.json(#"{"_tag":"localUpdated","local":{"hasPrimaryRemote":true,"hasWorkingTreeChanges":true,"isDefaultRef":false,"isRepo":true,"refName":"dev","workingTree":{"rootPath":"/repo","deletions":0,"files":[],"insertions":0}}}"#)
+        #expect(VcsStatus.apply(rooted, to: s)?.workingTree.rootPath == "/repo")
         #expect(VcsStatus.apply(Self.json(#"{"_tag":"other"}"#), to: s) == s)
         // A remote update before any snapshot assumes a repository with no ref.
         let early = VcsStatus.apply(remote, to: nil)
