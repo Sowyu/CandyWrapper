@@ -490,6 +490,15 @@ final class ComposerController {
         configObservers.forEach { $0(environmentId) }
     }
 
+    /// An environment's live shell: a thread draft whose model pick the thread now runs drops it, so the
+    /// composer follows later changes made on other clients (composerDraftStore.ts:4152-4219, T3 2767012996).
+    func liveShell(_ environmentId: String, _ snapshot: ShellSnapshot?) {
+        guard let snapshot, !pickers.store.drafts.isEmpty else { return }
+        var models: [String: ModelSelection] = [:]
+        for thread in snapshot.threads { models[thread.id.scoped(to: environmentId).rawValue] = thread.modelSelection }
+        if pickers.store.reconcileThreadModels({ models[$0] }), environmentId == targetEnvironmentId { refresh() }
+    }
+
     /// `sendShortcut` and `followUpBehavior` (client settings) drive the composer's Enter and follow-up rules.
     private func applyClientSettings() {
         let c = ClientSettingsStore.shared.current

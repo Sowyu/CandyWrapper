@@ -339,8 +339,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         chatGptWelcome = ChatGptWelcomeCoordinator(window: window, environments: environments, composer: threads.composer)
         var showedWelcome = false
         let priorLiveShell = environments.onLiveShell
-        environments.onLiveShell = { [weak welcome, weak environments] env, snapshot in
+        environments.onLiveShell = { [weak welcome, weak environments, weak composer = threads.composer] env, snapshot in
             priorLiveShell?(env, snapshot)
+            composer?.liveShell(env, snapshot)
             welcome?.liveShell(env, snapshot: snapshot)
             if !showedWelcome, CommandLine.arguments.contains("--welcome"), env == environments?.primaryId {
                 showedWelcome = true
