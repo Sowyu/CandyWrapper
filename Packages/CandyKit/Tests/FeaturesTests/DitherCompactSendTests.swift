@@ -7,7 +7,9 @@ import DesignSystem
 /// place of the round send button and the Compact chip.
 @MainActor
 struct DitherCompactSendTests {
-    @Test func ditherSplitsCompactAndSend() throws {
+    /// It applies the global `ThemeRuntime` and restores it in `defer`; keep the body synchronous on
+    /// the main actor so no other test runs while the Dither theme is on.
+    @Test func ditherSplitsCompactAndSend() {
         var input = ThemeRuntimeInput()
         input.ditherDark = true
         input.ditherLight = true
@@ -20,7 +22,5 @@ struct DitherCompactSendTests {
         let pills = composer.subviews.compactMap { $0 as? MessageActionPill }.filter { !$0.isHidden }
         #expect(pills.contains { $0.title == "Compact and send" })
         #expect(composer.compactPill.isHidden)
-        let rep = Snapshot.image(of: composer, size: composer.bounds.size, scale: 2, dark: true)
-        try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/dither-compact-send.png"))
     }
 }
