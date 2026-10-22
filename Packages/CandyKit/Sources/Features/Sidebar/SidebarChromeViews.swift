@@ -454,6 +454,8 @@ public final class SidebarAccountRowView: ControlView {
     /// The updates "Update all" would run now (`UpdateEverythingLogic.offered`); the item hides at 0.
     public var updateAllCount = 0
     public var onUpdateAll: (() -> Void)?
+    /// The menu is open: the chevron brightens and turns down, and the row keeps its pressed fill.
+    private var menuOpen = false { didSet { if menuOpen != oldValue { chevron.setRotation(menuOpen ? 180 : 0); needsDisplay = true } } }
     /// Room at the right edge for the update button, which sits inside the row; the chevron moves left of it.
     public var trailingReserve: CGFloat = 0 { didSet { if trailingReserve != oldValue { needsLayout = true } } }
 
@@ -515,9 +517,10 @@ public final class SidebarAccountRowView: ControlView {
     public override func updateLayer() {
         updateRedaction(animated: false)
         layer?.cornerRadius = DitherChrome.controlRadius
-        layer?.backgroundColor = state.hoverOrPressed ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
+        layer?.backgroundColor = menuOpen ? SB.c(\.sidebarRowActive).cgColor(in: self)
+            : state.hoverOrPressed ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
         avatar.backgroundColor = SB.c(\.sidebarForeground, 0.12).cgColor(in: self)
-        chevron.strokeColor = SB.c(\.sidebarMutedForeground)
+        chevron.strokeColor = menuOpen || state.hoverOrPressed ? SB.c(\.sidebarForeground) : SB.c(\.sidebarMutedForeground)
     }
 
     public override func layout() {
@@ -550,6 +553,8 @@ public final class SidebarAccountRowView: ControlView {
         if updateAllCount > 0 {
             items.append(MenuItem("Update all (\(updateAllCount))", icon: .circleArrowUp) { [weak self] in self?.onUpdateAll?() })
         }
-        MenuPopupView.show(items, from: self, placement: PopupPlacement(side: .top, align: .start, sideOffset: 6, fallbackAxisSide: .none))
+        let menu = MenuPopupView.show(items, from: self, placement: PopupPlacement(side: .top, align: .start, sideOffset: 6, fallbackAxisSide: .none))
+        menuOpen = menu != nil
+        menu?.hostPopup?.onClose = { [weak self] in self?.menuOpen = false }
     }
 }
