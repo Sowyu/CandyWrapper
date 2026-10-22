@@ -27,12 +27,16 @@ public final class DitherTabStripView: TopbarDragView {
 
     private var views: [TabView] = []
     private let plus = ButtonView(nil, icon: .plus, variant: .ghost, size: .iconSm)
+    /// The thread's rows scroll on under the strip, so the tabs and + sit on a blur. It shows nothing over the bare art.
+    private let plusFrost = BackdropBlurView()
     static let tabWidth: CGFloat = 200, tabHeight: CGFloat = 28, gap: CGFloat = 4
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         plus.setAccessibilityLabel("New thread")
         plus.action = { [weak self] in self?.onNew?() }
+        plusFrost.cornerRadius = DitherChrome.controlRadius
+        addSubview(plusFrost)
         addSubview(plus)
         // A tab group, as VoiceOver knows NSTabView's: the tabs are its radio buttons.
         setAccessibilityElement(true)
@@ -76,6 +80,7 @@ public final class DitherTabStripView: TopbarDragView {
             x += max(60, width) + Self.gap
         }
         plus.frame = NSRect(x: x + 2, y: (bounds.height - 24) / 2, width: 24, height: 24)
+        plusFrost.frame = plus.frame
         if drag != nil {
             drag?.rest = views.map(\.frame)
             layoutDrag()
@@ -187,6 +192,7 @@ public final class DitherTabStripView: TopbarDragView {
         private var icon: IconView
         private let label: LabelView
         private let close = ButtonView(nil, icon: .x, variant: .ghostMuted, size: .iconMicro)
+        private let frost = BackdropBlurView()
         /// The working grid in the close button's slot, made the first time the thread works.
         private var grid: DotGridSpinnerView?
 
@@ -198,7 +204,7 @@ public final class DitherTabStripView: TopbarDragView {
             label.lineHeight = 18
             close.setAccessibilityLabel("Close tab")
             close.action = { [weak self] in self?.onClose?() }
-            [icon, label, close].forEach(addSubview)
+            [frost, icon, label, close].forEach(addSubview)
             if tab.activity != nil { let g = DotGridSpinnerView(); grid = g; addSubview(g) }
             setAccessibilityRole(.radioButton)
             setAccessibilityLabel(tab.title)
@@ -286,6 +292,8 @@ public final class DitherTabStripView: TopbarDragView {
 
         override func layout() {
             super.layout()
+            frost.frame = bounds
+            frost.cornerRadius = DitherChrome.cardRadius
             icon.frame = NSRect(x: 10, y: (bounds.height - 14) / 2, width: 14, height: 14)
             let closeX = bounds.width - 6 - 16
             close.frame = NSRect(x: closeX, y: (bounds.height - 16) / 2, width: 16, height: 16)

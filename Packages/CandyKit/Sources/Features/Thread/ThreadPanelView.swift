@@ -145,6 +145,7 @@ public final class ThreadHeaderView: TopbarDragView {
         toggles[0].setAccessibilityLabel("Toggle thread details panel")
         toggles[1].setAccessibilityLabel("Toggle terminal drawer")
         toggles[2].setAccessibilityLabel("Toggle right panel")
+        addSubview(frost)
         toggles.forEach(addSubview)
         addSubview(cost)
         toggleTips = toggles.map { TooltipController.attach(to: $0, text: "", placement: PopupPlacement(side: .bottom, align: .center, sideOffset: 4)) }
@@ -172,6 +173,8 @@ public final class ThreadHeaderView: TopbarDragView {
 
     /// Dither: the title alone, without the project crumb, since the tab strip and the project chip carry it.
     private var plain: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    /// Dither: the rows scroll on under the toggles and cost, so a blur sits behind them. It shows nothing over the bare art.
+    private let frost = BackdropBlurView()
 
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
@@ -225,6 +228,9 @@ public final class ThreadHeaderView: TopbarDragView {
         cost.isHidden = !plain || !threadVisible || cost.breakdown == nil
         let costSize = cost.intrinsicContentSize
         cost.frame = NSRect(x: x - costSize.width, y: midY - costSize.height / 2, width: costSize.width, height: costSize.height)
+        let cluster = ([cost] + toggles).filter { $0.superview === self && !$0.isHidden }.map(\.frame).reduce(nil as NSRect?) { $0?.union($1) ?? $1 }
+        frost.isHidden = !plain || cluster == nil
+        if let cluster { frost.frame = cluster.insetBy(dx: -4, dy: -2); frost.cornerRadius = DitherChrome.controlRadius }
     }
 }
 
@@ -512,6 +518,19 @@ public final class ThreadPanelView: DSView {
         return 0.85 * (1 - t * t * (3 - 2 * t))
     }
     static let fadeStops = (0...10).map { Double($0) / 10 }
+    /// Dither's fade at the window's top edge: how far it reaches and how much it hides at `y`, 0 at the edge to 1 at its
+    /// end. Short and light, so the rows read until they are nearly at the edge.
+    static let ditherEdgeFade: CGFloat = 20
+    static func ditherFade(_ y: Double) -> Double {
+        let t = min(1, max(0, y))
+        return 0.7 * (1 - t) * (1 - t)
+    }
+    /// How far the panel's top sits below the window's under Dither (the tab strip band), which the timeline reaches up through.
+    private var ditherOverhang: CGFloat {
+        guard ThemeRuntime.isDither(dark: effectiveAppearance.isDark), let content = window?.contentView else { return 0 }
+        let top = content.convert(NSPoint(x: 0, y: bounds.minY), from: self).y
+        return min(DitherChrome.band, max(0, content.isFlipped ? top : content.bounds.height - top))
+    }
 
     private weak var sheetPreviousResponder: NSResponder?
     private var sheetWasOpen = false
@@ -1791,8 +1810,11 @@ public final class ThreadPanelView: DSView {
         terminalGhost?.frame.origin.y = chatHeight
         // The rows run on under the header and fade out toward the top (`fade`).
         let glass = WindowGlass.isActive(for: self)
-        timeline.topClearance = chatTop
-        timeline.frame = NSRect(x: 0, y: 0, width: chat, height: max(0, chatHeight))
+        // Dither's panel sits under the tab strip band, so the timeline reaches up past the panel's top to the
+        // window's edge and its rows slide on under the band (the user: "my stuff is still getting covered").
+        let above = ditherOverhang
+        timeline.topClearance = chatTop + above
+        timeline.frame = NSRect(x: 0, y: -above, width: chat, height: max(0, chatHeight + above))
         // Mid-slide the panel keeps its width and runs past the window's right edge.
         rightPanel.frame = NSRect(x: sheet ? bounds.width - panelWidth : chat, y: panelTop, width: panelWidth, height: max(0, bounds.height - panelTop))
         panelGhost?.frame.origin.x = chat
@@ -1913,8 +1935,11 @@ public final class ThreadPanelView: DSView {
         if masks {
             fadeMask.frame = timeline.bounds
             let h = max(1, Double(timeline.bounds.height))
-            fadeMask.locations = (Self.fadeStops.map { $0 * Double(band) / h } + [1]).map { NSNumber(value: min($0, 1)) }
-            fadeMask.colors = (Self.fadeStops.map { 1 - Self.topFade($0) } + [1]).map { NSColor.black.withAlphaComponent($0).cgColor }
+            // Dither fades only the last few points at the window's edge, so the rows stay readable under the header and tabs.
+            let reach = dither ? Double(Self.ditherEdgeFade) : Double(band)
+            fadeMask.locations = (Self.fadeStops.map { $0 * reach / h } + [1]).map { NSNumber(value: min($0, 1)) }
+            fadeMask.colors = (Self.fadeStops.map { 1 - (dither ? Self.ditherFade($0) : Self.topFade($0)) } + [1])
+                .map { NSColor.black.withAlphaComponent($0).cgColor }
             if timeline.layer?.mask !== fadeMask { timeline.layer?.mask = fadeMask }
         } else if timeline.layer?.mask === fadeMask {
             timeline.layer?.mask = nil
