@@ -250,6 +250,8 @@ final class ChangedFileRowView: DSView {
     override func mouseEntered(with event: NSEvent) { hovered = true }
     override func mouseExited(with event: NSEvent) { hovered = false }
     override func viewDidHide() { super.viewDidHide(); hovered = false }
+    // `cursor-pointer` on folder and file rows (ChangedFilesTree.tsx:185,216, T3 72ebd98cc6).
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) {
         guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
