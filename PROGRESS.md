@@ -33,6 +33,10 @@ The current state and the open work. Before you stop, tick what you finished, ad
 - [ ] Port timeline and streaming perf bucket b3 (taken 2026-10-22, perf-timeline).
 - [x] Port upstream sidebar performance work, bucket b1 (taken 2026-10-22, perf-sidebar): audited all 10 commits; unchanged repository identity refreshes now keep project-array storage (20 copies to zero). All 41 focused reducer, sidebar load and sidebar fidelity tests passed; the counting test fails on the old reducer. The other changes already fit the native sidebar or belong to other areas.
 
+### Dither round 8, 2026-10-22 (taken 2026-10-22, main agent)
+
+- [ ] S. Light hairlines in the details card, a floating account pill, thicker composer pills with checkout and ref below the composer, and matching corners (taken 2026-10-22, agent dither-polish8). Files: `Features/Git/ThreadDetailsCardView.swift` and its split buttons, `Features/Composer/**`, the sidebar footer in `SidebarView.swift` and `SidebarChromeViews.swift`.
+
 ### Dither round 7, 2026-10-22 (taken 2026-10-22, main agent)
 
 - [x] P. No middle bar: the thread scrim reads evenly across the panel, and the account row's email shows blurred (done 2026-10-22, agent dither-scrim). The column scrim is gone; an open thread shows the art with every dot's brightness capped where muted text needs it (`DitherArt.capped`, a soft knee, hue kept), the same across the whole panel, so saturated shapes still show and bright areas fade. Under Redesign the e-mail rests as T3's blurred scramble and fades to the real text on hover; VoiceOver reads the real text as the row's value. Checked on screen with a bright yellow test picture at 1100pt: no band in dark or light, measured worst case over the art 7.4:1 `mutedForeground` and 4.6:1 `secondaryLabel` in dark (2.8 and 1.7 beside the old column), 4.6:1 `mutedForeground` in light; the e-mail blurred at rest and readable on hover in light and dark; 0% CPU idle. Not checked: the fade's frames, other window widths on screen (the cap has no geometry).
