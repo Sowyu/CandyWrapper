@@ -5,13 +5,16 @@ import ImageIO
 /// filling the main panel in its own colors at 2pt ordered-dither dots of brightness, held within a reach of the
 /// panel's background that keeps text readable anywhere on it. A new thread shows it fully, an open thread under a
 /// light scrim of the background, and every other page under a heavy one. It renders once per size and appearance
-/// off the main thread and runs nothing while idle.
+/// off the main thread. Opening a new thread resolves the dots in, in Bayer order, for 0.75 s; otherwise it holds
+/// still and runs nothing.
 public final class DitherArtView: NSView {
     private let art = CALayer()
     private let scrim = CALayer()
     private var shown: DitherArt.Request?
     private var pending: DitherArt.Request?
     private var debounce: DispatchWorkItem?
+    /// A new thread opened before the art had rendered: the first render resolves in.
+    private var revealsWhenShown = false
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -64,9 +67,53 @@ public final class DitherArtView: NSView {
     /// Pass nil when the source leaves. Pages that never call it get the heavy page scrim.
     @MainActor
     public static func setEmphasis(_ emphasis: Emphasis?, from source: NSView) {
+        let wasHero = heroSources.contains(source)
         heroSources.remove(source); threadSources.remove(source)
         if emphasis == .hero { heroSources.add(source) } else if emphasis == .thread { threadSources.add(source) }
+        // Opening a new thread resolves the dots in.
+        if emphasis == .hero, !wasHero, let art = art(behind: source) { art.playReveal() }
         for art in arts.allObjects { art.updateScrim() }
+    }
+
+    /// The art showing behind `source`, if any.
+    @MainActor
+    static func art(behind source: NSView) -> DitherArtView? {
+        arts.allObjects.first { art in
+            art.superview.map { source.isDescendant(of: $0) } == true && (art.window == nil || art.window === source.window)
+        }
+    }
+
+    /// Dots resolve in, in Bayer order, over 0.75 s, and the last frame is the static art itself, so the art ends
+    /// exactly as it rests. Core Animation flips the ten frames; they exist only while it plays.
+    func playReveal() {
+        guard !Motion.reduced else { return }
+        guard let request = shown, let contents = art.contents else { revealsWhenShown = true; return }
+        revealsWhenShown = false
+        let final = DitherArtImage(image: (contents as! CGImage))
+        // Hidden until the frames are ready, so the full art never flashes before resolving in.
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        art.opacity = 0
+        CATransaction.commit()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let frames = DitherArtFrames(images: final.image.map {
+                DitherArt.revealFrames($0, background: request.background, reveals: (1...9).map { Double($0) / 10 })
+            } ?? [])
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    CATransaction.begin(); CATransaction.setDisableActions(true)
+                    self.art.opacity = 1
+                    CATransaction.commit()
+                    // A newer render replaced the art meanwhile: it shows as it is.
+                    guard self.shown == request, !frames.images.isEmpty, let final = self.art.contents else { return }
+                    let resolve = CAKeyframeAnimation(keyPath: "contents")
+                    resolve.values = frames.images + [final]
+                    resolve.calculationMode = .discrete
+                    resolve.duration = 0.75
+                    self.art.add(resolve, forKey: "reveal")
+                }
+            }
+        }
     }
     @MainActor private static let heroSources = NSHashTable<NSView>.weakObjects()
     @MainActor private static let threadSources = NSHashTable<NSView>.weakObjects()
@@ -158,6 +205,7 @@ public final class DitherArtView: NSView {
                         CATransaction.begin(); CATransaction.setDisableActions(true)
                         self.placeArt()
                         CATransaction.commit()
+                        if self.revealsWhenShown { self.playReveal() }
                     }
                 }
             }
@@ -170,6 +218,7 @@ public final class DitherArtView: NSView {
 }
 
 private struct DitherArtImage: @unchecked Sendable { let image: CGImage? }
+private struct DitherArtFrames: @unchecked Sendable { let images: [CGImage] }
 
 /// The art's rendering. Touches no AppKit view, so it runs on any thread.
 public enum DitherArt {
@@ -270,5 +319,30 @@ public enum DitherArt {
             }
         }
         return ctx.makeImage()
+    }
+
+    /// The art partly resolved, one frame per reveal: a dot whose Bayer threshold is above the reveal shows the
+    /// background, so a reveal of 1 is `art` itself. Works from the rendered art, so it costs no decode.
+    nonisolated static func revealFrames(_ art: CGImage, background: [Double], reveals: [Double]) -> [CGImage] {
+        let w = art.width, h = art.height
+        guard w > 0, h > 0,
+              let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
+              let data = ctx.data?.bindMemory(to: UInt32.self, capacity: w * h) else { return [] }
+        ctx.draw(art, in: CGRect(x: 0, y: 0, width: w, height: h))
+        let full = Array(UnsafeBufferPointer(start: data, count: w * h))
+        // One whole pixel in the context's byte order: red, green, blue, then the skipped byte.
+        let rgb = (0..<3).map { UInt32(min(max(background.count == 3 ? background[$0] * 255 : 0, 0), 255).rounded()) }
+        let base = UInt32(littleEndian: rgb[0] | rgb[1] << 8 | rgb[2] << 16 | 255 << 24)
+        return reveals.compactMap { reveal in
+            // A dot shows once its Bayer threshold, (b + 0.5) / 64, is within the reveal.
+            let cut = Int((reveal * 64 - 0.5).rounded(.down))
+            // Row 0 of the buffer is the top of the picture, as in `render`.
+            for y in 0..<h {
+                let row = y * w, b = (y & 7) * 8
+                for x in 0..<w { data[row + x] = Int(bayer[b + (x & 7)]) <= cut ? full[row + x] : base }
+            }
+            return ctx.makeImage()
+        }
     }
 }

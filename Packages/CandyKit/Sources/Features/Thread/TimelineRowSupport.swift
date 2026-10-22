@@ -385,9 +385,7 @@ final class ShineLabelView: DSView {
                 band.colors = [NSColor.clear.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
                 band.locations = nil
             case .focus:
-                band.colors = [0, 0.12, 0.55, 1, 0.55, 0.12, 0].map { CGColor(gray: 0, alpha: $0) }
-                // 0, .675, 1.575, 2.25, 2.925, 3.825 and 4.5rem of the 4.5rem window.
-                band.locations = [0, 0.15, 0.35, 0.5, 0.65, 0.85, 1]
+                Self.makeFocusBand(band)
             }
             band.removeAnimation(forKey: "shine")
             loop?.update()
@@ -411,16 +409,28 @@ final class ShineLabelView: DSView {
         loop = LoopingAnimation(view: self, key: "shine", layer: { [weak self] in self?.shining == true ? self?.band : nil }) { [weak self] in
             let width = self?.bright.bounds.width ?? 0
             // `focus` moves its band by the overlay's own width, the label plus 9rem.
-            let from: CGFloat = -36, to = self?.style == .focus ? width + 108 : width + 36
-            // Keep T3's 30 held steps (index.css:545, 604), with the user's 2.5 times faster sweep.
-            let a = CAKeyframeAnimation(keyPath: "position.x")
-            a.values = (0..<30).map { from + (to - from) * CGFloat($0) / 30 }
-            a.keyTimes = (0...30).map { NSNumber(value: Double($0) / 30) }
-            a.calculationMode = .discrete
-            a.duration = self?.sweepDuration ?? 2.2
-            a.repeatCount = .infinity
-            return a
+            return Self.sweep(to: self?.style == .focus ? width + 108 : width + 36, duration: self?.sweepDuration ?? 2.2)
         }
+    }
+
+    /// `live-activity-focus`'s soft-edged 72px window.
+    static func makeFocusBand(_ band: CAGradientLayer) {
+        band.colors = [0, 0.12, 0.55, 1, 0.55, 0.12, 0].map { CGColor(gray: 0, alpha: $0) }
+        // 0, .675, 1.575, 2.25, 2.925, 3.825 and 4.5rem of the 4.5rem window.
+        band.locations = [0, 0.15, 0.35, 0.5, 0.65, 0.85, 1]
+    }
+
+    /// The band's endless trip from -36 to `to`, in T3's 30 held steps (index.css:545, 604), at the user's 2.5 times
+    /// faster sweep.
+    static func sweep(to: CGFloat, duration: TimeInterval) -> CAKeyframeAnimation {
+        let from: CGFloat = -36
+        let a = CAKeyframeAnimation(keyPath: "position.x")
+        a.values = (0..<30).map { from + (to - from) * CGFloat($0) / 30 }
+        a.keyTimes = (0...30).map { NSNumber(value: Double($0) / 30) }
+        a.calculationMode = .discrete
+        a.duration = duration
+        a.repeatCount = .infinity
+        return a
     }
 
     var textWidth: CGFloat { base.textWidth }

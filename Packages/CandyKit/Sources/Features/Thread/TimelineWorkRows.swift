@@ -212,6 +212,7 @@ final class WorkLineView: DSView {
             label.font = TL.font(14)
         }
         label.text = text
+        label.base.prefixColor = nil
         label.shining = active
         time.text = TL.dayAwareTimestamp(timestamp, now: now)
         self.expanded = expanded
@@ -754,6 +755,10 @@ final class WorkLiveRowView: WorkRowBase {
         l.configure(icon: WorkIcons.entry(entry), text: label,
                     style: .tool, time: entry.createdAt, expanded: false, active: active, now: context.now())
         l.expandable = false
+        // Dither, after Capy's "Creating 1 subagent": the verb in the foreground, the rest muted.
+        if ThemeRuntime.isDither(dark: effectiveAppearance.isDark), let space = label.firstIndex(of: " ") {
+            l.label.base.prefixColor = (label[..<space].utf16.count, TL.c(\.foreground))
+        }
         needsLayout = true
     }
 
@@ -821,6 +826,8 @@ final class WorkingRowView: TimelineRowView {
     private let rule = FillView()
     private var startMs: Int64?
     private var compacting = false
+    /// Dither's rolling, shimmering timer in place of `label`.
+    private var ticker: DitherWorkingTicker?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -846,17 +853,34 @@ final class WorkingRowView: TimelineRowView {
         compactingLabel.isHidden = !compacting
         compactingLabel.fastMode = context.fastGlimmer
         compactingLabel.shining = compacting
+        if ThemeRuntime.isDither(dark: effectiveAppearance.isDark), !compacting {
+            if ticker == nil { let t = DitherWorkingTicker(); ticker = t; addSubview(t) }
+            ticker?.fastMode = context.fastGlimmer
+        } else {
+            ticker?.removeFromSuperview(); ticker = nil
+        }
+        label.isHidden = compacting || ticker != nil
         needsLayout = true
-        tick()
+        tick(animated: false)
     }
 
     /// `formatWorkingTimer` (:3477-3490). The text shows whole seconds, so it changes once a second.
-    private func tick() {
+    private func tick(animated: Bool = true) {
         if compacting { LabelClock.shared.cancel(self); return }
-        guard let startMs else { label.text = "Working..."; LabelClock.shared.cancel(self); return }
+        guard let startMs else {
+            label.text = "Working..."
+            ticker?.set(prefix: "Working...", value: "", animated: false)
+            LabelClock.shared.cancel(self)
+            return
+        }
         let elapsedMs = max(0, Int64(context.now().timeIntervalSince1970 * 1000) - startMs)
         let seconds = elapsedMs / 1000
-        label.text = "Working for " + (seconds < 60 ? "\(seconds)s" : formatDuration(Double(seconds) * 1000))
+        let value = seconds < 60 ? "\(seconds)s" : formatDuration(Double(seconds) * 1000)
+        label.text = "Working for " + value
+        if let ticker {
+            ticker.set(prefix: "Working for ", value: value, animated: animated)
+            needsLayout = true
+        }
         LabelClock.shared.schedule(self, in: Double(1000 - elapsedMs % 1000) / 1000) { [weak self] in self?.tick() }
     }
 
@@ -868,6 +892,7 @@ final class WorkingRowView: TimelineRowView {
     override func layout() {
         super.layout()
         label.frame = NSRect(x: 4, y: 4 + (24 - TL.relaxed) / 2, width: bounds.width - 8, height: TL.relaxed)
+        ticker?.frame = NSRect(x: 4, y: label.frame.minY, width: min(bounds.width - 8, ceil(ticker?.textWidth ?? 0) + 8), height: TL.relaxed)
         if compacting {
             // `inline-flex items-center gap-1.5`: the 12pt icon centered on the line, then the text.
             compactingIcon.frame = NSRect(x: 4, y: 10, width: 12, height: 12)

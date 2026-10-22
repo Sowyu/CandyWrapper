@@ -39,6 +39,21 @@ struct DitherArtTests {
         #expect(bottom < top)
         #expect(DitherArt.fade(0.5) == 0.15 && DitherArt.fade(1) < 0.4)
     }
+
+    /// The new-thread reveal starts empty, grows in Bayer order and ends on the resting art, byte for byte.
+    @Test func revealFramesGrowFromTheBackgroundToTheRestingArt() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "dither-reveal-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let bg = 10.0 / 255
+        let art = try #require(DitherArt.render(.init(url: try picture(gray: 0.9, in: dir), width: 80, height: 60, background: [bg, bg, bg], scale: 2)))
+        let frames = DitherArt.revealFrames(art, background: [bg, bg, bg], reveals: [0, 0.5, 1])
+        try #require(frames.count == 3)
+        func lit(_ image: CGImage) -> Int { bytes(image).enumerated().filter { $0.offset % 4 == 0 && $0.element != 10 }.count }
+        #expect(lit(frames[0]) == 0)
+        #expect(lit(frames[1]) > 0 && lit(frames[1]) < lit(art))
+        #expect(bytes(frames[2]) == bytes(art))
+    }
 }
 
 /// The art yields to the system display options: Reduce Transparency covers it with the solid background, and

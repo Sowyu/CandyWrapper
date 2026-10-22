@@ -1,11 +1,13 @@
 import AppKit
 
 /// Dither's "working" mark, after Capy's: a 3 x 3 grid of dots with a light that sweeps across it diagonally. Core
-/// Animation runs the sweep, only while the view is in a window and shown; Reduce Motion leaves the grid still at
-/// half strength. Nothing runs in the app while it animates.
+/// Animation runs the sweep, only while the view is shown in a window that isn't covered; Reduce Motion leaves the
+/// grid still at half strength. Nothing runs in the app while it animates.
 public final class DotGridSpinnerView: NSView {
     public var color: NSColor = .labelColor { didSet { needsDisplay = true } }
     private var dots: [CALayer] = []
+    private var running = false
+    private var occlusion: NSObjectProtocol?
     /// The sweep, in seconds.
     static let period: CFTimeInterval = 1.2
 
@@ -19,7 +21,16 @@ public final class DotGridSpinnerView: NSView {
             layer?.addSublayer(d)
             dots.append(d)
         }
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(displayOptionsChanged),
+                                                          name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
     }
+
+    isolated deinit {
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        if let occlusion { NotificationCenter.default.removeObserver(occlusion) }
+    }
+
+    @objc private func displayOptionsChanged(_ note: Notification) { sync() }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
@@ -46,6 +57,12 @@ public final class DotGridSpinnerView: NSView {
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        if let occlusion { NotificationCenter.default.removeObserver(occlusion) }
+        occlusion = window.map { window in
+            NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.sync() }
+            }
+        }
         sync()
     }
 
@@ -53,7 +70,11 @@ public final class DotGridSpinnerView: NSView {
     public override func viewDidUnhide() { super.viewDidUnhide(); sync() }
 
     private func sync() {
-        let run = window != nil && !isHiddenOrHasHiddenAncestor && !Motion.reduced
+        let visible = window.map { $0.isVisible && $0.occlusionState.contains(.visible) } ?? false
+        let run = visible && !isHiddenOrHasHiddenAncestor && !Motion.reduced
+        // Keeps a running sweep's phase when nothing changed.
+        guard run != running || !run else { return }
+        running = run
         for (i, d) in dots.enumerated() {
             d.removeAnimation(forKey: "sweep")
             d.opacity = run ? 0.25 : 0.5
