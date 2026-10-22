@@ -9,22 +9,31 @@ import T3Protocol
 public struct MarkdownContextChips: Equatable {
     public var records: [String: JSONValue]
     public var attachments: [String: JSONValue]
-    public var threadTitles: [String: String]
+    /// The threads the message names that this machine knows (`useThreadShell`), by local id.
+    public var threads: [String: LinkedThread]
 
-    public init(records: [String: JSONValue] = [:], attachments: [String: JSONValue] = [:], threadTitles: [String: String] = [:]) {
-        self.records = records; self.attachments = attachments; self.threadTitles = threadTitles
+    /// A known thread's shell title and its project's icon, nil when the project is unknown.
+    public struct LinkedThread: Equatable, Sendable {
+        public var title: String
+        public var project: ProjectIconSource?
+        public init(title: String, project: ProjectIconSource? = nil) { self.title = title; self.project = project }
     }
 
-    /// The message's records by context id and its attachments by id; `threadTitle` names live threads
-    /// by local id (`useThreadShell`), nil once a thread is gone.
-    public static func message(context: JSONValue?, attachments: [JSONValue], threadTitle: (String) -> String?) -> MarkdownContextChips {
-        var out = MarkdownContextChips()
+    public init(records: [String: JSONValue] = [:], attachments: [String: JSONValue] = [:], threads: [String: LinkedThread] = [:]) {
+        self.records = records; self.attachments = attachments; self.threads = threads
+    }
+
+    /// The message's records by context id and its attachments by id; `thread` looks up live threads
+    /// by local id, nil once a thread is gone. `text` adds the threads its `t3-thread://` links name.
+    public static func message(context: JSONValue?, attachments: [JSONValue], text: String = "",
+                               thread: (String) -> LinkedThread?) -> MarkdownContextChips {
+        var out = links(in: text, thread: thread) ?? MarkdownContextChips()
         if case .array(let records)? = context?["records"] {
             for record in records {
                 guard let id = record["contextId"]?.stringValue else { continue }
                 out.records[id] = record
-                if record["kind"]?.stringValue == "thread", let threadId = record["threadId"]?.stringValue, let title = threadTitle(threadId) {
-                    out.threadTitles[threadId] = title
+                if record["kind"]?.stringValue == "thread", let threadId = record["threadId"]?.stringValue, let live = thread(threadId) {
+                    out.threads[threadId] = live
                 }
             }
         }
@@ -32,6 +41,60 @@ public struct MarkdownContextChips: Equatable {
             if let id = attachment["id"]?.stringValue { out.attachments[id] = attachment }
         }
         return out
+    }
+
+    // MARK: Thread links
+
+    static let threadLinkPrefix = "t3-thread://v1/"
+
+    /// `parseThreadLinkHref` (packages/shared/src/threadLinks.ts:14-17): the id as written, not decoded.
+    static func threadLinkId(_ href: String) -> String? {
+        guard href.hasPrefix(threadLinkPrefix) else { return nil }
+        let id = String(href.dropFirst(threadLinkPrefix.count))
+        return id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : id
+    }
+
+    /// `percentDecodedThreadLinkId` (threadLinks.ts:19-26): nil when decoding changes nothing or fails.
+    static func percentDecoded(_ id: String) -> String? {
+        guard let decoded = id.removingPercentEncoding, decoded != id,
+              !decoded.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return decoded
+    }
+
+    /// The threads a reply's `[title](t3-thread://v1/<id>)` links name, written and percent-decoded,
+    /// or nil when it has none (`hasThreadLinks`, threadLinks.ts:60-62), so plain replies carry no chips.
+    public static func links(in text: String, thread: (String) -> LinkedThread?) -> MarkdownContextChips? {
+        guard text.contains("](\(threadLinkPrefix)") else { return nil }
+        var out = MarkdownContextChips()
+        for match in text.matches(of: /\]\(t3-thread:\/\/v1\/([^\s)]+)\)/) {
+            let written = String(match.1)
+            for id in [written, percentDecoded(written)].compactMap({ $0 }) where out.threads[id] == nil {
+                if let live = thread(id) { out.threads[id] = live }
+            }
+        }
+        return out
+    }
+
+    /// `MarkdownThreadLink` (MarkdownThreadLink.tsx:12-39): the thread as written, else its percent-decoded
+    /// id, drawn as `ThreadContextChip` with the link text as its recorded title.
+    // ponytail: same machine only; T3 also finds a thread with that id on exactly one other machine
+    // (`resolveThreadLinkRef`, threadLinks.ts:28-50). Add it with a scoped open action if links cross machines.
+    @MainActor
+    func threadLinkChip(threadId written: String, label: String) -> MarkdownContextChip {
+        let decoded = threads[written] == nil ? Self.percentDecoded(written).flatMap { threads[$0] != nil ? $0 : nil } : nil
+        return threadChip(threadId: decoded ?? written, recordTitle: label)
+    }
+
+    /// `ThreadContextChip` (ThreadContextChip.tsx:11-50): the live title, else the recorded one; the project's
+    /// favicon once the shell names a known project. Since 15dc7b0130 the chip keeps its own colors inside
+    /// markdown (`.chat-markdown a:not(:has([data-slot="context-chip-label"]))`, index.css:1958-1979).
+    @MainActor
+    func threadChip(threadId: String, recordTitle: String) -> MarkdownContextChip {
+        let live = threads[threadId]
+        let trimmed = live?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let title = trimmed.isEmpty ? recordTitle : trimmed
+        return MarkdownContextChip(look: ComposerChipLook(kind: .thread, label: title, project: live?.project), action: .openThread(threadId),
+                                   tooltip: live != nil ? "Open thread" : "Thread no longer available", accessibility: "Thread, \(title)")
     }
 
     /// The chip for one reference, as the presentation registry dispatches it.
@@ -52,15 +115,7 @@ public struct MarkdownContextChips: Equatable {
             let text = recordLabel.isEmpty ? name : recordLabel
             return MarkdownContextChip(look: ComposerChipLook(kind: .skill, label: text), action: .none, tooltip: "$\(name)", accessibility: "Skill, \(text)")
         case "thread":
-            // ThreadContextChip.tsx: the live title, else the recorded one.
-            let threadId = record["threadId"]?.stringValue ?? ""
-            let live = threadTitles[threadId]
-            let title = live ?? record["title"]?.stringValue ?? recordLabel
-            // A router `<Link>`, so the markdown link color wins over the chip's (`.chat-markdown a:not(.chat-markdown-file-link)`).
-            // ponytail: no dotted hover underline (the same rule's `:hover` background); add it if the hover looks bare
-            return MarkdownContextChip(look: ComposerChipLook(kind: .thread, label: title, foregroundOverride: Themed.color(\.infoForeground)),
-                                       action: .openThread(threadId),
-                                       tooltip: live != nil ? "Open thread" : "Thread no longer available", accessibility: "Thread, \(title)")
+            return threadChip(threadId: record["threadId"]?.stringValue ?? "", recordTitle: record["title"]?.stringValue ?? recordLabel)
         case "image":
             guard let id = record["attachmentId"]?.stringValue, let attachment = attachments[id], attachment["type"]?.stringValue == "image" else { return unavailable }
             let name = record["name"]?.stringValue ?? recordLabel

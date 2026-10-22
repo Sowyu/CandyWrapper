@@ -48,7 +48,7 @@ struct ThreadViewFidelityTests {
             "a-image": .object(["type": .string("image"), "id": .string("a-image"), "name": .string("screenshot.png"), "mimeType": .string("image/png")]),
         ]
         // The live thread title, as `useThreadShell` gives it.
-        return MarkdownContextChips(records: records, attachments: attachments, threadTitles: ["t1": "Fix login redirect"])
+        return MarkdownContextChips(records: records, attachments: attachments, threads: ["t1": .init(title: "Fix login redirect")])
     }
 
     /// A solid 4x4 picture, the one the reference's `<img>` shows.
@@ -159,7 +159,7 @@ struct ThreadViewFidelityTests {
         #expect(chips.chip(kind: "image", contextId: "missing", label: "gone").look.kind == .unresolved)
         #expect(chips.chip(kind: "file", contextId: "thread_demo", label: "x").look.kind == .unresolved) // kind mismatch
         var stale = chips
-        stale.threadTitles = [:]
+        stale.threads = [:]
         #expect(stale.chip(kind: "thread", contextId: "thread_demo", label: "x").tooltip == "Thread no longer available")
         let color = MarkdownContextChips.averageColor(Self.solid([46, 139, 87]))!.usingColorSpace(.sRGB)!
         #expect(abs(color.redComponent * 255 - 46) < 1 && abs(color.greenComponent * 255 - 139) < 1 && abs(color.blueComponent * 255 - 87) < 1)

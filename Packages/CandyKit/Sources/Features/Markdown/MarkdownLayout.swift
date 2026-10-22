@@ -121,6 +121,29 @@ enum MarkdownStyle {
                 i = end
                 continue
             }
+            func appendContextChip(_ chip: MarkdownContextChip) {
+                var chip = chip
+                let measured = ComposerChipAttachment.measure(chip.look, maxWidth: maxChipWidth)
+                chip.label = measured.label
+                chip.frame.size = measured.size
+                // One no-break space as wide as the chip: the chip never wraps and the layout item draws it.
+                let space = TextLine(NSAttributedString(string: "\u{00A0}", attributes: [.font: parent])).width
+                let start = out.length
+                // Find skips a user message's context reference and ends the text segment there (threadFindText.ts).
+                out.append(NSAttributedString(string: "\u{00A0}", attributes: [.font: parent, .foregroundColor: color,
+                                                                                .kern: measured.size.width - space, .markdownFindText: "\u{0}"]))
+                contextChips.append((NSRange(location: start, length: 1), chip))
+            }
+            if let url = run.link, let threadId = MarkdownContextChips.threadLinkId(url.absoluteString) {
+                // `parseThreadLinkHref` before every other link kind (ChatMarkdown.tsx:1067-1074): a thread chip
+                // labelled with the link text, or the id when it has none.
+                var end = i
+                while end < runs.count, runs[end].link == url { end += 1 }
+                let text = runs[i..<end].map(\.text).joined()
+                i = end
+                appendContextChip((contexts ?? MarkdownContextChips()).threadLinkChip(threadId: threadId, label: text.isEmpty ? threadId : text))
+                continue
+            }
             if let url = run.link, url.scheme == "t3-context", let parsed = ComposerContext.parseHref(url.absoluteString) {
                 var end = i
                 while end < runs.count, runs[end].link == url { end += 1 }
@@ -132,17 +155,7 @@ enum MarkdownStyle {
                     out.append(NSAttributedString(string: label, attributes: [.font: parent, .foregroundColor: color]))
                     continue
                 }
-                var chip = contexts.chip(kind: parsed.kind, contextId: parsed.contextId, label: label)
-                let measured = ComposerChipAttachment.measure(chip.look, maxWidth: maxChipWidth)
-                chip.label = measured.label
-                chip.frame.size = measured.size
-                // One no-break space as wide as the chip: the chip never wraps and the layout item draws it.
-                let space = TextLine(NSAttributedString(string: "\u{00A0}", attributes: [.font: parent])).width
-                let start = out.length
-                // Find skips a user message's context reference and ends the text segment there (threadFindText.ts).
-                out.append(NSAttributedString(string: "\u{00A0}", attributes: [.font: parent, .foregroundColor: color,
-                                                                                .kern: measured.size.width - space, .markdownFindText: "\u{0}"]))
-                contextChips.append((NSRange(location: start, length: 1), chip))
+                appendContextChip(contexts.chip(kind: parsed.kind, contextId: parsed.contextId, label: label))
                 continue
             }
             var findText: String?

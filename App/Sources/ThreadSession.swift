@@ -468,6 +468,13 @@ final class ThreadController {
             let title = shell.title.trimmingCharacters(in: .whitespacesAndNewlines)
             return title.isEmpty ? nil : title
         }
+        panel.model.linkedThread = { [weak self, weak sidebar] local in
+            guard let env = self?.openThreadId?.environmentId, let snapshot = sidebar?.snapshot else { return nil }
+            let id = local.scoped(to: env)
+            guard let shell = snapshot.threads.first(where: { $0.id == id }) ?? snapshot.archivedThreads.first(where: { $0.id == id }) else { return nil }
+            let project = snapshot.projects.first { $0.id == shell.projectId }
+            return MarkdownContextChips.LinkedThread(title: shell.title, project: project.map(ProjectIconSource.init))
+        }
         panel.model.onOpenScheduledTask = { [weak self] taskId in
             guard let self, let env = self.openThreadId?.environmentId else { return }
             self.automations.openSettings?(env, taskId)

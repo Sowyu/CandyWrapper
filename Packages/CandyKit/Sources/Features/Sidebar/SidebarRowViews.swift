@@ -95,11 +95,7 @@ public final class ProjectMonogramView: DSView {
     public override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     private func updateIdentity() {
-        if case .monogram(let text, let color)? = source?.override {
-            identity = (text, color)
-        } else {
-            identity = Self.identity(projectTitle)
-        }
+        identity = source.map(Self.identity) ?? Self.identity(projectTitle)
         if source != nil, !observing {
             observing = true
             NotificationCenter.default.addObserver(self, selector: #selector(iconsChanged), name: ProjectIconStore.didChange, object: nil)
@@ -132,6 +128,12 @@ public final class ProjectMonogramView: DSView {
     public override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         if scale != 1 { ctx.scaleBy(x: scale, y: scale) }
+        Self.draw(source, identity: identity, dimmed: dimmed, ctx: ctx)
+    }
+
+    /// The 16px favicon in a flipped context at the origin, in the current drawing appearance. The
+    /// monogram shows until `ProjectIconStore` has the icon file, which posts `didChange` once it does.
+    static func draw(_ source: ProjectIconSource?, identity: (monogram: String, color: String), dimmed: Bool = false, ctx: CGContext) {
         let tileRect = CGRect(x: 0, y: 0, width: 16, height: 16)
         switch source?.override {
         case .emoji(let emoji)?:
@@ -148,7 +150,7 @@ public final class ProjectMonogramView: DSView {
             return
         case .lucide(let name, let color)?:
             let icon = IconName.allCases.first { $0.lucideName == name } ?? .folderCode
-            drawIcon(icon.definition, in: tileRect, color: SB.base("\(color)-600", "\(color)-400").cgColor(in: self), ctx: ctx)
+            drawIcon(icon.definition, in: tileRect, color: SB.base("\(color)-600", "\(color)-400").cgColor, ctx: ctx)
             return
         default: break
         }
@@ -164,7 +166,7 @@ public final class ProjectMonogramView: DSView {
             ctx.restoreGState()
             return
         }
-        var color = SB.base("\(identity.color)-600", "\(identity.color)-400").cgColor(in: self)
+        var color = SB.base("\(identity.color)-600", "\(identity.color)-400").cgColor
         if dimmed, let gray = color.converted(to: CGColorSpace(name: CGColorSpace.genericGrayGamma2_2)!, intent: .defaultIntent, options: nil) {
             color = gray // `grayscale` on settled favicons
         }
@@ -187,8 +189,14 @@ public final class ProjectMonogramView: DSView {
         ctx.restoreGState()
     }
 
+    /// The identity a source draws: its chosen monogram, else the one generated from its title.
+    static func identity(_ source: ProjectIconSource) -> (monogram: String, color: String) {
+        if case .monogram(let text, let color)? = source.override { return (text, color) }
+        return identity(source.title)
+    }
+
     /// A lucide icon stroked into `rect` (`size-full` in the 14px box).
-    private func drawIcon(_ definition: IconDefinition, in rect: CGRect, color: CGColor, ctx: CGContext) {
+    private static func drawIcon(_ definition: IconDefinition, in rect: CGRect, color: CGColor, ctx: CGContext) {
         let scale = rect.width / definition.viewBox.width
         ctx.saveGState()
         ctx.translateBy(x: rect.minX - definition.viewBox.x * scale, y: rect.minY - definition.viewBox.y * scale)
