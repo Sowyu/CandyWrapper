@@ -30,34 +30,14 @@ public final class DraftHeroView: DSView {
 
     public override var wantsUpdateLayer: Bool { false }
 
-    /// Dither (after Capy's new-thread page): no headline, the project and machine chips over the composer's left edge.
+    /// Dither (after Capy's new-thread page): no headline, the project chip over the composer's left edge; the machine shows in the row under the composer.
     private var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
     private let chipIcon = ProjectMonogramView(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
     private let scratchIcon = IconView(name: .folder, size: 14)
     /// The project chip; `onPickProject` gets it as the anchor.
     public private(set) lazy var projectChip = DitherChipView(icon: chipIcon, accessibilityLabel: "Project")
-    /// The machine chip (`RunOnControl`'s machine); `onPickMachine` gets it as the anchor.
-    public private(set) lazy var machineChip = DitherChipView(icon: IconView(name: .laptop, size: 14), accessibilityLabel: "Run on")
     /// The project's icon for the chip; set after `projectTitle`.
     public var projectIcon: ProjectIconSource? { didSet { chipIcon.source = projectIcon } }
-    /// The machine chip was clicked; open the machine list under `anchor`.
-    public var onPickMachine: ((NSView) -> Void)?
-
-    /// The current machine for the Dither machine chip, nil to hide it. `interactive` with a choice of machines.
-    public func setMachine(label: String?, kind: String, online: Bool, interactive: Bool) {
-        machineChip.isHidden = label == nil || !capy
-        machineChip.text = label ?? ""
-        machineChip.online = online
-        machineChip.interactive = interactive
-        if machineKind != kind {
-            machineKind = kind
-            machineChip.replaceIcon(IconView(definition: EnvironmentMachineIcon.definition(kind), size: 14))
-        }
-        machineLabel = label
-        needsLayout = true
-    }
-    private var machineKind = "laptop"
-    private var machineLabel: String?
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -68,12 +48,8 @@ public final class DraftHeroView: DSView {
             guard let self else { return }
             self.onPickProject?(self.projectChip)
         }
-        machineChip.muted = true
-        machineChip.action = { [weak self] in
-            guard let self else { return }
-            self.onPickMachine?(self.machineChip)
-        }
-        for chip in [projectChip, machineChip] { chip.isHidden = true; addSubview(chip) }
+        projectChip.isHidden = true
+        addSubview(projectChip)
         updateChips()
     }
 
@@ -89,26 +65,20 @@ public final class DraftHeroView: DSView {
         superview?.needsLayout = true
     }
 
-    /// Redesign: where the chips end, so the checkout and branch pills can follow them in the row.
+    /// Redesign: where the chips end. The machine shows in the row under the composer, so only the project chip
+    /// sits here.
     public var chipsWidth: CGFloat {
         guard capy else { return 0 }
-        var w = projectChip.intrinsicContentSize.width
-        if machineLabel != nil { w += DitherPill.spacing + machineChip.intrinsicContentSize.width }
-        return w
+        return projectChip.intrinsicContentSize.width
     }
 
     public override func layout() {
         super.layout()
         projectChip.isHidden = !capy
-        machineChip.isHidden = !capy || machineLabel == nil
         guard capy else { return }
         // Redesign: floating pills from the composer's left edge, `DitherPill.spacing` apart.
         let project = projectChip.intrinsicContentSize
         projectChip.frame = NSRect(x: 0, y: (bounds.height - project.height) / 2, width: project.width, height: project.height)
-        let machine = machineChip.intrinsicContentSize
-        let gap = DitherPill.spacing
-        machineChip.frame = NSRect(x: projectChip.frame.maxX + gap, y: (bounds.height - machine.height) / 2,
-                                   width: min(machine.width, max(0, bounds.width - projectChip.frame.maxX - gap)), height: machine.height)
         window?.invalidateCursorRects(for: self)
     }
 

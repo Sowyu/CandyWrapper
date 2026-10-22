@@ -443,6 +443,9 @@ public final class ThreadPanelView: DSView {
     /// `shouldShowComposerContextStrip` on the draft page: the project has a machine to show
     /// (BranchToolbar.logic.ts:59-81). The checkout and branch controls are not drawn yet.
     public var showsContextStrip = false { didSet { if showsContextStrip != oldValue { needsLayout = true } } }
+    /// Redesign's machine and workspace row under the composer, in place of the checkout and ref pills.
+    public let deviceRow = DitherDeviceRowView()
+    public var showsDeviceRow = false { didSet { if showsDeviceRow != oldValue { needsLayout = true } } }
     /// The thread error banner over the top of the timeline (ChatView.tsx:11355-11375).
     public let errorBanner = ThreadErrorBannerView()
     /// The composer provider's status (ProviderStatusBanner.tsx), above the error banner in the
@@ -631,6 +634,8 @@ public final class ThreadPanelView: DSView {
         addSubview(approvalPanel)
         contextStrip.isHidden = true
         addSubview(contextStrip)
+        deviceRow.isHidden = true
+        addSubview(deviceRow)
         addSubview(commandMenu)
         addSubview(composer)
         composer.onHeightChange = { [weak self] in self?.needsLayout = true }
@@ -1312,6 +1317,7 @@ public final class ThreadPanelView: DSView {
         }
         // Back from Redesign: everything docks again, the ring in the composer's footer.
         contextStrip.floatsAsPills = false
+        deviceRow.isHidden = true
         waitingIndicator.isHidden = true
         ringPill.isHidden = true
         if composer.contextWindowMeter.superview !== composer {
@@ -1487,7 +1493,6 @@ public final class ThreadPanelView: DSView {
         // Pill rows sit inside the composer's corners; cards keep its full width.
         let px = x + DitherPill.inset, pw = max(0, width - 2 * DitherPill.inset)
         // The draft centers the composer alone, so pills coming and going never move it.
-        let keepsStrip = !isDraft && ClientSettingsStore.shared.current.bool("persistComposerContextStrip")
         // A thread always keeps the row: the context ring and the waiting indicator sit at its right.
         let below = isDraft ? 0 : gap + pillH
         let y = isDraft ? (chatTop + (chatHeight - chatTop - height - 20) / 2).rounded() : chatHeight - 20 - below - height
@@ -1518,11 +1523,11 @@ public final class ThreadPanelView: DSView {
             top = rowY
             shown.append(stashBadge)
         }
-        // The machine is a chip on the draft, so the strip carries only the checkout and branch there. They sit
-        // under the composer, as T3's strip does.
-        let strip = visible && showsContextStrip && (isDraft ? contextStrip.showsGitControls : keepsStrip)
-        // The row's right end, right to left: the context ring, then the waiting indicator. The checkout and branch
-        // pills get what is left, the indicator drops its label before anything overlaps.
+        // Capy's machine and workspace row takes the strip's place under the composer, in threads and on the draft;
+        // its menu holds the strip's machine, workspace and ref.
+        let deviceShown = visible && showsDeviceRow
+        // The row's right end, right to left: the context ring, then the waiting indicator. The machine row
+        // gets what is left, the indicator drops its label before anything overlaps.
         let belowY = y + height + gap
         var belowRight = px + pw
         let meter = composer.contextWindowMeter
@@ -1542,8 +1547,7 @@ public final class ThreadPanelView: DSView {
         let waitingOn = docked && showsBackgroundWork
         waitingIndicator.isHidden = !waitingOn
         if waitingOn {
-            // ponytail: a fixed 150pt floor for the checkout and branch pills, measure the strip's compact width if it clips
-            let room = belowRight - px - (strip ? 150 + spacing : 0)
+            let room = belowRight - px - (deviceShown ? min(deviceRow.intrinsicContentSize.width, 150) + spacing : 0)
             waitingIndicator.showsLabel = waitingIndicator.width(showingLabel: true) <= room
             let w = min(waitingIndicator.width(showingLabel: waitingIndicator.showsLabel), max(0, belowRight - px))
             waitingIndicator.frame = NSRect(x: belowRight - w, y: belowY, width: w, height: pillH)
@@ -1551,10 +1555,12 @@ public final class ThreadPanelView: DSView {
             shown.append(waitingIndicator)
         }
         contextStrip.floatsAsPills = true
-        contextStrip.isHidden = !strip
-        if strip {
-            contextStrip.frame = NSRect(x: px, y: belowY, width: max(0, belowRight - px), height: pillH)
-            shown.append(contextStrip)
+        contextStrip.isHidden = true
+        deviceRow.isHidden = !deviceShown
+        if deviceShown {
+            let rx = px
+            deviceRow.frame = NSRect(x: rx, y: belowY, width: min(deviceRow.intrinsicContentSize.width, max(0, belowRight - rx)), height: pillH)
+            shown.append(deviceRow)
         }
 
         // The banner stack's items: notices become pills, the rest cards. The stack only runs their exits.

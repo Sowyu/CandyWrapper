@@ -109,6 +109,8 @@ final class GitController {
             NSMenu.popUpContextMenu(menu, with: event, for: view)
         }
         strip.branch.onContextMenu = branchMenu
+        panel.deviceRow.action = { [weak self] in self?.openDeviceMenu() }
+        composer.onRunOnUpdate = { [weak self] in self?.renderDeviceRow() }
         panel.lazyDetailsCard.configure { [weak self] card in
             card.runContext.action = { [weak self] in self?.openRunContextMenu(inPanel: true) }
             card.branch.onContextMenu = branchMenu
@@ -340,7 +342,7 @@ final class GitController {
         panel.proactiveRepositoryIsGit = status?.isRepo
         defer { onRender?() }
         composer.draftIsGitRepo = target?.isDraft == true && isRepo
-        guard let target else { renderCard(); return }
+        guard let target else { renderCard(); renderDeviceRow(); return }
         if !target.isDraft {
             panel.contextStrip.showsGitControls = isRepo
             panel.showsContextStrip = isRepo || target.environmentId != sidebar?.state.environments.primaryId
@@ -368,7 +370,21 @@ final class GitController {
         strip.branch.text = branchLabel
         strip.branch.isEnabled = refsLoaded && !branchActionPending
         renderCard()
+        renderDeviceRow()
         panel.needsLayout = true
+    }
+
+    /// Redesign's machine row under the composer: the machine (the draft's pick or auto balance), Capy's short
+    /// workspace mode in a repository, and whether the machine is connected.
+    private func renderDeviceRow() {
+        guard let target else { panel.showsDeviceRow = false; return }
+        let runOn = panel.contextStrip.runOn, env = environmentOption
+        let picked = target.isDraft ? runOn.selected : nil
+        let workspace = !isRepo ? nil : target.envMode == .worktree || target.worktreePath != nil ? "Worktree" : "Local"
+        panel.deviceRow.configure(machine: (target.isDraft ? runOn.autoBalanceLabel : nil) ?? picked?.label ?? env?.label ?? "Run on",
+                                  kind: picked?.machine ?? env?.machine ?? "laptop", workspace: workspace,
+                                  online: environments.state(target.environmentId)?.status == .connected)
+        panel.showsDeviceRow = true
     }
 
     /// The details card, while it is built.
@@ -470,22 +486,36 @@ final class GitController {
     private func openRunContextMenu(inPanel: Bool) {
         guard let target, target.isDraft, composer.currentDraft != nil else { return }
         let anchor: NSView = inPanel ? panel.detailsCard.runContext : panel.contextStrip.runContext
-        var items: [MenuItem] = []
+        var items = runOnItems()
+        if !items.isEmpty { items.append(.separator) }
+        items += workspaceItems(target)
+        let width: CGFloat = inPanel ? anchor.bounds.width : previousWorktree != nil ? 336 : 0
+        let placement = inPanel ? PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none)
+            : PopupPlacement(side: .top, align: .start, sideOffset: 4, fallbackAxisSide: .none)
+        let menu = MenuPopupView.show(items, from: anchor, placement: placement, minimumWidth: width)
+        if !inPanel { returnFocusToComposer(menu?.hostPopup, from: anchor) }
+    }
+
+    /// "Run on" with a choice of machines; empty without one.
+    private func runOnItems() -> [MenuItem] {
         let runOn = panel.contextStrip.runOn
-        if runOn.options.count > 1 || runOn.offersAddToMachine {
-            items.append(.label("Run on"))
-            if let item = runOn.autoBalanceMenuItem() { items.append(item) }
-            for option in runOn.options {
-                var item = MenuItem.radio(option.label, checked: runOn.autoBalanceLabel == nil && option.environmentId == runOn.selectedId)
-                item.glyph = EnvironmentMachineIcon.definition(option.machine)
-                item.closesOnClick = true
-                item.action = { [weak runOn] in if option.environmentId != runOn?.selectedId || runOn?.autoBalanceLabel != nil { runOn?.onChange?(option.environmentId) } }
-                items.append(item)
-            }
-            if let add = runOn.addToMachineMenuItem() { items.append(add) }
-            items.append(.separator)
+        guard runOn.options.count > 1 || runOn.offersAddToMachine else { return [] }
+        var items: [MenuItem] = [.label("Run on")]
+        if let item = runOn.autoBalanceMenuItem() { items.append(item) }
+        for option in runOn.options {
+            var item = MenuItem.radio(option.label, checked: runOn.autoBalanceLabel == nil && option.environmentId == runOn.selectedId)
+            item.glyph = EnvironmentMachineIcon.definition(option.machine)
+            item.closesOnClick = true
+            item.action = { [weak runOn] in if option.environmentId != runOn?.selectedId || runOn?.autoBalanceLabel != nil { runOn?.onChange?(option.environmentId) } }
+            items.append(item)
         }
-        items.append(.label("Workspace"))
+        if let add = runOn.addToMachineMenuItem() { items.append(add) }
+        return items
+    }
+
+    /// The draft's "Workspace" choices: the checkout, a new worktree, and the previous worktree when there is one.
+    private func workspaceItems(_ target: Target) -> [MenuItem] {
+        var items: [MenuItem] = [.label("Workspace")]
         var local = MenuItem.radio(BranchToolbarLogic.currentWorkspaceLabel(target.worktreePath), checked: target.envMode == .local)
         local.glyph = (target.worktreePath != nil ? IconName.folderGit : IconName.folder).definition
         local.isDisabled = forceNewWorktree
@@ -505,11 +535,45 @@ final class GitController {
             item.action = { [weak self] in self?.usePreviousWorktree() }
             items.append(item)
         }
-        let width: CGFloat = inPanel ? anchor.bounds.width : previousWorktree != nil ? 336 : 0
-        let placement = inPanel ? PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none)
-            : PopupPlacement(side: .top, align: .start, sideOffset: 4, fallbackAxisSide: .none)
-        let menu = MenuPopupView.show(items, from: anchor, placement: placement, minimumWidth: width)
-        if !inPanel { returnFocusToComposer(menu?.hostPopup, from: anchor) }
+        return items
+    }
+
+    /// Redesign's machine row menu: everything the checkout and ref pills offered. The machine (a choice on an
+    /// unlocked draft, else the one it runs on), the workspace (a choice on a draft, else where the thread runs) and
+    /// the ref, which opens the branch picker from the row.
+    private func openDeviceMenu() {
+        guard let target else { return }
+        let anchor = panel.deviceRow
+        let draft = target.isDraft && composer.currentDraft != nil
+        var items = draft ? runOnItems() : []
+        if items.isEmpty, let env = environmentOption {
+            var item = MenuItem.radio(panel.contextStrip.runOn.autoBalanceLabel ?? env.label, checked: true)
+            item.glyph = EnvironmentMachineIcon.definition(env.machine)
+            item.isDisabled = true
+            items = [.label("Run on"), item]
+        }
+        if isRepo {
+            items.append(.separator)
+            if draft {
+                items += workspaceItems(target)
+            } else {
+                var item = MenuItem.radio(BranchToolbarLogic.workspaceLabel(mode: target.envMode, worktreePath: target.worktreePath, modeLocked: true), checked: true)
+                item.glyph = folderIcon(target)
+                item.isDisabled = true
+                items += [.label("Workspace"), item]
+            }
+            var ref = MenuItem(branchLabel, disabled: !refsLoaded || branchActionPending)
+            ref.glyph = IconName.gitBranch.definition
+            // The picker opens once the menu has closed, from the row.
+            ref.action = { [weak self] in DispatchQueue.main.async { self?.openBranchPicker(inPanel: false, from: anchor) } }
+            items += [.separator, .label("Branch"), ref]
+        }
+        let menu = MenuPopupView.show(items, from: anchor, placement: PopupPlacement(side: .top, align: .start, sideOffset: 4, fallbackAxisSide: .none),
+                                      minimumWidth: previousWorktree != nil ? 336 : 240)
+        anchor.isPopupOpen = menu != nil
+        let previous = menu?.hostPopup?.onClose
+        menu?.hostPopup?.onClose = { [weak anchor] in previous?(); anchor?.isPopupOpen = false }
+        returnFocusToComposer(menu?.hostPopup, from: anchor)
     }
 
     /// The composer's strip menus hand focus back to the prompt when they close, as the composer's own
@@ -552,9 +616,10 @@ final class GitController {
 
     // MARK: Branch picker
 
-    func openBranchPicker(inPanel: Bool) {
+    func openBranchPicker(inPanel: Bool, from row: NSView? = nil) {
         guard let target, refsLoaded, !branchActionPending, picker == nil else { return }
-        let anchor: NSView = inPanel ? panel.detailsCard.branch : panel.contextStrip.branch
+        let row = row ?? (inPanel || panel.deviceRow.isHidden ? nil : panel.deviceRow)
+        let anchor: NSView = row ?? (inPanel ? panel.detailsCard.branch : panel.contextStrip.branch)
         let view = BranchPickerView()
         view.width = inPanel ? anchor.bounds.width : 320
         view.selectedValue = resolvedBranch
@@ -567,7 +632,7 @@ final class GitController {
         }
         view.onPick = { [weak self] value in self?.pick(value) }
         let placement = inPanel ? PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none)
-            : PopupPlacement(side: .top, align: .end, sideOffset: 4, fallbackAxisSide: .none)
+            : PopupPlacement(side: .top, align: row != nil ? .start : .end, sideOffset: 4, fallbackAxisSide: .none)
         guard let popup = view.present(from: anchor, placement: placement) else { return }
         popup.onClose = { [weak self] in self?.picker = nil }
         if !inPanel { returnFocusToComposer(popup, from: anchor) }
@@ -1019,7 +1084,7 @@ final class GitController {
         }
         shortcuts.on("composer.workspace") { [weak self] call in
             guard let self, self.stripShowsGit else { return false }
-            if !call.isRepeat { self.openRunContextMenu(inPanel: false) }
+            if !call.isRepeat { if self.panel.deviceRow.isHidden { self.openRunContextMenu(inPanel: false) } else { self.openDeviceMenu() } }
             return true
         }
         // `threadPanel.toggle` (ChatView.tsx:8144-8149 in 2994): the header's details toggle.
@@ -1035,7 +1100,9 @@ final class GitController {
         }
     }
 
-    private var stripShowsGit: Bool { panel.window != nil && !panel.contextStrip.isHidden && panel.contextStrip.showsGitControls }
+    private var stripShowsGit: Bool {
+        panel.window != nil && (!panel.contextStrip.isHidden || !panel.deviceRow.isHidden) && panel.contextStrip.showsGitControls
+    }
 
     // MARK: Checkout pull request (PullRequestThreadDialog.tsx)
 

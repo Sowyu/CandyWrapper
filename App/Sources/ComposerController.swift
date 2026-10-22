@@ -315,7 +315,6 @@ final class ComposerController {
         composer.onResume = { [weak self] in self?.resume() }
         composer.onTextChange = { [weak self] text in self?.remember(text) }
         panel.hero.onPickProject = { [weak self] anchor in self?.pickProject(from: anchor) }
-        panel.hero.onPickMachine = { [weak self] anchor in self?.panel.contextStrip.runOn.open(from: anchor) }
         panel.contextStrip.runOn.onAutoBalance = { [weak self] in self?.chooseAutomaticEnvironment() }
         panel.contextStrip.runOn.onChange = { [weak self] env in self?.changeEnvironment(env) }
         composer.stageArt = sidebar.stage != .none && ClientSettingsStore.shared.current.string("environmentIdentificationMode") == "artwork"
@@ -727,8 +726,8 @@ final class ComposerController {
             // Only the machine picker carries `composer.host`, and only with a choice of machines on an
             // unlocked draft (BranchToolbar.tsx:297-299, 697-699); otherwise the key does nothing.
             guard case .draft = self.target, !self.panel.contextStrip.runOn.locked else { return true }
-            if !call.isRepeat, self.panel.contextStrip.isHidden, ThemeRuntime.isDither(dark: self.panel.effectiveAppearance.isDark) {
-                self.panel.contextStrip.runOn.open(from: self.panel.hero.machineChip)
+            if !call.isRepeat, ThemeRuntime.isDither(dark: self.panel.effectiveAppearance.isDark) {
+                if !self.panel.deviceRow.isHidden { self.panel.deviceRow.performAction() }
             } else if !call.isRepeat, !self.panel.contextStrip.isHidden {
                 if self.panel.contextStrip.showsGitControls { self.panel.contextStrip.runContext.performAction() } else { self.panel.contextStrip.runOn.open() }
             }
@@ -1020,7 +1019,7 @@ final class ComposerController {
         guard case .draft(let session) = target, let group = group(of: ProjectId(session.projectId)) else {
             if case .thread = target { return } // GitController supplies the active thread's context.
             panel.showsContextStrip = false
-            panel.hero.setMachine(label: nil, kind: "server", online: false, interactive: false)
+            onRunOnUpdate?()
             return
         }
         let targets = runOnTargets(group)
@@ -1044,12 +1043,12 @@ final class ComposerController {
         // `shouldShowComposerContextStrip`: a Git project, or a machine to show.
         panel.contextStrip.showsGitControls = draftIsGitRepo
         panel.showsContextStrip = draftIsGitRepo || targets.count > 1 || (env != nil && env != sidebarEnvironments.primaryId)
-        // Dither's machine chip shows the draft's machine whether or not there is a choice.
-        let machine = runOn.selected
-        panel.hero.setMachine(label: runOn.autoBalanceLabel ?? machine?.label, kind: machine?.machine ?? "server",
-                              online: env.flatMap { environments.state($0) }?.status == .connected, interactive: !runOn.locked)
+        onRunOnUpdate?()
         panel.needsLayout = true
     }
+
+    /// After the draft's "Run on" changes, so Redesign's machine row follows it.
+    var onRunOnUpdate: (() -> Void)?
 
     /// `useAddProjectTargets` for the draft's project and the machines its group already runs on, set by the app.
     var addProjectTargets: ((ProjectShell, [String]) -> [AddProjectToMachine.Target])?
