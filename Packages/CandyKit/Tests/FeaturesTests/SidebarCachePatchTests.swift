@@ -19,7 +19,8 @@ struct SidebarCachePatchTests {
             SidebarPreview.thread("b1", "with a branch", project: "p0", kind: .read, minutesAgo: 5, extra: ["branch": "fix/x"]),
             SidebarPreview.thread("b2", "no branch", project: "p0", kind: .read, minutesAgo: 9),
         ])
-        let state = SidebarListState()
+        var state = SidebarListState()
+        state.dither = true
         let nowMs = TimestampFormat.nowMs(SidebarPreview.referenceNow)
         let cache = SidebarListCache()
         var items = SidebarListBuilder.items(snapshot: snap, state: state, nowMs: nowMs, cache: cache)
