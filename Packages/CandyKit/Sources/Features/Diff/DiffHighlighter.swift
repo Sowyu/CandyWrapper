@@ -37,9 +37,11 @@ final class DiffHighlighter {
     /// A file's spans arrived from off the main thread: redraw its rows.
     var onReady: (@MainActor (_ file: Int) -> Void)?
     static let capacity = 6
-    /// Files with at most this many diff lines tokenize inline, so they never flash plain text.
-    // ponytail: about a millisecond inline; lower it if expanding a mid-size file stutters.
+    /// Files with at most this many diff lines and this many bytes of code tokenize inline, so they
+    /// never flash plain text.
+    // ponytail: about a millisecond inline; lower either if expanding a mid-size file stutters.
     static let inlineLines = 1_000
+    static let inlineBytes = 64 * 1_024
 
     init(diff: UnifiedDiff, tokenize: @escaping Tokenizer = { CodeHighlighter.tokens($0, language: $1) }) {
         self.diff = diff
@@ -68,7 +70,8 @@ final class DiffHighlighter {
         let info = diff.files[file]
         guard !pending.contains(file), let first = info.hunks.first?.lines.lowerBound, let end = info.hunks.last?.lines.upperBound,
               CodeHighlighter.supports(info.language) else { return nil }
-        if end - first <= Self.inlineLines {
+        if end - first <= Self.inlineLines,
+           diff.lines[first..<end].reduce(0, { $0 + Int($1.length) }) <= Self.inlineBytes {
             let built = Self.build(diff, first..<end, language: info.language, tokenize: tokenize)
             store(built, file)
             return built

@@ -279,6 +279,24 @@ struct DiffTests {
         #expect(spy.onMain == 0)
     }
 
+    /// One changed line of a megabyte is too much code to tokenize inline, despite the short diff.
+    @Test func hugeSingleLineHighlightsOffMain() async {
+        final class Spy: @unchecked Sendable {
+            let lock = NSLock()
+            var onMain = 0, offMain = 0
+            func record() { lock.lock(); if Thread.isMainThread { onMain += 1 } else { offMain += 1 }; lock.unlock() }
+        }
+        let line = "const a = \"" + String(repeating: "x", count: 1_000_000) + "\""
+        let diff = UnifiedDiff("diff --git a/min.js b/min.js\n--- a/min.js\n+++ b/min.js\n@@ -1 +1 @@\n-const a = 1\n+\(line)\n")
+        let spy = Spy()
+        let highlighter = DiffHighlighter(diff: diff, tokenize: { spy.record(); return CodeHighlighter.tokens($0, language: $1) })
+        #expect(highlighter.spans(file: 0, line: 1).isEmpty)
+        await highlighter.inFlight?.value
+        #expect(spy.onMain == 0)
+        #expect(spy.offMain > 0)
+        #expect(!highlighter.spans(file: 0, line: 1).isEmpty)
+    }
+
     /// Resizing an annotation keeps the reader's line in place instead of jumping to the file header.
     @Test func reloadAnnotationsKeepsScrollPosition() {
         final class Card: NSView, DiffAnnotationContent {
