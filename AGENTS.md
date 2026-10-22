@@ -20,6 +20,7 @@ Run them from the repo root.
 | Check the disk before you build | `scripts/preflight` |
 | Run all tests | `scripts/test` |
 | Run some tests | `scripts/test --filter SidebarFidelityTests` |
+| Run the opt-in tests against a real `t3 serve`, the sandbox server and the Keychain | `scripts/test-integration`, after `scripts/sandbox-server` |
 | Build an app to test | `scripts/build-test-app <task>` |
 | Start the sandbox T3 server | `scripts/sandbox-server` |
 | Start the 2994 Nightly sandbox server on 47392 | `SANDBOX_DIR=~/CandyWrapper-research/sandbox-2994 SANDBOX_PORT=47392 scripts/sandbox-server 0.0.46-nightly.20261011.2994`, token in that folder |
