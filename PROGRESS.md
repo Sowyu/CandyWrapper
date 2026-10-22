@@ -31,7 +31,9 @@ Split by files so nobody edits the same ones. Claim a task by adding your agent 
 
 - [ ] Remaining 3473 parity, most seen first: decline approvals on send, the background work banner, thread link chips, the pele Mermaid renderer, PR reply nesting and change breakdown, connection diagnosis, Add to another machine, webhook filters and dedupe, usage pool refills and smaller items. See [the audit](docs/research/nightly-diff-3473.md#2-visible-changes).
 
-- [ ] (taken 2026-10-22) 33 more 3473 gaps, found by checking the 115 commits the first research pass never covered: snooze rules, terminal path links, project scripts in the shell history, the SSH verification wording, Azure DevOps Server links, palette PR badges, wide table wrapping, SnapShots during questions and more. Four agents are porting them. See [the audit, section 6](docs/research/nightly-diff-3473.md#6-commits-the-first-pass-missed).
+- [x] 33 more 3473 gaps (2026-10-22), found by checking the 115 commits the first research pass never covered: 31 ported and 2 already matching T3, among them snooze rules, terminal path links, project scripts kept out of the shell history, the SSH verification wording, Azure DevOps Server links, palette PR badges, wide table wrapping and SnapShots during questions. A Codex review found four bugs in the ports, all fixed. What's left is in [the audit, section 6](docs/research/nightly-diff-3473.md#6-commits-the-first-pass-missed).
+- [ ] (taken 2026-10-22) Add to another machine from Run on, with the ignored file copy (effb4337e5, 54346a617c).
+- [ ] Regenerate the other component references with 3473's stylesheet, which `design/t3-source/main.css` holds since 2026-10-22 (only composer-rich was redone), and port whatever fails.
 
 - [ ] Teach `scripts/gen-settings-search.py` CandyWrapper's exceptions (no mobile app or math rows yet, "Keep threads with a PR", "Open pull requests in CandyWrapper"), so the catalog can be regenerated instead of hand-edited. Found 2026-10-21.
 
@@ -98,6 +100,7 @@ The code marks known shortcuts with `// ponytail:`, each naming when to fix it (
 
 ## Waiting on the user
 
+- Client activity reports: CandyWrapper never sends `server.reportClientActivity`. T3 sends it every 25 s per machine, and the server runs its provider checks, usage-limit refreshes and git fetch with PR status only while a client reports in, so with only CandyWrapper connected those refresh at startup or by hand. Report only while CandyWrapper is the frontmost window (recommended, nothing while it's in the background), every 25 s like T3, or not at all? (asked 2026-10-22)
 - The Allow Remote Access design was built as proposed but never confirmed (`docs/decisions.md`).
 - An off-machine backup of the Sparkle signing key (`docs/release.md`).
 - Whether Settings should note an older official T3 Code app installed next to CandyWrapper's newer T3 runtime (asked 2026-10-14).
