@@ -1613,10 +1613,6 @@ public final class ThreadPanelView: DSView {
         // ponytail: the mask renders the timeline offscreen while it scrolls, a mask per row if Dither scrolling drops frames
         let masks = glass || dither
         fade.isHidden = masks
-        // The art's scrim is heavy under the text column only (DitherArtView.setTextColumn).
-        let lane = timeline.laneFrame
-        DitherArtView.setTextColumn(dither && !isDraft && chat > 0
-            ? convert(NSRect(x: lane.x, y: 0, width: lane.width, height: timeline.bounds.height), from: timeline) : nil, from: self)
         if masks {
             fadeMask.frame = timeline.bounds
             let h = max(1, Double(timeline.bounds.height))
