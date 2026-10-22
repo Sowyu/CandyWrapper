@@ -50,7 +50,7 @@ public final class IconView: NSView {
         wantsLayer = true
         layerContentsRedrawPolicy = .never
         layer?.masksToBounds = false
-        if ThemeRuntime.isDither(dark: NSApp?.effectiveAppearance.isDark ?? true), let alt = hugeiconsName?.hugeiconsDefinition {
+        if ThemeRuntime.isDither(dark: NSApp?.effectiveAppearance.isDark ?? true), let alt = hugeiconsName.flatMap(Self.ditherDefinition) {
             self.definition = alt
             usesHugeicons = true
         }
@@ -77,7 +77,7 @@ public final class IconView: NSView {
 
     /// Swaps between lucide and Hugeicons as the Dither theme turns on or off for this view.
     private func syncIconSet() {
-        let alt = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? hugeiconsName?.hugeiconsDefinition : nil
+        let alt = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? hugeiconsName.flatMap(Self.ditherDefinition) : nil
         guard (alt != nil) != usesHugeicons else { return }
         usesHugeicons = alt != nil
         definition = alt ?? base
@@ -122,6 +122,17 @@ public final class IconView: NSView {
         body()
         CATransaction.commit()
     }
+
+    /// Dither's glyph for `name`: Anthropic's mark for Claude (it shows the maker's logo, like OpenAI's for Codex),
+    /// else the Hugeicons glyph.
+    nonisolated static func ditherDefinition(_ name: IconName) -> IconDefinition? {
+        name == .brandClaudeAI ? anthropicMark : name.hugeiconsDefinition
+    }
+    /// Anthropic's "A" mark, filled in the current color.
+    nonisolated static let anthropicMark = IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+        IconElement(.path(d: "M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z"),
+                    IconPaint(fill: .current, stroke: .none, evenOdd: false)),
+    ])
 
     /// Dither's glyph sizes: whatever box a call site gives, a row, menu or badge glyph draws at 14 and a toolbar glyph
     /// at 16, centered on its box, so neighbours match. Other sizes (8, 10, 18 and up) keep their box.
