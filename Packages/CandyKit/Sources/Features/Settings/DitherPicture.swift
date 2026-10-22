@@ -39,7 +39,7 @@ public enum DitherPicture {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.image]
         panel.allowsMultipleSelection = false
-        panel.message = "Choose a picture for the Dither theme."
+        panel.message = "Choose a picture for the Redesign theme."
         let finish: (NSApplication.ModalResponse) -> Void = { response in
             guard response == .OK, let url = panel.url else { return }
             do { try set(url); done() } catch { onError(error.localizedDescription) }

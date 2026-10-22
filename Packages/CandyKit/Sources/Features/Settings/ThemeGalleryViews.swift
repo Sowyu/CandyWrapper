@@ -308,11 +308,15 @@ final class ThemeLibraryCardView: ControlView {
     private let decoration = BoxDecorationLayer()
     private(set) var circles: [ThemeCircleButton] = []
     private let titleButton = ThemeCardTitleButton()
+    /// The experimental Redesign theme carries a flask before its name.
+    private let badge: IconView?
     private(set) var buttons: [ButtonView] = []
 
     init(card: ThemeCardDefinition, picked: [ThemeAppearance], actions: Actions) {
         self.card = card
+        badge = card.id == ThemeDefinition.dither.id ? IconView(name: .flaskConical, size: 14, strokeColor: Themed.color(\.mutedForeground)) : nil
         super.init(frame: .zero)
+        if let badge { addSubview(badge) }
         scalesWhenPressed = false
         transitions = .colors // ThemeSettings.tsx:157
         decoration.host = self
@@ -379,8 +383,10 @@ final class ThemeLibraryCardView: ControlView {
             b.frame = NSRect(x: bx, y: rowY, width: 24, height: 24)
             bx -= 4
         }
-        let titleMax = (buttons.isEmpty ? bounds.width - 1 - 12 : bx + 4 - 8) - 13
-        titleButton.frame = NSRect(x: 13, y: rowY + 2, width: min(titleMax, titleButton.intrinsicContentSize.width), height: 20)
+        var tx: CGFloat = 13
+        if let badge { badge.frame = NSRect(x: tx, y: rowY + 5, width: 14, height: 14); tx += 14 + 6 }
+        let titleMax = (buttons.isEmpty ? bounds.width - 1 - 12 : bx + 4 - 8) - tx
+        titleButton.frame = NSRect(x: tx, y: rowY + 2, width: min(titleMax, titleButton.intrinsicContentSize.width), height: 20)
     }
 }
 
