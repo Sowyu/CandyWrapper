@@ -358,12 +358,15 @@ public final class PopupHost: DSView {
             anchor = popup.anchorRect ?? .zero
         }
         var size = popup.content.popupSize
-        var result = PopupPositioner.place(size: size, anchor: anchor, in: bounds, popup.placement)
+        // Redesign: popups stay below the window's top band (traffic lights, tabs), never over it.
+        var area = bounds
+        if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) { area.origin.y += DitherChrome.band; area.size.height -= DitherChrome.band }
+        var result = PopupPositioner.place(size: size, anchor: anchor, in: area, popup.placement)
         // `max-h-(--available-height)`: the popup never grows past the space on its side.
-        let limit = result.side.isVertical ? result.available.height : bounds.height - 2 * popup.placement.collisionPadding
+        let limit = result.side.isVertical ? result.available.height : area.height - 2 * popup.placement.collisionPadding
         if size.height > limit, limit > 0 {
             size.height = limit
-            result = PopupPositioner.place(size: size, anchor: anchor, in: bounds, popup.placement)
+            result = PopupPositioner.place(size: size, anchor: anchor, in: area, popup.placement)
         }
         popup.result = result
         let frame = result.frame
