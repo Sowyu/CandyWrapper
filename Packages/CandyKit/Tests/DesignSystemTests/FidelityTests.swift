@@ -4,14 +4,45 @@ import Testing
 
 /// Compares native components with T3's own markup rendered in Chromium, state by state and
 /// theme by theme. References come from scripts/component-reference (design/component-reference).
-/// Output: /tmp/candywrapper-fidelity/report.html plus ours and diff PNGs per case.
-/// Records numbers only; thresholds come later.
-@MainActor
+/// Output: report-button.html plus ours and diff PNGs per case, under `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct FidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "button": .init(0.075, except: [
+            "default.sm.active.dark": 0.11,
+            "default.sm.active.light": 0.11,
+            "destructive-outline.sm.active.dark": 0.11,
+            "destructive-outline.sm.active.light": 0.11,
+            "destructive-outline.sm.focus-visible.dark": 0.085,
+            "destructive-outline.sm.focus-visible.light": 0.08,
+            "destructive.sm.active.dark": 0.14,
+            "destructive.sm.active.light": 0.125,
+            "destructive.sm.focus-visible.dark": 0.085,
+            "destructive.sm.focus-visible.light": 0.09,
+            "glass.sm.focus-visible.light": 0.08,
+            "media-close.sm.active.dark": 0.105,
+            "media-close.sm.active.light": 0.135,
+            "media-close.sm.focus-visible.dark": 0.08,
+            "media-navigation.sm.active.dark": 0.1,
+            "media-navigation.sm.focus-visible.dark": 0.085,
+            "outline.compact.active.light": 0.105,
+            "outline.default.active.light": 0.09,
+            "outline.icon-tiny.focus-visible.light": 0.085,
+            "outline.lg.active.light": 0.09,
+            "outline.micro.active.light": 0.1,
+            "outline.sm.active.light": 0.095,
+            "overlay.sm.active.light": 0.105,
+            "warning-outline.sm.active.dark": 0.13,
+            "warning-outline.sm.active.light": 0.14,
+            "warning-outline.sm.focus-visible.dark": 0.095,
+            "warning-outline.sm.focus-visible.light": 0.09,
+        ]),
+    ]
     static let repo = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .deletingLastPathComponent().deletingLastPathComponent()
-    static let out = URL(fileURLWithPath: "/tmp/candywrapper-fidelity")
+    static let out = Fidelity.root
     /// A channel difference above this counts the pixel as different.
     static let tolerance = 8
 
@@ -39,7 +70,7 @@ struct FidelityTests {
             for state in spec["states"] as! [String] {
                 for theme in spec["themes"] as! [String] {
                     let file = "\(name).\(state).\(theme).png"
-                    guard let ref = NSBitmapImageRep(data: try Data(contentsOf: refDir.appendingPathComponent(file))) else { continue }
+                    let ref = try #require(NSBitmapImageRep(data: Data(contentsOf: refDir.appendingPathComponent(file))))
                     let button = ButtonView(native["title"].flatMap { $0.isEmpty ? nil : $0 },
                                             icon: native["icon"].flatMap(IconName.init(rawValue:)),
                                             variant: ButtonView.Variant(rawValue: native["variant"]!)!,
@@ -70,7 +101,7 @@ struct FidelityTests {
         let mean = results.map(\.differing).reduce(0, +) / Double(max(1, results.count))
         print(String(format: "%d cases, mean differing %.2f%%, report: %@", results.count, mean * 100,
                      Self.out.appendingPathComponent("report-button.html").path))
-        #expect(!results.isEmpty)
+        Self.ceilings.check("button", results.map { ($0.name, $0.differing) })
     }
 
     static func controlState(_ name: String) -> ControlView.State {

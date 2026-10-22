@@ -3,9 +3,14 @@ import Testing
 @testable import DesignSystem
 
 /// The whole command palette popup against T3's markup in Chromium (spec from
-/// scripts/gen-command-palette-spec.py). Report: /tmp/candywrapper-fidelity/report-command-palette.html.
-@MainActor
+/// scripts/gen-command-palette-spec.py). Report: report-command-palette.html.
+@MainActor @Suite(.fidelity)
 struct CommandPaletteFidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "command-palette": .init(0.065, except: ["empty.rest.light": 0.07]),
+    ]
+
     static func palette(_ name: String) -> CommandPaletteView {
         let v: CommandPaletteView
         switch name {
@@ -72,7 +77,7 @@ struct CommandPaletteFidelityTests {
     }
 
     @Test func commandPalette() throws {
-        let mean = try FormsFidelityTests.run("command-palette", title: "Command palette") { n, _, _ in Self.palette(n["case"]!) }
+        let mean = try FormsFidelityTests.run("command-palette", title: "Command palette", ceilings: Self.ceilings) { n, _, _ in Self.palette(n["case"]!) }
         print(String(format: "FIDELITY command-palette: mean differing %.2f%%", mean * 100))
         #expect(mean < 0.05)
     }

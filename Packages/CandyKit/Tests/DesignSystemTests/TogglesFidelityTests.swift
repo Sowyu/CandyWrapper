@@ -4,9 +4,42 @@ import Testing
 
 /// Batch B fidelity: Toggle, ToggleGroup, Switch, Checkbox, Radio, Alert, Empty and
 /// CollapsibleSectionHeader against T3's markup in Chromium (specs from scripts/gen-toggles-spec.py).
-/// Writes /tmp/candywrapper-fidelity/report-<component>.html. Collapsible has no styling of its own.
-@MainActor
+/// Writes report-<component>.html. Collapsible has no styling of its own.
+@MainActor @Suite(.fidelity)
 struct TogglesFidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "alert": .init(0.07, except: [
+            "sidebar.wrap.rest.dark": 0.08,
+            "sidebar.wrap.rest.light": 0.08,
+        ]),
+        "checkbox": .init(0.06),
+        "collapsible-section-header": .init(0.035),
+        "empty": .init(0.045),
+        "radio": .init(0.075, except: [
+            "on.focus-visible.dark": 0.095,
+            "on.focus-visible.light": 0.085,
+        ]),
+        "switch": .init(0.065, except: [
+            "default.on.focus-visible.dark": 0.07,
+            "sm.on.focus-visible.dark": 0.075,
+            "sm.on.focus-visible.light": 0.075,
+        ]),
+        "toggle": .init(0.065, except: [
+            "ghost.off.focus-visible.dark": 0.07,
+            "ghost.off.focus-visible.light": 0.07,
+            "ghost.on.focus-visible.dark": 0.07,
+            "ghost.on.focus-visible.light": 0.075,
+            "pill.off.focus-visible.light": 0.07,
+            "pill.on.focus-visible.dark": 0.075,
+            "segmented.off.focus-visible.dark": 0.07,
+            "segmented.off.focus-visible.light": 0.08,
+            "segmented.on.focus-visible.dark": 0.09,
+            "segmented.on.focus-visible.light": 0.08,
+        ]),
+        "toggle-group": .init(0.05),
+    ]
+
     typealias Native = [String: String]
 
     @Test func toggle() throws {
@@ -91,7 +124,7 @@ struct TogglesFidelityTests {
                 if disabledCase && state != "rest" { continue }
                 for theme in spec["themes"] as! [String] {
                     let file = "\(name).\(state).\(theme).png"
-                    guard let ref = NSBitmapImageRep(data: try Data(contentsOf: refDir.appendingPathComponent(file))) else { continue }
+                    let ref = try #require(NSBitmapImageRep(data: Data(contentsOf: refDir.appendingPathComponent(file))))
                     let view = make(native)
                     var controlState = FidelityTests.controlState(state)
                     if disabledCase { controlState.enabled = false }
@@ -118,7 +151,7 @@ struct TogglesFidelityTests {
         }
         let mean = results.map(\.differing).reduce(0, +) / Double(max(1, results.count))
         print(String(format: "FIDELITY %@: %d cases, mean differing %.2f%%", component, results.count, mean * 100))
-        #expect(!results.isEmpty)
+        Self.ceilings.check(component, results.map { ($0.name, $0.differing) })
     }
 
     /// Like FidelityTests.render, for any view: intrinsic size, or the reference width when the

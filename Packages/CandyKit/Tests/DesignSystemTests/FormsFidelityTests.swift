@@ -4,15 +4,37 @@ import Testing
 
 /// Batch A fidelity: Input, Textarea, InputGroup, Label, Kbd, Badge, Separator, Skeleton, Spinner
 /// against T3's markup in Chromium. Specs come from scripts/gen-forms-spec.py.
-/// Reports: /tmp/candywrapper-fidelity/report-<component>.html.
-@MainActor
+/// Reports: report-<component>.html under `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct FormsFidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "badge": .init(0.095),
+        "input": .init(0.045, except: [
+            "invalid.value.focus-visible.light": 0.055,
+            "mono.value.disabled.dark": 0.06,
+            "mono.value.disabled.light": 0.06,
+            "mono.value.focus-visible.dark": 0.065,
+            "mono.value.focus-visible.light": 0.065,
+            "mono.value.rest.dark": 0.065,
+            "mono.value.rest.light": 0.065,
+        ]),
+        "input-group": .init(0.035),
+        "input-group-hover": .init(0.03),
+        "kbd": .init(0.05),
+        "label": .init(0.1),
+        "separator": .init(0.02),
+        "skeleton": .init(0.02),
+        "spinner": .init(0.04),
+        "textarea": .init(0.045),
+    ]
+
     typealias Make = (_ native: [String: String], _ state: String, _ css: CGSize) -> NSView
 
     /// Runs one component spec. `make` builds our view in the given state; it is placed at 8,8 with
     /// its intrinsic size, or the reference's CSS size where it has no intrinsic metric.
     @discardableResult
-    static func run(_ component: String, title: String, make: Make) throws -> Double {
+    static func run(_ component: String, title: String, ceilings: FidelityCeilings = Self.ceilings, make: Make) throws -> Double {
         let repo = FidelityTests.repo
         let refDir = repo.appendingPathComponent("design/component-reference/\(component)")
         let spec = try JSONSerialization.jsonObject(with: Data(contentsOf: repo.appendingPathComponent("design/component-reference/\(component).json"))) as! [String: Any]
@@ -28,7 +50,7 @@ struct FormsFidelityTests {
             for state in spec["states"] as! [String] {
                 for theme in spec["themes"] as! [String] {
                     let file = "\(name).\(state).\(theme).png"
-                    guard let ref = NSBitmapImageRep(data: try Data(contentsOf: refDir.appendingPathComponent(file))) else { continue }
+                    let ref = try #require(NSBitmapImageRep(data: Data(contentsOf: refDir.appendingPathComponent(file))))
                     let view = make(native, state, css)
                     var size = view.intrinsicContentSize
                     if size.width == NSView.noIntrinsicMetric { size.width = css.width }
@@ -59,7 +81,7 @@ struct FormsFidelityTests {
         }
         let mean = results.map(\.differing).reduce(0, +) / Double(max(1, results.count))
         print(String(format: "FIDELITY %@: %d cases, mean differing %.2f%%", title, results.count, mean * 100))
-        #expect(!results.isEmpty)
+        ceilings.check(component, results.map { ($0.name, $0.differing) })
         return mean
     }
 

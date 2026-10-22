@@ -3,9 +3,21 @@ import Testing
 @testable import DesignSystem
 
 /// Overlays fidelity: Dialog, AlertDialog, Sheet, Toast and TextBlock wrapping against T3's markup in
-/// Chromium (specs from scripts/gen-overlays-spec.py). Reports: /tmp/candywrapper-fidelity/report-<component>.html.
-@MainActor
+/// Chromium (specs from scripts/gen-overlays-spec.py). Reports: report-<component>.html under `Fidelity.root`.
+@MainActor @Suite(.fidelity)
 struct OverlaysFidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "alert-dialog": .init(0.09),
+        "dialog": .init(0.09),
+        "sheet": .init(0.03),
+        "text-block": .init(0.14, except: [
+            "xl.300.rest.dark": 0.165,
+            "xl.300.rest.light": 0.16,
+        ]),
+        "toast": .init(0.07),
+    ]
+
     static func dialog(_ n: [String: String]) -> DialogView {
         let kind: DialogView.Kind = switch n["kind"] {
         case "alertDialog": .alertDialog
@@ -27,7 +39,7 @@ struct OverlaysFidelityTests {
 
     @Test func dialogs() throws {
         for component in ["dialog", "alert-dialog", "sheet"] {
-            try FormsFidelityTests.run(component, title: component) { n, _, css in
+            try FormsFidelityTests.run(component, title: component, ceilings: Self.ceilings) { n, _, css in
                 var n = n
                 if component == "sheet" { n["kind"] = "sheet" }
                 let v = Self.dialog(n)
@@ -38,7 +50,7 @@ struct OverlaysFidelityTests {
     }
 
     @Test func toast() throws {
-        try FormsFidelityTests.run("toast", title: "toast") { n, _, css in
+        try FormsFidelityTests.run("toast", title: "toast", ceilings: Self.ceilings) { n, _, css in
             let v = ToastView(title: n["title"]!, message: n["description"], kind: ToastQueue.Kind(rawValue: n["kind"]!)!,
                               actionTitle: n["action"])
             v.frame.size.width = css.width
@@ -47,7 +59,7 @@ struct OverlaysFidelityTests {
     }
 
     @Test func textBlock() throws {
-        try FormsFidelityTests.run("text-block", title: "TextBlock") { n, _, css in
+        try FormsFidelityTests.run("text-block", title: "TextBlock", ceilings: Self.ceilings) { n, _, css in
             let weight: NSFont.Weight = n["weight"] == "semibold" ? .semibold : .regular
             let v = TextBlockView(n["text"]!, font: DSFont.ui(CGFloat(Double(n["font"]!)!), weight: weight),
                                   lineHeight: CGFloat(Double(n["line"]!)!),

@@ -4,9 +4,20 @@ import Testing
 
 /// Popup family fidelity: Menu, Select (trigger and popup), Combobox and Autocomplete popups, Popover
 /// and Tooltip against T3's markup rendered statically open in Chromium (scripts/gen-popups-spec.py).
-/// Writes /tmp/candywrapper-fidelity/report-<component>.html.
-@MainActor
+/// Writes report-<component>.html.
+@MainActor @Suite(.fidelity)
 struct PopupsFidelityTests {
+    /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
+    static let ceilings: FidelityCeilings = [
+        "autocomplete-popup": .init(0.05),
+        "combobox-popup": .init(0.05),
+        "menu": .init(0.05),
+        "popover": .init(0.065),
+        "select-popup": .init(0.05),
+        "select-trigger": .init(0.05),
+        "tooltip": .init(0.07),
+    ]
+
     typealias Native = [String: String]
 
     static func menuPreset(_ name: String) -> [MenuItem] {
@@ -84,7 +95,7 @@ struct PopupsFidelityTests {
             for state in spec["states"] as! [String] {
                 for theme in spec["themes"] as! [String] {
                     let file = "\(name).\(state).\(theme).png"
-                    guard let ref = NSBitmapImageRep(data: try Data(contentsOf: refDir.appendingPathComponent(file))) else { continue }
+                    let ref = try #require(NSBitmapImageRep(data: Data(contentsOf: refDir.appendingPathComponent(file))))
                     let view = make(c["native"] as! Native)
                     let css = manifest[name]!
                     let ours = TogglesFidelityTests.render(view, state: Self.state(state, of: view), width: css["width"]!,
@@ -110,7 +121,7 @@ struct PopupsFidelityTests {
         }
         let mean = results.map(\.differing).reduce(0, +) / Double(max(1, results.count))
         print(String(format: "FIDELITY %@: %d cases, mean differing %.2f%%", component, results.count, mean * 100))
-        #expect(!results.isEmpty)
+        Self.ceilings.check(component, results.map { ($0.name, $0.differing) })
     }
 
     /// Forced pseudo state, keeping `data-pressed` set by the case.
