@@ -217,4 +217,18 @@ struct SidebarLeftoverTests {
         #expect(SidebarProviderUpdatePillModel.resolve([provider("claudeAgent", "failed", finished: "2026-10-10T02:00:00.000Z", latest: "2.0.0")],
                                                        visibleAfter: after, dismissed: [failed!.key]) == nil)
     }
+
+    /// T3 f15aa815f3: an update on a non-default instance shows past the default instance's idle or older state.
+    @Test func providerPillSeesNonDefaultInstances() {
+        let after = "2026-10-10T00:00:00.000Z"
+        var work = provider("codex", "running")
+        work.instanceId = ProviderInstanceId("codex-work")
+        let running = SidebarProviderUpdatePillModel.resolve([provider("codex", nil), work], visibleAfter: after, dismissed: [])
+        #expect(running?.tone == .loading && running?.title == "Updating Codex")
+        var workFailed = provider("codex", "failed", finished: "2026-10-10T02:00:00.000Z")
+        workFailed.instanceId = ProviderInstanceId("codex-work")
+        let failed = SidebarProviderUpdatePillModel.resolve(
+            [provider("codex", "succeeded", finished: "2026-10-10T01:00:00.000Z"), workFailed], visibleAfter: after, dismissed: [])
+        #expect(failed?.tone == .error && failed?.title == "Codex update failed")
+    }
 }
