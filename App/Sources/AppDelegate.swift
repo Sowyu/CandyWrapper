@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var t3Connect: T3ConnectController?
     private var shortcuts: Shortcuts?
     private var palette: PaletteCommands?
+    private var menuBar: MenuBarController?
     private var routeHistory: RouteHistory?
     private var terminationSignal: DispatchSourceSignal?
     private var notifications: ThreadNotificationCoordinator?
@@ -177,7 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Set by Cmd-Q and the Quit menu item, so a logout, `kill` or a test snapshot quits without asking.
     private var askBeforeQuit = false
 
-    @objc private func quitFromMenu(_ sender: Any?) {
+    @objc func quitFromMenu(_ sender: Any?) {
         askBeforeQuit = true
         NSApp.terminate(sender)
     }
@@ -632,6 +633,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.shortcuts = shortcuts
         palette.togglePerformanceHUD = { [weak self] in self?.togglePerformanceHUD(nil) }
         self.palette = palette
+        installMenuBar(window: window, palette: palette, threads: threads)
+    }
+
+    /// The menu bar item (Capy's tray, docs/research/capy-menubar.md). Each action brings the window forward first.
+    private func installMenuBar(window: NSWindow, palette: PaletteCommands, threads: ThreadController) {
+        guard !Self.isPreview else { return }
+        let menuBar = MenuBarController(snapshot: { [weak palette] in palette?.snapshot })
+        let show = { [weak window] in
+            NSApp.activate()
+            window?.makeKeyAndOrderFront(nil)
+        }
+        menuBar.openThread = { [weak palette, weak threads] id in
+            show()
+            palette?.showThreadView()
+            threads?.open(id)
+        }
+        menuBar.viewAllThreads = { [weak palette] in show(); palette?.open() }
+        menuBar.newThread = { [weak palette] in show(); palette?.newThreadFromSidebar(shift: false) }
+        menuBar.quit = { [weak self] in self?.quitFromMenu(nil) }
+        self.menuBar = menuBar
     }
 
     /// Development: `--thread-preview [title prefix]` shows a recorded thread from

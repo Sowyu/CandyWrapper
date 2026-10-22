@@ -272,8 +272,11 @@ public final class GeneralSettingsView: SettingsPageBase {
             (continueRow.control as? SwitchView)?.isEnabled = supported
             if !supported { (continueRow.accessories.last as? ResetSlot)?.isShown = false }
         }
+        // CandyWrapper's own: the menu bar item (Capy's "Show in menu bar", general-D4mfTeHV.js in its renderer).
+        let menuBar = clientSwitch("menu-bar", "Keep the CandyWrapper icon and recent threads in the menu bar.", key: "menuBarItemEnabled",
+                                   reset: "menu bar icon", title: "Show in menu bar")
         return section("behavior", "Behavior", [notifications, inApp, time, streaming, whitespace, fileState, layout, proactive, skills, rich, collapse,
-                                                send, followUp, updates, continueRow, backgroundActivityRow()])
+                                                send, followUp, updates, continueRow, backgroundActivityRow(), menuBar])
     }
 
     /// A select over a boolean client key.

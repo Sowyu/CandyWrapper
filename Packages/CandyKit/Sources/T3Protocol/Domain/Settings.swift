@@ -118,6 +118,8 @@ public struct ClientSettings: Equatable, Sendable {
         // Settings > Connections > Load balancing (contracts settings.ts:289-310): stored per client.
         "loadBalancingEnabled": SettingSpec(.bool, .bool(false)),
         "loadBalancingWeights": SettingSpec(.any, .object([:])),
+        // CandyWrapper only: the menu bar item (Capy's `tray.enabled`, default on), the value stays local.
+        "menuBarItemEnabled": SettingSpec(.bool, .bool(true)),
     ]
 
     public static let defaults = ClientSettings(values: fields.mapValues(\.defaultValue))
