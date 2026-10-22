@@ -606,7 +606,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.routeHistory = history
         // Capy's + opens the new-thread page for the current project; its project chip picks another.
         ditherTabs = DitherTabsController(layout: layout, sidebar: sidebar, history: history, current: currentRoute,
-                                          newThread: { [weak palette] in palette?.newThreadFromSidebar(shift: true) })
+                                          newThread: { [weak palette] opened in palette?.newThreadFromSidebar(shift: true, then: opened) })
         layout.tabStrip.trailingAccessory = threads.costLabel
         commands.historyBack = { [weak history] in history?.back() ?? false }
         commands.closePalette = { [weak palette] in palette?.close() }

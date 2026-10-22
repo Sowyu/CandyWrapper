@@ -516,6 +516,10 @@ final class SidebarCardRowView: SidebarRowBase {
     private let statusIcon = StatusIconSlot()
     private let statusLabel = LabelView()
     private let duration = LabelView()
+    /// Dither's working and waiting timer: the duration's digits roll up as they change, like "Working for". Built on
+    /// the first Dither row that shows one, so other themes never make it.
+    private var rollingDuration: RollingTextView?
+    private var rollingFor: String?
     private let title = LabelView()
     private let branchIcon = IconView(name: .folderGit2, size: 12)
     private let branch = LabelView()
@@ -616,15 +620,31 @@ final class SidebarCardRowView: SidebarRowBase {
             duration.color = SB.c(\.secondaryLabel)
             duration.font = SB.tabular(12)
         }
-        // Waiting keeps only its duration, with the grid in the foreground color for its icon.
+        // Working and waiting show the grid and a muted timer whose digits roll, without the word.
         let waitingGrid = capyRow && r.topStatus == .waiting
         let grid = capyRow && r.topStatus == .working || waitingGrid
         if grid {
             statusIcon.set(nil, color: .clear)
             statusLabel.text = ""
-            if !waitingGrid { duration.text = "" }
             workingGrid.color = waitingGrid ? SB.c(\.foreground) : SB.c(\.warning)
         }
+        let rolls = grid && !duration.text.isEmpty
+        if rolls {
+            let v = rollingDuration ?? {
+                let v = RollingTextView(font: SB.tabular(12, .medium), lineHeight: 16)
+                addSubview(v)
+                rollingDuration = v
+                return v
+            }()
+            v.color = SB.status(.waiting)
+            // Only a tick of the same thread rolls; a reused row shows its new thread's time at once.
+            v.set(prefix: "", value: duration.text, animated: rollingFor == r.id.rawValue)
+            rollingFor = r.id.rawValue
+            duration.color = .clear
+        } else {
+            rollingFor = nil
+        }
+        if let v = rollingDuration, v.isHidden == rolls { v.isHidden = !rolls }
         if workingGrid.isHidden == grid { workingGrid.isHidden = !grid }
         HoverReveal.fade([workingGrid], visible: !showActions)
         let woke = r.topStatus == .woke
@@ -632,7 +652,7 @@ final class SidebarCardRowView: SidebarRowBase {
         if !woke { statusLabel.isUnderlined = false }
         // The status label and the actions cross-fade over 150 ms (`transition-opacity`, Sidebar.tsx:2027,2094);
         // the slot's width follows `showsActions` at once, as `absolute` and `static` flip without a transition.
-        HoverReveal.fade([statusIcon, statusLabel, duration], visible: !showActions || woke)
+        HoverReveal.fade([statusIcon, statusLabel, duration] + [rollingDuration].compactMap { $0 }, visible: !showActions || woke)
         let snoozes = r.action == .settle && r.canSnooze
         if !snoozes { HoverReveal.snap([snoozeButton], visible: false, hides: true) }
         HoverReveal.fade(snoozes ? [settleButton, snoozeButton] : [settleButton], visible: showActions, hides: true)
@@ -714,6 +734,7 @@ final class SidebarCardRowView: SidebarRowBase {
         if !duration.text.isEmpty {
             let dw = ceil(duration.textWidth)
             duration.frame = NSRect(x: sx - dw, y: top + 2, width: dw + 1, height: 16)
+            rollingDuration?.frame = duration.frame
             sx -= dw + (statusLabel.text.isEmpty ? 0 : 4)
         }
         if !statusLabel.text.isEmpty {

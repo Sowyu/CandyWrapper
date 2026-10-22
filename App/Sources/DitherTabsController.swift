@@ -15,13 +15,14 @@ final class DitherTabsController {
     private weak var sidebar: SidebarContentView?
     private let history: RouteHistory
     private let current: () -> RouteHistory.Route?
-    private let newThread: () -> Void
+    /// Opens a new-thread draft and calls back once it shows, which can be after a server round trip.
+    private let newThread: (@escaping @MainActor () -> Void) -> Void
     private var list = DitherTabList()
     /// Set only while + or Cmd-click navigates, so the route it shows lands in a new tab.
     private var opensNewTab = false
 
     init(layout: SidebarLayoutView, sidebar: SidebarContentView, history: RouteHistory,
-         current: @escaping () -> RouteHistory.Route?, newThread: @escaping () -> Void) {
+         current: @escaping () -> RouteHistory.Route?, newThread: @escaping (@escaping @MainActor () -> Void) -> Void) {
         self.strip = layout.tabStrip
         self.layout = layout
         self.sidebar = sidebar
@@ -36,7 +37,7 @@ final class DitherTabsController {
             self?.list.move(key, to: index)
             self?.sync()
         }
-        strip.onNew = { [weak self] in self?.inNewTab { self?.newThread() } }
+        strip.onNew = { [weak self] in self?.openNewThreadTab() }
         sidebar.onOpenInNewTab = { [weak self, weak sidebar] id in self?.inNewTab { sidebar?.actions.openThread(id) } }
         layout.backButton.action = { [weak history] in history?.back() }
         layout.forwardButton.action = { [weak history] in history?.forward() }
@@ -87,11 +88,13 @@ final class DitherTabsController {
     }
 
     private func select(_ key: String) {
+        opensNewTab = false
         guard list.select(key) != nil else { return }
         showSelected()
     }
 
     private func close(_ key: String) {
+        opensNewTab = false
         if list.close(key) { showSelected() } else { sync() }
     }
 
@@ -102,6 +105,12 @@ final class DitherTabsController {
             if history.go(route) { return sync() }
             list.close(DitherTabList.key(route))
         }
-        inNewTab { newThread() }
+        openNewThreadTab()
+    }
+
+    /// The draft can open after a server round trip, so the flag waits for it instead of ending with the call.
+    private func openNewThreadTab() {
+        opensNewTab = true
+        newThread { [weak self] in self?.opensNewTab = false; self?.sync() }
     }
 }

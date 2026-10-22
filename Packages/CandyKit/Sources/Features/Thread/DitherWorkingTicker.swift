@@ -62,10 +62,12 @@ final class DitherWorkingTicker: DSView {
 /// A fixed prefix and a value whose characters each sit in their own slot, so one can roll on its own. The view clips
 /// to its line, so a rolling character leaves through its top edge.
 final class RollingTextView: DSView {
-    static let font = TL.tabular(14)
     static let duration: CFTimeInterval = 0.32
+    /// The timeline's 14pt by default; the sidebar's timer passes its own.
+    let font: NSFont
+    let lineHeight: CGFloat
     var color: NSColor = .labelColor { didSet { prefix.color = color; slots.forEach { $0.label.color = color } } }
-    private let prefix = LabelView("", font: RollingTextView.font)
+    private let prefix: LabelView
     private var slots: [Slot] = []
     private var value = ""
 
@@ -75,15 +77,18 @@ final class RollingTextView: DSView {
         /// Nil until the slot first shows a character.
         var character: Character?
         var width: CGFloat = 0
-        init(color: NSColor) {
-            label = RollingTextView.label(" ", color: color)
+        init(_ view: RollingTextView, color: NSColor) {
+            label = view.label(" ", color: color)
             clip.addSubview(label)
         }
     }
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        prefix.lineHeight = TL.relaxed
+    init(font: NSFont = TL.tabular(14), lineHeight: CGFloat = TL.relaxed) {
+        self.font = font
+        self.lineHeight = lineHeight
+        prefix = LabelView("", font: font)
+        super.init(frame: .zero)
+        prefix.lineHeight = lineHeight
         addSubview(prefix)
         layer?.masksToBounds = true
     }
@@ -91,11 +96,11 @@ final class RollingTextView: DSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    static func width(_ c: Character) -> CGFloat { ceil((String(c) as NSString).size(withAttributes: [.font: font]).width * 2) / 2 }
+    func width(_ c: Character) -> CGFloat { ceil((String(c) as NSString).size(withAttributes: [.font: font]).width * 2) / 2 }
 
-    static func label(_ c: Character, color: NSColor) -> LabelView {
+    func label(_ c: Character, color: NSColor) -> LabelView {
         let l = LabelView(String(c), font: font, color: color)
-        l.lineHeight = TL.relaxed
+        l.lineHeight = lineHeight
         l.truncates = false
         return l
     }
@@ -111,7 +116,7 @@ final class RollingTextView: DSView {
         // Slots line up from the right, where the seconds change: "9s" to "10s" rolls the 9 and adds a slot.
         while slots.count > new.count { let s = slots.removeFirst(); s.clip.removeFromSuperview() }
         while slots.count < new.count {
-            let s = Slot(color: color)
+            let s = Slot(self, color: color)
             addSubview(s.clip)
             slots.insert(s, at: 0)
         }
@@ -119,8 +124,8 @@ final class RollingTextView: DSView {
             let c = new[i]
             guard c != slot.character else { continue }
             slot.character = c
-            slot.width = Self.width(c)
-            let incoming = Self.label(c, color: color)
+            slot.width = width(c)
+            let incoming = label(c, color: color)
             let outgoing = slot.label
             slot.label = incoming
             slot.clip.addSubview(incoming)
@@ -135,7 +140,7 @@ final class RollingTextView: DSView {
 
     /// The old character leaves upward as the new one rises from below, each fading across the slot's edge.
     private func rollIn(_ incoming: LabelView, out outgoing: LabelView) {
-        let h = TL.relaxed
+        let h = lineHeight
         // Flipped layers: a negative y moves up.
         func move(_ layer: CALayer?, from: CGFloat, to: CGFloat, opacity: (CGFloat, CGFloat)) {
             let group = CAAnimationGroup()
