@@ -55,6 +55,13 @@ public enum SettingsSection: String, CaseIterable, Sendable {
     /// The nav lists Project only for a project scope (`isSettingsOverviewVisible`).
     static let navSections = allCases.filter { $0 != .diagnostics && $0 != .licenses }
 
+    /// Dither's nav groups (after Capy's labelled sidebar sections), in nav order; the first has no label.
+    static let ditherGroups: [(label: String?, sections: [SettingsSection])] = [
+        (nil, [.projects, .general, .appearance, .keybindings, .snapShots]),
+        ("Agents", [.providers, .integrations, .scheduledTasks, .sourceControl]),
+        ("System", [.storage, .connections, .archive]),
+    ]
+
     /// SettingsSidebarNav.tsx `SnapShotIcon` (a `createLucideIcon` glyph outside the generated set).
     static let snapShotIcon = IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
         IconElement(.path(d: "M8 3H6a3 3 0 0 0-3 3v2M16 3h2a3 3 0 0 1 3 3v2M21 16v2a3 3 0 0 1-3 3h-2M8 21H6a3 3 0 0 1-3-3v-2")),
@@ -74,6 +81,14 @@ public final class SettingsSidebarView: DSView {
     private let searchKbd = KbdView("/")
     public private(set) var items: [SettingsSection: SidebarMenuButtonView] = [:]
     let back = SidebarMenuButtonView("Back", icon: .arrowLeft)
+    /// Dither (after Capy): the "← Settings" row under the traffic lights, its nav rows and group labels.
+    let ditherHeader = DitherSettingsNavRow("Settings", icon: .arrowLeft)
+    private(set) var ditherItems: [SettingsSection: DitherSettingsNavRow] = [:]
+    private var ditherLabels: [LabelView] = []
+    let ditherBack = DitherSettingsNavRow("Back", icon: .arrowLeft)
+    let ditherSignIn = DitherSettingsNavRow("Sign in to T3 Connect", icon: .logIn)
+    private let searchFill = CALayer()
+    private var isDither: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
     /// `T3ConnectSidebarSignIn`: shown while signed out of T3 Connect.
     public let signIn = SidebarMenuButtonView("Sign in to T3 Connect", icon: .logIn)
     /// `T3ConnectSidebarAvatar`: Clerk's `UserButton`, shown while signed in. Opens the account menu.
@@ -94,7 +109,10 @@ public final class SettingsSidebarView: DSView {
     public var stage: SidebarStage = .nightly { didSet { applyStage() } }
 
     public var selected: SettingsSection = .connections {
-        didSet { for (section, item) in items { item.isActive = section == selected } }
+        didSet {
+            for (section, item) in items { item.isActive = section == selected }
+            for (section, item) in ditherItems { item.isActive = section == selected }
+        }
     }
     /// A project is picked in the scope: the nav lists Project first.
     public var showsProject = false {
@@ -156,6 +174,30 @@ public final class SettingsSidebarView: DSView {
         avatar.isHidden = true
         addSubview(avatar)
         trigger.action = { [weak self] in self?.onToggleSidebar?() }
+        searchFill.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull(), "borderColor": NSNull(), "hidden": NSNull()]
+        searchFill.cornerRadius = DitherChrome.controlRadius
+        searchFill.borderWidth = 0.5
+        layer?.insertSublayer(searchFill, at: 0)
+        for (label, sections) in SettingsSection.ditherGroups {
+            if let label {
+                let l = LabelView(label, font: DSFont.ui(12, weight: .medium), color: Themed.color(\.sidebarMutedForeground, sidebar: true))
+                l.lineHeight = 16
+                ditherLabels.append(l)
+                addSubview(l)
+            }
+            for section in sections {
+                let row = DitherSettingsNavRow(section.label, icon: section.icon)
+                if section == .snapShots { row.iconDefinition = SettingsSection.snapShotIcon }
+                row.isActive = section == selected
+                row.action = { [weak self] in self?.select(section) }
+                ditherItems[section] = row
+                addSubview(row)
+            }
+        }
+        ditherHeader.action = { [weak self] in self?.onBack?() }
+        ditherBack.action = { [weak self] in self?.onBack?() }
+        ditherSignIn.action = { [weak self] in self?.onSignIn?() }
+        for v in [ditherHeader, ditherBack, ditherSignIn] { addSubview(v) }
         setAccessibilityRole(.group)
         setAccessibilityLabel("Settings")
         applyStage()
@@ -238,9 +280,23 @@ public final class SettingsSidebarView: DSView {
         }
     }
 
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyStage()
+        needsDisplay = true
+    }
+
+    public override func updateLayer() {
+        super.updateLayer()
+        // Capy's search field: a `--section` fill under a `--border-1` hairline.
+        searchFill.backgroundColor = Themed.color(light: \.foreground, 0.04, dark: \.foreground, 0.035).cgColor(in: self)
+        searchFill.borderColor = Themed.color(light: \.foreground, 0.08, dark: \.foreground, 0.08).cgColor(in: self)
+    }
+
     private func applyStage() {
         let mode = ClientSettingsStore.shared.current.string("environmentIdentificationMode")
-        let artwork = mode == "artwork" && stage == .nightly
+        // Dither keeps Capy's plain sidebar.
+        let artwork = mode == "artwork" && stage == .nightly && !isDither
         backdrop.isHidden = !artwork
         brand.onBackdrop = artwork
         trigger.mediaTint = artwork ? StageBackdropView.ink() : nil
@@ -251,6 +307,16 @@ public final class SettingsSidebarView: DSView {
 
     public override func layout() {
         super.layout()
+        let dither = isDither
+        brand.isHidden = dither
+        searchKbd.isHidden = dither || isSearching
+        back.isHidden = dither
+        for (section, item) in items { item.isHidden = dither || isSearching || (section == .projects && !showsProject) }
+        signIn.isHidden = dither || t3Connect != .signedOut
+        for v in [ditherHeader, ditherBack] as [NSView] + Array(ditherItems.values) + ditherLabels { v.isHidden = !dither }
+        ditherSignIn.isHidden = !dither || t3Connect != .signedOut
+        searchFill.isHidden = !dither
+        if dither { layoutDither(); return }
         let w = bounds.width, h = bounds.height
         // `SidebarChromeHeader`, as in the thread sidebar.
         backdrop.frame = NSRect(x: 0, y: 0, width: w, height: 80)
@@ -286,6 +352,108 @@ public final class SettingsSidebarView: DSView {
         back.frame = NSRect(x: 8, y: rowY + (row - 32) / 2, width: w - 16 - (avatar.isHidden ? 0 : 36 + 4), height: 32)
         avatar.frame = NSRect(x: w - 8 - 36, y: rowY, width: 36, height: 36)
         signIn.frame = NSRect(x: 8, y: rowY - 8 - 32, width: w - 16, height: 32)
+    }
+
+    /// Dither, after Capy's settings sidebar: the traffic lights keep the 52pt titlebar row (the window draws back and
+    /// forward at its right end), then "← Settings" with the collapse button, a filled search field and 28pt nav rows
+    /// in labelled groups; Sign in and Back as rows in the footer.
+    private func layoutDither() {
+        let w = bounds.width, h = bounds.height
+        let rowH = DitherSettingsNavRow.height
+        var y: CGFloat = DitherChrome.band
+        ditherHeader.frame = NSRect(x: 8, y: y, width: max(0, w - 16 - 28 - 4), height: rowH)
+        trigger.frame = NSRect(x: w - 8 - 28, y: y, width: 28, height: 28)
+        y += rowH + 6
+        search.frame = NSRect(x: 8, y: y, width: max(0, w - 16), height: rowH)
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        searchFill.frame = search.frame
+        CATransaction.commit()
+        y += rowH + 10
+        if isSearching {
+            noResults.frame = NSRect(x: 16, y: y + 24, width: w - 32, height: 16)
+            if results.isEmpty { y += 64 + 8 }
+            for row in resultRows where !row.isHidden {
+                row.frame = NSRect(x: 8, y: y, width: w - 16, height: SettingsSearchResultRow.height)
+                y += SettingsSearchResultRow.height + 4
+            }
+        }
+        var labels = ditherLabels.makeIterator()
+        for (label, sections) in SettingsSection.ditherGroups {
+            if label != nil, let l = labels.next() {
+                l.isHidden = isSearching
+                if !isSearching {
+                    // Capy's group header: `h-7 px-2 text-xs font-medium text-muted-foreground-2`, 12pt above it.
+                    y += 12
+                    l.frame = NSRect(x: 16, y: y + (rowH - 16) / 2, width: max(0, w - 32), height: 16)
+                    y += rowH
+                }
+            }
+            for section in sections {
+                guard let row = ditherItems[section] else { continue }
+                row.isHidden = isSearching || (section == .projects && !showsProject)
+                if row.isHidden { continue }
+                row.frame = NSRect(x: 8, y: y, width: max(0, w - 16), height: rowH)
+                y += rowH + 2
+            }
+        }
+        let footer: CGFloat = avatar.isHidden ? rowH : 36
+        let rowY = h - 8 - footer
+        ditherBack.frame = NSRect(x: 8, y: rowY + (footer - rowH) / 2, width: w - 16 - (avatar.isHidden ? 0 : 36 + 4), height: rowH)
+        avatar.frame = NSRect(x: w - 8 - 36, y: rowY, width: 36, height: 36)
+        ditherSignIn.frame = NSRect(x: 8, y: rowY - 2 - rowH, width: w - 16, height: rowH)
+    }
+}
+
+/// Dither's settings nav row (after Capy's sidebar nav): 28pt, a 16pt icon and a 13pt medium label, 6pt corners,
+/// Capy's translucent fill on hover and when selected.
+final class DitherSettingsNavRow: ControlView {
+    static let height: CGFloat = 28
+    private var icon: IconView
+    private let label: LabelView
+    var isActive = false { didSet { setAccessibilitySelected(isActive); needsDisplay = true } }
+    var iconDefinition: IconDefinition? {
+        didSet {
+            guard let iconDefinition else { return }
+            icon.removeFromSuperview()
+            icon = IconView(definition: iconDefinition, size: 16, color: Themed.color(\.sidebarMutedForeground, sidebar: true))
+            addSubview(icon)
+            needsLayout = true
+            needsDisplay = true
+        }
+    }
+
+    init(_ text: String, icon name: IconName) {
+        icon = IconView(name: name, size: 16)
+        label = LabelView(text, font: DSFont.ui(13, weight: .medium), color: Themed.color(\.sidebarForeground, sidebar: true))
+        super.init(frame: .zero)
+        scalesWhenPressed = false
+        label.lineHeight = 20
+        addSubview(icon)
+        addSubview(label)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel(text)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        icon.frame = NSRect(x: 8, y: (bounds.height - 16) / 2, width: 16, height: 16)
+        label.frame = NSRect(x: 32, y: (bounds.height - 20) / 2, width: max(0, bounds.width - 40), height: 20)
+    }
+
+    override func stateDidChange(from old: State) { super.stateDidChange(from: old); needsDisplay = true }
+
+    override func updateLayer() {
+        layer?.cornerRadius = DitherChrome.controlRadius
+        let fill: NSColor? = isActive ? Themed.color(\.sidebarRowSelected, sidebar: true)
+            : state.hoverOrPressed ? Themed.color(\.sidebarRowHover, sidebar: true) : nil
+        layer?.backgroundColor = fill?.cgColor(in: self)
+        // Capy: muted labels that brighten on hover and selection; icons stay muted.
+        let lit = isActive || state.hoverOrPressed
+        label.color = Themed.color(\.sidebarForeground, lit ? 1 : 0.82, sidebar: true)
+        if iconDefinition == nil { icon.strokeColor = Themed.color(\.sidebarMutedForeground, sidebar: true) }
     }
 }
 
@@ -435,6 +603,8 @@ public final class SettingsPageView: DSView {
     public let toasts = ToastViewport()
     private let document = PageDocument()
     private let scroll: ScrollAreaView
+    /// Dither (after Capy's settings): the page's own large title at the top of the column, in place of the breadcrumb.
+    let ditherTitle = LabelView("", font: DSFont.ui(22, weight: .medium), color: Themed.color(\.foreground))
     /// Escape goes back (`useEscapeToGoBack`).
     public var onEscape: (() -> Void)?
     /// `WorkspacePageContainer` width: `max-w-4xl` (readable), `max-w-5xl` (wide), `max-w-6xl` (expanded).
@@ -455,6 +625,9 @@ public final class SettingsPageView: DSView {
         addSubview(scroll)
         addSubview(header)
         addSubview(toasts)
+        ditherTitle.lineHeight = 28
+        ditherTitle.isHidden = true
+        document.addSubview(ditherTitle)
         toasts.layer?.zPosition = 3
     }
 
@@ -478,18 +651,27 @@ public final class SettingsPageView: DSView {
     /// Back to the top for a newly opened page.
     public func scrollToTop() { scroll.scroll(to: .zero) }
 
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsLayout = true }
+
     public override func layout() {
         super.layout()
+        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: SettingsHeaderView.height)
         scroll.frame = NSRect(x: 0, y: SettingsHeaderView.height, width: bounds.width, height: max(0, bounds.height - SettingsHeaderView.height))
         let gutter: CGFloat = 6
         let inner = max(0, bounds.width - 2 * gutter)
-        let container = min(containerWidth, inner)
+        // Dither: Capy's centred column, about 800pt of content; the two-pane pages keep their width.
+        let container = min(dither && containerWidth <= 896 ? 848 : containerWidth, inner)
         let contentWidth = max(0, container - 48)
         let x = gutter + (inner - container) / 2 + 24
         let pageHeight = page?.height(forWidth: contentWidth) ?? 0
-        document.frame = NSRect(x: 0, y: 0, width: scroll.bounds.width, height: max(scroll.bounds.height, 24 + pageHeight + 48))
-        page?.frame = NSRect(x: x.rounded(), y: 24, width: contentWidth, height: pageHeight)
+        ditherTitle.isHidden = !dither || page == nil
+        ditherTitle.text = header.plainTitle ?? header.section?.label ?? ""
+        // Capy's title (`text-xl font-medium`), then 28pt to the first section.
+        let top: CGFloat = dither ? 8 + 28 + 28 : 24
+        ditherTitle.frame = NSRect(x: (x + 16).rounded(), y: 8, width: max(0, contentWidth - 32), height: 28)
+        document.frame = NSRect(x: 0, y: 0, width: scroll.bounds.width, height: max(scroll.bounds.height, top + pageHeight + 48))
+        page?.frame = NSRect(x: x.rounded(), y: top, width: contentWidth, height: pageHeight)
         toasts.frame = ToastViewport.frame(in: bounds)
     }
 
@@ -525,12 +707,17 @@ public final class SettingsHeaderView: TopbarDragView {
         addSubview(restore)
     }
 
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsLayout = true }
+
     public override func layout() {
         super.layout()
         let y = (Self.height - 20) / 2
         var x = contentStart
-        root.isHidden = section == nil
-        slash.isHidden = section == nil
+        // Dither: Capy's settings have no breadcrumb, the page shows its own title (`SettingsPageView.ditherTitle`).
+        let crumbless = section != nil && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        current.isHidden = crumbless
+        root.isHidden = section == nil || crumbless
+        slash.isHidden = section == nil || crumbless
         if section != nil {
             root.frame = NSRect(x: x, y: y, width: ceil(root.textWidth), height: 20)
             x += ceil(root.textWidth) + 12

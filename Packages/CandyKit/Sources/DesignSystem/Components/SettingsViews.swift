@@ -22,7 +22,7 @@ public final class SettingsRowView: DSView {
     public var status: String? { didSet { statusText.text = status ?? ""; statusText.isHidden = status == nil; invalidateIntrinsicContentSize(); needsLayout = true } }
     public var statusIsError = false { didSet { statusText.color = statusIsError ? Themed.color(\.destructive) : Themed.color(\.contrastMutedForeground) } }
     /// A description in `text-destructive`, such as a failed cleanup entry.
-    public var detailIsError = false { didSet { detailText.color = detailIsError ? Themed.color(\.destructive) : Themed.color(\.contrastMutedForeground, 0.8) } }
+    public var detailIsError = false { didSet { detailText.color = detailIsError ? Themed.color(\.destructive) : Themed.color(\.contrastMutedForeground, 0.8); applyDither() } }
     /// `aria-disabled`: opacity .64 (and muted text, which the dimmed foreground approximates).
     public var isDisabled = false { didSet { alphaValue = isDisabled ? 0.64 : 1 } }
     /// The 1px `border-t border-border/50` a divided group gives every row after the first.
@@ -79,6 +79,17 @@ public final class SettingsRowView: DSView {
         layer?.addSublayer(border)
         inertCover.isHidden = true
         addSubview(inertCover)
+        applyDither()
+    }
+
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); applyDither() }
+
+    /// Dither (after Capy's settings rows): a 13pt medium title over a 12pt muted description, same line heights.
+    private func applyDither() {
+        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        let size: CGFloat = dither ? 13 : 14
+        if titleLabel.font.pointSize != size { titleLabel.font = DSFont.ui(size, weight: .medium); needsLayout = true }
+        if !detailIsError { detailText.color = Themed.color(\.contrastMutedForeground, dither ? 1 : 0.8) }
     }
 
     private func applyInert() {
@@ -188,7 +199,7 @@ public final class SettingsRowView: DSView {
     }
 
     public override func updateLayer() {
-        border.backgroundColor = Themed.color(\.contrastBorder, 0.5).cgColor(in: self)
+        border.backgroundColor = SettingsGroupView.dividerColor(dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark)).cgColor(in: self)
         layer?.backgroundColor = fill?.cgColor(in: self)
     }
 }
@@ -221,7 +232,13 @@ public final class SettingsGroupView: BoxView {
 
     private func restyle() {
         var box = BoxStyle()
-        if variant == .grouped {
+        if variant == .grouped, ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
+            // Dither (after Capy's `bg-card rounded-(--radius-card) border-[0.5px] border-(--card-hairline)`).
+            box.radius = DitherChrome.cardRadius
+            box.borderWidth = 0.5
+            box.border = Self.dividerColor(dither: true)
+            box.fill = Themed.color(\.card)
+        } else if variant == .grouped {
             box.radius = 14
             box.border = Themed.color(\.contrastBorder, 0.6)
             box.fill = Themed.color(\.card, 0.4)
@@ -238,6 +255,14 @@ public final class SettingsGroupView: BoxView {
         }
         while dividers.count > count { dividers.removeLast().removeFromSuperlayer() }
         needsDisplay = true
+    }
+
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle(); needsLayout = true }
+
+    /// The rows' dividers: T3's border/50, or under Dither Capy's hairline (`--border-1`, black 11% in light where
+    /// Capy rings its cards with that shadow).
+    static func dividerColor(dither: Bool) -> NSColor {
+        dither ? Themed.color(light: \.foreground, 0.11, dark: \.foreground, 0.08) : Themed.color(\.contrastBorder, 0.5)
     }
 
     private var inset: CGFloat { variant == .grouped ? 1 : 0 }
@@ -260,11 +285,14 @@ public final class SettingsGroupView: BoxView {
         var y = inset
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        // Dither's dividers are a 0.5pt hairline centred in T3's 1pt gap.
+        let hairline = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         for d in dividers { d.isHidden = true }
         for (i, row) in shown.enumerated() {
             if i > 0 {
                 if variant == .grouped {
-                    dividers[i - 1].frame = CGRect(x: inset, y: y, width: bounds.width - 2 * inset, height: 1)
+                    dividers[i - 1].frame = hairline ? CGRect(x: inset, y: y + 0.25, width: bounds.width - 2 * inset, height: 0.5)
+                        : CGRect(x: inset, y: y, width: bounds.width - 2 * inset, height: 1)
                     dividers[i - 1].isHidden = false
                 }
                 y += gap
@@ -278,7 +306,7 @@ public final class SettingsGroupView: BoxView {
 
     public override func updateLayer() {
         super.updateLayer()
-        let color = Themed.color(\.contrastBorder, 0.5).cgColor(in: self)
+        let color = Self.dividerColor(dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark)).cgColor(in: self)
         for d in dividers { d.backgroundColor = color }
     }
 }
@@ -303,6 +331,16 @@ public final class SettingsSectionView: DSView {
         titleLabel.color = Themed.color(\.contrastForeground, 0.7)
         addSubview(titleLabel)
         addSubview(group)
+        applyDither()
+    }
+
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); applyDither() }
+
+    /// Dither (after Capy's section labels): 15pt medium in the foreground color.
+    private func applyDither() {
+        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        titleLabel.font = dither ? DSFont.ui(15, weight: .medium) : DSFont.ui(14)
+        titleLabel.color = Themed.color(\.contrastForeground, dither ? 1 : 0.7)
     }
 
     public func height(forWidth width: CGFloat) -> CGFloat { 28 + 10 + group.height(forWidth: width) }
