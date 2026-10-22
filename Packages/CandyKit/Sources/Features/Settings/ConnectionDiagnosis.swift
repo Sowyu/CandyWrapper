@@ -207,10 +207,22 @@ public struct ConnectionDiagnosis: Sendable, Equatable {
         add("Route", relayPath ? "T3 Connect" : "Direct")
         add("App version", input.clientVersion)
         add("Host version", input.serverVersion)
-        add("Error", failure?.detail)
+        add("Error", failure.map { Self.redacted($0.detail) })
         add("Trace ID", failure?.traceId)
         return ConnectionDiagnosis(headline: headline(host, located, failure), hops: hops, steps: steps(host, located, failure), facts: facts,
                                    moreInfoURL: relayPath ? t3ConnectTroubleshootingURL(helpSection(located, failure)) : nil)
+    }
+
+    /// Error text can quote a server or a URL, and Copy diagnostics puts it on the clipboard: credentials in an
+    /// auth header, a URL's user info or a token parameter or fragment go.
+    static func redacted(_ text: String) -> String {
+        var out = text
+        for (pattern, template) in [(#"(?i)\b(Bearer|DPoP|Basic)\s+[^\s,;"']+"#, "$1 [redacted]"),
+                                    (#"(://)[^/\s@]+@"#, "$1[redacted]@"),
+                                    (#"(?i)\b((?:access_)?token|pairingToken|credential|secret|password|code)=[^&\s#"']+"#, "$1=[redacted]")] {
+            out = out.replacingOccurrences(of: pattern, with: template, options: .regularExpression)
+        }
+        return out
     }
 
     /// `DateTime.formatIso`: `2026-10-22T10:00:00.000Z`.

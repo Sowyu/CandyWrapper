@@ -45,7 +45,10 @@ public enum ConnectionFailure: Error, Sendable, Equatable {
                 case 403: return .blocked(.permission, "The environment credential does not grant the required access.")
                 case 400: return .blocked(.configuration, body == nil ? "The environment rejected the request." : "The environment rejected the authentication request.")
                 case 404: return .blocked(.configuration, "The environment endpoint could not be found.")
-                default: return .transient(e.description)
+                // The body's `reason` and `message` are the server's own words and go nowhere: they reach Copy
+                // diagnostics, and a server could echo a credential (connection/errors.ts:238-244).
+                case 500: return .transient("The environment could not authorize the connection.")
+                default: return .transient("The environment returned undeclared status \(code).")
                 }
             case .network, .timedOut, .invalidResponse: return .transient(e.description)
             }
