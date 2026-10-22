@@ -8,7 +8,8 @@ import T3Store
 /// 360 wide, at most 346 tall. Spec: docs/research/J-composer-visuals.md 8.1, reference 13.
 final class ModelPickerView: DSView, PickerPopupBody {
     static let width: CGFloat = 360, maxHeight: CGFloat = 346, railWidth: CGFloat = 44
-    static let capyWidth: CGFloat = 420, capyHeight: CGFloat = 440
+    static let capyWidth: CGFloat = 420, capyHeight: CGFloat = 440, capyMinHeight: CGFloat = 300
+    static func width(_ capy: Bool) -> CGFloat { capy ? capyWidth : width }
     static let searchHeight: CGFloat = 43, rowHeight: CGFloat = 45, rowGap: CGFloat = 2
 
     var catalog: ProviderCatalog { didSet { if catalog != oldValue { reload() } } }
@@ -267,10 +268,11 @@ final class ModelPickerView: DSView, PickerPopupBody {
 
     /// Search block plus the list (rows + 20) or the empty text (`p-2`, 36), then the ChatGPT footer.
     var naturalSize: CGSize {
-        // Redesign keeps Capy's roomy, steady size, so a short list (favorites, a search) doesn't squash it.
-        if capy { return CGSize(width: Self.capyWidth, height: Self.capyHeight + footerHeight) }
-        if let frozenHeight { return CGSize(width: Self.width, height: frozenHeight) }
-        let list = sections.rows.isEmpty ? 36 : listContentHeight + listTop + listBottom
+        if let frozenHeight { return CGSize(width: Self.width(capy), height: frozenHeight) }
+        let list = sections.rows.isEmpty ? 36 + (capy ? listTop - 6 : 0) : listContentHeight + listTop + listBottom
+        // Redesign fits its content between a floor, so a short list (favorites, a search) isn't squashed, and Capy's
+        // 440; the host trims it further when the space above the chip is shorter.
+        if capy { return CGSize(width: Self.capyWidth, height: min(max(searchH + list, Self.capyMinHeight), Self.capyHeight) + footerHeight) }
         return CGSize(width: Self.width, height: min(Self.maxHeight, searchH + list) + footerHeight)
     }
 
