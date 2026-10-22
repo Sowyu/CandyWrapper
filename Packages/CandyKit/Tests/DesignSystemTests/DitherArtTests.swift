@@ -56,6 +56,23 @@ struct DitherArtTests {
     }
 }
 
+/// A thread's text column keeps AA over the brightest art: the scrim there is the least that holds 4.5:1 for every
+/// muted text color that holds it on the plain background, and a dark picture needs none.
+struct DitherArtColumnScrimTests {
+    func hex(_ v: Int) -> [Double] { [Double(v >> 16 & 255) / 255, Double(v >> 8 & 255) / 255, Double(v & 255) / 255] }
+
+    @Test func columnScrimHoldsAAOverTheWorstArt() {
+        for (bg, texts) in [(hex(0x131314), [hex(0xaaaaab), hex(0x848485)]), (hex(0xf9f9f9), [hex(0x6c6c6c), hex(0x898989)])] {
+            let worst = DitherArt.farthest(from: bg)
+            let a = Double(DitherArt.columnScrim(worst: worst, background: bg, texts: texts))
+            let mixed = (0..<3).map { bg[$0] * a + worst[$0] * (1 - a) }
+            for text in texts where DitherArt.contrast(text, bg) >= 4.6 { #expect(DitherArt.contrast(text, mixed) >= 4.5) }
+            #expect(a > DitherArt.threadScrim && a < 1)
+            #expect(DitherArt.columnScrim(worst: bg, background: bg, texts: texts) == 0)
+        }
+    }
+}
+
 /// The art yields to the system display options: Reduce Transparency covers it with the solid background, and
 /// Increase Contrast keeps every page's scrim heavy enough that text sits on about the background.
 struct DitherArtDisplayOptionTests {

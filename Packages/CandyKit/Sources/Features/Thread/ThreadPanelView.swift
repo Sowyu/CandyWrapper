@@ -1450,14 +1450,8 @@ public final class ThreadPanelView: DSView {
     /// No fill of its own: the main panel's grain surface (`bg-background surface-grain`) shows
     /// through. Only the top fade uses the background color.
     public override func updateLayer() {
-        // Dither fades into the tab strip band above the panel, in its color and all of it at the top (DitherArtView).
-        if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
-            let band = DitherChrome.bandColor(in: self)
-            fade.colors = Self.fadeStops.map { band.copy(alpha: DitherChrome.bandBlend($0))! }
-        } else {
-            let bg = TL.c(\.background).cgColor(in: self)
-            fade.colors = Self.fadeStops.map { bg.copy(alpha: Self.topFade($0))! }
-        }
+        let bg = TL.c(\.background).cgColor(in: self)
+        fade.colors = Self.fadeStops.map { bg.copy(alpha: Self.topFade($0))! }
         needsLayout = true
     }
 
@@ -1610,8 +1604,17 @@ public final class ThreadPanelView: DSView {
         fade.frame = CGRect(x: 0, y: 0, width: max(0, chat - 6), height: band)
         fade.zPosition = 1
         header.layer?.zPosition = 2
-        fade.isHidden = glass
-        if glass {
+        // Dither's art runs up to the panel's top edge, so the rows fade out over it as a mask, as over Glass: an overlay
+        // in any one color would paint a band over the art, and its unfaded scrollbar column left a strip at the right.
+        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        // ponytail: the mask renders the timeline offscreen while it scrolls, a mask per row if Dither scrolling drops frames
+        let masks = glass || dither
+        fade.isHidden = masks
+        // The art's scrim is heavy under the text column only (DitherArtView.setTextColumn).
+        let lane = timeline.laneFrame
+        DitherArtView.setTextColumn(dither && !isDraft && chat > 0
+            ? convert(NSRect(x: lane.x, y: 0, width: lane.width, height: timeline.bounds.height), from: timeline) : nil, from: self)
+        if masks {
             fadeMask.frame = timeline.bounds
             let h = max(1, Double(timeline.bounds.height))
             fadeMask.locations = (Self.fadeStops.map { $0 * Double(band) / h } + [1]).map { NSNumber(value: min($0, 1)) }
