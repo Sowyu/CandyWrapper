@@ -66,10 +66,6 @@ public final class DitherArtView: NSView {
         return current
     }
 
-    /// Switching threads resolves the dots in again, like opening a new thread.
-    @MainActor
-    public static func replayReveal(behind source: NSView) { art(behind: source)?.playReveal() }
-
     /// How much of the art a page shows.
     public enum Emphasis: Sendable { case hero, thread }
 

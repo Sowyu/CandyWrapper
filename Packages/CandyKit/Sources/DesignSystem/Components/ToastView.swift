@@ -122,7 +122,8 @@ public final class ToastView: DSView {
         }
         let icon = leadingIcon?.name ?? typeIcon
         // ponytail: loading shows no spinner yet; use SpinnerView at 80% opacity when a loading toast exists
-        iconView = icon.map { IconView(name: $0) }
+        // A leading Claude glyph names the provider (an update, a migration), so Dither draws Anthropic's mark.
+        iconView = icon.map { IconView(name: $0, providerMark: leadingIcon != nil) }
         actionButton = actionTitle.map { ButtonView($0, variant: .default, size: .xs) }
         actionButton?.action = action
         super.init(frame: .zero)

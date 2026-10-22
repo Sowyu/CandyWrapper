@@ -28,18 +28,23 @@ public final class IconView: NSView {
 
     private let nominalSize: CGFloat
 
-    public convenience init(name: IconName, size: CGFloat = 16, strokeColor: NSColor = .labelColor, fillColor: NSColor? = nil) {
-        self.init(name: name, definition: name.definition, brand: name.isBrand, size: size, strokeColor: strokeColor, fillColor: fillColor)
+    /// `providerMark`: Claude stands for its provider here, so Dither draws Anthropic's mark.
+    public convenience init(name: IconName, size: CGFloat = 16, strokeColor: NSColor = .labelColor, fillColor: NSColor? = nil,
+                            providerMark: Bool = false) {
+        self.init(name: name, definition: name.definition, brand: name.isBrand, size: size, strokeColor: strokeColor, fillColor: fillColor,
+                  providerMark: providerMark)
     }
 
     /// An icon outside the generated set. `currentColor` resolves to `strokeColor` (or `fillColor` for fills).
     /// A lucide icon's definition (a menu glyph, a restroked chevron) still swaps to its Hugeicons glyph under Dither.
     public convenience init(definition: IconDefinition, size: CGFloat = 16, color: NSColor = .labelColor) {
-        self.init(name: nil, definition: definition, brand: true, size: size, strokeColor: color, fillColor: nil)
+        self.init(name: nil, definition: definition, brand: true, size: size, strokeColor: color, fillColor: nil, providerMark: false)
     }
 
-    private init(name: IconName?, definition: IconDefinition, brand: Bool, size: CGFloat, strokeColor: NSColor, fillColor: NSColor?) {
+    private init(name: IconName?, definition: IconDefinition, brand: Bool, size: CGFloat, strokeColor: NSColor, fillColor: NSColor?,
+                 providerMark: Bool) {
         self.name = name
+        self.providerMark = providerMark
         self.definition = definition
         self.base = definition
         self.isBrand = brand
@@ -50,7 +55,7 @@ public final class IconView: NSView {
         wantsLayer = true
         layerContentsRedrawPolicy = .never
         layer?.masksToBounds = false
-        if ThemeRuntime.isDither(dark: NSApp?.effectiveAppearance.isDark ?? true), let alt = hugeiconsName.flatMap(Self.ditherDefinition) {
+        if ThemeRuntime.isDither(dark: NSApp?.effectiveAppearance.isDark ?? true), let alt = hugeiconsName.flatMap(ditherDefinition) {
             self.definition = alt
             usesHugeicons = true
         }
@@ -77,7 +82,7 @@ public final class IconView: NSView {
 
     /// Swaps between lucide and Hugeicons as the Dither theme turns on or off for this view.
     private func syncIconSet() {
-        let alt = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? hugeiconsName.flatMap(Self.ditherDefinition) : nil
+        let alt = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? hugeiconsName.flatMap(ditherDefinition) : nil
         guard (alt != nil) != usesHugeicons else { return }
         usesHugeicons = alt != nil
         definition = alt ?? base
@@ -123,11 +128,13 @@ public final class IconView: NSView {
         CATransaction.commit()
     }
 
-    /// Dither's glyph for `name`: Anthropic's mark for Claude (it shows the maker's logo, like OpenAI's for Codex),
-    /// else the Hugeicons glyph.
-    nonisolated static func ditherDefinition(_ name: IconName) -> IconDefinition? {
-        name == .brandClaudeAI ? anthropicMark : name.hugeiconsDefinition
+    /// Dither's glyph for `name`: Anthropic's mark where Claude stands for the provider (the maker's logo, like
+    /// OpenAI's for Codex), Claude's own where it stands for a model, else the Hugeicons glyph.
+    private func ditherDefinition(_ name: IconName) -> IconDefinition? {
+        name == .brandClaudeAI ? (providerMark ? Self.anthropicMark : nil) : name.hugeiconsDefinition
     }
+    /// Draws Claude as its provider, Anthropic, under Dither.
+    private let providerMark: Bool
     /// Anthropic's "A" mark, filled in the current color.
     nonisolated static let anthropicMark = IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
         IconElement(.path(d: "M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z"),

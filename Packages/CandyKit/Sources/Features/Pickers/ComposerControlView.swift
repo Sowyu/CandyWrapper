@@ -141,9 +141,12 @@ public final class ComposerControlSeparatorView: DSView {
 /// (`[&_svg:not([class*='text-'])]:text-muted-foreground`). Otherwise the instance's initials.
 @MainActor
 enum ProviderIcon {
-    static func make(driver: String, displayName: String, size: CGFloat, color: NSColor = Themed.color(\.contrastForeground)) -> NSView {
+    /// `model`: the glyph marks a model (the composer's model chip, a picker row), so Claude keeps its own logo under
+    /// Dither; elsewhere it marks the provider and shows Anthropic's.
+    static func make(driver: String, displayName: String, size: CGFloat, color: NSColor = Themed.color(\.contrastForeground),
+                     model: Bool = false) -> NSView {
         switch driver {
-        case "claudeAgent": return IconView(name: .brandClaudeAI, size: size, strokeColor: color)
+        case "claudeAgent": return IconView(name: .brandClaudeAI, size: size, strokeColor: color, providerMark: !model)
         case "codex": return IconView(name: .brandOpenAI, size: size, strokeColor: color)
         case "cursor": return IconView(name: .brandCursor, size: size, strokeColor: color)
         case "grok": return IconView(definition: ProviderPackageIcons.grok, size: size, color: ProviderPackageIcons.grokFill)

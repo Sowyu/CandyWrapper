@@ -876,7 +876,6 @@ final class ThreadController {
         OpenTiming.begin(id.rawValue)
         ImageTiming.mark("open", id.rawValue)
         hideNoActiveThread()
-        DitherArtView.replayReveal(behind: panel)
         let previousEnvironment = panel.isDraft ? nil : session?.environmentId
         session?.end()
         setCost(nil)

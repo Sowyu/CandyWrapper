@@ -104,7 +104,7 @@ public final class ComposerPickers {
         // ProviderModelPicker.tsx:95-96, 248-262: the `h-3` badge two points past the 16pt glyph, ringed in `contrast-input`.
         let glyph = current.entry.map { e in
             ProviderIcon.make(driver: e.driver, displayName: e.displayName, size: 16, color: Themed.color(\.contrastMutedForeground),
-                              badge: ProviderBadge.make(e, in: context.catalog, size: .small, overhang: 2, ring: Themed.color(\.contrastInput)))
+                              model: true, badge: ProviderBadge.make(e, in: context.catalog, size: .small, overhang: 2, ring: Themed.color(\.contrastInput)))
         }
         modelButton.icon = glyph
         modelButton.toolTip = "\(current.triggerLabel) · ⇧⌘M"
