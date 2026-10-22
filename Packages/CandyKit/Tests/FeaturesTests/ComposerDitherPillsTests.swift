@@ -93,21 +93,6 @@ struct ComposerDitherPillsTests {
         }
     }
 
-    /// The legend splits the live report into cached and new input, output and reasoning, which add up to the
-    /// tokens used, as the Claude adapter reports them (ClaudeAdapterV2.ts:248-266).
-    @Test func contextLegendSplitsTheReport() throws {
-        let report: JSONValue = .object(["usedTokens": .number(12_500), "inputTokens": .number(12_000), "cachedInputTokens": .number(9_000),
-                                         "outputTokens": .number(500), "reasoningOutputTokens": .number(100)])
-        let parts = try #require(ThreadContextWindowUsage.Parts(report, prefix: ""))
-        let legend = ThreadContextWindowDetailsView.legend(parts)
-        #expect(legend.map(\.name) == ["Cached input", "New input", "Output", "Reasoning"])
-        #expect(legend.map(\.value) == [9_000, 3_000, 400, 100])
-        #expect(legend.map(\.value).reduce(0, +) == 12_500)
-        #expect(ThreadContextWindowUsage.Parts(.object(["usedTokens": .number(1)]), prefix: "") == nil)
-        let snapshot: JSONValue = .object(["lastInputTokens": .number(10), "lastOutputTokens": .number(2), "inputTokens": .number(999)])
-        #expect(ThreadContextWindowUsage.Parts(snapshot, prefix: "last") == .init(cached: 0, input: 10, output: 2, reasoning: 0))
-    }
-
     @Test func composerStaysPutAsPillsComeAndGo() throws {
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous) }

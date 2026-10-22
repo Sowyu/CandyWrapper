@@ -1373,6 +1373,7 @@ final class ComposerController {
         syncWorktreeSetup()
         panel.tasksView.steps = ThreadTaskStep.derive(projection)
         contextWindow = ThreadContextWindowUsage.derive(projection)
+        composer.contextWindowMeter.projection = projection
         composer.contextWindowMeter.usage = meterEnabled ? contextWindow : nil
         composer.needsLayout = true
         let runs = projection?.runs ?? []
