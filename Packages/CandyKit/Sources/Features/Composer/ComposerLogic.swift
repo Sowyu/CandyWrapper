@@ -266,8 +266,10 @@ public enum ComposerLogic {
 
     /// `submitStatus` (ComposerPrimaryActions.tsx:292-304): the send button's tooltip and label while
     /// it cannot send. A lost environment wins over every other reason.
-    public static func submitStatus(environmentUnavailable: Bool, sendDisabledReason: String?, busy: Bool, editingQueued: Bool) -> String? {
-        if environmentUnavailable { return "Environment disconnected" }
+    /// `providerUnavailable`: connected, but blocked only by a missing provider, which says so instead.
+    public static func submitStatus(environmentUnavailable: Bool, providerUnavailable: Bool = false, sendDisabledReason: String?,
+                                    busy: Bool, editingQueued: Bool) -> String? {
+        if environmentUnavailable { return providerUnavailable ? "Enable a provider to send a message" : "Environment disconnected" }
         if let sendDisabledReason { return sendDisabledReason }
         return busy ? (editingQueued ? "Updating queued message" : "Submitting message") : nil
     }

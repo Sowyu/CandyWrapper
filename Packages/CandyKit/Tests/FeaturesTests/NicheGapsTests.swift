@@ -33,6 +33,8 @@ struct NicheGapsTests {
         #expect(ComposerLogic.submitStatus(environmentUnavailable: false, sendDisabledReason: nil, busy: true, editingQueued: true) == "Updating queued message")
         #expect(ComposerLogic.submitStatus(environmentUnavailable: false, sendDisabledReason: nil, busy: true, editingQueued: false) == "Submitting message")
         #expect(ComposerLogic.submitStatus(environmentUnavailable: false, sendDisabledReason: nil, busy: false, editingQueued: false) == nil)
+        #expect(ComposerLogic.submitStatus(environmentUnavailable: true, providerUnavailable: true, sendDisabledReason: nil, busy: false,
+                                           editingQueued: false) == "Enable a provider to send a message")
     }
 
     @Test func environmentDownStillSendsOnEnter() {
