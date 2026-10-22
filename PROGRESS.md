@@ -1,6 +1,6 @@
 # Progress
 
-- [ ] Port upstream diff, git and pull request performance bucket b4 (taken 2026-10-22, perf-diffgit).
+- [ ] Port upstream diff, git and pull request performance bucket b4 (taken 2026-10-22, perf-diffgit). Linked PR rows now virtualized; nine focused tests and dark real-window scrolling passed. Viewed-mark invalidation next.
 
 The current state and the open work. Before you stop, tick what you finished, add what the next agent must know, and keep this file short: finished work belongs in the git log, and the full history up to 2026-10-12 is in `docs/history/`.
 
