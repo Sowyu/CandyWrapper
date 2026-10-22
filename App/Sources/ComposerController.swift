@@ -461,9 +461,10 @@ final class ComposerController {
         var refreshComposer = true
         switch event {
         case .snapshot(let snapshot):
-            // A host that froze reports it on reconnect for a few minutes: say why it dropped, once per stall.
+            // A host that froze reports it on reconnect for a few minutes: say why it dropped, once per stall. The
+            // label is the environment's, else its descriptor's (HostFreezeToastCoordinator.tsx:22-24).
             if let stall = snapshot.lastEventLoopStall, shownStalls.insert("\(environmentId):\(stall.detectedAt)").inserted {
-                let notice = stall.notice(hostLabel: environments.label(environmentId) ?? "This environment")
+                let notice = stall.notice(hostLabel: environments.label(environmentId) ?? snapshot.environmentLabel ?? "This environment")
                 toast(.warning, notice.title, notice.description)
             }
             // Hub snapshots never ride in a config snapshot; keep the last ones.

@@ -20,7 +20,27 @@ public final class SettingsRowView: DSView {
     private var controlWidth: CGFloat = 0
     /// `status`: a line under the description (`pt-0.5 text-xs text-muted-foreground`), destructive for errors.
     public var status: String? { didSet { statusText.text = status ?? ""; statusText.isHidden = status == nil; invalidateIntrinsicContentSize(); needsLayout = true } }
-    public var statusIsError = false { didSet { statusText.color = statusIsError ? Themed.color(\.destructive) : Themed.color(\.contrastMutedForeground) } }
+    public var statusIsError = false {
+        didSet {
+            statusText.color = statusIsError ? Themed.color(\.destructive) : Themed.color(\.contrastMutedForeground)
+            statusLinkView?.color = statusText.color
+        }
+    }
+    /// An underlined link after the status text (`<a className="underline underline-offset-2">`), such as T3 Connect's
+    /// "More info". It follows the last line, or takes its own line when it doesn't fit.
+    public var statusLink: (title: String, action: @MainActor @Sendable () -> Void)? {
+        didSet {
+            statusLinkView?.removeFromSuperview()
+            statusLinkView = statusLink.map { link in
+                let v = StatusLinkView(link.title, color: statusText.color)
+                v.action = link.action
+                addSubview(v)
+                return v
+            }
+            invalidateIntrinsicContentSize(); needsLayout = true
+        }
+    }
+    private var statusLinkView: StatusLinkView?
     /// A description in `text-destructive`, such as a failed cleanup entry.
     public var detailIsError = false { didSet { detailText.color = detailIsError ? Themed.color(\.destructive) : Themed.color(\.contrastMutedForeground, 0.8); applyDither() } }
     /// `aria-disabled`: opacity .64 (and muted text, which the dimmed foreground approximates).
@@ -126,7 +146,10 @@ public final class SettingsRowView: DSView {
             return detail == nil ? 0 : detailText.height(forWidth: min(576, w))
         }
         let hasDetail = detail != nil || detailView != nil
-        func statusHeight(_ w: CGFloat) -> CGFloat { status == nil ? 0 : statusText.height(forWidth: w) }
+        func statusHeight(_ w: CGFloat) -> CGFloat {
+            guard status != nil else { return 0 }
+            return statusText.height(forWidth: w) + (statusLinkPlacement(w)?.ownLine == true ? 16 : 0)
+        }
         func textHeight(_ w: CGFloat) -> CGFloat {
             20 + (hasDetail ? 4 + detailHeight(w) : 0) + (status == nil ? 0 : 4 + 2 + statusHeight(w))
         }
@@ -151,6 +174,15 @@ public final class SettingsRowView: DSView {
                       control: NSRect(x: Self.paddingX, y: controlY, width: inner, height: controlSize.height),
                       status: NSRect(x: Self.paddingX, y: top + th - statusHeight(inner), width: inner, height: statusHeight(inner)),
                       height: (control == nil ? top + th : controlY + controlSize.height) + footerHeight(width))
+    }
+
+    /// Where the status link goes: after the last line plus a space, or on a line of its own.
+    private func statusLinkPlacement(_ width: CGFloat) -> (x: CGFloat, line: Int, ownLine: Bool)? {
+        guard let link = statusLinkView else { return nil }
+        let lines = statusText.layout(forWidth: width)
+        let last = ceil(lines.widths.last ?? 0)
+        let fits = last + 4 + link.intrinsicContentSize.width <= width
+        return fits ? (last + 4, max(0, lines.lines.count - 1), false) : (0, lines.lines.count, true)
     }
 
     /// `pt-3 pb-1` with children, else `py-3`.
@@ -197,6 +229,10 @@ public final class SettingsRowView: DSView {
         }
         inertCover.frame = f.control
         statusText.frame = f.status
+        if let link = statusLinkView, let p = statusLinkPlacement(f.status.width) {
+            link.isHidden = status == nil
+            link.frame = NSRect(x: f.status.minX + p.x, y: f.status.minY + CGFloat(p.line) * 16, width: link.intrinsicContentSize.width, height: 16)
+        }
         control?.frame = f.control
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -371,3 +407,26 @@ public final class SettingsSectionView: DSView {
 
 extension SettingsSectionView: SettingsGroupRow {}
 extension SettingsGroupView: SettingsGroupRow {}
+
+/// The status line's link: 12pt underlined text in the status color that opens on click.
+final class StatusLinkView: ControlView {
+    private let label: LabelView
+    var color: NSColor { get { label.color } set { label.color = newValue } }
+
+    init(_ title: String, color: NSColor) {
+        label = LabelView(title, font: DSFont.ui(12), color: color)
+        super.init(frame: .zero)
+        scalesWhenPressed = false
+        label.lineHeight = 16
+        label.isUnderlined = true
+        addSubview(label)
+        setAccessibilityRole(.link)
+        setAccessibilityLabel(title)
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: ceil(label.textWidth) + 1, height: 16) }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    override func layout() { super.layout(); label.frame = bounds }
+}

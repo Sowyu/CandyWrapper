@@ -361,6 +361,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         }
         row.status = r.status
         row.statusIsError = r.statusIsError
+        row.statusLink = r.statusMoreInfoURL.flatMap(URL.init(string:)).map { url in ("More info", { NSWorkspace.shared.open(url) }) }
         switch r.control {
         case .none:
             row.control = nil

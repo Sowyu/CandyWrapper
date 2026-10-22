@@ -382,6 +382,8 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     public var environmentThemes: [JSONValue] = []
     /// `environment.platform.os` (`darwin`, `linux`, `win32`).
     public var platformOS: String?
+    /// `environment.label`: the descriptor's name for the host.
+    public var environmentLabel: String?
     /// `availableEditors`: the editor ids the server found on its machine (`EditorId`, e.g. `file-manager`).
     public var availableEditors: [String] = []
     public var logsDirectoryPath: String?
@@ -422,6 +424,7 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
         keybindings = Keymap.decodeRules(try c.decodeIfPresent(JSONValue.self, forKey: .keybindings))
         let environment = try? c.decodeIfPresent(JSONValue.self, forKey: .environment)
         platformOS = environment?["platform"]?["os"]?.stringValue
+        environmentLabel = environment?["label"]?.stringValue
         capabilities = Set((environment?["capabilities"]?.objectValue ?? [:]).compactMap { $0.value.boolValue == true ? $0.key : nil })
         // These flags live at ServerConfig's top level (server.ts:687-688).
         if try c.decodeIfPresent(Bool.self, forKey: .threadFind) == true { capabilities.insert("threadFind") }

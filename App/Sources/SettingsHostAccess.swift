@@ -258,7 +258,6 @@ extension SettingsController {
         // publish-only link, unlinked only when neither is wanted) in front of the relay install flow
         // (`DesktopManagedController.ensureRelayClient`); left to T3 Code's app until it is ported and tried on a real account with the user
         // The reachability line and description (SavedEnvironmentRows.tsx:495-515, 585-596).
-        // ponytail: the unreachable line leaves out T3's inline "More info" link, add it when SettingsRowView's status takes links
         let reachability = tunnel ? linkState?.reachability : nil
         let detail = !tunnel ? "Make this environment available to your other devices through T3 Connect."
             : reachability?.status == "unreachable" ? "T3 Connect is on, but other devices cannot reach this environment."
@@ -269,6 +268,7 @@ extension SettingsController {
                           detail: detail,
                           status: linkError ?? reachability?.statusLine,
                           statusIsError: unreachable,
+                          statusMoreInfoURL: unreachable ? reachability?.helpURL : nil,
                           control: .toggle(.init(isOn: tunnel, isEnabled: false, tooltip: reason ?? Self.bridgeTooltip, label: "Enable T3 Connect"))))
         // Publishing alone needs a publish-only link; with the tunnel up it is a preference the server sets.
         rows.append(.init(id: "publish-agent-activity", title: "Publish agent activity",

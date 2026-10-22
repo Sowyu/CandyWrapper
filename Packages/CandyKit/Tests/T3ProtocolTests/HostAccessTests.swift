@@ -74,5 +74,8 @@ struct HostAccessTests {
         #expect(one.reachability?.statusLine == "Tunnel connected · 1 connection")
         let down = try state(#"{"status":"unreachable","checkedAt":"x","cause":"edge_unreachable","reason":"The tunnel cannot reach Cloudflare.","hint":null,"fix":"Open port 7844."}"#)
         #expect(down.reachability?.statusLine == "The tunnel cannot reach Cloudflare. Fix: Open port 7844.")
+        // The line's "More info" (connectReachabilityHelpUrl, environmentHttp.ts:479-492).
+        #expect(down.reachability?.helpURL == "https://github.com/pingdotgg/t3code/blob/main/docs/user/t3-connect-troubleshooting.md#port-7844-is-blocked-on-the-host")
+        #expect(up.reachability?.helpURL == nil)
     }
 }
