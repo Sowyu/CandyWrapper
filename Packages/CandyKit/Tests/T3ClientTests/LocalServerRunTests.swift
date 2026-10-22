@@ -56,4 +56,36 @@ struct LocalServerRunTests {
         #expect(ContinuousClock.now - start < .seconds(3))
         #expect(reaped(pid))
     }
+
+    /// The command exits at once, but a background child keeps its stdout. One second later the
+    /// child writes again and records that the write went through, so a marker file means the read
+    /// end was still open after run gave up.
+    @Test func descendantHoldingStdoutCannotOutliveTheDeadline() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cw-run-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let pidFile = dir.appendingPathComponent("pid")
+        let marker = dir.appendingPathComponent("alive")
+        let script = dir.appendingPathComponent("fake-t3").path
+        let body = """
+            #!/bin/sh
+            echo partial
+            ( sleep 1; echo late; echo yes > '\(marker.path)'; exec sleep 30 ) &
+            echo $! > '\(pidFile.path).tmp'
+            mv '\(pidFile.path).tmp' '\(pidFile.path)'
+            exit 0
+
+            """
+        try body.write(toFile: script, atomically: true, encoding: .utf8)
+        chmod(script, 0o755)
+        let start = ContinuousClock.now
+        await #expect(throws: LocalServerLaunchError.self) {
+            _ = try await LocalServerLauncher.run(executable: script, arguments: [script, "auth"], environment: [:],
+                                                  timeout: .milliseconds(500))
+        }
+        #expect(ContinuousClock.now - start < .seconds(2))
+        let background = try await waitForPid(pidFile)
+        defer { kill(background, SIGKILL) }
+        try await Task.sleep(for: .seconds(2))
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
+    }
 }
