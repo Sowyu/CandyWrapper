@@ -509,6 +509,7 @@ final class ThreadController {
             self.terminal.openExistingSetupTerminal(id)
         }
         terminal.openBrowserLink = { [weak self] url in self?.browser.openLink(url) ?? false }
+        terminal.availableEditors = { [weak self] env in self?.composer.config(env)?.availableEditors }
         pullRequests.openIntegratedBrowser = { [weak self] url in self?.browser.openURL(url.absoluteString) }
         pullRequests.openBrowserLink = { [weak self] url in self?.browser.openLink(url) ?? false }
         devices = DevicePanelController(panel: panel, environments: environments, files: files)

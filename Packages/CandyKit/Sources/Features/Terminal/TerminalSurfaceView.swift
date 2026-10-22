@@ -38,8 +38,9 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
         super.init(frame: frameRect)
         terminal.terminalDelegate = self
         terminal.surface = self
-        // T3 activates links on a plain click and underlines them under the pointer.
+        // T3 activates links on a plain click and underlines them under the pointer, found by its rules.
         terminal.linkHighlightMode = .hover
+        terminal.getTerminal().implicitLinkDetector = TerminalLinks.detector
         // libghostty's embedder in T3 does not ring; nothing in the drawer reacts to BEL.
         terminal.bellStyle = .none
         terminal.optionAsMetaKey = false

@@ -538,7 +538,10 @@ final class TerminalController {
             guard let self, let attachment, host?.attachments[terminalId] === attachment else { return }
             self.resize(attachment, cols: cols, rows: rows)
         }
-        surface.onLink = { [weak self] link in self?.openLink(link, cwd: launch.cwd) }
+        surface.onLink = { [weak self, weak surface] link in
+            guard let surface else { return }
+            self?.openLink(link, cwd: launch.cwd, threadId: threadId, surface: surface)
+        }
         surface.onFocus = { [weak self, weak host] in
             guard let self, let host else { return }
             if host === self.panelHost { self.activatePanelTerminal(terminalId) } else if self.state.activeTerminalId != terminalId { self.activate(terminalId) }
@@ -606,18 +609,33 @@ final class TerminalController {
         attachment.outbox.yield((TerminalRPC.resize, TerminalRPC.resizeInput(threadId: local, terminalId: attachment.terminalId, cols: cols, rows: rows)))
     }
 
-    /// `handleLinkActivate`: URLs open in the browser, paths in the default app.
-    // ponytail: URLs skip T3's built-in preview (WP7.6) and paths open with the default app, not the
-    // preferred editor; route both there when the preview panel and editor picker land
+    /// `handleLinkActivate` (ThreadTerminalDrawer.tsx:939-990): URLs open in the browser panel or the browser.
+    /// Paths resolve against the terminal's folder (`resolvePathLinkTarget`) and open in the preferred editor
+    /// on the thread's machine (`useOpenInPreferredEditor`); a failure prints in the terminal.
     var openBrowserLink: ((URL) -> Bool)?
-    private func openLink(_ link: String, cwd: String) {
-        if link.range(of: #"^https?://"#, options: [.regularExpression, .caseInsensitive]) != nil {
+    /// The editors an environment's server reports (`serverConfig.availableEditors`).
+    var availableEditors: ((String) -> [String]?)?
+    private func openLink(_ link: String, cwd: String, threadId: ThreadId, surface: TerminalSurfaceView) {
+        if TerminalLinks.isURL(link) {
             if let url = URL(string: link), openBrowserLink?(url) != true { NSWorkspace.shared.open(url) }
             return
         }
-        let path = link.hasPrefix("/") ? link : (cwd as NSString).appendingPathComponent(link)
-        let file = path.replacingOccurrences(of: #":\d+(:\d+)?$"#, with: "", options: .regularExpression)
-        NSWorkspace.shared.open(URL(fileURLWithPath: file))
+        guard let env = threadId.environmentId else { return }
+        let target = FileLinks.resolveAgainst(link, cwd: cwd)
+        let defaults = UserDefaults.standard
+        guard let editor = OpenInEditors.preferred(available: availableEditors?(env) ?? [], last: defaults.string(forKey: OpenInEditors.lastEditorKey)) else {
+            surface.apply(.message("No available editor can open \(target) in environment \(env)."))
+            return
+        }
+        // `resolveAndPersistPreferredEditor` keeps the editor it picked.
+        defaults.set(editor, forKey: OpenInEditors.lastEditorKey)
+        Task { [weak self, weak surface] in
+            do {
+                _ = try await self?.environments.request(env, "shell.openInEditor", OpenInEditors.launchInput(cwd: target, editor: editor))
+            } catch {
+                surface?.apply(.message((error as? RPCClientError)?.typedError?.fields["message"]?.stringValue ?? "Unable to open path"))
+            }
+        }
     }
 
     // MARK: Labels

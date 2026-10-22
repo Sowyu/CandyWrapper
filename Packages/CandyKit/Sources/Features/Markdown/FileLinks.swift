@@ -168,7 +168,7 @@ public enum FileLinks {
     }
 
     /// `resolvePathLinkTarget` (fileLinks.ts): `~/` from the home inferred from cwd, else joined onto cwd.
-    static func resolveAgainst(_ raw: String, cwd: String) -> String {
+    public static func resolveAgainst(_ raw: String, cwd: String) -> String {
         let position = splitPosition(raw)
         var path = position.path
         if path.hasPrefix("~/") {
