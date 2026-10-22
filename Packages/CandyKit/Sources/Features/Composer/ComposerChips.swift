@@ -232,7 +232,8 @@ final class ComposerChipAttachment: NSTextAttachment {
         nonisolated(unsafe) let container = textContainer
         return MainActor.assumeIsolated {
             let appearance = container?.textView?.effectiveAppearance ?? NSApp?.effectiveAppearance ?? NSAppearance(named: .aqua)!
-            guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(ceil(size.width * 2)), pixelsHigh: Int(ceil(size.height * 2)),
+            let scale = max(2, container?.textView?.window?.backingScaleFactor ?? 2)
+            guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(ceil(size.width * scale)), pixelsHigh: Int(ceil(size.height * scale)),
                                              bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                              colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
                   let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
@@ -240,7 +241,7 @@ final class ComposerChipAttachment: NSTextAttachment {
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = context
             let ctx = context.cgContext
-            ctx.scaleBy(x: 2, y: 2)
+            ctx.scaleBy(x: scale, y: scale)
             ctx.translateBy(x: 0, y: size.height)
             ctx.scaleBy(x: 1, y: -1)
             appearance.performAsCurrentDrawingAppearance {
@@ -335,10 +336,35 @@ private final class ChipView: NSView {
         self.label = label
         super.init(frame: frame)
         setAccessibilityElement(false)
+        // A fractional chip width must crop, never stretch the backing bitmap (that resample made the chip soft).
+        layerContentsPlacement = .topLeft
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    /// TextKit places the chip at `vertical-align: middle`, usually between device pixels; snapping the origin to the
+    /// nearest pixel keeps the box edges and the label sharp. Moves at most half a pixel off the text's middle.
+    override func setFrameOrigin(_ newOrigin: NSPoint) { super.setFrameOrigin(snapped(newOrigin)) }
+    override var frame: NSRect {
+        get { super.frame }
+        set { super.frame = NSRect(origin: snapped(newValue.origin), size: newValue.size) }
+    }
+    private func snapped(_ origin: NSPoint) -> NSPoint {
+        guard let superview, window != nil else { return origin }
+        return superview.backingAlignedRect(NSRect(origin: origin, size: .zero), options: .alignAllEdgesNearest).origin
+    }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        setFrameOrigin(frame.origin)
+        needsDisplay = true
+    }
+    /// A move to a screen with another scale redraws at the new one.
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        setFrameOrigin(frame.origin)
+        needsDisplay = true
+    }
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let (icon, iconColor) = look.icon
