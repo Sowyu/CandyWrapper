@@ -231,6 +231,26 @@ private func ids(_ p: ThreadProjection?) -> [String] { p?.visibleTurnItems.map(\
         #expect(flags.values == [false, true, false])
     }
 
+    /// A stream that fails midway keeps what it applied and passes the error on, so the session
+    /// can resubscribe after `lastSequence`.
+    @Test func consumeKeepsAppliedChunksAndRethrows() async throws {
+        struct Dropped: Error {}
+        let calls = Counter()
+        let store = ThreadStore(threadId: "thread-1") { calls.increment() }
+        let first: [ThreadStreamItem] = [snapshot(projection(), sequence: 1)]
+        let second: [ThreadStreamItem] = [.event(sequence: 2, event: event(.turnItemUpdated, .turnItem(message("a", ordinal: 1)))), .synchronized]
+        let chunks = AsyncThrowingStream<[ThreadStreamItem], Error> { c in
+            c.yield(first)
+            c.yield(second)
+            c.finish(throwing: Dropped())
+        }
+        await #expect(throws: Dropped.self) { try await store.consume(chunks: chunks) }
+        #expect(calls.value == 1)
+        let update = await store.takeUpdate()
+        #expect(ids(update?.projection) == ["a"] && update?.lastSequence == 2 && update?.status == .live)
+        #expect(await store.subscribeInput().afterSequence == 2)
+    }
+
     // MARK: Recorded streams
 
     @Test func replayingEventsReachesTheServersOwnSnapshot() throws {
