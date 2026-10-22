@@ -240,10 +240,65 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     override func insertText(_ string: Any, replacementRange: NSRange) {
         typedInsert = !clipboardEdit
         defer { typedInsert = false }
+        let range = replacementRange.location == NSNotFound ? (hasMarkedText() ? markedRange() : selectedRange()) : replacementRange
+        let opensPair = richTextEnabled && !hasMarkedText() && range.length == 0 && ((string as? String) ?? (string as? NSAttributedString)?.string) == "`"
+            && codePair(at: range.location - 1) == nil && typedPairCanOpen(before: range.location)
+        // Text typed inside a typed pair joins it; anywhere else it stays out.
+        if let id = codePair(at: range.location - 1), codePair(at: NSMaxRange(range)) == id { typingAttributes[.composerCodePair] = id }
+        else { typingAttributes[.composerCodePair] = nil }
         super.insertText(string, replacementRange: replacementRange)
+        if opensPair, let storage = textStorage {
+            let caret = selectedRange().location
+            guard caret >= 2, (storage.string as NSString).substring(with: NSRange(location: caret - 2, length: 2)) == "``" else { return }
+            nextCodePair += 1
+            storage.addAttribute(.composerCodePair, value: nextCodePair, range: NSRange(location: caret - 2, length: 2))
+        }
+    }
+
+    // MARK: Typed code pairs (`codePairCaretPlugin`, composer-rich-text-doc.ts:50-113, 7259e4f594)
+
+    private var nextCodePair = 0
+    /// Between a text change's start and its `textDidChange`: caret moves then are the edit's, not the user's.
+    private var textChanging = false
+
+    private func codePair(at index: Int) -> Int? {
+        guard let storage = textStorage, index >= 0, index < storage.length else { return nil }
+        return storage.attribute(.composerCodePair, at: index, effectiveRange: nil) as? Int
+    }
+
+    /// A second backtick right after a lone first one, in plain text outside code, records a pair.
+    private func typedPairCanOpen(before caret: Int) -> Bool {
+        guard let storage = textStorage, caret >= 1, caret <= storage.length else { return false }
+        let start = lineStart(caret)
+        let before = (storage.string as NSString).substring(with: NSRange(location: start, length: caret - start))
+        guard before.range(of: "(^|[^`])`$", options: .regularExpression) != nil else { return false }
+        let tick = caret - 1
+        return storage.attribute(.composerCodeBlock, at: tick, effectiveRange: nil) == nil
+            && ComposerRichTextStyler.marks(storage.attribute(.composerMarks, at: tick, effectiveRange: nil)).isEmpty
+    }
+
+    /// The caret moved, with no edit, to just after a typed pair's closing backtick: a filled, plain pair becomes
+    /// inline code and the caret types plain text after it. Doubled backticks on either side keep it literal.
+    private func formatCodePair(endingAt caret: Int) -> Bool {
+        guard let storage = textStorage, !textChanging, !isChipifying, undoManager?.isUndoing != true, undoManager?.isRedoing != true,
+              let id = codePair(at: caret - 1), codePair(at: caret) != id else { return false }
+        var pair = NSRange()
+        _ = storage.attribute(.composerCodePair, at: caret - 1, longestEffectiveRange: &pair, in: NSRange(location: 0, length: storage.length))
+        let text = storage.string as NSString
+        guard NSMaxRange(pair) == caret, pair.length >= 3, pair.location == 0 || text.character(at: pair.location - 1) != 96,
+              caret == text.length || text.character(at: caret) != 96,
+              text.substring(with: pair).range(of: "^`[^`\n]+`$", options: .regularExpression) != nil,
+              !storage.containsAttachments(in: pair), ComposerRichTextStyler.plain(storage, pair),
+              storage.attribute(.composerCodeBlock, at: pair.location, effectiveRange: nil) == nil else { return false }
+        let inner = NSRange(location: pair.location + 1, length: pair.length - 2)
+        let code = NSAttributedString(string: text.substring(with: inner), attributes: ComposerRichTextStyler.attributes([.code], base: baseAttributes))
+        replaceAttributed(pair, with: code, caret: pair.location + inner.length)
+        typingAttributes = caretAttributes([])
+        return true
     }
 
     func textDidChange(_ notification: Notification) {
+        textChanging = false
         if undoManager?.isUndoing == true || undoManager?.isRedoing == true { lastEditKind = "other" }
         if !isChipifying { editStamp += 1 }
         if !isChipifying, !hasMarkedText(), undoManager?.isUndoing != true, undoManager?.isRedoing != true {
@@ -419,6 +474,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         attributes[.composerChipSource] = nil
         attributes[.composerMarks] = nil
         attributes[.composerCodeBlock] = nil
+        attributes[.composerCodePair] = nil
         attributes[.backgroundColor] = nil
         attributes[.strikethroughStyle] = nil
         attributes[.font] = Self.font
@@ -607,6 +663,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         guard richTextEnabled, !stillSelecting, !hasMarkedText(), ranges.count == 1, ranges[0].rangeValue.length == 0,
               let storage = textStorage else { return }
         let caret = ranges[0].rangeValue.location, text = storage.string as NSString
+        if caret != old, formatCodePair(endingAt: caret) { return }
         let atLineStart = caret == 0 || text.character(at: caret - 1) == 10 || block(at: caret - 1) != nil
         let source = atLineStart ? caret : caret - 1
         // An empty line or item types plain text in the line's own style.
@@ -740,7 +797,9 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             if kind != lastEditKind || kind == "other" || now - lastEditAt > 1 { breakUndoCoalescing() }
             lastEditKind = kind; lastEditAt = now
         }
-        return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
+        let allowed = super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
+        if allowed { textChanging = true }
+        return allowed
     }
 
     private func listEdit(indent: Bool) -> Bool {

@@ -306,7 +306,8 @@ import Testing
         try pressReturn(editor)
         try pressReturn(editor)
         type(editor, "c")
-        #expect(storedDraft(editor) == "> a\n> b\nc")
+        // The draft writes a blank line before the paragraph after a quote (02e9d2417a).
+        #expect(editor.expandedText == "> a\n> b\n\nc")
         let middle = makeEditor()
         middle.setText(">  ab")
         placeCaret(middle, "b")
@@ -354,7 +355,7 @@ import Testing
 
     /// A character typed in a list item, quote or heading already looks rendered, so the
     /// keystroke edits one character and never restyles the whole draft (the M8 keystroke budget).
-    @Test(arguments: ["- one\n- two", "1. a\n   - b", "> q", "# Head", "text\n## Sub", "plain", "Steps\n- a", "> a\n> b", "- [ ] t", "a\n> q\nb\n- c"])
+    @Test(arguments: ["- one\n- two", "1. a\n   - b", "> q", "# Head", "text\n## Sub", "plain", "Steps\n- a", "> a\n> b", "- [ ] t", "a\n> q\n\nb\n- c"])
     func typedTextInABlockRendersToItself(_ value: String) {
         let editor = makeEditor()
         editor.setText(value)
