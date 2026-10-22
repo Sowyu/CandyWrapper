@@ -285,7 +285,8 @@ public final class ComposerView: DSView {
     private let scroll = NSScrollView()
     let placeholder = TextBlockView()
     private let validation = LabelView()
-    let attach = ButtonView(nil, icon: .paperclip, variant: .ghost, size: .iconSm)
+    /// Attach files; Redesign's "+", which the app turns into a menu.
+    public let attach = ButtonView(nil, icon: .paperclip, variant: .ghost, size: .iconSm)
     let primary = ComposerPrimaryButton()
     let compactPill = ComposerCompactPill()
     /// Dither: T3's first compact-before-send control (655dfbe8, ComposerPrimaryActions.tsx before 0647c481) instead

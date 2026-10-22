@@ -55,3 +55,19 @@ struct ComposerPickerWorkTests {
         #expect(models.prefix(9).allSatisfy { row in !previous.contains { $0 === row } })
     }
 }
+
+/// Redesign's model picker card shows only what the provider reported.
+@MainActor @Test func ditherProviderCardInfo() {
+    var p = ServerProvider(instanceId: "codex", driver: "codex", displayName: "Codex")
+    var info = DitherProviderCardInfo(ProviderCatalog([p]).entries[0])
+    #expect(info.email == nil && info.plan == nil && info.used == nil && info.statusText == "Connected")
+    p.auth = .object(["email": .string("a@example.com"), "label": .string("Pro")])
+    p.usageLimits = ProviderUsageLimits(checkedAt: "2026-10-22T00:00:00Z", windows: [
+        UsageLimitWindow(id: "s", kind: "session", label: "5h", usedPercent: 12.4),
+        UsageLimitWindow(id: "w", kind: "weekly", label: "Weekly", usedPercent: 21.2)])
+    p.status = .error
+    info = DitherProviderCardInfo(ProviderCatalog([p]).entries[0])
+    #expect(info.email == "a@example.com" && info.plan == "Pro")
+    #expect(info.used?.percent == 21 && info.used?.label == "Weekly")
+    #expect(info.statusText == "Not connected")
+}

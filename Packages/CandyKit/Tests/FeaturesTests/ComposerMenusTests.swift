@@ -116,6 +116,8 @@ struct ComposerMenusTests {
         #expect(ComposerMenus.threadItems(query: "", threads: threads, excluding: nil).isEmpty)
         #expect(ComposerMenus.threadItems(query: "LOGIN", threads: threads, excluding: "b").map(\.id) == ["thread:a"])
         #expect(ComposerMenus.threadItems(query: "login", threads: threads, excluding: nil).map(\.id) == ["thread:b", "thread:a"])
+        // Redesign's "+" > Threads: a bare `@` lists the newest unarchived threads.
+        #expect(ComposerMenus.threadItems(query: "", threads: threads, excluding: nil, browse: true).map(\.id) == ["thread:b", "thread:a"])
         let paths = ComposerMenus.pathItems([("src/app/Chat.tsx", false), ("README.md", false), ("src", true)])
         #expect(paths.map(\.label) == ["Chat.tsx", "README.md", "src"])
         #expect(paths.map(\.description) == ["src/app", "", ""])

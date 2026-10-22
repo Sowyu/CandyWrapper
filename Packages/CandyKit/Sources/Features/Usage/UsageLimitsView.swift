@@ -74,6 +74,8 @@ final class UsageRedactedTextView: ControlView {
         tip?.text = revealed ? hideTooltip : revealTooltip
         label.layer?.filters = revealed ? nil : [CIFilter(name: "CIGaussianBlur", parameters: [kCIInputRadiusKey: 2])].compactMap { $0 }
         invalidateIntrinsicContentSize()
+        // The real text and its scramble differ in width; a parent that lays out by hand follows.
+        superview?.needsLayout = true
     }
 
     override var intrinsicContentSize: NSSize { NSSize(width: ceil(label.textWidth) + 1, height: label.lineHeight ?? 16) }
