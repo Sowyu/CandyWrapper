@@ -162,7 +162,7 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
     }
 
     override func scrollWheel(with event: NSEvent) {
-        scrollOffset = min(max(0, scrollOffset - event.scrollingDeltaY), maxScroll)
+        scrollOffset = min(max(0, scrollOffset - event.scrollPointsY), maxScroll)
         needsLayout = true
     }
 
