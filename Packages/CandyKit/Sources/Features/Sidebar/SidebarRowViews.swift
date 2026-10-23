@@ -585,8 +585,6 @@ final class SidebarCardRowView: SidebarRowBase {
     private var showsSnooze = false
     private var hidForLift = false
     private var capyGroup: CapyHoverGroup?
-    /// The thread's bot while the Orchestrator is on (Redesign only), made on the first row that wears one.
-    private var botView: BotView?
     /// A menu from the row's own buttons is open, which keeps the actions and holds back the hover card.
     var rowMenuOpen: Bool { snoozeButton.state.popupOpen || capyGroup?.menuOpen == true }
     /// Working duration ticks with the list's timer.
@@ -647,8 +645,7 @@ final class SidebarCardRowView: SidebarRowBase {
         // Dither keeps the project icon at the row's lead, beside the title, and drops the provider glyph; under a
         // project section the header carries the icon.
         monogram.isHidden = r.projectTitle == nil && r.projectLabel == nil || r.inProjectSection
-        capyIcon.isHidden = !capyRow || !monogram.isHidden || r.inProjectSection || r.bot != nil
-        refreshBot(r)
+        capyIcon.isHidden = !capyRow || !monogram.isHidden || r.inProjectSection
         capyIcon.strokeColor = SB.c(\.sidebarMutedForeground)
         project.text = r.projectLabel ?? ""
         project.font = capyRow ? SB.font(11) : SB.font(12, r.recedes ? .regular : .medium)
@@ -763,26 +760,6 @@ final class SidebarCardRowView: SidebarRowBase {
     /// project, branch and badges on a small gray line.
     private var capyRow: Bool { row?.dither == true }
 
-    /// The bot at the row's lead, in the icon's place, with the thread's state on its face.
-    private func refreshBot(_ r: SidebarRowModel) {
-        guard capyRow, let identity = r.bot else { botView?.isHidden = true; return }
-        let bot = botView ?? {
-            let b = BotView(identity: identity, size: 18)
-            addSubview(b)
-            botView = b
-            return b
-        }()
-        bot.isHidden = false
-        bot.identity = identity
-        bot.mood = switch r.topStatus {
-        case .approval, .input: .needsYou
-        case .working, .waiting: .working
-        case .failed: .blocked
-        default: r.isUnread ? .unread(1) : .idle
-        }
-        if !monogram.isHidden { monogram.isHidden = true }
-    }
-
     private func refreshCapyGroup(_ r: SidebarRowModel, snoozes: Bool, visible: Bool) {
         let g = capyGroup ?? {
             let g = CapyHoverGroup()
@@ -884,9 +861,7 @@ final class SidebarCardRowView: SidebarRowBase {
         if capy {
             // Title beside the icon, before the status slot; the meta line under it starts with the project. In a
             // section the header carries the icon and the row sits flush with it.
-            let wearsBot = botView?.isHidden == false
-            let tx = row?.inProjectSection == true && !wearsBot ? left : left + 24
-            if wearsBot { botView?.frame = NSRect(x: left - 1, y: top + 1, width: 18, height: 18) }
+            let tx = row?.inProjectSection == true ? left : left + 24
             title.frame = NSRect(x: tx, y: top, width: max(0, slotRight - 6 - tx), height: 20)
             placeRenameField(row?.isRenaming == true ? renameField : nil, over: title,
                              frame: NSRect(x: tx, y: top - 1, width: max(0, right - tx), height: 22))
@@ -912,7 +887,7 @@ final class SidebarCardRowView: SidebarRowBase {
         if !terminal.isHidden { terminal.frame = NSRect(x: trailing - 6 - 14, y: y3 + 1, width: 14, height: 14); trailing -= 20 }
         var bx = left
         if capy {
-            bx = row?.inProjectSection == true && botView?.isHidden != false ? left : left + 24
+            bx = row?.inProjectSection == true ? left : left + 24
             // The project icon names the project; the meta line spells it out only when there is no branch to show.
             let showsProject = !project.text.isEmpty && branch.text.isEmpty && row?.inProjectSection != true
             project.isHidden = !showsProject

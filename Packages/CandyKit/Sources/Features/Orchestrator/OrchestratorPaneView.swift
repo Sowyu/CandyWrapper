@@ -3,19 +3,20 @@ import DesignSystem
 import T3Protocol
 import T3Store
 
-/// A thread under the Orchestrator, as an Overview card. Built from server events only, so it costs no tokens.
+/// A thread under the Orchestrator, as an Overview card. Built from server events only, so it costs no tokens. Threads
+/// never get a bot: the card carries the sidebar's own status icon.
 public struct OrchestratorCrewCard: Equatable {
     public var id: ThreadId
     public var title: String
     public var project: String
     public var state: String
-    public var mood: BotMood
-    public var bot: BotIdentity
+    /// The sidebar's top status, nil when idle.
+    public var status: SidebarTopStatus?
     public var lastLine: String?
     /// "Hands off", or "You wrote 3 min ago, it asks first".
     public var note: String?
-    public init(id: ThreadId, title: String, project: String, state: String, mood: BotMood, bot: BotIdentity, lastLine: String?, note: String?) {
-        self.id = id; self.title = title; self.project = project; self.state = state; self.mood = mood; self.bot = bot
+    public init(id: ThreadId, title: String, project: String, state: String, status: SidebarTopStatus?, lastLine: String?, note: String?) {
+        self.id = id; self.title = title; self.project = project; self.state = state; self.status = status
         self.lastLine = lastLine; self.note = note
     }
 }
@@ -28,10 +29,9 @@ public struct OrchestratorNeed: Equatable {
     public var label: String
     /// Approvals get Allow and Deny through T3's own `runtime-request.respond`; questions open their thread.
     public var isApproval: Bool
-    public var bot: BotIdentity
-    public init(threadId: ThreadId, threadTitle: String, requestId: String, label: String, isApproval: Bool, bot: BotIdentity) {
+    public init(threadId: ThreadId, threadTitle: String, requestId: String, label: String, isApproval: Bool) {
         self.threadId = threadId; self.threadTitle = threadTitle; self.requestId = requestId; self.label = label
-        self.isApproval = isApproval; self.bot = bot
+        self.isApproval = isApproval
     }
 }
 
@@ -592,7 +592,7 @@ final class OrchestratorPlanCard: DSView, SettingsGroupRow {
     func set(_ steps: [OrchestratorReply.PlanStep], environmentId: String) {
         rows.forEach { $0.removeFromSuperview() }
         rows = steps.map { s in
-            let r = OrchestratorPlanStepRow(s, bot: s.threadId.map { BotIdentity.forThread(ThreadId($0).scoped(to: environmentId).rawValue) })
+            let r = OrchestratorPlanStepRow(s)
             r.onOpen = { [weak self] in if let t = s.threadId { self?.onOpen?(t) } }
             addSubview(r)
             return r
@@ -621,17 +621,14 @@ final class OrchestratorPlanCard: DSView, SettingsGroupRow {
 }
 
 final class OrchestratorPlanStepRow: ControlView {
-    private let mark = IconView(name: .circle, size: 14)
     private let label = TextBlockView()
-    private let bot: BotView?
+    private let link = IconView(name: .arrowUpRight, size: 12)
     let step: OrchestratorReply.PlanStep
     var onOpen: (() -> Void)?
 
-    init(_ step: OrchestratorReply.PlanStep, bot identity: BotIdentity?) {
+    init(_ step: OrchestratorReply.PlanStep) {
         self.step = step
-        bot = identity.map { BotView(identity: $0, size: 16) }
         super.init(frame: .zero)
-        mark.removeFromSuperview()
         let icon = IconView(name: step.done ? .circleCheck : .circle, size: 14)
         icon.strokeColor = step.done ? Themed.color(\.primary) : Themed.color(\.mutedForeground)
         addSubview(icon)
@@ -641,21 +638,22 @@ final class OrchestratorPlanStepRow: ControlView {
         label.lineHeight = 18
         label.color = step.done ? Themed.color(\.mutedForeground) : Themed.color(\.foreground)
         addSubview(label)
-        bot.map(addSubview)
+        link.strokeColor = Themed.color(\.mutedForeground)
+        link.isHidden = step.threadId == nil
+        addSubview(link)
         action = { [weak self] in self?.onOpen?() }
         isEnabled = step.threadId != nil
         setAccessibilityLabel("\(step.done ? "Done: " : "")\(label.text)")
     }
     private var markView: IconView?
 
-    func height(forWidth width: CGFloat) -> CGFloat { max(22, label.height(forWidth: width - 22 - (bot == nil ? 0 : 22)) + 4) }
+    func height(forWidth width: CGFloat) -> CGFloat { max(22, label.height(forWidth: width - 22 - 18) + 4) }
 
     override func layout() {
         super.layout()
         markView?.frame = NSRect(x: 0, y: 3, width: 14, height: 14)
-        let right: CGFloat = bot == nil ? 0 : 22
-        label.frame = NSRect(x: 22, y: 1, width: bounds.width - 22 - right, height: bounds.height - 2)
-        bot?.frame = NSRect(x: bounds.width - 18, y: 1, width: 16, height: 16)
+        label.frame = NSRect(x: 22, y: 1, width: bounds.width - 22 - 18, height: bounds.height - 2)
+        link.frame = NSRect(x: bounds.width - 14, y: 4, width: 12, height: 12)
     }
 
     override func stateDidChange(from old: State) {
@@ -804,7 +802,7 @@ final class OrchestratorNeedsCard: DSView, SettingsGroupRow {
 
 final class OrchestratorNeedRow: DSView {
     static let height: CGFloat = 48
-    private let bot: BotView
+    private let icon: IconView
     private let thread = LabelView("", font: DSFont.ui(13, weight: .medium), color: Themed.color(\.foreground))
     private let kind = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private let deny = ButtonView("Deny", variant: .outline, size: .xs)
@@ -814,14 +812,16 @@ final class OrchestratorNeedRow: DSView {
     var onOpen: (() -> Void)?
 
     init(_ need: OrchestratorNeed) {
-        bot = BotView(identity: need.bot, size: 22)
+        // The sidebar's own Approval and Input marks; threads never get a bot.
+        let status: SidebarTopStatus = need.isApproval ? .approval : .input
+        icon = IconView(name: SB.statusIcon(status) ?? .circleAlert, size: 16)
+        icon.strokeColor = SB.status(status)
         super.init(frame: .zero)
-        bot.mood = .needsYou
         thread.text = need.threadTitle
         thread.lineHeight = 18
         kind.text = need.label
         kind.lineHeight = 16
-        for v in [bot, thread, kind, deny, allow, open] as [NSView] { addSubview(v) }
+        for v in [icon, thread, kind, deny, allow, open] as [NSView] { addSubview(v) }
         deny.isHidden = !need.isApproval
         allow.isHidden = !need.isApproval
         deny.action = { [weak self] in self?.answered(.decline) }
@@ -838,7 +838,7 @@ final class OrchestratorNeedRow: DSView {
 
     override func layout() {
         super.layout()
-        bot.frame = NSRect(x: 12, y: 13, width: 22, height: 22)
+        icon.frame = NSRect(x: 15, y: 16, width: 16, height: 16)
         var right = bounds.width - 12
         for b in [allow, deny, open] where !b.isHidden {
             let w = b.intrinsicContentSize.width
@@ -921,16 +921,17 @@ final class OrchestratorOverviewView: DSView {
 
 final class OrchestratorCrewCardView: ControlView {
     static let height: CGFloat = 104
-    private let bot: BotView
+    private let icon: IconView?
     private let title = LabelView("", font: DSFont.ui(13, weight: .medium), color: Themed.color(\.foreground))
     private let meta = LabelView("", font: DSFont.ui(11), color: Themed.color(\.mutedForeground))
     private let last = TextBlockView()
     private let note = LabelView("", font: DSFont.ui(11, weight: .medium), color: Themed.color(\.warning))
 
     init(_ card: OrchestratorCrewCard) {
-        bot = BotView(identity: card.bot, size: 32)
+        // The sidebar's own status mark; threads never get a bot.
+        icon = card.status.flatMap { s in SB.statusIcon(s).map { IconView(name: $0, size: 16) } }
+        icon?.strokeColor = card.status.map { SB.status($0) } ?? Themed.color(\.mutedForeground)
         super.init(frame: .zero)
-        bot.mood = card.mood
         title.text = card.title
         title.lineHeight = 18
         meta.text = [card.project, card.state].filter { !$0.isEmpty }.joined(separator: " · ")
@@ -942,16 +943,18 @@ final class OrchestratorCrewCardView: ControlView {
         last.maxLines = 2
         note.text = card.note ?? ""
         note.lineHeight = 14
-        for v in [bot, title, meta, last, note] as [NSView] { addSubview(v) }
+        for v in [title, meta, last, note] as [NSView] { addSubview(v) }
+        icon.map(addSubview)
         setAccessibilityLabel("\(card.title), \(card.state)")
     }
 
     override func layout() {
         super.layout()
         let w = bounds.width
-        bot.frame = NSRect(x: 12, y: 12, width: 32, height: 32)
-        title.frame = NSRect(x: 52, y: 12, width: w - 64, height: 18)
-        meta.frame = NSRect(x: 52, y: 31, width: w - 64, height: 14)
+        let x: CGFloat = icon == nil ? 12 : 36
+        icon?.frame = NSRect(x: 12, y: 13, width: 16, height: 16)
+        title.frame = NSRect(x: x, y: 12, width: w - x - 12, height: 18)
+        meta.frame = NSRect(x: x, y: 31, width: w - x - 12, height: 14)
         last.frame = NSRect(x: 12, y: 52, width: w - 24, height: 32)
         note.frame = NSRect(x: 12, y: 84, width: w - 24, height: 14)
     }
