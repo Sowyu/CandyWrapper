@@ -8,13 +8,16 @@ enum WorkImage: Hashable {
     /// A tool's output image (`ToolOutput`, V2ItemInspector.tsx:149-158), alt "Tool output image".
     case toolOutput(ToolOutputImage)
     /// The host file a read viewed (`resolveViewedImageAsset`, presentation.ts:501-523), a `media-file`.
-    case file(String, workspaceRoot: String?)
+    /// `kept` names the tool item, whose copy CandyWrapper kept (`AgentImageCache`) loads once the file is gone.
+    case file(String, workspaceRoot: String?, kept: KeptItem? = nil)
+
+    struct KeptItem: Hashable { var thread: ThreadId; var item: TurnItemId }
 
     /// The cache key: a file shares its measured size with Markdown images of the same path.
     var key: String {
         switch self {
         case .toolOutput(let image): image.key
-        case .file(let path, _): MarkdownImageSource.workspaceFile(path).key
+        case .file(let path, _, _): MarkdownImageSource.workspaceFile(path).key
         }
     }
 
@@ -22,14 +25,14 @@ enum WorkImage: Hashable {
     var alt: String {
         switch self {
         case .toolOutput: "Tool output image"
-        case .file(let path, _): (path as NSString).lastPathComponent
+        case .file(let path, _, _): (path as NSString).lastPathComponent
         }
     }
 
     var reference: MediaReference? {
         switch self {
         case .toolOutput: nil
-        case .file(let path, let root): MediaReference.file(path, workspaceRoot: root)
+        case .file(let path, let root, _): MediaReference.file(path, workspaceRoot: root)
         }
     }
 
@@ -38,7 +41,7 @@ enum WorkImage: Hashable {
     var loader: AsyncImageView.Loader {
         switch self {
         case .toolOutput(let image): MarkdownImages.assetLoader(key: image.key, resource: image.resource)
-        case .file(let path, _): MarkdownImages.loader(.workspaceFile(path))
+        case .file(let path, _, let kept): MarkdownImages.viewedLoader(path, thread: kept?.thread, item: kept?.item)
         }
     }
 }
@@ -133,7 +136,7 @@ struct WorkDetail: Hashable {
         if let path = WorkLog.viewedImagePath(e), case .workspaceFile(let file) = MarkdownImageSource.classify(path, workspaceRoot: workspaceRoot),
            !d.showsImageOutput(output), !MarkdownImages.failed.contains(MarkdownImageSource.workspaceFile(file).key) {
             if !d.blocks.isEmpty { d.blocks[0].gap = 2 }
-            d.blocks.insert(Block(text: "", kind: .image(.file(file, workspaceRoot: workspaceRoot)), gap: 2), at: 0)
+            d.blocks.insert(Block(text: "", kind: .image(.file(file, workspaceRoot: workspaceRoot, kept: e.projectedItem.map { .init(thread: $0.sourceThreadId, item: $0.sourceItemId) })), gap: 2), at: 0)
         }
         return d
     }

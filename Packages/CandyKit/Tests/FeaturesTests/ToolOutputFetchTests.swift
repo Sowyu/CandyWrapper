@@ -150,7 +150,8 @@ struct ToolOutputFetchTests {
         func kinds(_ output: ToolOutputState?) -> [WorkDetail.Kind] {
             WorkDetail.of(e, label: "Read", workspaceRoot: root, output: output).blocks.map(\.kind)
         }
-        let file = WorkDetail.Kind.image(.file(path, workspaceRoot: root))
+        // The row names its item, whose kept copy loads once the file is gone.
+        let file = WorkDetail.Kind.image(.file(path, workspaceRoot: root, kept: .init(thread: row.sourceThreadId, item: row.sourceItemId)))
         let result = WorkDetail.Kind.image(.toolOutput(.init(threadId: row.sourceThreadId, itemId: row.sourceItemId, index: 0)))
         // Closed or loading: nothing fetches the file while the result may still carry the image.
         #expect(!kinds(nil).contains(file))

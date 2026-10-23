@@ -26,7 +26,8 @@ struct ThreadImageGalleryTests {
     }
 
     static func viewed(_ id: String, _ path: String, at: String, thread: String = "t") throws -> ProjectedTurnItem {
-        try item(id, thread: thread, at: at, extra: ["viewedImagePath": .string(path)])
+        // The wire's shape for a dynamic tool: its output left out (WireProjection.ts:126-134).
+        try item(id, thread: thread, at: at, extra: ["viewedImagePath": .string(path), "outputOmitted": .bool(true)])
     }
 
     @Test func collectsViewedImagesToolOutputsAndReplyImages() throws {
@@ -87,6 +88,128 @@ struct ThreadImageGalleryTests {
 
     @Test func markdownImagesReadAngleBracketsAndTitles() {
         #expect(ThreadImageGallery.markdownImages(#"![a](<shots/x.png>) ![b](/y.png "t") [link](z.png)"#) == ["shots/x.png", "/y.png"])
+    }
+
+    // MARK: Images that outlive their files
+
+    /// The server's stored copy first, then our kept copy, then the file itself. A reply's URL has only itself.
+    @Test func loadOrderPrefersTheServerThenOurCopyThenTheFile() {
+        var image = GalleryImage(source: .file("/tmp/shot.png"), threadId: "t", agent: "Main", entryId: "a", at: "2026-10-23T10:00:00Z", itemId: "a")
+        #expect(image.attempts == [.kept(thread: "t", item: "a"), .source])
+        image.stored = ToolOutputImage(threadId: "t", itemId: "a", index: 0)
+        #expect(image.attempts == [.stored(ToolOutputImage(threadId: "t", itemId: "a", index: 0)), .kept(thread: "t", item: "a"), .source])
+        let url = GalleryImage(source: .url("https://x.test/c.png"), threadId: "t", agent: "Main", entryId: "m", at: "2026-10-23T10:00:00Z")
+        #expect(url.attempts == [.source])
+    }
+
+    /// Dynamic tools arrive with `outputOmitted` and no image blocks, so items that viewed an image or look like captures
+    /// become candidates; the server's count then gives the viewed image its stored copy and adds the rest as tiles.
+    @Test func storedOutputImagesJoinTheirItems() throws {
+        let p = try Self.projection("t", items: [
+            try Self.viewed("a", "/tmp/shot.png", at: "2026-10-23T10:00:00Z"),
+            try Self.item("b", at: "2026-10-23T10:01:00Z", extra: ["toolName": .string("browser_take_screenshot"), "outputOmitted": .bool(true)]),
+            try Self.item("c", at: "2026-10-23T10:02:00Z", extra: ["toolName": .string("Bash"), "outputOmitted": .bool(true)]),
+        ])
+        let collected = ThreadImageGallery.collect(p, agent: "Main")
+        #expect(collected.candidates.map(\.itemId) == ["a", "b"])
+        let images = ThreadImageGallery.assemble(collected, counts: ["t|a": 2, "t|b": 1], hashes: ["t|a": "abc"])
+        #expect(images.map(\.key) == ["media-file:/tmp/shot.png", "tool-output-image:t:a:1", "tool-output-image:t:b:0"])
+        #expect(images[0].stored == ToolOutputImage(threadId: "t", itemId: "a", index: 0))
+        #expect(images[0].contentHash == "abc")
+        // Before the counts arrive there is only the viewed file.
+        #expect(ThreadImageGallery.assemble(collected, counts: [:], hashes: [:]).count == 1)
+    }
+
+    @Test func sameContentAtTwoPathsIsOneTile() {
+        var a = GalleryImage(source: .file("/tmp/a.png"), threadId: "t", agent: "Main", entryId: "a", at: "2026-10-23T10:00:00Z", itemId: "a")
+        var b = GalleryImage(source: .file("/tmp/b.png"), threadId: "t", agent: "Main", entryId: "b", at: "2026-10-23T10:05:00Z", itemId: "b")
+        a.contentHash = "same"; b.contentHash = "same"
+        #expect(ThreadImageGallery.merge([[a, b]]).map(\.entryId) == ["b"])
+        // The same path with new content, an overwritten screenshot, keeps both views.
+        var c = b; c.entryId = "c"; c.contentHash = "other"; c.source = .file("/tmp/a.png")
+        #expect(ThreadImageGallery.merge([[a, c]]).count == 2)
+    }
+
+    @Test func keptCopiesShareOneFilePerContentAndSurviveARelaunch() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("agent-images-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let png = Data([0x89, 0x50, 0x4E, 0x47]) + Data(repeating: 7, count: 100)
+        let cache = AgentImageCache(root: root)
+        let one = await cache.store(env: "local", thread: "t", item: "a", data: png, ext: "png")
+        let two = await cache.store(env: "local", thread: "t", item: "b", data: png, ext: "png")
+        #expect(one == two)
+        let files = try FileManager.default.contentsOfDirectory(atPath: root.appendingPathComponent("local").path)
+        #expect(files == ["\(one.hash).png"])
+        // A relaunch reads the index back.
+        let again = AgentImageCache(root: root)
+        #expect(await again.entries(env: "local", thread: "t") == ["a": one, "b": one])
+        #expect(await again.url(env: "local", thread: "t", item: "a")?.lastPathComponent == "\(one.hash).png")
+        // Capturing a file copies it; a missing file keeps nothing.
+        let source = root.appendingPathComponent("shot.png")
+        try (png + Data([1])).write(to: source)
+        #expect(await again.capture(env: "local", thread: "t", item: "c", file: source) != nil)
+        try FileManager.default.removeItem(at: source)
+        #expect(await again.capture(env: "local", thread: "t", item: "d", file: source) == nil)
+        #expect(await again.url(env: "local", thread: "t", item: "c") != nil)
+    }
+
+    @Test func keptCopiesDropLeastRecentlyViewedOverTheCapAndWithTheirThread() async {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("agent-images-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        nonisolated(unsafe) var clock = 0.0
+        let cache = AgentImageCache(root: root, capBytes: 250, now: { clock })
+        for (i, item) in ["a", "b"].enumerated() {
+            clock = Double(i)
+            await cache.store(env: "local", thread: "t", item: item, data: Data(repeating: UInt8(i), count: 100), ext: "png")
+        }
+        clock = 5
+        _ = await cache.url(env: "local", thread: "t", item: "a") // a is now the most recent
+        clock = 6
+        await cache.store(env: "local", thread: "u", item: "c", data: Data(repeating: 9, count: 100), ext: "png")
+        #expect(await cache.entries(env: "local", thread: "t").keys.sorted() == ["a"])
+        await cache.keepOnly(env: "local", threads: ["u"])
+        #expect(await cache.entries(env: "local", thread: "t").isEmpty)
+        #expect(await cache.entries(env: "local", thread: "u").keys.sorted() == ["c"])
+        #expect(await cache.url(env: "local", thread: "u", item: "c") != nil)
+    }
+
+    @Test func missingTilesHideBehindTheToggle() {
+        let images = (0..<3).map { GalleryImage(source: .file("/tmp/\($0).png"), threadId: "t", agent: "Main", entryId: "e\($0)", at: "2026-10-23T10:00:00Z", itemId: TurnItemId("e\($0)")) }
+        let missing: Set<String> = [images[0].pixelKey, images[2].pixelKey]
+        #expect(ThreadImageGallery.visible(images, missing: missing, showMissing: false).map(\.entryId) == ["e1"])
+        #expect(ThreadImageGallery.visible(images, missing: missing, showMissing: true).count == 3)
+        #expect(ThreadImageGallery.countLabel(total: 53, missing: 41) == "53 · 41 missing")
+        #expect(ThreadImageGallery.countLabel(total: 3, missing: 0) == "3")
+        let view = ThreadImageGalleryView()
+        view.apply(images: images, missing: missing, showMissing: false)
+        #expect(view.images.map(\.entryId) == ["e1"])
+        view.apply(images: images, missing: missing, showMissing: true)
+        #expect(view.images.count == 3)
+    }
+
+    /// A file gone before we kept it, which the server didn't keep, is missing once the lookups answer; a file kept
+    /// earlier, or whose item the server kept, is not.
+    @Test func controllerCallsOnlyUnrecoverableImagesMissing() async throws {
+        let pill = DitherHeaderPillView()
+        let gallery = ThreadImageGalleryController(pill: pill)
+        gallery.fileExists = { _ in false }
+        gallery.keptHashes = { _ in ["kept": "h1"] }
+        gallery.storedCount = { _, item in item == "served" ? 1 : 0 }
+        gallery.keep = { _ in nil }
+        let p = try Self.projection("t", items: [
+            try Self.viewed("gone", "/tmp/gone.png", at: "2026-10-23T10:00:00Z"),
+            try Self.viewed("kept", "/tmp/kept.png", at: "2026-10-23T10:01:00Z"),
+            try Self.viewed("served", "/tmp/served.png", at: "2026-10-23T10:02:00Z"),
+        ])
+        gallery.update(threadId: "t", projection: p)
+        // Nothing is missing until the lookups answer.
+        #expect(gallery.missing.isEmpty)
+        for _ in 0..<100 where gallery.missing.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        let missing = gallery.images.filter { gallery.missing.contains($0.pixelKey) }.map(\.entryId)
+        #expect(missing == ["gone"])
+        #expect(gallery.images.first { $0.entryId == "served" }?.stored != nil)
+        #expect(gallery.images.first { $0.entryId == "kept" }?.contentHash == "h1")
+        #expect(pill.galleryCount == 3)
     }
 
     // MARK: Offscreen renders for review, written only with GALLERY_SNAPSHOTS=<dir>.
@@ -171,5 +294,15 @@ struct ThreadImageGalleryTests {
         await Self.pump { picture.loadedSide > 0 }
         Self.save(root, "progress-03-large-offscreen.png", dir: dir)
         #expect(gallery.handleKey(.escape))
+
+        // Missing tiles: hidden behind the header's toggle, and the honest empty state when nothing is left.
+        let fake = gallery.images
+        gallery.apply(images: fake, missing: Set(fake.prefix(7).map(\.pixelKey)), showMissing: false)
+        root.layoutSubtreeIfNeeded()
+        await Self.pump { cells().allSatisfy { ($0.subviews.first as? AsyncImageView)?.image != nil } }
+        Self.save(root, "persist-01-missing-header-offscreen.png", dir: dir)
+        gallery.apply(images: fake, missing: Set(fake.map(\.pixelKey)), showMissing: false)
+        root.layoutSubtreeIfNeeded()
+        Self.save(root, "persist-02-all-missing-offscreen.png", dir: dir)
     }
 }
