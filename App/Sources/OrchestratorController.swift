@@ -131,11 +131,12 @@ final class OrchestratorController {
         let needs = currentNeeds()
         let working = orchestratorShell.map { OrchestratorEvent.running.contains($0.status) } ?? false
         sidebar.orchestrator = OrchestratorSidebarInfo(name: config.displayName, machine: machineLabel,
-                                                       machineKind: env.flatMap { environments.machine($0) } ?? "laptop", bot: .orchestrator, needsYou: needs.count,
+                                                       machineKind: env.flatMap { environments.machine($0) } ?? "laptop", bot: config.bot, needsYou: needs.count,
                                                        working: working, started: machine != nil, isOpen: pane != nil)
         guard let pane else { return }
         var state = OrchestratorPaneState()
         state.name = config.displayName
+        state.bot = config.bot
         state.machine = machineLabel
         state.environmentId = env ?? ""
         state.started = machine != nil
@@ -162,6 +163,7 @@ final class OrchestratorController {
             p.onUndoMemory = { [weak self] id in self?.undoMemory(id) }
             p.onStart = { [weak self] in self?.start() }
             p.onOpenAsThread = { [weak self] in if let id = self?.threadId { self?.sidebar?.actions.openThread(id) } }
+            p.onEditBot = { [weak self] in self?.openSettings() }
             pane = p
             return p
         }()
@@ -184,6 +186,8 @@ final class OrchestratorController {
 
     /// Gives the main area back to the thread view; set by the app.
     var closePane: () -> Void = {}
+    /// Opens Settings > Orchestrator; set by the app.
+    var openSettings: () -> Void = {}
 
     private func startFeed() {
         guard let id = threadId, let env = id.environmentId, let session = environments.session(env) else { return }

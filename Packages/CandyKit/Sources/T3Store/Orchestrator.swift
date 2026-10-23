@@ -92,12 +92,15 @@ public struct OrchestratorConfig: Codable, Hashable, Sendable {
     public var machines: [String: OrchestratorMachine] = [:]
     /// Assistant messages whose memory blocks were saved already, newest last, so a reload saves nothing twice.
     public var savedMemoryMessages: [String] = []
+    /// Its bot's shape and colour (`BotShape` and `BotColor` raw values); nil is the default flower in violet.
+    public var botShape: Int?
+    public var botColor: Int?
 
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
         case enabled, name, prompt, environmentId, homeProjectId, crewLimit, models, notebook, closedCheckMinutes, askFirstMinutes
-        case handsOff, machines, savedMemoryMessages
+        case handsOff, machines, savedMemoryMessages, botShape, botColor
     }
 
     /// Missing keys keep their defaults, so a newer field never wipes the rest.
@@ -117,6 +120,8 @@ public struct OrchestratorConfig: Codable, Hashable, Sendable {
         handsOff = try c.decodeIfPresent(Set<String>.self, forKey: .handsOff) ?? []
         machines = try c.decodeIfPresent([String: OrchestratorMachine].self, forKey: .machines) ?? [:]
         savedMemoryMessages = try c.decodeIfPresent([String].self, forKey: .savedMemoryMessages) ?? []
+        botShape = try c.decodeIfPresent(Int.self, forKey: .botShape)
+        botColor = try c.decodeIfPresent(Int.self, forKey: .botColor)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -134,6 +139,8 @@ public struct OrchestratorConfig: Codable, Hashable, Sendable {
         try c.encode(handsOff, forKey: .handsOff)
         try c.encode(machines, forKey: .machines)
         try c.encode(savedMemoryMessages, forKey: .savedMemoryMessages)
+        try c.encodeIfPresent(botShape, forKey: .botShape)
+        try c.encodeIfPresent(botColor, forKey: .botColor)
     }
 
     static let defaultName = "Orchestrator"

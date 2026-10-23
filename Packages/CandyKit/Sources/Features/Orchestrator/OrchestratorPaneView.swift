@@ -63,9 +63,12 @@ public final class OrchestratorPaneView: DSView {
     public var onStart: (() -> Void)?
     /// Opens the Orchestrator's thread in the normal thread view.
     public var onOpenAsThread: (() -> Void)?
+    /// A click on its bot: Settings > Orchestrator, where its shape and colour change.
+    public var onEditBot: (() -> Void)?
     public var onEscape: (() -> Void)?
 
     private let headerBot = BotView(identity: .orchestrator, size: 30)
+    private let headerBotButton = ControlView()
     private let title = LabelView("", font: DSFont.ui(15, weight: .semibold), color: Themed.color(\.foreground))
     private let subtitle = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private let tabs = ToggleGroupView(variant: .segmented, items: [("Chat", nil), ("Overview", nil)], selected: 0)
@@ -83,6 +86,10 @@ public final class OrchestratorPaneView: DSView {
     public override init(frame: NSRect) {
         super.init(frame: frame)
         for v in [headerBot, title, subtitle, tabs, openThread, chatScroll, overviewScroll, composer, start] as [NSView] { addSubview(v) }
+        addSubview(headerBotButton)
+        headerBotButton.setAccessibilityLabel("Change the Orchestrator's look")
+        headerBotButton.toolTip = "Change its shape and colour"
+        headerBotButton.action = { [weak self] in self?.onEditBot?() }
         divider.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull()]
         layer?.addSublayer(divider)
         for s in [chatScroll, overviewScroll] {
@@ -131,6 +138,8 @@ public final class OrchestratorPaneView: DSView {
         start.isHidden = next.started
         composer.isHidden = !next.started || showsOverview
         composer.isEnabled = next.connected
+        // Before the items, so new stacks get the picked bot.
+        if old.bot != next.bot { chat.setAvatarIdentity(next.bot) }
         if old.items != next.items || old.undoable != next.undoable || old.undone != next.undone || old.needs != next.needs
             || old.environmentId != next.environmentId || old.name != next.name {
             chat.set(items: next.items, needs: next.needs, undoable: next.undoable, undone: next.undone, environmentId: next.environmentId,
@@ -165,8 +174,10 @@ public final class OrchestratorPaneView: DSView {
     public override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
-        let top: CGFloat = 52
+        // The main area already starts under Redesign's tab band, so the header sits at the top.
+        let top: CGFloat = 0
         headerBot.frame = NSRect(x: 20, y: top + 6, width: 30, height: 30)
+        headerBotButton.frame = headerBot.frame.insetBy(dx: -4, dy: -4)
         let tw = tabs.intrinsicContentSize.width
         tabs.frame = NSRect(x: (w - tw) / 2, y: top + 8, width: tw, height: 28)
         let ow = openThread.intrinsicContentSize.width
@@ -265,7 +276,7 @@ final class OrchestratorChatView: DSView {
         var nextAvatars: [String: BotView] = [:]
         for item in items {
             guard case .bubble(let id, false, _, _, true) = item else { continue }
-            let bot = avatars[id] ?? BotView(identity: .orchestrator, size: 26)
+            let bot = avatars[id] ?? BotView(identity: avatarIdentity, size: 26)
             if bot.superview !== self { addSubview(bot) }
             nextAvatars[id] = bot
         }
@@ -300,7 +311,13 @@ final class OrchestratorChatView: DSView {
         relayout()
     }
 
-    func setAvatarIdentity(_ identity: BotIdentity) { avatars.values.forEach { $0.identity = identity } }
+    /// The Orchestrator's bot under its stacks.
+    private var avatarIdentity = BotIdentity.orchestrator
+
+    func setAvatarIdentity(_ identity: BotIdentity) {
+        avatarIdentity = identity
+        avatars.values.forEach { $0.identity = identity }
+    }
 
     private func relayout() {
         needsLayout = true
@@ -1010,6 +1027,8 @@ final class OrchestratorComposerView: DSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         field.bare = true
+        // One line tall until you write more, so the round send button sits centred beside it.
+        field.bareMinHeight = 32
         field.setAccessibilityLabel("Message the Orchestrator")
         addSubview(field)
         addSubview(send)
@@ -1038,16 +1057,19 @@ final class OrchestratorComposerView: DSView {
         superview?.needsLayout = true
     }
 
+    static let minHeight: CGFloat = 40
+
     func height(forWidth width: CGFloat) -> CGFloat {
-        field.setFrameSize(NSSize(width: width - 16 - 40, height: field.frame.height))
-        return max(40, min(200, field.intrinsicContentSize.height) + 8)
+        field.setFrameSize(NSSize(width: width - 14 - 44, height: field.frame.height))
+        return max(Self.minHeight, min(200, field.intrinsicContentSize.height) + 8)
     }
 
     override func layout() {
         super.layout()
         let fh = min(200, field.intrinsicContentSize.height)
         field.frame = NSRect(x: 14, y: (bounds.height - fh) / 2, width: bounds.width - 14 - 44, height: fh)
-        send.frame = NSRect(x: bounds.width - 6 - 28, y: bounds.height - 6 - 28, width: 28, height: 28)
+        // Centred in a one-line field; with more lines it stays level with the last one, as in Messages.
+        send.frame = NSRect(x: bounds.width - 6 - 28, y: bounds.height - (Self.minHeight + 28) / 2, width: 28, height: 28)
     }
 
     override var wantsUpdateLayer: Bool { true }

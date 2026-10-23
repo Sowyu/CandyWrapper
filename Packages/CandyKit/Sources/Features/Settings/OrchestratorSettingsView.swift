@@ -92,7 +92,14 @@ public final class OrchestratorSettingsView: SettingsPageBase {
         let closed = choiceRow("While closed", "A scheduled task on its machine wakes it to check every thread. It's off while CandyWrapper is open.",
                                labels: ["Off", "Every 15 minutes", "Every 30 minutes", "Every hour", "Every 2 hours"],
                                read: { c in closedChoices.firstIndex { $0 == c.closedCheckMinutes } }, write: { c, i in c.closedCheckMinutes = closedChoices[i] })
-        return section(nil, "Orchestrator", [nameRow, status, machineRow, projectRow, crew, ask, closed])
+        let picker = OrchestratorBotPicker()
+        picker.onPick = { [weak self] identity in
+            self?.store.update { $0.botShape = identity.shape.rawValue; $0.botColor = identity.color.rawValue }
+        }
+        binder.add { [weak self, weak picker] in if let self { picker?.identity = self.config.bot } }
+        let lookRow = row(nil, title: "Look", detail: "Its bot's shape and colour, in the sidebar and its chat. The pumpkin is always orange.")
+        lookRow.footer = picker
+        return section(nil, "Orchestrator", [nameRow, lookRow, status, machineRow, projectRow, crew, ask, closed])
     }
 
     private func choiceRow(_ title: String, _ detail: String, labels: [String], read: @escaping (OrchestratorConfig) -> Int?,
@@ -503,5 +510,124 @@ final class OrchestratorModelForm: DSView {
             r.view.frame = NSRect(x: 0, y: y, width: bounds.width, height: r.height)
             y += r.height + 16
         }
+    }
+}
+
+/// The Orchestrator's look, after Grok Bot's "Create New Bot" sheet: a big preview, then every shape in the current
+/// colour, then the colour dots.
+final class OrchestratorBotPicker: DSView, SettingsGroupRow {
+    var identity = BotIdentity.orchestrator { didSet { if identity != oldValue { refresh() } } }
+    var onPick: ((BotIdentity) -> Void)?
+    private let preview = BotView(identity: .orchestrator, size: 72)
+    private var shapes: [OrchestratorBotCell] = []
+    private var colors: [OrchestratorColorDot] = []
+    static let cell: CGFloat = 36, dot: CGFloat = 22, gap: CGFloat = 6
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        addSubview(preview)
+        shapes = BotShape.allCases.map { shape in
+            let c = OrchestratorBotCell(BotIdentity(shape: shape, color: identity.color))
+            c.setAccessibilityLabel(shape.name)
+            c.action = { [weak self] in
+                guard let self else { return }
+                self.onPick?(BotIdentity(shape: shape, color: self.identity.color))
+            }
+            addSubview(c)
+            return c
+        }
+        colors = BotColor.allCases.map { color in
+            let d = OrchestratorColorDot(color)
+            d.action = { [weak self] in
+                guard let self else { return }
+                self.onPick?(BotIdentity(shape: self.identity.shape, color: color))
+            }
+            addSubview(d)
+            return d
+        }
+        refresh()
+    }
+
+    private func refresh() {
+        preview.identity = identity
+        for (shape, cell) in zip(BotShape.allCases, shapes) {
+            cell.identity = BotIdentity(shape: shape, color: identity.color)
+            cell.isSelected = shape == identity.shape
+        }
+        for (color, dot) in zip(BotColor.allCases, colors) {
+            dot.isSelected = color == identity.color
+            // The pumpkin keeps its orange.
+            dot.isEnabled = identity.shape != .pumpkin
+        }
+    }
+
+    private func columns(_ width: CGFloat) -> Int { max(1, Int((width - 72 - 20 + Self.gap) / (Self.cell + Self.gap))) }
+
+    func height(forWidth width: CGFloat) -> CGFloat {
+        let rows = (shapes.count + columns(width) - 1) / columns(width)
+        return max(72, CGFloat(rows) * (Self.cell + Self.gap) - Self.gap + 12 + Self.dot)
+    }
+
+    override func layout() {
+        super.layout()
+        preview.frame = NSRect(x: 0, y: 0, width: 72, height: 72)
+        let x0: CGFloat = 72 + 20, cols = columns(bounds.width)
+        for (i, c) in shapes.enumerated() {
+            c.frame = NSRect(x: x0 + CGFloat(i % cols) * (Self.cell + Self.gap), y: CGFloat(i / cols) * (Self.cell + Self.gap),
+                             width: Self.cell, height: Self.cell)
+        }
+        let rows = (shapes.count + cols - 1) / cols
+        let y = CGFloat(rows) * (Self.cell + Self.gap) - Self.gap + 12
+        for (i, d) in colors.enumerated() {
+            d.frame = NSRect(x: x0 + 7 + CGFloat(i) * (Self.dot + 8), y: y, width: Self.dot, height: Self.dot)
+        }
+    }
+}
+
+final class OrchestratorBotCell: ControlView {
+    private let bot: BotView
+    var identity: BotIdentity { get { bot.identity } set { bot.identity = newValue } }
+    var isSelected = false { didSet { needsDisplay = true; setAccessibilityValue(isSelected ? "selected" : nil) } }
+
+    init(_ identity: BotIdentity) {
+        bot = BotView(identity: identity, size: 24)
+        super.init(frame: .zero)
+        addSubview(bot)
+    }
+
+    override func layout() {
+        super.layout()
+        bot.frame = bounds.insetBy(dx: 6, dy: 6)
+    }
+
+    override func stateDidChange(from old: State) { super.stateDidChange(from: old); needsDisplay = true }
+    override var wantsUpdateLayer: Bool { true }
+    override func updateLayer() {
+        layer?.cornerRadius = 10
+        layer?.borderWidth = isSelected ? 2 : 0
+        layer?.borderColor = Themed.color(\.primary).cgColor(in: self)
+        layer?.backgroundColor = (isSelected || state.hoverOrPressed ? Themed.color(\.secondary) : NSColor.clear).cgColor(in: self)
+    }
+}
+
+final class OrchestratorColorDot: ControlView {
+    let color: BotColor
+    var isSelected = false { didSet { needsDisplay = true; setAccessibilityValue(isSelected ? "selected" : nil) } }
+
+    init(_ color: BotColor) {
+        self.color = color
+        super.init(frame: .zero)
+        setAccessibilityLabel("\(color)".capitalized)
+    }
+
+    override func stateDidChange(from old: State) { super.stateDidChange(from: old); needsDisplay = true }
+    override var wantsUpdateLayer: Bool { true }
+    override func updateLayer() {
+        let c = color.rgb
+        layer?.cornerRadius = bounds.height / 2
+        layer?.backgroundColor = NSColor(srgbRed: c.r, green: c.g, blue: c.b, alpha: state.enabled ? 1 : 0.35).cgColor
+        // A ring outside the dot marks the pick, a faint one shows hover.
+        layer?.borderWidth = isSelected ? 2.5 : state.hoverOrPressed ? 1.5 : 0
+        layer?.borderColor = (isSelected ? Themed.color(\.foreground) : Themed.color(\.foreground, 0.4)).cgColor(in: self)
     }
 }

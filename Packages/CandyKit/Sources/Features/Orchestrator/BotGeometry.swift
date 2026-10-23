@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import T3Store
 
 // The Orchestrator's bots (docs/orchestrator.md, "The bots"): Grok Bot's flat shapes and capsule eyes, redrawn here, and
 // omabot's eye logic (github.com/njpatel/omabot, Apache-2.0): the eyes are printed on the face and turn with the head,
@@ -109,6 +110,14 @@ public struct BotIdentity: Hashable, Sendable, Codable {
     }
 
     public static let orchestrator = BotIdentity(shape: .flower, color: .violet)
+}
+
+extension OrchestratorConfig {
+    /// The bot you picked for the Orchestrator, else the violet flower.
+    public var bot: BotIdentity {
+        BotIdentity(shape: botShape.flatMap(BotShape.init(rawValue:)) ?? BotIdentity.orchestrator.shape,
+                    color: botColor.flatMap(BotColor.init(rawValue:)) ?? BotIdentity.orchestrator.color)
+    }
 }
 
 /// Where a bot looks: yaw turns it right, pitch turns it up, in radians.
