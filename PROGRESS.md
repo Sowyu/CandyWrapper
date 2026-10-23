@@ -1,6 +1,6 @@
 # Progress
 
-- [ ] Match the sidebar account chevron to the update button and keep a uniform utility gap (taken 2026-10-23, sidebar-utility-row-sizes).
+- [x] Match the sidebar account chevron to the update button (2026-10-23, sidebar-utility-row-sizes): both Redesign frames measure 28 by 28pt on screen, the chevron glyph is 16pt, and the gap is 4pt, like the utility row. The update button keeps its existing size and behavior. Quick lane: 1,731 tests passed. Screenshot: `/tmp/sidebar-utility-row-sizes-row.png`. The isolated app quit, its build was deleted and the screen lock was released.
 
 - [x] Published v1.13.0 (build 62), 2026-10-23, from `e46d4842`: the experimental Orchestrator in Redesign (phase 1), plus Redesign's subagent pill, Back to parent pill, agent image gallery, image shimmer, project icons on thread tabs and sidebar fixes. All 1,877 tests passed on the release's code (`c8b03e9f`). Signed ZIP, DMG and update feed verified: the downloaded app checks out with Team ID 8Q677AYRU7 and reads 1.13.0 (62), and the feed's top item is 1.13.0 (62) with the ZIP's size. perf-review flagged no regressions (`docs/perf/2026-10-23-ce6dde1-w1.md`).
 
