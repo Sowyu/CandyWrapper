@@ -238,8 +238,10 @@ public enum OrchestratorBrief {
 
         \(questionsSection)
         """
+        // Last, so the voice rules are the final word; the default prompt carries them already.
+        let voice = prompt.contains(voiceSection) ? "" : "\n\n" + voiceSection
         return text.trimmingCharacters(in: .whitespacesAndNewlines) + "\n\n" + notes.joined(separator: "\n") + "\n" + app
-            + (i.machines.count > 1 ? "\n\n" + otherMachines(i) : "")
+            + (i.machines.count > 1 ? "\n\n" + otherMachines(i) : "") + voice
     }
 
     /// How to reach threads on machines other than its own (docs/orchestrator.md, "Every machine").
@@ -261,6 +263,23 @@ public enum OrchestratorBrief {
         The same limits hold on every machine, and CandyWrapper enforces them: it refuses to prompt a Hands off thread, it refuses an ask-first thread until you asked the user and send again with "confirmed":true, and it refuses a launch once \(i.crewLimit) workers run across all machines. On \(i.machine) itself, keep using your t3 tools. Calls run only while CandyWrapper is open. Event lines name the machine of any thread that isn't on \(i.machine).
         """
     }
+
+    /// How it talks to you: in the default prompt, and added to any brief whose prompt lacks it, so an edited or older
+    /// prompt gets it too. It comes last, so it wins over older advice on replies.
+    public static let voiceSection = """
+    # Talking to the user
+
+    These rules beat any other advice in this brief about how to reply.
+
+    - Reply in 1 to 3 short sentences, in plain, casual words, like a friend texting.
+    - No lists, headers, bold, tables or code blocks unless the user asks for them.
+    - Don't get technical unless the user asks. Leave out commit hashes, file names, test counts, run ids and tool names. Say "the fix is in" or "it's out", not how.
+    - When something needs the user, say that first, in one line.
+    - Don't repeat what a worker said, don't explain why unless the user asks, and never recap.
+    - When an event brings nothing new for the user, reply with one short line or nothing at all.
+    - Keep your digest and plan up to date as notes in orchestrator-memory blocks (note: digest, note: plan). The app saves blocks and never shows them as text, so never write a note's contents into your reply.
+    - Link a thread by its title, like [Release notes](t3-thread://v1/<threadId>).
+    """
 
     /// Added to every brief, so prompts edited before these existed still get them.
     public static let visualsSection = """
@@ -366,7 +385,7 @@ public enum OrchestratorBrief {
     5. Wait. When a worker finishes a turn or asks something, you wake up. Don't poll. Use t3_thread_wait or completion events.
     6. Review each result against the step's "done" checks, using the review rules below.
     7. Act on the review. Send the next prompt, ask for a fix, answer the worker's question, or close the thread.
-    8. Report only what changed, using the digest format.
+    8. Tell the user only what changed, in a line or two, and save the new digest as a note.
 
     # Writing a worker's first prompt
 
@@ -422,14 +441,7 @@ public enum OrchestratorBrief {
     {{bots}}
     When a step matches a bot's job, give it to that bot instead of starting a new thread. Tell the user when a bot finds something in one of your threads.
 
-    # Talking to the user
-
-    - Lead with what needs them, then what's new, then what's running.
-    - Keep a digest as a fenced orchestrator-digest block with three parts: Needs you, New and In progress, grouped by project. Rewrite it when the state changes. When something needs the user, also say it in chat.
-    - One line per thread: name, state, next step.
-    - Link threads as [title](t3-thread://v1/<threadId>).
-    - Be short. Don't repeat what a worker said. Don't recap what the user already saw.
-    - Use plain words. When you're unsure, say so once and say what would settle it.
+    \(voiceSection)
     """
 }
 

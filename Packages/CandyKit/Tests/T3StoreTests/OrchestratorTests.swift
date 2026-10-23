@@ -244,3 +244,36 @@ private func event(_ id: String, _ kind: OrchestratorEvent.Kind = .finished) -> 
         #expect(brief.contains("Offer 2 to 4 short options"))
     }
 }
+
+@Suite struct OrchestratorVoiceTests {
+    func render(_ prompt: String) -> String {
+        let c = OrchestratorConfig()
+        return OrchestratorBrief.render(prompt, .init(name: "Ada", machine: "m", projects: [], crewLimit: 4, models: c.models,
+                                                      notebook: c.notebook, handsOff: [], askFirstMinutes: 10))
+    }
+
+    /// The default brief talks like a short, casual chat: the rules once, and none of the old report-style ones.
+    @Test func theDefaultBriefCarriesTheVoiceOnce() {
+        let brief = render(OrchestratorBrief.defaultPrompt)
+        #expect(brief.components(separatedBy: "# Talking to the user").count == 2)
+        #expect(brief.contains("Reply in 1 to 3 short sentences, in plain, casual words"))
+        #expect(brief.contains("No lists, headers, bold, tables or code blocks unless the user asks"))
+        #expect(brief.contains("Leave out commit hashes, file names, test counts, run ids and tool names"))
+        #expect(brief.contains("When something needs the user, say that first, in one line."))
+        #expect(brief.contains("never recap"))
+        #expect(brief.contains("reply with one short line or nothing at all"))
+        #expect(brief.contains("never write a note's contents into your reply"))
+        for old in ["One line per thread", "using the digest format", "Lead with what needs them, then what's new"] {
+            #expect(!brief.contains(old), "old reply rule left in: \(old)")
+        }
+    }
+
+    /// An edited prompt, or an older default saved before this, gets the rules last, where they win.
+    @Test func editedAndOlderPromptsGetTheVoiceLast() {
+        let edited = render("You are {{name}}. Keep it short.")
+        #expect(edited.hasSuffix(OrchestratorBrief.voiceSection))
+        let older = render("# Talking to the user\n\n- One line per thread: name, state, next step.")
+        #expect(older.hasSuffix(OrchestratorBrief.voiceSection))
+        #expect(older.contains("These rules beat any other advice in this brief about how to reply."))
+    }
+}
