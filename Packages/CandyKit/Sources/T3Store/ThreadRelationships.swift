@@ -48,12 +48,20 @@ public struct ProjectedSubagent: Sendable, Equatable {
     public let result: String?
     public let startedAt: T3Timestamp?
     public let completedAt: T3Timestamp?
+    /// The parent's run that started it (`runId`, orchestrationV2.ts:698-731).
+    public var runId: RunId? = nil
+    /// The task's own status before `following` swaps in the child's live run (`nativeStatus`,
+    /// ThreadRelationshipsControl.tsx:271).
+    public var nativeStatus: String? = nil
+    /// `nativeTaskRef.strength == "strong"` with a native id: a provider-native task Stop can reach.
+    public var nativeTaskStrong = false
 
     public init(id: String, childThreadId: ThreadId?, origin: String, driver: String, providerInstanceId: String, title: String,
                 model: String?, status: String, progress: String?, result: String?, startedAt: T3Timestamp?, completedAt: T3Timestamp?) {
         self.id = id; self.childThreadId = childThreadId; self.origin = origin; self.driver = driver
         self.providerInstanceId = providerInstanceId; self.title = title; self.model = model; self.status = status
         self.progress = progress; self.result = result; self.startedAt = startedAt; self.completedAt = completedAt
+        self.nativeStatus = status
     }
 
     /// `projectedSubagentsToRuntime` (RT/subagentRuntime.ts:107-156): the title falls back to the prompt,
@@ -70,6 +78,9 @@ public struct ProjectedSubagent: Sendable, Equatable {
                   title: json["title"]?.stringValue ?? fallbackTitle, model: json["model"]?.stringValue, status: status,
                   progress: json["progress"]?.stringValue, result: json["result"]?.stringValue,
                   startedAt: started, completedAt: completed)
+        runId = json["runId"]?.stringValue.map { RunId($0) }
+        let ref = json["nativeTaskRef"]
+        nativeTaskStrong = ref?["strength"]?.stringValue == "strong" && ref?["nativeId"]?.stringValue != nil
     }
 
     /// `liveSubagent` (ThreadRelationshipsControl.tsx:177-194): while the child thread has a live run, the
@@ -78,9 +89,13 @@ public struct ProjectedSubagent: Sendable, Equatable {
     public func following(_ child: ThreadShell?) -> ProjectedSubagent {
         guard !ThreadRelationships.isWorkActive(status), let live = child?.activityRunStatus?.rawValue else { return self }
         let started: T3Timestamp? = if case .value(let t) = child?.activityRunStartedAt { t } else { nil }
-        return ProjectedSubagent(id: id, childThreadId: childThreadId, origin: origin, driver: driver, providerInstanceId: providerInstanceId,
-                                 title: title, model: model, status: live == "running" || live == "waiting" ? live : "pending",
-                                 progress: nil, result: nil, startedAt: started, completedAt: nil)
+        var out = ProjectedSubagent(id: id, childThreadId: childThreadId, origin: origin, driver: driver, providerInstanceId: providerInstanceId,
+                                    title: title, model: model, status: live == "running" || live == "waiting" ? live : "pending",
+                                    progress: nil, result: nil, startedAt: started, completedAt: nil)
+        out.runId = runId
+        out.nativeStatus = nativeStatus
+        out.nativeTaskStrong = nativeTaskStrong
+        return out
     }
 }
 

@@ -31,6 +31,8 @@ public final class ThreadLineageController {
     public var request: ((String, String, JSONValue) async throws -> JSONValue)?
     /// Opens a scoped thread id in the panel.
     public var openThread: ((ThreadId) -> Void)?
+    /// Opens a scoped thread id in a new tab where Redesign has tabs, else like `openThread`.
+    public var openThreadInTab: ((ThreadId) -> Void)?
     public var localVisit: ((ThreadId) -> T3Timestamp?)?
     public var acknowledgeWake: ((ThreadId, T3Timestamp) -> Void)?
     /// The composer's model for the next send.
@@ -50,6 +52,11 @@ public final class ThreadLineageController {
 
     private var threadId: ThreadId?
     private var projection: ThreadProjection?
+    /// The thread whose wait on its subagents already opened the strip, so it opens once per wait.
+    private var stripAutoOpened: ThreadId?
+    private var stripThread: ThreadId?
+    /// Subagent ids with a Stop in flight.
+    private var stoppingAgents: Set<String> = []
     /// Fires once when the open thread's snooze ends, so the footer leaves Snoozed without a push.
     private var wakeTimer: DispatchWorkItem?
     private var wakeKey: String?
@@ -73,6 +80,14 @@ public final class ThreadLineageController {
             section.onDetach = { [weak self] in self?.detach() }
         }
         panel.onDetailsVisibilityChange = { [weak self] in self?.sync() }
+        panel.lazySubagentPanel.configure { [weak self] strip in
+            strip.onOpen = { [weak self] row in
+                guard let self, let child = row.childThreadId, let env = self.threadId?.environmentId else { return }
+                let scoped = child.scoped(to: env)
+                (self.openThreadInTab ?? self.openThread)?(scoped)
+            }
+            strip.onStop = { [weak self] row in self?.stopFromStrip(row) }
+        }
         panel.model.onForkFromRun = { [weak self] source, run in self?.fork(source: source, run: run) }
     }
 
@@ -95,6 +110,7 @@ public final class ThreadLineageController {
             panel.timeline.setFooter(nil, height: 0)
             panel.header.parentThreadTitle = nil
             panel.childInputKey = nil
+            panel.showsSubagentStrip = false
             armWake()
             return
         }
@@ -134,7 +150,47 @@ public final class ThreadLineageController {
         subagentRequest = PendingSubagentRequests.byThread(all)[threadId]
         syncFooter()
         updateChildInputs(all, threadId: threadId)
+        syncStrip(projection, local: local, env: env)
         armWake()
+    }
+
+    /// Redesign's subagent strip, from the projection's subagent records and their child shells. Opens by itself once
+    /// each time the thread starts waiting on them.
+    private func syncStrip(_ projection: ThreadProjection, local: [ThreadShell], env: String) {
+        guard let threadId else { return }
+        if stripThread != threadId {
+            stripThread = threadId
+            stripAutoOpened = nil
+            panel.subagentStripExpanded = false
+        }
+        let me = local.first { $0.id == threadId.localId }
+        let strip = SubagentStrip.make(subagents: projection.subagents, shells: local, latestRunId: projection.runs.max { $0.ordinal < $1.ordinal }?.id, parent: me)
+        panel.showsSubagentStrip = strip.isVisible
+        guard strip.isVisible else {
+            stripAutoOpened = nil
+            panel.subagentStripExpanded = false
+            return
+        }
+        panel.subagentStripCoversBackgroundWork = me?.backgroundTasks.allSatisfy { $0.kind == .subagent } ?? true
+        panel.lazySubagentPill.view.configure(strip)
+        let providers = providers?(env) ?? []
+        stoppingAgents.formIntersection(strip.rows.filter(\.canStop).map(\.id))
+        panel.lazySubagentPanel.view.items = strip.rows.map {
+            .init(row: $0, modelName: Self.modelName($0, providers), stopping: stoppingAgents.contains($0.id))
+        }
+        if !strip.parentWaiting { stripAutoOpened = nil }
+        else if stripAutoOpened != threadId {
+            stripAutoOpened = threadId
+            panel.subagentStripExpanded = true
+        }
+    }
+
+    /// The row's model as the model picker names it, else the slug made readable, else the provider's name.
+    static func modelName(_ row: SubagentStrip.Row, _ providers: [ServerProvider]) -> String {
+        let provider = providers.first { $0.instanceId.rawValue == row.providerInstanceId }
+        guard let slug = row.model, !slug.isEmpty else { return provider?.displayName ?? provider?.driver ?? row.driver }
+        return provider.flatMap { ThreadRelationships.resolveModel($0.models, slug) }.map(ModelNames.trigger)
+            ?? ThreadRelationships.modelSlugName(slug)
     }
 
     /// Milliseconds until a snoozed shell wakes, plus 50 and capped like `setTimeout`, or nil when it is not
@@ -343,6 +399,34 @@ public final class ThreadLineageController {
         }
     }
 
+    /// Stop on a strip row (`stopSubagent`, ThreadRelationshipsControl.tsx:367-381, through `interruptThreadTurn`'s
+    /// subagent branch, client-runtime operations/commands.ts:769-799): `subagent.stop` on this thread's run, then an
+    /// app-owned child's own live run stops too, since older servers reject the first. "Could not stop subagent" on failure.
+    private func stopFromStrip(_ row: SubagentStrip.Row) {
+        guard let threadId, let env = threadId.environmentId, let dispatch, row.canStop, !stoppingAgents.contains(row.id),
+              let record = projection?.subagents.compactMap(ProjectedSubagent.init).first(where: { $0.id == row.id }) else { return }
+        stoppingAgents.insert(row.id)
+        sync()
+        let childRun = row.childThreadId.flatMap { c in shells?().first { $0.id == c.scoped(to: env) }?.activeRunId }
+        Task { [weak self] in
+            var failed = false
+            if record.origin == "app_owned", let child = row.childThreadId {
+                if let run = record.runId {
+                    _ = try? await dispatch(threadId, ThreadRelationshipCommands.stopSubagent(threadId.localId, runId: run, subagentId: row.id))
+                }
+                if let childRun {
+                    do { _ = try await dispatch(child.scoped(to: env), ThreadRelationshipCommands.interrupt(child, runId: childRun)) } catch { failed = true }
+                }
+            } else if let run = record.runId {
+                do { _ = try await dispatch(threadId, ThreadRelationshipCommands.stopSubagent(threadId.localId, runId: run, subagentId: row.id)) }
+                catch { failed = true }
+            }
+            if failed { self?.toast("Could not stop subagent") }
+            self?.stoppingAgents.remove(row.id)
+            self?.sync()
+        }
+    }
+
     /// `stopWorkflow` (ThreadRelationshipsControl.tsx:391-402 in 2994): `orchestration.stopWorkflow` with this
     /// thread and the coordinator subagent; a failure says "Could not stop workflow".
     private func stopWorkflow(_ row: ThreadId, coordinator: String) {
@@ -404,6 +488,12 @@ public enum ThreadRelationshipCommands {
             .object(["type": .string("provider-session.detach"), "commandId": .string("\(commandId):detach:\(session)"),
                      "threadId": .string(threadId.rawValue), "providerSessionId": .string(session), "reason": .string("client-requested")])
         }
+    }
+
+    /// `subagent.stop` (orchestrationV2.ts:2855-2861): the parent ends one of its subagents.
+    public static func stopSubagent(_ threadId: ThreadId, runId: RunId, subagentId: String, commandId: String = ThreadCommands.newCommandId()) -> JSONValue {
+        .object(["type": .string("subagent.stop"), "commandId": .string(commandId), "threadId": .string(threadId.rawValue),
+                 "runId": .string(runId.rawValue), "subagentId": .string(subagentId)])
     }
 
     /// `interruptThreadTurn` (:780-829) with a known run: `run.interrupt` holding the queue.

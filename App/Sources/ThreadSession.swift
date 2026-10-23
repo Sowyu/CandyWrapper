@@ -428,6 +428,9 @@ final class ThreadController {
             return try await environments.request(env, method, payload)
         }
         lineage.openThread = { [weak self] id in self?.open(id) }
+        lineage.openThreadInTab = { [weak self] id in
+            if let inTab = self?.sidebar?.onOpenInNewTab { inTab(id) } else { self?.open(id) }
+        }
         // A second `orchestration.subscribeThread` for the parent, only while the lineage controller needs it.
         lineage.watchThread = { [weak environments] id, onProjection in
             guard let env = id.environmentId, let supervisor = environments?.session(env)?.supervisor else { return {} }
