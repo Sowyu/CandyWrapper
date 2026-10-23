@@ -3,8 +3,9 @@ import T3Protocol
 
 /// What a thread would have cost at API prices, after Capy's tab bar figure; Redesign shows it in the thread header. Each provider turn reports its token
 /// totals as `turnTokenUsage` when it ends (providerRuntime.ts:321-347, orchestrationV2.ts:989): input counts cache
-/// reads and writes, output counts reasoning. A turn without totals, such as one still running, counts its latest
-/// request's `tokenUsage` (orchestrationV2.ts:166-177).
+/// reads and writes, output counts reasoning. A turn that ended without totals counts its latest request's
+/// `tokenUsage` (orchestrationV2.ts:166-177). A running turn counts nothing until it ends: its `tokenUsage` is only
+/// the latest request (ClaudeAdapterV2.ts:235-268, CodexAdapterV2.ts:194-206), so it would rise and fall.
 public enum ThreadCostEstimate {
     /// USD per million tokens.
     public struct Price: Equatable, Sendable {
@@ -96,10 +97,12 @@ public enum ThreadCostEstimate {
     }
 
     /// A subagent thread as the card reads it: `own` is its `own(_:)` breakdown, nil when its projection
-    /// couldn't be read.
+    /// couldn't be read. `reading` marks one whose first read is still in flight.
     public struct SubagentThread: Sendable {
-        public var id: ThreadId, title: String, own: Breakdown?
-        public init(id: ThreadId, title: String, own: Breakdown?) { self.id = id; self.title = title; self.own = own }
+        public var id: ThreadId, title: String, own: Breakdown?, reading: Bool
+        public init(id: ThreadId, title: String, own: Breakdown?, reading: Bool = false) {
+            self.id = id; self.title = title; self.own = own; self.reading = reading
+        }
     }
 
     /// The thread's estimate in USD, or nil when it has no usage or any turn ran on a model without a price.
@@ -115,11 +118,12 @@ public enum ThreadCostEstimate {
 
     /// The open thread's estimate with every subagent thread under it, each priced by its own models. Subagent
     /// turns count in their own threads only: T3 scopes a turn's totals to the main agent (providerRuntime.ts:321-331).
-    /// Nil when the thread's own turns can't be priced, or nothing has usage yet.
+    /// Nil when the thread's own turns can't be priced, nothing has usage yet, or a subagent's first read is in flight,
+    /// so the figure appears once with its subagents instead of jumping when they arrive.
     public static func breakdown(_ projection: ThreadProjection, id: ThreadId, children: (ThreadId) -> [SubagentThread]) -> Breakdown? {
         var result = own(projection)
         guard result.unpricedModels.isEmpty else { return nil }
-        var seen: Set<ThreadId> = [id]
+        var seen: Set<ThreadId> = [id], reading = false
         func walk(_ parent: ThreadId) {
             for child in children(parent) where seen.insert(child.id).inserted {
                 if let b = child.own, !b.unpricedModels.isEmpty {
@@ -127,6 +131,8 @@ public enum ThreadCostEstimate {
                     for m in b.unpricedModels where !result.unpricedModels.contains(m) { result.unpricedModels.append(m) }
                 } else if let b = child.own {
                     if !b.models.isEmpty { result.subagents.append(Subagent(title: child.title, models: b.models, tokens: b.tokens, usd: b.ownUSD)) }
+                } else if child.reading {
+                    reading = true
                 } else {
                     result.subagentsUnread += 1
                 }
@@ -134,6 +140,7 @@ public enum ThreadCostEstimate {
             }
         }
         walk(id)
+        if reading { return nil }
         return result.models.isEmpty && result.subagents.isEmpty ? nil : result
     }
 
@@ -141,11 +148,15 @@ public enum ThreadCostEstimate {
     public static func own(_ projection: ThreadProjection) -> Breakdown {
         let runByAttempt = Dictionary(projection.attempts.map { ($0.id.rawValue, $0.runId) }, uniquingKeysWith: { a, _ in a })
         let modelByRun = Dictionary(projection.runs.compactMap { run in run.modelSelection.map { (run.id, $0.model) } }, uniquingKeysWith: { a, _ in a })
+        let runByNode = Dictionary(projection.nodes.compactMap { node in node.runId.map { (node.id.rawValue, $0) } }, uniquingKeysWith: { a, _ in a })
+        // A turn with no run of its own, like a Codex subagent's turn in its child thread (CodexAdapterV2.ts:2648-2656),
+        // takes the latest run's model, else the thread's (orchestrationV2.ts:378).
         let fallback = projection.runs.max { $0.ordinal < $1.ordinal }?.modelSelection?.model
+            ?? projection.thread.raw["modelSelection"]?["model"]?.stringValue
         var result = Breakdown()
         for turn in projection.providerTurns {
             guard let tokens = tokens(turn) else { continue }
-            let run = turn["runAttemptId"]?.stringValue.flatMap { runByAttempt[$0] }
+            let run = turn["runAttemptId"]?.stringValue.flatMap { runByAttempt[$0] } ?? turn["nodeId"]?.stringValue.flatMap { runByNode[$0] }
             let model = run.flatMap { modelByRun[$0] } ?? fallback ?? "an unknown model"
             guard let price = price(model) else {
                 if !result.unpricedModels.contains(model) { result.unpricedModels.append(model) }
@@ -156,13 +167,14 @@ public enum ThreadCostEstimate {
         return result
     }
 
-    /// A turn's totals, else its latest request.
+    /// A turn's totals, else its latest request once it has ended. Nil while it runs.
     static func tokens(_ turn: JSONValue) -> Tokens? {
         if let usage = turn["turnTokenUsage"], let input = usage["inputTokens"]?.doubleValue, let output = usage["outputTokens"]?.doubleValue {
             return Tokens(input: input, cached: usage["cachedInputTokens"]?.doubleValue ?? 0,
                           cacheWrite: usage["cacheCreationTokens"]?.doubleValue ?? 0, output: output)
         }
-        guard let usage = turn["tokenUsage"],
+        let status = turn["status"]?.stringValue
+        guard status != "running", status != "pending", let usage = turn["tokenUsage"],
               let input = usage["inputTokens"]?.doubleValue, let output = usage["outputTokens"]?.doubleValue else { return nil }
         return Tokens(input: input, cached: usage["cachedInputTokens"]?.doubleValue ?? 0, output: output)
     }

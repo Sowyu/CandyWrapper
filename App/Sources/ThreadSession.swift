@@ -314,8 +314,8 @@ final class ThreadController {
     /// The projection and thread the figure reads, kept so subagent usage that arrives later can join it.
     private var costProjection: ThreadProjection?
     private var costThreadId: ThreadId?
-    /// Subagent threads' own usage, read when the cost card opens, with the shell `updatedAt` it was read at
-    /// (nil after a failed read, so the next open retries).
+    /// Subagent threads' own usage, read when their parent thread opens and when the cost card opens, with the shell
+    /// `updatedAt` it was read at (nil after a failed read, so the next open retries).
     // ponytail: kept for the session, a few numbers per subagent thread; drop entries on archive if it grows
     private var subagentCosts: [ThreadId: (updatedAt: T3Timestamp?, own: ThreadCostEstimate.Breakdown?)] = [:]
     private var readingSubagentCosts: Set<ThreadId> = []
@@ -991,13 +991,20 @@ final class ThreadController {
     }
 
     private func setCost(_ projection: ThreadProjection?, id: ThreadId? = nil) {
+        let dither = ThemeRuntime.isDither(dark: true) || ThemeRuntime.isDither(dark: false)
+        let opened = projection != nil && id != nil && id != costThreadId
         costProjection = projection
         costThreadId = projection == nil ? nil : id
+        // Read subagent usage once as the thread opens, so the figure doesn't jump when the card opens.
+        if opened, dither { readSubagentCosts() }
         var next: ThreadCostEstimate.Breakdown?
-        if ThemeRuntime.isDither(dark: true) || ThemeRuntime.isDither(dark: false), let projection, let id {
+        if dither, let projection, let id {
             let byParent = subagentShellsByParent()
-            next = ThreadCostEstimate.breakdown(projection, id: id) { [subagentCosts] parent in
-                (byParent[parent] ?? []).map { .init(id: $0.id, title: $0.title, own: subagentCosts[$0.id]?.own) }
+            next = ThreadCostEstimate.breakdown(projection, id: id) { [subagentCosts, readingSubagentCosts] parent in
+                (byParent[parent] ?? []).map {
+                    .init(id: $0.id, title: $0.title, own: subagentCosts[$0.id]?.own,
+                          reading: subagentCosts[$0.id] == nil && readingSubagentCosts.contains($0.id))
+                }
             }
         }
         guard next != cost || projection == nil else { return }
@@ -1014,7 +1021,8 @@ final class ThreadController {
 
     /// Reads each subagent thread under the open one that changed since its last read, nested ones included.
     /// Neither the shell nor the subagent record carries usage (orchestrationV2.ts:700-731, 1836-1928), so this
-    /// takes the child's projection (`orchestration.getThreadProjection`, rpc.ts:1675-1682) once, when the card opens.
+    /// takes the child's projection (`orchestration.getThreadProjection`, rpc.ts:1675-1682) when the parent opens and
+    /// when the card opens, only for children whose `updatedAt` moved. No polling.
     private func readSubagentCosts() {
         guard let root = costThreadId, let env = root.environmentId else { return }
         let byParent = subagentShellsByParent()
@@ -1037,7 +1045,10 @@ final class ThreadController {
                         return (child.id, child.updatedAt, (try? json.decode(as: ThreadProjection.self)).map(ThreadCostEstimate.own))
                     }
                 }
-                for await (id, at, own) in group { self?.subagentCosts[id] = (at, own) }
+                for await (id, at, own) in group {
+                    // A failed read keeps the last good figure and retries on the next open.
+                    if at == nil, let kept = self?.subagentCosts[id]?.own { self?.subagentCosts[id] = (nil, kept) } else { self?.subagentCosts[id] = (at, own) }
+                }
             }
             guard let self else { return }
             self.readingSubagentCosts.subtract(stale.map(\.id))

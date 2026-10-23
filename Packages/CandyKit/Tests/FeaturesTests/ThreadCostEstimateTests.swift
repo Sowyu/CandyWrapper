@@ -43,7 +43,12 @@ import T3Protocol
         let running = try JSONDecoder().decode(JSONValue.self, from: Data("""
         {"status":"running","tokenUsage":{"inputTokens":700,"cachedInputTokens":200,"outputTokens":30,"usedTokens":730}}
         """.utf8))
-        #expect(ThreadCostEstimate.tokens(running) == .init(input: 700, cached: 200, output: 30))
+        // A running turn's `tokenUsage` is its latest request alone, so it counts nothing until the turn ends.
+        #expect(ThreadCostEstimate.tokens(running) == nil)
+        let ended = try JSONDecoder().decode(JSONValue.self, from: Data("""
+        {"status":"interrupted","tokenUsage":{"inputTokens":700,"cachedInputTokens":200,"outputTokens":30,"usedTokens":730}}
+        """.utf8))
+        #expect(ThreadCostEstimate.tokens(ended) == .init(input: 700, cached: 200, output: 30))
         let empty = try JSONDecoder().decode(JSONValue.self, from: Data(#"{"status":"pending"}"#.utf8))
         #expect(ThreadCostEstimate.tokens(empty) == nil)
     }
@@ -88,5 +93,59 @@ import T3Protocol
         let result = try #require(ThreadCostEstimate.breakdown(empty, id: "env:root") { _ in [.init(id: "env:a", title: "A", own: child)] })
         #expect(result.models.isEmpty && abs(result.usd - 0.1) < 1e-9)
         #expect(ThreadCostEstimate.breakdown(empty, id: "env:root") { _ in [] } == nil)
+    }
+
+    /// The figure while a turn streams: each request replaces the turn's `tokenUsage`, and the total arrives at the end.
+    @Test func theFigureHoldsStillWhileATurnRunsAndMovesOnceWhenItEnds() throws {
+        var p = try thread("claude-opus-5-5", input: 1_000_000, output: 0)
+        let done = try #require(ThreadCostEstimate.usd(p))
+        func request(_ input: Double) -> JSONValue {
+            .object(["id": .string("t2"), "status": .string("running"), "tokenUsage": .object(["inputTokens": .number(input), "outputTokens": .number(10), "usedTokens": .number(input)])])
+        }
+        // Requests of 50k, then 20k after a compaction, then 80k: the old figure followed them up and down.
+        for input in [50_000.0, 20_000, 80_000] {
+            p.providerTurns = [p.providerTurns[0], request(input)]
+            #expect(ThreadCostEstimate.usd(p) == done)
+        }
+        p.providerTurns[1] = .object(["id": .string("t2"), "status": .string("completed"),
+                                      "turnTokenUsage": .object(["inputTokens": .number(500_000), "outputTokens": .number(0)])])
+        #expect(abs(try #require(ThreadCostEstimate.usd(p)) - (done + 2)) < 1e-9)
+    }
+
+    @Test func aTurnWithoutAnAttemptKeepsItsOwnRunsModelAfterASwitch() throws {
+        var p = try thread("claude-opus-5-5", input: 0, output: 0)
+        var first = try #require(p.runs.first)
+        first.id = "run-old"; first.ordinal = 1; first.modelSelection = ModelSelection(instanceId: "claudeAgent", model: "claude-haiku-5-5")
+        var latest = first
+        latest.id = "run-new"; latest.ordinal = 99; latest.modelSelection = ModelSelection(instanceId: "claudeAgent", model: "claude-opus-5-5")
+        p.runs = [first, latest]
+        p.nodes = [ExecutionNode(id: "node-old", threadId: p.thread.id, runId: "run-old", parentNodeId: nil, rootNodeId: "node-old", kind: "root", status: "completed")]
+        p.attempts = []
+        p.providerTurns = [.object(["id": .string("t1"), "status": .string("completed"), "nodeId": .string("node-old"), "runAttemptId": .null,
+                                    "turnTokenUsage": .object(["inputTokens": .number(1_000_000), "outputTokens": .number(0)])])]
+        // Priced as haiku ($0.10), the run it ran in, not the latest run's opus ($4).
+        let b = try #require(ThreadCostEstimate.breakdown(p))
+        #expect(b.models == ["claude-haiku-5-5"] && abs(b.usd - 0.1) < 1e-9)
+    }
+
+    @Test func aSubagentThreadWithoutRunsIsPricedAtTheThreadsModel() throws {
+        var p = try thread("claude-opus-5-5", input: 1_000_000, output: 0)
+        p.runs = []
+        guard case .object(var raw) = p.thread.raw else { Issue.record("thread isn't an object"); return }
+        raw["modelSelection"] = .object(["instanceId": .string("codex"), "model": .string("gpt-6-luna")])
+        p.thread = try JSONDecoder().decode(AppThread.self, from: JSONEncoder().encode(JSONValue.object(raw)))
+        let b = try #require(ThreadCostEstimate.breakdown(p))
+        #expect(b.models == ["gpt-6-luna"] && abs(b.usd - 0.1) < 1e-9)
+    }
+
+    @Test func theFigureWaitsForASubagentsFirstReadInsteadOfJumping() throws {
+        let p = try thread("claude-opus-5-5", input: 1_000_000, output: 0)
+        let child = ThreadCostEstimate.own(try thread("claude-haiku-5-5", input: 1_000_000, output: 0))
+        #expect(ThreadCostEstimate.breakdown(p, id: "env:root") { _ in [.init(id: "env:a", title: "A", own: nil, reading: true)] } == nil)
+        let read = try #require(ThreadCostEstimate.breakdown(p, id: "env:root") { _ in [.init(id: "env:a", title: "A", own: child)] })
+        #expect(abs(read.usd - 4.1) < 1e-9)
+        // A failed read shows the thread's own figure and says a subagent was left out.
+        let failed = try #require(ThreadCostEstimate.breakdown(p, id: "env:root") { _ in [.init(id: "env:a", title: "A", own: nil)] })
+        #expect(abs(failed.usd - 4) < 1e-9 && failed.subagentsUnread == 1)
     }
 }
