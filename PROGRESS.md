@@ -57,6 +57,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+- [ ] Orchestrator HTML pages and question tool (taken 2026-10-23, orchestrator-html-questions): the brief recommends html_preview then html_render for visuals and the question tool for choices; rendered pages and tool questions show and answer in its chat.
 - [ ] Orchestrator on every machine (taken 2026-10-23, orchestrator-multi-machine): CandyWrapper relays the Orchestrator's `orchestrator-call` blocks (list, read, send, launch, archive) to every connected machine and relays every machine's events, with Hands off, ask first and the worker limit checked in code. Design in `docs/orchestrator.md`, "Every machine".
 - [x] Orchestrator composer and Overview (2026-10-23, orchestrator-drafts): the composer draft lives in the thread composer's store and survives leaving the pane and a relaunch; the Overview has Running, Finished and Stopped sections; images attach from the + button, a paste or a drop and reach the Orchestrator (it answered "Red." for a red test image). Checked on screen against the 3473 sandbox; the fast lane passed.
 - [x] Orchestrator polish (2026-10-23, orchestrator-polish): the pane's header sits right under the tabs, the composer is one line with its send button centred, and Settings > Orchestrator has a Look row (14 shapes, 11 colours) that the sidebar row, pane header and chat follow. Clicking its bot in the pane opens the row. Checked on screen against the 3473 sandbox; the fast lane passed.
