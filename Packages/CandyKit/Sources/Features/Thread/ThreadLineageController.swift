@@ -111,6 +111,7 @@ public final class ThreadLineageController {
             panel.header.parentThreadTitle = nil
             panel.childInputKey = nil
             panel.showsSubagentStrip = false
+            panel.parentPillTitle = nil
             armWake()
             return
         }
@@ -141,7 +142,10 @@ public final class ThreadLineageController {
             panel.timeline.setHeader(parentLink, height: TimelineParentLinkView.height)
             panel.header.parentThreadTitle = link.title
             panel.header.onOpenParent = { [weak self] in self?.open(link.threadId) }
+            panel.parentPillTitle = thread.isProviderNativeSubagent ? nil : link.title
+            panel.onOpenParentPill = { [weak self] in self?.open(link.threadId) }
         } else {
+            panel.parentPillTitle = nil
             panel.timeline.setHeader(nil, height: 0)
             panel.header.parentThreadTitle = nil
         }
