@@ -29,6 +29,8 @@ public class ComposerBannerView: DSView {
     public enum Placement { case attached, floating }
     public var placement = Placement.attached { didSet { if placement != oldValue { needsLayout = true; needsDisplay = true } } }
     /// Redesign floats every attachment as its own card: whole, frosted, with a drop shadow (`DitherPill`).
+    /// Redesign: the composer's own corner and no drop shadow in dark, for a panel that reads as part of it.
+    var matchesComposer = false { didSet { if matchesComposer != oldValue { needsLayout = true } } }
     var ditherFloating: Bool { placement == .floating && ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
     /// What the content leaves at the bottom for the composer to cover: the overlap when attached, nothing floating.
     public var tail: CGFloat { placement == .attached ? Self.overlap : 0 }
@@ -100,7 +102,7 @@ public class ComposerBannerView: DSView {
         // CSS scales radii down to fit the box (a 34pt floating card gets 17); Core Animation does not.
         // Redesign: a pill's control corner, a panel's card corner.
         let dither = ditherFloating
-        let radius = top < 0 ? 0 : dither ? (h <= DitherPill.height ? DitherPill.radius : DitherChrome.cardRadius)
+        let radius = top < 0 ? 0 : dither && matchesComposer ? DitherChrome.panelRadius : dither ? (h <= DitherPill.height ? DitherPill.radius : DitherChrome.cardRadius)
             : floating ? min(cardRadius, h / 2) : cardRadius
         surface.layer?.cornerRadius = radius
         blur.cornerRadius = radius
@@ -109,7 +111,7 @@ public class ComposerBannerView: DSView {
         if dither {
             let layer = shade ?? CALayer()
             if shade == nil, let root = self.layer { root.insertSublayer(layer, at: 0); shade = layer }
-            layer.isHidden = false
+            layer.isHidden = matchesComposer && effectiveAppearance.isDark
             layer.frame = bounds
             DitherPill.shadow(layer, path: layer.bounds, radius: radius, dark: effectiveAppearance.isDark)
             layer.mask = DitherPill.outsideMask(layer.bounds, radius: radius, existing: layer.mask)
