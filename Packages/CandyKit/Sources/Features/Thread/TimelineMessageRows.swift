@@ -251,7 +251,7 @@ final class UserMessageRowView: TimelineRowView {
             let items = images.map { image in
                 let imageId = image["id"]?.stringValue ?? ""
                 let source = image["source"].flatMap { $0["kind"]?.stringValue == "snap-shot" ? $0 : nil }
-                return ExpandedImagePreviewView.Item(key: imageId, name: image["name"]?.stringValue ?? "image", source: source) { side in await loader(imageId, side, false) }
+                return ExpandedImagePreviewView.Item(key: imageId, name: image["name"]?.stringValue ?? "image", source: source, cacheable: true) { side in await loader(imageId, side, false) }
             }
             guard let index = items.firstIndex(where: { $0.key == id }) else { return }
             model.onExpandImage?(items, index)
@@ -1011,7 +1011,7 @@ final class UserMessageAttachmentsView: DSView {
         guard let view = gesture.view, let index = cells.firstIndex(where: { $0 === view }), let loader = model?.attachmentImage else { return }
         let items = images.map { image in
             ExpandedImagePreviewView.Item(key: image.attachmentId, name: image.name,
-                                          source: image.source.flatMap { $0["kind"]?.stringValue == "snap-shot" ? $0 : nil }) { side in await loader(image.attachmentId, side, false) }
+                                          source: image.source.flatMap { $0["kind"]?.stringValue == "snap-shot" ? $0 : nil }, cacheable: true) { side in await loader(image.attachmentId, side, false) }
         }
         model?.onExpandImage?(items, index)
     }

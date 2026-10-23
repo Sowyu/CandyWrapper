@@ -8,20 +8,19 @@ import T3Protocol
 /// button 40pt above its right edge, the name and "(i/n)" under it in `text-xs text-white/80`, and
 /// `media-navigation` chevrons at the popup's sides when there is more than one image. Arrow keys
 /// move, Escape and a click on the backdrop close. Each image decodes at the size it is shown.
-// ponytail: zoom scales the decode made for the fitted box, so 8x of a large screenshot is soft where T3 shows full
-// resolution; decode again at the zoomed size (capped) if users zoom into detail
 
 public final class ExpandedImagePreviewView: DSView {
     public struct Item: Sendable {
         public var key: String
         public var name: String
+        public var cacheable: Bool
         public var load: AsyncImageView.Loader
         /// Where the image lives, for its menu's copy items (MediaActions.tsx).
         public var reference: MediaReference?
         /// A SnapShot capture's `source`: the caption gets its accessibility data button.
         public var source: JSONValue?
-        public init(key: String, name: String, source: JSONValue? = nil, load: @escaping AsyncImageView.Loader, reference: MediaReference? = nil) {
-            self.key = key; self.name = name; self.load = load; self.reference = reference; self.source = source
+        public init(key: String, name: String, source: JSONValue? = nil, cacheable: Bool = false, load: @escaping AsyncImageView.Loader, reference: MediaReference? = nil) {
+            self.key = key; self.name = name; self.cacheable = cacheable; self.load = load; self.reference = reference; self.source = source
         }
     }
 
@@ -37,6 +36,7 @@ public final class ExpandedImagePreviewView: DSView {
     private let next = ButtonView(nil, icon: .chevronRight, variant: .mediaNavigation, size: .icon)
     /// `ZoomableImage` (chat/ZoomableImage.tsx:11-142): 1 to 8 times the fitted size. The frame grows with the zoom up
     /// to the media box, then scrolls; `scroll` is the frame's scroll offset into the zoomed image.
+    private var naturalSize: CGSize?
     private var zoom: CGFloat = 1
     private var scroll = CGPoint.zero
     private var drag: (point: CGPoint, scroll: CGPoint)?
@@ -70,7 +70,16 @@ public final class ExpandedImagePreviewView: DSView {
         close.action = { [weak self] in self?.dismiss() }
         previous.action = { [weak self] in self?.move(-1) }
         next.action = { [weak self] in self?.move(1) }
-        image.onLoad = { [weak self] in self?.needsLayout = true }
+        image.onLoad = { [weak self] in
+            guard let self else { return }
+            // A sharper decode changes pixels, never the fitted geometry or the pan anchor.
+            if self.naturalSize == nil, let cg = self.image.image,
+               self.image.loadedSide >= (self.image.decodeSide ?? 0) {
+                self.naturalSize = MarkdownImages.sizes[self.items[self.index].key]
+                    ?? CGSize(width: cg.width, height: cg.height)
+            }
+            self.needsLayout = true
+        }
         setAccessibilityRole(.group)
         setAccessibilityLabel("Expanded image preview")
         show()
@@ -83,8 +92,7 @@ public final class ExpandedImagePreviewView: DSView {
         frame = content.bounds
         autoresizingMask = [.width, .height]
         // Decode for the largest box the image can take (`--media-width`, `--media-height`).
-        let box = max(frame.width * 0.92 - 96, min(frame.height * 0.86, frame.height - 160))
-        image.requestedSide = Int((box * window.backingScaleFactor).rounded(.up))
+        requestPixels(scale: window.backingScaleFactor)
         content.addSubview(self)
         window.makeFirstResponder(self)
     }
@@ -104,7 +112,7 @@ public final class ExpandedImagePreviewView: DSView {
 
     private func show() {
         guard items.indices.contains(index) else { return }
-        zoom = 1; scroll = .zero
+        zoom = 1; scroll = .zero; naturalSize = nil
         let item = items[index]
         caption.text = item.name + (items.count > 1 ? " (\(index + 1)/\(items.count))" : "")
         showingDetails = false
@@ -124,6 +132,8 @@ public final class ExpandedImagePreviewView: DSView {
             if let contents { addSubview(contents) }
         }
         image.onContextMenu = { event, view in MediaAttachmentContextMenu.show(name: item.name, load: item.load, event: event, view: view, reference: item.reference) }
+        requestPixels(mediaBox)
+        image.cacheable = item.cacheable
         image.set(key: item.key, fallbackText: "Image unavailable. The file may have been moved or deleted.", loader: item.load)
         needsLayout = true
     }
@@ -215,7 +225,7 @@ public final class ExpandedImagePreviewView: DSView {
     private var fittedSize: CGSize {
         let box = mediaBox
         guard let cg = image.image else { return CGSize(width: min(box.width, 672), height: min(box.height, 640)) }
-        let natural = CGSize(width: CGFloat(cg.width), height: CGFloat(cg.height))
+        let natural = naturalSize ?? MarkdownImages.sizes[items[index].key] ?? CGSize(width: cg.width, height: cg.height)
         let fit = min(1, box.width / max(1, natural.width), box.height / max(1, natural.height))
         return CGSize(width: natural.width * fit, height: natural.height * fit)
     }
@@ -257,6 +267,7 @@ public final class ExpandedImagePreviewView: DSView {
         let inner = viewport(zoom: zoom), scaled = zoomedSize
         scroll.x = min(max(0, scaled.width - inner.width), max(0, scroll.x))
         scroll.y = min(max(0, scaled.height - inner.height), max(0, scroll.y))
+        requestPixels()
         // `ring-1` sits outside the image's box.
         frameView.frame = inner.insetBy(dx: -1, dy: -1)
         image.frame = NSRect(x: 1 - scroll.x, y: 1 - scroll.y, width: scaled.width, height: scaled.height)
@@ -275,6 +286,14 @@ public final class ExpandedImagePreviewView: DSView {
         let popupX = ((w - popupWidth) / 2).rounded()
         previous.frame = NSRect(x: popupX, y: (h / 2 - 16).rounded(), width: 32, height: 32)
         next.frame = NSRect(x: popupX + popupWidth - 32, y: (h / 2 - 16).rounded(), width: 32, height: 32)
+    }
+
+    /// Decode only the pixels this zoom can show, in 128px steps while a wheel gesture grows.
+    /// Panning reuses the layer's pixels and performs no image work.
+    private func requestPixels(_ initial: CGSize? = nil, scale: CGFloat? = nil) {
+        let size = initial ?? (image.image == nil ? mediaBox : zoomedSize)
+        let side = max(size.width, size.height) * (scale ?? window?.backingScaleFactor ?? 2)
+        image.requestedSide = min(4096, max(128, Int(ceil(side / 128)) * 128))
     }
 
     /// A new window size fits the image again (`resize` resets the zoom).

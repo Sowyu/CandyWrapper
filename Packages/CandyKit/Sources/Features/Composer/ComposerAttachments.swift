@@ -265,23 +265,29 @@ public enum ComposerImageIO {
 
     /// A thumbnail whose shorter side covers `side` pixels (`object-cover`), or whose longer side
     /// fits `side` when `cover` is false. Orientation applied.
-    public static func thumbnail(_ url: URL, side: Int, cover: Bool) async -> CGImage? {
-        await Task.detached(priority: .userInitiated) { () -> CGImage? in
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
-            var maxPixel = side
-            if cover, let size = pixelSize(url), size.width > 0, size.height > 0 {
-                let ratio = max(size.width, size.height) / min(size.width, size.height)
-                maxPixel = Int((CGFloat(side) * ratio).rounded(.up))
-            }
+    public static func thumbnail(_ url: URL, side: Int, cover: Bool, measurementKey: String? = nil) async -> CGImage? {
+        let decoded = await ImageDecodeWorker.shared.run { () -> (image: CGImage, natural: CGSize)? in
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
+                  let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                  let w = props[kCGImagePropertyPixelWidth] as? Int, let h = props[kCGImagePropertyPixelHeight] as? Int,
+                  w > 0, h > 0 else { return nil }
+            let rotated = (props[kCGImagePropertyOrientation] as? Int ?? 1) >= 5
+            let natural = rotated ? CGSize(width: h, height: w) : CGSize(width: w, height: h)
+            let ratio = cover ? CGFloat(max(w, h)) / CGFloat(min(w, h)) : 1
+            let maxPixel = Int(min(4096, (CGFloat(max(1, side)) * ratio).rounded(.up)))
             let options: [CFString: Any] = [
                 kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceShouldCacheImmediately: true, kCGImageSourceThumbnailMaxPixelSize: max(1, maxPixel),
+                kCGImageSourceShouldCacheImmediately: true, kCGImageSourceThumbnailMaxPixelSize: maxPixel,
             ]
             let start = ContinuousClock.now
-            let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+            guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
             ImageTiming.mark("decode", "\(url.lastPathComponent) \(maxPixel) took \(ContinuousClock.now - start)")
-            return image
-        }.value
+            return (image, natural)
+        }
+        guard !Task.isCancelled, let decoded else { return nil }
+        // Keep the source's exact aspect ratio across differently rounded thumbnail sizes.
+        if let measurementKey { await MarkdownImages.record(decoded.natural, for: measurementKey) }
+        return decoded.image
     }
 
     public enum PrepareFailure: Error, Equatable { case tooLarge, unreadable }

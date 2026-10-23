@@ -144,19 +144,19 @@ public enum MarkdownImages {
             let (file, response) = try await URLSession.shared.download(from: url)
             defer { try? FileManager.default.removeItem(at: file) }
             guard !Task.isCancelled, let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode) else { return nil }
-            return await Task.detached(priority: .userInitiated) {
+            return await ImageDecodeWorker.shared.run {
                 CGImageSourceCreateWithURL(file as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary).flatMap { decode($0, side: side) }
-            }.value
+            }
         } catch { return nil }
     }
 
     /// A `data:` URL; Foundation reads base64 and percent-encoded payloads.
     nonisolated static func decodeData(_ uri: String, side: Int) async -> (image: CGImage, natural: CGSize)? {
-        await Task.detached(priority: .userInitiated) {
+        await ImageDecodeWorker.shared.run {
             guard let url = URL(string: uri), let data = try? Data(contentsOf: url),
                   let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
             return decode(source, side: side)
-        }.value
+        }
     }
 
     /// A thumbnail whose longer side is at most `side` (and 4096) pixels, orientation applied, plus the natural size.

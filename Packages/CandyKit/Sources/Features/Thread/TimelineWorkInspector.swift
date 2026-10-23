@@ -33,6 +33,8 @@ enum WorkImage: Hashable {
         }
     }
 
+    var cacheable: Bool { if case .toolOutput = self { true } else { false } }
+
     var loader: AsyncImageView.Loader {
         switch self {
         case .toolOutput(let image): MarkdownImages.assetLoader(key: image.key, resource: image.resource)
@@ -452,7 +454,7 @@ final class WorkDetailView: DSView {
     }
 
     private func imageItem(_ image: WorkImage) -> ExpandedImagePreviewView.Item {
-        .init(key: image.key, name: image.alt, load: image.loader, reference: image.reference)
+        .init(key: image.key, name: image.alt, cacheable: image.cacheable, load: image.loader, reference: image.reference)
     }
 
     private func placeImages(_ laid: [Laid]) {
@@ -483,6 +485,7 @@ final class WorkDetailView: DSView {
     private func makeImageView(_ image: WorkImage) -> AsyncImageView {
         let view = AsyncImageView()
         view.cover = false
+        view.cacheable = image.cacheable
         // `text-xs text-muted-foreground`
         view.fallback.color = Themed.color(\.mutedForeground)
         view.fallback.font = DSFont.ui(12)

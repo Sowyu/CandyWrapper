@@ -3161,7 +3161,7 @@ extension ComposerController {
         }
         panel.model.attachmentImage = { [weak self] id, side, cover in
             guard let source = await self?.attachmentSource(id) else { return nil }
-            return await ComposerImageIO.thumbnail(source, side: side, cover: cover)
+            return await ComposerImageIO.thumbnail(source, side: side, cover: cover, measurementKey: id)
         }
         panel.model.onExpandImage = { [weak self] items, index in self?.presentPreview(items, index: index) }
         panel.stashBadge.onToggleMenu = { [weak self] in self?.toggleStashMenu() }
@@ -3879,7 +3879,7 @@ extension ComposerController {
         guard let index = images.firstIndex(where: { $0.id == id }) else { return }
         let items = images.map { image in
             let url = image.fileURL
-            return ExpandedImagePreviewView.Item(key: url.path, name: image.name, source: image.snapShotSource) { side in await ComposerImageIO.thumbnail(url, side: side, cover: false) }
+            return ExpandedImagePreviewView.Item(key: url.path, name: image.name, source: image.snapShotSource, cacheable: true) { side in await ComposerImageIO.thumbnail(url, side: side, cover: false, measurementKey: url.path) }
         }
         presentPreview(items, index: index)
     }
