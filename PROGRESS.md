@@ -1,5 +1,6 @@
 # Progress
 
+- [ ] Publish v1.12.12 (build 61) with the first image expansion fix and pending Redesign header/composer refinements (taken 2026-10-23, image-first-open-release).
 - [x] First image expansion (2026-10-23, image-first-open): show the clicked pixels immediately, reuse the Markdown/tool loader and downloaded bytes for expansion and zoom, and distinguish loading from a real failure. Weak references release hidden pixels, and downloads cancel and remove their temporary files. All 1,831 tests and 32 focused checks passed. A three-second HTTP fixture needed one request across inline display, expansion and zoom; the sharp expanded decode took 39.9 ms. The Release review flagged no new regressions, with shared-machine caveats retained. See `docs/perf/image-first-open-2026-10-23.md`.
 
 - [x] Published v1.12.11 (build 60), 2026-10-23, from `61156bdc`: image rendering, Dock icon size and native Auto styling, and recent menu-bar threads with project icons and no subagents. Signed ZIP, DMG and update feed verified. App code passed all 1,817 tests and 25 final image checks; two general thread-benchmark follow-ups remain recorded in the image review.
