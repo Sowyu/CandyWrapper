@@ -1609,8 +1609,42 @@ public final class ThreadPanelView: DSView {
         var shown: [NSView] = []
         var top = y
 
+        // The banner stack's items: notices become pills, the rest cards. The stack only runs their exits.
+        let ordered = ComposerBannerStackItem.ordered(bannerStackItems(docked: docked, composerVisible: visible))
+        let exiting = bannerStack.exitingView
+        bannerStack.update(ordered, adopting: false)
+        var pills: [(ComposerBannerView, CGFloat)] = []
+        var cards: [(ComposerBannerView, CGFloat)] = []
+        if docked && showsActivity { pills.append((activityRow, activityRow.pillWidth)) }
+        if docked && showsPlanFollowUp { pills.append((planFollowUpBanner, planFollowUpBanner.pillWidth)) }
+        for item in ordered where item.view !== lazyBackgroundWorkBanner.loaded {
+            if let notice = item.view as? ComposerNoticeBannerView {
+                pills.append((notice, notice.pillWidth))
+            } else {
+                cards.append((item.view, item.height(width) - overlap))
+            }
+        }
+
+        // Cards (the plan's tasks, a request, banner cards) sit right on the composer, full width; the pill rows,
+        // Stash and Queued included, float above them rather than wedged between (the user).
+        let request: ComposerBannerView? = !docked ? nil : drawer == .approval ? approvalPanel : drawer == .question ? questionPanel : nil
+        if let request {
+            lazyQuestionPanel.loaded?.maxBodyHeight = min(384, (window?.contentView?.bounds.height ?? bounds.height) * 0.4)
+            let h = request === approvalPanel ? approvalPanel.preferredHeight(width: width) : questionPanel.preferredHeight(width: width)
+            cards.insert((request, h - overlap), at: 0)
+        }
+        if docked && !tasksView.steps.isEmpty {
+            tasksView.frame.size.width = width
+            cards.insert((tasksView, tasksView.height - overlap), at: request == nil ? 0 : 1)
+        }
+        for (view, h) in cards {
+            view.frame = NSRect(x: x, y: top - gap - h, width: width, height: h)
+            top = view.frame.minY
+            shown.append(view)
+        }
+
         // The context row: the draft's chips (the hero), Stash at the right.
-        let rowY = y - gap - pillH
+        let rowY = top - gap - pillH
         var left = px, right = px + pw
         if isDraft {
             let w = hero.chipsWidth
@@ -1665,21 +1699,6 @@ public final class ThreadPanelView: DSView {
             shown.append(deviceRow)
         }
 
-        // The banner stack's items: notices become pills, the rest cards. The stack only runs their exits.
-        let ordered = ComposerBannerStackItem.ordered(bannerStackItems(docked: docked, composerVisible: visible))
-        let exiting = bannerStack.exitingView
-        bannerStack.update(ordered, adopting: false)
-        var pills: [(ComposerBannerView, CGFloat)] = []
-        var cards: [(ComposerBannerView, CGFloat)] = []
-        if docked && showsActivity { pills.append((activityRow, activityRow.pillWidth)) }
-        if docked && showsPlanFollowUp { pills.append((planFollowUpBanner, planFollowUpBanner.pillWidth)) }
-        for item in ordered where item.view !== lazyBackgroundWorkBanner.loaded {
-            if let notice = item.view as? ComposerNoticeBannerView {
-                pills.append((notice, notice.pillWidth))
-            } else {
-                cards.append((item.view, item.height(width) - overlap))
-            }
-        }
 
         // Queued then Stash at the row's right. Both drop their labels to the glyph and count when that lets the hero
         // or the first status pill fit beside them.
@@ -1713,22 +1732,6 @@ public final class ThreadPanelView: DSView {
             shown.append(view)
         }
 
-        // Cards stack above the pills, full width.
-        let request: ComposerBannerView? = !docked ? nil : drawer == .approval ? approvalPanel : drawer == .question ? questionPanel : nil
-        if let request {
-            lazyQuestionPanel.loaded?.maxBodyHeight = min(384, (window?.contentView?.bounds.height ?? bounds.height) * 0.4)
-            let h = request === approvalPanel ? approvalPanel.preferredHeight(width: width) : questionPanel.preferredHeight(width: width)
-            cards.insert((request, h - overlap), at: 0)
-        }
-        if docked && !tasksView.steps.isEmpty {
-            tasksView.frame.size.width = width
-            cards.insert((tasksView, tasksView.height - overlap), at: request == nil ? 0 : 1)
-        }
-        for (view, h) in cards {
-            view.frame = NSRect(x: x, y: top - gap - h, width: width, height: h)
-            top = view.frame.minY
-            shown.append(view)
-        }
 
         // The queue opens from its pill as a panel over everything above the row, floating over the timeline like the
         // stash list. The `/` menu and the stash list win while open.

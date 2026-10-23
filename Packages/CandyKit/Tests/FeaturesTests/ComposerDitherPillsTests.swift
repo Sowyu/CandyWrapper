@@ -48,6 +48,21 @@ struct ComposerDitherPillsTests {
         #expect(work.maxX < stash.minX)
     }
 
+    @Test func pillsFloatAboveThePlanCard() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        let (panel, window) = try panel(dither: true)
+        defer { window.contentView = nil }
+        panel.tasksView.steps = [ThreadTaskStep(text: "Verify in the sandbox", status: "running")]
+        panel.needsLayout = true
+        panel.layoutSubtreeIfNeeded()
+        let tasks = panel.tasksView.frame, stash = panel.stashBadge.frame
+        // The plan card sits right on the composer; Stash floats above it, not between.
+        #expect(!panel.tasksView.isHidden)
+        #expect(tasks.maxY == panel.composer.frame.minY - DitherPill.gap)
+        #expect(stash.maxY == tasks.minY - DitherPill.gap)
+    }
+
     /// Capy's row under the composer: the background work becomes the waiting indicator at the right, left of the
     /// context ring, and leaves the pill row above.
     @Test func waitingIndicatorSitsUnderTheComposerAtTheRight() throws {
