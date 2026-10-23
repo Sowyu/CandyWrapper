@@ -185,16 +185,6 @@ public enum ThreadImageGallery {
         return images
     }
 
-    /// The grid's tiles: missing ones only while "Show missing" is on.
-    public static func visible(_ images: [GalleryImage], missing: Set<String>, showMissing: Bool) -> [GalleryImage] {
-        showMissing ? images : images.filter { !missing.contains($0.pixelKey) }
-    }
-
-    /// The header's count: "53" or "53 · 41 missing".
-    public static func countLabel(total: Int, missing: Int) -> String {
-        missing > 0 ? "\(total) · \(missing) missing" : "\(total)"
-    }
-
     static let toolTypes: Set<TurnItemType> = [.dynamicTool, .commandExecution, .fileSearch, .fileChange, .webSearch]
 
     /// `![alt](src "title")` sources, angle brackets dropped. Images inside code spans count too.
@@ -260,6 +250,7 @@ public final class ThreadImageGalleryController {
     private var own = ThreadImageGallery.Collected()
     private var children: [ThreadId: ThreadImageGallery.Collected] = [:]
     private var names: [ThreadId: String] = [:]
+    /// The images that show: those nothing can load (server copy, kept copy and file all gone) never do.
     public private(set) var images: [GalleryImage] = []
     /// Stored output image counts and our copies' hashes, by `ThreadImageGallery.itemKey`.
     // ponytail: session only, a number and a hash per image item; drop per thread if sessions see thousands
@@ -275,8 +266,6 @@ public final class ThreadImageGalleryController {
     private var loadedHashes: [String: String] = [:]
     /// Tiles every source failed for, by pixel key.
     private var failed: Set<String> = []
-    public private(set) var missing: Set<String> = []
-    public var showMissing = false { didSet { if showMissing != oldValue { sync() } } }
     /// When the gallery last closed, or the thread first opened this session, per thread.
     // ponytail: session only, one number per opened thread; persist it if the dot should survive relaunch
     private var lookedAt: [ThreadId: Int64] = [:]
@@ -312,7 +301,6 @@ public final class ThreadImageGalleryController {
             children = [:]
             names = [:]
             failed = []
-            showMissing = false
             if let threadId, lookedAt[threadId] == nil { lookedAt[threadId] = TimestampFormat.nowMs() }
         }
         own = projection.map { ThreadImageGallery.collect($0, agent: "Main") } ?? .init()
@@ -377,15 +365,16 @@ public final class ThreadImageGalleryController {
     private func sync() {
         let lists = [ThreadImageGallery.assemble(own, counts: counts, hashes: hashes)]
             + children.map { id, c in ThreadImageGallery.assemble(c, agent: names[id] ?? "Subagent", counts: counts, hashes: hashes) }
-        let next = ThreadImageGallery.merge(lists, loaded: loadedHashes)
-        if next != images { images = next }
-        missing = Set(images.filter(isMissing).map(\.pixelKey))
-        let shown = ThreadImageGallery.visible(images, missing: missing, showMissing: false)
+        let all = ThreadImageGallery.merge(lists, loaded: loadedHashes)
+        let shown = all.filter { !isMissing($0) }
+        if shown != images { images = shown }
+        // Nothing left to show: the same as a thread without images, so the button hides and an open card closes.
+        if images.isEmpty, isOpen { close() }
         pill.galleryCount = images.count
         let since = threadId.flatMap { lookedAt[$0] } ?? .max
-        pill.galleryUnseen = !isOpen && ThreadImageGallery.unseen(shown, sinceMs: since) > 0
+        pill.galleryUnseen = !isOpen && ThreadImageGallery.unseen(images, sinceMs: since) > 0
         pill.gallery.isPressed = isOpen
-        view?.apply(images: images, missing: missing, showMissing: showMissing)
+        view?.images = images
     }
 
     /// Nothing left to load it from: every source failed, or the file is gone with no server or kept copy.
@@ -417,8 +406,7 @@ public final class ThreadImageGalleryController {
             guard let self, let popup = self.popup, let window = self.pill.window else { return }
             PopupHost.host(for: window).reposition(popup)
         }
-        view.onShowMissing = { [weak self] on in self?.showMissing = on }
-        view.apply(images: images, missing: missing, showMissing: showMissing)
+        view.images = images
         view.onOpenInThread = { [weak self] image in self?.close(); self?.onOpenInThread?(image) }
         view.onReveal = { [weak self] image in self?.onReveal?(image) }
         view.canReveal = { [weak self] image in self?.canReveal?(image) ?? false }

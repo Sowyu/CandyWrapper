@@ -173,43 +173,65 @@ struct ThreadImageGalleryTests {
         #expect(await cache.url(env: "local", thread: "u", item: "c") != nil)
     }
 
-    @Test func missingTilesHideBehindTheToggle() {
-        let images = (0..<3).map { GalleryImage(source: .file("/tmp/\($0).png"), threadId: "t", agent: "Main", entryId: "e\($0)", at: "2026-10-23T10:00:00Z", itemId: TurnItemId("e\($0)")) }
-        let missing: Set<String> = [images[0].pixelKey, images[2].pixelKey]
-        #expect(ThreadImageGallery.visible(images, missing: missing, showMissing: false).map(\.entryId) == ["e1"])
-        #expect(ThreadImageGallery.visible(images, missing: missing, showMissing: true).count == 3)
-        #expect(ThreadImageGallery.countLabel(total: 53, missing: 41) == "53 · 41 missing")
-        #expect(ThreadImageGallery.countLabel(total: 3, missing: 0) == "3")
-        let view = ThreadImageGalleryView()
-        view.apply(images: images, missing: missing, showMissing: false)
-        #expect(view.images.map(\.entryId) == ["e1"])
-        view.apply(images: images, missing: missing, showMissing: true)
-        #expect(view.images.count == 3)
+    static func controller(fileExists: Bool, kept: [String: String] = [:], served: Set<String> = []) -> (ThreadImageGalleryController, DitherHeaderPillView) {
+        let pill = DitherHeaderPillView()
+        pill.toggles = [IconName.ellipsis, .panelBottom, .panelRight].map { ToggleView(nil, icon: $0, variant: .ghost, size: .xs) }
+        for t in pill.toggles { pill.addSubview(t) }
+        let gallery = ThreadImageGalleryController(pill: pill)
+        gallery.fileExists = { _ in fileExists }
+        gallery.keptHashes = { _ in kept }
+        gallery.storedCount = { _, item in served.contains(item.rawValue) ? 1 : 0 }
+        gallery.keep = { _ in nil }
+        return (gallery, pill)
     }
 
-    /// A file gone before we kept it, which the server didn't keep, is missing once the lookups answer; a file kept
-    /// earlier, or whose item the server kept, is not.
-    @Test func controllerCallsOnlyUnrecoverableImagesMissing() async throws {
-        let pill = DitherHeaderPillView()
-        let gallery = ThreadImageGalleryController(pill: pill)
-        gallery.fileExists = { _ in false }
-        gallery.keptHashes = { _ in ["kept": "h1"] }
-        gallery.storedCount = { _, item in item == "served" ? 1 : 0 }
-        gallery.keep = { _ in nil }
+    static func settle(_ gallery: ThreadImageGalleryController, until done: () -> Bool) async throws {
+        for _ in 0..<100 where !done() { try await Task.sleep(for: .milliseconds(10)) }
+        try await Task.sleep(for: .milliseconds(30))
+    }
+
+    /// An image nothing can load (file gone, no kept copy, no server copy) leaves the grid and the count; a file kept
+    /// earlier, or whose item the server kept, stays.
+    @Test func unloadableImagesLeaveTheGridAndTheCount() async throws {
+        let (gallery, pill) = Self.controller(fileExists: false, kept: ["kept": "h1"], served: ["served"])
         let p = try Self.projection("t", items: [
             try Self.viewed("gone", "/tmp/gone.png", at: "2026-10-23T10:00:00Z"),
             try Self.viewed("kept", "/tmp/kept.png", at: "2026-10-23T10:01:00Z"),
             try Self.viewed("served", "/tmp/served.png", at: "2026-10-23T10:02:00Z"),
         ])
         gallery.update(threadId: "t", projection: p)
-        // Nothing is missing until the lookups answer.
-        #expect(gallery.missing.isEmpty)
-        for _ in 0..<100 where gallery.missing.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
-        let missing = gallery.images.filter { gallery.missing.contains($0.pixelKey) }.map(\.entryId)
-        #expect(missing == ["gone"])
+        try await Self.settle(gallery) { gallery.images.count == 2 }
+        #expect(gallery.images.map(\.entryId) == ["served", "kept"])
         #expect(gallery.images.first { $0.entryId == "served" }?.stored != nil)
         #expect(gallery.images.first { $0.entryId == "kept" }?.contentHash == "h1")
-        #expect(pill.galleryCount == 3)
+        #expect(pill.galleryCount == 2)
+        // A tile whose every source fails while it shows goes too.
+        gallery.markFailed(gallery.images[0])
+        #expect(gallery.images.map(\.entryId) == ["kept"] && pill.galleryCount == 1)
+        // The card's grid and header count only what shows.
+        let view = ThreadImageGalleryView()
+        view.images = gallery.images
+        #expect(view.images.count == 1)
+    }
+
+    /// Every image gone is the same as a thread with no images: nothing to show, a count of 0, the button hidden.
+    @Test func allMissingIsAnEmptyGallery() async throws {
+        let (gone, gonePill) = Self.controller(fileExists: false)
+        gone.update(threadId: "t", projection: try Self.projection("t", items: [
+            try Self.viewed("a", "/tmp/a.png", at: "2026-10-23T10:00:00Z"),
+            try Self.viewed("b", "/tmp/b.png", at: "2026-10-23T10:01:00Z"),
+        ]))
+        try await Self.settle(gone) { gone.images.isEmpty }
+        let (none, nonePill) = Self.controller(fileExists: false)
+        none.update(threadId: "u", projection: try Self.projection("u", items: []))
+        #expect(gone.images.isEmpty && none.images.isEmpty)
+        for pill in [gonePill, nonePill] {
+            pill.layoutSubtreeIfNeeded()
+            #expect(pill.galleryCount == 0 && !pill.galleryUnseen)
+            #expect(pill.gallery.isHidden)
+        }
+        gone.toggle()
+        #expect(!gone.isOpen)
     }
 
     /// The same bytes reached three ways: a kept file, a tool's output image (hashed when it downloaded) and the
@@ -337,14 +359,5 @@ struct ThreadImageGalleryTests {
         Self.save(root, "progress-03-large-offscreen.png", dir: dir)
         #expect(gallery.handleKey(.escape))
 
-        // Missing tiles: hidden behind the header's toggle, and the honest empty state when nothing is left.
-        let fake = gallery.images
-        gallery.apply(images: fake, missing: Set(fake.prefix(7).map(\.pixelKey)), showMissing: false)
-        root.layoutSubtreeIfNeeded()
-        await Self.pump { cells().allSatisfy { ($0.subviews.first as? AsyncImageView)?.image != nil } }
-        Self.save(root, "persist-01-missing-header-offscreen.png", dir: dir)
-        gallery.apply(images: fake, missing: Set(fake.map(\.pixelKey)), showMissing: false)
-        root.layoutSubtreeIfNeeded()
-        Self.save(root, "persist-02-all-missing-offscreen.png", dir: dir)
     }
 }
