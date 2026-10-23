@@ -38,6 +38,13 @@ enum ImageDecodeCache {
     }
     private static var requests: [String: [Request]] = [:]
 
+    /// A cover decode still contains the full source image. It can fill the fitted viewer while
+    /// that viewer requests its sharper fit decode, without treating the cover quality as sufficient.
+    static func preview(for key: String) -> CGImage? {
+        memory.object(forKey: "\(key)|fit" as NSString)?.image
+            ?? memory.object(forKey: "\(key)|cover" as NSString)?.image
+    }
+
     static func clear() {
         memory.removeAllObjects()
         for request in requests.values.joined() { request.task?.cancel() }

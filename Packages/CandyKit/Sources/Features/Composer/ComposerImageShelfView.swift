@@ -10,7 +10,10 @@ public final class AsyncImageView: DSView {
     /// Decodes for a pixel side, with larger requests when the display grows.
     public typealias Loader = @Sendable (_ side: Int) async -> CGImage?
     public private(set) var key: String?
-    private var loader: Loader?
+    private(set) var loader: Loader?
+    private var failureText = ""
+    private var pendingText = ""
+    private var failed = false
     private var task: Task<Void, Never>?
     public var cover = true {
         didSet {
@@ -51,19 +54,23 @@ public final class AsyncImageView: DSView {
 
     deinit { task?.cancel() }
 
-    public func set(key: String?, fallbackText: String, loader: Loader?) {
-        fallback.text = fallbackText
+    public func set(key: String?, fallbackText: String, loader: Loader?, preview: CGImage? = nil, loadingText: String? = nil) {
+        failureText = fallbackText
+        pendingText = loadingText ?? fallbackText
+        fallback.text = failed ? failureText : pendingText
         guard key != self.key else { return }
         self.key = key
         self.loader = loader
         reset()
+        if let preview { show(preview) }
         start()
     }
 
     private func reset() {
         generation += 1
         task?.cancel(); task = nil
-        attemptedSide = 0; loadedSide = 0
+        attemptedSide = 0; loadedSide = 0; failed = false
+        fallback.text = pendingText
         show(nil)
     }
 
@@ -109,6 +116,8 @@ public final class AsyncImageView: DSView {
             if hit.side >= side { return }
         }
         attemptedSide = side
+        failed = false
+        fallback.text = pendingText
         let generation = self.generation
         ImageTiming.mark("request", "\(key) \(side)")
         task = Task { [weak self] in
@@ -126,6 +135,9 @@ public final class AsyncImageView: DSView {
             if let result {
                 self.loadedSide = result.side
                 self.show(result.image)
+            } else if self.image == nil {
+                self.failed = true
+                self.fallback.text = self.failureText
             }
             self.onLoad?()
             // Layout or backing scale may have changed during the decode. Upgrade once to its latest size.
@@ -144,6 +156,7 @@ public final class AsyncImageView: DSView {
             image.loadedSide = side
             image.attemptedSide = side
             image.show(await loader(side))
+            if image.image == nil { image.failed = true; image.fallback.text = image.failureText }
             image.onLoad?()
         }
     }
@@ -168,6 +181,11 @@ public final class ComposerImageShelfView: DSView {
         public init(id: String, name: String, status: ComposerFileRow.Status, fileURL: URL, source: JSONValue? = nil) {
             self.id = id; self.name = name; self.status = status; self.fileURL = fileURL; self.source = source
         }
+    }
+
+    func previewItem(_ item: ExpandedImagePreviewView.Item, for id: String) -> ExpandedImagePreviewView.Item {
+        guard let view = views.first(where: { $0.id == id }) else { return item }
+        return item.withPreview(from: view.image)
     }
 
     static let side: CGFloat = 64, gap: CGFloat = 8, marginBottom: CGFloat = 12
@@ -257,7 +275,7 @@ public final class ComposerImageShelfView: DSView {
                 }
             }
             let url = tile.fileURL
-            image.set(key: url.path, fallbackText: tile.name) { side in await ComposerImageIO.thumbnail(url, side: side, cover: true) }
+            image.set(key: url.path, fallbackText: tile.name) { side in await ComposerImageIO.thumbnail(url, side: side, cover: true, measurementKey: url.path) }
             image.onContextMenu = { event, view in
                 MediaAttachmentContextMenu.show(name: tile.name, load: { side in await ComposerImageIO.thumbnail(url, side: side, cover: false) }, event: event, view: view)
             }
@@ -331,6 +349,11 @@ final class ComposerRestingImagesView: DSView {
     private let overflow = OverflowTile()
     private var ids: [String] = []
 
+    func previewItem(_ item: ExpandedImagePreviewView.Item, for id: String) -> ExpandedImagePreviewView.Item {
+        guard let index = ids.firstIndex(of: id), thumbs.indices.contains(index) else { return item }
+        return item.withPreview(from: thumbs[index].image)
+    }
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         overflow.action = { [weak self] in self?.onOverflow?() }
@@ -352,7 +375,7 @@ final class ComposerRestingImagesView: DSView {
         ids = shown.map(\.id)
         for (i, (view, tile)) in zip(thumbs, shown).enumerated() {
             let url = tile.fileURL
-            view.image.set(key: url.path, fallbackText: "") { side in await ComposerImageIO.thumbnail(url, side: side, cover: true) }
+            view.image.set(key: url.path, fallbackText: "") { side in await ComposerImageIO.thumbnail(url, side: side, cover: true, measurementKey: url.path) }
             view.setAccessibilityLabel("Preview \(tile.name)")
             view.action = { [weak self] in guard let self, i < self.ids.count else { return }; self.onExpand?(self.ids[i]) }
         }

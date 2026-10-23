@@ -529,7 +529,7 @@ final class WorkDetailView: DSView {
     /// The tool output is not in a Markdown gallery, so the preview holds this one image (markdownImageGallery.ts:11-50).
     @objc private func expandImage(_ gesture: NSClickGestureRecognizer) {
         guard let window, let view = gesture.view as? AsyncImageView, view.image != nil, let key = view.key, let image = image(for: key) else { return }
-        ExpandedImagePreviewView(items: [imageItem(image)], index: 0).present(in: window)
+        ExpandedImagePreviewView(items: [imageItem(image).withPreview(from: view, sharingLoader: true)], index: 0).present(in: window)
     }
 
     /// `cursor-zoom-in` on a loaded image.

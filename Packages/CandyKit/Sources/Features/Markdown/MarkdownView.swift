@@ -587,7 +587,7 @@ public final class MarkdownView: DSView {
             view.setAccessibilityLabel("Preview " + item.name)
             imageTooltips[index].text = place.tooltip ?? ""
             view.onContextMenu = { [weak self] event, source in
-                MediaAttachmentContextMenu.show(name: item.name, load: item.load, event: event, view: source,
+                MediaAttachmentContextMenu.show(name: item.name, load: (source as? AsyncImageView)?.loader ?? item.load, event: event, view: source,
                                                 reference: item.reference, openFile: self?.openInFileViewer(item.reference))
             }
         }
@@ -619,7 +619,8 @@ public final class MarkdownView: DSView {
     }
     @objc private func expandMarkdownImage(_ gesture: NSClickGestureRecognizer) {
         guard let window, let index = imageViews.firstIndex(where: { $0 === gesture.view }) else { return }
-        ExpandedImagePreviewView(items: imageItems, index: index).present(in: window)
+        let items = zip(imageItems, imageViews).map { $0.withPreview(from: $1, sharingLoader: true) }
+        ExpandedImagePreviewView(items: items, index: index).present(in: window)
     }
 
     fileprivate func chipHover(_ index: Int, _ inside: Bool) {

@@ -168,6 +168,11 @@ public final class ComposerView: DSView {
     /// The draft's images above the files (`expandedComposerImages`).
     public let imageShelf = ComposerImageShelfView()
     private let restingImages = ComposerRestingImagesView()
+
+    public func imagePreviewItem(_ item: ExpandedImagePreviewView.Item, for id: String) -> ExpandedImagePreviewView.Item {
+        if !restingImages.isHidden { return restingImages.previewItem(item, for: id) }
+        return imageShelf.previewItem(item, for: id)
+    }
     public var imageTiles: [ComposerImageShelfView.Tile] {
         get { imageShelf.tiles }
         set {
