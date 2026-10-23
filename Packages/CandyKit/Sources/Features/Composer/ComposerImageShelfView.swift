@@ -34,6 +34,10 @@ public final class AsyncImageView: DSView {
     /// path: decodes then go through `memory`. Leave it off for keys whose bytes can change, like a
     /// workspace file path.
     public var cacheable = false
+    /// Redesign's loading skeleton: a soft fill, an image glyph and a shimmer sweep, only while a decode is in flight.
+    public var skeleton = false { didSet { if skeleton != oldValue { updateSkeleton() } } }
+    private var shimmer: CAGradientLayer?
+    private var glyph: IconView?
     /// The attempted side also records failures, so layout never retries a failed request forever.
     private var attemptedSide = 0
     private(set) var loadedSide = 0
@@ -80,6 +84,7 @@ public final class AsyncImageView: DSView {
             if let key, image != nil { ImageTiming.mark("drop", key) }
             reset()
         } else { start() }
+        updateSkeleton()
     }
 
     public override func viewDidHide() { super.viewDidHide(); reset() }
@@ -102,6 +107,41 @@ public final class AsyncImageView: DSView {
         self.image = image
         layer?.contents = image
         fallback.isHidden = image != nil
+        updateSkeleton()
+    }
+
+    /// Shows the skeleton while loading and removes it the moment pixels or a failure arrive, so it only ever animates
+    /// while something is on its way.
+    private func updateSkeleton() {
+        let loading = skeleton && image == nil && !failed && loader != nil && window != nil && !isHiddenOrHasHiddenAncestor
+        if !loading {
+            shimmer?.removeFromSuperlayer(); shimmer = nil
+            glyph?.removeFromSuperview(); glyph = nil
+            if skeleton { fallback.alphaValue = 1 }
+            return
+        }
+        fallback.alphaValue = 0
+        if glyph == nil {
+            let g = IconView(name: .image, size: 20)
+            g.strokeColor = Themed.color(\.mutedForeground, 0.5)
+            addSubview(g, positioned: .below, relativeTo: fallback)
+            glyph = g
+        }
+        if shimmer == nil, let host = layer {
+            let g = CAGradientLayer()
+            g.startPoint = CGPoint(x: 0, y: 0.5); g.endPoint = CGPoint(x: 1, y: 0.5)
+            let base = Themed.color(\.foreground, 0.05).cgColor(in: self), lit = Themed.color(\.foreground, 0.12).cgColor(in: self)
+            g.colors = [base, lit, base]
+            g.locations = [-0.6, -0.3, 0]
+            let sweep = CABasicAnimation(keyPath: "locations")
+            sweep.fromValue = [-0.6, -0.3, 0]; sweep.toValue = [1, 1.3, 1.6]
+            sweep.duration = 1.4; sweep.repeatCount = .infinity
+            sweep.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            g.add(sweep, forKey: "sweep")
+            host.insertSublayer(g, at: 0)
+            shimmer = g
+        }
+        needsLayout = true
     }
 
     private func start() {
@@ -138,6 +178,7 @@ public final class AsyncImageView: DSView {
             } else if self.image == nil {
                 self.failed = true
                 self.fallback.text = self.failureText
+                self.updateSkeleton()
             }
             self.onLoad?()
             // Layout or backing scale may have changed during the decode. Upgrade once to its latest size.
@@ -164,6 +205,10 @@ public final class AsyncImageView: DSView {
     public override func layout() {
         super.layout()
         fallback.frame = NSRect(x: 4, y: (bounds.height - 14) / 2, width: max(0, bounds.width - 8), height: 14)
+        glyph?.frame = NSRect(x: (bounds.width - 20) / 2, y: (bounds.height - 20) / 2, width: 20, height: 20)
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        shimmer?.frame = bounds
+        CATransaction.commit()
     }
 }
 

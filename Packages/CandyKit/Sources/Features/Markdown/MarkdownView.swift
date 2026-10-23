@@ -583,6 +583,7 @@ public final class MarkdownView: DSView {
             view.frame = place.frame
             view.layer?.cornerRadius = place.radius
             view.cacheable = item.key.hasPrefix("diagram-")
+            view.skeleton = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
             view.set(key: item.key, fallbackText: place.fallback, loader: item.load)
             view.setAccessibilityLabel("Preview " + item.name)
             imageTooltips[index].text = place.tooltip ?? ""
