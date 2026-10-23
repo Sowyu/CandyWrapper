@@ -7,7 +7,7 @@ import Testing
 @MainActor
 struct DitherTabStripAccessoryTests {
     final class Fixed: NSView {
-        override var intrinsicContentSize: NSSize { NSSize(width: 260, height: 32) }
+        override var intrinsicContentSize: NSSize { NSSize(width: 260, height: DitherTabStripView.tabHeight) }
     }
 
     @Test func tabsNeverRunUnderTheAccessory() throws {
@@ -24,6 +24,8 @@ struct DitherTabStripAccessoryTests {
         #expect(shown.count < tabs.count)
         #expect(tabs.last.map { !$0.isHidden } == true)
         #expect(shown.allSatisfy { $0.frame.maxX < pill.frame.minX })
+        let sameLine = shown.allSatisfy { $0.frame.midY == pill.frame.midY && $0.frame.height == pill.frame.height }
+        #expect(sameLine)
     }
 
     @Test func windowKeepsTheSelectedTab() {

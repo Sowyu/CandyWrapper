@@ -14,7 +14,10 @@ public final class ThreadCostPillView: ControlView {
             digits.set(prefix: "", value: text, animated: oldValue != nil && breakdown != nil)
             setAccessibilityValue(text)
             invalidateIntrinsicContentSize()
-            superview?.needsLayout = true
+            needsLayout = true
+            digits.needsLayout = true
+            // In Redesign's pill the tab strip has to re-measure it too, or a thread switch leaves a stale gap.
+            if let pill = superview as? DitherHeaderPillView { pill.resized() } else { superview?.needsLayout = true }
         }
     }
 
@@ -69,7 +72,8 @@ public final class ThreadCostPillView: ControlView {
 
     private func restyle() {
         var box = BoxStyle()
-        box.radius = 10
+        // ToggleView's radius: `.sm` 10 at 28 tall, `.xs` 8 at 24 (Redesign's pill).
+        box.radius = bounds.height < 28 ? 8 : 10
         box.fill = state.hovered || state.active ? Themed.color(\.accent) : nil
         decoration.boxStyle = box
         digits.color = state.hovered || state.active ? Themed.color(\.contrastForeground) : Themed.color(\.mutedForeground)
@@ -80,6 +84,7 @@ public final class ThreadCostPillView: ControlView {
         super.layout()
         decoration.layout(boxSize: bounds.size)
         let w = digits.textWidth
+        restyle()
         digits.frame = NSRect(x: ((bounds.width - w) / 2).rounded(), y: ((bounds.height - 18) / 2).rounded(), width: w, height: 18)
     }
 }

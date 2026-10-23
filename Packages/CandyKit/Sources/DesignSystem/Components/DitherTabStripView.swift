@@ -34,7 +34,9 @@ public final class DitherTabStripView: TopbarDragView {
     private let plus = ButtonView(nil, icon: .plus, variant: .ghost, size: .iconSm)
     /// The thread's rows scroll on under the strip, so the tabs and + sit on a blur. It shows nothing over the bare art.
     private let plusFrost = BackdropBlurView()
-    static let tabWidth: CGFloat = 200, tabHeight: CGFloat = 28, gap: CGFloat = 4
+    static let tabWidth: CGFloat = 200, gap: CGFloat = 4
+    /// The tabs' height; the header pill beside them matches it and shares their midline.
+    public static let tabHeight: CGFloat = 28
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -334,9 +336,10 @@ public final class DitherTabStripView: TopbarDragView {
         override func updateLayer() {
             layer?.cornerRadius = DitherChrome.controlRadius
             // Keyboard focus shows T3's ring (`focus-visible:ring-2 ring-ring`); the tabs drew none before.
-            layer?.borderWidth = state.focusVisible ? 2 : isSelected ? 0.5 : 0
+            // Every tab wears Redesign's shared rim; the selected one stands out by its fill alone.
+            layer?.borderWidth = state.focusVisible ? 2 : 1
             layer?.borderColor = state.focusVisible ? Themed.color(\.ring).cgColor(in: self)
-                : Themed.color(\.contrastForeground, 0.1).cgColor(in: self)
+                : DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor
             layer?.backgroundColor = isSelected ? Themed.color(\.surfaceRaised).cgColor(in: self)
                 : state.hovered ? Themed.color(\.foreground, 0.04).cgColor(in: self) : nil
         }

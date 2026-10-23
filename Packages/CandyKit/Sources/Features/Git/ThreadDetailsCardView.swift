@@ -434,6 +434,9 @@ public final class DiffTotalsView: DSView {
     private let minus = LabelView()
     public var insertions = 0 { didSet { update() } }
     public var deletions = 0 { didSet { update() } }
+    /// Moves the digits down by this much: mono digits ride high in their line, so Redesign's band nudges them onto the
+    /// tab titles' midline.
+    public var glyphOffset: CGFloat = 0 { didSet { needsLayout = true } }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -453,8 +456,9 @@ public final class DiffTotalsView: DSView {
 
     public override func layout() {
         super.layout()
-        plus.frame = NSRect(x: 0, y: 0, width: ceil(plus.textWidth), height: 16)
-        minus.frame = NSRect(x: ceil(plus.textWidth) + 4, y: 0, width: ceil(minus.textWidth), height: 16)
+        let y = isFlipped ? glyphOffset : -glyphOffset
+        plus.frame = NSRect(x: 0, y: y, width: ceil(plus.textWidth), height: 16)
+        minus.frame = NSRect(x: ceil(plus.textWidth) + 4, y: y, width: ceil(minus.textWidth), height: 16)
     }
 
     public override func updateLayer() {
