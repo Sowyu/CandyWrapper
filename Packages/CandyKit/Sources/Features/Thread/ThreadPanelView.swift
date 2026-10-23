@@ -76,9 +76,9 @@ public final class ThreadHeaderView: TopbarDragView {
             host.addSubview(toggle)
             toggle.isHidden = !plain && !threadVisible
         }
-        if toggles[0].icon != (plain ? .gitFork : .squareMenu) {
-            toggles[0].icon = plain ? .gitFork : .squareMenu
-            toggles[0].setAccessibilityLabel(plain ? "Toggle lineage" : "Toggle thread details panel")
+        if toggles[0].icon != (plain ? .ellipsis : .squareMenu) {
+            toggles[0].icon = plain ? .ellipsis : .squareMenu
+            toggles[0].setAccessibilityLabel(plain ? "Thread actions" : "Toggle thread details panel")
             refreshToggleTooltips()
         }
         if !plain { toggles[0].isHidden = !threadVisible }
@@ -128,7 +128,7 @@ public final class ThreadHeaderView: TopbarDragView {
             ActiveKeymap.label(for: command).map { "\(text) (\($0))" } ?? text
         }
         guard toggleTips.count == 3 else { return }
-        toggleTips[0].text = tip(plain ? "Pull requests, automations and lineage" : "Toggle thread details", "threadPanel.toggle")
+        toggleTips[0].text = tip(plain ? "Editor, scripts, git and lineage" : "Toggle thread details", "threadPanel.toggle")
         toggleTips[1].text = tip("Toggle terminal drawer", "terminal.toggle")
         toggleTips[2].text = tip("Toggle right panel", "rightPanel.toggle")
     }
@@ -773,7 +773,7 @@ public final class ThreadPanelView: DSView {
         header.toggles[0].onPressedChange = { [weak self] _ in
             guard let self else { return }
             header.toggles[0].isPressed = detailsOpen // the controller decides
-            onDetailsToggle?()
+            if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) { showDitherActions() } else { onDetailsToggle?() }
         }
         header.toggles[2].onPressedChange = { [weak self] _ in
             guard let self else { return }
@@ -880,11 +880,30 @@ public final class ThreadPanelView: DSView {
         onDetailsVisibilityChange?()
     }
 
-    /// Redesign: builds the card for its links, shows the Lineage toggle while it has any, and closes it when they go.
+    /// Redesign's actions menu from the ellipsis in the tab band: Open in editor, scripts, git and Lineage. Lineage opens the
+    /// card with the thread's pull requests, automations and lineage under the same button.
+    public func showDitherActions() {
+        let toggle = header.toggles[0]
+        header.pill.menuSections[.lineage] = { [weak self] in
+            guard let self, self.lazyDetailsCard.loaded?.hasRelations == true else { return [] }
+            var item = MenuItem("Pull requests, automations and lineage", icon: .gitFork)
+            item.action = { [weak self] in DispatchQueue.main.async { self?.setDetailsOpen(true) } }
+            return [.label("Lineage"), item]
+        }
+        if detailsOpen { setDetailsOpen(false) }
+        let items = header.pill.menuItems()
+        guard !items.isEmpty, toggle.window != nil else { return }
+        let menu = MenuPopupView.show(items, from: toggle, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none),
+                                      minimumWidth: 240)
+        toggle.isPressed = menu != nil
+        let previous = menu?.hostPopup?.onClose
+        menu?.hostPopup?.onClose = { [weak self, weak toggle] in previous?(); toggle?.isPressed = self?.detailsOpen ?? false }
+    }
+
+    /// Redesign: builds the card for its links and closes it when they go.
     private func syncDitherRelations() {
         let card = detailsCard
         card.relationsOnly = true
-        header.pill.showsRelations = card.hasRelations
         if !card.hasRelations, detailsPopoverOpen { DispatchQueue.main.async { [weak self] in self?.closeDetailsPopover() } }
     }
 

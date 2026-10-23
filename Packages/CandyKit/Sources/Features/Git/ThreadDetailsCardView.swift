@@ -229,27 +229,13 @@ public final class DetailsSplitControl: DSView {
     }
 
     /// `role="group"` height: 32, or taller while the progress or success row shows its second line.
-    public var preferredHeight: CGFloat { compact ? 28 : primary.preferredHeight }
-
-    /// Redesign's header band: 28 tall, a 22pt chevron, the label only when it has text, and a running action on one
-    /// line with the chevron hidden and no elapsed time.
-    public var compact = false { didSet { primary.compact = compact; needsLayout = true } }
-    /// The compact group's width: the primary's content, then the rule and the chevron unless an action runs.
-    public var preferredWidth: CGFloat { primary.preferredWidth + (elapsedText == nil ? 23 : 0) }
-    /// The compact group's width may have changed: new text, icon or mode.
-    public var onResize: (@MainActor () -> Void)? { didSet { primary.onResize = onResize } }
-    /// A right click anywhere on the group (Redesign's editor button picks the editor this way).
-    public var onContextMenu: (@MainActor () -> Void)?
-    public override func rightMouseDown(with event: NSEvent) {
-        if let onContextMenu { onContextMenu() } else { super.rightMouseDown(with: event) }
-    }
+    public var preferredHeight: CGFloat { primary.preferredHeight }
 
     /// The elapsed time in the chevron's slot while an action runs; nil shows the chevron.
     public var elapsedText: String? {
         didSet {
             elapsed.text = elapsedText ?? ""
-            elapsed.isHidden = elapsedText == nil || compact
-            if (elapsedText == nil) != (oldValue == nil) { onResize?() }
+            elapsed.isHidden = elapsedText == nil
             secondary.isHidden = elapsedText != nil
             rule.isHidden = elapsedText != nil
             needsLayout = true
@@ -261,12 +247,6 @@ public final class DetailsSplitControl: DSView {
         super.layout()
         fill.frame = bounds
         let w = bounds.width
-        if compact {
-            secondary.frame = NSRect(x: w - 22, y: 0, width: 22, height: bounds.height)
-            rule.frame = CGRect(x: w - 23, y: (bounds.height - 14) / 2, width: 1, height: 14)
-            primary.frame = NSRect(x: 0, y: 0, width: elapsedText != nil ? w : w - 23, height: bounds.height)
-            return
-        }
         secondary.frame = NSRect(x: w - 32, y: 0, width: 32, height: 32)
         rule.frame = CGRect(x: w - 33, y: 8, width: 1, height: 16)
         if elapsedText != nil {
@@ -321,15 +301,12 @@ public final class DetailsSplitPart: ControlView {
     var corners: BoxStyle.Corners = .all
     var isChevron = false { didSet { rebuild() } }
     var onStateChange: (@MainActor () -> Void)?
-    /// See `DetailsSplitControl.compact`.
-    var compact = false { didSet { rebuild() } }
-    var onResize: (@MainActor () -> Void)?
     public var icon: IconDefinition? { didSet { if icon != oldValue { rebuild() } } }
     /// A full-color mark drawn instead of `icon` (the Open in editor's brand logos).
     public var image: NSImage? { didSet { if image !== oldValue { rebuild() } } }
     /// The idle icon's color; nil is `muted-foreground` (`THREAD_DETAILS_PANEL_ICON_CLASS`).
     public var iconColor: NSColor? { didSet { restyle() } }
-    public var text = "" { didSet { if mode == .idle { label.text = text }; needsLayout = true; if text != oldValue { onResize?() } } }
+    public var text = "" { didSet { label.text = text; needsLayout = true } }
     public var mode = Mode.idle { didSet { if mode != oldValue { rebuild() } } }
     /// `aria-disabled`: drawn at 64% but still hoverable for its reason.
     public var looksDisabled = false { didSet { applyAlpha() } }
@@ -355,12 +332,6 @@ public final class DetailsSplitPart: ControlView {
         addSubview(label)
         addSubview(detail)
         rebuild()
-    }
-
-    /// The compact part's width: 8 in, the 16pt glyph, the label after 6 when it has text, 8 out.
-    var preferredWidth: CGFloat {
-        let text = label.isHidden ? "" : label.text
-        return 8 + 16 + (text.isEmpty ? 0 : 6 + ceil(label.textWidth)) + 8
     }
 
     var preferredHeight: CGFloat {
@@ -390,13 +361,13 @@ public final class DetailsSplitPart: ControlView {
                 addSubview(s); spinner = s
                 label.text = status
                 detail.text = output ?? ""
-                detail.isHidden = output == nil || compact
+                detail.isHidden = output == nil
             case .success(let title, let description):
                 let v = IconView(name: .check, size: 14)
                 addSubview(v); iconView = v
                 label.text = title
                 detail.text = description ?? ""
-                detail.isHidden = description == nil || compact
+                detail.isHidden = description == nil
             }
         }
         scalesWhenPressed = mode == .idle
@@ -404,7 +375,6 @@ public final class DetailsSplitPart: ControlView {
         needsLayout = true
         applyAlpha()
         onStateChange?()
-        onResize?()
     }
 
     public override func layout() {
@@ -412,12 +382,6 @@ public final class DetailsSplitPart: ControlView {
         fill.layout(boxSize: bounds.size)
         if isChevron {
             iconView?.frame = NSRect(x: (bounds.width - 16) / 2, y: (bounds.height - 16) / 2, width: 16, height: 16)
-            return
-        }
-        if compact {
-            let midY = bounds.height / 2
-            (spinner ?? iconView ?? imageView)?.frame = NSRect(x: 8, y: midY - 8, width: 16, height: 16)
-            label.frame = NSRect(x: 30, y: midY - 10, width: max(0, bounds.width - 38), height: 20)
             return
         }
         // Idle: the 32pt row. Running and success: a 28pt title row (`grid-rows-[1.75rem]`, `py-0.75`) with

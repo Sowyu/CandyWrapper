@@ -28,22 +28,21 @@ struct DitherHeaderPillTests {
         #expect(card.preferredHeight == height)
     }
 
-    @Test func pillWidthFollowsItsControls() {
+    @Test func pillStaysSlimAndTheMenuKeepsSectionOrder() {
         let header = ThreadHeaderView()
         let pill = header.pill
         pill.cost = header.cost
         pill.toggles = header.toggles
         header.toggles.forEach { pill.addSubview($0) }
-        let bare = pill.intrinsicContentSize.width
-        pill.showsOpenIn = true
-        pill.openIn.primary.icon = IconName.squareArrowOutUpRight.definition
-        let withEditor = pill.intrinsicContentSize.width
-        let expected: CGFloat = bare + 2 + pill.openIn.preferredWidth
-        #expect(withEditor == expected)
-        // The editor button is icon-only: 8 + 16 + 8, then the rule and the 22pt chevron.
-        let editor: CGFloat = 55
-        #expect(pill.openIn.preferredWidth == editor)
-        pill.showsRelations = true
-        #expect(pill.intrinsicContentSize.width > withEditor)
+        pill.showsVersionControl = true
+        pill.totals.insertions = 71088
+        pill.changes.invalidateIntrinsicContentSize()
+        // Three icon toggles and the totals, with no text labels or chevrons: the tabs keep the rest of the band.
+        #expect(pill.intrinsicContentSize.width <= 200)
+        pill.menuSections[.git] = { [MenuItem("Commit")] }
+        pill.menuSections[.editor] = { [MenuItem("Open in Zed")] }
+        pill.menuSections[.lineage] = { [] }
+        let titles = pill.menuItems().map(\.title)
+        #expect(titles == ["Open in Zed", "", "Commit"])
     }
 }
