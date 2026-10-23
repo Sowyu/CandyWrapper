@@ -34,7 +34,7 @@ Each machine CandyWrapper connects to, like this Mac or a remote one through T3 
 
 - Every thread on the machine is the Orchestrator's, whoever started it. Its crew is all of them.
 - Threads stay normal T3 threads. You can still open any thread and type in it yourself.
-- The Orchestrator's prompts show in a thread as coming from Orchestrator, with its bot. T3 already records which thread sent each message (`senderThreadId`, `orchestratorMcp.ts:438`).
+- The Orchestrator's prompts show in a thread as coming from Orchestrator, with a small label naming it. T3 already records which thread sent each message (`senderThreadId`, `orchestratorMcp.ts:438`).
 - You and the Orchestrator share threads politely. If you sent the last message in a thread less than 10 minutes ago, the Orchestrator asks you before it prompts that thread. If a turn is running, it queues its message instead of interrupting, unless the thread is clearly stuck.
 - A thread can be marked "Hands off" from its menu. The Orchestrator still reads and reports on it, but never prompts it.
 - Approvals stay with you. The Orchestrator can answer a thread's questions but can't approve its commands (`orchestratorMcp.ts:228`). Every approval from every thread shows in its "Needs you" list.
@@ -243,7 +243,7 @@ The Orchestrator pane reads like a group chat in iMessage, with Orchestrator and
 
 - Your messages are accent-coloured bubbles on the right. Bot messages are grey bubbles on the left.
 - Messages in a row from the same sender group into one stack. The corners between them tighten, and only the last bubble gets a tail.
-- The sender's bot sits at the bottom of each stack on the left. A crew bot's name shows above its first bubble.
+- The Orchestrator's bot sits at the bottom of each of its stacks on the left. When a standing bot speaks in the chat, its bot and name show the same way. Threads never get a bot.
 - A centred time label shows wherever more than 15 minutes pass between messages. A small "Read" shows under your last message once Orchestrator's turn starts.
 - While a bot works, a typing bubble with three dots sits under its last message. It animates only while that turn runs.
 - Plans, approvals and questions show as cards inside the bubble stack, with buttons like Allow and Deny and no tail.
@@ -298,15 +298,14 @@ You change these by telling Orchestrator, which saves the change with a fenced `
 
 Grok Bot reads like team chat. Bots sit in the left sidebar, each with its own conversation, and markers show who needs you, who has unread results and who is working. Pinned bots stay at the top.
 
-1. A "Crew" section sits at the top of the Redesign sidebar, above the project list.
-2. Orchestrator is pinned first, with its own avatar. Clicking it opens the Orchestrator thread.
-3. Every thread sits under Orchestrator, grouped by project, with its bot and state. Threads it started carry `parentThreadId`, but the list shows every thread.
-4. Each row shows an avatar, a name, a one-line title and a status marker.
-5. The markers are "needs you" for a pending approval or question, "unread" for new results, "working" while a turn runs, and none when idle.
-6. Clicking a crew row opens that thread like any other thread.
-7. A small profile sheet edits a bot's name, title, description and avatar. CandyWrapper stores those locally, keyed by thread id. Orchestrator's own names from its briefs are the defaults.
-8. The dock badge counts "needs you" rows.
-9. Finished crew threads stay in the roster until you archive them, and the archive uses T3's own archive.
+Only the Orchestrator and the standing bots get bot faces. Threads are never drawn as bots. They keep their normal sidebar rows, icons and status, exactly as they look with the toggle off.
+
+1. The Orchestrator row is pinned at the top of the Redesign sidebar, above the thread list, with its bot, its machine and a needs-you count. Clicking it opens the Orchestrator's chat.
+2. In phase 2, a "Bots" section sits under it, with one row per standing bot, like OpSec. Each row shows the bot, its name, its last line and a status marker.
+3. The markers are "needs you" for a pending approval or question, "unread" for new results, "working" while a turn runs, and none when idle.
+4. The thread list below stays T3's own. The Orchestrator adds nothing to thread rows, not even a badge.
+5. A small profile sheet edits a bot's name, title, description and face. CandyWrapper stores those locally.
+6. The dock badge counts "needs you" items.
 
 ## The bots
 
@@ -317,9 +316,9 @@ The bots copy Grok Bot's look as closely as we can redraw it: a flat, bright sha
 - Each shape is a polar outline, rounded by a same-colour stroke with round joins, and drawn in a Core Animation layer with no images. The mockup code in this thread is the starting point.
 - The slices are cheap at sidebar size, up to about 20 bots on screen. If we need more, we switch to a real mesh.
 - Each bot is a real 3D solid drawn in one flat colour, with no shading. CandyWrapper inflates the 2D outline into a cushion by stacking about 14 slices that shrink toward the front and back. It rotates the solid by the gaze's yaw and pitch and fills the union of the projected slices as one path. Each shape has its own thickness, from 1.0 for the ball down to 0.5 for the star. The eyes are printed on the solid's face. The face is a smooth dome as deep as the cushion, and every point of each capsule outline is lifted onto it and turned with the body. So the eyes curve, get thinner as they turn away, and never slide on their own. The eyes never touch the edge. Every projected eye point needs a margin of 9% of the radius around it, measured against the visible rounded edge. Instead of moving the eyes, the head turns less. For each shape, CandyWrapper works out once how far it may turn in 32 directions, walking out from facing front to the first pose that fails, and it clamps the gaze to 94% of that. The star turns the least, about half a full turn, because its middle is narrow. A test sweeps every shape through 315 yaw and pitch poses and fails if any eye comes within the margin. The mockup passed 2,835 poses across 9 shapes.
-- The "New crew member" sheet copies Grok Bot's "Create New Bot" sheet: a big preview, a name field, a shape grid and colour dots. The profile sheet reuses it for edits.
+- The "New bot" sheet copies Grok Bot's "Create New Bot" sheet: a big preview, a name field, a shape grid and colour dots. The profile sheet reuses it for edits.
 - Orchestrator is the first row, larger, pinned above a divider, and the user picks its shape and colour like any bot.
-- A crew member Orchestrator starts gets the next free shape and colour pair.
+- A new standing bot gets the next free shape and colour pair. Threads never get one.
 
 The face carries the state through gaze and colour, never through a mouth. The eyes change only by turning with the head.
 
