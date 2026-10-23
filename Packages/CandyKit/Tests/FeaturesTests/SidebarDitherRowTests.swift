@@ -75,7 +75,7 @@ struct SidebarDitherRowTests {
         }
     }
 
-    @Test func hoveredRowShowsSettleSnoozePinArchiveAndMore() throws {
+    @Test func hoveredRowShowsSettleSnoozeAndMore() throws {
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous) }
         var dither = previous
@@ -97,7 +97,7 @@ struct SidebarDitherRowTests {
         card.refresh()
         card.layoutSubtreeIfNeeded()
         let shown = card.subviews.compactMap { $0 as? RowActionButton }.filter { !$0.isHidden }
-        #expect(shown.map(\.toolTip) == ["Settle thread", "Snooze thread", "Pin thread", "Archive thread", "More actions"])
+        #expect(shown.map(\.toolTip) == ["Settle thread", "Snooze thread", "More actions"])
         #expect(zip(shown, shown.dropFirst()).allSatisfy { $0.frame.maxX <= $1.frame.minX && $0.frame.width == $1.frame.width })
         window.contentView = nil
     }

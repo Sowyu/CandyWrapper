@@ -526,24 +526,21 @@ struct SidebarRowActions {
     var jumpHint: (ThreadId) -> String? = { _ in nil }
 }
 
-/// Dither's hover actions (after Capy): the jump shortcut, Settle and Snooze when the row can, then pin, archive and ⋯,
-/// all same-size icon buttons. Built on the first Dither row, so other themes never make it.
+/// Dither's hover actions (after Capy): the jump shortcut, Settle and Snooze when the row can, then ⋯, all same-size
+/// icon buttons. Pin and Archive live in the ⋯ menu only (the user, 2026-10-23). Built on the first Dither row, so other themes never make it.
 @MainActor
 final class CapyHoverGroup {
     let jump = KbdView()
     let settle = RowActionButton(icon: .check, size: 14, accessibility: "Settle thread")
     let snooze = RowActionButton(icon: .clock, size: 14, accessibility: "Snooze thread").menuTrigger()
-    let pin = RowActionButton(icon: .pin, size: 14, accessibility: "Pin thread")
-    let unpin = RowActionButton(icon: .pinOff, size: 14, accessibility: "Unpin thread")
-    let archive = RowActionButton(icon: .archive, size: 14, accessibility: "Archive thread")
     let more = RowActionButton(icon: .ellipsis, size: 14, accessibility: "More actions").menuTrigger()
     /// What the hovered row shows, left to right; placed while hidden too, so a fade-out stays put.
     var shown: [NSView] = []
-    var all: [NSView] { [jump, settle, snooze, pin, unpin, archive, more] }
+    var all: [NSView] { [jump, settle, snooze, more] }
     var menuOpen: Bool { snooze.state.popupOpen || more.state.popupOpen }
 
     init() {
-        for b in [settle, snooze, pin, unpin, archive, more] { b.padding = 3 }
+        for b in [settle, snooze, more] { b.padding = 3 }
     }
 }
 
@@ -768,9 +765,6 @@ final class SidebarCardRowView: SidebarRowBase {
             let id: () -> ThreadId? = { [weak self] in self?.row?.id }
             g.settle.action = { [weak self] in if let i = id() { self?.actions.settle(i) } }
             g.snooze.action = { [weak self, weak g] in if let i = id(), let g { self?.actions.snooze(i, g.snooze) } }
-            g.pin.action = { [weak self] in if let i = id() { self?.actions.pin(i) } }
-            g.unpin.action = { [weak self] in if let i = id() { self?.actions.unpin(i) } }
-            g.archive.action = { [weak self] in if let i = id() { self?.actions.archive(i) } }
             g.more.action = { [weak self, weak g] in if let i = id(), let g { self?.actions.moreMenu(i, g.more) } }
             capyGroup = g
             return g
@@ -778,9 +772,7 @@ final class SidebarCardRowView: SidebarRowBase {
         // The jump label is read only while the actions show, so a resting list never asks for it.
         let hint = visible ? actions.jumpHint(r.id) : nil
         if let hint { g.jump.keys = hint }
-        // ponytail: archive shows on running rows too and the command refuses with a toast; hide it if that reads wrong
-        let shown: [NSView] = (hint == nil ? [] : [g.jump]) + [g.settle] + (snoozes ? [g.snooze] : [])
-            + [r.isPinned ? g.unpin : g.pin, g.archive, g.more]
+        let shown: [NSView] = (hint == nil ? [] : [g.jump]) + [g.settle] + (snoozes ? [g.snooze] : []) + [g.more]
         let gone = g.all.filter { v in !shown.contains { $0 === v } }
         HoverReveal.snap(gone, visible: false, hides: true)
         HoverReveal.fade(shown, visible: visible, hides: true)
