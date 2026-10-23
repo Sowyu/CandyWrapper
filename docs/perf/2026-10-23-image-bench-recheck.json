@@ -1,0 +1,75 @@
+{
+  "baseline": "2026-10-21-80ed242-w1.json",
+  "command": "CW_BENCH=1 scripts/test -c release -Xswiftc -enable-testing --skip-build --filter 'hugeThreadCache|hugeThreadUpdate'",
+  "results": [
+    {
+      "bytes": 655678,
+      "json_bytes": 8294252,
+      "max_ms": 32.494958,
+      "median_ms": 30.784458,
+      "min_ms": 30.659833,
+      "name": "huge_cache_write",
+      "runs": 5
+    },
+    {
+      "bytes": 655678,
+      "max_ms": 25.140333,
+      "median_ms": 24.894834,
+      "min_ms": 24.714584,
+      "name": "huge_cache_load",
+      "runs": 5
+    },
+    {
+      "max_ms": 1.9394580000000001,
+      "median_ms": 1.741292,
+      "min_ms": 1.7061250000000001,
+      "name": "huge_update_stream",
+      "runs": 10,
+      "timeline_rows": 2701
+    },
+    {
+      "max_ms": 1.697749,
+      "median_ms": 1.5532080000000001,
+      "min_ms": 1.439084,
+      "name": "huge_update_tool",
+      "runs": 10,
+      "timeline_rows": 2701
+    },
+    {
+      "max_ms": 2.7634589999999997,
+      "median_ms": 2.587626,
+      "min_ms": 2.5364999999999998,
+      "name": "huge_update_append",
+      "runs": 10,
+      "timeline_rows": 2702
+    },
+    {
+      "max_ms": 2.277667,
+      "median_ms": 2.248792,
+      "min_ms": 2.244709,
+      "name": "huge_update_stream_entries",
+      "runs": 9
+    },
+    {
+      "max_ms": 0.034125,
+      "median_ms": 0.033916,
+      "min_ms": 0.033708,
+      "name": "huge_update_stream_rows_patch",
+      "runs": 9
+    },
+    {
+      "max_ms": 2.285209,
+      "median_ms": 2.244833,
+      "min_ms": 2.2405,
+      "name": "huge_update_tool_entries",
+      "runs": 9
+    },
+    {
+      "max_ms": 21.676583,
+      "median_ms": 21.505458,
+      "min_ms": 21.366417,
+      "name": "huge_update_tool_rows_offmain",
+      "runs": 5
+    }
+  ]
+}

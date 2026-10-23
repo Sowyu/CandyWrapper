@@ -673,7 +673,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let directory = URL(fileURLWithPath: title).deletingLastPathComponent()
             panel.model.attachmentImage = { id, side, cover in
                 let file = directory.appendingPathComponent((id as NSString).lastPathComponent + ".png")
-                return await ComposerImageIO.thumbnail(file, side: side, cover: cover)
+                return await ComposerImageIO.thumbnail(file, side: side, cover: cover, measurementKey: id)
+            }
+            panel.model.onExpandImage = { [weak panel] items, index in
+                guard let window = panel?.window else { return }
+                ExpandedImagePreviewView(items: items, index: index).present(in: window)
             }
             panel.setProjection(projection, projectTitle: "Layout sandbox", workspaceRoot: directory.path)
             if args.contains("--preview-details") {

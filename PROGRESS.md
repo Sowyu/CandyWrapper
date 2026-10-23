@@ -1,6 +1,8 @@
 # Progress
 
-- [ ] Optimize image decoding, cache reuse and expanded preview rendering (taken 2026-10-23, imageperf). Audit display-size work, cancellation, scrolling and zoom; verify in the sandbox and run the full review.
+- [x] Image rendering (2026-10-23, imageperf): share immutable decodes, retain sharper cache entries, upgrade on resize, scale and zoom, release hidden pixels and cancel unused requests. Background ImageIO work runs serially with bounded panorama sizes; source dimensions keep zoom geometry stable. Twenty repeated images need 1 decode instead of 20 and 95% fewer decoded bytes. Full suite: 1,817 passed; final focused and visual checks: 25 passed. Fit, zoom, pan and cached reopen checked in the sandbox. App performance stayed within review thresholds. Details and the two remaining general benchmark flags: `docs/perf/image-rendering-2026-10-23.md`.
+
+- [ ] Investigate huge-thread stream/tool benchmark drift against October 21: focused recheck 1.74/1.55 ms versus 1.00/0.80 ms. The fixture contains no images; immediate-parent attribution remains unmeasured. Full review and recheck saved in `docs/perf/image-rendering-2026-10-23.md` (found 2026-10-23, imageperf).
 
 - [x] Dark app icons (2026-10-23, iconsdark): every app icon has light and dark Dock images from `scripts/icon/render-variants`, and Settings > Appearance > App icon appearance picks Auto (follows macOS), Light or Dark. The picker's thumbnails show the variant the Dock gets.
 

@@ -121,3 +121,146 @@ struct AsyncImageCacheTests {
         #expect(grid.height(forWidth: 210) == cell * 2 + UserMessageAttachmentsView.gap + 8)
     }
 }
+
+extension AsyncImageCacheTests {
+    @Test func concurrentViewsShareOneDecode() async {
+        AsyncImageView.clearMemory()
+        let window = window(), calls = Calls(), key = UUID().uuidString
+        let views = (0..<20).map { _ in AsyncImageView(frame: NSRect(x: 0, y: 0, width: 64, height: 48)) }
+        for view in views {
+            view.cacheable = true
+            view.set(key: key, fallbackText: "", loader: Self.loader(calls))
+            window.contentView!.addSubview(view)
+        }
+        #expect(await eventually { views.allSatisfy { $0.image != nil } })
+        #expect(calls.all.count == 1, "twenty visible copies need only one decode")
+        for view in views { view.removeFromSuperview() }
+    }
+
+    @Test func resizingUpgradesButShrinkingReusesPixels() async {
+        let window = window(), calls = Calls()
+        let view = AsyncImageView(frame: NSRect(x: 0, y: 0, width: 40, height: 30))
+        view.set(key: UUID().uuidString, fallbackText: "", loader: Self.loader(calls))
+        window.contentView!.addSubview(view)
+        await waitForImage(view)
+        let first = view.image
+        view.frame.size = CGSize(width: 200, height: 150)
+        #expect(view.image === first, "keep the picture while sharper pixels arrive")
+        #expect(await eventually { calls.all.count == 2 && view.loadedSide == view.decodeSide })
+        let sharp = view.image
+        view.frame.size = CGSize(width: 30, height: 20)
+        #expect(view.image === sharp)
+        #expect(calls.all.count == 2)
+        view.removeFromSuperview()
+    }
+
+    @Test func hiddenImagesReleasePixelsAndReloadFromMemory() async {
+        AsyncImageView.clearMemory()
+        let window = window(), calls = Calls()
+        let view = AsyncImageView(frame: NSRect(x: 0, y: 0, width: 40, height: 30))
+        view.cacheable = true
+        view.isHidden = true
+        view.set(key: UUID().uuidString, fallbackText: "", loader: Self.loader(calls))
+        window.contentView!.addSubview(view)
+        #expect(calls.all.isEmpty)
+        view.isHidden = false
+        await waitForImage(view)
+        #expect(calls.all.count == 1)
+        view.isHidden = true
+        #expect(view.image == nil)
+        view.isHidden = false
+        #expect(view.image != nil)
+        #expect(calls.all.count == 1)
+        view.removeFromSuperview()
+    }
+
+    @Test func failedUpgradeDoesNotRetryOnEveryLayout() async {
+        let window = window(), calls = Calls()
+        let view = AsyncImageView(frame: NSRect(x: 0, y: 0, width: 40, height: 30))
+        let smallLoader = Self.loader(Calls())
+        view.set(key: UUID().uuidString, fallbackText: "", loader: { side in
+            calls.record(side)
+            return side <= 80 ? await smallLoader(side) : nil
+        })
+        window.contentView!.addSubview(view)
+        await waitForImage(view)
+        let first = view.image
+        view.requestedSide = 300
+        #expect(await eventually { calls.all.count == 2 })
+        for _ in 0..<20 { view.frame.size = CGSize(width: 200, height: 150); await Task.yield() }
+        #expect(view.image === first)
+        #expect(calls.all.count == 2)
+        view.removeFromSuperview()
+    }
+
+    @Test func lastConsumerCancelsSharedLoader() async {
+        let window = window(), calls = Calls()
+        let view = AsyncImageView(frame: NSRect(x: 0, y: 0, width: 40, height: 30))
+        view.cacheable = true
+        view.set(key: UUID().uuidString, fallbackText: "", loader: { side in
+            calls.record(side)
+            do { try await Task.sleep(for: .seconds(30)) }
+            catch { calls.record(-1) }
+            return nil
+        })
+        window.contentView!.addSubview(view)
+        #expect(await eventually { calls.all.count == 1 })
+        view.removeFromSuperview()
+        #expect(await eventually { calls.all.last == -1 })
+        #expect(view.image == nil)
+    }
+
+    @Test func aSmallerLateDecodeCannotReplaceASharpCacheEntry() async throws {
+        let key = UUID().uuidString, load = Self.loader(Calls())
+        let large = try #require(await load(256)), small = try #require(await load(32))
+        ImageDecodeCache.store(large, side: 256, key: key)
+        ImageDecodeCache.store(small, side: 32, key: key)
+        #expect(AsyncImageView.memory.object(forKey: key as NSString)?.image === large)
+    }
+
+    @Test func zoomUpgradesPixelsWithoutMovingTheImage() async throws {
+        let window = window(), calls = Calls()
+        let preview = ExpandedImagePreviewView(items: [.init(key: UUID().uuidString, name: "image", load: Self.loader(calls))], index: 0)
+        preview.present(in: window)
+        let image = try #require(preview.subviews.flatMap(\.subviews).compactMap { $0 as? AsyncImageView }.first)
+        #expect(await eventually { preview.layoutSubtreeIfNeeded(); return image.image != nil })
+        preview.layoutSubtreeIfNeeded()
+        let oldSide = image.loadedSide
+        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                                windowNumber: window.windowNumber, context: nil, characters: "+",
+                                                charactersIgnoringModifiers: "+", isARepeat: false, keyCode: 24))
+        for _ in 0..<3 { preview.keyDown(with: event) }
+        preview.layoutSubtreeIfNeeded()
+        let zoomedFrame = image.frame
+        #expect(await eventually { preview.layoutSubtreeIfNeeded(); return image.loadedSide > oldSide })
+        #expect(image.frame == zoomedFrame, "a sharper decode keeps the zoom and pan geometry")
+        preview.dismiss()
+        #expect(image.image == nil)
+    }
+}
+
+extension AsyncImageCacheTests {
+    @Test func removingOneConsumerKeepsTheOtherRequestAlive() async {
+        AsyncImageView.clearMemory()
+        let window = window(), calls = Calls(), key = UUID().uuidString
+        let makePixels = Self.loader(Calls())
+        let loader: AsyncImageView.Loader = { side in
+            calls.record(side)
+            do { try await Task.sleep(for: .milliseconds(100)) }
+            catch { calls.record(-1); return nil }
+            return await makePixels(side)
+        }
+        let a = AsyncImageView(frame: NSRect(x: 0, y: 0, width: 40, height: 30))
+        let b = AsyncImageView(frame: a.frame)
+        for view in [a, b] {
+            view.cacheable = true
+            view.set(key: key, fallbackText: "", loader: loader)
+            window.contentView!.addSubview(view)
+        }
+        #expect(await eventually { !calls.all.isEmpty })
+        a.removeFromSuperview()
+        #expect(await eventually { b.image != nil })
+        #expect(calls.all.count == 1)
+        b.removeFromSuperview()
+    }
+}
