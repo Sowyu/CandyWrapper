@@ -98,7 +98,9 @@ struct SidebarDitherRowTests {
         card.layoutSubtreeIfNeeded()
         let shown = card.subviews.compactMap { $0 as? RowActionButton }.filter { !$0.isHidden }
         #expect(shown.map(\.toolTip) == ["Settle thread", "Snooze thread", "More actions"])
-        #expect(zip(shown, shown.dropFirst()).allSatisfy { $0.frame.maxX <= $1.frame.minX && $0.frame.width == $1.frame.width })
+        // In order without overlap; Settle carries its word, so it is wider than the icon-only buttons, which match.
+        #expect(zip(shown, shown.dropFirst()).allSatisfy { $0.frame.maxX <= $1.frame.minX })
+        #expect(shown[0].frame.width > shown[1].frame.width && shown[1].frame.width == shown[2].frame.width)
         window.contentView = nil
     }
 }

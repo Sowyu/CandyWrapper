@@ -531,7 +531,8 @@ struct SidebarRowActions {
 @MainActor
 final class CapyHoverGroup {
     let jump = KbdView()
-    let settle = RowActionButton(icon: .check, size: 14, accessibility: "Settle thread")
+    /// With its word, the group's one labelled button: with Pin and Archive gone there is room (the user).
+    let settle = RowActionButton(icon: .check, size: 14, title: "Settle", accessibility: "Settle thread")
     let snooze = RowActionButton(icon: .clock, size: 14, accessibility: "Snooze thread").menuTrigger()
     let more = RowActionButton(icon: .ellipsis, size: 14, accessibility: "More actions").menuTrigger()
     /// What the hovered row shows, left to right; placed while hidden too, so a fade-out stays put.
