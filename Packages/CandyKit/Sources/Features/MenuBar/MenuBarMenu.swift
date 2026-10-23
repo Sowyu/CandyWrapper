@@ -22,7 +22,8 @@ public enum MenuBarMenu {
 
     public static func rows(_ snapshot: ShellSnapshot?) -> [Row] {
         var rows: [Row] = []
-        let live = (snapshot?.threads ?? []).filter { $0.archivedAt == nil }
+        // Subagent threads stay out: the menu is for threads you started (the user).
+        let live = (snapshot?.threads ?? []).filter { $0.archivedAt == nil && $0.lineage.relationshipToParent != .subagent }
         if snapshot == nil {
             rows.append(.label("Loading threads…"))
         } else if live.isEmpty {

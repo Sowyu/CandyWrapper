@@ -35,4 +35,12 @@ struct MenuBarMenuTests {
         #expect(MenuBarMenu.title(long) == String(repeating: "x", count: 47) + "…")
         #expect(MenuBarMenu.title(String(repeating: "y", count: 48)).count == 48)
     }
+
+    @Test func subagentThreadsStayOut() {
+        var child = Self.thread("sub", "Subagent", minute: 9)
+        child.lineage = ThreadLineage(parentThreadId: ThreadId("main"), relationshipToParent: .subagent, rootThreadId: ThreadId("main"))
+        let rows = MenuBarMenu.rows(Self.snapshot([Self.thread("main", "Main", minute: 1), child]))
+        #expect(rows.contains(.thread(ThreadId("main"), title: "Main")))
+        #expect(!rows.contains(.thread(ThreadId("sub"), title: "Subagent")))
+    }
 }

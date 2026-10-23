@@ -189,6 +189,15 @@ public final class ProjectMonogramView: DSView {
         ctx.restoreGState()
     }
 
+    /// The project's 16pt icon as an image, for native menus. Drawn when the menu draws, in its appearance.
+    public static func menuImage(_ source: ProjectIconSource) -> NSImage {
+        NSImage(size: NSSize(width: 16, height: 16), flipped: true) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            draw(source, identity: identity(source), ctx: ctx)
+            return true
+        }
+    }
+
     /// The identity a source draws: its chosen monogram, else the one generated from its title.
     static func identity(_ source: ProjectIconSource) -> (monogram: String, color: String) {
         if case .monogram(let text, let color)? = source.override { return (text, color) }
