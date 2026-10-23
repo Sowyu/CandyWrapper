@@ -1,0 +1,67 @@
+{
+  "_about": "Real subagent records from the user's live T3, read 2026-10-23 13:20 with the t3-code MCP tools, read-only (t3_thread_read on the parent's activity view and on both children, t3_thread_list with includeSubagents). Replayed as of snapshotAt, during the gallery's 5th run, which is when the user's 1.13.0 showed Subagent 6/4/3/2 all spinning and 'Waiting on 4'. Records are in creation order, as projection.subagents lists them. No secrets: ids, titles, models and times only.",
+  "snapshotAt": "2026-10-23T12:35:00.000Z",
+  "parent": {
+    "_source": "t3_thread_read(a5165836-...) recentRuns: run 355 ran 12:30:47-12:31:22, run 356 started 12:42:14 after the gallery finished, so at 12:35 the parent sat idle holding the gallery task as background work.",
+    "id": "a5165836-14bb-4f11-a9b1-e55353c8d945",
+    "title": "Polish Dither Wallpaper Theme",
+    "status": "completed",
+    "latestRunId": "run:thread:a5165836-14bb-4f11-a9b1-e55353c8d945:ordinal:355",
+    "pendingBackgroundTasks": [
+      {"taskId": "node:delegated-task:command%3Amcp%3A1c2c2f21-8d28-4497-b34a-33cc3511b293%3Athread-send%3Agallery-dedupe-fit-1", "kind": "subagent", "description": "Redesign: agent image gallery",
+       "childThreadId": "thread:delegated-task:command%3Amcp%3A1c2c2f21-8d28-4497-b34a-33cc3511b293%3Adelegate-task%3Aagent-image-gallery-1"}
+    ]
+  },
+  "children": [
+    {
+      "_source": "t3_thread_read(gallery child): run 5 requested 12:31:07.541, started 12:31:07.589, completed 12:42:13.190, so it was running at 12:35.",
+      "id": "thread:delegated-task:command%3Amcp%3A1c2c2f21-8d28-4497-b34a-33cc3511b293%3Adelegate-task%3Aagent-image-gallery-1",
+      "title": "Redesign: agent image gallery", "creationSource": "mcp", "status": "running",
+      "activityRunStatus": "running", "activityRunStartedAt": "2026-10-23T12:31:07.589Z"
+    },
+    {
+      "_source": "t3_thread_list(includeSubagents): the strip agent's thread; its follow-up (subagent-strip-fixes-1) finished 12:09:52 and the next one started 13:11, so it sat idle at 12:35.",
+      "id": "thread:delegated-task:command%3Amcp%3A1c2c2f21-8d28-4497-b34a-33cc3511b293%3Adelegate-task%3Asubagent-strip-1",
+      "title": "Redesign: Capy-style subagent strip", "creationSource": "mcp", "status": "completed",
+      "activityRunStatus": null, "activityRunStartedAt": null
+    }
+  ],
+  "subagents": [
+    {"_source": "t3_thread_list: strip child created 10:09:24.116; its parent run id was not read, so runId is null here (the row is settled either way).",
+     "id": "node:delegated-task:command%3Amcp%3A1c2c2f21-8d28-4497-b34a-33cc3511b293%3Adelegate-task%3Asubagent-strip-1",
+     "threadId": "a5165836-14bb-4f11-a9b1-e55353c8d945", "runId": null, "origin": "app_owned", "driver": "claudeAgent", "providerInstanceId": "claudeAgent",
+     "childThreadId": "thread:delegated-task:command%3Amcp%3A1c2c2f21-8d28-4497-b34a-33cc3511b293%3Adelegate-task%3Asubagent-strip-1",
+     "prompt": "", "title": "Redesign: Capy-style subagent strip", "model": "claude-opus-5-5", "status": "completed", "result": null,
+     "startedAt": "2026-10-23T10:09:24.116Z", "completedAt": null},
+    {"_source": "parent activity item 4180 (type subagent, status completed, run 336); times from the gallery child's run 1.",
+     "id": "node:delegated-task:command%3Amcp%3A1c2c2f21-8d28-4497-b34a-33cc3511b293%3Adelegate-task%3Aagent-image-gallery-1",
+     "threadId": "a5165836-14bb-4f11-a9b1-e55353c8d945", "runId": "run:thread:a5165836-14bb-4f11-a9b1-e55353c8d945:ordinal:336", "origin": "app_owned", "driver": "claudeAgent", "providerInstanceId": "claudeAgent",
+     "childThreadId": "thread:delegated-task:command%3Amcp%3A1c2c2f21-8d28-4497-b34a-33cc3511b293%3Adelegate-task%3Aagent-image-gallery-1",
+     "prompt": "", "title": "Redesign: agent image gallery", "model": "claude-opus-5-5", "status": "completed", "result": null,
+     "startedAt": "2026-10-23T10:34:24.381Z", "completedAt": "2026-10-23T11:01:38.071Z"},
+    {"_source": "parent activity item 4372 (status interrupted, run 350); gallery child's run 3, 12:01:55-12:04:15 (the stray Stop).",
+     "id": "node:delegated-task:command%3Amcp%3A1c2c2f21-8d28-4497-b34a-33cc3511b293%3Athread-send%3Agallery-persist-1",
+     "threadId": "a5165836-14bb-4f11-a9b1-e55353c8d945", "runId": "run:thread:a5165836-14bb-4f11-a9b1-e55353c8d945:ordinal:350", "origin": "app_owned", "driver": "claudeAgent", "providerInstanceId": "claudeAgent",
+     "childThreadId": "thread:delegated-task:command%3Amcp%3A1c2c2f21-8d28-4497-b34a-33cc3511b293%3Adelegate-task%3Aagent-image-gallery-1",
+     "prompt": "", "title": "Redesign: agent image gallery", "model": "claude-opus-5-5", "status": "interrupted", "result": null,
+     "startedAt": "2026-10-23T12:01:55.351Z", "completedAt": "2026-10-23T12:04:15.054Z"},
+    {"_source": "parent activity item 4380 (status completed, run 351); gallery child's run 4, 12:04:29-12:23:34.",
+     "id": "node:delegated-task:command%3Amcp%3A1c2c2f21-8d28-4497-b34a-33cc3511b293%3Athread-send%3Agallery-persist-resume-1",
+     "threadId": "a5165836-14bb-4f11-a9b1-e55353c8d945", "runId": "run:thread:a5165836-14bb-4f11-a9b1-e55353c8d945:ordinal:351", "origin": "app_owned", "driver": "claudeAgent", "providerInstanceId": "claudeAgent",
+     "childThreadId": "thread:delegated-task:command%3Amcp%3A1c2c2f21-8d28-4497-b34a-33cc3511b293%3Adelegate-task%3Aagent-image-gallery-1",
+     "prompt": "", "title": "Redesign: agent image gallery", "model": "claude-opus-5-5", "status": "completed", "result": null,
+     "startedAt": "2026-10-23T12:04:29.551Z", "completedAt": "2026-10-23T12:23:34.910Z"},
+    {"_source": "parent activity item 4386 (status completed, run 352, updated 12:09:52): the strip agent's first follow-up.",
+     "id": "node:delegated-task:command%3Amcp%3A1c2c2f21-8d28-4497-b34a-33cc3511b293%3Athread-send%3Asubagent-strip-fixes-1",
+     "threadId": "a5165836-14bb-4f11-a9b1-e55353c8d945", "runId": "run:thread:a5165836-14bb-4f11-a9b1-e55353c8d945:ordinal:352", "origin": "app_owned", "driver": "claudeAgent", "providerInstanceId": "claudeAgent",
+     "childThreadId": "thread:delegated-task:command%3Amcp%3A1c2c2f21-8d28-4497-b34a-33cc3511b293%3Adelegate-task%3Asubagent-strip-1",
+     "prompt": "", "title": "Redesign: Capy-style subagent strip", "model": "claude-opus-5-5", "status": "completed", "result": null,
+     "startedAt": "2026-10-23T12:04:59.666Z", "completedAt": "2026-10-23T12:09:52.831Z"},
+    {"_source": "parent activity item 4403 (run 355; completed 12:42:13, so running at 12:35); gallery child's run 5.",
+     "id": "node:delegated-task:command%3Amcp%3A1c2c2f21-8d28-4497-b34a-33cc3511b293%3Athread-send%3Agallery-dedupe-fit-1",
+     "threadId": "a5165836-14bb-4f11-a9b1-e55353c8d945", "runId": "run:thread:a5165836-14bb-4f11-a9b1-e55353c8d945:ordinal:355", "origin": "app_owned", "driver": "claudeAgent", "providerInstanceId": "claudeAgent",
+     "childThreadId": "thread:delegated-task:command%3Amcp%3A1c2c2f21-8d28-4497-b34a-33cc3511b293%3Adelegate-task%3Aagent-image-gallery-1",
+     "prompt": "", "title": "Redesign: agent image gallery", "model": "claude-opus-5-5", "status": "running", "result": null,
+     "startedAt": "2026-10-23T12:31:07.589Z", "completedAt": null}
+  ]
+}
