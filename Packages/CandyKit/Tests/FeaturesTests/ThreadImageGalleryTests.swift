@@ -212,6 +212,48 @@ struct ThreadImageGalleryTests {
         #expect(pill.galleryCount == 3)
     }
 
+    /// The same bytes reached three ways: a kept file, a tool's output image (hashed when it downloaded) and the
+    /// server's copy of another viewed file. One tile, the newest view, counting all three.
+    @Test func identicalBytesFromDifferentSourcesAreOneTile() {
+        var kept = GalleryImage(source: .file("/tmp/a.png"), threadId: "t", agent: "Main", entryId: "a", at: "2026-10-23T10:00:00Z", itemId: "a")
+        kept.contentHash = "same"
+        let output = GalleryImage(source: .toolOutput(ToolOutputImage(threadId: "s", itemId: "b", index: 0)), threadId: "s",
+                                  agent: "Subagent 1", entryId: "b", at: "2026-10-23T10:05:00Z", itemId: "b")
+        var served = GalleryImage(source: .file("/tmp/c.png"), threadId: "t", agent: "Main", entryId: "c", at: "2026-10-23T10:02:00Z", itemId: "c")
+        served.stored = ToolOutputImage(threadId: "t", itemId: "c", index: 0)
+        let other = GalleryImage(source: .file("/tmp/d.png"), threadId: "t", agent: "Main", entryId: "d", at: "2026-10-23T10:03:00Z", itemId: "d")
+        let loaded = [output.key: "same", served.key: "same", other.key: "different"]
+        let merged = ThreadImageGallery.merge([[kept, served, other], [output]], loaded: loaded)
+        #expect(merged.map(\.entryId) == ["b", "d"])
+        #expect(merged[0].views == 3 && merged[0].agent == "Subagent 1")
+        #expect(ThreadImageGalleryView.caption(merged[0]).hasSuffix(" · 3×"))
+        #expect(ThreadImageGalleryView.caption(merged[0], long: true).hasSuffix(" · viewed 3×"))
+        #expect(merged[1].views == 1 && !ThreadImageGalleryView.caption(merged[1], long: true).contains("viewed"))
+        // Before the downloads answer, each source is its own tile.
+        #expect(ThreadImageGallery.merge([[kept, served, other], [output]]).count == 4)
+    }
+
+    /// The card is as tall as its rows, between the empty state's minimum and the old fixed height, past which it scrolls.
+    @Test func cardHeightFollowsItsRows() {
+        let h = ThreadImageGalleryView.height
+        let max = ThreadImageGalleryView.size.height, min = ThreadImageGalleryView.minHeight
+        #expect(h(0, false) == min)
+        let one = h(2, false), two = h(5, false)
+        #expect(one > min && one < two && two < max)
+        #expect(h(4, false) == one && h(8, false) == two)
+        // A row is a tile and its caption plus the gap: 93 + 18 + 8 at 540 wide.
+        #expect(two - one == 119)
+        #expect(h(53, false) == max)
+        #expect(h(2, true) == max)
+        let view = ThreadImageGalleryView()
+        view.images = Self.fakeImages().prefix(2).map { $0 }
+        #expect(view.frame.height == one && view.intrinsicContentSize.height == one)
+        var resized = 0
+        view.onResize = { resized += 1 }
+        view.images = Self.fakeImages()
+        #expect(view.frame.height == h(10, false) && resized == 1)
+    }
+
     // MARK: Offscreen renders for review, written only with GALLERY_SNAPSHOTS=<dir>.
 
     static func dataURI(_ hue: CGFloat, _ label: String) -> String {

@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import DesignSystem
 import T3Protocol
 import T3Store
@@ -9,15 +10,18 @@ import T3Store
 /// (`ImageDecodeCache`), so a reopened gallery shows its pictures in the first frame.
 // ponytail: thumbnails share the 48 MB decode NSCache with the timeline; give the gallery its own LRU if it evicts timeline images
 public final class ThreadImageGalleryView: DSView {
+    /// The widest and tallest the card gets; past `size.height` the grid scrolls.
     static let size = NSSize(width: 540, height: 470)
+    /// Room for the empty and missing state's two lines.
+    static let minHeight: CGFloat = 160
     static let inset: CGFloat = 10, gap: CGFloat = 8, columns = 4, header: CGFloat = 36, caption: CGFloat = 18
 
     /// Newest first. Setting it keeps the picture shown large, by its identity.
     public var images: [GalleryImage] = [] {
         didSet {
             guard images != oldValue else { return }
-            if let shown = large.flatMap({ oldValue.indices.contains($0) ? oldValue[$0].key : nil }) {
-                large = images.firstIndex { $0.key == shown }
+            if let shown = large.flatMap({ oldValue.indices.contains($0) ? oldValue[$0] : nil }) {
+                large = images.firstIndex { $0.key == shown.key || $0.dedupeKey == shown.dedupeKey }
             }
             reload()
         }
@@ -28,6 +32,10 @@ public final class ThreadImageGalleryView: DSView {
     private(set) var showMissing = false
     /// Every source of a tile failed.
     public var onFailed: ((GalleryImage) -> Void)?
+    /// A tile's downloaded bytes hashed to this.
+    public var onHash: ((GalleryImage, String) -> Void)?
+    /// The card's height changed; the popup moves to fit.
+    public var onResize: (() -> Void)?
     /// "Show missing" flipped.
     public var onShowMissing: ((Bool) -> Void)?
     public var onOpenInThread: ((GalleryImage) -> Void)?
@@ -65,7 +73,9 @@ public final class ThreadImageGalleryView: DSView {
             guard let self else { return }
             self.onShowMissing?(!self.showMissing)
         }
-        grid.loader = { [weak self] image in Self.loader(image) { self?.onFailed?(image) } }
+        grid.loader = { [weak self] image in
+            Self.loader(image, onHash: { hash in self?.onHash?(image, hash) }) { self?.onFailed?(image) }
+        }
         back.toolTip = "Back to all images"
         back.setAccessibilityLabel("Back to all images")
         previous.toolTip = "Previous image"
@@ -83,8 +93,18 @@ public final class ThreadImageGalleryView: DSView {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
-    public override var intrinsicContentSize: NSSize { Self.size }
-    public override var fittingSize: NSSize { Self.size }
+    public override var intrinsicContentSize: NSSize { NSSize(width: Self.size.width, height: Self.height(tiles: images.count, large: large != nil)) }
+    public override var fittingSize: NSSize { intrinsicContentSize }
+
+    /// As tall as its rows of tiles, between `minHeight` and `size.height`; a picture shown large takes the full height.
+    static func height(tiles: Int, large: Bool) -> CGFloat {
+        guard !large else { return size.height }
+        let w = ((size.width - 2 * inset - CGFloat(columns - 1) * gap) / CGFloat(columns)).rounded(.down)
+        let cell = (w * 0.75).rounded() + caption
+        let rows = (tiles + columns - 1) / columns
+        let grid = rows == 0 ? 0 : 4 + CGFloat(rows) * (cell + gap) + inset
+        return min(size.height, max(minHeight, header + grid))
+    }
 
     /// The controller's state: every image, which are missing, and whether missing ones show.
     public func apply(images all: [GalleryImage], missing: Set<String>, showMissing: Bool) {
@@ -135,12 +155,19 @@ public final class ThreadImageGalleryView: DSView {
         reveal.isHidden = image.map { !(canReveal?($0) ?? false) } ?? true
         if gridShown { picture.set(key: nil, fallbackText: "", loader: nil) }
         if let image {
-            picture.set(key: image.pixelKey, fallbackText: "Image unavailable", loader: Self.loader(image) { [weak self] in self?.onFailed?(image) },
+            picture.set(key: image.pixelKey, fallbackText: "Image unavailable",
+                        loader: Self.loader(image, onHash: { [weak self] hash in self?.onHash?(image, hash) }) { [weak self] in self?.onFailed?(image) },
                         preview: ImageDecodeCache.preview(for: image.pixelKey), loadingText: "Loading…")
-            detail.text = Self.caption(image) + " · " + Self.name(image)
+            detail.text = Self.caption(image, long: true) + " · " + Self.name(image)
             picture.toolTip = image.filePath
         } else {
             grid.images = images
+        }
+        let height = Self.height(tiles: images.count, large: image != nil)
+        if frame.height != height {
+            setFrameSize(NSSize(width: Self.size.width, height: height))
+            invalidateIntrinsicContentSize()
+            onResize?()
         }
         needsLayout = true
     }
@@ -176,9 +203,11 @@ public final class ThreadImageGalleryView: DSView {
         detail.frame = NSRect(x: i + 4, y: buttonsY + 3, width: max(0, x - i - 8), height: 18)
     }
 
-    static func caption(_ image: GalleryImage) -> String {
+    /// A tile's caption ends in "2×" for a picture viewed twice; the large view, with room, says "viewed 2×".
+    static func caption(_ image: GalleryImage, long: Bool = false) -> String {
         let when = TimestampFormat.formatRelativeTimeLabel(image.at.raw, nowMs: TimestampFormat.nowMs())
-        return when.isEmpty ? image.agent : image.agent + " · " + when
+        let views = image.views > 1 ? (long ? " · viewed \(image.views)×" : " · \(image.views)×") : ""
+        return (when.isEmpty ? image.agent : image.agent + " · " + when) + views
     }
 
     static func name(_ image: GalleryImage) -> String {
@@ -192,13 +221,21 @@ public final class ThreadImageGalleryView: DSView {
     /// Tries the image's sources in order (`GalleryImage.attempts`): the server's stored copy, our kept copy, then the
     /// file or URL itself. Host files and tool outputs sign through `assets.createUrl` on their own thread
     /// (`useAssetUrlState`, apps/web/src/assets/assetUrls.ts:20-41), with the timeline's loaders.
-    static func loader(_ image: GalleryImage, onFailed: @escaping @MainActor () -> Void = {}) -> AsyncImageView.Loader {
+    /// `onHash` gets the SHA-256 of bytes it downloads, once, so identical pictures merge into one tile.
+    static func loader(_ image: GalleryImage, onHash: @escaping @MainActor (String) -> Void = { _ in },
+                       onFailed: @escaping @MainActor () -> Void = {}) -> AsyncImageView.Loader {
+        nonisolated(unsafe) let hashed = onHash
+        let onFile: @Sendable (URL) async -> Void = { url in
+            guard let data = try? Data(contentsOf: url), !data.isEmpty else { return }
+            let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+            await hashed(hash)
+        }
         let loaders: [AsyncImageView.Loader] = image.attempts.map { attempt in
             switch attempt {
-            case .stored(let stored): MarkdownImages.assetLoader(key: stored.key, resource: stored.resource)
+            case .stored(let stored): MarkdownImages.assetLoader(key: stored.key, resource: stored.resource, onFile: onFile)
             case .kept(let thread, let item): MarkdownImages.keptLoader(thread: thread, item: item)
             case .source:
-                if let resource = image.resource { MarkdownImages.assetLoader(key: image.key, resource: resource) }
+                if let resource = image.resource { MarkdownImages.assetLoader(key: image.key, resource: resource, onFile: onFile) }
                 else if case .url(let url) = image.source { MarkdownImages.loader(.direct(url)) }
                 else { { _ in nil } }
             }
