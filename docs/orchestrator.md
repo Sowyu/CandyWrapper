@@ -27,8 +27,42 @@ Each machine CandyWrapper connects to, like this Mac or a remote one through T3 
 
 - You pick Orchestrator's machine when you turn it on, from the same machine list as the composer's Run on. You can change it later, which starts a new Orchestrator thread there with the same notebook.
 - Orchestrator runs on that machine's server, so it keeps working while CandyWrapper is closed, as long as that machine is on.
-- Orchestrator's crew threads run on the same machine. T3's thread tools act on the server they run on, and `t3_thread_launch` takes no machine (`orchestratorMcp.ts`), so a Orchestrator can't start or prompt threads on another machine.
+- T3's thread tools act only on the server they run on, and `t3_thread_launch` takes no machine (`orchestratorMcp.ts`). CandyWrapper relays calls to every other machine, so the Orchestrator still sees and manages every thread everywhere. See "Every machine" below.
 - The Orchestrator row shows its name on the first line and its machine on the second, with the same machine glyph and label as the composer's machine row, like "[machine icon] mac-mini".
+
+## Every machine
+
+The Orchestrator manages every thread on every machine CandyWrapper connects to, not only the machine its thread runs on. On 2026-10-23 it got "thread_not_found" for a thread on another machine, because T3's `t3_thread_*` tools only reach their own server.
+
+### Why the app relays
+
+The Orchestrator's agent runs on its machine's T3 server, and that server gives it exactly one MCP server, its own `t3-code` (`ClaudeAdapterV2.ts:1354`, `T3_CODE_ORCHESTRATION_INSTRUCTIONS`). Clients can't add MCP servers to a thread. A CandyWrapper MCP server also wouldn't help, because the agent runs on another machine, like miniko, and can't reach CandyWrapper on your Mac. CandyWrapper already holds a live connection to every machine, so it carries the calls. This needs no change to T3's server and no new wire messages.
+
+1. The brief lists every connected machine with its label and machine id, and marks the one the Orchestrator runs on.
+2. To act on any machine, the Orchestrator writes a fenced `orchestrator-call` block with one JSON call per line, then ends its turn.
+3. When the Orchestrator's turn ends, CandyWrapper reads that turn's replies once with `orchestration.getThreadProjection`, runs each call on the machine it names over that machine's own connection, and sends all the results back as one message that starts with `Result:`. The pane draws it as a small centred line, like an event.
+4. CandyWrapper relays the turn ends, failures and requests of threads on every connected machine, not only its own. Each event line names the machine.
+
+The calls are:
+
+- `{"tool":"list"}` lists every machine's projects and threads, each labelled with its machine. `"machine"` narrows it to one.
+- `{"tool":"read","machine":"…","threadId":"…","last":5}` returns a thread's state and its last messages, 5 by default and 20 at most.
+- `{"tool":"send","machine":"…","threadId":"…","text":"…"}` prompts a thread. Behind a running turn the message queues.
+- `{"tool":"launch","machine":"…","projectId":"…","title":"…","text":"…","model":"<Models row label>","worktree":"<base ref>"}` starts a thread. Without `model` it uses the default row, and without `worktree` it runs in the project's checkout.
+- `{"tool":"archive","machine":"…","threadId":"…"}` archives a finished thread.
+
+`machine` takes the machine id or its label. Thread ids alone never say where a thread lives, so every call that names a thread also names its machine, and every result says which machine it came from.
+
+### The limits still hold
+
+CandyWrapper checks the limits in code before it relays a call, on top of the brief:
+
+- A thread marked Hands off is never prompted. "Hands off" is in the thread menu on every machine.
+- If you wrote in a thread inside the ask-first window, `send` refuses until the Orchestrator asked you and adds `"confirmed":true`.
+- `launch` refuses once the worker limit is reached. It counts the running threads the relay launched on other machines plus the running children of the Orchestrator thread.
+- A message CandyWrapper relays reaches the server as yours, because T3 marks every client command `createdBy: "user"` (`ws.ts:1830`). CandyWrapper remembers when it relayed to each thread, so its own message doesn't start the ask-first window.
+
+The Orchestrator still uses T3's own tools on its own machine, since they need no extra turn. Calls run only while CandyWrapper is open. The "while closed" check uses T3's tools, so it sees only its own machine. Calls from a turn that ended while CandyWrapper was closed are never run later.
 
 ## Every thread is under the Orchestrator
 
@@ -363,7 +397,7 @@ Start each phase only when the one before it is done: tests and perf-review pass
 1. Phase 1, the Orchestrator as master of every thread on its machine: toggle, settings tab with the Models list, one Orchestrator per machine, sidebar and crew, chat with Overview and Needs you, plan and memory blocks, 3D bots.
 2. Phase 2, bots: standing bots with a role prompt, memory and their own chat, starting with OpSec. The Orchestrator hands steps to them. Bot templates and the "New bot" sheet.
 3. Phase 3, running on their own: schedules and event triggers for bots, through T3's scheduled tasks, plus the Digest tab and the dock badge.
-4. Phase 4, every machine: showing every machine's Orchestrator together, with one combined Needs you list.
+4. Phase 4, every machine: showing every machine's Orchestrator together, with one combined Needs you list. The relay in "Every machine" came first, on 2026-10-23, so one Orchestrator already reaches every machine.
 
 ## Open questions
 
