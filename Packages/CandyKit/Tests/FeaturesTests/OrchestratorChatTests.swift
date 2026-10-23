@@ -39,6 +39,7 @@ import Testing
             case .read: "read"
             case .typing: "typing"
             case .image: "image"
+            case .html: "html"
             }
         }
         #expect(kinds == ["time", "brief", "me^", "me$", "read", "bot^$", "plan:w1", "time", "line:“Scribe” finished a turn:w1", "typing"])
@@ -84,6 +85,21 @@ import Testing
             switch i { case .image: "image"; case .bubble: "bubble"; default: nil }
         }
         #expect(kinds == ["image", "bubble"])
+    }
+
+    /// A page it published with html_render shows above that turn's reply.
+    @Test func publishedPagesSitAboveTheReply() throws {
+        let tool = try JSONDecoder().decode(TurnItem.self, from: JSONSerialization.data(withJSONObject: [
+            "id": "ti-2", "threadId": "orch", "type": "dynamic_tool", "ordinal": 2, "status": "completed", "runId": "run-1",
+            "updatedAt": T3Timestamp(start).raw, "toolName": "mcp__t3-code__html_render",
+            "output": ["htmlRender": ["attachmentId": "page-1", "title": "Plan", "height": 400]],
+        ] as [String: Any]))
+        let items = OrchestratorChat.items(messages: [message("m2", "assistant", "Here it is.", minutes: 0, run: "run-1")],
+                                           turnItems: [tool], running: false, now: start)
+        let kinds = items.compactMap { i -> String? in
+            switch i { case .html(_, let page): "html:\(page.attachmentId)"; case .bubble: "bubble"; default: nil }
+        }
+        #expect(kinds == ["html:page-1", "bubble"])
     }
 
     /// The Overview's groups: work under way, work done, and work that stopped short.

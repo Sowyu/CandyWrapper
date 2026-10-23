@@ -161,6 +161,7 @@ You write the prompt in Settings. CandyWrapper ships the default below, prefille
 - Since T3 has no system prompt, CandyWrapper sends the prompt as the first message of the Orchestrator thread. Redesign draws that message as a collapsed "Brief" card instead of a chat bubble.
 - If you edit the prompt while a Orchestrator exists, CandyWrapper sends the new version as an "Updated brief" message on your next send. Old threads keep their history.
 - A rename goes out as an "Updated brief" with your next message, like any other change to the brief.
+- CandyWrapper adds two short sections to every brief, an edited prompt's too. "Showing visuals" asks for a self-contained HTML page, checked with html_preview and published with html_render, when a chart, table, diagram or mockup would say more than prose; the page shows in the Orchestrator's chat above its reply. "Asking the user" asks it to use its question tool (AskUserQuestion on Claude, request_user_input on Codex) with 2 to 4 options; the question shows above the chat's composer like a thread's, and the answer goes back through T3's own path.
 - The prompt can use `{{name}}`, `{{machine}}`, `{{projects}}`, `{{bots}}`, `{{models}}` and `{{crewLimit}}`. CandyWrapper fills them in before sending. `{{models}}` is the table from the Models list in the Orchestrator settings tab.
 
 ### Default prompt
