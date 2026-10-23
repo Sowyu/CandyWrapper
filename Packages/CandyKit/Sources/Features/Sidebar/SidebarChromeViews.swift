@@ -488,6 +488,41 @@ final class SidebarAccountAvatarView: ControlView {
 /// CPU and memory (`AppUsageReadoutView`), and a chevron. The avatar opens Settings at Machines and connections; the
 /// rest opens the account menu above it: Settings, Usage and Appearance, then "Update all (N)" while updates wait. It
 /// shows no e-mail, which was too easy to reveal on a screen share (the user, 2026-10-22).
+/// The account pill's chevron: the only thing that opens the account menu, with its own hover fill.
+final class SidebarAccountChevronButton: ControlView {
+    static let size: CGFloat = 24
+    let icon = IconView(name: .chevronUp, size: 12)
+    /// The menu is open: the glyph turns down and keeps the pressed fill.
+    var open = false { didSet { if open != oldValue { icon.setRotation(open ? 180 : 0); needsDisplay = true } } }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        scalesWhenPressed = false
+        addSubview(icon)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel("Account menu")
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override func stateDidChange(from old: State) {
+        super.stateDidChange(from: old)
+        needsDisplay = true
+    }
+
+    override func layout() {
+        super.layout()
+        icon.frame = NSRect(x: (bounds.width - 12) / 2, y: (bounds.height - 12) / 2, width: 12, height: 12)
+    }
+
+    override func updateLayer() {
+        let lit = open || state.hoverOrPressed
+        layer?.cornerRadius = 6
+        layer?.backgroundColor = lit ? SB.c(\.sidebarForeground, open || state.active ? 0.12 : 0.08).cgColor(in: self) : nil
+        icon.strokeColor = lit ? SB.c(\.sidebarForeground) : SB.c(\.sidebarMutedForeground)
+    }
+}
+
 public final class SidebarAccountRowView: ControlView {
     public static let height: CGFloat = 44
     /// Its distance from the sidebar's left, right and bottom edges.
@@ -497,7 +532,7 @@ public final class SidebarAccountRowView: ControlView {
     let avatar = SidebarAccountAvatarView()
     private let name = LabelView("", font: SB.font(13, .medium), color: SB.c(\.sidebarForeground))
     public let usage = AppUsageReadoutView()
-    private let chevron = IconView(name: .chevronUp, size: 12)
+    private let chevron = SidebarAccountChevronButton()
     public var onOpenSettings: (() -> Void)?
     public var onOpenUsage: (() -> Void)?
     /// A click on the avatar: Settings at Machines and connections.
@@ -505,8 +540,8 @@ public final class SidebarAccountRowView: ControlView {
     /// The updates "Update all" would run now (`UpdateEverythingLogic.offered`); the item hides at 0.
     public var updateAllCount = 0
     public var onUpdateAll: (() -> Void)?
-    /// The menu is open: the chevron brightens and turns down, and the row keeps its pressed fill.
-    private var menuOpen = false { didSet { if menuOpen != oldValue { chevron.setRotation(menuOpen ? 180 : 0); needsDisplay = true } } }
+    /// The menu is open: the chevron brightens and turns down, and the row keeps its lit fill.
+    private var menuOpen = false { didSet { if menuOpen != oldValue { chevron.open = menuOpen; needsDisplay = true } } }
     /// Room at the right edge for the update button, which sits inside the row; the chevron moves left of it.
     public var trailingReserve: CGFloat = 0 { didSet { if trailingReserve != oldValue { needsLayout = true } } }
 
@@ -522,8 +557,9 @@ public final class SidebarAccountRowView: ControlView {
         addSubview(name)
         addSubview(usage)
         addSubview(chevron)
-        setAccessibilityRole(.button)
-        action = { [weak self] in self?.showMenu() }
+        setAccessibilityRole(.group)
+        // Only the chevron opens the menu (the user); the rest of the pill is not a button.
+        chevron.action = { [weak self] in self?.showMenu() }
         avatar.action = { [weak self] in self?.onOpenMachines?() }
         set(name: NSFullUserName(), image: nil, initials: nil)
     }
@@ -549,12 +585,11 @@ public final class SidebarAccountRowView: ControlView {
         // A floating pill: an opaque resting fill a step up from the sidebar, so its shadow stays outside, lit a
         // step more on hover and while the menu is open, under a light hairline.
         let dark = effectiveAppearance.isDark
-        let lift: CGFloat = menuOpen ? 2 : state.hoverOrPressed ? 1 : 0
+        let lift: CGFloat = menuOpen ? 2 : 0
         layer?.cornerRadius = Self.radius
         layer?.backgroundColor = NSColor(white: dark ? 0.085 + 0.03 * lift : 1 - 0.025 * lift, alpha: 1).cgColor
         layer?.borderColor = SB.c(\.sidebarForeground, dark ? 0.08 : 0.07).cgColor(in: self)
         layer?.shadowOpacity = dark ? 0.4 : 0.08
-        chevron.strokeColor = menuOpen || state.hoverOrPressed ? SB.c(\.sidebarForeground) : SB.c(\.sidebarMutedForeground)
     }
 
     public override func layout() {
@@ -568,10 +603,11 @@ public final class SidebarAccountRowView: ControlView {
         CATransaction.commit()
         let tx: CGFloat = 8 + 28 + 10
         let end = bounds.width - trailingReserve
-        let right = end - 8 - 12 - 6
+        let c = SidebarAccountChevronButton.size
+        let right = end - 2 - c - 4
         name.frame = NSRect(x: tx, y: h / 2 - 16, width: max(0, right - tx), height: 16)
         usage.frame = NSRect(x: tx, y: h / 2, width: max(0, right - tx), height: 16)
-        chevron.frame = NSRect(x: end - 8 - 12, y: (h - 12) / 2, width: 12, height: 12)
+        chevron.frame = NSRect(x: end - 2 - c, y: (h - c) / 2, width: c, height: c)
     }
 
     private func showMenu() {
@@ -588,9 +624,10 @@ public final class SidebarAccountRowView: ControlView {
         if updateAllCount > 0 {
             items.append(MenuItem("Update all (\(updateAllCount))", icon: .circleArrowUp) { [weak self] in self?.onUpdateAll?() })
         }
-        // Over the chevron, its right edge on the chevron's (the user, 2026-10-22).
-        let menu = MenuPopupView.show(items, from: self, placement: PopupPlacement(side: .top, align: .end, sideOffset: 6, fallbackAxisSide: .none),
-                                      anchorRect: chevron.frame)
+        // To the pill's right, out over the panel and clear of the update button, its bottom on the pill's
+        // (the user, 2026-10-23).
+        let menu = MenuPopupView.show(items, from: self, placement: PopupPlacement(side: .right, align: .end, sideOffset: 8, fallbackAxisSide: .none),
+                                      anchorRect: bounds)
         menuOpen = menu != nil
         menu?.hostPopup?.onClose = { [weak self] in self?.menuOpen = false }
     }
