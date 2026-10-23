@@ -1,5 +1,7 @@
 # Progress
 
+- [ ] Optimize image decoding, cache reuse and expanded preview rendering (taken 2026-10-23, imageperf). Audit display-size work, cancellation, scrolling and zoom; verify in the sandbox and run the full review.
+
 - [x] Dark app icons (2026-10-23, iconsdark): every app icon has light and dark Dock images from `scripts/icon/render-variants`, and Settings > Appearance > App icon appearance picks Auto (follows macOS), Light or Dark. The picker's thumbnails show the variant the Dock gets.
 
 - [x] Redesign cost pill holds still (2026-10-23, cost2): the figure jumped for three reasons, each with a test in ThreadCostEstimateTests. Subagent usage was only read when the card opened, so hovering added it to the pill ("Spawn Subagent Sleep Task" went from $0.02 to $0.22); it's now read once when the thread opens, and the pill waits for that first read. A running turn counted its latest request's `tokenUsage`, which rises and falls per request (ClaudeAdapterV2.ts:235-268, CodexAdapterV2.ts:194-206), so a turn now counts once it ends. A turn without an attempt, like a Codex subagent's, took the latest run's model and got repriced after a model switch; it now takes its node's run, else the thread's model. A failed subagent read keeps the last good figure. Checked on screen: $0.22, $0.00, $0.02, $0.01 stay put across thread switches and card opens.
