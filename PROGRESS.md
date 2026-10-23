@@ -1,5 +1,7 @@
 # Progress
 
+- [ ] Match the sidebar account chevron to the update button and keep a uniform utility gap (taken 2026-10-23, sidebar-utility-row-sizes).
+
 - [x] Published v1.13.0 (build 62), 2026-10-23, from `e46d4842`: the experimental Orchestrator in Redesign (phase 1), plus Redesign's subagent pill, Back to parent pill, agent image gallery, image shimmer, project icons on thread tabs and sidebar fixes. All 1,877 tests passed on the release's code (`c8b03e9f`). Signed ZIP, DMG and update feed verified: the downloaded app checks out with Team ID 8Q677AYRU7 and reads 1.13.0 (62), and the feed's top item is 1.13.0 (62) with the ZIP's size. perf-review flagged no regressions (`docs/perf/2026-10-23-ce6dde1-w1.md`).
 
 - [x] Published v1.12.12 (build 61), 2026-10-23, from `f79a93fa`: immediate expansion from loaded pixels, shared image downloads, correct loading/error states, and the pending Redesign tab-band controls, tab alignment/rims and composer pill placement. All 1,832 tests passed on the release commit. Signed ZIP, DMG downloads and update feed verified. The image performance review flagged no new regressions; shared-machine caveats and older benchmark follow-ups remain in `docs/perf/image-first-open-2026-10-23.md`.
