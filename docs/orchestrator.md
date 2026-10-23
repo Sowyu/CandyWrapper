@@ -1,0 +1,354 @@
+# Orchestrator (experimental, Redesign only)
+
+The working name was Captain. The user renamed it Orchestrator on 2026-10-23, since Captain copies Capy.
+
+There is one Orchestrator, and it manages all your threads, across every project. You talk to Orchestrator. It starts threads, prompts them, reads every reply, sends the next prompt and closes threads that are done. It tells you what needs you, and you change the plan by telling it in chat. Next to Orchestrator you keep bots, each with one standing job, like Grok Bot's bots. Orchestrator hands work to bots and to threads. This builds on Capy's Captains (docs.capy.ai/captains), but CandyWrapper has exactly one Orchestrator instead of one per area. This is a plan only. Nothing here is built yet.
+
+```
+You
+ └─ Orchestrator: manages every thread in every project
+     ├─ Bots: OpSec, Reviewer, Tester... each with one job
+     └─ Threads: the work, in any project
+```
+
+## How you use it
+
+1. Turn Orchestrator on. It sees every project T3 has. T3's thread tools take a project id (`OrchestratorMcpThreadListInput`, `orchestratorMcp.ts:312`), so Orchestrator goes through `t3_project_list` and works in each one.
+2. Tell it a goal in its chat. It saves the goal in its plan.
+3. Orchestrator starts the threads it needs, in the right project, each with its own job and prompt. It can also take over threads you started yourself.
+4. Each time a thread finishes a turn or asks something, Orchestrator wakes up, reads the reply, updates its plan and prompts the next step. You don't have to watch.
+5. Orchestrator keeps a digest with three parts: what needs you, what's new and what's in progress, grouped by project. When something needs you, it posts that part in chat.
+6. You steer in plain chat, like "pause the database work until Monday" or "have OpSec check the sidebar branch". Orchestrator passes it on.
+7. When a thread is done, Orchestrator archives it.
+
+## Which machine Orchestrator runs on
+
+Each machine CandyWrapper connects to, like this Mac or a remote one through T3 Connect, is its own T3 server, and every thread lives on one of them. A thread can't move once it's made (`GitController.swift:349` locks its Run on).
+
+- You pick Orchestrator's machine when you turn it on, from the same machine list as the composer's Run on. You can change it later, which starts a new Orchestrator thread there with the same notebook.
+- Orchestrator runs on that machine's server, so it keeps working while CandyWrapper is closed, as long as that machine is on.
+- Orchestrator's crew threads run on the same machine. T3's thread tools act on the server they run on, and `t3_thread_launch` takes no machine (`orchestratorMcp.ts`), so a Orchestrator can't start or prompt threads on another machine.
+- The Orchestrator row and chat show the machine, like "Orchestrator · mac-mini".
+
+## Crew threads stay normal threads
+
+- A crew thread is a full T3 thread. You can open it and watch, but you don't have to.
+- Crew threads open beside Orchestrator's chat, so you can follow one while you talk to Orchestrator.
+- Orchestrator's prompts show in a crew thread as coming from Orchestrator, with its bot. T3 already records which thread sent each message (`senderThreadId`, `orchestratorMcp.ts:438`).
+- If a crew thread asks you something directly, like an approval, you answer it there or from Orchestrator's "needs you" list.
+- You can hand a thread to Orchestrator by dragging it onto Orchestrator, or take it back with "Remove from Orchestrator".
+- Approvals stay with you. Orchestrator can answer a crew thread's questions but can't approve its commands (`orchestratorMcp.ts:228`).
+
+## Bots
+
+Orchestrator runs all your threads. Next to it you can keep bots, each with one standing job, like Grok Bot's bots. A bot isn't a manager. It does its one job well, again and again, and remembers what it learned.
+
+An OpSec bot is the first example. It checks your projects for leaks and fixes them:
+
+- It runs the secret scan and searches the repo and its history for keys, tokens, IP addresses, e-mails and private names.
+- It checks screenshots and fixtures for real data instead of sandbox data.
+- It checks that credentials live only in the Keychain and that nothing logs them.
+- It reports what it found, ranked by risk, and fixes what you approve in a worktree.
+
+Every bot has the same parts:
+
+1. A name, a face and a one-line job, like "OpSec: keeps secrets and private data out of my repos".
+2. A role prompt you write, with its own rules.
+3. Its own memory of what it found and what you told it, like "the sandbox token in fixtures/ is fake, ignore it".
+4. Its own chat, so you talk to it like Orchestrator.
+5. When it runs: only when you ask, on a schedule, or on an event. Events include before a push, after a thread finishes, and when a new project is added. Schedules use T3's own scheduled tasks (`ScheduledTask` in `orchestratorMcp.ts`), so nothing in CandyWrapper ticks while idle.
+6. How far it may go: report only, propose fixes, or fix in a worktree and ask before merging.
+7. Which projects it covers.
+
+Each run is a normal T3 thread started from the bot's chat, so you can open it like any crew thread.
+
+Orchestrator and bots work together. Orchestrator can hand work to a bot, like "ask OpSec to check this branch before I merge". A bot can tell Orchestrator when it finds something in one of Orchestrator's threads.
+
+CandyWrapper ships a few bot templates to start from: OpSec, Reviewer, Tester and Dependency updater. You can make your own from scratch.
+
+## What T3 already gives us
+
+- Every agent thread on a T3 server already gets the t3-code orchestration tools: launching and reading threads, delegating, waiting, answering questions and scheduling. See `packages/contracts/src/orchestratorMcp.ts` in the 3473 source.
+- A thread started by another thread carries `parentThreadId` (`orchestrationV2.ts:109`). That is how CandyWrapper finds Orchestrator's crew.
+- Approvals stay with the user. A parent can answer a child's questions but cannot approve its commands (`orchestratorMcp.ts:228`).
+- T3 has no per-thread system prompt. The only custom instruction fields are for commit writing style and branch names (`settings.ts:815`).
+
+So Orchestrator is an ordinary T3 thread, and the official app sees it as one. No server changes and no new wire messages. CandyWrapper adds the brief, the toggle and the roster UI.
+
+## The Orchestrator settings tab
+
+When the toggle is on, Settings gets its own Orchestrator tab. It disappears again when the toggle is off or the theme isn't Redesign.
+
+The tab holds:
+
+- The system prompt editor, with Reset to default.
+- The machine the Orchestrator runs on.
+- The worker limit, 4 by default.
+- The Models list, described below.
+- The notebook: rules, worker rules, plan and digest, each editable.
+
+### The Models list
+
+You decide which models the Orchestrator may use and when. Each row has:
+
+1. A label, like "Heavy work".
+2. The provider and model, picked from the same live catalog as the composer's model picker.
+3. Its options, like reasoning effort and service tier, from that model's own option list.
+4. "Use when", a description in your own words of when this model is best.
+5. Notes, anything else the Orchestrator should know, like "slower but catches subtle bugs".
+6. A default mark on one row, for when nothing else fits.
+
+You can add, edit, reorder and delete rows. CandyWrapper turns the list into a table and puts it in the brief as `{{models}}`. When you change the list, the Orchestrator gets it as an "Updated brief" on your next message, so it always reads the current version. A row whose model leaves the catalog shows a warning and is left out of the brief.
+
+The default rows:
+
+| Label | Model | Options | Use when |
+|---|---|---|---|
+| Heavy work | Claude Opus 5.5 (`claudeAgent`, `claude-opus-5-5`) | effort high | Hard tasks: tricky bugs, concurrency, security, migrations, big changes across many files. |
+| Audits | GPT-6.1-Sol (`codex`, `gpt-6.1-sol`) | reasoningEffort medium | Reviewing code or a branch, checking someone else's work, finding problems without changing anything. |
+| Everyday work (default) | Claude Opus 5.5 (`claudeAgent`, `claude-opus-5-5`) | effort medium | Simpler tasks that still need good judgement: normal features, fixes and edits. |
+| Quick changes | GPT-6.1-Sol (`codex`, `gpt-6.1-sol`) | reasoningEffort high | Fast, quick changes that don't need the best quality code, like renames, config values and small one-file fixes. |
+
+## The custom prompt
+
+You write the prompt in Settings. CandyWrapper ships the default below, prefilled and editable, with a "Reset to default" button.
+
+- One prompt for the one Orchestrator.
+- CandyWrapper stores it in its own settings, not in T3's `settings.json`, so the server never sees an unknown key.
+- Since T3 has no system prompt, CandyWrapper sends the prompt as the first message of the Orchestrator thread. Redesign draws that message as a collapsed "Brief" card instead of a chat bubble.
+- If you edit the prompt while a Orchestrator exists, CandyWrapper sends the new version as an "Updated brief" message on your next send. Old threads keep their history.
+- The prompt can use `{{name}}`, `{{machine}}`, `{{projects}}`, `{{bots}}`, `{{models}}` and `{{crewLimit}}`. CandyWrapper fills them in before sending. `{{models}}` is the table from the Models list in the Orchestrator settings tab.
+
+### Default prompt
+
+The default prompt is long on purpose. Managing threads fails in a few predictable ways: vague first prompts, trusting a worker's "done" without proof, polling, starting too much at once, and drowning the user in recaps. Each section below targets one of those. `{{name}}` is the manager's name.
+
+```
+# Who you are
+
+You are {{name}}, the user's manager for every agent thread on this T3 server ({{machine}}). You don't do the work yourself. You turn the user's goals into threads, write their prompts, check their results, and keep the user informed. Your value is judgement: choosing the right work, writing prompts that need no follow-up, and catching bad results before the user sees them.
+
+You may read code and threads to understand a task or check a result. You never edit files, run builds or push yourself. Workers do that.
+
+Projects you can work in:
+{{projects}}
+
+# Your notebook
+
+You keep four notes. The app shows them to you at the start of each session and saves your changes. To change one, write a fenced block named orchestrator-memory with the note's name and its full new text.
+
+- rules: how the user wants you to work. When the user corrects you, add the correction here in one line.
+- crew-rules: rules every worker gets in its first prompt.
+- plan: each goal, its steps, which thread owns each step, and what's done.
+- digest: your last report.
+
+Read the plan before you act. Update it after every change of state. It is how you pick up where you stopped.
+
+# The loop
+
+1. Take in the goal. If it's clear, plan. If one fact blocks the plan, ask one question. Otherwise make the sensible choice and say which choice you made.
+2. Plan. Break the goal into steps that one thread can finish and check on its own. Pick the project for each step. Write the plan as a fenced orchestrator-plan block: numbered steps, each with its owner, model and rough time.
+3. Wait for "go", unless the user said "just do it" or the rules say so.
+4. Dispatch. Start one thread per step. Start independent steps together. Start dependent steps only when what they need is done.
+5. Wait. When a worker finishes a turn or asks something, you wake up. Don't poll. Use t3_thread_wait or completion events.
+6. Review each result against the step's "done" checks, using the review rules below.
+7. Act on the review. Send the next prompt, ask for a fix, answer the worker's question, or close the thread.
+8. Report only what changed, using the digest format.
+
+# Writing a worker's first prompt
+
+Every first prompt stands alone. The worker knows nothing you don't write down. Use this shape:
+
+Goal: one sentence on what must be true when the worker is done.
+Context: why this matters and what the user already decided.
+Read first: the files, docs or threads to start from.
+Ruled out: what was already tried or must not change.
+Rules: the crew-rules, plus anything specific to this step.
+Done when: two to four checks that someone else could verify, like "scripts/test --filter Sidebar passes" or "the doc names the cause with file:line".
+Report: end your final message with STATUS (done, blocked or failed), CHANGED (files), VERIFIED (what you ran and what it printed) and OPEN (anything unresolved).
+Do not start other agents.
+
+Give each worker a short name and a one-line job, like "Fixer: repairs the failing sidebar test". Use the name as the thread title.
+
+# Choosing a model
+
+The user set up these models and when to use each. Read the "use when" for every row and pick the row that fits the step best. Start the worker with that row's provider, model and options, exactly as written.
+{{models}}
+If no row fits, use the first row marked default and say which you picked. If a step fits two rows, pick the cheaper one unless the step needs top-quality code. Give anything that edits code its own worktree.
+
+# Reviewing a result
+
+Don't trust "done". Check it.
+- Did the worker meet every "done when" check? Look for the evidence in VERIFIED, not the claim.
+- If a claim has no evidence, ask for it: "Show the test output."
+- Did it change things outside its step? If so, ask why, or ask it to undo them.
+- Did it hide a failure, skip a test or weaken a check to pass? Treat that as failed.
+- If two workers touch the same files, run them one after the other, not together.
+A result that passes all checks closes the step. Archive the thread when its work is merged or no longer needed.
+
+# When things go wrong
+
+- A new worker shows no sign of life within two minutes: cancel it and start it again once. If it stalls again, tell the user.
+- A worker fails the same check twice: stop prompting it. Work out why. Change the approach, or bring the user a short diagnosis and options.
+- A worker asks something the plan or the code answers: answer it. A real decision goes to the user.
+- Anything outside the plan comes up: note it in the plan as a follow-up, and don't start it without the user.
+
+# Limits
+
+- Run at most {{crewLimit}} workers at once.
+- Never approve a command or a file change. Approvals belong to the user. Tell the user which thread is waiting and what it wants to run.
+- Never do anything destructive or outward-facing without the user's yes. That covers force pushes, deleting branches, releases, publishing, sending messages and touching production.
+- Follow each project's AGENTS.md or CLAUDE.md. Copy the rules that matter into the worker's prompt.
+- Only prompt threads you started or the user handed you. You may read other threads to report on them.
+- Don't re-read whole threads to stay current. Read the new part. Each read costs the user money.
+- Keep secrets out of prompts, plans and notes.
+
+# Bots
+
+The user also keeps bots, each with one standing job:
+{{bots}}
+When a step matches a bot's job, give it to that bot instead of starting a new thread. Tell the user when a bot finds something in one of your threads.
+
+# Talking to the user
+
+- Lead with what needs them, then what's new, then what's running.
+- Keep a digest as a fenced orchestrator-digest block with three parts: Needs you, New and In progress, grouped by project. Rewrite it when the state changes. When something needs the user, also say it in chat.
+- One line per thread: name, state, next step.
+- Link threads as [title](t3-thread://v1/<threadId>).
+- Be short. Don't repeat what a worker said. Don't recap what the user already saw.
+- Use plain words. When you're unsure, say so once and say what would settle it.
+```
+
+## More than a thread
+
+Under the hood Orchestrator is still a T3 thread, so the official app and the server see nothing new. CandyWrapper builds the manager around it.
+
+1. Orchestrator gets its own home. It leaves the normal thread list, sits pinned in the sidebar, and opens in a Orchestrator pane with its chat, a Digest tab and an Overview.
+2. The Overview shows the top 5 "needs you" items and the crew as live bot cards. Each card shows the state, the current step, the last line and the cost. CandyWrapper builds the cards from server events, so they cost no tokens.
+3. The Digest tab shows Orchestrator's digest. Orchestrator rewrites it when the crew's state changes, inside a fenced `orchestrator-digest` block that CandyWrapper takes out of the reply and draws as a page.
+4. Orchestrator's plan becomes a checklist. Orchestrator writes it in a fenced `orchestrator-plan` block, and CandyWrapper draws it as steps, each linked to the crew thread doing it. To the official app these blocks are plain text.
+5. Orchestrator wakes up on its own when a crew thread finishes a turn. T3 already wakes a parent thread when a delegated task completes (`orchestratorMcp.ts:222`), so this needs no polling.
+
+## The chat looks like iMessage
+
+The Orchestrator pane reads like a group chat in iMessage, with Orchestrator and the crew as the other people in it.
+
+- Your messages are accent-coloured bubbles on the right. Bot messages are grey bubbles on the left.
+- Messages in a row from the same sender group into one stack. The corners between them tighten, and only the last bubble gets a tail.
+- The sender's bot sits at the bottom of each stack on the left. A crew bot's name shows above its first bubble.
+- A centred time label shows wherever more than 15 minutes pass between messages. A small "Read" shows under your last message once Orchestrator's turn starts.
+- While a bot works, a typing bubble with three dots sits under its last message. It animates only while that turn runs.
+- Plans, approvals and questions show as cards inside the bubble stack, with buttons like Allow and Deny and no tail.
+- Tool calls and crew events collapse into small centred lines like "Scout finished, read 14 files". Clicking one opens that crew thread.
+- The composer is a rounded field with a round send button.
+
+## Memory and personality
+
+Orchestrator remembers you and each project, and every bot is a lasting character, like a Grok Bot bot.
+
+### Orchestrator's notebook
+
+Like Capy's Captain Drive, each Orchestrator keeps four notes, stored by CandyWrapper on this Mac:
+
+- Rules hold Orchestrator's own rules, like "ask before starting more than two threads".
+- Crew rules go into every crew prompt, like "run scripts/test --fast after each change".
+- The plan holds the goal, the steps and working notes, so Orchestrator picks up where it stopped.
+- The digest holds the last digest.
+
+You change these by telling Orchestrator, which saves the change with a fenced `orchestrator-memory` block. Settings also lets you edit them directly.
+
+### Three kinds of memory
+
+- "About you" holds how you like to work, such as report style, models, what to always ask about and words to avoid. It is shared by every Orchestrator.
+- Project memory holds a project's conventions, decisions, what's in flight and what went wrong last time.
+- Bot memory holds what one crew bot has learned in its role, like "Tester: the full suite takes 6 minutes, run the fast lane first".
+
+### How memory gets in and out
+
+1. CandyWrapper stores memory on this Mac, in its own Application Support folder, never in T3's files.
+2. When a Orchestrator thread starts, CandyWrapper adds "About you" and the project memory to the brief. When a crew bot starts, its bot memory goes into its brief.
+3. Orchestrator saves a memory by writing a fenced `orchestrator-memory` block. CandyWrapper takes it out of the reply, stores it and shows a small "Saved to memory" chip with Undo. To the official app it is plain text.
+4. When you correct Orchestrator, the brief tells it to save the correction as a memory.
+5. Settings has a Memory page where you read, edit, pin and delete every entry.
+6. Each brief carries at most about 2,000 tokens of memory. Pinned entries always go in, and the rest go newest and most used first.
+7. Memory entries go through the same secret scan as commits, so a token or key never gets saved.
+
+### Personality
+
+- Orchestrator has a name, a bot shape and colour, and a tone setting from terse to chatty. Terse is the default.
+- An autonomy setting per kind of action decides what Orchestrator does without asking. The kinds are starting crew, answering crew questions, retrying failed work and archiving finished threads.
+- Crew bots last across tasks. "Tester" stays the same green pill with the same memory, and each new task gives it a new thread. The roster shows your saved bots, and Orchestrator picks from them before making a new one.
+- Each saved bot has a name, a title, a role prompt, a default model and effort, and its memory.
+
+## The toggle
+
+1. Settings shows "Experimental Orchestrator features" under the theme picker, only while Redesign is the theme. It's off by default.
+2. Switching away from Redesign hides Orchestrator's UI but keeps the threads. They are normal T3 threads and show up as usual in the default themes.
+3. With the toggle off, CandyWrapper creates no views and holds nothing for Orchestrator.
+
+## The UI, like Grok Bot
+
+Grok Bot reads like team chat. Bots sit in the left sidebar, each with its own conversation, and markers show who needs you, who has unread results and who is working. Pinned bots stay at the top.
+
+1. A "Crew" section sits at the top of the Redesign sidebar, above the project list.
+2. Orchestrator is pinned first, with its own avatar. Clicking it opens the Orchestrator thread.
+3. Crew rows sit under Orchestrator. A crew row is any thread whose `parentThreadId` is the Orchestrator thread.
+4. Each row shows an avatar, a name, a one-line title and a status marker.
+5. The markers are "needs you" for a pending approval or question, "unread" for new results, "working" while a turn runs, and none when idle.
+6. Clicking a crew row opens that thread like any other thread.
+7. A small profile sheet edits a bot's name, title, description and avatar. CandyWrapper stores those locally, keyed by thread id. Orchestrator's own names from its briefs are the defaults.
+8. The dock badge counts "needs you" rows.
+9. Finished crew threads stay in the roster until you archive them, and the archive uses T3's own archive.
+
+## The bots
+
+The bots copy Grok Bot's look as closely as we can redraw it: a flat, bright shape with two dark capsule eyes and no mouth. Each eye is a rounded capsule with fully round ends, about a quarter of the bot's radius wide and twice that tall, facing front. The user chose to match Grok Bot's shapes and colours, knowing they're xAI's art (see `docs/decisions.md`, 2026-10-23). The eye logic follows omabot (github.com/njpatel/omabot, Apache-2.0), credited in the code.
+
+- There are 14 shapes, matching Grok Bot's picker: circle, cloud, tilted tile, four-point star, clover, heart blob, flower, drop, bean, rounded triangle, chunk, splat, hexagon and pumpkin. The pumpkin is always orange and has a stem.
+- There are 11 colours, matching Grok Bot's picker: white, brown, red, orange, amber, green, teal, blue, violet, pink and grey.
+- Each shape is a polar outline, rounded by a same-colour stroke with round joins, and drawn in a Core Animation layer with no images. The mockup code in this thread is the starting point.
+- The slices are cheap at sidebar size, up to about 20 bots on screen. If we need more, we switch to a real mesh.
+- Each bot is a real 3D solid drawn in one flat colour, with no shading. CandyWrapper inflates the 2D outline into a cushion by stacking about 14 slices that shrink toward the front and back. It rotates the solid by the gaze's yaw and pitch and fills the union of the projected slices as one path. Each shape has its own thickness, from 1.0 for the ball down to 0.5 for the star. The eyes are printed on the solid's face. The face is a smooth dome as deep as the cushion, and every point of each capsule outline is lifted onto it and turned with the body. So the eyes curve, get thinner as they turn away, and never slide on their own. The eyes never touch the edge. Every projected eye point needs a margin of 9% of the radius around it, measured against the visible rounded edge. Instead of moving the eyes, the head turns less. For each shape, CandyWrapper works out once how far it may turn in 32 directions, walking out from facing front to the first pose that fails, and it clamps the gaze to 94% of that. The star turns the least, about half a full turn, because its middle is narrow. A test sweeps every shape through 315 yaw and pitch poses and fails if any eye comes within the margin. The mockup passed 2,835 poses across 9 shapes.
+- The "New crew member" sheet copies Grok Bot's "Create New Bot" sheet: a big preview, a name field, a shape grid and colour dots. The profile sheet reuses it for edits.
+- Orchestrator is the first row, larger, pinned above a divider, and the user picks its shape and colour like any bot.
+- A crew member Orchestrator starts gets the next free shape and colour pair.
+
+The face carries the state through gaze and colour, never through a mouth. The eyes change only by turning with the head.
+
+1. An idle bot has level eyes looking slightly off centre, and each bot has its own resting gaze.
+2. A working bot looks around in a slow one-shot turn when its turn starts, then settles.
+3. A bot that needs you looks up toward you, does a small hop, and has an amber "!" badge.
+4. A bot with unread results shows a blue count badge.
+5. A blocked bot looks down.
+6. An archived bot looks down and turns grey.
+
+The motion rules follow the idle rule.
+
+- While the pointer is over the Crew list, the eyes follow it with a spring, and they settle back when it leaves. That runs only on pointer events.
+- State changes play one flourish of under a second, like a look around or a nod, then stop.
+- Bots don't blink on a timer. A blink plays only as part of a flourish.
+- With Reduce Motion on, the faces change without moving.
+- A collapsed sidebar or a hidden window holds no animations.
+
+## Cost and idle rules
+
+- The roster updates only from events the server already pushes: thread updates, turn state and pending requests. No polling and no timers.
+- The "working" marker uses the same animation rules as the rest of Redesign. It stops when nothing is running.
+- The crew cost uses the subagent cost math the Redesign cost pill already has. The Orchestrator row shows the total for its crew.
+
+## Build order
+
+1. Add the toggle and the prompt editor in Settings, with storage and the default prompt. About half a day.
+2. Add "New Orchestrator" for a project. It creates the thread, fills in the template and sends it as the first message. Then draw that first message as the Brief card. About a day.
+3. Build the Crew sidebar section from `parentThreadId`, with avatars, names and titles. About a day.
+4. Add the status markers and the dock badge from the existing pending request and turn state. About half a day.
+5. Draw the bots, with shapes, colours, six faces, transitions and the Reduce Motion path. Then add the profile sheet and local profile storage. About a day and a half.
+6. Run the full review: perf-review against the last run for idle cost, the whole test suite, and a code review. Also check on screen against the sandbox, with a few Haiku turns. About half a day.
+
+That comes to about 5 days in total. Every step ships on its own behind the toggle.
+
+## Open questions
+
+- Should Orchestrator wait for "go" by default, as in the default prompt, or act right away?
+- Should Orchestrator's name and avatar be editable, or fixed as "Orchestrator"?
+- What are the default models? The draft uses Sonnet 5.5 for research and Opus 5.5 for judgement, both at medium.
