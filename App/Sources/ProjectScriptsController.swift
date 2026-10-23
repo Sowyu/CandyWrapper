@@ -37,13 +37,23 @@ final class ProjectScriptsController {
         self.composer = composer
         self.terminal = terminal
         panel.lazyDetailsCard.configure { [weak self] card in
-            card.scripts.primary.action = { [weak self] in
-                guard let self, let primary = ProjectScripts.primary(self.scripts) else { self?.openMenu(); return }
+            card.scripts.primary.action = { [weak self, weak card] in
+                guard let self, let card else { return }
+                guard let primary = ProjectScripts.primary(self.scripts) else { self.openMenu(from: card.scripts); return }
                 self.terminal.runScript(primary)
             }
-            card.scripts.secondary.action = { [weak self] in self?.openMenu() }
+            card.scripts.secondary.action = { [weak self, weak card] in if let card { self?.openMenu(from: card.scripts) } }
             card.addScript.action = { [weak self] in self?.openEditor(nil) }
         }
+        // Redesign's Run button in the header band: the primary script, else the menu (which ends in "Add project
+        // script"); with no scripts at all its + opens the add form.
+        let pill = panel.header.pill
+        pill.scripts.primary.action = { [weak self] in
+            guard let self else { return }
+            if let primary = ProjectScripts.primary(self.scripts) { self.terminal.runScript(primary) }
+            else if pill.scriptsRow == .add { self.openEditor(nil) } else { self.openMenu(from: pill.scripts) }
+        }
+        pill.scripts.secondary.action = { [weak self] in self?.openMenu(from: pill.scripts) }
         composer.configObservers.append { [weak self] _ in self?.refresh() }
     }
 
@@ -57,14 +67,17 @@ final class ProjectScriptsController {
         guard let threadId, let env = threadId.environmentId, let project = project(threadId) else {
             scripts = []
             panel.lazyDetailsCard.set(\.scriptsRow, nil)
+            panel.header.pill.scriptsRow = nil
             return
         }
         let settings = ServerSettingsValues(composer?.config(env)?.settings.raw ?? .null)
         scripts = ProjectScripts.resolve(settings, projectId: project.id.localId.rawValue, projectScripts: ProjectScript.list(.array(project.scripts)))
         loadProjectFile(env, cwd: thread(threadId)?.worktreePath ?? project.workspaceRoot)
         // ProjectScriptsControl.tsx:269-300, 372-375: "Actions" while only a settle action or t3.json imports exist.
-        panel.lazyDetailsCard.set(\.scriptsRow, ProjectScripts.primary(scripts).map { .run(name: $0.name, icon: ProjectScriptIcon.name($0.icon)) }
-            ?? (scripts.isEmpty && importable.isEmpty ? .add : .actions))
+        let row: ThreadDetailsCardView.ScriptsRow = ProjectScripts.primary(scripts).map { .run(name: $0.name, icon: ProjectScriptIcon.name($0.icon)) }
+            ?? (scripts.isEmpty && importable.isEmpty ? .add : .actions)
+        panel.lazyDetailsCard.set(\.scriptsRow, row)
+        panel.header.pill.scriptsRow = row
     }
 
     /// `useT3ProjectFileState` (hooks/useT3ProjectFileScripts.ts:31-53): `t3.json` at the workspace root; a missing,
@@ -119,8 +132,7 @@ final class ProjectScriptsController {
     }
 
     /// The chevron's menu: every action with its roles and shortcut, then "Add project script".
-    private func openMenu() {
-        let split = panel.detailsCard.scripts
+    private func openMenu(from split: DetailsSplitControl) {
         let context = KeybindingContext([:])
         var items = scripts.map { script -> MenuItem in
             var item = MenuItem(ProjectScripts.menuLabel(script), icon: ProjectScriptIcon.name(script.icon),

@@ -229,13 +229,27 @@ public final class DetailsSplitControl: DSView {
     }
 
     /// `role="group"` height: 32, or taller while the progress or success row shows its second line.
-    public var preferredHeight: CGFloat { primary.preferredHeight }
+    public var preferredHeight: CGFloat { compact ? 28 : primary.preferredHeight }
+
+    /// Redesign's header band: 28 tall, a 22pt chevron, the label only when it has text, and a running action on one
+    /// line with the chevron hidden and no elapsed time.
+    public var compact = false { didSet { primary.compact = compact; needsLayout = true } }
+    /// The compact group's width: the primary's content, then the rule and the chevron unless an action runs.
+    public var preferredWidth: CGFloat { primary.preferredWidth + (elapsedText == nil ? 23 : 0) }
+    /// The compact group's width may have changed: new text, icon or mode.
+    public var onResize: (@MainActor () -> Void)? { didSet { primary.onResize = onResize } }
+    /// A right click anywhere on the group (Redesign's editor button picks the editor this way).
+    public var onContextMenu: (@MainActor () -> Void)?
+    public override func rightMouseDown(with event: NSEvent) {
+        if let onContextMenu { onContextMenu() } else { super.rightMouseDown(with: event) }
+    }
 
     /// The elapsed time in the chevron's slot while an action runs; nil shows the chevron.
     public var elapsedText: String? {
         didSet {
             elapsed.text = elapsedText ?? ""
-            elapsed.isHidden = elapsedText == nil
+            elapsed.isHidden = elapsedText == nil || compact
+            if (elapsedText == nil) != (oldValue == nil) { onResize?() }
             secondary.isHidden = elapsedText != nil
             rule.isHidden = elapsedText != nil
             needsLayout = true
@@ -247,6 +261,12 @@ public final class DetailsSplitControl: DSView {
         super.layout()
         fill.frame = bounds
         let w = bounds.width
+        if compact {
+            secondary.frame = NSRect(x: w - 22, y: 0, width: 22, height: bounds.height)
+            rule.frame = CGRect(x: w - 23, y: (bounds.height - 14) / 2, width: 1, height: 14)
+            primary.frame = NSRect(x: 0, y: 0, width: elapsedText != nil ? w : w - 23, height: bounds.height)
+            return
+        }
         secondary.frame = NSRect(x: w - 32, y: 0, width: 32, height: 32)
         rule.frame = CGRect(x: w - 33, y: 8, width: 1, height: 16)
         if elapsedText != nil {
@@ -301,12 +321,15 @@ public final class DetailsSplitPart: ControlView {
     var corners: BoxStyle.Corners = .all
     var isChevron = false { didSet { rebuild() } }
     var onStateChange: (@MainActor () -> Void)?
+    /// See `DetailsSplitControl.compact`.
+    var compact = false { didSet { rebuild() } }
+    var onResize: (@MainActor () -> Void)?
     public var icon: IconDefinition? { didSet { if icon != oldValue { rebuild() } } }
     /// A full-color mark drawn instead of `icon` (the Open in editor's brand logos).
     public var image: NSImage? { didSet { if image !== oldValue { rebuild() } } }
     /// The idle icon's color; nil is `muted-foreground` (`THREAD_DETAILS_PANEL_ICON_CLASS`).
     public var iconColor: NSColor? { didSet { restyle() } }
-    public var text = "" { didSet { label.text = text; needsLayout = true } }
+    public var text = "" { didSet { if mode == .idle { label.text = text }; needsLayout = true; if text != oldValue { onResize?() } } }
     public var mode = Mode.idle { didSet { if mode != oldValue { rebuild() } } }
     /// `aria-disabled`: drawn at 64% but still hoverable for its reason.
     public var looksDisabled = false { didSet { applyAlpha() } }
@@ -332,6 +355,12 @@ public final class DetailsSplitPart: ControlView {
         addSubview(label)
         addSubview(detail)
         rebuild()
+    }
+
+    /// The compact part's width: 8 in, the 16pt glyph, the label after 6 when it has text, 8 out.
+    var preferredWidth: CGFloat {
+        let text = label.isHidden ? "" : label.text
+        return 8 + 16 + (text.isEmpty ? 0 : 6 + ceil(label.textWidth)) + 8
     }
 
     var preferredHeight: CGFloat {
@@ -361,13 +390,13 @@ public final class DetailsSplitPart: ControlView {
                 addSubview(s); spinner = s
                 label.text = status
                 detail.text = output ?? ""
-                detail.isHidden = output == nil
+                detail.isHidden = output == nil || compact
             case .success(let title, let description):
                 let v = IconView(name: .check, size: 14)
                 addSubview(v); iconView = v
                 label.text = title
                 detail.text = description ?? ""
-                detail.isHidden = description == nil
+                detail.isHidden = description == nil || compact
             }
         }
         scalesWhenPressed = mode == .idle
@@ -375,6 +404,7 @@ public final class DetailsSplitPart: ControlView {
         needsLayout = true
         applyAlpha()
         onStateChange?()
+        onResize?()
     }
 
     public override func layout() {
@@ -382,6 +412,12 @@ public final class DetailsSplitPart: ControlView {
         fill.layout(boxSize: bounds.size)
         if isChevron {
             iconView?.frame = NSRect(x: (bounds.width - 16) / 2, y: (bounds.height - 16) / 2, width: 16, height: 16)
+            return
+        }
+        if compact {
+            let midY = bounds.height / 2
+            (spinner ?? iconView ?? imageView)?.frame = NSRect(x: 8, y: midY - 8, width: 16, height: 16)
+            label.frame = NSRect(x: 30, y: midY - 10, width: max(0, bounds.width - 38), height: 20)
             return
         }
         // Idle: the 32pt row. Running and success: a 28pt title row (`grid-rows-[1.75rem]`, `py-0.75`) with
@@ -509,6 +545,14 @@ public final class ThreadDetailsCardView: DSView {
     /// lineage; `essential` also drops Open in. The panel picks it from the height it has
     /// (`resolveDensity`).
     public enum Density: Sendable { case full, compact, essential }
+    /// Redesign keeps only the thread's links: its pull requests, automations and lineage, in a dropdown under the
+    /// header band's Lineage button. The workspace and git rows live in that band and under the composer instead.
+    public var relationsOnly = false { didSet { if relationsOnly != oldValue { updateRows() } } }
+    /// Whether `relationsOnly` has anything to show.
+    public var hasRelations: Bool { !pullRequestRows.isEmpty || !automations.isEmpty || !lineage.isEmpty }
+    /// `hasRelations` changed.
+    public var onRelationsChange: (@MainActor () -> Void)?
+    private var hadRelations = false
     public var density = Density.full { didSet { if density != oldValue { updateRows() } } }
 
     /// `resolveThreadDetailsCardDensity` (threadDetailsCardLayout.ts:7-14): the richest density whose
@@ -584,7 +628,10 @@ public final class ThreadDetailsCardView: DSView {
         updateRows()
     }
 
-    private func relayout() { invalidateIntrinsicContentSize(); needsLayout = true; superview?.needsLayout = true }
+    private func relayout() {
+        invalidateIntrinsicContentSize(); needsLayout = true; superview?.needsLayout = true
+        if hasRelations != hadRelations { hadRelations = hasRelations; onRelationsChange?() }
+    }
 
     private func updateScripts() {
         switch scriptsRow {
@@ -603,8 +650,8 @@ public final class ThreadDetailsCardView: DSView {
         case .add, nil:
             break
         }
-        scripts.isHidden = scriptsRow == nil || scriptsRow == .add
-        addScript.isHidden = scriptsRow != .add
+        scripts.isHidden = scriptsRow == nil || scriptsRow == .add || relationsOnly
+        addScript.isHidden = scriptsRow != .add || relationsOnly
         relayout()
     }
 
@@ -612,16 +659,19 @@ public final class ThreadDetailsCardView: DSView {
     private var scriptsView: NSView? { !scripts.isHidden ? scripts : !addScript.isHidden ? addScript : nil }
 
     private func updateRows() {
-        runContext.isHidden = density != .full
-        openIn.isHidden = !showsOpenIn || density == .essential
-        branch.isHidden = !showsVersionControl || !isRepo
-        gitActions.isHidden = !showsVersionControl || !isRepo || !showsGitActions || (density != .full && gitActions.primary.mode == .idle)
-        changes.isHidden = !showsVersionControl || !isRepo
-        initGit.isHidden = !showsVersionControl || isRepo || !showsGitActions
+        runContext.isHidden = density != .full || relationsOnly
+        openIn.isHidden = !showsOpenIn || density == .essential || relationsOnly
+        branch.isHidden = !showsVersionControl || !isRepo || relationsOnly
+        gitActions.isHidden = !showsVersionControl || !isRepo || !showsGitActions || (density != .full && gitActions.primary.mode == .idle) || relationsOnly
+        changes.isHidden = !showsVersionControl || !isRepo || relationsOnly
+        initGit.isHidden = !showsVersionControl || isRepo || !showsGitActions || relationsOnly
+        scripts.isHidden = scriptsRow == nil || scriptsRow == .add || relationsOnly
+        addScript.isHidden = scriptsRow != .add || relationsOnly
         relayout()
     }
 
     private func versionRows(_ density: Density) -> [NSView] {
+        if relationsOnly { return pullRequestRows }
         guard showsVersionControl else { return [] }
         guard isRepo else { return showsGitActions ? [initGit] : [] }
         let actions: [NSView] = showsGitActions && (density == .full || gitActions.primary.mode != .idle) ? [gitActions] : []
@@ -638,6 +688,10 @@ public final class ThreadDetailsCardView: DSView {
 
     /// The card's height at a density, with every section it shows there.
     public func preferredHeight(_ density: Density) -> CGFloat {
+        if relationsOnly {
+            let rows = pullRequestRows.reduce(0) { $0 + rowHeight($1) }
+            return 2 + (rows > 0 ? 8 + rows + 8 : 0) + (automations.isEmpty ? 0 : 1 + automations.preferredHeight) + lineage.preferredHeight
+        }
         var h: CGFloat = 2 + 8 + (density == .full ? 32 : 0) + (showsOpenIn && density != .essential ? 32 : 0) + (scriptsView != nil ? 32 : 0) + 10
         let rows = versionRows(density)
         if showsVersionControl, !rows.isEmpty {
@@ -664,6 +718,23 @@ public final class ThreadDetailsCardView: DSView {
         content.frame = NSRect(x: 0, y: 0, width: width, height: height)
         let inner = width - 16
         var y: CGFloat = 8
+        if relationsOnly {
+            for row in pullRequestRows {
+                row.frame = NSRect(x: 8, y: y, width: inner, height: rowHeight(row))
+                y += rowHeight(row)
+            }
+            divider.isHidden = true
+            let lineageHeight = lineage.preferredHeight
+            lineage.isHidden = lineage.isEmpty
+            lineage.frame = NSRect(x: 0, y: height + 1 - lineageHeight, width: width, height: lineageHeight)
+            automations.isHidden = automations.isEmpty
+            let ay = height + 1 - lineageHeight - 1 - automations.preferredHeight
+            // The first section draws no rule over it.
+            automationsDivider.isHidden = automations.isHidden || pullRequestRows.isEmpty
+            automationsDivider.frame = CGRect(x: 0, y: ay, width: width, height: 1)
+            automations.frame = NSRect(x: 0, y: ay + 1, width: width, height: automations.preferredHeight)
+            return
+        }
         if density == .full {
             runContext.frame = NSRect(x: 8, y: y, width: inner, height: 32)
             y += 32

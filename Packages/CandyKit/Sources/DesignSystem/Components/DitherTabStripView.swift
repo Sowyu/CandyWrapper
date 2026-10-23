@@ -24,6 +24,11 @@ public final class DitherTabStripView: TopbarDragView {
     public var onNew: (() -> Void)?
     /// A tab was dragged to a new index in strip order.
     public var onMove: ((String, Int) -> Void)?
+    /// The thread's header controls, right-aligned in the band and centered with the tabs. The tabs shrink to make room,
+    /// then scroll to keep the selected one, and never run under it. Its intrinsic width sets the room it takes.
+    public var trailingAccessory: NSView? {
+        didSet { oldValue?.removeFromSuperview(); trailingAccessory.map { addSubview($0) }; needsLayout = true }
+    }
 
     private var views: [TabView] = []
     private let plus = ButtonView(nil, icon: .plus, variant: .ghost, size: .iconSm)
@@ -45,7 +50,7 @@ public final class DitherTabStripView: TopbarDragView {
     }
 
     public override func accessibilityTabs() -> [Any]? { views }
-    public override func accessibilityChildren() -> [Any]? { views + [plus] }
+    public override func accessibilityChildren() -> [Any]? { views.filter { !$0.isHidden } + [plus] + [trailingAccessory].compactMap { $0?.isHidden == false ? $0 : nil } }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
@@ -72,12 +77,23 @@ public final class DitherTabStripView: TopbarDragView {
     public override func layout() {
         super.layout()
         let y = (bounds.height - Self.tabHeight) / 2
-        let room = max(0, bounds.width - contentStart - 40)
-        let width = views.isEmpty ? 0 : min(Self.tabWidth, (room - Self.gap * CGFloat(views.count - 1)) / CGFloat(views.count))
+        var reserve: CGFloat = 0
+        if let accessory = trailingAccessory, !accessory.isHidden {
+            let size = accessory.intrinsicContentSize
+            accessory.frame = NSRect(x: bounds.width - 10 - size.width, y: ((bounds.height - size.height) / 2).rounded(),
+                                     width: size.width, height: size.height)
+            reserve = size.width + 10 + 8
+        }
+        let room = max(0, bounds.width - contentStart - 40 - reserve)
+        let shown = Self.window(count: views.count, selected: views.firstIndex { $0.tab.id == selected }, room: room)
+        let count = CGFloat(shown.count)
+        let width = shown.isEmpty ? 0 : min(Self.tabWidth, (room - Self.gap * (count - 1)) / count)
         var x = contentStart - 12
-        for v in views {
-            v.frame = NSRect(x: x, y: y, width: max(60, width), height: Self.tabHeight)
-            x += max(60, width) + Self.gap
+        for (i, v) in views.enumerated() {
+            v.isHidden = !shown.contains(i)
+            guard !v.isHidden else { continue }
+            v.frame = NSRect(x: x, y: y, width: max(Self.minTabWidth, width), height: Self.tabHeight)
+            x += max(Self.minTabWidth, width) + Self.gap
         }
         plus.frame = NSRect(x: x + 2, y: (bounds.height - 24) / 2, width: 24, height: 24)
         plusFrost.frame = plus.frame
@@ -85,6 +101,17 @@ public final class DitherTabStripView: TopbarDragView {
             drag?.rest = views.map(\.frame)
             layoutDrag()
         }
+    }
+
+    static let minTabWidth: CGFloat = 60
+
+    /// The tabs that fit `room` at their narrowest: all of them, else a run that keeps the selected one in view.
+    // ponytail: hidden tabs are reachable only by selecting them elsewhere (sidebar, history); add scroll arrows if users keep many tabs in narrow windows
+    static func window(count: Int, selected: Int?, room: CGFloat) -> Range<Int> {
+        let fits = max(1, Int((room + gap) / (minTabWidth + gap)))
+        guard count > fits else { return 0..<count }
+        let start = min(max(0, (selected ?? 0) - fits + 1), count - fits)
+        return start..<(start + fits)
     }
 
     // MARK: Reordering
@@ -116,9 +143,12 @@ public final class DitherTabStripView: TopbarDragView {
     private func layoutDrag() {
         guard let drag, drag.rest.count == views.count, views.indices.contains(drag.index) else { return }
         let rest = drag.rest, dragged = rest[drag.index]
-        let x = min(max(dragged.minX + drag.offset, rest[0].minX), rest[rest.count - 1].maxX - dragged.width)
+        // Tabs scrolled out of the strip keep stale frames, so the drag stays among the shown ones.
+        let shown = rest.indices.filter { !views[$0].isHidden }
+        guard let first = shown.first, let last = shown.last else { return }
+        let x = min(max(dragged.minX + drag.offset, rest[first].minX), rest[last].maxX - dragged.width)
         let center = x + dragged.width / 2
-        let over = rest.indices.min { abs(rest[$0].midX - center) < abs(rest[$1].midX - center) } ?? drag.index
+        let over = shown.min { abs(rest[$0].midX - center) < abs(rest[$1].midX - center) } ?? drag.index
         self.drag?.over = over
         views[drag.index].setFrameOrigin(NSPoint(x: x, y: dragged.minY))
         let shift = dragged.width + Self.gap

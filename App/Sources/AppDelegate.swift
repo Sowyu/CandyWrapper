@@ -346,7 +346,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { self?.updateSlowRPCToast() }
         }
         installQuitHold(window: window, layout: layout)
-        openIn = OpenInController(card: threads.panel.lazyDetailsCard, git: threads.git, environments: environments, composer: threads.composer,
+        openIn = OpenInController(card: threads.panel.lazyDetailsCard, pill: threads.panel.header.pill, git: threads.git, environments: environments, composer: threads.composer,
                                   shortcuts: shortcuts)
         threads.panel.model.openFile = { [weak threads, weak openIn] meta, editor in
             if editor { openIn?.openFile(meta) } else { threads?.files.openLink(meta) }
@@ -611,6 +611,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.routeHistory = history
         // Capy's + opens the new-thread page for the current project; its project chip picks another.
+        // Redesign's header controls sit at the right of the tab band (they hide with the thread panel).
+        layout.tabStrip.trailingAccessory = self.threads?.panel.header.pill
         ditherTabs = DitherTabsController(layout: layout, sidebar: sidebar, history: history, current: currentRoute,
                                           newThread: { [weak palette] opened in palette?.newThreadFromSidebar(shift: true, then: opened) })
         commands.historyBack = { [weak history] in history?.back() ?? false }
