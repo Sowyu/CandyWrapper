@@ -61,6 +61,8 @@ public struct SidebarRowModel: Equatable, Sendable {
     public var inProjectSection = false
     /// Dither's compact row, from `SidebarListState.dither`.
     public var dither = false
+    /// The thread's bot while the Orchestrator manages its machine (Redesign only).
+    public var bot: BotIdentity? = nil
 
     /// The linked pull request badge (`ThreadPullRequestBadgeControl`), nil without a link.
     public var pullRequestBadge: SidebarPullRequestBadge? = nil
@@ -294,6 +296,10 @@ public struct SidebarListState: Equatable, Sendable {
     /// `sidebarProjectSortOrder` and the manual order it reads (`projectOrder`): Dither's project sections follow them.
     public var projectSortOrder = SidebarModel.SortOrder.manual
     public var projectOrder: [String] = []
+    /// The machine the Orchestrator manages, while it is on: rows there wear their bot.
+    public var orchestratorMachine: String?
+    /// Threads the list leaves out: the Orchestrator's own, which sits pinned above the list.
+    public var hiddenThreadIds: Set<ThreadId> = []
 
     public init(activeThreadId: ThreadId? = nil) { self.activeThreadId = activeThreadId }
 
@@ -310,6 +316,7 @@ public struct SidebarListState: Equatable, Sendable {
             && a.heldOrder?.section == b.heldOrder?.section && a.heldOrder?.order == b.heldOrder?.order
             && a.collapsedProjects == b.collapsedProjects && a.dither == b.dither
             && a.projectSortOrder == b.projectSortOrder && a.projectOrder == b.projectOrder
+            && a.orchestratorMachine == b.orchestratorMachine && a.hiddenThreadIds == b.hiddenThreadIds
     }
 }
 
@@ -588,6 +595,7 @@ public enum SidebarListBuilder {
             pullRequestBadge: SidebarPullRequestBadge(shell),
             timeAnchorMs: anchor?.epochMs, snoozeWakeMs: wake)
         model.dither = state.dither
+        if let machine = state.orchestratorMachine, shell.id.environmentId == machine { model.bot = BotIdentity.forThread(shell.id.rawValue) }
         return model
     }
 

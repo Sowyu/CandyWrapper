@@ -5,6 +5,8 @@ import DesignSystem
 /// icons). "Project" only shows while a project scope is chosen (`isSettingsOverviewVisible`).
 public enum SettingsSection: String, CaseIterable, Sendable {
     case projects, general, appearance, keybindings, snapShots, providers, integrations, scheduledTasks, sourceControl, storage, connections, archive
+    /// Redesign's Orchestrator tab, CandyWrapper's own; never in T3's nav.
+    case orchestrator
     /// Reached from General > Diagnostics; not in the nav (`SETTINGS_BREADCRUMB_LABELS`).
     case diagnostics, licenses
 
@@ -25,6 +27,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .storage: "Storage"
         case .connections: "Connections"
         case .archive: "Archive"
+        case .orchestrator: "Orchestrator"
         case .diagnostics: "Diagnostics"
         case .licenses: "Open source licenses"
         }
@@ -44,6 +47,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .storage: .hardDrive
         case .connections: .link2
         case .archive: .archive
+        case .orchestrator: .workflow
         case .diagnostics: .activity
         case .licenses: .fileText
         }
@@ -53,7 +57,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
     public var isAvailable: Bool { true }
 
     /// The nav lists Project only for a project scope (`isSettingsOverviewVisible`).
-    static let navSections = allCases.filter { $0 != .diagnostics && $0 != .licenses }
+    static let navSections = allCases.filter { $0 != .diagnostics && $0 != .licenses && $0 != .orchestrator }
 
     /// SettingsSidebarNav.tsx `SnapShotIcon` (a `createLucideIcon` glyph outside the generated set).
     static let snapShotIcon = IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
@@ -138,6 +142,7 @@ public final class SettingsSidebarView: DSView {
         ClientSettingsStore.shared.observe { [weak self] keys in
             if keys.contains("environmentIdentificationMode") { self?.applyStage() }
         }
+        OrchestratorStore.shared.observe { [weak self] in self?.needsLayout = true }
         addSubview(brand)
         addSubview(trigger)
         search.field.setAccessibilityLabel("Search settings")
@@ -386,7 +391,7 @@ public final class SettingsSidebarView: DSView {
             }
             for section in sections {
                 guard let row = ditherItems[section] else { continue }
-                row.isHidden = isSearching || (section == .project && !showsProject)
+                row.isHidden = isSearching || (section == .project && !showsProject) || (section == .orchestrator && !OrchestratorStore.shared.config.enabled)
                 if row.isHidden { continue }
                 row.frame = NSRect(x: 8, y: y, width: max(0, w - 16), height: rowH)
                 y += rowH + 2

@@ -7,6 +7,8 @@ import T3Store
 @MainActor
 public struct SidebarActions {
     public var openThread: (ThreadId) -> Void = { _ in }
+    /// The pinned Orchestrator row was clicked (Redesign, Orchestrator on).
+    public var openOrchestrator: () -> Void = {}
     public var settle: (ThreadId) -> Void = { _ in }
     public var unsettle: (ThreadId) -> Void = { _ in }
     public var snooze: (ThreadId, NSView) -> Void = { _, _ in }
@@ -85,6 +87,34 @@ public final class SidebarContentView: DSView {
                    SidebarNavRowView(.calendarClock, "Automations"), SidebarNavRowView(.settings, "Settings")]
     /// Dither (after Capy): the account row, a pill floating at the foot of the sidebar.
     public let accountRow = SidebarAccountRowView()
+    /// Redesign with the Orchestrator on: its pinned row above the threads, which all sit under it. Nil removes the row.
+    public var orchestrator: OrchestratorSidebarInfo? {
+        didSet {
+            guard orchestrator != oldValue else { return }
+            if let info = orchestrator {
+                if let row = orchestratorRow { row.apply(info) } else {
+                    let row = OrchestratorSidebarRowView(info)
+                    row.action = { [weak self] in self?.actions.openOrchestrator() }
+                    addSubview(row)
+                    orchestratorRow = row
+                    let relay = BotPointerRelay()
+                    let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                              owner: relay, userInfo: nil)
+                    addTrackingArea(area)
+                    botPointer = (relay, area)
+                }
+            } else {
+                orchestratorRow?.removeFromSuperview()
+                orchestratorRow = nil
+                if let (_, area) = botPointer { removeTrackingArea(area) }
+                botPointer = nil
+            }
+            if (orchestrator == nil) != (oldValue == nil) { needsLayout = true }
+        }
+    }
+    private var orchestratorRow: OrchestratorSidebarRowView?
+    /// Forwards pointer moves over the sidebar to the bots while the Orchestrator is on.
+    private var botPointer: (BotPointerRelay, NSTrackingArea)?
     /// Dither: Capy's "Threads" section label between the nav rows and the list.
     let navSection = LabelView("Threads", font: SB.font(12, .medium), color: SB.c(\.sidebarMutedForeground))
     let backButton = SidebarMenuButtonView("Back", icon: .arrowLeft)
@@ -101,8 +131,18 @@ public final class SidebarContentView: DSView {
         didSet {
             // Inline, so the fix-up does not run this observer again.
             if isOnUtilityPage { state.activeThreadId = nil; state.activeDraftId = nil }
+            if state.hiddenThreadIds != oldValue.hiddenThreadIds { refreshListSnapshot() }
             if state != oldValue { rebuild(animated: true) }
         }
+    }
+    /// The snapshot the list draws: `snapshot` without the threads `state.hiddenThreadIds` names.
+    private var listSnapshot: ShellSnapshot?
+
+    private func refreshListSnapshot() {
+        let hidden = state.hiddenThreadIds
+        guard var s = snapshot, !hidden.isEmpty, s.threads.contains(where: { hidden.contains($0.id) }) else { listSnapshot = snapshot; return }
+        s.threads.removeAll { hidden.contains($0.id) }
+        listSnapshot = s
     }
     /// Where the shelves' expansion persists, as T3's `t3code:sidebar:*-expanded` localStorage keys
     /// (Sidebar.tsx:297-301). Nil in tests and previews; the app sets it once, which restores them.
@@ -369,6 +409,7 @@ public final class SidebarContentView: DSView {
     /// knows; without it every thread is compared.
     public func setSnapshot(_ snapshot: ShellSnapshot?, animated: Bool = true, changedThreadIds: Set<ThreadId>? = nil) {
         self.snapshot = snapshot
+        refreshListSnapshot()
         listCache?.noteChanges(changedThreadIds)
         rebuild(animated: animated)
     }
@@ -389,7 +430,7 @@ public final class SidebarContentView: DSView {
     /// The thread rows in display order, outside search (`orderedThreadKeys`, Sidebar.tsx:3073-3079):
     /// what `thread.previous`, `thread.next` and `thread.jump.N` walk.
     public var orderedThreadIds: [ThreadId] {
-        SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: nowMs, cache: listCache).compactMap {
+        SidebarListBuilder.items(snapshot: listSnapshot, state: state, nowMs: nowMs, cache: listCache).compactMap {
             if case .row(let row) = $0 { row.id } else { nil }
         }
     }
@@ -439,12 +480,12 @@ public final class SidebarContentView: DSView {
             searchOrderKey = ""
             // A thread changed in place or a label stepped: patch those rows of the list it already shows.
             var patched = false
-            if let cache = listCache, let snapshot, list.itemsGeneration == cache.generation,
+            if let cache = listCache, let snapshot = listSnapshot, list.itemsGeneration == cache.generation,
                let patch = cache.patch(snapshot: snapshot, state: state, nowMs: ms) {
                 patched = list.patchItems(patch)
             }
             if !patched {
-                let items = SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: ms, cache: listCache)
+                let items = SidebarListBuilder.items(snapshot: listSnapshot, state: state, nowMs: ms, cache: listCache)
                 list.setItems(items, animated: animated, generation: listCache?.generation)
             }
         }
@@ -455,7 +496,7 @@ public final class SidebarContentView: DSView {
     }
 
     private func searchItems(nowMs: Int64) -> [SidebarItem] {
-        SidebarListBuilder.searchItems(snapshot: snapshot, state: state, query: searchQuery, matches: searchMatches,
+        SidebarListBuilder.searchItems(snapshot: listSnapshot, state: state, query: searchQuery, matches: searchMatches,
                                        pending: searchPending, highlighted: searchHighlight, nowMs: nowMs)
     }
 
@@ -894,6 +935,14 @@ public final class SidebarContentView: DSView {
             row.frame = NSRect(x: 8, y: listTop, width: max(0, w - 16), height: SidebarNavRowView.height)
             listTop += SidebarNavRowView.height + 2
         }
+        if let row = orchestratorRow {
+            row.isHidden = !capy
+            if capy {
+                listTop += 6
+                row.frame = NSRect(x: 8, y: listTop, width: max(0, w - 16), height: OrchestratorSidebarRowView.height)
+                listTop += OrchestratorSidebarRowView.height
+            }
+        }
         if navSection.superview == nil { navSection.lineHeight = 16; addSubview(navSection) }
         navSection.isHidden = !capy
         if capy {
@@ -937,4 +986,11 @@ public final class SidebarContentView: DSView {
         list.frame.size.width = w
         list.needsLayout = true
     }
+}
+
+/// Sends the pointer's moves over the sidebar to the bots, which turn toward it; leaving sends them back to rest.
+final class BotPointerRelay: NSResponder {
+    override func mouseMoved(with event: NSEvent) { BotGazeTracker.shared.pointer(event.locationInWindow, in: event.window) }
+    override func mouseEntered(with event: NSEvent) { BotGazeTracker.shared.pointer(event.locationInWindow, in: event.window) }
+    override func mouseExited(with event: NSEvent) { BotGazeTracker.shared.pointer(nil, in: event.window) }
 }
