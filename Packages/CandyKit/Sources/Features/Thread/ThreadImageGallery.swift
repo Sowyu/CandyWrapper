@@ -28,9 +28,36 @@ public struct GalleryImage: Hashable, Sendable {
     /// The timeline entry that showed it: a work entry or a message id.
     public var entryId: String
     public var at: T3Timestamp
+    /// The tool item that showed it, nil for a reply's image. Our kept copy is filed under it.
+    public var itemId: TurnItemId?
+    /// The server's stored copy of a viewed image, when the item's output kept one.
+    public var stored: ToolOutputImage?
+    /// The SHA-256 of our kept copy, once we have one.
+    public var contentHash: String?
 
-    public init(source: Source, threadId: ThreadId, agent: String, entryId: String, at: T3Timestamp) {
-        self.source = source; self.threadId = threadId; self.agent = agent; self.entryId = entryId; self.at = at
+    public init(source: Source, threadId: ThreadId, agent: String, entryId: String, at: T3Timestamp, itemId: TurnItemId? = nil) {
+        self.source = source; self.threadId = threadId; self.agent = agent; self.entryId = entryId; self.at = at; self.itemId = itemId
+    }
+
+    /// One picture however many paths or items showed it: the content when we kept a copy, else the source.
+    public var dedupeKey: String { contentHash.map { "sha256:" + $0 } ?? key }
+
+    /// Where the gallery tries to load it, in order.
+    public enum Attempt: Equatable, Sendable {
+        /// The server's copy (`tool-output-image`), which outlives the file.
+        case stored(ToolOutputImage)
+        /// Our copy, kept while the file still existed.
+        case kept(thread: ThreadId, item: TurnItemId)
+        /// The file, URL or tool output itself.
+        case source
+    }
+
+    public var attempts: [Attempt] {
+        var out: [Attempt] = []
+        if let stored { out.append(.stored(stored)) }
+        if case .file = source, let itemId { out.append(.kept(thread: threadId, item: itemId)) }
+        out.append(.source)
+        return out
     }
 
     /// The picture's identity: one tile per file, URL or tool output, whichever agent saw it.
@@ -59,10 +86,36 @@ public struct GalleryImage: Hashable, Sendable {
 }
 
 public enum ThreadImageGallery {
+    /// A tool item whose stored output may hold images the stream leaves out: every `dynamic_tool` arrives with
+    /// `outputOmitted` and no image blocks (apps/server/src/orchestration-v2/WireProjection.ts:126-134), while the
+    /// server still serves them by item and index from the stored item (apps/server/src/assets/AssetAccess.ts:240-252,
+    /// 750-768). The count comes from `orchestration.getTurnItem`, once per item.
+    public struct Candidate: Hashable, Sendable {
+        public var threadId: ThreadId
+        public var itemId: TurnItemId
+        public var entryId: String
+        public var at: T3Timestamp
+        public var key: String { ThreadImageGallery.itemKey(threadId, itemId) }
+    }
+
+    public struct Collected: Equatable, Sendable {
+        public var images: [GalleryImage] = []
+        public var candidates: [Candidate] = []
+    }
+
+    public static func itemKey(_ thread: ThreadId, _ item: TurnItemId) -> String { thread.rawValue + "|" + item.rawValue }
+
     /// The images of one thread's projection, oldest first.
     public static func images(_ projection: ThreadProjection, agent: String) -> [GalleryImage] {
+        collect(projection, agent: agent).images
+    }
+
+    /// The images of one thread's projection, oldest first, and the tool items whose stored output may hold more:
+    /// items that viewed an image, browser and computer surfaces, and tools named like screenshots.
+    public static func collect(_ projection: ThreadProjection, agent: String) -> Collected {
         let thread = projection.thread.id
         var out: [GalleryImage] = []
+        var candidates: [Candidate] = []
         for row in projection.visibleTurnItems {
             // Inherited rows belong to the parent thread, which collects them itself.
             guard row.visibility != "inherited" else { continue }
@@ -70,11 +123,20 @@ public enum ThreadImageGallery {
             guard toolTypes.contains(row.item.type) || row.item.string("viewedImagePath") != nil else { continue }
             let entry = WorkLog.entry(for: row)
             let at = row.item.startedAt ?? row.item.updatedAt
-            if let path = WorkLog.viewedImagePath(entry) {
-                out.append(GalleryImage(source: .file(path), threadId: thread, agent: agent, entryId: entry.id, at: at))
+            let viewed = WorkLog.viewedImagePath(entry)
+            if let path = viewed {
+                out.append(GalleryImage(source: .file(path), threadId: thread, agent: agent, entryId: entry.id, at: at, itemId: row.sourceItemId))
             }
-            for image in ToolOutputImage.list(threadId: row.sourceThreadId, itemId: row.sourceItemId, count: TurnItemDetail.outputImageCount(row.item)) {
-                out.append(GalleryImage(source: .toolOutput(image), threadId: thread, agent: agent, entryId: entry.id, at: at))
+            let inline = TurnItemDetail.outputImageCount(row.item)
+            for image in ToolOutputImage.list(threadId: row.sourceThreadId, itemId: row.sourceItemId, count: inline) {
+                out.append(GalleryImage(source: .toolOutput(image), threadId: thread, agent: agent, entryId: entry.id, at: at, itemId: row.sourceItemId))
+            }
+            // Claude's Read keeps no bytes: its `{type: "image", file}` output is no block `readToolOutputImage` serves
+            // (packages/shared/src/toolOutput.ts:227-238), so ingest strips it (toolOutputImageBytes.ts:105-119).
+            let toolName = row.item.string("toolName") ?? ""
+            if inline == 0, row.item.type == .dynamicTool, row.item.outputOmitted, toolName != "Read",
+               viewed != nil || entry.toolSurface != nil || looksLikeCapture(toolName.isEmpty ? row.item.title ?? "" : toolName) {
+                candidates.append(Candidate(threadId: row.sourceThreadId, itemId: row.sourceItemId, entryId: entry.id, at: at))
             }
         }
         for message in projection.messages where message.role == "assistant" && !message.streaming {
@@ -87,7 +149,48 @@ public enum ThreadImageGallery {
                 out.append(GalleryImage(source: source, threadId: thread, agent: agent, entryId: message.id.rawValue, at: message.createdAt))
             }
         }
-        return out
+        return Collected(images: out, candidates: candidates)
+    }
+
+    static func looksLikeCapture(_ name: String) -> Bool {
+        let lower = name.lowercased()
+        return ["screenshot", "snapshot", "capture", "view_image", "viewimage"].contains { lower.contains($0) }
+    }
+
+    /// Joins what the server keeps (`counts`, by `itemKey`) and our copies' hashes (`hashes`, by `itemKey`) to the
+    /// collected images. A viewed image whose item kept an output image loads that first; a candidate without a
+    /// viewed image gets one tile per stored image.
+    public static func assemble(_ collected: Collected, agent: String? = nil, counts: [String: Int], hashes: [String: String]) -> [GalleryImage] {
+        var images = collected.images
+        var viewedItems: Set<String> = []
+        for i in images.indices {
+            if let name = agent { images[i].agent = name }
+            guard let item = images[i].itemId, case .file = images[i].source else { continue }
+            let key = itemKey(images[i].threadId, item)
+            viewedItems.insert(key)
+            images[i].contentHash = hashes[key]
+            if let n = counts[key], n > 0 { images[i].stored = ToolOutputImage(threadId: images[i].threadId, itemId: item, index: 0) }
+        }
+        for c in collected.candidates {
+            let n = counts[c.key] ?? 0
+            let first = viewedItems.contains(c.key) ? 1 : 0
+            guard n > first else { continue }
+            for index in first..<n {
+                images.append(GalleryImage(source: .toolOutput(ToolOutputImage(threadId: c.threadId, itemId: c.itemId, index: index)),
+                                           threadId: c.threadId, agent: agent ?? images.first?.agent ?? "Main", entryId: c.entryId, at: c.at, itemId: c.itemId))
+            }
+        }
+        return images
+    }
+
+    /// The grid's tiles: missing ones only while "Show missing" is on.
+    public static func visible(_ images: [GalleryImage], missing: Set<String>, showMissing: Bool) -> [GalleryImage] {
+        showMissing ? images : images.filter { !missing.contains($0.pixelKey) }
+    }
+
+    /// The header's count: "53" or "53 · 41 missing".
+    public static func countLabel(total: Int, missing: Int) -> String {
+        missing > 0 ? "\(total) · \(missing) missing" : "\(total)"
     }
 
     static let toolTypes: Set<TurnItemType> = [.dynamicTool, .commandExecution, .fileSearch, .fileChange, .webSearch]
@@ -109,7 +212,7 @@ public enum ThreadImageGallery {
             return l != r ? l > r : a.offset > b.offset
         }.map(\.element)
         var seen: Set<String> = []
-        return all.filter { seen.insert($0.key).inserted }
+        return all.filter { seen.insert($0.dedupeKey).inserted }
     }
 
     /// Names the open thread's children: provider subagents count up in the order they started, delegated tasks keep
@@ -131,15 +234,28 @@ public enum ThreadImageGallery {
 }
 
 /// Keeps the gallery's images for the open thread, the pill's toggle and dot, and the open card. Everything here runs
-/// on projection pushes and child reads; nothing ticks.
+/// on projection pushes, child reads and load results; nothing ticks.
 @MainActor
 public final class ThreadImageGalleryController {
     private let pill: DitherHeaderPillView
     private var threadId: ThreadId?
-    private var own: [GalleryImage] = []
-    private var children: [ThreadId: [GalleryImage]] = [:]
+    private var own = ThreadImageGallery.Collected()
+    private var children: [ThreadId: ThreadImageGallery.Collected] = [:]
     private var names: [ThreadId: String] = [:]
     public private(set) var images: [GalleryImage] = []
+    /// Stored output image counts and our copies' hashes, by `ThreadImageGallery.itemKey`.
+    // ponytail: session only, a number and a hash per image item; drop per thread if sessions see thousands
+    private var counts: [String: Int] = [:]
+    private var hashes: [String: String] = [:]
+    private var requested: Set<String> = []
+    /// Threads whose kept copies were looked up, so a tile isn't called missing before that answer arrives.
+    private var hashesLoaded: Set<ThreadId> = []
+    /// Whether each tile's file existed when first checked, by pixel key. A gone file stays gone; a new view is a new tile.
+    private var fileState: [String: Bool] = [:]
+    /// Tiles every source failed for, by pixel key.
+    private var failed: Set<String> = []
+    public private(set) var missing: Set<String> = []
+    public var showMissing = false { didSet { if showMissing != oldValue { sync() } } }
     /// When the gallery last closed, or the thread first opened this session, per thread.
     // ponytail: session only, one number per opened thread; persist it if the dot should survive relaunch
     private var lookedAt: [ThreadId: Int64] = [:]
@@ -151,6 +267,14 @@ public final class ThreadImageGalleryController {
     public var onOpenInThread: ((GalleryImage) -> Void)?
     public var onReveal: ((GalleryImage) -> Void)?
     public var canReveal: ((GalleryImage) -> Bool)?
+    /// Whether a host file exists now: nil when it can't be told from here (a remote environment).
+    public var fileExists: ((GalleryImage) -> Bool?)?
+    /// Keeps a copy of a viewed file that still exists and answers with its content hash, nil when it couldn't.
+    public var keep: ((GalleryImage) async -> String?)?
+    /// Our kept copies of one thread: item id to content hash.
+    public var keptHashes: ((ThreadId) async -> [String: String])?
+    /// How many output images the server kept for an item (`orchestration.getTurnItem`), nil on failure.
+    public var storedCount: ((ThreadId, TurnItemId) async -> Int?)?
 
     public init(pill: DitherHeaderPillView) {
         self.pill = pill
@@ -166,28 +290,92 @@ public final class ThreadImageGalleryController {
             self.threadId = threadId
             children = [:]
             names = [:]
+            failed = []
+            showMissing = false
             if let threadId, lookedAt[threadId] == nil { lookedAt[threadId] = TimestampFormat.nowMs() }
         }
-        own = projection.map { ThreadImageGallery.images($0, agent: "Main") } ?? []
+        own = projection.map { ThreadImageGallery.collect($0, agent: "Main") } ?? .init()
         sync()
+        fetch(own)
     }
 
     /// Child threads' images as read, and every child's name.
-    public func setChildren(_ images: [ThreadId: [GalleryImage]], names: [ThreadId: String]) {
-        children = images
+    public func setChildren(_ collected: [ThreadId: ThreadImageGallery.Collected], names: [ThreadId: String]) {
+        children = collected
         self.names = names
+        sync()
+        for c in collected.values { fetch(c) }
+    }
+
+    /// A tile whose every source failed.
+    public func markFailed(_ image: GalleryImage) {
+        guard failed.insert(image.pixelKey).inserted else { return }
         sync()
     }
 
+    /// Asks once per item for what the server kept and keeps our own copy of viewed files, at first sight.
+    private func fetch(_ collected: ThreadImageGallery.Collected) {
+        for thread in Set(collected.images.map(\.threadId) + collected.candidates.map(\.threadId)) where !hashesLoaded.contains(thread) {
+            guard requested.insert("hashes|" + thread.rawValue).inserted, let keptHashes else { continue }
+            Task { [weak self] in
+                let found = await keptHashes(thread)
+                guard let self else { return }
+                for (item, hash) in found { self.hashes[ThreadImageGallery.itemKey(thread, TurnItemId(item))] = hash }
+                self.hashesLoaded.insert(thread)
+                self.sync()
+            }
+        }
+        for c in collected.candidates where counts[c.key] == nil {
+            guard requested.insert("count|" + c.key).inserted, let storedCount else { continue }
+            Task { [weak self] in
+                let n = await storedCount(c.threadId, c.itemId)
+                guard let self else { return }
+                if let n { self.counts[c.key] = n } else { self.requested.remove("count|" + c.key) }
+                self.sync()
+            }
+        }
+        for image in collected.images {
+            guard case .file = image.source, let item = image.itemId else { continue }
+            let key = ThreadImageGallery.itemKey(image.threadId, item)
+            guard hashes[key] == nil, requested.insert("keep|" + key).inserted, exists(image) != false, let keep else { continue }
+            Task { [weak self] in
+                guard let hash = await keep(image), let self else { return }
+                self.hashes[key] = hash
+                self.sync()
+            }
+        }
+    }
+
     private func sync() {
-        let named = children.map { id, list in list.map { var image = $0; image.agent = names[id] ?? "Subagent"; return image } }
-        let next = ThreadImageGallery.merge([own] + named)
+        let lists = [ThreadImageGallery.assemble(own, counts: counts, hashes: hashes)]
+            + children.map { id, c in ThreadImageGallery.assemble(c, agent: names[id] ?? "Subagent", counts: counts, hashes: hashes) }
+        let next = ThreadImageGallery.merge(lists)
         if next != images { images = next }
+        missing = Set(images.filter(isMissing).map(\.pixelKey))
+        let shown = ThreadImageGallery.visible(images, missing: missing, showMissing: false)
         pill.galleryCount = images.count
         let since = threadId.flatMap { lookedAt[$0] } ?? .max
-        pill.galleryUnseen = !isOpen && ThreadImageGallery.unseen(images, sinceMs: since) > 0
+        pill.galleryUnseen = !isOpen && ThreadImageGallery.unseen(shown, sinceMs: since) > 0
         pill.gallery.isPressed = isOpen
-        view?.images = images
+        view?.apply(images: images, missing: missing, showMissing: showMissing)
+    }
+
+    /// Nothing left to load it from: every source failed, or the file is gone with no server or kept copy.
+    private func isMissing(_ image: GalleryImage) -> Bool {
+        if failed.contains(image.pixelKey) { return true }
+        guard image.stored == nil, image.contentHash == nil, case .file = image.source else { return false }
+        guard hashesLoaded.contains(image.threadId) else { return false }
+        // The server's count for its item is still on its way.
+        if let item = image.itemId, case let key = ThreadImageGallery.itemKey(image.threadId, item),
+           requested.contains("count|" + key), counts[key] == nil { return false }
+        return exists(image) == false
+    }
+
+    private func exists(_ image: GalleryImage) -> Bool? {
+        if let known = fileState[image.pixelKey] { return known }
+        let now = fileExists?(image)
+        if let now { fileState[image.pixelKey] = now }
+        return now
     }
 
     /// ⇧⌘I and the toggle.
@@ -195,7 +383,9 @@ public final class ThreadImageGalleryController {
         if isOpen { close(); return }
         guard pill.window != nil, !pill.isHidden, !images.isEmpty, let window = pill.window else { pill.gallery.isPressed = false; return }
         let view = ThreadImageGalleryView()
-        view.images = images
+        view.onFailed = { [weak self] image in self?.markFailed(image) }
+        view.onShowMissing = { [weak self] on in self?.showMissing = on }
+        view.apply(images: images, missing: missing, showMissing: showMissing)
         view.onOpenInThread = { [weak self] image in self?.close(); self?.onOpenInThread?(image) }
         view.onReveal = { [weak self] image in self?.onReveal?(image) }
         view.canReveal = { [weak self] image in self?.canReveal?(image) ?? false }

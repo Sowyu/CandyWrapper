@@ -66,6 +66,8 @@ public enum MarkdownImages {
     /// A signed URL and pixel size for any `assets.createUrl` resource on the open thread's environment
     /// (`useAssetUrlState`, apps/web/src/assets/assetUrls.ts:20-41). Set by the app.
     public static var resourceURL: ((_ resource: JSONValue) async -> (url: URL, size: CGSize?)?)?
+    /// CandyWrapper's kept copy of an image a tool item viewed (`AgentImageCache`), for when the file is gone. Set by the app.
+    public static var keptCopy: ((_ thread: ThreadId, _ item: TurnItemId) async -> URL?)?
     /// Opens a workspace-relative file in the right panel's file viewer ("Open in file viewer").
     public static var openInFileViewer: ((_ relativePath: String) -> Void)?
 
@@ -123,6 +125,32 @@ public enum MarkdownImages {
             guard !Task.isCancelled, let decoded else { return nil }
             await record(decoded.natural, for: key)
             return decoded.image
+        }
+    }
+
+    static func keptURL(thread: ThreadId, item: TurnItemId) async -> URL? {
+        await keptCopy?(thread, item)
+    }
+
+    /// Decodes the kept copy of an item's viewed image, nil when there is none.
+    /// `sizeKey` records its natural size, so a timeline slot takes the picture's own box.
+    nonisolated static func keptLoader(thread: ThreadId, item: TurnItemId, sizeKey: String? = nil) -> AsyncImageView.Loader {
+        { side in
+            guard let url = await keptURL(thread: thread, item: item),
+                  let decoded = await decodeFile(url, side: side), !Task.isCancelled else { return nil }
+            if let sizeKey { await record(decoded.natural, for: sizeKey) }
+            return decoded.image
+        }
+    }
+
+    /// A viewed file, then the kept copy once the file is gone.
+    nonisolated static func viewedLoader(_ path: String, thread: ThreadId?, item: TurnItemId?) -> AsyncImageView.Loader {
+        let file = loader(.workspaceFile(path))
+        guard let thread, let item else { return file }
+        let kept = keptLoader(thread: thread, item: item, sizeKey: MarkdownImageSource.workspaceFile(path).key)
+        return { side in
+            if let image = await file(side) { return image }
+            return Task.isCancelled ? nil : await kept(side)
         }
     }
 

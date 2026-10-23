@@ -322,7 +322,9 @@ final class ThreadController {
     /// Redesign's agent image gallery, fed by the open projection and the same child reads as the cost.
     private(set) var gallery: ThreadImageGalleryController!
     // ponytail: kept for the session beside `subagentCosts`, a few paths per child; drop on archive if it grows
-    private var subagentImages: [ThreadId: [GalleryImage]] = [:]
+    private var subagentImages: [ThreadId: ThreadImageGallery.Collected] = [:]
+    /// Environments whose kept images were checked against their threads this session.
+    private var prunedImageEnvironments: Set<String> = []
     /// Whether the window shows a thread route; Settings and the utility pages hide the figure.
     var costRouteShowsThread = true { didSet { syncCost() } }
     private(set) var terminal: TerminalController!
@@ -429,6 +431,39 @@ final class ThreadController {
             if image.threadId == open.localId { self.panel.timeline.revealEntry(containing: image.entryId) } else { self.open(image.threadId.scoped(to: env)) }
         }
         gallery.canReveal = { [weak self] image in self?.localImageURL(image) != nil }
+        // Our copy of what agents viewed, for when their temp files are gone (`AgentImageCache`).
+        let cacheRoot = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(Bundle.main.bundleIdentifier ?? "CandyWrapper").appendingPathComponent("agent-images")
+        let cache = AgentImageCache.shared ?? AgentImageCache(root: cacheRoot)
+        AgentImageCache.shared = cache
+        MarkdownImages.keptCopy = { [weak self] thread, item in
+            guard let env = self?.openThreadId?.environmentId else { return nil }
+            return await cache.url(env: env, thread: thread.rawValue, item: item.rawValue)
+        }
+        gallery.fileExists = { [weak self] image in
+            guard let self, let env = self.openThreadId?.environmentId, env == self.environments.primaryId else { return nil }
+            return self.localImageURL(image) != nil
+        }
+        gallery.keptHashes = { [weak self] thread in
+            guard let env = self?.openThreadId?.environmentId else { return [:] }
+            return await cache.entries(env: env, thread: thread.rawValue).mapValues(\.hash)
+        }
+        gallery.keep = { [weak self] image in
+            guard let self, let env = self.openThreadId?.environmentId, let item = image.itemId else { return nil }
+            if env == self.environments.primaryId {
+                guard let url = self.localImageURL(image) else { return nil }
+                return await cache.capture(env: env, thread: image.threadId.rawValue, item: item.rawValue, file: url)?.hash
+            }
+            guard let resource = image.resource else { return nil }
+            return await cache.keepRemote(env: env, thread: image.threadId.rawValue, item: item.rawValue, resource: resource)?.hash
+        }
+        gallery.storedCount = { [weak self] thread, item in
+            guard let self, let env = self.openThreadId?.environmentId else { return nil }
+            let payload: JSONValue = .object(["threadId": .string(thread.rawValue), "itemId": .string(item.rawValue)])
+            guard let json = try? await self.environments.request(env, "orchestration.getTurnItem", payload),
+                  let result = try? json.decode(as: GetTurnItemResult.self) else { return nil }
+            return result.item.map(TurnItemDetail.outputImageCount) ?? 0
+        }
         gallery.onReveal = { [weak self] image in
             guard let url = self?.localImageURL(image) else { return }
             NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -1067,13 +1102,13 @@ final class ThreadController {
         readingSubagentCosts.formUnion(stale.map(\.id))
         let environments = environments
         Task { [weak self] in
-            await withTaskGroup(of: (ThreadId, T3Timestamp?, ThreadCostEstimate.Breakdown?, [GalleryImage]?).self) { group in
+            await withTaskGroup(of: (ThreadId, T3Timestamp?, ThreadCostEstimate.Breakdown?, ThreadImageGallery.Collected?).self) { group in
                 for child in stale {
                     group.addTask {
                         let payload: JSONValue = .object(["threadId": .string(child.id.localId.rawValue)])
                         guard let json = try? await environments.request(env, "orchestration.getThreadProjection", payload),
                               let projection = try? json.decode(as: ThreadProjection.self) else { return (child.id, nil, nil, nil) }
-                        return (child.id, child.updatedAt, ThreadCostEstimate.own(projection), ThreadImageGallery.images(projection, agent: ""))
+                        return (child.id, child.updatedAt, ThreadCostEstimate.own(projection), ThreadImageGallery.collect(projection, agent: ""))
                     }
                 }
                 for await (id, at, own, images) in group {
@@ -1099,9 +1134,22 @@ final class ThreadController {
             for child in byParent[parent] ?? [] where seen.insert(child.id).inserted { children.append(child); queue.append(child.id) }
         }
         let names = ThreadImageGallery.agentNames(children.map { (id: $0.id.localId, title: $0.title, providerNative: $0.isProviderNativeSubagent, createdAt: $0.createdAt) })
-        var images: [ThreadId: [GalleryImage]] = [:]
+        pruneKeptImages()
+        var images: [ThreadId: ThreadImageGallery.Collected] = [:]
         for child in children { if let list = subagentImages[child.id] { images[child.id.localId] = list } }
         gallery.setChildren(images, names: names)
+    }
+
+    /// Drops kept images of threads this environment no longer has, once per environment per session, after the
+    /// shell snapshot lists its threads (live and archived).
+    private func pruneKeptImages() {
+        guard let env = openThreadId?.environmentId, !prunedImageEnvironments.contains(env), let cache = AgentImageCache.shared,
+              let snapshot = sidebar?.snapshot else { return }
+        let threads = (snapshot.threads + snapshot.archivedThreads).filter { $0.id.environmentId == env }
+        guard !threads.isEmpty else { return }
+        prunedImageEnvironments.insert(env)
+        let ids = Set(threads.map { $0.id.localId.rawValue })
+        Task { await cache.keepOnly(env: env, threads: ids) }
     }
 
     /// A gallery image's file on this Mac: the primary environment, a path that exists.
