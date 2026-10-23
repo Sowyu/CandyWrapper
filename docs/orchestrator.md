@@ -347,6 +347,15 @@ The motion rules follow the idle rule.
 
 That comes to about 5 days in total. Every step ships on its own behind the toggle.
 
+## Phases
+
+Start each phase only when the one before it is done: tests and perf-review pass, it's checked on screen, and the user has used it for a few days.
+
+1. Phase 1, the Orchestrator: toggle, settings tab with the Models list, one Orchestrator per machine, sidebar and crew, chat with Overview and Needs you, plan and memory blocks, 3D bots.
+2. Phase 2, bots: standing bots with a role prompt, memory and their own chat, starting with OpSec. The Orchestrator hands steps to them. Bot templates and the "New bot" sheet.
+3. Phase 3, running on their own: schedules and event triggers for bots, through T3's scheduled tasks, plus the Digest tab and the dock badge.
+4. Phase 4, reach: handing threads to the Orchestrator by dragging, taking over threads you started, and showing every machine's Orchestrator together.
+
 ## Open questions
 
 - Should Orchestrator wait for "go" by default, as in the default prompt, or act right away?
