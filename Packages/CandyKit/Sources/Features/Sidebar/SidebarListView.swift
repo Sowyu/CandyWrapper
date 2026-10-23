@@ -19,6 +19,8 @@ public final class SidebarListView: DSView {
     private var pools: [SidebarItem.Kind: [SidebarRowBase]] = [:]
     /// Rows fading out after removal; they leave the pool until their animation ends.
     private var exiting: Set<ObjectIdentifier> = []
+    /// Set while a project section folds, so its leaving rows rise toward the header.
+    private var foldingUp = false
     private var clipObserver: NSObjectProtocol?
     /// Keyboard focus, as an item key. Arrows move it, Enter opens it.
     public private(set) var focusedKey: String?
@@ -538,7 +540,7 @@ public final class SidebarListView: DSView {
             }
         }
         let move = CABasicAnimation(keyPath: "transform.translation.y")
-        move.fromValue = 0; move.toValue = min(view.frame.height, 40); move.isAdditive = true
+        move.fromValue = 0; move.toValue = foldingUp ? -min(view.frame.height, 16) : min(view.frame.height, 40); move.isAdditive = true
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 1; fade.toValue = 0
         let group = CAAnimationGroup()
@@ -608,7 +610,11 @@ public final class SidebarListView: DSView {
         switch item {
         case .row(let r): onOpen?(r.id)
         case .shelfHeader(let shelf, _, _): onToggleShelf?(shelf)
-        case .projectHeader(let h): onToggleProject?(h.key)
+        case .projectHeader(let h):
+            // A fold tucks its rows up into the header rather than dropping them like removed rows.
+            foldingUp = true
+            onToggleProject?(h.key)
+            foldingUp = false
         case .showMore: onShowMore?()
         case .draft(let d): onOpenDraft?(d.id)
         case .searchResult(let r): onOpenSearchResult?(r.id)
