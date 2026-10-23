@@ -485,6 +485,21 @@ public final class ThreadPanelView: DSView {
     private var queueBadgeCount = 0
     /// While the queue panel is open, a click outside it or its pill closes it, as the stash list does.
     private var queueClickMonitor: Any?
+    /// Redesign's subagent strip: a pill left of Queued while subagents run or wait, which opens the panel over the
+    /// row. Both are built the first time a thread has subagents; `ThreadLineageController` feeds them.
+    public let lazySubagentPill = LazyView { SubagentStripPillView() }
+    public let lazySubagentPanel = LazyView { SubagentStripPanelView() }
+    public var showsSubagentStrip = false { didSet { if showsSubagentStrip != oldValue { needsLayout = true } } }
+    public var subagentStripExpanded = false {
+        didSet {
+            guard subagentStripExpanded != oldValue else { return }
+            lazySubagentPill.loaded?.expanded = subagentStripExpanded
+            needsLayout = true
+        }
+    }
+    /// Every background task is a subagent the strip already shows, so the waiting indicator under the composer stays
+    /// hidden while the strip is on.
+    public var subagentStripCoversBackgroundWork = false { didSet { if subagentStripCoversBackgroundWork != oldValue { needsLayout = true } } }
     /// The stash list, docked where the `/` menu goes; the `/` menu wins when both are open.
     /// Built the first time it opens. Wire it and push entries through `lazyStashMenu`.
     public let lazyStashMenu = LazyView { ComposerStashMenuView() }
@@ -699,6 +714,15 @@ public final class ThreadPanelView: DSView {
         queueBadge.isHidden = true
         queueBadge.onToggleMenu = { [weak self] in self?.queue.toggle() }
         addSubview(queueBadge)
+        lazySubagentPill.configure { [weak self] pill in
+            pill.isHidden = true
+            pill.expanded = self?.subagentStripExpanded ?? false
+            pill.onToggle = { [weak self] in self?.subagentStripExpanded.toggle() }
+        }
+        lazySubagentPanel.configure { [weak self] panel in
+            panel.isHidden = true
+            panel.onCollapse = { [weak self] in self?.subagentStripExpanded = false }
+        }
         // Above every attachment (`z-20`), under the drawers and menus.
         bannerStack.isHidden = true
         bannerStack.onLayoutChange = { [weak self] in self?.needsLayout = true }
@@ -1425,6 +1449,8 @@ public final class ThreadPanelView: DSView {
         waitingIndicator.isHidden = true
         ringPill.isHidden = true
         queueBadge.isHidden = true
+        lazySubagentPill.loaded?.isHidden = true
+        lazySubagentPanel.loaded?.isHidden = true
         watchQueueClicks(false)
         if composer.contextWindowMeter.superview !== composer {
             composer.addSubview(composer.contextWindowMeter)
@@ -1581,7 +1607,7 @@ public final class ThreadPanelView: DSView {
     /// What the composer docks that is not in the banner stack.
     private var ditherDockViews: [ComposerBannerView?] {
         [approvalPanel, lazyQuestionPanel.loaded, tasksView, lazyPlanFollowUpBanner.loaded, activityRow, queue, stashBadge,
-         queueBadge, commandMenu, lazyStashMenu.loaded]
+         queueBadge, commandMenu, lazyStashMenu.loaded, lazySubagentPill.loaded, lazySubagentPanel.loaded]
     }
     /// The pills and cards Redesign showed on the last pass, to animate what comes and goes.
     private var ditherShown: [NSView] = []
@@ -1682,7 +1708,8 @@ public final class ThreadPanelView: DSView {
             shown += [ringPill, meter]
         }
         if waitingIndicator.superview !== self { addSubview(waitingIndicator, positioned: .above, relativeTo: queue) }
-        let waitingOn = docked && showsBackgroundWork
+        let stripOn = docked && showsSubagentStrip
+        let waitingOn = docked && showsBackgroundWork && !(stripOn && subagentStripCoversBackgroundWork)
         waitingIndicator.isHidden = !waitingOn
         if waitingOn {
             let room = belowRight - px - (deviceShown ? min(deviceRow.intrinsicContentSize.width, 150) + spacing : 0)
@@ -1704,13 +1731,20 @@ public final class ThreadPanelView: DSView {
 
         // Queued then Stash at the row's right. Both drop their labels to the glyph and count when that lets the hero
         // or the first status pill fit beside them.
-        let rightPills = [(queueBadge, queued > 0), (stashBadge, badgeShown)].filter(\.1).map(\.0)
-        func cluster(_ titled: Bool) -> CGFloat { rightPills.reduce(0) { $0 + $1.width(showingTitle: titled) + spacing } }
+        let strip: SubagentStripPillView? = stripOn ? lazySubagentPill.view : nil
+        if let strip, strip.superview !== self { addSubview(strip, positioned: .above, relativeTo: queue) }
+        let badges = [(queueBadge, queued > 0), (stashBadge, badgeShown)].filter(\.1).map(\.0)
+        // The subagent pill leads the cluster and keeps its width; only Queued and Stash drop their labels.
+        let rightPills: [ComposerBannerView] = (strip.map { [$0] } ?? []) + badges
+        func pillWidth(_ view: ComposerBannerView, _ titled: Bool) -> CGFloat {
+            (view as? ComposerStashBadgeView)?.width(showingTitle: titled) ?? (view as? SubagentStripPillView)?.preferredWidth ?? 0
+        }
+        func cluster(_ titled: Bool) -> CGFloat { rightPills.reduce(0) { $0 + pillWidth($1, titled) + spacing } }
         let leftNeed = left > px ? left - px : pills.first.map { min($0.1, pw) + spacing } ?? 0
         let titled = leftNeed + cluster(true) <= pw || (leftNeed + cluster(false) > pw && cluster(true) <= pw)
         for view in rightPills.reversed() {
-            view.showsTitle = titled
-            let w = view.preferredWidth
+            (view as? ComposerStashBadgeView)?.showsTitle = titled
+            let w = pillWidth(view, titled)
             view.frame = NSRect(x: right - w, y: rowY, width: w, height: pillH)
             right -= w + spacing
             top = rowY
@@ -1746,6 +1780,15 @@ public final class ThreadPanelView: DSView {
             shown.append(queue)
         }
         watchQueueClicks(queueOpen)
+        // The subagent panel opens from its pill the same way; the queue, the `/` menu and the stash list win.
+        if stripOn && subagentStripExpanded && !queueOpen && !menuShown && !stashShown {
+            let panel = lazySubagentPanel.view
+            if panel.superview !== self { addSubview(panel, positioned: .above, relativeTo: queue) }
+            let maxH = min((window?.contentView?.bounds.height ?? bounds.height) * 0.4, max(96, top - gap - 24))
+            let h = panel.preferredHeight(maxHeight: maxH)
+            panel.frame = NSRect(x: x, y: top - gap - h, width: width, height: h)
+            shown.append(panel)
+        }
 
         // Show what is placed, hide the rest, all floating.
         let candidates: [ComposerBannerView?] = [environmentBanner, lazyNoticeBanner.loaded, lazyServerUpdateBanner.loaded,
