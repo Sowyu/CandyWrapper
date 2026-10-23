@@ -897,6 +897,63 @@ public enum SidebarModel {
     ) -> [ProjectGroup] {
         sortLogicalProjects(groups, threads: threads, order: order) { $0.archivedAt == nil && !isSidebarSubagentThread($0) }
     }
+
+    /// The manual project order (`projectOrder`, uiStateStore.ts:23-60): T3 keeps it on the client as physical
+    /// project keys (`getProjectOrderKey`). `orderItemsByPreferredIds` puts the stored keys first and the rest after
+    /// in snapshot order, so a new project lands at the end; `buildProjectGroups` keeps first-seen order, so a group
+    /// sits where its first member does (useSidebarProjectGroups.ts:17-35).
+    public static func orderProjectGroups(_ groups: [ProjectGroup], projects: [ProjectShell], preferred: [String]) -> [ProjectGroup] {
+        guard !preferred.isEmpty else { return groups }
+        let rank = projectRanks(projects, preferred: preferred)
+        let groupRank = groups.map { g in g.memberProjectIds.compactMap { rank[$0] }.min() ?? Int.max }
+        return groups.indices.sorted { groupRank[$0] == groupRank[$1] ? $0 < $1 : groupRank[$0] < groupRank[$1] }.map { groups[$0] }
+    }
+
+    /// Each project's place in the manual order: stored keys first, the rest after them in snapshot order.
+    static func projectRanks(_ projects: [ProjectShell], preferred: [String]) -> [ProjectId: Int] {
+        var stored: [String: Int] = [:]
+        for (i, key) in preferred.enumerated() where stored[key] == nil { stored[key] = i }
+        var rank: [ProjectId: Int] = [:]
+        for (i, p) in projects.enumerated() { rank[p.id] = stored[physicalProjectKey(p)] ?? preferred.count + i }
+        return rank
+    }
+
+    /// Groups in the `sidebarProjectSortOrder` setting's order: Manual reads the stored order, the others sort by activity.
+    public static func sortProjectGroups(_ groups: [ProjectGroup], projects: [ProjectShell], threads: [ThreadShell],
+                                         order: SortOrder, preferred: [String]) -> [ProjectGroup] {
+        order == .manual ? orderProjectGroups(groups, projects: projects, preferred: preferred)
+            : sortSidebarV2ProjectGroups(groups, threads: threads, order: order)
+    }
+
+    /// A project group dragged before `target`, or to the end for nil (`reorderProjects`, uiStateStore.ts:376-418, with the
+    /// drop line's before-this-group slot instead of dnd-kit's swap). `groups` is the order on screen; the result is the
+    /// new stored order, every project's key, so later projects keep landing after it.
+    public static func movingProjectGroup(_ key: String, before target: String?, groups: [ProjectGroup],
+                                          projects: [ProjectShell], preferred: [String]) -> [String] {
+        var order = groups
+        guard key != target, let from = order.firstIndex(where: { $0.key == key }) else { return currentOrder(groups, projects, preferred) }
+        let moved = order.remove(at: from)
+        let at = target.flatMap { t in order.firstIndex { $0.key == t } } ?? order.count
+        order.insert(moved, at: at)
+        return currentOrder(order, projects, preferred)
+    }
+
+    private static func currentOrder(_ groups: [ProjectGroup], _ projects: [ProjectShell], _ preferred: [String]) -> [String] {
+        let rank = projectRanks(projects, preferred: preferred)
+        let byId = Dictionary(projects.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        var seen = Set<String>(), keys: [String] = []
+        for group in groups {
+            let members = group.memberProjectIds.sorted { (rank[$0] ?? .max) < (rank[$1] ?? .max) }
+            for id in members {
+                guard let p = byId[id] else { continue }
+                let k = physicalProjectKey(p)
+                if seen.insert(k).inserted { keys.append(k) }
+            }
+        }
+        // Projects in no group on screen (another grouping, a hidden environment) keep their stored place at the end.
+        for k in preferred where seen.insert(k).inserted { keys.append(k) }
+        return keys
+    }
 }
 
 /// `createInboxReturnTracker` (client-runtime state/threadInbox.ts:110-148): when this client saw each

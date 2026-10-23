@@ -199,7 +199,7 @@ final class PullRequestsPageController {
     private var projects: [ProjectShell] {
         let envs = Set(capableEnvironments)
         let groups = SidebarListBuilder.projectScopeGroups(snapshot: sidebar?.snapshot, primaryEnvironmentId: environments.primaryId,
-            order: SidebarModel.SortOrder(rawValue: ClientSettingsStore.shared.current.string("sidebarProjectSortOrder")) ?? .updatedAt)
+            order: SidebarProjectOrder.sortOrder, preferred: SidebarProjectOrder.stored)
         return groups.flatMap(\.members).filter { project in
             guard let env = project.id.environmentId, envs.contains(env) else { return false }
             let scratch = sidebar?.state.scratchRoots[env]
