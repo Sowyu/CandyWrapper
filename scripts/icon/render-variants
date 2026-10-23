@@ -16,6 +16,9 @@ for doc name in AppIcon Sticker AppIconPink Pink AppIconGrape Grape AppIconMint 
     # 512 px covers the largest Dock tile, 256 pt at 2x.
     "$ictool" App/Resources/$doc.icon --export-image --output-file $set/icon.png --platform macOS \
       --rendition $rendition --width 512 --height 512 --scale 1 > /dev/null
+    # ictool fills the canvas edge to edge; a Dock image needs macOS's margin (an 824 tile on a 1024 grid),
+    # or it shows bigger than every other app in the Dock and the app switcher.
+    sips -Z 412 $set/icon.png > /dev/null && sips --padToHeightWidth 512 512 $set/icon.png > /dev/null
     print '{ "images" : [ { "filename" : "icon.png", "idiom" : "universal" } ], "info" : { "author" : "xcode", "version" : 1 } }' > $set/Contents.json
   done
 done

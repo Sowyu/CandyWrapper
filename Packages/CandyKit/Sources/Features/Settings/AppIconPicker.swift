@@ -194,8 +194,10 @@ final class AppIconPickerView: DSView {
             super.layout()
             let side = Self.width
             decoration.layout(boxSize: NSSize(width: side, height: side))
-            // The rendition has Apple's margin built in, so the icon fills the ring box.
-            icon.frame = NSRect(x: 2, y: 2, width: side - 4, height: side - 4)
+            // The images carry macOS's Dock margin (412 of 512, scripts/icon/render-variants), so the view is
+            // drawn larger by that ratio and the tile itself fills the ring box.
+            let inner = side - 4, full = (inner * 512 / 412).rounded()
+            icon.frame = NSRect(x: (side - full) / 2, y: (side - full) / 2, width: full, height: full)
             label.frame = NSRect(x: 0, y: side, width: side, height: 16)
         }
     }
