@@ -8,7 +8,7 @@ import DesignSystem
 /// section. `ThreadHeaderView` owns the pill and moves its cost and toggles in; the app hands it to the tab strip.
 public final class DitherHeaderPillView: DSView {
     /// The working tree's totals; a click shows the diff, as the card's Changes row did.
-    public let changes = ButtonView(nil, variant: .ghost, size: .sm)
+    public let changes = ButtonView(nil, variant: .ghost, size: .xs)
     public let totals = DiffTotalsView()
 
     /// Whether the totals show: a checkout that is a repository.
@@ -37,12 +37,14 @@ public final class DitherHeaderPillView: DSView {
     var toggles: [NSView] = []
 
     private let frost = BackdropBlurView()
-    private static let inset: CGFloat = 2
+    /// As tall as the tabs, with 24pt controls 2pt in, so their hover fills stay inside the rim.
+    private static let inset: CGFloat = 2, control: CGFloat = 24
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         addSubview(frost)
         changes.accessory = totals
+        totals.glyphOffset = 1
         changes.setAccessibilityLabel("Show changes")
         changes.toolTip = "Show changes"
         addSubview(changes)
@@ -68,8 +70,8 @@ public final class DitherHeaderPillView: DSView {
 
     public override var intrinsicContentSize: NSSize {
         let shown = arranged.filter(\.1).map { $0.0.intrinsicContentSize.width }
-        guard !shown.isEmpty else { return NSSize(width: 0, height: 32) }
-        return NSSize(width: shown.reduce(0, +) + 2 * Self.inset, height: 32)
+        guard !shown.isEmpty else { return NSSize(width: 0, height: DitherTabStripView.tabHeight) }
+        return NSSize(width: shown.reduce(0, +) + 2 * Self.inset, height: DitherTabStripView.tabHeight)
     }
 
     public override func layout() {
@@ -79,7 +81,7 @@ public final class DitherHeaderPillView: DSView {
             view.isHidden = !shown
             guard shown else { continue }
             let size = view.intrinsicContentSize
-            view.frame = NSRect(x: x, y: ((bounds.height - size.height) / 2).rounded(), width: size.width, height: size.height)
+            view.frame = NSRect(x: x, y: ((bounds.height - Self.control) / 2).rounded(), width: size.width, height: Self.control)
             x += size.width
         }
         // The cost appearing or a toggle hiding changes the width the tab strip gives the pill.

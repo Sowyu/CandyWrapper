@@ -39,6 +39,7 @@ struct DitherHeaderPillTests {
         pill.changes.invalidateIntrinsicContentSize()
         // Three icon toggles and the totals, with no text labels or chevrons: the tabs keep the rest of the band.
         #expect(pill.intrinsicContentSize.width <= 200)
+        #expect(pill.intrinsicContentSize.height == DitherTabStripView.tabHeight)
         pill.menuSections[.git] = { [MenuItem("Commit")] }
         pill.menuSections[.editor] = { [MenuItem("Open in Zed")] }
         pill.menuSections[.lineage] = { [] }

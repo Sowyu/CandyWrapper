@@ -76,6 +76,8 @@ public final class ThreadHeaderView: TopbarDragView {
             host.addSubview(toggle)
             toggle.isHidden = !plain && !threadVisible
         }
+        // The pill's controls are 24pt, inside a pill as tall as the tabs.
+        for toggle in toggles where toggle.size != (plain ? .xs : .sm) { toggle.size = plain ? .xs : .sm }
         if toggles[0].icon != (plain ? .ellipsis : .squareMenu) {
             toggles[0].icon = plain ? .ellipsis : .squareMenu
             toggles[0].setAccessibilityLabel(plain ? "Thread actions" : "Toggle thread details panel")
