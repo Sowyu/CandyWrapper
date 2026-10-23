@@ -31,6 +31,9 @@ public final class OrchestratorStore {
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         config = defaults.data(forKey: Self.defaultsKey).flatMap { try? JSONDecoder().decode(OrchestratorConfig.self, from: $0) } ?? OrchestratorConfig()
+        // `CANDY_ORCHESTRATOR=1` turns the toggle on for this launch without saving it, for perf runs whose defaults
+        // start empty (scripts/perf-review), as `CANDY_THEME` pins the theme.
+        if defaults === UserDefaults.standard, ProcessInfo.processInfo.environment["CANDY_ORCHESTRATOR"] == "1" { config.enabled = true }
         wasActive = isActive
         themeObserver = NotificationCenter.default.addObserver(forName: ThemeRuntime.didChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.themeChanged() }

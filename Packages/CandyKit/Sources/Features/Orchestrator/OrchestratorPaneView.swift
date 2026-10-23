@@ -97,6 +97,7 @@ public final class OrchestratorPaneView: DSView {
             self.showsOverview = i == 1
             self.chatScroll.isHidden = self.showsOverview
             self.overviewScroll.isHidden = !self.showsOverview
+            self.composer.isHidden = !self.state.started || self.showsOverview
             self.needsLayout = true
         }
         openThread.action = { [weak self] in self?.onOpenAsThread?() }
@@ -128,7 +129,7 @@ public final class OrchestratorPaneView: DSView {
         composer.placeholder = "Message \(next.name)"
         openThread.isHidden = !next.started
         start.isHidden = next.started
-        composer.isHidden = !next.started
+        composer.isHidden = !next.started || showsOverview
         composer.isEnabled = next.connected
         if old.items != next.items || old.undoable != next.undoable || old.undone != next.undone || old.needs != next.needs
             || old.environmentId != next.environmentId || old.name != next.name {
@@ -906,7 +907,7 @@ final class OrchestratorOverviewView: DSView {
             addSubview(v)
             return v
         }
-        crewTitle.text = crew.isEmpty ? "Threads · none yet" : "Threads · \(crew.count)"
+        crewTitle.text = crew.isEmpty ? "Threads · none in flight" : "Threads in flight · \(crew.count)"
         needsLayout = true
     }
 

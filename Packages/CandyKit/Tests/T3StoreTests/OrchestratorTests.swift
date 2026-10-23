@@ -77,6 +77,15 @@ private func event(_ id: String, _ kind: OrchestratorEvent.Kind = .finished) -> 
         #expect(batch.pending.count == 2)
     }
 
+    @Test func eventsOfThreadsArchivedInsideTheWindowAreDropped() {
+        var batch = OrchestratorEventBatch()
+        _ = batch.add([event("a"), event("b")], now: now)
+        #expect(batch.flush(now: now.addingTimeInterval(30), keep: { $0.threadId.rawValue == "b" }) == event("b").line)
+        _ = batch.add([event("a")], now: now.addingTimeInterval(40))
+        #expect(batch.flush(now: now.addingTimeInterval(70), keep: { _ in false }) == nil)
+        #expect(batch.deadline == nil && batch.pending.isEmpty)
+    }
+
     @Test func nothingArmsWithoutEvents() {
         var batch = OrchestratorEventBatch()
         #expect(batch.add([], now: now) == nil)
