@@ -22,6 +22,8 @@ public struct OrchestratorReply: Equatable, Sendable {
     public var plan: [PlanStep]?
     public var memories: [Memory]
     public var digest: String?
+    /// Calls for other machines, from `orchestrator-call` blocks (OrchestratorRelay.swift).
+    public var calls: [OrchestratorCall] = []
 
     /// Splits `text` into prose and blocks. An unclosed block (a reply still streaming) stays out of the prose until
     /// it closes, so it never flashes as code.
@@ -30,6 +32,7 @@ public struct OrchestratorReply: Equatable, Sendable {
         var plan: [PlanStep]?
         var memories: [Memory] = []
         var digest: String?
+        var calls: [OrchestratorCall] = []
         var open: (kind: String, fence: Substring, lines: [Substring])?
         for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
             let trimmed = line.drop { $0 == " " }
@@ -39,6 +42,7 @@ public struct OrchestratorReply: Equatable, Sendable {
                     switch block.kind {
                     case "orchestrator-plan": plan = (plan ?? []) + steps(body)
                     case "orchestrator-memory": if let m = memory(body) { memories.append(m) }
+                    case "orchestrator-call": calls += OrchestratorCall.parse(body)
                     default: digest = body.trimmingCharacters(in: .whitespacesAndNewlines)
                     }
                     open = nil
@@ -51,7 +55,7 @@ public struct OrchestratorReply: Equatable, Sendable {
             let fence = trimmed.prefix { $0 == "`" || $0 == "~" }
             if fence.count >= 3 {
                 let info = trimmed.dropFirst(fence.count).trimmingCharacters(in: .whitespaces).lowercased()
-                if ["orchestrator-plan", "orchestrator-memory", "orchestrator-digest"].contains(info) {
+                if ["orchestrator-plan", "orchestrator-memory", "orchestrator-digest", "orchestrator-call"].contains(info) {
                     open = (info, fence, [])
                     continue
                 }
@@ -59,7 +63,7 @@ public struct OrchestratorReply: Equatable, Sendable {
             prose.append(line)
         }
         let joined = prose.joined(separator: "\n").replacingOccurrences(of: "\n\n\n+", with: "\n\n", options: .regularExpression)
-        return OrchestratorReply(text: joined.trimmingCharacters(in: .whitespacesAndNewlines), plan: plan, memories: memories, digest: digest)
+        return OrchestratorReply(text: joined.trimmingCharacters(in: .whitespacesAndNewlines), plan: plan, memories: memories, digest: digest, calls: calls)
     }
 
     /// Numbered or bulleted lines become steps; `[x]` or `✓` marks one done.

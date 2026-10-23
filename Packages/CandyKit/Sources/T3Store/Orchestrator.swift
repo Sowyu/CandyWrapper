@@ -95,12 +95,16 @@ public struct OrchestratorConfig: Codable, Hashable, Sendable {
     /// Its bot's shape and colour (`BotShape` and `BotColor` raw values); nil is the default flower in violet.
     public var botShape: Int?
     public var botColor: Int?
+    /// When the relay last prompted each thread on any machine, scoped id to epoch ms, for the ask-first rule.
+    public var relayedAt: [String: Int64] = [:]
+    /// Scoped ids of the threads the relay launched, which count toward the worker limit.
+    public var relayWorkers: Set<String> = []
 
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
         case enabled, name, prompt, environmentId, homeProjectId, crewLimit, models, notebook, closedCheckMinutes, askFirstMinutes
-        case handsOff, machines, savedMemoryMessages, botShape, botColor
+        case handsOff, machines, savedMemoryMessages, botShape, botColor, relayedAt, relayWorkers
     }
 
     /// Missing keys keep their defaults, so a newer field never wipes the rest.
@@ -122,6 +126,8 @@ public struct OrchestratorConfig: Codable, Hashable, Sendable {
         savedMemoryMessages = try c.decodeIfPresent([String].self, forKey: .savedMemoryMessages) ?? []
         botShape = try c.decodeIfPresent(Int.self, forKey: .botShape)
         botColor = try c.decodeIfPresent(Int.self, forKey: .botColor)
+        relayedAt = try c.decodeIfPresent([String: Int64].self, forKey: .relayedAt) ?? [:]
+        relayWorkers = try c.decodeIfPresent(Set<String>.self, forKey: .relayWorkers) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -141,6 +147,8 @@ public struct OrchestratorConfig: Codable, Hashable, Sendable {
         try c.encode(savedMemoryMessages, forKey: .savedMemoryMessages)
         try c.encodeIfPresent(botShape, forKey: .botShape)
         try c.encodeIfPresent(botColor, forKey: .botColor)
+        try c.encode(relayedAt, forKey: .relayedAt)
+        try c.encode(relayWorkers, forKey: .relayWorkers)
     }
 
     static let defaultName = "Orchestrator"
@@ -187,11 +195,15 @@ public enum OrchestratorBrief {
         public var notebook: OrchestratorNotebook
         public var handsOff: [String]
         public var askFirstMinutes: Int
+        /// Every machine CandyWrapper connects to. The connected flag stays out of the fingerprint.
+        public var machines: [OrchestratorMachineRef]
 
         public init(name: String, machine: String, projects: [(name: String, id: String, path: String)], crewLimit: Int,
-                    models: [OrchestratorModelRow], notebook: OrchestratorNotebook, handsOff: [String], askFirstMinutes: Int) {
+                    models: [OrchestratorModelRow], notebook: OrchestratorNotebook, handsOff: [String], askFirstMinutes: Int,
+                    machines: [OrchestratorMachineRef] = []) {
             self.name = name; self.machine = machine; self.projects = projects; self.crewLimit = crewLimit
             self.models = models; self.notebook = notebook; self.handsOff = handsOff; self.askFirstMinutes = askFirstMinutes
+            self.machines = machines
         }
     }
 
@@ -223,6 +235,27 @@ public enum OrchestratorBrief {
         \(handsOff)
         """
         return text.trimmingCharacters(in: .whitespacesAndNewlines) + "\n\n" + notes.joined(separator: "\n") + "\n" + app
+            + (i.machines.count > 1 ? "\n\n" + otherMachines(i) : "")
+    }
+
+    /// How to reach threads on machines other than its own (docs/orchestrator.md, "Every machine").
+    static func otherMachines(_ i: Inputs) -> String {
+        """
+        # Every machine
+
+        You manage the threads on every machine CandyWrapper connects to. Your t3_thread and t3_project tools reach only \(i.machine), so a thread on another machine reads as thread_not_found there. The machines:
+        \(OrchestratorMachineRef.briefList(i.machines))
+
+        To act on any machine, write a fenced block named orchestrator-call with one JSON object per line, then end your turn. CandyWrapper runs each call on the machine it names and sends the results back as your next message, one part per call starting with "Result:". A thread id alone doesn't say where a thread lives, so every call that names a thread also names its "machine", by id or label.
+
+        - {"tool":"list"} lists every machine's projects and threads. Add "machine" for one machine.
+        - {"tool":"read","machine":"<machine>","threadId":"<id>","last":5} returns the thread's state and its last messages, up to 20.
+        - {"tool":"send","machine":"<machine>","threadId":"<id>","text":"<prompt>"} prompts it. Behind a running turn it queues.
+        - {"tool":"launch","machine":"<machine>","projectId":"<id>","title":"<name>","text":"<first prompt>","model":"<Models row label>","worktree":"<base ref>"} starts a worker. Leave out model for the default row and worktree to run in the project's checkout.
+        - {"tool":"archive","machine":"<machine>","threadId":"<id>"} archives a finished thread.
+
+        The same limits hold on every machine, and CandyWrapper enforces them: it refuses to prompt a Hands off thread, it refuses an ask-first thread until you asked the user and send again with "confirmed":true, and it refuses a launch once \(i.crewLimit) workers run across all machines. On \(i.machine) itself, keep using your t3 tools. Calls run only while CandyWrapper is open. Event lines name the machine of any thread that isn't on \(i.machine).
+        """
     }
 
     /// `{{models}}`: one table row per model, the default marked. Rows the caller found missing are left out before this.
@@ -257,6 +290,8 @@ public enum OrchestratorBrief {
     public static func fingerprint(_ prompt: String, _ i: Inputs) -> String {
         var bare = i
         bare.notebook = OrchestratorNotebook()
+        // A machine going offline and back sends no brief.
+        bare.machines = i.machines.map { var m = $0; m.connected = true; return m }
         return digest(render(prompt, bare))
     }
 
@@ -392,11 +427,14 @@ public enum OrchestratorPermission: Equatable, Sendable {
 
     /// Hands off wins; then "ask first" while your own message is the thread's last prompt and is younger than the
     /// window. A prompt from another thread after yours (`latestUserMessageAt` past `latestUserAuthoredMessageAt`,
-    /// ProjectionStore.ts:1622-1624) means you already said go.
-    public static func of(_ thread: ThreadShell, handsOff: Bool, windowMinutes: Int, now: Date) -> Self {
+    /// ProjectionStore.ts:1622-1624) means you already said go. So does a relayed prompt at or after yours
+    /// (`relayedAtMs`): the server records those as yours too, since every client command is `createdBy: "user"`.
+    public static func of(_ thread: ThreadShell, handsOff: Bool, windowMinutes: Int, now: Date, relayedAtMs: Int64? = nil) -> Self {
         if handsOff { return .handsOff }
         guard windowMinutes > 0, let authored = thread.latestUserAuthoredMessageAt?.epochMs else { return .free }
         if let latest = thread.latestUserMessageAt?.epochMs, latest > authored { return .free }
+        // ponytail: 5 s of clock skew between this Mac and the thread's machine; compare message ids if a machine drifts more
+        if let relayed = relayedAtMs, authored <= relayed + 5_000 { return .free }
         let ageMs = Int64(now.timeIntervalSince1970 * 1000) - authored
         guard ageMs < Int64(windowMinutes) * 60_000 else { return .free }
         return .askFirst(minutesAgo: max(0, Int(ageMs / 60_000)))
@@ -421,9 +459,11 @@ public struct OrchestratorEvent: Hashable, Sendable {
     public var title: String
     public var kind: Kind
     public var permission: OrchestratorPermission
+    /// The machine's label when the thread isn't on the Orchestrator's own machine.
+    public var machine: String?
 
-    public init(threadId: ThreadId, title: String, kind: Kind, permission: OrchestratorPermission) {
-        self.threadId = threadId; self.title = title; self.kind = kind; self.permission = permission
+    public init(threadId: ThreadId, title: String, kind: Kind, permission: OrchestratorPermission, machine: String? = nil) {
+        self.threadId = threadId; self.title = title; self.kind = kind; self.permission = permission; self.machine = machine
     }
 
     public static func == (l: Self, r: Self) -> Bool { l.threadId == r.threadId && l.kind == r.kind }
@@ -437,7 +477,8 @@ public struct OrchestratorEvent: Hashable, Sendable {
         case .needsYou: "is waiting on an approval or a question"
         }
         let note = permission.note.map { " \($0.prefix(1).uppercased())\($0.dropFirst())." } ?? ""
-        return "Event: “\(title)” \(what) (t3-thread://v1/\(threadId.localId.rawValue)).\(note)"
+        let on = machine.map { " on \($0) (machine \(threadId.environmentId ?? ""))" } ?? ""
+        return "Event: “\(title)”\(on) \(what) (t3-thread://v1/\(threadId.localId.rawValue)).\(note)"
     }
 
     public static let running: Set<ThreadStatus> = [.preparing, .queued, .starting, .running, .waiting]
@@ -445,7 +486,8 @@ public struct OrchestratorEvent: Hashable, Sendable {
     /// What changed between two shell states of the machine's threads. Skips the Orchestrator, archived and deleted
     /// threads, and threads with a parent: T3 wakes a parent when its own child finishes (orchestratorMcp.ts:222).
     public static func diff(old: [ThreadId: ThreadShell], new: [ThreadShell], orchestrator: ThreadId,
-                            handsOff: (ThreadId) -> Bool, windowMinutes: Int, now: Date) -> [OrchestratorEvent] {
+                            handsOff: (ThreadId) -> Bool, windowMinutes: Int, now: Date,
+                            relayedAt: (ThreadId) -> Int64? = { _ in nil }, machine: String? = nil) -> [OrchestratorEvent] {
         var out: [OrchestratorEvent] = []
         for t in new where t.id != orchestrator && t.archivedAt == nil && t.deletedAt == nil && t.lineage.parentThreadId == nil {
             guard let before = old[t.id] else { continue }
@@ -455,8 +497,8 @@ public struct OrchestratorEvent: Hashable, Sendable {
             else if wasRunning, !isRunning, t.status == .completed || t.status == .idle { kinds.append(.finished) }
             if let r = t.pendingRuntimeRequest, r.id != before.pendingRuntimeRequest?.id { kinds.append(.needsYou) }
             guard !kinds.isEmpty else { continue }
-            let permission = OrchestratorPermission.of(t, handsOff: handsOff(t.id), windowMinutes: windowMinutes, now: now)
-            for k in kinds { out.append(.init(threadId: t.id, title: t.title, kind: k, permission: permission)) }
+            let permission = OrchestratorPermission.of(t, handsOff: handsOff(t.id), windowMinutes: windowMinutes, now: now, relayedAtMs: relayedAt(t.id))
+            for k in kinds { out.append(.init(threadId: t.id, title: t.title, kind: k, permission: permission, machine: machine)) }
         }
         return out
     }
