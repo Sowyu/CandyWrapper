@@ -375,9 +375,11 @@ final class PaletteCommands {
         guard let snapshot else { return [] }
         // `projectGroups` in the `sidebarProjectSortOrder` order (CommandPalette.tsx:955-963), then the
         // contextual project first (`buildSidebarProjectPickerEntries`, sidebarProjectGrouping.ts:168-175).
-        let order = SidebarModel.SortOrder(rawValue: ClientSettingsStore.shared.current.string("sidebarProjectSortOrder")) ?? .updatedAt
-        var groups = SidebarModel.sortLogicalProjectsForSidebar(
-            SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: envs.primaryId), threads: snapshot.threads, order: order)
+        let order = SidebarProjectOrder.sortOrder
+        let built = SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: envs.primaryId)
+        // Manual reads the stored order (CommandPaletteLookups.ts:73-83).
+        var groups = order == .manual ? SidebarModel.orderProjectGroups(built, projects: snapshot.projects, preferred: SidebarProjectOrder.stored)
+            : SidebarModel.sortLogicalProjectsForSidebar(built, threads: snapshot.threads, order: order)
         if let current = threads.composer.activeProjectId, let i = groups.firstIndex(where: { $0.memberProjectIds.contains(current) }), i > 0 {
             groups.insert(groups.remove(at: i), at: 0)
         }

@@ -114,6 +114,7 @@ public final class SidebarListCache {
             structural = true
             return rebuild(snapshot: snapshot, state: state, nowMs: nowMs, shared: shared)
         }
+        ctx.threadShells = snapshot.threads
         var resort = Set<SidebarSection>()
         var changed = Set<Int>()
         var moved = false

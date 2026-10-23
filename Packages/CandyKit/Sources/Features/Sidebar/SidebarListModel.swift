@@ -291,6 +291,9 @@ public struct SidebarListState: Equatable, Sendable {
     public var collapsedProjects: Set<String> = []
     /// Dither in the sidebar's current appearance: compact rows under project sections.
     public var dither = false
+    /// `sidebarProjectSortOrder` and the manual order it reads (`projectOrder`): Dither's project sections follow them.
+    public var projectSortOrder = SidebarModel.SortOrder.manual
+    public var projectOrder: [String] = []
 
     public init(activeThreadId: ThreadId? = nil) { self.activeThreadId = activeThreadId }
 
@@ -306,6 +309,7 @@ public struct SidebarListState: Equatable, Sendable {
             && a.workingShelfEnabled == b.workingShelfEnabled && a.workingExpanded == b.workingExpanded
             && a.heldOrder?.section == b.heldOrder?.section && a.heldOrder?.order == b.heldOrder?.order
             && a.collapsedProjects == b.collapsedProjects && a.dither == b.dither
+            && a.projectSortOrder == b.projectSortOrder && a.projectOrder == b.projectOrder
     }
 }
 
@@ -324,8 +328,13 @@ public enum SidebarListBuilder {
         var shelves: SidebarModel.Shelves
         /// `projectGroupsSpanEnvironments`: scratch rows name their machine only then.
         var spansEnvironments = false
+        /// The projects and threads Dither's section order reads.
+        var projects: [ProjectShell]
+        var threadShells: [ThreadShell]
 
         init(snapshot: ShellSnapshot, state: SidebarListState, nowMs: Int64) {
+            projects = snapshot.projects
+            threadShells = snapshot.threads
             let groups = SidebarModel.buildProjectGroups(snapshot.projects, grouping: state.grouping, preferredEnvironmentId: state.environments.primaryId)
             self.groups = groups
             spansEnvironments = SidebarEnvironments.span(groups)
@@ -346,11 +355,11 @@ public enum SidebarListBuilder {
 
     /// The scope popup's projects (`projectGroups`, Sidebar.tsx:2541-2544) in the `sidebarProjectSortOrder` setting's order.
     public static func projectScopeGroups(snapshot: ShellSnapshot?, primaryEnvironmentId: String? = nil,
-                                          order: SidebarModel.SortOrder = .updatedAt) -> [SidebarModel.ProjectGroup] {
+                                          order: SidebarModel.SortOrder = .updatedAt, preferred: [String] = []) -> [SidebarModel.ProjectGroup] {
         guard let snapshot else { return [] }
-        return SidebarModel.sortSidebarV2ProjectGroups(
+        return SidebarModel.sortProjectGroups(
             SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: primaryEnvironmentId),
-                                                       threads: snapshot.threads, order: order)
+            projects: snapshot.projects, threads: snapshot.threads, order: order, preferred: preferred)
     }
 
     /// `sidebarListItems` (Sidebar.tsx:3781-3829) without the drag-only markers and the beta Working shelf,
@@ -485,15 +494,22 @@ public enum SidebarListBuilder {
 
     static let pinnedSectionKey = "pinned"
 
-    /// Dither (after Capy): the unpinned threads under one header per project, in the order each project's newest
-    /// thread sorts. The open thread stays visible in a folded section.
+    /// Dither (after Capy): the unpinned threads under one header per project, in the `sidebarProjectSortOrder` order:
+    /// Manual keeps the order the user dragged, so a new turn never moves a section. The open thread stays visible
+    /// in a folded section.
     static func projectSections(_ threads: [SidebarThread], ctx: Context, state: SidebarListState,
                                 row: (SidebarThread) -> SidebarItem) -> [SidebarItem] {
-        var order: [String] = [], byKey: [String: [SidebarThread]] = [:]
+        var byKey: [String: [SidebarThread]] = [:]
+        for t in threads {
+            byKey[ctx.groupByProject[t.shell.projectId]?.key ?? "project:\(t.shell.projectId.rawValue)", default: []].append(t)
+        }
+        var order = SidebarModel.sortProjectGroups(ctx.groups, projects: ctx.projects, threads: ctx.threadShells,
+                                                   order: state.projectSortOrder, preferred: state.projectOrder).map(\.key)
+        // Threads whose project has no group yet (a snapshot mid-update) follow, in thread order.
+        var placed = Set(order)
         for t in threads {
             let key = ctx.groupByProject[t.shell.projectId]?.key ?? "project:\(t.shell.projectId.rawValue)"
-            if byKey[key] == nil { order.append(key) }
-            byKey[key, default: []].append(t)
+            if placed.insert(key).inserted { order.append(key) }
         }
         var items: [SidebarItem] = []
         for key in order {
