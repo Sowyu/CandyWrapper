@@ -4221,6 +4221,8 @@ extension ComposerController {
         for image in images { release(image) }
         composer.text = ""
         remember("")
+        // An image-only prompt leaves the text unchanged, so nothing else redraws the attachment chips.
+        refresh()
         pulseStashBadge()
         if let evicted {
             for file in evicted.files ?? [] { deleteUpload(file.attachmentId, environmentId: file.environmentId) }
