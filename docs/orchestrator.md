@@ -45,13 +45,13 @@ The Orchestrator's agent runs on its machine's T3 server, and that server gives 
 
 The calls are:
 
-- `{"tool":"list"}` lists every machine's projects and threads, each labelled with its machine. `"machine"` narrows it to one.
+- `{"tool":"list"}` lists every machine's projects and its 40 newest threads, each labelled with its machine. `"machine"` narrows it to one machine, and `"title"` finds threads whose title contains it.
 - `{"tool":"read","machine":"…","threadId":"…","last":5}` returns a thread's state and its last messages, 5 by default and 20 at most.
 - `{"tool":"send","machine":"…","threadId":"…","text":"…"}` prompts a thread. Behind a running turn the message queues.
 - `{"tool":"launch","machine":"…","projectId":"…","title":"…","text":"…","model":"<Models row label>","worktree":"<base ref>"}` starts a thread. Without `model` it uses the default row, and without `worktree` it runs in the project's checkout.
 - `{"tool":"archive","machine":"…","threadId":"…"}` archives a finished thread.
 
-`machine` takes the machine id or its label. Thread ids alone never say where a thread lives, so every call that names a thread also names its machine, and every result says which machine it came from.
+`machine` takes the machine id or its label. When two machines share a label, like two servers on one Mac, only the id names one, and results print the id next to the label. Thread ids alone never say where a thread lives, so every call that names a thread also names its machine, and every result says which machine it came from.
 
 ### The limits still hold
 

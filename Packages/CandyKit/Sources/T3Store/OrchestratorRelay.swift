@@ -155,22 +155,32 @@ public struct OrchestratorRelay {
     }
 
     func run(_ call: OrchestratorCall) async -> String {
+        // Two machines can share a label, like two servers on one Mac: then the text names the id too.
+        let named = host.machines()
+        let machines = named.map { m in
+            var m = m
+            if named.contains(where: { $0.id != m.id && $0.label.compare(m.label, options: .caseInsensitive) == .orderedSame }) { m.label += " (machine \(m.id))" }
+            return m
+        }
         guard let tool = call.tool else {
             return refusal("couldn't read the call `\(call.raw.prefix(200))`. Write one JSON object per line with a \"tool\" of list, read, send, launch or archive.")
         }
-        let machines = host.machines()
         if tool == .list {
+            // The list's headers carry every id already.
             if let name = call.machine {
-                guard let m = OrchestratorMachineRef.resolve(name, in: machines) else { return unknownMachine(name, machines) }
-                return list([m])
+                guard let m = OrchestratorMachineRef.resolve(name, in: named) else { return unknownMachine(name, named) }
+                return list([m], title: call.title)
             }
-            return list(machines)
+            return list(named, title: call.title)
         }
         guard let name = call.machine else {
-            let hint = call.threadId.flatMap { id in machines.first { host.snapshot($0.id)?.threads.contains { $0.id.rawValue == id } == true } }
+            let hint = call.threadId.flatMap { id in named.first { host.snapshot($0.id)?.threads.contains { $0.id.rawValue == id } == true } }
             return refusal("\(tool.rawValue) needs a \"machine\"." + (hint.map { " Thread \(call.threadId ?? "") is on \($0.label) (machine \($0.id))." } ?? ""))
         }
-        guard let machine = OrchestratorMachineRef.resolve(name, in: machines) else { return unknownMachine(name, machines) }
+        // Resolve against the real labels, then speak with the clear ones.
+        guard let target = OrchestratorMachineRef.resolve(name, in: named), let machine = machines.first(where: { $0.id == target.id }) else {
+            return unknownMachine(name, named)
+        }
         guard machine.connected, let snapshot = host.snapshot(machine.id) else { return refusal("\(machine.label) isn't connected right now.") }
         if tool == .launch { return await launch(call, on: machine, snapshot) }
         guard let id = call.threadId else { return refusal("\(tool.rawValue) needs a \"threadId\".") }
@@ -187,7 +197,8 @@ public struct OrchestratorRelay {
 
     // MARK: Tools
 
-    func list(_ machines: [OrchestratorMachineRef]) -> String {
+    /// `title` keeps the threads whose title contains it, past the list's cap.
+    func list(_ machines: [OrchestratorMachineRef], title: String? = nil) -> String {
         var body: [String] = []
         var total = 0
         let config = host.config()
@@ -205,6 +216,7 @@ public struct OrchestratorRelay {
             let own = host.orchestrator()
             let threads = snapshot.threads
                 .filter { $0.archivedAt == nil && $0.deletedAt == nil && $0.lineage.parentThreadId == nil && $0.id.scoped(to: m.id) != own }
+                .filter { t in title.map { t.title.localizedCaseInsensitiveContains($0) } ?? true }
                 .sorted { ($0.updatedAt.epochMs ?? 0) > ($1.updatedAt.epochMs ?? 0) }
             total += threads.count
             for t in threads.prefix(Self.listLimit) {
@@ -216,7 +228,7 @@ public struct OrchestratorRelay {
                 if let note = permission.note { line += ". \(note.prefix(1).uppercased())\(note.dropFirst())" }
                 body.append(line)
             }
-            if threads.count > Self.listLimit { body.append("- …and \(threads.count - Self.listLimit) older threads") }
+            if threads.count > Self.listLimit { body.append("- …and \(threads.count - Self.listLimit) older threads. Add \"title\" to find one.") }
             if threads.isEmpty { body.append("- (no threads)") }
         }
         let summary = "listed \(total) thread\(total == 1 ? "" : "s") on \(machines.count) machine\(machines.count == 1 ? "" : "s")"
