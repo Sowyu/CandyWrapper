@@ -15,6 +15,7 @@ private final class FakeMachines {
     var config = OrchestratorConfig()
     var snapshots: [String: ShellSnapshot] = [:]
     var connected: Set<String> = ["mini", "book"]
+    var labels = ["mini": "miniko", "book": "MacBook"]
     /// Every request, in order: the machine, the method and the payload.
     var requests: [(machine: String, method: String, payload: JSONValue)] = []
     var projection = #"{"thread":{"id":"w1","title":"Worker","projectId":"p2","lineage":{"rootThreadId":"w1","parentThreadId":null,"relationshipToParent":null}},"runs":[],"attempts":[],"nodes":[],"subagents":[],"providerSessions":[],"providerThreads":[],"providerTurns":[],"runtimeRequests":[],"messages":[{"id":"m1","threadId":"w1","role":"user","text":"Fix the test","streaming":false,"createdAt":"2027-01-15T08:00:00.000Z","updatedAt":"2027-01-15T08:00:00.000Z"},{"id":"m2","threadId":"w1","role":"assistant","text":"STATUS done","streaming":false,"createdAt":"2027-01-15T08:01:00.000Z","updatedAt":"2027-01-15T08:01:00.000Z"}],"plans":[],"turnItems":[],"checkpointScopes":[],"checkpoints":[],"contextHandoffs":[],"contextTransfers":[],"visibleTurnItems":[],"updatedAt":"2027-01-15T08:01:00.000Z"}"#
@@ -39,8 +40,8 @@ private final class FakeMachines {
     var relay: OrchestratorRelay {
         OrchestratorRelay(host: OrchestratorRelayHost(
             machines: { [unowned self] in
-                [OrchestratorMachineRef(id: "mini", label: "miniko", isHome: true, connected: connected.contains("mini")),
-                 OrchestratorMachineRef(id: "book", label: "MacBook", isHome: false, connected: connected.contains("book"))]
+                [OrchestratorMachineRef(id: "mini", label: labels["mini"]!, isHome: true, connected: connected.contains("mini")),
+                 OrchestratorMachineRef(id: "book", label: labels["book"]!, isHome: false, connected: connected.contains("book"))]
             },
             snapshot: { [unowned self] in snapshots[$0] },
             request: { [unowned self] machine, method, payload in
@@ -178,6 +179,21 @@ private final class FakeMachines {
         #expect(OrchestratorRelay.summaries(result).count == 11)
         #expect(result.contains("skipped 2 more calls"))
         #expect(OrchestratorRelay.isResultMessage(result))
+    }
+}
+
+@MainActor
+@Suite struct OrchestratorRelayNamingTests {
+    @Test func sharedLabelsGetTheirMachineIdAndListFindsByTitle() async {
+        let fake = FakeMachines()
+        fake.labels = ["mini": "miniko", "book": "miniko"]
+        // A label two machines share names neither, so the id has to.
+        #expect(await fake.run(#"{"tool":"read","machine":"miniko","threadId":"w1"}"#).contains("no machine “miniko”"))
+        let missing = await fake.run(#"{"tool":"read","machine":"mini","threadId":"w1"}"#)
+        #expect(missing.contains("there is no thread w1 on miniko (machine mini)"))
+        #expect(await fake.run(#"{"tool":"send","machine":"book","threadId":"w1","text":"x"}"#) == "Result: sent to “Book thread” on miniko (machine book)")
+        let found = await fake.run(#"{"tool":"list","title":"book"}"#)
+        #expect(found.hasPrefix("Result: listed 1 thread on 2 machines") && found.contains("“Book thread”") && !found.contains("“Mini thread”"))
     }
 }
 

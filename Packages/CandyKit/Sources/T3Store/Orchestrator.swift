@@ -248,7 +248,7 @@ public enum OrchestratorBrief {
 
         To act on any machine, write a fenced block named orchestrator-call with one JSON object per line, then end your turn. CandyWrapper runs each call on the machine it names and sends the results back as your next message, one part per call starting with "Result:". A thread id alone doesn't say where a thread lives, so every call that names a thread also names its "machine", by id or label.
 
-        - {"tool":"list"} lists every machine's projects and threads. Add "machine" for one machine.
+        - {"tool":"list"} lists every machine's projects and its 40 newest threads. Add "machine" for one machine and "title" to find threads by title.
         - {"tool":"read","machine":"<machine>","threadId":"<id>","last":5} returns the thread's state and its last messages, up to 20.
         - {"tool":"send","machine":"<machine>","threadId":"<id>","text":"<prompt>"} prompts it. Behind a running turn it queues.
         - {"tool":"launch","machine":"<machine>","projectId":"<id>","title":"<name>","text":"<first prompt>","model":"<Models row label>","worktree":"<base ref>"} starts a worker. Leave out model for the default row and worktree to run in the project's checkout.
