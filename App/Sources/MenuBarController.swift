@@ -44,13 +44,27 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        for row in MenuBarMenu.rows(snapshot()) {
+        let shell = snapshot()
+        for row in MenuBarMenu.rows(shell) {
             switch row {
             case .label(let text):
                 let item = NSMenuItem(title: text, action: nil, keyEquivalent: "")
                 item.isEnabled = false
                 menu.addItem(item)
-            case .thread(let id, let title): menu.addItem(action(title) { [weak self] in self?.openThread(id) })
+            case .thread(let id, let title):
+                let item = action(title) { [weak self] in self?.openThread(id) }
+                // The thread's project icon, as the sidebar draws it.
+                if let projectId = shell?.threads.first(where: { $0.id == id })?.projectId,
+                   let project = shell?.projects.first(where: { $0.id == projectId }) {
+                    // In the title, not `image`: this macOS hides item images in status bar menus.
+                    let icon = NSTextAttachment()
+                    icon.image = ProjectMonogramView.menuImage(ProjectIconSource(project))
+                    icon.bounds = NSRect(x: 0, y: -3, width: 16, height: 16)
+                    let line = NSMutableAttributedString(attachment: icon)
+                    line.append(NSAttributedString(string: "  " + title, attributes: [.font: NSFont.menuFont(ofSize: 0)]))
+                    item.attributedTitle = line
+                }
+                menu.addItem(item)
             case .viewAll: menu.addItem(action("View all threads…") { [weak self] in self?.viewAllThreads() })
             case .newThread: menu.addItem(action("New Thread") { [weak self] in self?.newThread() })
             case .separator: menu.addItem(.separator())
