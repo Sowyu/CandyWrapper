@@ -489,6 +489,10 @@ public final class ThreadPanelView: DSView {
     /// row. Both are built the first time a thread has subagents; `ThreadLineageController` feeds them.
     public let lazySubagentPill = LazyView { SubagentStripPillView() }
     public let lazySubagentPanel = LazyView { SubagentStripPanelView() }
+    /// Redesign, on a delegated task thread: "Back to <parent>" at the left of the pill row. Nil hides it.
+    public let lazyParentPill = LazyView { DitherParentPillView() }
+    public var parentPillTitle: String? { didSet { if parentPillTitle != oldValue { needsLayout = true } } }
+    public var onOpenParentPill: (() -> Void)?
     public var showsSubagentStrip = false { didSet { if showsSubagentStrip != oldValue { needsLayout = true } } }
     public var subagentStripExpanded = false {
         didSet {
@@ -714,6 +718,10 @@ public final class ThreadPanelView: DSView {
         queueBadge.isHidden = true
         queueBadge.onToggleMenu = { [weak self] in self?.queue.toggle() }
         addSubview(queueBadge)
+        lazyParentPill.configure { [weak self] pill in
+            pill.isHidden = true
+            pill.action = { [weak self] in self?.onOpenParentPill?() }
+        }
         lazySubagentPill.configure { [weak self] pill in
             pill.isHidden = true
             pill.expanded = self?.subagentStripExpanded ?? false
@@ -1451,6 +1459,7 @@ public final class ThreadPanelView: DSView {
         queueBadge.isHidden = true
         lazySubagentPill.loaded?.isHidden = true
         lazySubagentPanel.loaded?.isHidden = true
+        lazyParentPill.loaded?.isHidden = true
         watchQueueClicks(false)
         if composer.contextWindowMeter.superview !== composer {
             composer.addSubview(composer.contextWindowMeter)
@@ -1678,6 +1687,20 @@ public final class ThreadPanelView: DSView {
             let w = hero.chipsWidth
             hero.frame = NSRect(x: px, y: rowY, width: w, height: pillH)
             if w > 0 { left += w + spacing; top = rowY }
+        }
+        // A delegated task's way back to its parent leads the row.
+        if docked, let title = parentPillTitle {
+            let pill = lazyParentPill.view
+            if pill.superview !== self { addSubview(pill, positioned: .above, relativeTo: queue) }
+            pill.configure(parentTitle: title)
+            let w = min(pill.preferredWidth, pw)
+            pill.frame = NSRect(x: left, y: rowY, width: w, height: pillH)
+            pill.isHidden = false
+            left += w + spacing
+            top = rowY
+            shown.append(pill)
+        } else {
+            lazyParentPill.loaded?.isHidden = true
         }
         let badgeShown = showsStashBadge && visible
         stashBadge.placement = .floating
