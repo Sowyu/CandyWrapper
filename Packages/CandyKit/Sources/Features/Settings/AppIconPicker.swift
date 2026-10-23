@@ -24,8 +24,6 @@ public enum AppIconChoice {
     static let systemAppearanceChanged = Notification.Name("AppIconChoice.systemAppearanceChanged")
     /// The system's appearance, not the app's: themes force `NSApp.appearance`, and Auto follows the system.
     static var systemDark = readSystemDark()
-    /// Clear or Tinted under System Settings > Appearance > Icon and widget style.
-    static var styledIcons = readStyledIcons()
     private static var shown: String?
 
     /// The image set that shows `value` in `appearance` ("auto", "light" or "dark").
@@ -35,10 +33,11 @@ public enum AppIconChoice {
         return "Icon\(label)\(dark ? "Dark" : "Light")"
     }
 
-    /// The Dock's image set, or nil for the bundle icon, which the system styles itself. The default icon style
-    /// stays light in Dark mode, so only Clear and Tinted get the bundle icon.
-    static func dockImageName(_ value: String, appearance: String, systemDark: Bool, styledIcons: Bool) -> String? {
-        value == "sticker" && appearance == "auto" && styledIcons ? nil : imageName(value, appearance: appearance, systemDark: systemDark)
+    /// The Dock's image set, or nil for the real bundle icon. Sticker on Auto is the real icon, which macOS styles
+    /// itself and which follows System Settings' icon style (Default, Dark, Clear, Tinted), like every other app.
+    /// The other choices can only be images: macOS has no API to switch an app's real icon.
+    static func dockImageName(_ value: String, appearance: String, systemDark: Bool) -> String? {
+        value == "sticker" && appearance == "auto" ? nil : imageName(value, appearance: appearance, systemDark: systemDark)
     }
 
     /// Applies the saved choice at launch and follows it and the system appearance from then on.
@@ -51,7 +50,6 @@ public enum AppIconChoice {
                                                             object: nil, queue: .main) { _ in
             MainActor.assumeIsolated {
                 systemDark = readSystemDark()
-                styledIcons = readStyledIcons()
                 NotificationCenter.default.post(name: systemAppearanceChanged, object: nil)
                 apply()
             }
@@ -60,17 +58,10 @@ public enum AppIconChoice {
     }
 
     private static func readSystemDark() -> Bool { UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark" }
-    // ponytail: the icon style's global default key, unset on this Mac's default style, so Clear and Tinted are
-    // unverified; check it on a Mac set to Tinted if Sticker stops following it.
-    private static func readStyledIcons() -> Bool {
-        let theme = UserDefaults.standard.string(forKey: "AppleIconAppearanceTheme") ?? ""
-        return theme.contains("Clear") || theme.contains("Tinted")
-    }
 
     private static func apply() {
         let settings = ClientSettingsStore.shared.current
-        let name = dockImageName(settings.string(key), appearance: settings.string(appearanceKey), systemDark: systemDark,
-                                 styledIcons: styledIcons)
+        let name = dockImageName(settings.string(key), appearance: settings.string(appearanceKey), systemDark: systemDark)
         guard name != shown else { return }
         shown = name
         // nil gives the Dock the bundle's icon back, styled by the system again.
@@ -141,7 +132,9 @@ final class AppIconPickerView: DSView {
 
     private func refreshImages() {
         for t in tiles {
-            t.icon.image = NSImage(named: AppIconChoice.imageName(t.value, appearance: iconAppearance, systemDark: AppIconChoice.systemDark)) ?? NSImage()
+            // Sticker on Auto shows the real icon as macOS draws it, the same one the Dock shows.
+            t.icon.image = t.value == "sticker" && iconAppearance == "auto" ? NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
+                : NSImage(named: AppIconChoice.imageName(t.value, appearance: iconAppearance, systemDark: AppIconChoice.systemDark)) ?? NSImage()
         }
     }
 
