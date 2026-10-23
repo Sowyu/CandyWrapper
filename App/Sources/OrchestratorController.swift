@@ -98,7 +98,6 @@ final class OrchestratorController {
         projection = nil
         if pane != nil { closePane() }
         sidebar?.orchestrator = nil
-        sidebar?.state.orchestratorMachine = nil
         sidebar?.state.hiddenThreadIds = []
     }
 
@@ -124,7 +123,6 @@ final class OrchestratorController {
     private func refreshViews() {
         guard active, let sidebar else { return }
         let env = machineId
-        sidebar.state.orchestratorMachine = env
         sidebar.state.hiddenThreadIds = Set(config.machines.map { ThreadId($0.value.threadId).scoped(to: $0.key) })
         let needs = currentNeeds()
         let working = orchestratorShell.map { OrchestratorEvent.running.contains($0.status) } ?? false
@@ -343,8 +341,7 @@ final class OrchestratorController {
                 let scoped = t.id.scoped(to: env)
                 let question = r.kind == .userInput
                 let label = question ? "Has a question for you" : PendingApproval(requestId: r.id.rawValue, requestKind: r.kind).label
-                return OrchestratorNeed(threadId: scoped, threadTitle: t.title, requestId: r.id.rawValue, label: label, isApproval: !question,
-                                        bot: config.isOrchestrator(scoped) ? .orchestrator : BotIdentity.forThread(scoped.rawValue))
+                return OrchestratorNeed(threadId: scoped, threadTitle: t.title, requestId: r.id.rawValue, label: label, isApproval: !question)
             }
     }
 
@@ -361,12 +358,13 @@ final class OrchestratorController {
                 let status = SidebarModel.resolveSidebarThreadStatus(presented)
                 let unread = SidebarModel.hasUnseenCompletion(latestRun: presented.latestRun,
                                                               lastVisitedAt: SidebarModel.resolveThreadLastVisitedAt(server: t.lastVisitedAt, local: nil))
-                let (state, mood): (String, BotMood) = switch status {
-                case .approval, .input: ("Needs you", .needsYou)
-                case .working, .waiting: ("Working", .working)
-                case .failed: ("Failed", .blocked)
-                case .limited: ("Usage limit", .blocked)
-                case .ready: unread ? ("Unread", .unread(1)) : t.latestRunCompletedAt.value != nil ? ("Done", .idle) : ("Idle", .idle)
+                let top = SidebarModel.resolveSidebarV2TopStatus(status: status, isUnread: unread, isWoke: false)
+                let state = switch status {
+                case .approval, .input: "Needs you"
+                case .working, .waiting: "Working"
+                case .failed: "Failed"
+                case .limited: "Usage limit"
+                case .ready: unread ? "Unread" : t.latestRunCompletedAt.value != nil ? "Done" : "Idle"
                 }
                 let permission = OrchestratorPermission.of(t, handsOff: config.isHandsOff(scoped), windowMinutes: config.askFirstMinutes, now: now)
                 let note: String? = switch permission {
@@ -375,8 +373,8 @@ final class OrchestratorController {
                 case .free: nil
                 }
                 let last = t.lastError ?? t.latestVisibleMessage?["text"]?.stringValue
-                return OrchestratorCrewCard(id: scoped, title: t.title, project: projects[t.projectId] ?? "", state: state, mood: mood,
-                                            bot: BotIdentity.forThread(scoped.rawValue), lastLine: last.map { String($0.prefix(160)) }, note: note)
+                return OrchestratorCrewCard(id: scoped, title: t.title, project: projects[t.projectId] ?? "", state: state, status: top,
+                                            lastLine: last.map { String($0.prefix(160)) }, note: note)
             }
     }
 

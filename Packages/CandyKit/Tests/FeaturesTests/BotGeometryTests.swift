@@ -50,10 +50,4 @@ import Testing
         #expect(a.body.boundingBox.insetBy(dx: -BotGeometry.lineWidth(id, size: 40) / 2, dy: -BotGeometry.lineWidth(id, size: 40) / 2)
             .standardized.minX >= -0.5)
     }
-
-    @Test func threadsKeepTheirBot() {
-        #expect(BotIdentity.forThread("abc") == BotIdentity.forThread("abc"))
-        let bots = Set((0..<200).map { BotIdentity.forThread("thread-\($0)") })
-        #expect(bots.count > 60)
-    }
 }

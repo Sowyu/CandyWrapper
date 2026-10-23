@@ -97,7 +97,7 @@ public enum BotColor: Int, CaseIterable, Sendable, Codable {
     }
 }
 
-/// Which bot a thread or the Orchestrator wears.
+/// Which bot the Orchestrator, or later a standing bot, wears. Threads never get one.
 public struct BotIdentity: Hashable, Sendable, Codable {
     public var shape: BotShape
     public var color: BotColor
@@ -106,16 +106,6 @@ public struct BotIdentity: Hashable, Sendable, Codable {
         self.shape = shape
         // The pumpkin is always orange.
         self.color = shape == .pumpkin ? .orange : color
-    }
-
-    /// A stable bot for a thread: the same id always gets the same shape and colour.
-    // ponytail: a hash, so two threads can share a bot; hand out the next free pair when bots get profiles (phase 2)
-    public static func forThread(_ id: String) -> BotIdentity {
-        var h: UInt64 = 0xcbf2_9ce4_8422_2325
-        for b in id.utf8 { h = (h ^ UInt64(b)) &* 0x100_0000_01b3 }
-        let shape = BotShape.allCases[Int(h % UInt64(BotShape.allCases.count))]
-        let color = BotColor.allCases[Int((h / 97) % UInt64(BotColor.allCases.count))]
-        return BotIdentity(shape: shape, color: color)
     }
 
     public static let orchestrator = BotIdentity(shape: .flower, color: .violet)
