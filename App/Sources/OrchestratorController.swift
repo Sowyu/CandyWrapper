@@ -245,7 +245,11 @@ final class OrchestratorController {
     /// The brief for `env` and its fingerprint.
     private func renderBrief(_ env: String) -> (text: String, fingerprint: String) {
         let snapshot = shell(env)
-        let projects = (snapshot?.projects ?? []).map { (name: $0.title, id: $0.id.rawValue, path: $0.workspaceRoot) }
+        // The machine's scratch folder ("No project") isn't a project to work in, and it appears in the shell late,
+        // which would send an updated brief for nothing.
+        let scratch = sidebar?.state.scratchRoots[env]
+        let projects = (snapshot?.projects ?? []).filter { SidebarModel.normalizeProjectPath($0.workspaceRoot) != scratch }
+            .map { (name: $0.title, id: $0.id.rawValue, path: $0.workspaceRoot) }
         let titles = Dictionary((snapshot?.threads ?? []).map { ($0.id.rawValue, $0.title) }, uniquingKeysWith: { a, _ in a })
         let handsOff = config.handsOff.compactMap { key -> String? in
             let id = ThreadId(key)
