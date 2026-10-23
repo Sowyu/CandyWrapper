@@ -22,11 +22,12 @@ public enum SidebarThreadDrag {
 /// py-2 text-sm shadow-lg`, a `messages-square` glyph, the title and "+N" for more threads. Drawn once
 /// into the drag image.
 final class SidebarThreadDragGhostView: DSView {
-    private let icon = IconView(name: .messagesSquare, size: 16)
+    private let icon: IconView
     private let title = LabelView()
     private let more: LabelView?
 
-    init(title text: String, count: Int) {
+    init(title text: String, count: Int, icon name: IconName = .messagesSquare) {
+        icon = IconView(name: name, size: 16)
         more = count > 1 ? LabelView("+\(count - 1)", font: DSFont.ui(12)) : nil
         super.init(frame: .zero)
         title.text = text

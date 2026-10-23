@@ -120,6 +120,23 @@ public final class SidebarContentView: DSView {
 
     static let collapsedProjectsKey = "sidebar.dither.collapsedProjects"
 
+    /// A Dither section dropped before `before` (nil: the end). The order on screen becomes the stored manual order,
+    /// and the setting turns to Manual, as T3 only drags projects in Manual (LegacySidebar.tsx:3330-3346).
+    func moveProjectGroup(_ key: String, before: String?) {
+        guard let snapshot else { return }
+        let groups = SidebarModel.buildProjectGroups(snapshot.projects, grouping: state.grouping, preferredEnvironmentId: state.environments.primaryId)
+        let shown = SidebarModel.sortProjectGroups(groups, projects: snapshot.projects, threads: snapshot.threads,
+                                                   order: state.projectSortOrder, preferred: state.projectOrder)
+        let order = SidebarModel.movingProjectGroup(key, before: before, groups: shown, projects: snapshot.projects, preferred: state.projectOrder)
+        SidebarProjectOrder.stored = order
+        let wasManual = state.projectSortOrder == .manual
+        var next = state
+        next.projectOrder = order
+        next.projectSortOrder = .manual
+        state = next
+        if !wasManual { ClientSettingsStore.shared.update(["sidebarProjectSortOrder": .string("manual")]) }
+    }
+
     func toggleShelf(_ shelf: SidebarShelf) {
         switch shelf {
         case .settled: state.settledExpanded.toggle(); state.settledVisibleCount = SidebarListBuilder.settledInitialCount
@@ -219,6 +236,13 @@ public final class SidebarContentView: DSView {
             UserDefaults.standard.set(Array(self.state.collapsedProjects), forKey: Self.collapsedProjectsKey)
         }
         state.collapsedProjects = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectsKey) ?? [])
+        state.projectOrder = SidebarProjectOrder.stored
+        list.projectSectionKey = { [weak self] id in
+            guard let self, let snapshot = self.snapshot, let thread = snapshot.threads.first(where: { $0.id == id }) else { return nil }
+            let groups = SidebarModel.buildProjectGroups(snapshot.projects, grouping: self.state.grouping, preferredEnvironmentId: self.state.environments.primaryId)
+            return groups.first { $0.memberProjectIds.contains(thread.projectId) }?.key ?? "project:\(thread.projectId.rawValue)"
+        }
+        list.onGroupDrop = { [weak self] key, before in self?.moveProjectGroup(key, before: before) }
         list.sortContextProvider = { [weak self] in
             guard let self else { return SidebarSortPlanner.Context() }
             let snoozed = self.snapshot.map {
@@ -243,7 +267,7 @@ public final class SidebarContentView: DSView {
         applyClientSettings(ClientSettingsStore.shared.current)
         clientSettingsObserver = ClientSettingsStore.shared.observe { [weak self] keys in
             guard keys.contains("sidebarProjectGroupingMode") || keys.contains("sidebarProjectGroupingOverrides")
-                    || keys.contains("sidebarWorkingShelfEnabled") else { return }
+                    || keys.contains("sidebarWorkingShelfEnabled") || keys.contains("sidebarProjectSortOrder") else { return }
             self?.applyClientSettings(ClientSettingsStore.shared.current)
         }
     }
@@ -269,6 +293,8 @@ public final class SidebarContentView: DSView {
             state.inboxReturns = working ? SidebarInboxReturnTracker() : nil
             state.workingShelfEnabled = working
         }
+        let order = SidebarProjectOrder.sortOrder
+        if state.projectSortOrder != order { state.projectSortOrder = order }
     }
 
     static func headerButton(_ icon: IconName, _ label: String) -> SidebarMenuButtonView {
@@ -704,7 +730,7 @@ public final class SidebarContentView: DSView {
         if let open = scopePopup, host.popups.contains(where: { $0 === open }) { host.close(open); return }
         let view = SidebarProjectScopeView(
             groups: SidebarListBuilder.projectScopeGroups(snapshot: snapshot, primaryEnvironmentId: state.environments.primaryId,
-                                                          order: SidebarModel.SortOrder(rawValue: ClientSettingsStore.shared.current.string("sidebarProjectSortOrder")) ?? .updatedAt),
+                                                          order: SidebarProjectOrder.sortOrder, preferred: state.projectOrder),
             selectedKey: state.projectScopeKey, minimumWidth: field.frame.width, environments: state.environments)
         view.onSelect = { [weak self] key in
             self?.setProjectScope(key)

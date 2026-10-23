@@ -172,6 +172,11 @@ extension SidebarListView: NSDraggingSource {
         let selected = rows.filter(\.isSelected).map(\.id)
         let ids = selected.contains(id) ? selected : [id]
         let model = rows.first { $0.id == id }
+        // Dither's sections get their own drag with a drop line (SidebarDitherDrag.swift).
+        if let model, model.dither {
+            guard !model.isRenaming, model.section != .working else { return }
+            return beginDitherThreadDrag(model, ids: ids, event: event)
+        }
         let title = model?.title.trimmingCharacters(in: .whitespaces) ?? ""
         let item = NSPasteboardItem()
         item.setString(ids.map(\.rawValue).joined(separator: "\n"), forType: .sidebarThreads)
@@ -180,10 +185,7 @@ extension SidebarListView: NSDraggingSource {
         ghostView.appearance = effectiveAppearance
         let ghost = ghostView.image()
         // `disabled`: renaming, the Working shelf, and servers that cannot store a pin order (Sidebar.tsx:5374-5384).
-        // Dither groups rows under project headers, which the planner's flat Pinned/Active list has no slot for, so
-        // its preview drew rows over the headers: there the drag is thread context only.
-        // ponytail: no drag-to-pin or reorder in Dither; teach the planner project headers if the user asks for it
-        let sortable = model.map { !$0.dither && !$0.isRenaming && $0.section != .working && canSortThread?($0.id) == true } ?? false
+        let sortable = model.map { !$0.isRenaming && $0.section != .working && canSortThread?($0.id) == true } ?? false
         let point = convert(event.locationInWindow, from: nil)
         dragging.setDraggingFrame(ghostFrame(point, size: ghost.size), contents: sortable ? Self.clearImage(ghost.size) : ghost)
         let session = beginDraggingSession(with: [dragging], event: event, source: self)
@@ -221,11 +223,17 @@ extension SidebarListView: NSDraggingSource {
     }
 
     public func draggingSession(_ session: NSDraggingSession, movedTo screenPoint: NSPoint) {
-        guard let window, sort?.session === session else { return }
+        guard let window else { return }
+        if ditherDrag?.session === session { return moveDitherDrag(to: window.convertPoint(fromScreen: screenPoint)) }
+        guard sort?.session === session else { return }
         moveSort(to: window.convertPoint(fromScreen: screenPoint))
     }
 
     public func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        if ditherDrag?.session === session {
+            // A drop on the composer takes the threads as context; the list commits only a drop in itself.
+            return endDitherDrag(commit: NSApp.currentEvent?.type != .keyDown && operation != .copy)
+        }
         guard sort?.session === session else { return }
         // Escape cancels; a release anywhere beside the list drops (SidebarPointerSensor).
         endSort(commit: NSApp.currentEvent?.type != .keyDown)
