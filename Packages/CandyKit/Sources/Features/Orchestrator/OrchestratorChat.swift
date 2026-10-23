@@ -106,7 +106,8 @@ public enum OrchestratorChat {
     static func eventLine(_ line: String) -> (text: String, threadId: String?) {
         var text = line.hasPrefix("Event: ") ? String(line.dropFirst(7)) : line
         var thread: String?
-        if let r = text.range(of: #" \(t3-thread://v1/([A-Za-z0-9_-]+)\)\.?"#, options: .regularExpression) {
+        // Thread ids may hold a colon: threads T3's tools launch are `mcp:<uuid>`.
+        if let r = text.range(of: #" \(t3-thread://v1/([A-Za-z0-9_:.-]+)\)\.?"#, options: .regularExpression) {
             thread = String(text[r].drop { $0 != "/" }.dropFirst("//v1/".count).prefix { $0 != ")" })
             text = String(text[..<r.lowerBound])
         }

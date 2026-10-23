@@ -54,4 +54,14 @@ import Testing
         #expect(items.contains(.brief(id: "brief-m1", text: "New brief", updated: true)))
         #expect(items.contains(.bubble(id: "m1", fromUser: true, text: "Go", first: true, last: true)))
     }
+
+    /// Threads T3's tools launch have ids like `mcp:<uuid>`; the line still drops its link and names the thread.
+    @Test func eventLinesNameThreadsWithColonIds() {
+        let e = OrchestratorChat.eventLine("Event: “Counter” finished a turn (t3-thread://v1/mcp:32a7b575-7401). Hands off: report only, never prompt it.")
+        #expect(e.text == "“Counter” finished a turn")
+        #expect(e.threadId == "mcp:32a7b575-7401")
+        let plan = OrchestratorReply.parse("```orchestrator-plan\n1. Count ([Counter](t3-thread://v1/mcp:32a7))\n```").plan
+        #expect(plan?.first?.threadId == "mcp:32a7")
+        #expect(plan.map { OrchestratorReply.displayText($0[0]) } == "Count (Counter)")
+    }
 }

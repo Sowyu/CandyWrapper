@@ -76,7 +76,7 @@ public struct OrchestratorReply: Equatable, Sendable {
             }
             if line.hasPrefix("✓") || line.hasPrefix("✅") { done = true; line = String(line.drop { !$0.isLetter && !$0.isNumber }) }
             if line.localizedCaseInsensitiveContains("(done)") { done = true }
-            let thread = line.range(of: #"t3-thread://v1/([A-Za-z0-9_-]+)"#, options: .regularExpression)
+            let thread = line.range(of: #"t3-thread://v1/([A-Za-z0-9_:.-]+)"#, options: .regularExpression)
                 .map { String(line[$0].dropFirst("t3-thread://v1/".count)) }
             return PlanStep(text: line, done: done, threadId: thread)
         }
@@ -98,7 +98,7 @@ public struct OrchestratorReply: Equatable, Sendable {
     /// Strips the step's markdown link syntax for display: `[Fixer](t3-thread://v1/x)` reads "Fixer".
     public static func displayText(_ step: PlanStep) -> String {
         step.text.replacingOccurrences(of: #"\[([^\]]+)\]\(t3-thread://v1/[^)]+\)"#, with: "$1", options: .regularExpression)
-            .replacingOccurrences(of: #"\(?t3-thread://v1/[A-Za-z0-9_-]+\)?"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\(?t3-thread://v1/[A-Za-z0-9_:.-]+\)?"#, with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
     }
 }

@@ -173,15 +173,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard confirmDitherQuit() else { returnFromCancelledQuit(); return .terminateCancel }
             asked = true
         }
-        // A quit you asked for turns the Orchestrator's schedule on first; the quit resumes once the server answered.
-        if ask, !orchestratorHandedOff, let orchestrator, orchestrator.needsQuitHandOff {
+        // Any quit (the menu, the Dock, a logout) first turns the Orchestrator's "while closed" schedule on. The run loop
+        // turns until its machine answered, at most a second and a half, so nothing cancels the quit.
+        if !orchestratorHandedOff, let orchestrator, orchestrator.needsQuitHandOff {
             orchestratorHandedOff = true
-            orchestrator.handOffBeforeQuit { DispatchQueue.main.async { NSApp.terminate(nil) } }
-            return .terminateCancel
+            var handedOff = false
+            orchestrator.handOffBeforeQuit { handedOff = true }
+            let deadline = Date().addingTimeInterval(1.6)
+            while !handedOff, Date() < deadline { RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05)) }
         }
         guard let server else { environments?.stopAll(); return .terminateNow }
         let reply = server.shouldTerminate(installingUpdate: installing, asked: asked)
-        if reply == .terminateCancel { returnFromCancelledQuit() }
+        if reply == .terminateCancel {
+            returnFromCancelledQuit()
+            // CandyWrapper stays open, so the schedule goes back off.
+            if orchestratorHandedOff { orchestratorHandedOff = false; orchestrator?.quitCancelled() }
+        }
         return reply
     }
 

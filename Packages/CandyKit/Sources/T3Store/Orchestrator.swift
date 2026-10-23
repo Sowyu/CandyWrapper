@@ -477,12 +477,14 @@ public struct OrchestratorEventBatch: Sendable {
         return deadline
     }
 
-    /// The message to send once the window closed, else nil. Empties the batch.
-    public mutating func flush(now: Date) -> String? {
+    /// The message to send once the window closed, else nil. Empties the batch. `keep` drops events that went stale
+    /// inside the window, like a turn end of a thread the Orchestrator archived meanwhile.
+    public mutating func flush(now: Date, keep: (OrchestratorEvent) -> Bool = { _ in true }) -> String? {
         guard let deadline, now >= deadline else { return nil }
         self.deadline = nil
         defer { pending = [] }
-        return pending.isEmpty ? nil : pending.map(\.line).joined(separator: "\n")
+        let lines = pending.filter(keep).map(\.line)
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
     /// Drops everything, as when the Orchestrator turns off.

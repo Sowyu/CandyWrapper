@@ -105,6 +105,8 @@ final class OrchestratorController {
 
     private func shellChanged() {
         guard active else { return }
+        // At launch the schedule turns off once its machine's shell has the thread.
+        syncSchedules(enabled: false)
         forgetVanishedThread()
         relay()
         refreshViews()
@@ -332,7 +334,9 @@ final class OrchestratorController {
 
     private func flush() {
         flushWork = nil
-        guard active, let env = machineId, let id = threadId, let text = batch.flush(now: Date().addingTimeInterval(0.001)) else { return }
+        let live = Set((machineId.flatMap { shell($0) }?.threads ?? []).filter { $0.archivedAt == nil && $0.deletedAt == nil }.map(\.id.rawValue))
+        guard active, let env = machineId, let id = threadId,
+              let text = batch.flush(now: Date().addingTimeInterval(0.001), keep: { live.contains($0.threadId.localId.rawValue) }) else { return }
         dispatch(text, to: id, env: env)
     }
 
@@ -357,8 +361,11 @@ final class OrchestratorController {
         let projects = Dictionary(snapshot.projects.map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a })
         let now = Date()
         return snapshot.threads
-            .filter { $0.archivedAt == nil && $0.deletedAt == nil && $0.lineage.parentThreadId == nil && $0.id.rawValue != machine?.threadId }
+            .filter { $0.archivedAt == nil && $0.deletedAt == nil && $0.lineage.parentThreadId == nil && $0.id.rawValue != machine?.threadId
+                && $0.settledAt == nil && $0.settledOverride != .settled }
             .sorted { ($0.updatedAt.epochMs ?? 0) > ($1.updatedAt.epochMs ?? 0) }
+            // ponytail: the 30 most recent unsettled threads; page the Overview if a machine keeps more in flight
+            .prefix(30)
             .map { t in
                 let scoped = t.id.scoped(to: env)
                 let presented = SidebarThread(t)
@@ -448,7 +455,8 @@ final class OrchestratorController {
 
     /// Makes sure each machine's check task exists with the set interval, on or off. CandyWrapper keeps it off while open.
     private func syncSchedules(enabled: Bool) {
-        guard let env = machineId, let machine = config.machines[env], !scheduleSynced.contains(env) || enabled else { return }
+        guard let env = machineId, let machine = config.machines[env], !scheduleSynced.contains(env) || enabled,
+              environments.session(env) != nil, shell(env)?.threads.contains(where: { $0.id.rawValue == machine.threadId }) == true else { return }
         scheduleSynced.insert(env)
         Task { await syncSchedule(env, machine, enabled: enabled) }
     }
@@ -481,6 +489,12 @@ final class OrchestratorController {
             if machine.scheduledTaskId != nil { store.update { $0.machines[env]?.scheduledTaskId = nil } }
             scheduleSynced.remove(env)
         }
+    }
+
+    /// The quit was cancelled after the hand-off: CandyWrapper stays open, so the schedule goes back off.
+    func quitCancelled() {
+        scheduleSynced.removeAll()
+        syncSchedules(enabled: false)
     }
 
     /// A quit should turn the "while closed" schedule on first.
