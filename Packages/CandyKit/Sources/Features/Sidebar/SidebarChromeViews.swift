@@ -490,8 +490,8 @@ final class SidebarAccountAvatarView: ControlView {
 /// shows no e-mail, which was too easy to reveal on a screen share (the user, 2026-10-22).
 /// The account pill's chevron: the only thing that opens the account menu, with its own hover fill.
 final class SidebarAccountChevronButton: ControlView {
-    static let size: CGFloat = 24
-    let icon = IconView(name: .chevronUp, size: 12)
+    static let size: CGFloat = 28
+    let icon = IconView(name: .chevronUp, size: 16)
     /// The menu is open: the glyph turns down and keeps the pressed fill.
     var open = false { didSet { if open != oldValue { icon.setRotation(open ? 180 : 0); needsDisplay = true } } }
 
@@ -512,7 +512,7 @@ final class SidebarAccountChevronButton: ControlView {
 
     override func layout() {
         super.layout()
-        icon.frame = NSRect(x: (bounds.width - 12) / 2, y: (bounds.height - 12) / 2, width: 12, height: 12)
+        icon.frame = NSRect(x: (bounds.width - 16) / 2, y: (bounds.height - 16) / 2, width: 16, height: 16)
     }
 
     override func updateLayer() {
@@ -602,12 +602,13 @@ public final class SidebarAccountRowView: ControlView {
         layer?.shadowPath = SmoothCorners.path(bounds, Self.radius, flipped: false)
         CATransaction.commit()
         let tx: CGFloat = 8 + 28 + 10
-        let end = bounds.width - trailingReserve
+        // Match the update button's 8pt inset and the utility row's 4pt gap.
+        let end = bounds.width - 8 - trailingReserve
         let c = SidebarAccountChevronButton.size
-        let right = end - 2 - c - 4
+        let right = end - c - 4
         name.frame = NSRect(x: tx, y: h / 2 - 16, width: max(0, right - tx), height: 16)
         usage.frame = NSRect(x: tx, y: h / 2, width: max(0, right - tx), height: 16)
-        chevron.frame = NSRect(x: end - 2 - c, y: (h - c) / 2, width: c, height: c)
+        chevron.frame = NSRect(x: end - c, y: (h - c) / 2, width: c, height: c)
     }
 
     private func showMenu() {
