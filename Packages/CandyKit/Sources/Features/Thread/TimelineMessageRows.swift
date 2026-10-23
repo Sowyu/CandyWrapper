@@ -1009,9 +1009,11 @@ final class UserMessageAttachmentsView: DSView {
 
     @objc private func expand(_ gesture: NSClickGestureRecognizer) {
         guard let view = gesture.view, let index = cells.firstIndex(where: { $0 === view }), let loader = model?.attachmentImage else { return }
-        let items = images.map { image in
+        let items = images.enumerated().map { i, image in
             ExpandedImagePreviewView.Item(key: image.attachmentId, name: image.name,
-                                          source: image.source.flatMap { $0["kind"]?.stringValue == "snap-shot" ? $0 : nil }, cacheable: true) { side in await loader(image.attachmentId, side, false) }
+                                          source: image.source.flatMap { $0["kind"]?.stringValue == "snap-shot" ? $0 : nil }, cacheable: true,
+                                          load: { side in await loader(image.attachmentId, side, false) })
+                .withPreview(from: cells[i])
         }
         model?.onExpandImage?(items, index)
     }

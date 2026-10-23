@@ -15,12 +15,23 @@ public final class ExpandedImagePreviewView: DSView {
         public var name: String
         public var cacheable: Bool
         public var load: AsyncImageView.Loader
+        public var preview: (@MainActor @Sendable () -> CGImage?)?
         /// Where the image lives, for its menu's copy items (MediaActions.tsx).
         public var reference: MediaReference?
         /// A SnapShot capture's `source`: the caption gets its accessibility data button.
         public var source: JSONValue?
         public init(key: String, name: String, source: JSONValue? = nil, cacheable: Bool = false, load: @escaping AsyncImageView.Loader, reference: MediaReference? = nil) {
             self.key = key; self.name = name; self.cacheable = cacheable; self.load = load; self.reference = reference; self.source = source
+        }
+
+        /// Hold the source view weakly, so the gallery never retains offscreen thumbnail pixels.
+        @MainActor public func withPreview(from view: AsyncImageView, sharingLoader: Bool = false) -> Self {
+            guard view.key == key else { return self }
+            var item = self
+            let key = key
+            item.preview = { [weak view] in view?.key == key ? view?.image : nil }
+            if sharingLoader, !view.cover, let loader = view.loader { item.load = loader }
+            return item
         }
     }
 
@@ -112,8 +123,9 @@ public final class ExpandedImagePreviewView: DSView {
 
     private func show() {
         guard items.indices.contains(index) else { return }
-        zoom = 1; scroll = .zero; naturalSize = nil
+        zoom = 1; scroll = .zero
         let item = items[index]
+        naturalSize = MarkdownImages.sizes[item.key]
         caption.text = item.name + (items.count > 1 ? " (\(index + 1)/\(items.count))" : "")
         showingDetails = false
         details?.removeFromSuperview(); details = nil
@@ -134,7 +146,9 @@ public final class ExpandedImagePreviewView: DSView {
         image.onContextMenu = { event, view in MediaAttachmentContextMenu.show(name: item.name, load: item.load, event: event, view: view, reference: item.reference) }
         requestPixels(mediaBox)
         image.cacheable = item.cacheable
-        image.set(key: item.key, fallbackText: "Image unavailable. The file may have been moved or deleted.", loader: item.load)
+        let preview = item.preview?() ?? (item.cacheable ? ImageDecodeCache.preview(for: item.key) : nil)
+        image.set(key: item.key, fallbackText: "Image unavailable. The file may have been moved or deleted.",
+                  loader: item.load, preview: preview, loadingText: "Loading image…")
         needsLayout = true
     }
 
@@ -226,7 +240,8 @@ public final class ExpandedImagePreviewView: DSView {
         let box = mediaBox
         guard let cg = image.image else { return CGSize(width: min(box.width, 672), height: min(box.height, 640)) }
         let natural = naturalSize ?? MarkdownImages.sizes[items[index].key] ?? CGSize(width: cg.width, height: cg.height)
-        let fit = min(1, box.width / max(1, natural.width), box.height / max(1, natural.height))
+        let limit: CGFloat = naturalSize == nil && image.loadedSide == 0 ? .greatestFiniteMagnitude : 1
+        let fit = min(limit, box.width / max(1, natural.width), box.height / max(1, natural.height))
         return CGSize(width: natural.width * fit, height: natural.height * fit)
     }
 

@@ -96,35 +96,47 @@ public enum MarkdownImages {
 
     /// Decodes `source` for a pixel side and records its natural size on the way.
     nonisolated static func loader(_ source: MarkdownImageSource) -> AsyncImageView.Loader {
-        { side in
-            let key = source.key
-            let decoded: (image: CGImage, natural: CGSize)?
+        let key = source.key
+        let download = MarkdownImageDownload {
+            let url: URL
             switch source {
-            case .blocked: decoded = nil
             case .direct(let uri):
-                if uri.lowercased().hasPrefix("data:") {
-                    decoded = await decodeData(uri, side: side)
-                } else if let url = URL(string: uri.hasPrefix("//") ? "https:" + uri : uri) {
-                    decoded = await download(url, side: side)
-                } else { decoded = nil }
+                guard let parsed = URL(string: uri.hasPrefix("//") ? "https:" + uri : uri) else { return nil }
+                url = parsed
             case .workspaceFile(let path):
-                guard let asset = await signedURL(path) else { decoded = nil; break }
+                guard let asset = await signedURL(path) else { return nil }
                 if let size = asset.size { await record(size, for: key) }
-                decoded = await download(asset.url, side: side)
+                url = asset.url
+            case .blocked: return nil
             }
-            guard let decoded else { return nil }
+            return await MarkdownImageDownload.fetch(url)
+        }
+        return { side in
+            let decoded: (image: CGImage, natural: CGSize)?
+            if case .direct(let uri) = source, uri.lowercased().hasPrefix("data:") {
+                decoded = await decodeData(uri, side: side)
+            } else {
+                guard let file = await download.value() else { return nil }
+                defer { withExtendedLifetime(file) {} }
+                decoded = await decodeFile(file.url, side: side)
+            }
+            guard !Task.isCancelled, let decoded else { return nil }
             await record(decoded.natural, for: key)
             return decoded.image
         }
     }
 
-    /// Decodes an asset `resource` (a tool output image) for a pixel side, recording its size under `key`:
-    /// first the size the server read from the header, then the decoded one.
+    /// A tool output loader keeps the same signed resource and downloaded file across size changes.
     nonisolated static func assetLoader(key: String, resource: JSONValue) -> AsyncImageView.Loader {
-        { side in
+        let download = MarkdownImageDownload {
             guard let asset = await signedURL(resource: resource) else { return nil }
             if let size = asset.size { await record(size, for: key) }
-            guard let decoded = await download(asset.url, side: side) else { return nil }
+            return await MarkdownImageDownload.fetch(asset.url)
+        }
+        return { side in
+            guard let file = await download.value() else { return nil }
+            defer { withExtendedLifetime(file) {} }
+            guard let decoded = await decodeFile(file.url, side: side), !Task.isCancelled else { return nil }
             await record(decoded.natural, for: key)
             return decoded.image
         }
@@ -139,15 +151,16 @@ public enum MarkdownImages {
     }
 
     nonisolated static func download(_ url: URL, side: Int) async -> (image: CGImage, natural: CGSize)? {
-        guard ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return nil }
-        do {
-            let (file, response) = try await URLSession.shared.download(from: url)
-            defer { try? FileManager.default.removeItem(at: file) }
-            guard !Task.isCancelled, let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode) else { return nil }
-            return await ImageDecodeWorker.shared.run {
-                CGImageSourceCreateWithURL(file as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary).flatMap { decode($0, side: side) }
-            }
-        } catch { return nil }
+        guard let file = await MarkdownImageDownload.fetch(url) else { return nil }
+        defer { withExtendedLifetime(file) {} }
+        return await decodeFile(file.url, side: side)
+    }
+
+    nonisolated static func decodeFile(_ url: URL, side: Int) async -> (image: CGImage, natural: CGSize)? {
+        await ImageDecodeWorker.shared.run {
+            CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary)
+                .flatMap { decode($0, side: side) }
+        }
     }
 
     /// A `data:` URL; Foundation reads base64 and percent-encoded payloads.

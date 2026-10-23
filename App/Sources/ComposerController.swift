@@ -3879,7 +3879,10 @@ extension ComposerController {
         guard let index = images.firstIndex(where: { $0.id == id }) else { return }
         let items = images.map { image in
             let url = image.fileURL
-            return ExpandedImagePreviewView.Item(key: url.path, name: image.name, source: image.snapShotSource, cacheable: true) { side in await ComposerImageIO.thumbnail(url, side: side, cover: false, measurementKey: url.path) }
+            let item = ExpandedImagePreviewView.Item(key: url.path, name: image.name, source: image.snapShotSource, cacheable: true) { side in
+                await ComposerImageIO.thumbnail(url, side: side, cover: false, measurementKey: url.path)
+            }
+            return composer.imagePreviewItem(item, for: image.id)
         }
         presentPreview(items, index: index)
     }
