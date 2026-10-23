@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds the UI driving tools into /tmp/cw-ui: click, scroll, key, axpress, front, grid, colmean, type.
+# Builds the UI driving tools into /tmp/cw-ui: click, scroll, key, drag, axpress, front, grid, colmean, type.
 # They post CGEvents and use the Accessibility API, so the shell's responsible app (T3's `t3`
 # here) needs Screen Recording and Accessibility ("Device Control and Data Access" on macOS 27).
 # Coordinates are global screen points, top-left origin; screencapture -R uses the same space.
@@ -7,7 +7,7 @@ set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p /tmp/cw-ui
 # The input tools get input-guard.swift in front: no input while the user's demo app is frontmost.
-for t in click scroll key type; do
+for t in click scroll key type drag; do
   cat "$here/input-guard.swift" "$here/$t.swift" > "/tmp/cw-ui/$t-main.swift"
   swiftc -O -o "/tmp/cw-ui/$t" "/tmp/cw-ui/$t-main.swift"
 done

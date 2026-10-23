@@ -1,6 +1,6 @@
 import AppKit
 
-// Prepended by scripts/ui/build to the tools that post input (click, scroll, key, type). HID events
+// Prepended by scripts/ui/build to the tools that post input (click, scroll, key, type, drag). HID events
 // go to whatever app is frontmost, and agents share the screen with the user's demo app: a stray
 // keystroke once landed in the user's real composer. So these tools refuse to send input while the
 // demo app (pid in /tmp/cw-demo.pid) is frontmost unless CW_UI_ALLOW_DEMO=1, and when CW_UI_PID is

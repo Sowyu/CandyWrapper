@@ -176,6 +176,7 @@ public final class SidebarListView: DSView {
     public override func viewWillMove(toWindow newWindow: NSWindow?) {
         super.viewWillMove(toWindow: newWindow)
         if newWindow == nil, sort != nil { cancelSort() }
+        if newWindow == nil { endDitherDrag(commit: false) }
     }
 
     public override func viewDidMoveToSuperview() {
@@ -310,6 +311,9 @@ public final class SidebarListView: DSView {
             view.onHoverChange = { [weak self] row, hovered in self?.rowHoverChanged(row, hovered) }
             view.onBeginDrag = { [weak self] row, id, event, press in self?.beginThreadDrag(row, id, event: event, press: press) }
         }
+        if kind == .projectHeader {
+            view.onBeginGroupDrag = { [weak self] header, event in self?.beginDitherGroupDrag(header, event: event) }
+        }
         view.onOpen = { [weak self, weak view] in
             guard let self, let item = view?.item else { return }
             self.open(item)
@@ -335,6 +339,7 @@ public final class SidebarListView: DSView {
         if case .row(let r) = item, r.isRenaming { lendRenameField(to: view, item) } else { lendRenameField(to: view, nil) }
         view.configure(item)
         view.isKeyboardFocused = item.key == focusedKey
+        view.alphaValue = ditherDimmed(item.key) ? Self.ditherDimAlpha : 1
     }
 
     private func lendRenameField(to view: SidebarRowBase, _ item: SidebarItem?) {
@@ -445,9 +450,16 @@ public final class SidebarListView: DSView {
     public var canSortDrop: ((ThreadId, SidebarSection, SidebarDropTarget) -> Bool)?
     /// A drop in the list: the thread, the section it left and where it lands.
     public var onSortDrop: ((ThreadId, SidebarSection, SidebarDropTarget) -> Void)?
+    /// Dither's drag in flight (SidebarDitherDrag.swift), nil at rest.
+    var ditherDrag: SidebarDitherDragSession?
+    /// Dither: the group key of a thread's project section.
+    var projectSectionKey: ((ThreadId) -> String?)?
+    /// Dither: a project section dropped before another group's, or at the end for nil.
+    var onGroupDrop: (@MainActor (String, String?) -> Void)?
 
     public override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
         if sender.draggingSource as? SidebarListView === self {
+            if let d = ditherDrag { return d.drop == nil ? [] : .move }
             return sort.map { $0.sortable && !$0.outside } == true ? .move : []
         }
         let row = fileDropRow(sender)
@@ -461,7 +473,7 @@ public final class SidebarListView: DSView {
     public override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
         defer { setFileDragRow(nil) }
         // The session's end commits the sort (`endSort`).
-        if sender.draggingSource as? SidebarListView === self { return sort != nil }
+        if sender.draggingSource as? SidebarListView === self { return sort != nil || ditherDrag?.drop != nil }
         guard let row = fileDropRow(sender), case .row(let r)? = row.item,
               let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
               !urls.isEmpty else { return false }

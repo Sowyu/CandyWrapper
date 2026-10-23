@@ -300,6 +300,8 @@ class SidebarRowBase: ControlView {
     /// A press on a thread row moved `dragDistance`: the list starts a thread drag. The point is the
     /// press, in window coordinates.
     final var onBeginDrag: (@MainActor (SidebarRowBase, ThreadId, NSEvent, NSPoint) -> Void)?
+    /// A press on a Dither project header moved `dragDistance`: the list starts a section drag.
+    final var onBeginGroupDrag: (@MainActor (SidebarProjectHeaderModel, NSEvent) -> Void)?
     /// The lifted row of an in-list drag (Sidebar.tsx:1599-1640, 1755-1757), nil at rest.
     struct Lift: Equatable {
         /// What dropping here does (`dropVerb`), nil inside the row's own section.
@@ -371,6 +373,15 @@ class SidebarRowBase: ControlView {
             released.active = false
             previewState(released)
             onBeginDrag(self, r.id, event, p)
+            return
+        }
+        if let p = pressPoint, case .projectHeader(let h)? = item, !h.isPinned, let onBeginGroupDrag,
+           hypot(event.locationInWindow.x - p.x, event.locationInWindow.y - p.y) >= SidebarListView.dragDistance {
+            pressPoint = nil
+            var released = state
+            released.active = false
+            previewState(released)
+            onBeginGroupDrag(h, event)
             return
         }
         super.mouseDragged(with: event)
