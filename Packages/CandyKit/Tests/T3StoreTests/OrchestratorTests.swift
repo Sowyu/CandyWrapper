@@ -203,3 +203,23 @@ private func event(_ id: String, _ kind: OrchestratorEvent.Kind = .finished) -> 
         #expect(r.memories.isEmpty)
     }
 }
+
+@Suite struct OrchestratorNameTests {
+    @Test func anEmptyNameFallsBackToOrchestrator() {
+        var c = OrchestratorConfig()
+        #expect(c.displayName == "Orchestrator")
+        c.name = "  "
+        #expect(c.displayName == "Orchestrator")
+        c.name = " Ada "
+        #expect(c.displayName == "Ada")
+    }
+
+    @Test func aRenameChangesTheBriefSoItGoesOutUpdated() {
+        let c = OrchestratorConfig()
+        func inputs(_ name: String) -> OrchestratorBrief.Inputs {
+            .init(name: name, machine: "m", projects: [], crewLimit: 4, models: c.models, notebook: c.notebook, handsOff: [], askFirstMinutes: 10)
+        }
+        #expect(OrchestratorBrief.render(c.prompt, inputs("Ada")).contains("You are Ada,"))
+        #expect(OrchestratorBrief.fingerprint(c.prompt, inputs("Ada")) != OrchestratorBrief.fingerprint(c.prompt, inputs("Orchestrator")))
+    }
+}

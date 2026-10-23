@@ -48,6 +48,8 @@ final class OrchestratorController {
         store.observe { [weak self] in self?.configChanged() }
         environments.observeShell { [weak self] in self?.shellChanged() }
         sidebar.actions.openOrchestrator = { [weak self] in self?.open() }
+        // A rename changes the brief's {{name}}, so it goes out as an updated brief with your next message.
+        sidebar.actions.renameOrchestrator = { name in OrchestratorStore.shared.update { $0.name = name } }
         configChanged()
     }
 
@@ -126,11 +128,12 @@ final class OrchestratorController {
         sidebar.state.hiddenThreadIds = Set(config.machines.map { ThreadId($0.value.threadId).scoped(to: $0.key) })
         let needs = currentNeeds()
         let working = orchestratorShell.map { OrchestratorEvent.running.contains($0.status) } ?? false
-        sidebar.orchestrator = OrchestratorSidebarInfo(name: config.name, machine: machineLabel, bot: .orchestrator, needsYou: needs.count,
+        sidebar.orchestrator = OrchestratorSidebarInfo(name: config.displayName, machine: machineLabel,
+                                                       machineKind: env.flatMap { environments.machine($0) } ?? "laptop", bot: .orchestrator, needsYou: needs.count,
                                                        working: working, started: machine != nil, isOpen: pane != nil)
         guard let pane else { return }
         var state = OrchestratorPaneState()
-        state.name = config.name
+        state.name = config.displayName
         state.machine = machineLabel
         state.environmentId = env ?? ""
         state.started = machine != nil
@@ -217,7 +220,7 @@ final class OrchestratorController {
         let create: JSONValue = .object([
             "type": .string("thread.create"), "commandId": .string(UUID().uuidString.lowercased()), "createdBy": .string("user"),
             "creationSource": .string("web"), "threadId": .string(local), "projectId": .string(project.id.rawValue),
-            "title": .string(config.name), "modelSelection": ThreadSession.encode(selection), "runtimeMode": .string(runtime),
+            "title": .string(config.displayName), "modelSelection": ThreadSession.encode(selection), "runtimeMode": .string(runtime),
             "interactionMode": .string("default"), "branch": .null, "worktreePath": .null,
         ])
         let message = ComposerController.standaloneCommand(threadId: ThreadId(local), messageId: MessageId(UUID().uuidString.lowercased()),
@@ -250,7 +253,7 @@ final class OrchestratorController {
             let local = id.localId.rawValue
             return "“\(titles[local] ?? "Untitled")” (t3-thread://v1/\(local))"
         }.sorted()
-        let inputs = OrchestratorBrief.Inputs(name: config.name, machine: machineLabel, projects: projects, crewLimit: config.crewLimit,
+        let inputs = OrchestratorBrief.Inputs(name: config.displayName, machine: machineLabel, projects: projects, crewLimit: config.crewLimit,
                                               models: availableRows(env), notebook: config.notebook, handsOff: handsOff,
                                               askFirstMinutes: config.askFirstMinutes)
         return (OrchestratorBrief.render(config.prompt, inputs), OrchestratorBrief.fingerprint(config.prompt, inputs))
@@ -456,7 +459,7 @@ final class OrchestratorController {
             return
         }
         var input: [String: JSONValue] = [
-            "title": .string("\(config.name) check"), "prompt": .string(OrchestratorBrief.scheduledCheckPrompt), "enabled": .bool(enabled),
+            "title": .string("\(config.displayName) check"), "prompt": .string(OrchestratorBrief.scheduledCheckPrompt), "enabled": .bool(enabled),
             "schedule": .object(["type": .string("interval"), "everyMs": .number(Double(minutes) * 60_000)]),
             "projectId": .string(projectId.rawValue), "threadId": .string(machine.threadId),
             "workspaceStrategy": .object(["type": .string("root")]), "modelSelection": ThreadSession.encode(selection),

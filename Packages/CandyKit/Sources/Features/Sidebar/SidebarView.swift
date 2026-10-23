@@ -9,6 +9,8 @@ public struct SidebarActions {
     public var openThread: (ThreadId) -> Void = { _ in }
     /// The pinned Orchestrator row was clicked (Redesign, Orchestrator on).
     public var openOrchestrator: () -> Void = {}
+    /// Its name was renamed inline with a double click.
+    public var renameOrchestrator: (String) -> Void = { _ in }
     public var settle: (ThreadId) -> Void = { _ in }
     public var unsettle: (ThreadId) -> Void = { _ in }
     public var snooze: (ThreadId, NSView) -> Void = { _, _ in }
@@ -95,6 +97,7 @@ public final class SidebarContentView: DSView {
                 if let row = orchestratorRow { row.apply(info) } else {
                     let row = OrchestratorSidebarRowView(info)
                     row.action = { [weak self] in self?.actions.openOrchestrator() }
+                    row.onRename = { [weak self] name in self?.actions.renameOrchestrator(name) }
                     addSubview(row)
                     orchestratorRow = row
                     let relay = BotPointerRelay()

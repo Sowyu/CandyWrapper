@@ -136,6 +136,13 @@ public struct OrchestratorConfig: Codable, Hashable, Sendable {
         try c.encode(savedMemoryMessages, forKey: .savedMemoryMessages)
     }
 
+    static let defaultName = "Orchestrator"
+    /// The name it goes by: what you typed, else "Orchestrator".
+    public var displayName: String {
+        let t = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? Self.defaultName : t
+    }
+
     /// The row the Orchestrator itself runs on: the first default row, else the first row.
     public var defaultRow: OrchestratorModelRow? { models.first { $0.isDefault } ?? models.first }
 
