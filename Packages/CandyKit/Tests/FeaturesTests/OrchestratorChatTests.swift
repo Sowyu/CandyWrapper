@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import T3Protocol
 import T3Store
@@ -37,6 +38,7 @@ import Testing
             case .memory: "memory"
             case .read: "read"
             case .typing: "typing"
+            case .image: "image"
             }
         }
         #expect(kinds == ["time", "brief", "me^", "me$", "read", "bot^$", "plan:w1", "time", "line:“Scribe” finished a turn:w1", "typing"])
@@ -64,4 +66,68 @@ import Testing
         #expect(plan?.first?.threadId == "mcp:32a7")
         #expect(plan.map { OrchestratorReply.displayText($0[0]) } == "Count (Counter)")
     }
+
+    /// Images ride on the user-message turn item; a message of images only hides T3's stand-in text.
+    @Test func sentImagesShowBeforeTheBubble() throws {
+        let item = try JSONDecoder().decode(TurnItem.self, from: JSONSerialization.data(withJSONObject: [
+            "id": "ti-1", "threadId": "orch", "type": "user_message", "ordinal": 1, "status": "completed", "messageId": "m1",
+            "updatedAt": T3Timestamp(start).raw,
+            "attachments": [["type": "image", "id": "att-1", "name": "shot.png", "mimeType": "image/png", "sizeBytes": 10]],
+        ] as [String: Any]))
+        let alone = OrchestratorChat.items(messages: [message("m1", "user", ComposerAttachmentRules.attachmentOnlyPrompt, minutes: 0)],
+                                           turnItems: [item], running: false, now: start)
+        #expect(alone.contains(.image(id: "image-m1-0", attachmentId: "att-1", name: "shot.png")))
+        #expect(!alone.contains { if case .bubble = $0 { true } else { false } })
+        let withText = OrchestratorChat.items(messages: [message("m1", "user", "What's in this?", minutes: 0)], turnItems: [item],
+                                              running: false, now: start)
+        let kinds = withText.compactMap { i -> String? in
+            switch i { case .image: "image"; case .bubble: "bubble"; default: nil }
+        }
+        #expect(kinds == ["image", "bubble"])
+    }
+
+    /// The Overview's groups: work under way, work done, and work that stopped short.
+    @Test func overviewGroups() {
+        #expect(OrchestratorCrewCard.group(.working, completedTurn: true) == .running)
+        #expect(OrchestratorCrewCard.group(.approval, completedTurn: false) == .running)
+        #expect(OrchestratorCrewCard.group(.ready, completedTurn: true) == .finished)
+        #expect(OrchestratorCrewCard.group(.ready, completedTurn: false) == .stopped)
+        #expect(OrchestratorCrewCard.group(.failed, completedTurn: true) == .stopped)
+        #expect(OrchestratorCrewCard.group(.limited, completedTurn: true) == .stopped)
+    }
 }
+
+/// The Orchestrator's draft lives in the thread composer's store (`ComposerController.setDraftText`, saved to
+/// `composer.prompts.v1`). The app makes a fresh pane each time you come back; here a dictionary stands in for
+/// the store, and the pane must report every edit, show the stored draft again, and clear it on send.
+@MainActor @Suite struct OrchestratorDraftTests {
+    final class Store { var drafts: [String: String] = [:] }
+
+    func pane(_ store: Store) -> OrchestratorPaneView {
+        let p = OrchestratorPaneView(frame: NSRect(x: 0, y: 0, width: 900, height: 700))
+        var s = OrchestratorPaneState()
+        s.started = true
+        s.connected = true
+        p.set(s)
+        p.onDraftChange = { store.drafts["orch"] = $0.isEmpty ? nil : $0 }
+        p.setDraft(store.drafts["orch"] ?? "")
+        return p
+    }
+
+    @Test func aDraftSurvivesLeavingAndComingBack() {
+        let store = Store()
+        var first: OrchestratorPaneView? = pane(store)
+        first?.setDraft("Plan the release notes")
+        #expect(store.drafts["orch"] == "Plan the release notes")
+        first = nil
+        let back = pane(store)
+        #expect(back.draft == "Plan the release notes")
+        var sent: String?
+        back.onSend = { sent = $0 }
+        back.composer.submit()
+        #expect(sent == "Plan the release notes")
+        #expect(store.drafts["orch"] == nil)
+        #expect(pane(store).draft.isEmpty)
+    }
+}
+

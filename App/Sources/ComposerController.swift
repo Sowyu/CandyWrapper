@@ -1253,6 +1253,23 @@ final class ComposerController {
         if attachments != currentAttachments { refresh() } else { refreshes.promptChanged() }
     }
 
+    /// A thread's saved draft, for a composer outside the thread panel (the Orchestrator's chat). It is the same
+    /// per-thread draft the thread's own composer keeps, saved to `composer.prompts.v1`.
+    func draftText(_ id: ThreadId) -> String { prompts[id.rawValue] ?? "" }
+
+    /// Saves a thread's draft from a composer outside the thread panel, debounced like typing here.
+    func setDraftText(_ text: String, for id: ThreadId) {
+        let key = id.rawValue
+        guard (prompts[key] ?? "") != text else { return }
+        prompts[key] = text.isEmpty ? nil : text
+        // The panel's composer, if it still shows this thread, follows, so it never writes back an older text.
+        if draftKey == key, queuedEdit == nil, questionRequestId == nil, composer.text != text {
+            composer.text = text
+            pickers.prompt = text
+        }
+        scheduleSave()
+    }
+
     private func flushPrompt() {
         guard queuedEdit == nil, questionRequestId == nil else { return }
         if let key = draftKey { prompts[key] = composer.text.isEmpty ? nil : composer.text }

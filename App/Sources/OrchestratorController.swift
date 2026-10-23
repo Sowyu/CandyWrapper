@@ -36,6 +36,10 @@ final class OrchestratorController {
     private var memoryUndo: [String: [(note: String, previous: String)]] = [:]
     private var undone: Set<String> = []
     private var scheduleSynced: Set<String> = []
+    /// Images waiting to go with your next message, kept while you leave the pane.
+    // ponytail: kept in memory only; a relaunch drops unsent images, persist them like the thread composer's if that bites
+    private var pendingImages: [ComposerAttachment] = []
+    private var uploads: [String: Task<Void, Never>] = [:]
     private var wasActive = false
 
     init(environments: Environments, sidebar: SidebarContentView, threads: ThreadController) {
@@ -150,6 +154,7 @@ final class OrchestratorController {
         }
         state.undoable = Set(memoryUndo.keys).subtracting(undone)
         state.undone = undone
+        state.pendingImages = pendingImages
         pane.set(state)
     }
 
@@ -164,11 +169,20 @@ final class OrchestratorController {
             p.onStart = { [weak self] in self?.start() }
             p.onOpenAsThread = { [weak self] in if let id = self?.threadId { self?.sidebar?.actions.openThread(id) } }
             p.onEditBot = { [weak self] in self?.openSettings() }
+            // The draft is the thread's own, kept by the thread composer's store (composer.prompts.v1).
+            p.onDraftChange = { [weak self] text in
+                guard let self, let id = self.threadId else { return }
+                self.threads.composer.setDraftText(text, for: id)
+            }
+            p.onImages = { [weak self] files in self?.addImages(files) }
+            p.onRemoveImage = { [weak self] id in self?.removeImage(id) }
+            p.imageLoader = { [weak self] id, side in await self?.sentImage(id, side: side) }
             pane = p
             return p
         }()
         startFeed()
         refreshViews()
+        if let id = threadId { view.setDraft(threads.composer.draftText(id)) }
         showPane(view)
         view.layoutSubtreeIfNeeded()
         view.needsDisplay = true
@@ -286,24 +300,47 @@ final class OrchestratorController {
     /// Your message from the pane, with the updated brief in front when the brief changed since the thread got it.
     func send(_ text: String) {
         guard let env = machineId, let id = threadId, let machine else { return }
+        // The images that finished uploading go with it; a message of images only carries T3's stand-in text.
+        let images = pendingImages.filter { $0.status == .ready && $0.environmentId == env }
+        let message = text.isEmpty && !images.isEmpty ? ComposerAttachmentRules.attachmentOnlyPrompt : text
         let brief = renderBrief(env)
-        var body = text
-        if brief.fingerprint != machine.briefDigest { body = OrchestratorBrief.updated(brief.text, message: text) }
-        dispatch(body, to: id, env: env) { [weak self] ok in
-            if ok, brief.fingerprint != machine.briefDigest { self?.store.update { $0.machines[env]?.briefDigest = brief.fingerprint } }
+        var body = message
+        if brief.fingerprint != machine.briefDigest { body = OrchestratorBrief.updated(brief.text, message: message) }
+        let sentIds = Set(images.map(\.id))
+        pendingImages.removeAll { sentIds.contains($0.id) }
+        refreshViews()
+        dispatch(body, to: id, env: env, attachments: images.compactMap(\.chatAttachment)) { [weak self] ok in
+            guard let self else { return }
+            if ok {
+                if brief.fingerprint != machine.briefDigest { self.store.update { $0.machines[env]?.briefDigest = brief.fingerprint } }
+                for image in images { Self.removeOwnCopy(image.fileURL) }
+            } else {
+                // Nothing is lost: the text goes back to the draft and the images back to the composer.
+                if !text.isEmpty, self.threads.composer.draftText(id).isEmpty {
+                    self.threads.composer.setDraftText(text, for: id)
+                    self.pane?.setDraft(text)
+                }
+                self.pendingImages = images + self.pendingImages
+                self.refreshViews()
+            }
         }
     }
 
     /// One message to the Orchestrator; behind a running turn it queues instead of interrupting.
-    private func dispatch(_ text: String, to id: ThreadId, env: String, done: ((Bool) -> Void)? = nil) {
+    private func dispatch(_ text: String, to id: ThreadId, env: String, attachments: [JSONValue] = [], done: ((Bool) -> Void)? = nil) {
         guard let session = environments.session(env), let selection = ownSelection(env) ?? orchestratorShell?.modelSelection else {
             toast("Couldn't reach the Orchestrator", "\(machineLabel) isn't connected.", .error)
             done?(false)
             return
         }
         let running = orchestratorShell.map { OrchestratorEvent.running.contains($0.status) } ?? false
-        let payload = ComposerController.standaloneCommand(threadId: id, messageId: MessageId(UUID().uuidString.lowercased()), text: text,
+        var payload = ComposerController.standaloneCommand(threadId: id, messageId: MessageId(UUID().uuidString.lowercased()), text: text,
                                                            selection: selection, queue: running)
+        // The same `attachments` the thread composer sends (`ChatImageAttachment`).
+        if !attachments.isEmpty, case .object(var command) = payload {
+            command["attachments"] = .array(attachments)
+            payload = .object(command)
+        }
         Task { [weak self] in
             do {
                 _ = try await session.supervisor.request("orchestration.dispatchCommand", payload: payload)
@@ -313,6 +350,105 @@ final class OrchestratorController {
                 done?(false)
             }
         }
+    }
+
+    // MARK: Images
+
+    /// Images from the + button, a paste or a drop, prepared and uploaded the way the thread composer does it
+    /// (`ComposerImageIO.prepare`, then `attachments.createUploadUrl`).
+    private func addImages(_ files: [ComposerIncomingFile]) {
+        guard let env = machineId, environments.session(env) != nil else { return }
+        let room = ComposerAttachmentRules.maxAttachments - pendingImages.count
+        guard room > 0 else { toast(ComposerAttachmentRules.countMessage, nil, .error); return }
+        let images = files.filter { if case .image = ComposerAttachmentRules.classify(name: $0.name, mimeType: $0.mimeType) { true } else { false } }
+        if images.count < files.count { toast("Only images can go to the Orchestrator", nil, .error) }
+        let work = ComposerController.attachmentWorkDirectory
+        Task { [weak self] in
+            try? FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+            for image in images.prefix(room) {
+                do {
+                    let p = try await ComposerImageIO.prepare(image.url, name: image.name, mimeType: image.mimeType,
+                                                              maxBytes: ComposerAttachmentRules.maxImageBytes, workDir: work)
+                    guard let self else { return }
+                    let a = ComposerAttachment(kind: .image, name: p.name, mimeType: p.mimeType, sizeBytes: p.sizeBytes, fileURL: p.url, environmentId: env)
+                    self.pendingImages.append(a)
+                    self.refreshViews()
+                    self.upload(a)
+                } catch {
+                    self?.toast("'\(image.name)' couldn't be attached", "It could not be read, or it is too large even after compression.", .error)
+                }
+            }
+        }
+    }
+
+    private func upload(_ a: ComposerAttachment) {
+        guard let session = environments.session(a.environmentId) else { return setStatus(a.id, .failed("Not connected")) }
+        let supervisor = session.supervisor, base = session.http.baseURL
+        uploads[a.id] = Task { [weak self] in
+            let result = await ComposerController.uploadAttachment(
+                supervisor: supervisor, base: base, type: "image", name: a.name, mimeType: a.mimeType, sizeBytes: a.sizeBytes, file: a.fileURL,
+                onMinted: { id in self?.update(a.id) { $0.attachmentId = id } },
+                onProgress: { p in self?.setStatus(a.id, .uploading(p)) })
+            guard let self else { return }
+            self.uploads[a.id] = nil
+            switch result {
+            case .uploaded(let id): self.update(a.id) { $0.attachmentId = id; $0.status = .ready }
+            case .failed(let why): self.setStatus(a.id, .failed(why))
+            case .cancelled: break
+            }
+        }
+    }
+
+    private func update(_ id: String, _ change: (inout ComposerAttachment) -> Void) {
+        guard let i = pendingImages.firstIndex(where: { $0.id == id }) else { return }
+        change(&pendingImages[i])
+        refreshViews()
+    }
+
+    private func setStatus(_ id: String, _ status: ComposerFileRow.Status) { update(id) { $0.status = status } }
+
+    /// Removes a waiting image: its upload stops and the server forgets it.
+    private func removeImage(_ id: String) {
+        guard let i = pendingImages.firstIndex(where: { $0.id == id }) else { return }
+        let a = pendingImages.remove(at: i)
+        uploads.removeValue(forKey: id)?.cancel()
+        if let minted = a.attachmentId, let session = environments.session(a.environmentId) {
+            Task { _ = try? await session.supervisor.request("attachments.delete", payload: .object(["attachmentId": .string(minted)])) }
+        }
+        Self.removeOwnCopy(a.fileURL)
+        refreshViews()
+    }
+
+    /// Deletes a pasted or re-encoded copy in the app's attachment folder. A picked file uploads as it is (`prepare`
+    /// returns its own URL), and that file is yours, so it stays.
+    static func removeOwnCopy(_ url: URL) {
+        let own = ComposerController.attachmentWorkDirectory.standardizedFileURL.path + "/"
+        guard url.standardizedFileURL.path.hasPrefix(own) else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// A sent image for the chat: the shared attachment cache the thread view fills, else `assets.createUrl` and a
+    /// download into it, then a thumbnail at `side` pixels.
+    private func sentImage(_ attachmentId: String, side: Int) async -> CGImage? {
+        let safe = attachmentId.replacingOccurrences(of: "[^A-Za-z0-9_-]", with: "_", options: .regularExpression)
+        let cached = ComposerController.attachmentCacheDirectory.appendingPathComponent(safe)
+        if !FileManager.default.fileExists(atPath: cached.path) {
+            guard let env = machineId, let session = environments.session(env) else { return nil }
+            do {
+                let result = try await session.supervisor.request("assets.createUrl", payload: .object([
+                    "resource": .object(["_tag": .string("attachment"), "attachmentId": .string(attachmentId)])]))
+                guard case .string(let relative)? = result["relativeUrl"],
+                      let url = URL(string: relative, relativeTo: session.http.baseURL)?.absoluteURL else { return nil }
+                let (temp, response) = try await URLSession.shared.download(from: url)
+                guard ((response as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2 else { return nil }
+                try? FileManager.default.createDirectory(at: ComposerController.attachmentCacheDirectory, withIntermediateDirectories: true)
+                try? FileManager.default.removeItem(at: cached)
+                try FileManager.default.moveItem(at: temp, to: cached)
+            } catch {
+                return nil
+            }
+        }
+        return await ComposerImageIO.thumbnail(cached, side: side, cover: false)
     }
 
     // MARK: The event relay
@@ -364,12 +500,10 @@ final class OrchestratorController {
         guard let env = machineId, let snapshot = shell(env) else { return [] }
         let projects = Dictionary(snapshot.projects.map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a })
         let now = Date()
-        return snapshot.threads
+        let cards = snapshot.threads
             .filter { $0.archivedAt == nil && $0.deletedAt == nil && $0.lineage.parentThreadId == nil && $0.id.rawValue != machine?.threadId
                 && $0.settledAt == nil && $0.settledOverride != .settled }
             .sorted { ($0.updatedAt.epochMs ?? 0) > ($1.updatedAt.epochMs ?? 0) }
-            // ponytail: the 30 most recent unsettled threads; page the Overview if a machine keeps more in flight
-            .prefix(30)
             .map { t in
                 let scoped = t.id.scoped(to: env)
                 let presented = SidebarThread(t)
@@ -392,8 +526,12 @@ final class OrchestratorController {
                 }
                 let last = t.lastError ?? t.latestVisibleMessage?["text"]?.stringValue
                 return OrchestratorCrewCard(id: scoped, title: t.title, project: projects[t.projectId] ?? "", state: state, status: top,
-                                            lastLine: last.map { String($0.prefix(160)) }, note: note)
+                                            lastLine: last.map { String($0.prefix(160)) }, note: note,
+                                            group: OrchestratorCrewCard.group(status, completedTurn: t.latestRunCompletedAt.value != nil))
             }
+        // ponytail: every running thread, the 20 most recent finished and 10 stopped; page the Overview if a machine keeps more
+        let running = cards.filter { $0.group == .running }
+        return running + Array(cards.filter { $0.group == .finished }.prefix(20)) + Array(cards.filter { $0.group == .stopped }.prefix(10))
     }
 
     /// Allow or Deny through T3's own `runtime-request.respond`, as the composer's approval panel sends it.

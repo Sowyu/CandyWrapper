@@ -6,6 +6,19 @@ import T3Store
 /// A thread under the Orchestrator, as an Overview card. Built from server events only, so it costs no tokens. Threads
 /// never get a bot: the card carries the sidebar's own status icon.
 public struct OrchestratorCrewCard: Equatable {
+    /// Where the Overview lists it: work under way, work done, or work that stopped short (failed, a usage limit,
+    /// never run). Approvals and questions list under Needs you as well.
+    public enum Group: Equatable, Sendable { case running, finished, stopped }
+
+    /// The group for a thread's sidebar status, given whether its latest turn completed.
+    public static func group(_ status: SidebarThreadStatus, completedTurn: Bool) -> Group {
+        switch status {
+        case .working, .waiting, .approval, .input: .running
+        case .ready: completedTurn ? .finished : .stopped
+        case .failed, .limited: .stopped
+        }
+    }
+
     public var id: ThreadId
     public var title: String
     public var project: String
@@ -15,9 +28,11 @@ public struct OrchestratorCrewCard: Equatable {
     public var lastLine: String?
     /// "Hands off", or "You wrote 3 min ago, it asks first".
     public var note: String?
-    public init(id: ThreadId, title: String, project: String, state: String, status: SidebarTopStatus?, lastLine: String?, note: String?) {
+    public var group: Group
+    public init(id: ThreadId, title: String, project: String, state: String, status: SidebarTopStatus?, lastLine: String?, note: String?,
+                group: Group) {
         self.id = id; self.title = title; self.project = project; self.state = state; self.status = status
-        self.lastLine = lastLine; self.note = note
+        self.lastLine = lastLine; self.note = note; self.group = group
     }
 }
 
@@ -49,6 +64,8 @@ public struct OrchestratorPaneState: Equatable {
     public var crew: [OrchestratorCrewCard] = []
     public var needs: [OrchestratorNeed] = []
     public var working = false
+    /// Images waiting to go with your next message.
+    public var pendingImages: [ComposerAttachment] = []
     public init() {}
 }
 
@@ -56,6 +73,28 @@ public struct OrchestratorPaneState: Equatable {
 /// Overview of what needs you and every thread on its machine. The Digest tab waits for phase 3.
 public final class OrchestratorPaneView: DSView {
     public var onSend: ((String) -> Void)?
+    /// Every edit to the message you're writing, so the draft survives leaving the pane.
+    public var onDraftChange: ((String) -> Void)? {
+        get { composer.onDraftChange }
+        set { composer.onDraftChange = newValue }
+    }
+    /// Images from the composer's + button, a paste or a drop.
+    public var onImages: (([ComposerIncomingFile]) -> Void)? {
+        get { composer.onImages }
+        set { composer.onImages = newValue }
+    }
+    public var onRemoveImage: ((String) -> Void)? {
+        get { composer.onRemoveImage }
+        set { composer.onRemoveImage = newValue }
+    }
+    /// A sent image's thumbnail by attachment id, at a pixel side.
+    public var imageLoader: ((String, Int) async -> CGImage?)? {
+        get { chat.imageLoader }
+        set { chat.imageLoader = newValue }
+    }
+    /// Shows a saved draft, unless you're typing in the field.
+    public func setDraft(_ text: String) { composer.draft = text }
+    public var draft: String { composer.draft }
     /// A thread by its scoped id.
     public var onOpenThread: ((ThreadId) -> Void)?
     public var onRespond: ((OrchestratorNeed, ApprovalDecision) -> Void)?
@@ -77,7 +116,7 @@ public final class OrchestratorPaneView: DSView {
     private lazy var chatScroll = ScrollAreaView(documentView: chat, scrollFade: true)
     private let overview = OrchestratorOverviewView()
     private lazy var overviewScroll = ScrollAreaView(documentView: overview, scrollFade: true)
-    private let composer = OrchestratorComposerView()
+    let composer = OrchestratorComposerView()
     private let start = ButtonView("Start the Orchestrator", size: .default)
     private let divider = CALayer()
     public private(set) var state = OrchestratorPaneState()
@@ -138,6 +177,7 @@ public final class OrchestratorPaneView: DSView {
         start.isHidden = next.started
         composer.isHidden = !next.started || showsOverview
         composer.isEnabled = next.connected
+        composer.attachments = next.pendingImages
         // Before the items, so new stacks get the picked bot.
         if old.bot != next.bot { chat.setAvatarIdentity(next.bot) }
         if old.items != next.items || old.undoable != next.undoable || old.undone != next.undone || old.needs != next.needs
@@ -216,6 +256,7 @@ final class OrchestratorChatView: DSView {
     var onRespond: ((OrchestratorNeed, ApprovalDecision) -> Void)?
     var onUndo: ((String) -> Void)?
     var onHeightChange: (() -> Void)?
+    var imageLoader: ((String, Int) async -> CGImage?)?
     private var items: [OrchestratorChatItem] = []
     private var views: [String: NSView] = [:]
     private var order: [String] = []
@@ -262,6 +303,13 @@ final class OrchestratorChatView: DSView {
                 m.set(notes: notes, canUndo: undoable.contains(messageId), undone: undone.contains(messageId))
                 m.onUndo = { [weak self] in self?.onUndo?(messageId) }
                 next[id] = m
+            case .image(_, let attachmentId, let name):
+                next[id] = (views[id] as? OrchestratorImageBubble) ?? {
+                    let b = OrchestratorImageBubble(attachmentId: attachmentId, name: name)
+                    b.onLoaded = { [weak self] in self?.relayout() }
+                    b.load(self.imageLoader)
+                    return b
+                }()
             case .read:
                 next[id] = (views[id] as? OrchestratorReadLabel) ?? OrchestratorReadLabel()
             case .typing:
@@ -353,6 +401,11 @@ final class OrchestratorChatView: DSView {
                 }
                 out.append((b, NSRect(x: x, y: y, width: size.width, height: size.height)))
                 if !user, last, let bot = avatars[id] { out.append((bot, NSRect(x: x0, y: y + size.height - 24, width: 26, height: 26))) }
+                y += size.height
+            case .image:
+                let size = (v as! OrchestratorImageBubble).size(maxSide: min(240, maxBubble))
+                // Flush with the bubbles' body, inside their tail.
+                out.append((v, NSRect(x: x0 + lane - OrchestratorBubbleView.tail - size.width, y: y, width: size.width, height: size.height)))
                 y += size.height
             case .read:
                 out.append((v, NSRect(x: x0 + lane - 60, y: y - 6, width: 60, height: 14)))
@@ -533,6 +586,54 @@ private extension NSColor {
         var out = self
         view.effectiveAppearance.performAsCurrentDrawingAppearance { out = NSColor(cgColor: self.cgColor) ?? self }
         return out
+    }
+}
+
+/// An image you sent, on the right with rounded corners like a photo in Messages. It keeps a square until its
+/// thumbnail arrives, then takes the image's shape.
+final class OrchestratorImageBubble: DSView {
+    let attachmentId: String
+    private let image = CALayer()
+    private var aspect: CGFloat?
+    private var load: Task<Void, Never>?
+    var onLoaded: (() -> Void)?
+
+    init(attachmentId: String, name: String) {
+        self.attachmentId = attachmentId
+        super.init(frame: .zero)
+        image.masksToBounds = true
+        image.cornerRadius = 16
+        image.contentsGravity = .resizeAspectFill
+        image.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        layer?.addSublayer(image)
+        setAccessibilityRole(.image)
+        setAccessibilityLabel(name)
+    }
+
+    isolated deinit { load?.cancel() }
+
+    func load(_ loader: ((String, Int) async -> CGImage?)?) {
+        guard let loader else { return }
+        let id = attachmentId
+        load = Task { [weak self] in
+            guard let cg = await loader(id, 480), !Task.isCancelled, let self else { return }
+            self.image.contents = cg
+            self.aspect = CGFloat(cg.width) / max(1, CGFloat(cg.height))
+            self.onLoaded?()
+        }
+    }
+
+    func size(maxSide: CGFloat) -> NSSize {
+        guard let aspect else { return NSSize(width: maxSide * 0.75, height: maxSide * 0.75) }
+        return aspect >= 1 ? NSSize(width: maxSide, height: (maxSide / aspect).rounded())
+            : NSSize(width: (maxSide * aspect).rounded(), height: maxSide)
+    }
+
+    override func layout() { super.layout(); image.frame = bounds }
+    override var wantsUpdateLayer: Bool { true }
+    override func updateLayer() {
+        layer?.cornerRadius = 16
+        layer?.backgroundColor = image.contents == nil ? Themed.color(\.secondary).cgColor(in: self) : nil
     }
 }
 
@@ -899,17 +1000,25 @@ final class OrchestratorOverviewView: DSView {
     var onOpenThread: ((ThreadId) -> Void)?
     var onRespond: ((OrchestratorNeed, ApprovalDecision) -> Void)?
     private let needsTitle = LabelView("Needs you", font: DSFont.ui(15, weight: .semibold), color: Themed.color(\.foreground))
-    private let crewTitle = LabelView("Threads", font: DSFont.ui(15, weight: .semibold), color: Themed.color(\.foreground))
     private let empty = LabelView("Nothing needs you.", font: DSFont.ui(13), color: Themed.color(\.mutedForeground))
     private let needsCard = OrchestratorNeedsCard()
-    private var cards: [OrchestratorCrewCardView] = []
     private var hasNeeds = false
+    /// Running, Finished and, when it has threads, Stopped: a title, then a grid of cards or a quiet "None".
+    private var sections: [(group: OrchestratorCrewCard.Group, title: LabelView, none: LabelView, cards: [OrchestratorCrewCardView])] = []
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        for v in [needsTitle, crewTitle, empty, needsCard] as [NSView] { addSubview(v) }
+        for v in [needsTitle, empty, needsCard] as [NSView] { addSubview(v) }
         needsCard.onRespond = { [weak self] n, d in self?.onRespond?(n, d) }
         needsCard.onOpen = { [weak self] n in self?.onOpenThread?(n.threadId) }
+    }
+
+    static func title(_ group: OrchestratorCrewCard.Group) -> String {
+        switch group {
+        case .running: "Running"
+        case .finished: "Finished"
+        case .stopped: "Stopped"
+        }
     }
 
     func set(crew: [OrchestratorCrewCard], needs: [OrchestratorNeed]) {
@@ -917,14 +1026,26 @@ final class OrchestratorOverviewView: DSView {
         needsCard.set(needs, limit: 5)
         needsCard.isHidden = needs.isEmpty
         empty.isHidden = !needs.isEmpty
-        cards.forEach { $0.removeFromSuperview() }
-        cards = crew.map { c in
-            let v = OrchestratorCrewCardView(c)
-            v.action = { [weak self] in self?.onOpenThread?(c.id) }
-            addSubview(v)
-            return v
+        for s in sections { s.title.removeFromSuperview(); s.none.removeFromSuperview(); s.cards.forEach { $0.removeFromSuperview() } }
+        sections = [OrchestratorCrewCard.Group.running, .finished, .stopped].compactMap { group in
+            let members = crew.filter { $0.group == group }
+            // Stopped shows only when something stopped.
+            if group == .stopped, members.isEmpty { return nil }
+            let title = LabelView(members.isEmpty ? Self.title(group) : "\(Self.title(group)) · \(members.count)",
+                                  font: DSFont.ui(15, weight: .semibold), color: Themed.color(\.foreground))
+            let none = LabelView(group == .running ? "Nothing is running." : "Nothing has finished yet.",
+                                 font: DSFont.ui(13), color: Themed.color(\.mutedForeground))
+            none.isHidden = !members.isEmpty
+            addSubview(title)
+            addSubview(none)
+            let cards = members.map { c in
+                let v = OrchestratorCrewCardView(c)
+                v.action = { [weak self] in self?.onOpenThread?(c.id) }
+                addSubview(v)
+                return v
+            }
+            return (group, title, none, cards)
         }
-        crewTitle.text = crew.isEmpty ? "Threads · none in flight" : "Threads in flight · \(crew.count)"
         needsLayout = true
     }
 
@@ -934,11 +1055,15 @@ final class OrchestratorOverviewView: DSView {
         return (lane, x0, columns, (lane - CGFloat(columns - 1) * 12) / CGFloat(columns))
     }
 
+    private func sectionHeight(_ count: Int, columns: Int) -> CGFloat {
+        let rows = (count + columns - 1) / columns
+        return 34 + (count == 0 ? 20 : CGFloat(rows) * (OrchestratorCrewCardView.height + 12) - 12)
+    }
+
     func height(forWidth width: CGFloat) -> CGFloat {
         let g = grid(width)
         let needsH = hasNeeds ? needsCard.height(forWidth: g.lane) : 20
-        let rows = (cards.count + g.columns - 1) / g.columns
-        return 24 + 24 + 10 + needsH + 28 + 24 + 10 + CGFloat(rows) * (OrchestratorCrewCardView.height + 12) + 24
+        return 24 + 34 + needsH + sections.reduce(0) { $0 + 28 + sectionHeight($1.cards.count, columns: g.columns) } + 24
     }
 
     override func layout() {
@@ -950,13 +1075,17 @@ final class OrchestratorOverviewView: DSView {
         empty.frame = NSRect(x: g.x0, y: y, width: g.lane, height: 20)
         let needsH = hasNeeds ? needsCard.height(forWidth: g.lane) : 20
         needsCard.frame = NSRect(x: g.x0, y: y, width: g.lane, height: needsH)
-        y += needsH + 28
-        crewTitle.frame = NSRect(x: g.x0, y: y, width: g.lane, height: 24)
-        y += 34
-        for (i, c) in cards.enumerated() {
-            let col = i % g.columns, row = i / g.columns
-            c.frame = NSRect(x: g.x0 + CGFloat(col) * (g.cardW + 12), y: y + CGFloat(row) * (OrchestratorCrewCardView.height + 12),
-                             width: g.cardW, height: OrchestratorCrewCardView.height)
+        y += needsH
+        for s in sections {
+            y += 28
+            s.title.frame = NSRect(x: g.x0, y: y, width: g.lane, height: 24)
+            s.none.frame = NSRect(x: g.x0, y: y + 34, width: g.lane, height: 20)
+            for (i, c) in s.cards.enumerated() {
+                let col = i % g.columns, row = i / g.columns
+                c.frame = NSRect(x: g.x0 + CGFloat(col) * (g.cardW + 12), y: y + 34 + CGFloat(row) * (OrchestratorCrewCardView.height + 12),
+                                 width: g.cardW, height: OrchestratorCrewCardView.height)
+            }
+            y += sectionHeight(s.cards.count, columns: g.columns)
         }
     }
 }
@@ -1017,11 +1146,41 @@ final class OrchestratorCrewCardView: ControlView {
 final class OrchestratorComposerView: DSView {
     private let field = TextareaView(placeholder: "Message the Orchestrator")
     private let send = ButtonView(icon: .arrowUp, size: .iconSm)
+    private let attach = ButtonView(icon: .plus, variant: .ghost, size: .iconSm)
+    private var thumbs: [OrchestratorAttachmentThumb] = []
+    /// Your message and the ready images' ids.
     var onSend: ((String) -> Void)?
-    var isEnabled = true { didSet { field.isEnabled = isEnabled; refreshSend() } }
+    /// Every edit, for the draft to persist.
+    var onDraftChange: ((String) -> Void)?
+    /// Images from the + button, a paste or a drop.
+    var onImages: (([ComposerIncomingFile]) -> Void)?
+    var onRemoveImage: ((String) -> Void)?
+    /// Where a pasted image's bytes are written before they upload.
+    var pasteDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("CandyWrapperAttachments", isDirectory: true)
+    var isEnabled = true { didSet { field.isEnabled = isEnabled; attach.isEnabled = isEnabled; refreshSend() } }
     var placeholder: String {
         get { field.placeholder }
         set { field.placeholder = newValue; field.setAccessibilityLabel(newValue) }
+    }
+    /// The images waiting to go with the next message.
+    var attachments: [ComposerAttachment] = [] {
+        didSet {
+            guard attachments != oldValue else { return }
+            syncThumbs()
+            refreshSend()
+            superview?.needsLayout = true
+        }
+    }
+
+    /// The text in the field. Setting it leaves alone a field you're typing in.
+    var draft: String {
+        get { field.text }
+        set {
+            guard field.text != newValue, !field.state.focused || field.text.isEmpty else { return }
+            field.text = newValue
+            refreshSend()
+            superview?.needsLayout = true
+        }
     }
 
     override init(frame: NSRect) {
@@ -1032,44 +1191,131 @@ final class OrchestratorComposerView: DSView {
         field.setAccessibilityLabel("Message the Orchestrator")
         addSubview(field)
         addSubview(send)
+        addSubview(attach)
         send.setAccessibilityLabel("Send")
         send.action = { [weak self] in self?.submit() }
-        field.onChange = { [weak self] _ in self?.refreshSend(); self?.superview?.needsLayout = true }
+        attach.setAccessibilityLabel("Attach images")
+        attach.toolTip = "Attach images"
+        attach.action = { [weak self] in self?.chooseImages() }
+        field.onChange = { [weak self] text in
+            self?.refreshSend()
+            self?.onDraftChange?(text)
+            self?.superview?.needsLayout = true
+        }
         field.onCommand = { [weak self] sel in
             guard sel == #selector(NSResponder.insertNewline(_:)), !(NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false),
                   !(self?.field.hasMarkedText ?? true) else { return false }
             self?.submit()
             return true
         }
+        // A pasted image or image file attaches, as in the thread composer; text pastes as text.
+        field.onPaste = { [weak self] pboard in
+            guard let self, let onImages = self.onImages else { return false }
+            let images = ComposerPasteboard.files(pboard, tempDir: self.pasteDirectory).filter(Self.isImage)
+            guard !images.isEmpty else { return false }
+            onImages(images)
+            return true
+        }
+        registerForDraggedTypes([.fileURL])
         refreshSend()
     }
 
-    private func refreshSend() { send.isEnabled = isEnabled && !field.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    static func isImage(_ file: ComposerIncomingFile) -> Bool {
+        if case .file = ComposerAttachmentRules.classify(name: file.name, mimeType: file.mimeType) { return false }
+        return true
+    }
+
+    private var uploading: Bool { attachments.contains { if case .uploading = $0.status { true } else { false } } }
+    private var hasContent: Bool {
+        !field.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || attachments.contains { $0.status == .ready }
+    }
+
+    private func refreshSend() { send.isEnabled = isEnabled && hasContent && !uploading }
 
     func focus() { window?.makeFirstResponder(field) }
 
-    private func submit() {
+    func submit() {
         let text = field.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isEnabled, !text.isEmpty else { return }
+        guard isEnabled, hasContent, !uploading else { return }
         field.text = ""
+        onDraftChange?("")
         refreshSend()
         onSend?(text)
         superview?.needsLayout = true
     }
 
+    private func chooseImages() {
+        guard let window else { return }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.image]
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK else { return }
+            MainActor.assumeIsolated { self?.onImages?(panel.urls.map { ComposerIncomingFile(url: $0) }) }
+        }
+    }
+
+    private func syncThumbs() {
+        let ids = attachments.map(\.id)
+        thumbs.removeAll { t in
+            if ids.contains(t.attachmentId) { return false }
+            t.removeFromSuperview()
+            return true
+        }
+        for a in attachments {
+            if let t = thumbs.first(where: { $0.attachmentId == a.id }) { t.attachment = a; continue }
+            let t = OrchestratorAttachmentThumb(a)
+            t.onRemove = { [weak self] in self?.onRemoveImage?(a.id) }
+            addSubview(t)
+            thumbs.append(t)
+        }
+        thumbs.sort { a, b in (ids.firstIndex(of: a.attachmentId) ?? 0) < (ids.firstIndex(of: b.attachmentId) ?? 0) }
+        needsLayout = true
+    }
+
+    // MARK: Drop
+
+    private static func droppedImages(_ info: any NSDraggingInfo) -> [ComposerIncomingFile] {
+        let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        return urls.map { ComposerIncomingFile(url: $0) }.filter(isImage)
+    }
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        isEnabled && onImages != nil && !Self.droppedImages(sender).isEmpty ? .copy : []
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        let images = Self.droppedImages(sender)
+        guard !images.isEmpty else { return false }
+        onImages?(images)
+        return true
+    }
+
+    // MARK: Layout
+
     static let minHeight: CGFloat = 40
+    static let thumbSide: CGFloat = 56
+    private var shelfHeight: CGFloat { attachments.isEmpty ? 0 : Self.thumbSide + 10 }
 
     func height(forWidth width: CGFloat) -> CGFloat {
-        field.setFrameSize(NSSize(width: width - 14 - 44, height: field.frame.height))
-        return max(Self.minHeight, min(200, field.intrinsicContentSize.height) + 8)
+        field.setFrameSize(NSSize(width: width - 40 - 44, height: field.frame.height))
+        return max(Self.minHeight, min(200, field.intrinsicContentSize.height) + 8) + shelfHeight
     }
 
     override func layout() {
         super.layout()
+        let shelf = shelfHeight
+        for (i, t) in thumbs.enumerated() {
+            t.frame = NSRect(x: 12 + CGFloat(i) * (Self.thumbSide + 8), y: 10, width: Self.thumbSide, height: Self.thumbSide)
+        }
+        let rowHeight = bounds.height - shelf
         let fh = min(200, field.intrinsicContentSize.height)
-        field.frame = NSRect(x: 14, y: (bounds.height - fh) / 2, width: bounds.width - 14 - 44, height: fh)
-        // Centred in a one-line field; with more lines it stays level with the last one, as in Messages.
-        send.frame = NSRect(x: bounds.width - 6 - 28, y: bounds.height - (Self.minHeight + 28) / 2, width: 28, height: 28)
+        field.frame = NSRect(x: 40, y: shelf + (rowHeight - fh) / 2, width: bounds.width - 40 - 44, height: fh)
+        // Centred in a one-line field; with more lines both buttons stay level with the last one, as in Messages.
+        let buttonY = bounds.height - (Self.minHeight + 28) / 2
+        attach.frame = NSRect(x: 6, y: buttonY, width: 28, height: 28)
+        send.frame = NSRect(x: bounds.width - 6 - 28, y: buttonY, width: 28, height: 28)
     }
 
     override var wantsUpdateLayer: Bool { true }
@@ -1079,5 +1325,60 @@ final class OrchestratorComposerView: DSView {
         layer?.borderColor = Themed.color(\.border).cgColor(in: self)
         layer?.backgroundColor = Themed.color(\.card, 0.85).cgColor(in: self)
         send.layer?.cornerRadius = 14
+        attach.layer?.cornerRadius = 14
+    }
+}
+
+/// A waiting image in the composer: its thumbnail, a spinner while it uploads, a mark if it failed, and a remove button.
+final class OrchestratorAttachmentThumb: DSView {
+    let attachmentId: String
+    private let image = CALayer()
+    private let remove = ButtonView(icon: .x, variant: .secondary, size: .iconXs)
+    private let spinner = SpinnerView(size: .sm)
+    private let failed = IconView(name: .circleAlert, size: 16)
+    var onRemove: (() -> Void)?
+    var attachment: ComposerAttachment { didSet { refresh() } }
+    private var load: Task<Void, Never>?
+
+    init(_ attachment: ComposerAttachment) {
+        attachmentId = attachment.id
+        self.attachment = attachment
+        super.init(frame: .zero)
+        image.masksToBounds = true
+        image.cornerRadius = 10
+        image.contentsGravity = .resizeAspectFill
+        image.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        layer?.addSublayer(image)
+        for v in [spinner, failed, remove] as [NSView] { addSubview(v) }
+        remove.setAccessibilityLabel("Remove \(attachment.name)")
+        remove.action = { [weak self] in self?.onRemove?() }
+        failed.strokeColor = Themed.color(\.destructive)
+        setAccessibilityLabel(attachment.name)
+        let url = attachment.fileURL
+        load = Task { [weak self] in
+            let cg = await ComposerImageIO.thumbnail(url, side: 112, cover: true)
+            guard !Task.isCancelled else { return }
+            self?.image.contents = cg
+        }
+        refresh()
+    }
+
+    isolated deinit { load?.cancel() }
+
+    private func refresh() {
+        let uploading: Bool = if case .uploading = attachment.status { true } else { false }
+        let didFail: Bool = if case .failed = attachment.status { true } else { false }
+        spinner.isHidden = !uploading
+        failed.isHidden = !didFail
+        failed.toolTip = if case .failed(let why) = attachment.status { why } else { nil }
+        image.opacity = uploading || didFail ? 0.55 : 1
+    }
+
+    override func layout() {
+        super.layout()
+        image.frame = bounds
+        remove.frame = NSRect(x: bounds.width - 18, y: -4, width: 22, height: 22)
+        spinner.frame = NSRect(x: (bounds.width - 16) / 2, y: (bounds.height - 16) / 2, width: 16, height: 16)
+        failed.frame = spinner.frame
     }
 }

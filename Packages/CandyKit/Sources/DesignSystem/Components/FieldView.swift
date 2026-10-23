@@ -50,6 +50,9 @@ public class FieldView: DSView {
     /// Sees every editing command first (`moveUp:`, `insertNewline:`, `deleteBackward:`, `cancelOperation:`);
     /// true means handled. Lets a field drive a list the way an autocomplete input does.
     public final var onCommand: (@MainActor (Selector) -> Bool)?
+    /// Sees a paste first, from Cmd-V or Edit > Paste; true means it took the pasteboard (an image, say) and the
+    /// text paste does not happen.
+    public final var onPaste: (@MainActor (NSPasteboard) -> Bool)?
     /// False when a parent (InputGroup) applies `opacity-64` instead.
     var dimsWhenDisabled = true
 
@@ -247,6 +250,19 @@ final class FieldEditor: NSTextView, NSTextViewDelegate {
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
         isMultiline = true
         super.init(frame: frameRect, textContainer: container)
+    }
+
+    override func paste(_ sender: Any?) {
+        if field?.onPaste?(NSPasteboard.general) == true { return }
+        super.paste(sender)
+    }
+
+    /// A plain-text view disables Paste when the pasteboard holds only an image or files; a field that takes those
+    /// (`onPaste`) keeps it on, as the thread composer's editor does.
+    override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(paste(_:)), field?.onPaste != nil, isEditable,
+           NSPasteboard.general.availableType(from: [.png, .tiff, .fileURL]) != nil { return true }
+        return super.validateUserInterfaceItem(item)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
