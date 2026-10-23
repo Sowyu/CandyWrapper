@@ -8,7 +8,7 @@ struct AppIconChoiceTests {
     @Test func autoFollowsTheSystem() {
         #expect(AppIconChoice.imageName("pink", appearance: "auto", systemDark: false) == "IconPinkLight")
         #expect(AppIconChoice.imageName("pink", appearance: "auto", systemDark: true) == "IconPinkDark")
-        #expect(AppIconChoice.dockImageName("classic", appearance: "auto", systemDark: true, styledIcons: true) == "IconClassicDark")
+        #expect(AppIconChoice.dockImageName("classic", appearance: "auto", systemDark: true) == "IconClassicDark")
     }
 
     @Test func lightAndDarkIgnoreTheSystem() {
@@ -17,10 +17,9 @@ struct AppIconChoiceTests {
     }
 
     @Test func stickerInAutoKeepsTheBundleIconOnlyForClearAndTinted() {
-        #expect(AppIconChoice.dockImageName("sticker", appearance: "auto", systemDark: true, styledIcons: true) == nil)
-        #expect(AppIconChoice.dockImageName("sticker", appearance: "auto", systemDark: true, styledIcons: false) == "IconStickerDark")
-        #expect(AppIconChoice.dockImageName("sticker", appearance: "light", systemDark: true, styledIcons: true) == "IconStickerLight")
-        #expect(AppIconChoice.dockImageName("sticker", appearance: "dark", systemDark: false, styledIcons: true) == "IconStickerDark")
+        #expect(AppIconChoice.dockImageName("sticker", appearance: "auto", systemDark: true) == nil)
+        #expect(AppIconChoice.dockImageName("sticker", appearance: "light", systemDark: true) == "IconStickerLight")
+        #expect(AppIconChoice.dockImageName("sticker", appearance: "dark", systemDark: false) == "IconStickerDark")
     }
 
     @Test func everyImageShips() throws {
