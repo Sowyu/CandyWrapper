@@ -33,21 +33,12 @@ targets:
       - path: App/Resources/Sounds
         buildPhase: resources
       # Icon Composer icons, built like T3's assets/prod/app-icon.icon. actool also writes the flat
-      # renditions and AppIcon.icns that macOS 14 and 15 show. AppIcon is Sticker; the colored stickers and
-      # AppIconClassic are the alternates Settings > Appearance > App icon puts in the Dock (AppIconChoice).
+      # renditions and AppIcon.icns that macOS 14 and 15 show. AppIcon is Sticker. The other AppIcon*.icon
+      # documents stay out of the build: scripts/icon/render-variants renders every icon's light and dark Dock
+      # image into AppIconVariants.xcassets, which Settings > Appearance > App icon uses (AppIconChoice).
       - path: App/Resources/AppIcon.icon
         buildPhase: resources
-      - path: App/Resources/AppIconClassic.icon
-        buildPhase: resources
-      - path: App/Resources/AppIconPink.icon
-        buildPhase: resources
-      - path: App/Resources/AppIconGrape.icon
-        buildPhase: resources
-      - path: App/Resources/AppIconMint.icon
-        buildPhase: resources
-      - path: App/Resources/AppIconLemon.icon
-        buildPhase: resources
-      - path: App/Resources/AppIconOrange.icon
+      - path: App/Resources/AppIconVariants.xcassets
         buildPhase: resources
     dependencies:
       - package: CandyKit
@@ -115,7 +106,6 @@ targets:
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual
         ENABLE_HARDENED_RUNTIME: YES
-        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: AppIconPink AppIconGrape AppIconMint AppIconLemon AppIconOrange AppIconClassic
         GENERATE_INFOPLIST_FILE: NO
         MARKETING_VERSION: "1.12.9"
         CURRENT_PROJECT_VERSION: "58"

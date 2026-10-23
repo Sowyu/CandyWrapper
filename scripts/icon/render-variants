@@ -1,0 +1,22 @@
+#!/bin/zsh -f
+# Renders the light and dark Dock images of every app icon from its Icon Composer document into
+# App/Resources/AppIconVariants.xcassets (Icon<Name>Light and Icon<Name>Dark), the images AppIconChoice puts in
+# the Dock. Run it after editing any App/Resources/AppIcon*.icon so the images never drift from the documents.
+set -e
+cd "$(dirname "$0")/../.."
+ictool="/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool"
+out=App/Resources/AppIconVariants.xcassets
+rm -rf $out
+mkdir -p $out
+print '{ "info" : { "author" : "xcode", "version" : 1 } }' > $out/Contents.json
+for doc name in AppIcon Sticker AppIconPink Pink AppIconGrape Grape AppIconMint Mint AppIconLemon Lemon AppIconOrange Orange AppIconClassic Classic; do
+  for rendition variant in Default Light Dark Dark; do
+    set=$out/Icon$name$variant.imageset
+    mkdir -p $set
+    # 512 px covers the largest Dock tile, 256 pt at 2x.
+    "$ictool" App/Resources/$doc.icon --export-image --output-file $set/icon.png --platform macOS \
+      --rendition $rendition --width 512 --height 512 --scale 1 > /dev/null
+    print '{ "images" : [ { "filename" : "icon.png", "idiom" : "universal" } ], "info" : { "author" : "xcode", "version" : 1 } }' > $set/Contents.json
+  done
+done
+print "rendered $(ls -d $out/*.imageset | wc -l | tr -d ' ') images into $out"

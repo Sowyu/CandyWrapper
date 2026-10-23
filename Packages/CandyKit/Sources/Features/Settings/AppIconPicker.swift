@@ -2,40 +2,78 @@ import AppKit
 import DesignSystem
 import T3Protocol
 
-/// The `appIcon` client setting: Sticker is the bundle's icon (`AppIcon.icon`); the colored stickers and Classic
-/// are alternates (`AppIconPink.icon` and so on) that actool compiles into Assets.car
-/// (`ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`).
+/// The `appIcon` and `appIconAppearance` client settings. Sticker is the bundle's icon (`AppIcon.icon`). Every
+/// icon, Sticker included, also has a light and a dark Dock image (`IconPinkLight`, `IconPinkDark` and so on in
+/// `AppIconVariants.xcassets`), which `scripts/icon/render-variants` renders from the `AppIcon*.icon` documents.
 ///
-/// macOS has no `setAlternateIconName` (AppKit 27 only offers `applicationIconImage`), so an alternate shows in
-/// the Dock only while the app runs; Finder, Launchpad and the Dock after quitting keep Sticker. An alternate is
-/// a flat bitmap there, so it doesn't follow the Dark, Clear or Tinted icon styles; Sticker, the bundle icon, does.
-/// `NSWorkspace.setIcon(_:forFile:)` would change Finder too, but it writes `Icon\r` and FinderInfo into the
-/// bundle, which fails `codesign --verify --strict`, and Sparkle's next update drops it (docs/decisions.md).
+/// macOS has no `setAlternateIconName` (AppKit 27 only offers `applicationIconImage`), so a choice shows in the
+/// Dock only while the app runs; Finder, Launchpad and the Dock after quitting keep Sticker. The images are flat
+/// bitmaps, so they don't follow the Clear or Tinted icon styles. Sticker in Auto hands the Dock the bundle icon
+/// while one of those styles is on, so it keeps following them. `NSWorkspace.setIcon(_:forFile:)` would change Finder too, but it writes `Icon\r` and FinderInfo
+/// into the bundle, which fails `codesign --verify --strict`, and Sparkle's next update drops it (docs/decisions.md).
 @MainActor
 public enum AppIconChoice {
     static let key = "appIcon"
-    /// The picker's order: value, label and the icon's name in Assets.car.
-    static let options: [(value: String, label: String, image: String)] = [
-        ("sticker", "Sticker", "AppIcon"), ("pink", "Pink", "AppIconPink"), ("grape", "Grape", "AppIconGrape"),
-        ("mint", "Mint", "AppIconMint"), ("lemon", "Lemon", "AppIconLemon"), ("orange", "Orange", "AppIconOrange"),
-        ("classic", "Classic", "AppIconClassic"),
+    static let appearanceKey = "appIconAppearance"
+    /// The picker's order: value and label. The label names the image sets.
+    static let options: [(value: String, label: String)] = [
+        ("sticker", "Sticker"), ("pink", "Pink"), ("grape", "Grape"), ("mint", "Mint"), ("lemon", "Lemon"),
+        ("orange", "Orange"), ("classic", "Classic"),
     ]
-    private static var shown = "sticker"
+    /// Posted when the system appearance changes, so the picker's thumbnails follow Auto.
+    static let systemAppearanceChanged = Notification.Name("AppIconChoice.systemAppearanceChanged")
+    /// The system's appearance, not the app's: themes force `NSApp.appearance`, and Auto follows the system.
+    static var systemDark = readSystemDark()
+    /// Clear or Tinted under System Settings > Appearance > Icon and widget style.
+    static var styledIcons = readStyledIcons()
+    private static var shown: String?
 
-    /// Applies the saved choice at launch and follows it from then on.
+    /// The image set that shows `value` in `appearance` ("auto", "light" or "dark").
+    static func imageName(_ value: String, appearance: String, systemDark: Bool) -> String {
+        let label = options.first { $0.value == value }?.label ?? "Sticker"
+        let dark = appearance == "dark" || (appearance != "light" && systemDark)
+        return "Icon\(label)\(dark ? "Dark" : "Light")"
+    }
+
+    /// The Dock's image set, or nil for the bundle icon, which the system styles itself. The default icon style
+    /// stays light in Dark mode, so only Clear and Tinted get the bundle icon.
+    static func dockImageName(_ value: String, appearance: String, systemDark: Bool, styledIcons: Bool) -> String? {
+        value == "sticker" && appearance == "auto" && styledIcons ? nil : imageName(value, appearance: appearance, systemDark: systemDark)
+    }
+
+    /// Applies the saved choice at launch and follows it and the system appearance from then on.
     public static func start() {
         ClientSettingsStore.shared.observe { keys in
-            if keys.contains(key) || keys.contains("hydration") { apply() }
+            if keys.contains(key) || keys.contains(appearanceKey) || keys.contains("hydration") { apply() }
+        }
+        // Event-driven: the distributed notification fires once per Light/Dark switch.
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+                                                            object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                systemDark = readSystemDark()
+                styledIcons = readStyledIcons()
+                NotificationCenter.default.post(name: systemAppearanceChanged, object: nil)
+                apply()
+            }
         }
         apply()
     }
 
+    private static func readSystemDark() -> Bool { UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark" }
+    // ponytail: the icon style's global default key, unset on this Mac's default style, so Clear and Tinted are
+    // unverified; check it on a Mac set to Tinted if Sticker stops following it.
+    private static func readStyledIcons() -> Bool {
+        let theme = UserDefaults.standard.string(forKey: "AppleIconAppearanceTheme") ?? ""
+        return theme.contains("Clear") || theme.contains("Tinted")
+    }
+
     private static func apply() {
-        let value = ClientSettingsStore.shared.current.string(key)
-        guard value != shown else { return }
-        shown = value
+        let settings = ClientSettingsStore.shared.current
+        let name = dockImageName(settings.string(key), appearance: settings.string(appearanceKey), systemDark: systemDark,
+                                 styledIcons: styledIcons)
+        guard name != shown else { return }
+        shown = name
         // nil gives the Dock the bundle's icon back, styled by the system again.
-        let name = options.first { $0.value == value && $0.value != "sticker" }?.image
         NSApp.applicationIconImage = name.flatMap { NSImage(named: $0) }
     }
 }
@@ -49,7 +87,27 @@ extension AppearanceSettingsView {
         picker.onPick = { [weak self] value in self?.context.writeClient?([AppIconChoice.key: .string(value)]) }
         binder.add { [weak self, weak picker] in
             guard let self else { return }
+            picker?.iconAppearance = self.client.string(AppIconChoice.appearanceKey)
             picker?.value = self.client.string(AppIconChoice.key)
+        }
+        return r
+    }
+
+    /// Auto follows the system's Light or Dark appearance, whatever the theme.
+    func appIconAppearanceRow() -> SettingsRowView {
+        let values = ["auto", "light", "dark"]
+        let toggle = ToggleGroupView(variant: .segmented, items: [("Auto", nil), ("Light", nil), ("Dark", nil)], selected: 0)
+        toggle.setAccessibilityLabel("App icon appearance")
+        let r = row(nil, title: "App icon appearance", detail: "Auto uses the dark icon while macOS is in Dark mode.", control: toggle)
+        toggle.onChange = { [weak self, weak toggle] i in
+            guard let self else { return }
+            // Clicking the pressed segment unpresses it; the choice stays.
+            guard let i else { toggle?.selectedIndex = values.firstIndex(of: self.client.string(AppIconChoice.appearanceKey)) ?? 0; return }
+            self.context.writeClient?([AppIconChoice.appearanceKey: .string(values[i])])
+        }
+        binder.add { [weak self, weak toggle] in
+            guard let self else { return }
+            toggle?.selectedIndex = values.firstIndex(of: self.client.string(AppIconChoice.appearanceKey)) ?? 0
         }
         return r
     }
@@ -58,6 +116,8 @@ extension AppearanceSettingsView {
 /// A row of icon thumbnails with labels; the chosen one has a 2px `ring`.
 final class AppIconPickerView: DSView {
     var value = "sticker" { didSet { tiles.forEach { $0.isActive = $0.value == value } } }
+    /// The thumbnails show the variant the Dock would get.
+    var iconAppearance = "auto" { didSet { if iconAppearance != oldValue { refreshImages() } } }
     var onPick: ((String) -> Void)?
     private var tiles: [Tile] = []
     private static let gap: CGFloat = 4
@@ -66,13 +126,23 @@ final class AppIconPickerView: DSView {
         super.init(frame: frameRect)
         setAccessibilityRole(.group)
         setAccessibilityLabel("App icon")
-        for (v, label, image) in AppIconChoice.options {
-            let t = Tile(value: v, label: label, image: image)
+        for (v, label) in AppIconChoice.options {
+            let t = Tile(value: v, label: label)
             t.action = { [weak self] in self?.onPick?(v) }
             tiles.append(t)
             addSubview(t)
         }
         tiles[0].isActive = true
+        refreshImages()
+        NotificationCenter.default.addObserver(self, selector: #selector(systemAppearanceChanged), name: AppIconChoice.systemAppearanceChanged, object: nil)
+    }
+
+    @objc private func systemAppearanceChanged() { if iconAppearance == "auto" { refreshImages() } }
+
+    private func refreshImages() {
+        for t in tiles {
+            t.icon.image = NSImage(named: AppIconChoice.imageName(t.value, appearance: iconAppearance, systemDark: AppIconChoice.systemDark)) ?? NSImage()
+        }
     }
 
     override var intrinsicContentSize: NSSize { NSSize(width: CGFloat(tiles.count) * (Tile.width + Self.gap) - Self.gap, height: Tile.height) }
@@ -87,12 +157,11 @@ final class AppIconPickerView: DSView {
         let value: String
         var isActive = false { didSet { restyle(); setAccessibilityValue(isActive) } }
         private let decoration = BoxDecorationLayer()
-        private let icon: ImageGlyphView
+        let icon = ImageGlyphView(image: NSImage())
         private let label = LabelView("", font: DSFont.ui(11, weight: .medium), color: Themed.color(\.mutedForeground))
 
-        init(value: String, label text: String, image: String) {
+        init(value: String, label text: String) {
             self.value = value
-            icon = ImageGlyphView(image: NSImage(named: image) ?? NSImage())
             super.init(frame: .zero)
             scalesWhenPressed = false
             transitions = .colors
