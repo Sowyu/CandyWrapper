@@ -23,7 +23,20 @@ public struct SubagentStrip: Sendable, Equatable {
         public let providerInstanceId: String
         public let model: String?
         public let canStop: Bool
+        public var startedAt: T3Timestamp? = nil
+        public var completedAt: T3Timestamp? = nil
         public var label: String { "Subagent \(number)" }
+        /// "<1m" or "3m" while it works, in whole minutes so a minute tick keeps it true; its run time once it
+        /// finished ("45s", "4m"); nil before it started or when a finished one has no end.
+        public func elapsedLabel(nowMs: Int64) -> String? {
+            guard let start = startedAt?.epochMs else { return nil }
+            if finished {
+                guard let end = completedAt?.epochMs else { return nil }
+                return ThreadRelationships.compactElapsed(seconds: Double(max(0, end - start)) / 1000)
+            }
+            let ms = max(0, nowMs - start)
+            return ms < 60_000 ? "<1m" : ThreadRelationships.compactElapsed(seconds: Double(ms / 60_000 * 60))
+        }
         public var finished: Bool { status == .done || status == .failed }
     }
 
@@ -41,6 +54,13 @@ public struct SubagentStrip: Sendable, Equatable {
     public var accessibilityLabel: String {
         parentWaiting ? "Waiting on \(activeCount) subagent\(activeCount == 1 ? "" : "s")"
             : "\(activeCount) running subagent\(activeCount == 1 ? "" : "s")"
+    }
+
+    /// Milliseconds until the first live row's time label turns over: the next whole minute since some live row
+    /// started. Nil when no live row has a start, so nothing needs a tick.
+    public static func nextTimeChangeMs(rows: [Row], nowMs: Int64) -> Int64? {
+        rows.lazy.filter { !$0.finished }.compactMap { $0.startedAt?.epochMs }
+            .map { 60_000 - max(0, nowMs - $0) % 60_000 }.min()
     }
 
     // ponytail: finished rows cap at 6 from the latest turn, older ones stay in Lineage; raise it if users want more
@@ -83,7 +103,8 @@ public struct SubagentStrip: Sendable, Equatable {
             let raw = child?.title ?? agent.title
             let row = Row(id: record.id, key: key, number: index + 1, childThreadId: agent.childThreadId,
                           title: ThreadRelationships.subagentDisplayTitle(raw), status: status, driver: agent.driver,
-                          providerInstanceId: agent.providerInstanceId, model: agent.model, canStop: canStop(agent))
+                          providerInstanceId: agent.providerInstanceId, model: agent.model, canStop: canStop(agent),
+                          startedAt: agent.startedAt, completedAt: agent.completedAt)
             if live { active.append(row) }
             else if latestRunId != nil, record.runId == latestRunId { finished.append(row) }
         }

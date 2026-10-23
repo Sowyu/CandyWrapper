@@ -130,8 +130,21 @@ struct SubagentStripRealDataTests {
         }
     }
 
-    /// The real `ThreadPanelView` in Redesign dark, the strip open, cropped to the composer's bottom 380pt.
-    static func render(_ strip: SubagentStrip, to url: URL) throws {
+    /// The redesigned panel from the real records as of the snapshot, and with eleven rows to show the height cap.
+    @Test func renderFinal() throws {
+        guard let dir = ProcessInfo.processInfo.environment["CANDY_STRIP_RENDER"] else { return }
+        let i = try Self.inputs()
+        let real = SubagentStrip.make(subagents: i.subagents, shells: i.shells, latestRunId: i.latestRunId, parent: i.parent)
+        let now = try #require(T3Timestamp("2026-10-23T12:35:00.000Z").epochMs)
+        var many = real
+        many.rows += SubagentStripPanelTests.finishedRows(10)
+        for (name, strip) in [("final-B", real), ("final-B-many", many)] {
+            try Self.render(strip, nowMs: now, to: URL(fileURLWithPath: dir).appendingPathComponent(name + ".png"))
+        }
+    }
+
+    /// The real `ThreadPanelView` in Redesign dark, the strip open, cropped to the bottom 520pt.
+    static func render(_ strip: SubagentStrip, nowMs: Int64? = nil, to url: URL) throws {
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous) }
         var input = ThemeRuntime.input
@@ -143,13 +156,23 @@ struct SubagentStripRealDataTests {
         let projection = try JSONDecoder().decode(ThreadProjection.self, from: Data(#"{"thread":{"id":"t"},"runs":[],"updatedAt":"2026-10-23T00:00:00Z"}"#.utf8))
         panel.setProjection(projection, projectTitle: "CandyWrapper", workspaceRoot: nil)
         panel.lazySubagentPill.view.configure(strip)
+        panel.lazySubagentPanel.view.nowMs = nowMs
         panel.lazySubagentPanel.view.items = strip.rows.map { .init(row: $0, modelName: ThreadRelationships.modelSlugName($0.model ?? "")) }
         panel.showsSubagentStrip = strip.isVisible
         panel.subagentStripExpanded = true
         panel.layoutSubtreeIfNeeded()
         panel.layoutSubtreeIfNeeded()
+        // The open panel stays inside the space above the pill row, and wholly inside the crop.
+        let visible: CGFloat = 520
+        if strip.isVisible {
+            let sheet = panel.lazySubagentPanel.view, pill = panel.lazySubagentPill.view
+            #expect(!sheet.isHidden)
+            #expect(sheet.frame.maxY + DitherPill.gap <= pill.frame.minY + 0.5)
+            #expect(sheet.frame.minY >= size.height - visible + 8)
+        }
         let rep = Snapshot.image(of: ThreadFidelityTests.onSurface(panel), size: size, scale: 2, dark: true)
-        let crop = try #require(rep.cgImage?.cropping(to: CGRect(x: 0, y: CGFloat(rep.pixelsHigh) - 760, width: CGFloat(rep.pixelsWide), height: 760)))
+        let crop2x = visible * 2
+        let crop = try #require(rep.cgImage?.cropping(to: CGRect(x: 0, y: CGFloat(rep.pixelsHigh) - crop2x, width: CGFloat(rep.pixelsWide), height: crop2x)))
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Snapshot.writePNG(NSBitmapImageRep(cgImage: crop), to: url)
     }
