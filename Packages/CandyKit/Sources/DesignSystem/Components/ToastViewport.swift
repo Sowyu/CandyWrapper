@@ -10,9 +10,12 @@ public final class ToastViewport: DSView {
     public static let width: CGFloat = 360
     static let inset: CGFloat = 32
 
-    public static func frame(in bounds: CGRect) -> CGRect {
-        let w = min(width, bounds.width - 2 * inset)
-        return CGRect(x: bounds.width - inset - w, y: inset + 52, width: w, height: max(0, bounds.height - inset - 52))
+    public static func frame(in bounds: CGRect, dither: Bool = false) -> CGRect {
+        // Redesign tucks the stack into the top right corner: its right edge on the tab band pill's (10pt in), just
+        // under the band (the user, 2026-10-23).
+        let right: CGFloat = dither ? 10 : inset, top: CGFloat = dither ? DitherChrome.band : inset + 52
+        let w = min(width, bounds.width - 2 * right)
+        return CGRect(x: bounds.width - right - w, y: top, width: w, height: max(0, bounds.height - top))
     }
 
     public private(set) var queue = ToastQueue()

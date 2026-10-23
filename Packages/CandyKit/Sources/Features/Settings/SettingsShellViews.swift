@@ -697,7 +697,7 @@ public final class SettingsPageView: DSView {
         ditherSubtitle.frame = NSRect(x: (x + 16).rounded(), y: 8 + 28 + 2, width: max(0, contentWidth - 32), height: 20)
         document.frame = NSRect(x: 0, y: 0, width: scroll.bounds.width, height: max(scroll.bounds.height, top + pageHeight + 48))
         page?.frame = NSRect(x: x.rounded(), y: top, width: contentWidth, height: pageHeight)
-        toasts.frame = ToastViewport.frame(in: bounds)
+        toasts.frame = ToastViewport.frame(in: bounds, dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark))
     }
 
     final class PageDocument: DSView {}

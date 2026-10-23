@@ -98,6 +98,9 @@ public final class TooltipController: NSResponder, HoverSyncClient {
     public var closeDelay: TimeInterval
     /// Built only when shown; custom cards share the tooltip lifetime and placement.
     public var content: (() -> (NSView & PopupContent))?
+    /// A card you can move onto: it waits a moment after the pointer leaves the trigger and stays open while the
+    /// pointer is over it.
+    public var interactive = false
     public static var providerTimeout: TimeInterval = 0.4
 
     private weak var view: NSView?
@@ -134,14 +137,17 @@ public final class TooltipController: NSResponder, HoverSyncClient {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
-    public override func mouseEntered(with event: NSEvent) { schedule(open: true) }
+    public override func mouseEntered(with event: NSEvent) {
+        if event.trackingArea?.userInfo?["popup"] != nil { pending?.cancel(); pending = nil; return }
+        schedule(open: true)
+    }
     public override func mouseExited(with event: NSEvent) { schedule(open: false) }
 
     /// One-shot delay, then open or close. The instant path skips both the delay and the motion.
     func schedule(open: Bool) {
         pending?.cancel()
         let instant = open && Date().timeIntervalSinceReferenceDate - Self.lastClosed < Self.providerTimeout
-        let wait = open ? (instant ? 0 : delay) : closeDelay
+        let wait = open ? (instant ? 0 : delay) : interactive ? max(closeDelay, 0.2) : closeDelay
         let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { open ? self?.show(instant: instant) : self?.hide() } }
         pending = work
         if wait == 0 { work.perform() } else { DispatchQueue.main.asyncAfter(deadline: .now() + wait, execute: work) }
@@ -160,6 +166,10 @@ public final class TooltipController: NSResponder, HoverSyncClient {
         popup?.onClose = { [weak self] in
             Self.lastClosed = Date().timeIntervalSinceReferenceDate
             self?.popup = nil
+        }
+        if interactive, let card = popup?.container {
+            card.addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                                owner: self, userInfo: ["popup": true]))
         }
     }
 
