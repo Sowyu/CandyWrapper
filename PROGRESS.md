@@ -1,5 +1,7 @@
 # Progress
 
+- [ ] Fix the first image expansion delay and misleading loading error; reuse visible pixels and downloaded source bytes (taken 2026-10-23, image-first-open).
+
 - [x] Published v1.12.11 (build 60), 2026-10-23, from `61156bdc`: image rendering, Dock icon size and native Auto styling, and recent menu-bar threads with project icons and no subagents. Signed ZIP, DMG and update feed verified. App code passed all 1,817 tests and 25 final image checks; two general thread-benchmark follow-ups remain recorded in the image review.
 
 - [x] Redesign header in the tab band (2026-10-23, header): the floating details card and its toggle are gone under Redesign. The header pill moved up into the tab band, right-aligned, and the tabs shrink and then scroll to keep the selected one clear of it. The pill holds the cost, Open in editor (icon, with the chevron or a right click picking the editor), the project scripts (Run, or + with "Add project script" in its menu), the git action with its menu (or Initialize Git), Lineage, the terminal toggle, and the diff totals before the right panel toggle; the totals open the diff. Lineage drops down a card with only the thread's pull requests, automations and lineage, shown while it has any; ⇧⌘B toggles it. The machine row's menu gained "Copy branch name"; machine, workspace and branch picking were already there. Default themes are unchanged.
