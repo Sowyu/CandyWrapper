@@ -168,7 +168,7 @@ public final class ThreadLineageController {
             panel.subagentStripExpanded = false
         }
         let me = local.first { $0.id == threadId.localId }
-        let strip = SubagentStrip.make(subagents: projection.subagents, shells: local, latestRunId: projection.runs.max { $0.ordinal < $1.ordinal }?.id, parent: me)
+        let strip = SubagentStrip.make(subagents: projection.subagents, shells: local, latestTurn: SubagentStrip.latestTurn(projection.runs), parent: me)
         panel.showsSubagentStrip = strip.isVisible
         guard strip.isVisible else {
             stripAutoOpened = nil

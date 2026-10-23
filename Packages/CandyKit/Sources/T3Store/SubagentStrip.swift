@@ -67,10 +67,24 @@ public struct SubagentStrip: Sendable, Equatable {
     public static let finishedCap = 6
     private static let active: Set<String> = ["pending", "running", "waiting"]
 
+    /// The runs of the thread's latest turn, whose finished subagents stay listed: the newest run that started and
+    /// every run that shares its work start. A wake run for a finished subagent carries the turn's start as
+    /// `workStartedAt` (wakeWorkStartedAt, Orchestrator.ts:410-430; orchestrationV2RunWorkStartedAt,
+    /// orchestrationV2.ts:571-575), and one T3 queues and cancels before it starts has no start, so neither one ends
+    /// the turn. A new user turn has no `workStartedAt` and starts a new one.
+    public static func latestTurn(_ runs: [Run]) -> Set<RunId> {
+        func work(_ run: Run) -> Int64? { (run.workStartedAt ?? run.startedAt ?? run.requestedAt).epochMs }
+        let started = runs.filter { $0.startedAt != nil }
+        guard let newest = started.max(by: { $0.ordinal < $1.ordinal }) ?? runs.max(by: { $0.ordinal < $1.ordinal })
+        else { return [] }
+        guard let turn = work(newest) else { return [newest.id] }
+        return Set(started.filter { work($0) == turn }.map(\.id)).union([newest.id])
+    }
+
     /// `subagents` is the projection's records in creation order; `shells` the environment's shells with local ids;
-    /// `latestRunId` the thread's newest run, whose finished subagents stay listed. A child needs input when its own run
-    /// waits on the user or a subagent under it does (`pendingSubagentRequestsByThread`, threadShell.ts:48-89).
-    public static func make(subagents: [JSONValue], shells: [ThreadShell], latestRunId: RunId?, parent: ThreadShell?) -> SubagentStrip {
+    /// `latestTurn` the runs of the thread's latest turn, whose finished subagents stay listed. A child needs input when
+    /// its own run waits on the user or a subagent under it does (`pendingSubagentRequestsByThread`, threadShell.ts:48-89).
+    public static func make(subagents: [JSONValue], shells: [ThreadShell], latestTurn: Set<RunId>, parent: ThreadShell?) -> SubagentStrip {
         guard !subagents.isEmpty else { return SubagentStrip() }
         let children = Dictionary(shells.filter { $0.lineage.relationshipToParent == .subagent }.map { ($0.id, $0) },
                                   uniquingKeysWith: { a, _ in a })
@@ -106,7 +120,7 @@ public struct SubagentStrip: Sendable, Equatable {
                           providerInstanceId: agent.providerInstanceId, model: agent.model, canStop: canStop(agent),
                           startedAt: agent.startedAt, completedAt: agent.completedAt)
             if live { active.append(row) }
-            else if latestRunId != nil, record.runId == latestRunId { finished.append(row) }
+            else if let run = record.runId, latestTurn.contains(run) { finished.append(row) }
         }
         var strip = SubagentStrip()
         strip.rows = active.reversed() + finished.reversed().prefix(finishedCap)

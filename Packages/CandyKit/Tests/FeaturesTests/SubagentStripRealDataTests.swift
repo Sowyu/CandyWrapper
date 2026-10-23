@@ -95,7 +95,7 @@ struct SubagentStripRealDataTests {
 
     @Test func oneRowForTheGalleryWithItsLatestTask() throws {
         let i = try Self.inputs()
-        let strip = SubagentStrip.make(subagents: i.subagents, shells: i.shells, latestRunId: i.latestRunId, parent: i.parent)
+        let strip = SubagentStrip.make(subagents: i.subagents, shells: i.shells, latestTurn: [i.latestRunId], parent: i.parent)
         // (a) The gallery agent is one row, numbered by its first task, showing its running 5th task.
         let gallery = strip.rows.filter { $0.title == "Redesign: agent image gallery" }
         #expect(gallery.count == 1)
@@ -115,7 +115,7 @@ struct SubagentStripRealDataTests {
         // settled task follows that run, but only as one row, and the other settled tasks never add rows.
         let i = try Self.inputs()
         let settled = i.subagents.filter { $0["status"]?.stringValue != "running" }
-        let strip = SubagentStrip.make(subagents: settled, shells: i.shells, latestRunId: i.latestRunId, parent: i.parent)
+        let strip = SubagentStrip.make(subagents: settled, shells: i.shells, latestTurn: [i.latestRunId], parent: i.parent)
         #expect(strip.rows.filter { $0.title == "Redesign: agent image gallery" }.count <= 1)
         #expect(strip.activeCount <= 1)
     }
@@ -123,7 +123,7 @@ struct SubagentStripRealDataTests {
     @Test func renderBeforeAndAfter() throws {
         guard let dir = ProcessInfo.processInfo.environment["CANDY_STRIP_RENDER"] else { return }
         let i = try Self.inputs()
-        let after = SubagentStrip.make(subagents: i.subagents, shells: i.shells, latestRunId: i.latestRunId, parent: i.parent)
+        let after = SubagentStrip.make(subagents: i.subagents, shells: i.shells, latestTurn: [i.latestRunId], parent: i.parent)
         let before = Self.legacy(subagents: i.subagents, shells: i.shells, latestRunId: i.latestRunId, parent: i.parent)
         for (name, strip) in [("real-before", before), ("real-after", after)] {
             try Self.render(strip, to: URL(fileURLWithPath: dir).appendingPathComponent(name + ".png"))
@@ -134,7 +134,7 @@ struct SubagentStripRealDataTests {
     @Test func renderFinal() throws {
         guard let dir = ProcessInfo.processInfo.environment["CANDY_STRIP_RENDER"] else { return }
         let i = try Self.inputs()
-        let real = SubagentStrip.make(subagents: i.subagents, shells: i.shells, latestRunId: i.latestRunId, parent: i.parent)
+        let real = SubagentStrip.make(subagents: i.subagents, shells: i.shells, latestTurn: [i.latestRunId], parent: i.parent)
         let now = try #require(T3Timestamp("2026-10-23T12:35:00.000Z").epochMs)
         var many = real
         many.rows += SubagentStripPanelTests.finishedRows(10)
