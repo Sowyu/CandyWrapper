@@ -21,6 +21,8 @@ final class OrchestratorRemote {
     var rows: (String) -> [OrchestratorModelRow] = { _ in [] }
     /// Sends the results to the Orchestrator.
     var reply: (String) -> Void = { _ in }
+    /// Whether this Mac relays now rather than the Android app (`OrchestratorHandoff`).
+    var mayRelay: () async -> Bool = { true }
 
     init(environments: Environments, threads: ThreadController) {
         self.environments = environments
@@ -53,13 +55,17 @@ final class OrchestratorRemote {
     }
 
     private func runCalls(env: String, thread: ThreadId, run: RunId?) async {
+        // As the Android app does: wait, so a "Result:" from it can land, and run only calls nobody answered yet.
+        try? await Task.sleep(for: OrchestratorHandoff.callDelay)
+        guard await mayRelay() else { return }
         let projection: ThreadProjection
         do {
             let json = try await environments.request(env, "orchestration.getThreadProjection", .object(["threadId": .string(thread.localId.rawValue)]))
             projection = try json.decode(as: ThreadProjection.self)
         } catch { return }
-        let replies = projection.messages.filter { $0.role == "assistant" && !$0.streaming && (run == nil || $0.runId == run) && !handled.contains($0.id.rawValue) }
-        handled.formUnion(replies.map(\.id.rawValue))
+        let mine = projection.messages.filter { $0.role == "assistant" && !$0.streaming && (run == nil || $0.runId == run) }
+        let replies = OrchestratorHandoff.unansweredReplies(projection.messages, run: run, handled: handled)
+        handled.formUnion(mine.map(\.id.rawValue))
         let calls = replies.sorted { ($0.createdAt.epochMs ?? 0) < ($1.createdAt.epochMs ?? 0) }.flatMap { OrchestratorReply.parse($0.text).calls }
         guard !calls.isEmpty, let text = await OrchestratorRelay(host: host()).run(calls) else { return }
         reply(text)

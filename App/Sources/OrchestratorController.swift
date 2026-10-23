@@ -38,6 +38,11 @@ final class OrchestratorController {
     private var memoryUndo: [String: [(note: String, previous: String)]] = [:]
     private var undone: Set<String> = []
     private var scheduleSynced: Set<String> = []
+    /// Whether this Mac or the Android app relays for the Orchestrator (`OrchestratorHandoff`).
+    private var handoff = OrchestratorHandoff()
+    /// Machines already searched this session for an Orchestrator thread to adopt.
+    private var adoptionTried: Set<String> = []
+    private var wakeObserver: NSObjectProtocol?
     /// Images waiting to go with your next message, kept while you leave the pane.
     // ponytail: kept in memory only; a relaunch drops unsent images, persist them like the thread composer's if that bites
     private var pendingImages: [ComposerAttachment] = []
@@ -62,6 +67,11 @@ final class OrchestratorController {
         remote.homeId = { [weak self] in self?.machineId }
         remote.orchestrator = { [weak self] in self?.threadId }
         remote.rows = { [weak self] in self?.availableRows($0) ?? [] }
+        remote.mayRelay = { [weak self] in await self?.mayRelay() ?? false }
+        // Asleep, the Mac can't tell who held the task meanwhile: it takes it back when it wakes.
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.didWake() }
+        }
         remote.reply = { [weak self] text in
             guard let self, self.active, let env = self.machineId, let id = self.threadId else { return }
             self.dispatch(text, to: id, env: env)
@@ -112,6 +122,8 @@ final class OrchestratorController {
         batch.reset()
         baselines = [:]
         remote.reset()
+        handoff.forget()
+        adoptionTried = []
         feed?.stop()
         feed = nil
         projection = nil
@@ -125,6 +137,7 @@ final class OrchestratorController {
         // At launch the schedule turns off once its machine's shell has the thread.
         syncSchedules(enabled: false)
         forgetVanishedThread()
+        adoptIfNeeded()
         remote.orchestratorChanged(orchestratorShell)
         relay()
         refreshViews()
@@ -263,6 +276,15 @@ final class OrchestratorController {
             return
         }
         starting = true
+        // An Orchestrator thread already on the machine, like the one the Android app started, is adopted instead.
+        Task { [weak self] in
+            guard let self else { return }
+            if await self.adopt(env) { self.starting = false; self.open(); return }
+            self.create(env, session: session, project: project, selection: selection)
+        }
+    }
+
+    private func create(_ env: String, session: ShellSession, project: ProjectShell, selection: ModelSelection) {
         let brief = renderBrief(env)
         let local = UUID().uuidString.lowercased()
         let runtime = threads.composer.config(env)?.settings.defaultRuntimeMode.rawValue ?? "full-access"
@@ -533,6 +555,8 @@ final class OrchestratorController {
                                              relayedAt: { config.relayedAt[$0.rawValue] },
                                              machine: env == home ? nil : environments.label(env) ?? env)
         }
+        // Until this Mac holds the "while closed" task, the Android app may be relaying: what happened meanwhile is its.
+        if handoff.ownStamp == nil, machine?.scheduledTaskId != nil { return }
         guard let deadline = batch.add(events, now: Date()) else { return }
         let work = DispatchWorkItem { [weak self] in self?.flush() }
         flushWork = work
@@ -546,7 +570,77 @@ final class OrchestratorController {
         })
         guard active, let env = machineId, let id = threadId,
               let text = batch.flush(now: Date().addingTimeInterval(0.001), keep: { live.contains($0.threadId) }) else { return }
-        dispatch(text, to: id, env: env)
+        Task { [weak self] in
+            guard let self, await self.mayRelay() else { return }
+            self.dispatch(text, to: id, env: env)
+        }
+    }
+
+    // MARK: Handoff with the Android app
+
+    /// Before relaying: whether this Mac still holds the "while closed" task. When someone else wrote it since (the
+    /// Android app taking over), or the Mac hasn't since it opened or woke, the Mac writes it back off, which tells the
+    /// phone to stop, and drops what it gathered.
+    private func mayRelay() async -> Bool {
+        guard active, let env = machineId, let machine = config.machines[env] else { return false }
+        let task = await scheduledTask(env, id: machine.scheduledTaskId)
+        guard handoff.verdict(task: task) == .resync else { return true }
+        await syncSchedule(env, machine, enabled: false)
+        return false
+    }
+
+    /// The machine's "while closed" task as the server has it now; nil when there is none or the server can't say.
+    private func scheduledTask(_ env: String, id: String?) async -> ScheduledTask? {
+        guard let id, let session = environments.session(env),
+              let json = try? await session.supervisor.request("scheduledTasks.list", payload: .object([:])) else { return nil }
+        return ScheduledTask.list(json).first { $0.id == id }
+    }
+
+    /// The Mac woke: it can't know who held the task while it slept, so it drops what it gathered and takes it back.
+    private func didWake() {
+        guard active else { return }
+        handoff.forget()
+        flushWork?.cancel()
+        flushWork = nil
+        batch.reset()
+        baselines = [:]
+        scheduleSynced.removeAll()
+        syncSchedules(enabled: false)
+    }
+
+    private func adoptIfNeeded() {
+        guard let env = machineId, machine == nil, !starting, !adoptionTried.contains(env), environments.session(env) != nil else { return }
+        adoptionTried.insert(env)
+        Task { [weak self] in _ = await self?.adopt(env) }
+    }
+
+    /// Finds an Orchestrator thread already on the machine by the "# Orchestrator brief" its first message starts with,
+    /// newest first, and makes it this Mac's, with its "while closed" task when it has one. The next message you send
+    /// carries this Mac's brief.
+    private func adopt(_ env: String) async -> Bool {
+        guard let session = environments.session(env), let snapshot = shell(env),
+              let json = try? await session.supervisor.request("orchestration.searchThreads", payload: .object(["query": .string("Orchestrator brief")])),
+              let matches = (try? json.decode(as: ThreadSearchResult.self))?.matches else { return false }
+        let live = Dictionary(snapshot.threads.filter { $0.archivedAt == nil && $0.deletedAt == nil && $0.lineage.parentThreadId == nil }
+            .map { ($0.id.rawValue, $0) }, uniquingKeysWith: { a, _ in a })
+        var seen = Set<String>()
+        let candidates = matches.filter(\.isUser).map(\.threadId.rawValue).filter { live[$0] != nil && seen.insert($0).inserted }
+            .sorted { (live[$0]?.updatedAt.epochMs ?? 0) > (live[$1]?.updatedAt.epochMs ?? 0) }
+        // ponytail: reads the 5 newest matches; widen it if a machine keeps more threads that quote a brief
+        for local in candidates.prefix(5) {
+            guard let reply = try? await session.supervisor.request("orchestration.getThreadProjection", payload: .object(["threadId": .string(local)])),
+                  let projection = try? reply.decode(as: ThreadProjection.self) else { continue }
+            let first = projection.messages.filter { $0.role == "user" }.min { ($0.createdAt.epochMs ?? 0) < ($1.createdAt.epochMs ?? 0) }
+            guard OrchestratorHandoff.isOrchestratorThread(firstUserMessage: first?.text) else { continue }
+            guard config.machines[env] == nil else { return true }
+            let tasks = (try? await session.supervisor.request("scheduledTasks.list", payload: .object([:]))).map(ScheduledTask.list) ?? []
+            let check = tasks.first { $0.threadId == local && $0.prompt.hasPrefix("Scheduled check:") }
+            store.update { $0.machines[env] = OrchestratorMachine(threadId: local, briefDigest: "", scheduledTaskId: check?.id) }
+            scheduleSynced.remove(env)
+            syncSchedules(enabled: false)
+            return true
+        }
+        return false
     }
 
     // MARK: Needs you and the crew
@@ -678,7 +772,11 @@ final class OrchestratorController {
               let projectId = shell(env)?.threads.first(where: { $0.id.rawValue == machine.threadId })?.projectId else { return }
         guard let minutes = config.closedCheckMinutes else {
             if let id = machine.scheduledTaskId {
-                _ = try? await session.supervisor.request("scheduledTasks.setEnabled", payload: .object(["id": .string(id), "enabled": .bool(false)]))
+                if let result = try? await session.supervisor.request("scheduledTasks.setEnabled", payload: .object(["id": .string(id), "enabled": .bool(false)])) {
+                    handoff.wrote(updatedAt: result["task"]?["updatedAt"]?.stringValue)
+                } else {
+                    scheduleSynced.remove(env)
+                }
             }
             return
         }
@@ -696,6 +794,8 @@ final class OrchestratorController {
             if let id = result["task"]?["id"]?.stringValue, id != machine.scheduledTaskId {
                 store.update { $0.machines[env]?.scheduledTaskId = id }
             }
+            // Off is this Mac holding the task; on hands it to the schedule and the Android app.
+            if enabled { handoff.forget() } else { handoff.wrote(updatedAt: result["task"]?["updatedAt"]?.stringValue) }
         } catch {
             // A task removed elsewhere: make a new one next time.
             if machine.scheduledTaskId != nil { store.update { $0.machines[env]?.scheduledTaskId = nil } }

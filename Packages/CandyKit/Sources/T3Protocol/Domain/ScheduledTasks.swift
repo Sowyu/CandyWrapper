@@ -108,17 +108,20 @@ public struct ScheduledTask: Equatable, Sendable {
     public var lastRunStatus: String
     public var lastRunError: String?
     public var runCount: Int
+    /// When the server last changed the task; the Orchestrator's handoff reads it (`ScheduledTask.updatedAt`).
+    public var updatedAt: String?
     public var webhook: ScheduledTaskWebhookEndpoint?
 
     public init(id: String, title: String, prompt: String, enabled: Bool = true, schedule: ScheduledTaskSchedule, projectId: String,
                 threadId: String? = nil, workspaceStrategy: JSONValue = .object(["type": .string("root")]),
                 modelSelection: JSONValue = .object([:]), runtimeMode: String = "full-access", interactionMode: String = "default",
                 nextRunAt: String? = nil, lastRunAt: String? = nil, lastRunStatus: String = "never", lastRunError: String? = nil,
-                runCount: Int = 0, webhook: ScheduledTaskWebhookEndpoint? = nil) {
+                runCount: Int = 0, webhook: ScheduledTaskWebhookEndpoint? = nil, updatedAt: String? = nil) {
         self.id = id; self.title = title; self.prompt = prompt; self.enabled = enabled; self.schedule = schedule
         self.projectId = projectId; self.threadId = threadId; self.workspaceStrategy = workspaceStrategy; self.modelSelection = modelSelection
         self.runtimeMode = runtimeMode; self.interactionMode = interactionMode; self.nextRunAt = nextRunAt; self.lastRunAt = lastRunAt
         self.lastRunStatus = lastRunStatus; self.lastRunError = lastRunError; self.runCount = runCount; self.webhook = webhook
+        self.updatedAt = updatedAt
     }
 
     public init?(json: JSONValue) {
@@ -132,7 +135,7 @@ public struct ScheduledTask: Equatable, Sendable {
                   lastRunError: json["lastRunError"]?.stringValue, runCount: json["runCount"]?.intValue ?? 0,
                   webhook: json["webhook"]?["path"]?.stringValue.map {
                       ScheduledTaskWebhookEndpoint(path: $0, url: json["webhook"]?["url"]?.stringValue, hasSecret: json["webhook"]?["hasSecret"]?.boolValue == true)
-                  })
+                  }, updatedAt: json["updatedAt"]?.stringValue)
     }
 
     /// `ScheduledTaskListResult.tasks`: entries this build cannot decode are skipped (`ForwardCompatibleArray`).
