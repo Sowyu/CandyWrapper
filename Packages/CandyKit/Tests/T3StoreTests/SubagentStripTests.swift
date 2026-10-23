@@ -103,4 +103,22 @@ import Testing
         let done = SubagentStrip.make(subagents: [agent("a", child: nil, status: "completed")], shells: [], latestRunId: "run-2", parent: nil)
         #expect(done.rows.first?.canStop == false)
     }
+
+    @Test func oneRowPerChildThreadNumberedByFirstAppearance() {
+        // c1 got a second task (a follow-up turn); both say running, the later one wins and keeps number 1.
+        let records = [agent("a", child: "c1", status: "completed", run: "run-1"), agent("b", child: "c2", status: "running"),
+                       agent("c", child: "c1", status: "running"), agent("d", child: nil, status: "running")]
+        let strip = SubagentStrip.make(subagents: records, shells: [child("c1"), child("c2")], latestRunId: "run-2", parent: nil)
+        #expect(strip.rows.map(\.label) == ["Subagent 3", "Subagent 2", "Subagent 1"])
+        #expect(strip.rows.map(\.id) == ["d", "b", "c"])
+        #expect(strip.rows.map(\.key) == ["agent:d", "thread:c2", "thread:c1"])
+        #expect(strip.activeCount == 3)
+    }
+
+    @Test func aLiveTaskOutranksALaterSettledOne() {
+        let records = [agent("a", child: "c1", status: "running"), agent("b", child: "c1", status: "completed")]
+        let strip = SubagentStrip.make(subagents: records, shells: [child("c1")], latestRunId: "run-2", parent: nil)
+        #expect(strip.rows.map(\.id) == ["a"])
+        #expect(strip.rows.first?.status == .running)
+    }
 }
