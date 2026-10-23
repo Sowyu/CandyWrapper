@@ -9,6 +9,10 @@ public final class TimelineParentLinkView: DSView {
 
     public var parentTitle = "" { didSet { detail.text = "·\u{00a0}" + parentTitle; needsLayout = true } }
     public var onOpen: (@MainActor () -> Void)? { didSet { pill.action = onOpen } }
+    /// Redesign only: a delegated task (another agent started it and you can message it) reads "Task from", the
+    /// provider's own subagents keep "Subagent of" and their status bar instead of a composer.
+    public var delegated = false { didSet { if delegated != oldValue { updateKind() } } }
+    private var tooltip: TooltipController?
 
     private let leftRule = CALayer(), rightRule = CALayer()
     private let pill = TimelineParentLinkPill()
@@ -28,7 +32,15 @@ public final class TimelineParentLinkView: DSView {
         addSubview(pill)
         for v in [icon, label, detail] as [NSView] { pill.addSubview(v) }
         pill.setAccessibilityLabel("Open parent thread")
-        _ = TooltipController.attach(to: pill, text: "Open parent thread", placement: PopupPlacement(side: .top, align: .center, sideOffset: 4))
+        tooltip = TooltipController.attach(to: pill, text: "Open parent thread", placement: PopupPlacement(side: .top, align: .center, sideOffset: 4))
+    }
+
+    private func updateKind() {
+        let task = delegated && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        label.text = task ? "Task from" : "Subagent of"
+        tooltip?.text = task ? "Another agent started this task. You can message it below to steer it. Click to open the parent."
+            : "Open parent thread"
+        needsLayout = true
     }
 
     public override func layout() {
@@ -59,7 +71,7 @@ public final class TimelineParentLinkView: DSView {
         detail.color = muted
     }
 
-    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateKind(); needsDisplay = true }
 }
 
 /// The divider's button: `rounded-full border border-border/70 bg-background`, `hover:bg-muted`.

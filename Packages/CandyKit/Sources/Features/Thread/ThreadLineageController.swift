@@ -120,6 +120,7 @@ public final class ThreadLineageController {
         let thread = projection.thread
         if let link = ThreadRelationships.parentLink(thread.lineage, threads: local) {
             parentLink.parentTitle = link.title
+            parentLink.delegated = !thread.isProviderNativeSubagent
             parentLink.onOpen = { [weak self] in self?.open(link.threadId) }
             panel.timeline.setHeader(parentLink, height: TimelineParentLinkView.height)
             panel.header.parentThreadTitle = link.title
