@@ -11,6 +11,8 @@ public enum OrchestratorChatItem: Equatable, Sendable {
     case brief(id: String, text: String, updated: Bool)
     /// A small centred line: an event, the tools a turn used, a scheduled check. Clicking it opens `threadId`.
     case line(id: String, text: String, threadId: String?)
+    /// An image you sent, drawn on its own like a photo in Messages.
+    case image(id: String, attachmentId: String, name: String)
     /// A chat bubble; `first` and `last` place it in its sender's stack, and only the last gets a tail.
     case bubble(id: String, fromUser: Bool, text: String, first: Bool, last: Bool)
     case plan(id: String, steps: [OrchestratorReply.PlanStep])
@@ -24,7 +26,7 @@ public enum OrchestratorChatItem: Equatable, Sendable {
     public var id: String {
         switch self {
         case .time(let id, _), .brief(let id, _, _), .line(let id, _, _), .bubble(let id, _, _, _, _), .plan(let id, _),
-             .memory(let id, _, _), .read(let id): id
+             .memory(let id, _, _), .read(let id), .image(let id, _, _): id
         case .typing: "typing"
         }
     }
@@ -40,6 +42,7 @@ public enum OrchestratorChat {
         var lastMs: Int64?
         var toolLinesShown = Set<String>()
         let tools = toolSummaries(turnItems)
+        let images = sentImages(turnItems)
         let sorted = messages.sorted { ($0.createdAt.epochMs ?? 0, $0.id.rawValue) < ($1.createdAt.epochMs ?? 0, $1.id.rawValue) }
         var lastUser: (index: Int, ms: Int64)?
         var lastAssistantMs: Int64?
@@ -52,7 +55,12 @@ public enum OrchestratorChat {
             case "user":
                 let parts = OrchestratorBrief.split(m.text)
                 if let brief = parts.brief { out.append(.brief(id: "brief-\(mid)", text: brief, updated: parts.updated)) }
-                let text = parts.message.trimmingCharacters(in: .whitespacesAndNewlines)
+                var text = parts.message.trimmingCharacters(in: .whitespacesAndNewlines)
+                let sent = images[mid] ?? []
+                for (i, image) in sent.enumerated() { out.append(.image(id: "image-\(mid)-\(i)", attachmentId: image.id, name: image.name)) }
+                // T3's stand-in text for a message of images only stays out of the chat.
+                if !sent.isEmpty, text == ComposerAttachmentRules.attachmentOnlyPrompt { text = "" }
+                if text.isEmpty, !sent.isEmpty { lastUser = (out.count - 1, ms) }
                 guard !text.isEmpty else { continue }
                 if OrchestratorEventBatch.isEventMessage(text) {
                     for (i, line) in text.split(separator: "\n").enumerated() {
@@ -88,6 +96,20 @@ public enum OrchestratorChat {
         }
         if running { out.append(.typing) }
         return stacked(out)
+    }
+
+    /// The images each of your messages carried, from its turn item (`attachments` of type image).
+    static func sentImages(_ items: [TurnItem]) -> [String: [(id: String, name: String)]] {
+        var out: [String: [(id: String, name: String)]] = [:]
+        for item in items where item.type == .userMessage {
+            guard let message = item.raw["messageId"]?.stringValue, let list = item.raw["attachments"]?.arrayValue else { continue }
+            let images = list.compactMap { a -> (id: String, name: String)? in
+                guard a["type"]?.stringValue == "image", let id = a["id"]?.stringValue else { return nil }
+                return (id, a["name"]?.stringValue ?? "image")
+            }
+            if !images.isEmpty { out[message] = images }
+        }
+        return out
     }
 
     /// Sets each bubble's place in its stack: bubbles in a row from one sender form a stack.
