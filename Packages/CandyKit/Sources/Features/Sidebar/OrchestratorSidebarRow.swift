@@ -82,12 +82,21 @@ final class OrchestratorSidebarRowView: ControlView {
 
     // MARK: Renaming
 
+    /// The press that started a rename: its release must not open the pane, which would take the focus back.
+    private var renamePress = false
+
     override func mouseDown(with event: NSEvent) {
         if event.clickCount == 2, title.frame.insetBy(dx: -4, dy: -2).contains(convert(event.locationInWindow, from: nil)) {
+            renamePress = true
             beginRename()
             return
         }
         super.mouseDown(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if renamePress { renamePress = false; return }
+        super.mouseUp(with: event)
     }
 
     func beginRename() {

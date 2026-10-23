@@ -31,6 +31,8 @@ final class DitherTabsController {
         self.newThread = newThread
         sidebar.onListChange = { [weak self] in self?.sync() }
         history.onChange = { [weak self] in self?.sync() }
+        // The Orchestrator's tab shows its name, which a rename changes.
+        OrchestratorStore.shared.observe { [weak self] in self?.sync() }
         strip.onSelect = { [weak self] key in self?.select(key) }
         strip.onClose = { [weak self] key in self?.close(key) }
         strip.onMove = { [weak self] key, index in
