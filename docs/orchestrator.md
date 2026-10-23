@@ -28,7 +28,7 @@ Each machine CandyWrapper connects to, like this Mac or a remote one through T3 
 - You pick Orchestrator's machine when you turn it on, from the same machine list as the composer's Run on. You can change it later, which starts a new Orchestrator thread there with the same notebook.
 - Orchestrator runs on that machine's server, so it keeps working while CandyWrapper is closed, as long as that machine is on.
 - Orchestrator's crew threads run on the same machine. T3's thread tools act on the server they run on, and `t3_thread_launch` takes no machine (`orchestratorMcp.ts`), so a Orchestrator can't start or prompt threads on another machine.
-- The Orchestrator row and chat show the machine, like "Orchestrator · mac-mini".
+- The Orchestrator row shows its name on the first line and its machine on the second, with the same machine glyph and label as the composer's machine row, like "[machine icon] mac-mini".
 
 ## Every thread is under the Orchestrator
 
@@ -89,6 +89,7 @@ When the toggle is on, Settings gets its own Orchestrator tab. It disappears aga
 
 The tab holds:
 
+- The Orchestrator's name, "Orchestrator" by default. An empty name falls back to "Orchestrator".
 - The system prompt editor, with Reset to default.
 - The machine the Orchestrator runs on.
 - The worker limit, 4 by default.
@@ -125,6 +126,7 @@ You write the prompt in Settings. CandyWrapper ships the default below, prefille
 - CandyWrapper stores it in its own settings, not in T3's `settings.json`, so the server never sees an unknown key.
 - Since T3 has no system prompt, CandyWrapper sends the prompt as the first message of the Orchestrator thread. Redesign draws that message as a collapsed "Brief" card instead of a chat bubble.
 - If you edit the prompt while a Orchestrator exists, CandyWrapper sends the new version as an "Updated brief" message on your next send. Old threads keep their history.
+- A rename goes out as an "Updated brief" with your next message, like any other change to the brief.
 - The prompt can use `{{name}}`, `{{machine}}`, `{{projects}}`, `{{bots}}`, `{{models}}` and `{{crewLimit}}`. CandyWrapper fills them in before sending. `{{models}}` is the table from the Models list in the Orchestrator settings tab.
 
 ### Default prompt
@@ -300,7 +302,7 @@ Grok Bot reads like team chat. Bots sit in the left sidebar, each with its own c
 
 Only the Orchestrator and the standing bots get bot faces. Threads are never drawn as bots. They keep their normal sidebar rows, icons and status, exactly as they look with the toggle off.
 
-1. The Orchestrator row is pinned at the top of the Redesign sidebar, above the thread list, with its bot, its machine and a needs-you count. Clicking it opens the Orchestrator's chat.
+1. The Orchestrator row is pinned at the top of the Redesign sidebar, above the thread list, with its bot and a needs-you count. Its first line is just its name. Its second line is the machine it runs on, with the composer machine row's glyph and label. Clicking it opens the Orchestrator's chat, and double-clicking its name renames it inline.
 2. In phase 2, a "Bots" section sits under it, with one row per standing bot, like OpSec. Each row shows the bot, its name, its last line and a status marker.
 3. The markers are "needs you" for a pending approval or question, "unread" for new results, "working" while a turn runs, and none when idle.
 4. The thread list below stays T3's own. The Orchestrator adds nothing to thread rows, not even a badge.
@@ -366,5 +368,5 @@ Start each phase only when the one before it is done: tests and perf-review pass
 ## Open questions
 
 - Should Orchestrator wait for "go" by default, as in the default prompt, or act right away?
-- Should Orchestrator's name and avatar be editable, or fixed as "Orchestrator"?
+- Should Orchestrator's avatar be editable? Its name is (2026-10-23): the settings tab's Name field, or a double click on the row's name.
 - What are the default models? The draft uses Sonnet 5.5 for research and Opus 5.5 for judgement, both at medium.

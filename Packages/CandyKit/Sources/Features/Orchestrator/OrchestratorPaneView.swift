@@ -121,16 +121,19 @@ public final class OrchestratorPaneView: DSView {
         state = next
         headerBot.identity = next.bot
         headerBot.mood = !next.needs.isEmpty ? .needsYou : next.working ? .working : .idle
-        title.text = "\(next.name) · \(next.machine)"
-        subtitle.text = !next.started ? "Not started" : !next.connected ? "Offline" : next.working ? "Working"
-            : next.needs.isEmpty ? "Watching every thread on \(next.machine)" : "\(next.needs.count) waiting on you"
+        title.text = next.name
+        let status = !next.started ? "Not started" : !next.connected ? "Offline" : next.working ? "Working"
+            : next.needs.isEmpty ? nil : "\(next.needs.count) waiting on you"
+        subtitle.text = [next.machine, status].compactMap { $0 }.joined(separator: " · ")
+        composer.placeholder = "Message \(next.name)"
         openThread.isHidden = !next.started
         start.isHidden = next.started
         composer.isHidden = !next.started
         composer.isEnabled = next.connected
         if old.items != next.items || old.undoable != next.undoable || old.undone != next.undone || old.needs != next.needs
-            || old.environmentId != next.environmentId {
-            chat.set(items: next.items, needs: next.needs, undoable: next.undoable, undone: next.undone, environmentId: next.environmentId)
+            || old.environmentId != next.environmentId || old.name != next.name {
+            chat.set(items: next.items, needs: next.needs, undoable: next.undoable, undone: next.undone, environmentId: next.environmentId,
+                     name: next.name)
         }
         if old.crew != next.crew || old.needs != next.needs { overview.set(crew: next.crew, needs: next.needs) }
         needsLayout = true
@@ -207,10 +210,13 @@ final class OrchestratorChatView: DSView {
     private var needsCard: OrchestratorNeedsCard?
     private var needs: [OrchestratorNeed] = []
     private var avatars: [String: BotView] = [:]
+    /// Its name over the first bubble of each of its stacks, as a group chat names the sender.
+    private var names: [String: LabelView] = [:]
     private var environmentId = ""
     static let maxBubble: CGFloat = 520
 
-    func set(items: [OrchestratorChatItem], needs: [OrchestratorNeed], undoable: Set<String>, undone: Set<String>, environmentId: String) {
+    func set(items: [OrchestratorChatItem], needs: [OrchestratorNeed], undoable: Set<String>, undone: Set<String>, environmentId: String,
+             name: String) {
         self.items = items
         self.environmentId = environmentId
         var next: [String: NSView] = [:]
@@ -264,6 +270,20 @@ final class OrchestratorChatView: DSView {
         }
         for (id, b) in avatars where nextAvatars[id] == nil { b.removeFromSuperview() }
         avatars = nextAvatars
+        var nextNames: [String: LabelView] = [:]
+        for item in items {
+            guard case .bubble(let id, false, _, true, _) = item else { continue }
+            let label = names[id] ?? {
+                let l = LabelView("", font: DSFont.ui(11, weight: .medium), color: Themed.color(\.mutedForeground))
+                l.lineHeight = 14
+                return l
+            }()
+            label.text = name
+            if label.superview !== self { addSubview(label) }
+            nextNames[id] = label
+        }
+        for (id, l) in names where nextNames[id] == nil { l.removeFromSuperview() }
+        names = nextNames
         self.needs = needs
         if needs.isEmpty {
             needsCard?.removeFromSuperview()
@@ -309,6 +329,10 @@ final class OrchestratorChatView: DSView {
                 let b = v as! OrchestratorBubbleView
                 let size = b.size(maxWidth: maxBubble)
                 let x = user ? x0 + lane - size.width : x0 + 34
+                if let name = names[id] {
+                    out.append((name, NSRect(x: x + OrchestratorBubbleView.tail + 12, y: y, width: maxBubble, height: 14)))
+                    y += 16
+                }
                 out.append((b, NSRect(x: x, y: y, width: size.width, height: size.height)))
                 if !user, last, let bot = avatars[id] { out.append((bot, NSRect(x: x0, y: y + size.height - 24, width: 26, height: 26))) }
                 y += size.height
@@ -977,6 +1001,10 @@ final class OrchestratorComposerView: DSView {
     private let send = ButtonView(icon: .arrowUp, size: .iconSm)
     var onSend: ((String) -> Void)?
     var isEnabled = true { didSet { field.isEnabled = isEnabled; refreshSend() } }
+    var placeholder: String {
+        get { field.placeholder }
+        set { field.placeholder = newValue; field.setAccessibilityLabel(newValue) }
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)

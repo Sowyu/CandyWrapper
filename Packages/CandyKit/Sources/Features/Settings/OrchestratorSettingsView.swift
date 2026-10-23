@@ -29,9 +29,19 @@ public final class OrchestratorSettingsView: SettingsPageBase {
     }
 
     private func orchestratorSection() -> SettingsSectionView {
+        let nameInput = InputView(placeholder: "Orchestrator", text: config.name, size: .sm)
+        nameInput.frame.size = NSSize(width: 200, height: 28)
+        nameInput.setAccessibilityLabel("Orchestrator name")
+        nameInput.onChange = { [weak self] text in self?.store.update { $0.name = text } }
+        let nameRow = row(nil, title: "Name", detail: "What it's called in the sidebar, its chat and its brief. A rename goes out as an updated brief with your next message.",
+                          control: nameInput)
+        binder.add { [weak self, weak nameInput] in
+            guard let self, let nameInput, !nameInput.state.focused, nameInput.text != self.config.name else { return }
+            nameInput.text = self.config.name
+        }
         let start = ButtonView("Start", variant: .outline, size: .sm)
         start.action = { [weak self] in self?.store.actions.start?() }
-        let status = row(nil, title: "Orchestrator", detail: nil, control: start)
+        let status = row(nil, title: "Status", detail: nil, control: start)
         binder.add { [weak self, weak status, weak start] in
             guard let self else { return }
             status?.detail = self.store.actions.status?() ?? "Not started"
@@ -82,7 +92,7 @@ public final class OrchestratorSettingsView: SettingsPageBase {
         let closed = choiceRow("While closed", "A scheduled task on its machine wakes it to check every thread. It's off while CandyWrapper is open.",
                                labels: ["Off", "Every 15 minutes", "Every 30 minutes", "Every hour", "Every 2 hours"],
                                read: { c in closedChoices.firstIndex { $0 == c.closedCheckMinutes } }, write: { c, i in c.closedCheckMinutes = closedChoices[i] })
-        return section(nil, "Orchestrator", [status, machineRow, projectRow, crew, ask, closed])
+        return section(nil, "Orchestrator", [nameRow, status, machineRow, projectRow, crew, ask, closed])
     }
 
     private func choiceRow(_ title: String, _ detail: String, labels: [String], read: @escaping (OrchestratorConfig) -> Int?,

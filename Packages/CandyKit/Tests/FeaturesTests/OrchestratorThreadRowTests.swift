@@ -29,7 +29,7 @@ struct OrchestratorThreadRowTests {
             SidebarPreview.thread("orch", "Orchestrator", project: "p1", kind: .read, minutesAgo: 1),
         ]), animated: false)
         if orchestrator {
-            content.orchestrator = OrchestratorSidebarInfo(name: "Orchestrator", machine: "miniko", bot: .orchestrator, needsYou: 1,
+            content.orchestrator = OrchestratorSidebarInfo(name: "Orchestrator", machine: "miniko", machineKind: "mac-mini", bot: .orchestrator, needsYou: 1,
                                                            working: true, started: true, isOpen: false)
             content.state.hiddenThreadIds = [ThreadId("orch")]
         }
