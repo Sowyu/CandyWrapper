@@ -11,20 +11,26 @@ import T3Protocol
 final class OpenInController {
     /// The details card, built the first time it opens; `render` fills it then.
     private let lazyCard: LazyView<ThreadDetailsCardView>
+    /// Redesign's header pill, whose editor button stands in for the card's row.
+    private let pill: DitherHeaderPillView
     private let git: GitController
     private let environments: Environments
     private let composer: ComposerController
 
-    init(card: LazyView<ThreadDetailsCardView>, git: GitController, environments: Environments, composer: ComposerController, shortcuts: Shortcuts?) {
+    init(card: LazyView<ThreadDetailsCardView>, pill: DitherHeaderPillView, git: GitController, environments: Environments, composer: ComposerController, shortcuts: Shortcuts?) {
         lazyCard = card
+        self.pill = pill
         self.git = git
         self.environments = environments
         self.composer = composer
         card.configure { [weak self] card in
             card.openIn.primary.action = { [weak self] in self?.open(nil) }
-            card.openIn.secondary.action = { [weak self] in self?.showMenu() }
+            card.openIn.secondary.action = { [weak self, weak card] in if let card { self?.showMenu(card.openIn) } }
             self?.render()
         }
+        pill.openIn.primary.action = { [weak self] in self?.open(nil) }
+        pill.openIn.secondary.action = { [weak self] in self?.showMenu(pill.openIn) }
+        pill.openIn.onContextMenu = { [weak self] in self?.showMenu(pill.openIn) }
         git.onRender = { [weak self] in self?.render() }
         // `useOpenFavoriteEditorShortcut`: only while the picker shows, an editor is known and there is a workspace.
         shortcuts?.on("editor.openFavorite") { [weak self] _ in
@@ -83,24 +89,28 @@ final class OpenInController {
     }
 
     func render() {
-        guard let card = lazyCard.loaded else { return }
-        card.showsOpenIn = isShown
+        lazyCard.loaded?.showsOpenIn = isShown
+        pill.showsOpenIn = isShown
         guard isShown else { return }
         let editor = preferred
-        let part = card.openIn.primary
-        // `primaryLabel` in panel mode, with the primary option's icon (`text-foreground`, every editor is a
-        // brand on macOS) or the generic one in `muted-foreground`.
-        part.text = "Open in \(editor.map(OpenInEditors.label) ?? "editor")"
-        part.image = editor.flatMap(OpenInEditors.image)
-        part.icon = (editor.map(Self.icon) ?? .squareArrowOutUpRight).definition
-        part.iconColor = editor == nil ? nil : Themed.color(\.contrastForeground)
-        part.isEnabled = editor != nil && cwd != nil && remote != .unavailable
-        part.setAccessibilityLabel(part.text)
+        let label = "Open in \(editor.map(OpenInEditors.label) ?? "editor")"
+        for split in [lazyCard.loaded?.openIn, pill.openIn].compactMap({ $0 }) {
+            let part = split.primary
+            // `primaryLabel` in panel mode, with the primary option's icon (`text-foreground`, every editor is a
+            // brand on macOS) or the generic one in `muted-foreground`. The pill shows the icon alone.
+            part.text = split.compact ? "" : label
+            part.toolTip = split.compact ? label : nil
+            part.image = editor.flatMap(OpenInEditors.image)
+            part.icon = (editor.map(Self.icon) ?? .squareArrowOutUpRight).definition
+            part.iconColor = editor == nil ? nil : Themed.color(\.contrastForeground)
+            part.isEnabled = editor != nil && cwd != nil && remote != .unavailable
+            part.setAccessibilityLabel(label)
+        }
     }
 
     /// The chevron's menu (`editorItems`, OpenInPicker.tsx:322-358): every available editor, the preferred one with
     /// the shortcut, then the one-time SSH hint; or the "no SSH route" row.
-    private func showMenu() {
+    private func showMenu(_ split: DetailsSplitControl) {
         let options = OpenInEditors.options(available: available)
         let shortcut = ActiveKeymap.label(for: "editor.openFavorite")
         var items = options.map { option in
@@ -121,7 +131,6 @@ final class OpenInController {
             items.append(MenuItem("Opens over SSH. Needs your key on \(environmentLabel)", disabled: true))
         }
         if remote == .unavailable { items = [MenuItem("No SSH route to \(environmentLabel)", disabled: true)] }
-        let split = lazyCard.view.openIn
         MenuPopupView.show(items, from: split.secondary, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none),
                            minimumWidth: split.bounds.width, anchorRect: split.convert(split.bounds, to: split.secondary))
     }

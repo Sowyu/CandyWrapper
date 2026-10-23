@@ -59,6 +59,32 @@ public final class ThreadHeaderView: TopbarDragView {
     }
     /// Redesign's cost estimate, left of the toggles; other themes never show it.
     public let cost = ThreadCostPillView()
+    /// Redesign's controls in the window's tab band; the app hands it to the tab strip. Under Redesign the cost and
+    /// the toggles move into it and the header itself hides.
+    public let pill = DitherHeaderPillView()
+
+    /// Moves the cost and the toggles between the header and Redesign's pill, and shows the pill only while it
+    /// applies. The panel calls this from its layout, since the header hides under Redesign; it leaves the terminal
+    /// and right panel toggles alone while the panel holds them.
+    public func syncPill() {
+        let plain = self.plain
+        pill.cost = cost
+        pill.toggles = toggles
+        let host: NSView = plain ? pill : self
+        for view in [cost, toggles[0]] as [NSView] where view.superview !== host { host.addSubview(view) }
+        for toggle in toggles.dropFirst() where toggle.superview === (plain ? self : pill) {
+            host.addSubview(toggle)
+            toggle.isHidden = !plain && !threadVisible
+        }
+        if toggles[0].icon != (plain ? .gitFork : .squareMenu) {
+            toggles[0].icon = plain ? .gitFork : .squareMenu
+            toggles[0].setAccessibilityLabel(plain ? "Toggle lineage" : "Toggle thread details panel")
+            refreshToggleTooltips()
+        }
+        if !plain { toggles[0].isHidden = !threadVisible }
+        pill.isHidden = !plain || !threadVisible || window == nil
+        pill.resized()
+    }
 
     public var projectTitle: String {
         get { project.text }
@@ -85,6 +111,7 @@ public final class ThreadHeaderView: TopbarDragView {
         for view in subviews where view !== titleEditor { view.isHidden = !visible }
         if !visible { titleEditor.isHidden = true }
         threadVisible = visible
+        pill.isHidden = !plain || !visible || window == nil
         updateParentVisibility()
         // Dither hides the project crumb in `layout`.
         if plain { for v in [favicon, project, slash, projectButton, title, titleHit, parentCrumb, parentSlash] as [NSView] { v.isHidden = true } }
@@ -101,7 +128,7 @@ public final class ThreadHeaderView: TopbarDragView {
             ActiveKeymap.label(for: command).map { "\(text) (\($0))" } ?? text
         }
         guard toggleTips.count == 3 else { return }
-        toggleTips[0].text = tip("Toggle thread details", "threadPanel.toggle")
+        toggleTips[0].text = tip(plain ? "Pull requests, automations and lineage" : "Toggle thread details", "threadPanel.toggle")
         toggleTips[1].text = tip("Toggle terminal drawer", "terminal.toggle")
         toggleTips[2].text = tip("Toggle right panel", "rightPanel.toggle")
     }
@@ -181,6 +208,11 @@ public final class ThreadHeaderView: TopbarDragView {
         needsLayout = true
     }
 
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        pill.isHidden = !plain || !threadVisible || window == nil
+    }
+
     public override func layout() {
         super.layout()
         let midY = Self.height / 2
@@ -225,9 +257,12 @@ public final class ThreadHeaderView: TopbarDragView {
             toggle.frame = NSRect(x: x, y: midY - size.height / 2, width: size.width, height: size.height)
             x -= 4
         }
-        cost.isHidden = !plain || !threadVisible || cost.breakdown == nil
-        let costSize = cost.intrinsicContentSize
-        cost.frame = NSRect(x: x - costSize.width, y: midY - costSize.height / 2, width: costSize.width, height: costSize.height)
+        // Under Redesign the cost lives in the pill, which places it.
+        if cost.superview === self {
+            cost.isHidden = !plain || !threadVisible || cost.breakdown == nil
+            let costSize = cost.intrinsicContentSize
+            cost.frame = NSRect(x: x - costSize.width, y: midY - costSize.height / 2, width: costSize.width, height: costSize.height)
+        }
         let cluster = ([cost] + toggles).filter { $0.superview === self && !$0.isHidden }.map(\.frame).reduce(nil as NSRect?) { $0?.union($1) ?? $1 }
         frost.isHidden = !plain || cluster == nil
         if let cluster {
@@ -318,7 +353,8 @@ public final class ThreadPanelView: DSView {
     /// between the queue and the request panel. Shown through `showsEnvironmentBanner`.
     public let environmentBanner = EnvironmentBannerView()
     public var showsEnvironmentBanner = false { didSet { if showsEnvironmentBanner != oldValue { needsLayout = true } } }
-    private var chatTop: CGFloat { ThreadHeaderView.height }
+    /// Redesign's header controls sit in the window's tab band, so its chat starts at the panel's top.
+    private var chatTop: CGFloat { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? 0 : ThreadHeaderView.height }
     /// A notice from the banner stack (the project clone's progress or failure), docked over the
     /// composer on drafts and threads alike. Shown through `showsNoticeBanner`.
     /// The notice banners are built the first time they show; wire them through the lazy holders.
@@ -721,6 +757,7 @@ public final class ThreadPanelView: DSView {
         lazyDetailsCard.onLoad = { [weak self] card in
             self?.insertAccessory(card, under: [self?.toasts])
             card.layer?.zPosition = 2
+            card.onRelationsChange = { [weak self] in self?.needsLayout = true }
         }
         lazyFindBar.onLoad = { [weak self] bar in
             guard let self else { return }
@@ -841,6 +878,14 @@ public final class ThreadPanelView: DSView {
         if !detailsOpen { lazyDetailsCard.loaded?.isHidden = true }
         syncDetailsPopoverMonitor()
         onDetailsVisibilityChange?()
+    }
+
+    /// Redesign: builds the card for its links, shows the Lineage toggle while it has any, and closes it when they go.
+    private func syncDitherRelations() {
+        let card = detailsCard
+        card.relationsOnly = true
+        header.pill.showsRelations = card.hasRelations
+        if !card.hasRelations, detailsPopoverOpen { DispatchQueue.main.async { [weak self] in self?.closeDetailsPopover() } }
     }
 
     /// T3 closes the popover when the card turns inline (ThreadDetailsCard.tsx:81-85), and on another thread it
@@ -1021,16 +1066,20 @@ public final class ThreadPanelView: DSView {
     /// The terminal and panel toggles sit on the panel's tab bar while the panel shows, closing slide
     /// included, and in the header otherwise, at the same place: T3 pins them to the window's top right
     /// (`panelLayoutControls`, `fixed`, ChatView.tsx:11203-11211).
+    /// Redesign keeps them in its pill in the tab band, over both the chat and the panel.
     private func placePanelToggles() {
-        let inPanel = rightPanelOpen || panelGhost != nil
-        guard (header.toggles[2].superview === self) != inPanel else { return }
+        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        let inPanel = !dither && (rightPanelOpen || panelGhost != nil)
+        let host: NSView = inPanel ? self : dither ? header.pill : header
+        guard header.toggles[2].superview !== host else { return }
         // A thread switch hides the header's subviews until its projection arrives; the toggles leaving
         // the header must not stay hidden.
         for toggle in header.toggles.dropFirst() {
-            (inPanel ? self : header).addSubview(toggle)
-            toggle.isHidden = !inPanel && model.projection == nil
+            host.addSubview(toggle)
+            toggle.isHidden = !inPanel && !dither && model.projection == nil
         }
         header.needsLayout = true
+        header.pill.resized()
     }
 
     /// How far open the inline right panel and the terminal drawer show, 0 to 1. T3 transitions the panel's
@@ -1797,7 +1846,10 @@ public final class ThreadPanelView: DSView {
         rightPanel.layer?.zPosition = sheet ? 21 : 0
         rightPanel.isSheet = sheet
         rightPanel.isMaximized = rightPanelMaximized
-        header.isHidden = chat == 0
+        let ditherHeader = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        placePanelToggles()
+        header.syncPill()
+        header.isHidden = chat == 0 || ditherHeader
         timeline.isHidden = chat == 0
         header.frame = NSRect(x: 0, y: 0, width: chat, height: ThreadHeaderView.height)
         fileDropOverlay.frame = NSRect(x: 8, y: chatTop + 8, width: max(0, chat - 16), height: max(0, bounds.height - chatTop - 16))
@@ -1852,14 +1904,16 @@ public final class ThreadPanelView: DSView {
         if rightPanelOpen || panelGhost != nil {
             // The window's panel controls: `mr-px` and 12px from the right, `gap-1`.
             var x = bounds.width - 12 - 1
-            for control in [header.toggles[2], header.toggles[1], maximize] {
+            for control in [header.toggles[2], header.toggles[1], maximize] where control.superview === self {
                 let size = control.intrinsicContentSize
                 x -= size.width
                 control.frame = NSRect(x: x, y: ThreadHeaderView.height / 2 - size.height / 2, width: size.width, height: size.height)
                 x -= 4
             }
         }
-        let inlinePlacement = ThreadDetailsPlacement.inlineCard(width: chat, height: chatHeight - chatTop, topInset: findInset)
+        // Redesign's card holds only the thread's links and drops down from the Lineage toggle in the tab band.
+        if ditherHeader { syncDitherRelations() } else { lazyDetailsCard.loaded?.relationsOnly = false }
+        let inlinePlacement = ditherHeader ? nil : ThreadDetailsPlacement.inlineCard(width: chat, height: chatHeight - chatTop, topInset: findInset)
         updateDetailsPresentation(inline: inlinePlacement != nil)
         let inlineDetails = detailsOpen ? inlinePlacement : nil
         timeline.detailsCardLeft = inlineDetails?.minX
@@ -1881,6 +1935,14 @@ public final class ThreadPanelView: DSView {
                 detailsCard.frame = NSRect(x: inlineDetails.minX, y: chatTop + inlineDetails.minY,
                     width: inlineDetails.width, height: min(detailsCard.preferredHeight, inlineDetails.height))
                 detailsCard.isHidden = false
+            } else if ditherHeader {
+                // Under the Lineage toggle, its right edge with the toggle's, inside the chat.
+                let toggle = header.toggles[0]
+                let anchor = toggle.window == nil ? chat - 12 : convert(toggle.bounds, from: toggle).maxX
+                let w = min(300, chat - 24), top = 6 + findInset
+                detailsCard.frame = NSRect(x: max(12, min(chat - 12, anchor) - w), y: top,
+                    width: w, height: min(detailsCard.preferredHeight, max(0, chatHeight - top - 8)))
+                detailsCard.isHidden = w <= 0
             } else {
                 // The popover sits 12px in from the right like the find bar, and under it while find is
                 // open (ThreadDetailsCard.tsx:185-193 and popover.tsx:75-83 in 2994, f92afe79c).

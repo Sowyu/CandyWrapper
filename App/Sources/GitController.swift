@@ -116,11 +116,18 @@ final class GitController {
             card.branch.onContextMenu = branchMenu
             card.branch.action = { [weak self] in self?.openBranchPicker(inPanel: true) }
             card.gitActions.primary.action = { [weak self] in self?.runQuickAction() }
-            card.gitActions.secondary.action = { [weak self] in self?.openGitMenu() }
+            card.gitActions.secondary.action = { [weak self, weak card] in if let card { self?.openGitMenu(from: card.gitActions) } }
             card.initGit.action = { [weak self] in self?.initializeGit() }
             card.changes.action = { [weak self] in self?.panel.toggleDiff() }
             self?.renderCard()
         }
+        // Redesign's header band carries the card's git action and totals; the branch is in the machine row's menu.
+        let pill = panel.header.pill
+        pill.gitActions.primary.action = { [weak self] in self?.runQuickAction() }
+        pill.gitActions.secondary.action = { [weak self] in self?.openGitMenu(from: pill.gitActions) }
+        pill.gitActions.secondary.setAccessibilityLabel("Git action options")
+        pill.initGit.action = { [weak self] in self?.initializeGit() }
+        pill.changes.action = { [weak self] in self?.panel.toggleDiff() }
         composer.onRefresh = { [weak self] in self?.syncBranchMismatch() }
         panel.setDetailsInlineOpen(UserDefaults.standard.bool(forKey: Self.detailsOpenKey))
         keyObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] note in
@@ -387,8 +394,24 @@ final class GitController {
         panel.showsDeviceRow = true
     }
 
+    /// Redesign's header pill: whether it shows the git controls, and the totals.
+    private func renderPill() {
+        let pill = panel.header.pill
+        pill.showsVersionControl = target != nil
+        pill.isRepo = isRepo
+        let totals = status?.branchChanges.map { ($0.insertions, $0.deletions) } ?? status.map { ($0.workingTree.insertions, $0.workingTree.deletions) } ?? (0, 0)
+        if pill.totals.insertions != totals.0 || pill.totals.deletions != totals.1 {
+            pill.totals.insertions = totals.0
+            pill.totals.deletions = totals.1
+            pill.changes.invalidateIntrinsicContentSize()
+            pill.resized()
+        }
+    }
+
     /// The details card, while it is built.
     private func renderCard() {
+        renderPill()
+        renderGitActions()
         guard let card = panel.lazyDetailsCard.loaded else { return }
         guard let target else { card.showsVersionControl = false; return }
         let label = BranchToolbarLogic.workspaceLabel(mode: target.envMode, worktreePath: target.worktreePath, modeLocked: !target.isDraft)
@@ -401,7 +424,6 @@ final class GitController {
         card.branch.isEnabled = refsLoaded && !branchActionPending
         card.showsVersionControl = true
         card.isRepo = isRepo
-        renderGitActions()
         let totals = status?.branchChanges.map { ($0.insertions, $0.deletions) } ?? status.map { ($0.workingTree.insertions, $0.workingTree.deletions) } ?? (0, 0)
         card.totals.insertions = totals.0
         card.totals.deletions = totals.1
@@ -440,7 +462,10 @@ final class GitController {
     }
 
     private func renderGitActions() {
-        guard let split = panel.lazyDetailsCard.loaded?.gitActions else { return }
+        for split in [panel.lazyDetailsCard.loaded?.gitActions, panel.header.pill.gitActions].compactMap({ $0 }) { renderGitActions(split) }
+    }
+
+    private func renderGitActions(_ split: DetailsSplitControl) {
         let key = statusKey ?? ""
         if let running {
             let status = GitActionsLogic.progressStatus(isPull: running.isPull, currentLabel: running.label)
@@ -567,6 +592,16 @@ final class GitController {
             // The picker opens once the menu has closed, from the row.
             ref.action = { [weak self] in DispatchQueue.main.async { self?.openBranchPicker(inPanel: false, from: anchor) } }
             items += [.separator, .label("Branch"), ref]
+            // The details card's branch row copied the name on a right click; Redesign has no card.
+            if let name = resolvedBranch, !name.isEmpty {
+                var copy = MenuItem("Copy branch name", icon: .copy)
+                copy.action = { [weak anchor] in
+                    NSPasteboard.general.clearContents()
+                    let copied = NSPasteboard.general.setString(name, forType: .string)
+                    if let anchor { AnchoredCopyToast.show(from: anchor, success: copied) }
+                }
+                items.append(copy)
+            }
         }
         let menu = MenuPopupView.show(items, from: anchor, placement: PopupPlacement(side: .top, align: .start, sideOffset: 4, fallbackAxisSide: .none),
                                       minimumWidth: previousWorktree != nil ? 336 : 240)
@@ -800,9 +835,8 @@ final class GitController {
 
     // MARK: Git actions
 
-    private func openGitMenu() {
+    private func openGitMenu(from split: DetailsSplitControl) {
         refreshStatus()
-        let split = panel.detailsCard.gitActions
         let status = self.status
         let hasRemote = status?.hasPrimaryRemote ?? false
         var items: [MenuItem] = GitActionsLogic.menuItems(status, busy: isBusy, hasPrimaryRemote: hasRemote).map { m in
@@ -1007,16 +1041,20 @@ final class GitController {
     /// "Initialize Git" (`vcs.init`).
     private func initializeGit() {
         guard let target, let shell else { return }
-        panel.detailsCard.initGit.text = "Initializing..."
-        panel.detailsCard.initGit.isEnabled = false
+        panel.lazyDetailsCard.loaded?.initGit.text = "Initializing..."
+        panel.lazyDetailsCard.loaded?.initGit.isEnabled = false
+        panel.header.pill.initGit.title = "Initializing..."
+        panel.header.pill.initGit.isEnabled = false
         Task { [weak self] in
             do {
                 _ = try await shell.supervisor.request(VcsRPC.initRepo, payload: VcsRPC.cwd(target.cwd))
             } catch {
                 self?.toast("Git initialization failed", Self.message(error), kind: .error)
             }
-            self?.panel.detailsCard.initGit.text = "Initialize Git"
-            self?.panel.detailsCard.initGit.isEnabled = true
+            self?.panel.lazyDetailsCard.loaded?.initGit.text = "Initialize Git"
+            self?.panel.lazyDetailsCard.loaded?.initGit.isEnabled = true
+            self?.panel.header.pill.initGit.title = "Initialize Git"
+            self?.panel.header.pill.initGit.isEnabled = true
             self?.refreshStatus()
         }
     }
