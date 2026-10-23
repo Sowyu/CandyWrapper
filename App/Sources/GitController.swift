@@ -121,13 +121,11 @@ final class GitController {
             card.changes.action = { [weak self] in self?.panel.toggleDiff() }
             self?.renderCard()
         }
-        // Redesign's header band carries the card's git action and totals; the branch is in the machine row's menu.
+        // Redesign's header band carries the totals and its actions menu the git actions; the branch is in the machine
+        // row's menu.
         let pill = panel.header.pill
-        pill.gitActions.primary.action = { [weak self] in self?.runQuickAction() }
-        pill.gitActions.secondary.action = { [weak self] in self?.openGitMenu(from: pill.gitActions) }
-        pill.gitActions.secondary.setAccessibilityLabel("Git action options")
-        pill.initGit.action = { [weak self] in self?.initializeGit() }
         pill.changes.action = { [weak self] in self?.panel.toggleDiff() }
+        pill.menuSections[.git] = { [weak self] in self?.actionsMenuItems() ?? [] }
         composer.onRefresh = { [weak self] in self?.syncBranchMismatch() }
         panel.setDetailsInlineOpen(UserDefaults.standard.bool(forKey: Self.detailsOpenKey))
         keyObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] note in
@@ -462,7 +460,7 @@ final class GitController {
     }
 
     private func renderGitActions() {
-        for split in [panel.lazyDetailsCard.loaded?.gitActions, panel.header.pill.gitActions].compactMap({ $0 }) { renderGitActions(split) }
+        if let split = panel.lazyDetailsCard.loaded?.gitActions { renderGitActions(split) }
     }
 
     private func renderGitActions(_ split: DetailsSplitControl) {
@@ -835,8 +833,39 @@ final class GitController {
 
     // MARK: Git actions
 
+    /// "Initialize Git" in flight, for Redesign's menu row.
+    private var initializing = false
+
+    /// Redesign's section: the quick action first (or its progress), then the split button's menu without it; outside a
+    /// repository, "Initialize Git".
+    private func actionsMenuItems() -> [MenuItem] {
+        guard target != nil else { return [] }
+        guard isRepo else {
+            return [.label("Git"), MenuItem(initializing ? "Initializing..." : "Initialize Git", icon: .gitBranchPlus, disabled: initializing) { [weak self] in self?.initializeGit() }]
+        }
+        refreshStatus()
+        var first: MenuItem
+        if let running {
+            first = MenuItem(GitActionsLogic.progressStatus(isPull: running.isPull, currentLabel: running.label), icon: .loaderCircle, disabled: true)
+        } else {
+            let q = quickAction
+            first = MenuItem(q.label, icon: quickIcon(q)) { [weak self] in self?.runQuickAction() }
+            first.tooltip = q.disabled ? q.hint ?? "This action is currently unavailable." : nil
+        }
+        let rest = gitMenuItems().filter { $0.title != first.title }
+        return [.label("Git"), first] + rest
+    }
+
     private func openGitMenu(from split: DetailsSplitControl) {
         refreshStatus()
+        let items = gitMenuItems()
+        guard !items.isEmpty else { return }
+        // `anchor: panelAnchorRef`, `w-(--anchor-width)`: the whole split group.
+        MenuPopupView.show(items, from: split.secondary, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none),
+                           minimumWidth: split.bounds.width, anchorRect: split.convert(split.bounds, to: split.secondary))
+    }
+
+    private func gitMenuItems() -> [MenuItem] {
         let status = self.status
         let hasRemote = status?.hasPrimaryRemote ?? false
         var items: [MenuItem] = GitActionsLogic.menuItems(status, busy: isBusy, hasPrimaryRemote: hasRemote).map { m in
@@ -852,10 +881,7 @@ final class GitController {
             items.append(publish)
         }
         items += GitActionsLogic.menuNotes(status).map { MenuItem.note($0) }
-        guard !items.isEmpty else { return }
-        // `anchor: panelAnchorRef`, `w-(--anchor-width)`: the whole split group.
-        MenuPopupView.show(items, from: split.secondary, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none),
-                           minimumWidth: split.bounds.width, anchorRect: split.convert(split.bounds, to: split.secondary))
+        return items
     }
 
     /// `openDialogForMenuItem`: commit opens the dialog, push and create PR run at once.
@@ -1043,8 +1069,7 @@ final class GitController {
         guard let target, let shell else { return }
         panel.lazyDetailsCard.loaded?.initGit.text = "Initializing..."
         panel.lazyDetailsCard.loaded?.initGit.isEnabled = false
-        panel.header.pill.initGit.title = "Initializing..."
-        panel.header.pill.initGit.isEnabled = false
+        initializing = true
         Task { [weak self] in
             do {
                 _ = try await shell.supervisor.request(VcsRPC.initRepo, payload: VcsRPC.cwd(target.cwd))
@@ -1053,8 +1078,7 @@ final class GitController {
             }
             self?.panel.lazyDetailsCard.loaded?.initGit.text = "Initialize Git"
             self?.panel.lazyDetailsCard.loaded?.initGit.isEnabled = true
-            self?.panel.header.pill.initGit.title = "Initialize Git"
-            self?.panel.header.pill.initGit.isEnabled = true
+            self?.initializing = false
             self?.refreshStatus()
         }
     }
@@ -1128,7 +1152,8 @@ final class GitController {
         // `threadPanel.toggle` (ChatView.tsx:8144-8149 in 2994): the header's details toggle.
         shortcuts.on("threadPanel.toggle") { [weak self] _ in
             guard let self, self.panel.window != nil, !self.panel.header.toggles[0].isHidden else { return false }
-            self.toggleDetails()
+            // Redesign: the actions menu in the tab band.
+            if ThemeRuntime.isDither(dark: self.panel.effectiveAppearance.isDark) { self.panel.showDitherActions() } else { self.toggleDetails() }
             return true
         }
         shortcuts.on("composer.previousWorktree") { [weak self] call in

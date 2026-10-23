@@ -45,15 +45,11 @@ final class ProjectScriptsController {
             card.scripts.secondary.action = { [weak self, weak card] in if let card { self?.openMenu(from: card.scripts) } }
             card.addScript.action = { [weak self] in self?.openEditor(nil) }
         }
-        // Redesign's Run button in the header band: the primary script, else the menu (which ends in "Add project
-        // script"); with no scripts at all its + opens the add form.
-        let pill = panel.header.pill
-        pill.scripts.primary.action = { [weak self] in
-            guard let self else { return }
-            if let primary = ProjectScripts.primary(self.scripts) { self.terminal.runScript(primary) }
-            else if pill.scriptsRow == .add { self.openEditor(nil) } else { self.openMenu(from: pill.scripts) }
+        // Redesign's actions menu: the same rows as the chevron's, under "Scripts".
+        panel.header.pill.menuSections[.scripts] = { [weak self] in
+            guard let self, self.threadId != nil else { return [] }
+            return [.label("Scripts")] + self.menuItems()
         }
-        pill.scripts.secondary.action = { [weak self] in self?.openMenu(from: pill.scripts) }
         composer.configObservers.append { [weak self] _ in self?.refresh() }
     }
 
@@ -67,7 +63,6 @@ final class ProjectScriptsController {
         guard let threadId, let env = threadId.environmentId, let project = project(threadId) else {
             scripts = []
             panel.lazyDetailsCard.set(\.scriptsRow, nil)
-            panel.header.pill.scriptsRow = nil
             return
         }
         let settings = ServerSettingsValues(composer?.config(env)?.settings.raw ?? .null)
@@ -77,7 +72,6 @@ final class ProjectScriptsController {
         let row: ThreadDetailsCardView.ScriptsRow = ProjectScripts.primary(scripts).map { .run(name: $0.name, icon: ProjectScriptIcon.name($0.icon)) }
             ?? (scripts.isEmpty && importable.isEmpty ? .add : .actions)
         panel.lazyDetailsCard.set(\.scriptsRow, row)
-        panel.header.pill.scriptsRow = row
     }
 
     /// `useT3ProjectFileState` (hooks/useT3ProjectFileScripts.ts:31-53): `t3.json` at the workspace root; a missing,
@@ -133,6 +127,11 @@ final class ProjectScriptsController {
 
     /// The chevron's menu: every action with its roles and shortcut, then "Add project script".
     private func openMenu(from split: DetailsSplitControl) {
+        MenuPopupView.show(menuItems(), from: split.secondary, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none),
+                           minimumWidth: split.bounds.width, anchorRect: split.convert(split.bounds, to: split.secondary))
+    }
+
+    private func menuItems() -> [MenuItem] {
         let context = KeybindingContext([:])
         var items = scripts.map { script -> MenuItem in
             var item = MenuItem(ProjectScripts.menuLabel(script), icon: ProjectScriptIcon.name(script.icon),
@@ -163,8 +162,7 @@ final class ProjectScriptsController {
         var add = MenuItem("Add project script", icon: .plus)
         add.action = { [weak self] in self?.openEditor(nil) }
         items.append(add)
-        MenuPopupView.show(items, from: split.secondary, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none),
-                           minimumWidth: split.bounds.width, anchorRect: split.convert(split.bounds, to: split.secondary))
+        return items
     }
 
     /// `importFileScript`: adds the script as a new action; a failure reopens the add form prefilled with the error.

@@ -11,15 +11,12 @@ import T3Protocol
 final class OpenInController {
     /// The details card, built the first time it opens; `render` fills it then.
     private let lazyCard: LazyView<ThreadDetailsCardView>
-    /// Redesign's header pill, whose editor button stands in for the card's row.
-    private let pill: DitherHeaderPillView
     private let git: GitController
     private let environments: Environments
     private let composer: ComposerController
 
     init(card: LazyView<ThreadDetailsCardView>, pill: DitherHeaderPillView, git: GitController, environments: Environments, composer: ComposerController, shortcuts: Shortcuts?) {
         lazyCard = card
-        self.pill = pill
         self.git = git
         self.environments = environments
         self.composer = composer
@@ -28,9 +25,8 @@ final class OpenInController {
             card.openIn.secondary.action = { [weak self, weak card] in if let card { self?.showMenu(card.openIn) } }
             self?.render()
         }
-        pill.openIn.primary.action = { [weak self] in self?.open(nil) }
-        pill.openIn.secondary.action = { [weak self] in self?.showMenu(pill.openIn) }
-        pill.openIn.onContextMenu = { [weak self] in self?.showMenu(pill.openIn) }
+        // Redesign's actions menu: "Open in <editor>", then "Open in..." with every editor.
+        pill.menuSections[.editor] = { [weak self] in self?.actionsMenuItems() ?? [] }
         git.onRender = { [weak self] in self?.render() }
         // `useOpenFavoriteEditorShortcut`: only while the picker shows, an editor is known and there is a workspace.
         shortcuts?.on("editor.openFavorite") { [weak self] _ in
@@ -89,23 +85,44 @@ final class OpenInController {
     }
 
     func render() {
-        lazyCard.loaded?.showsOpenIn = isShown
-        pill.showsOpenIn = isShown
+        guard let card = lazyCard.loaded else { return }
+        card.showsOpenIn = isShown
         guard isShown else { return }
         let editor = preferred
-        let label = "Open in \(editor.map(OpenInEditors.label) ?? "editor")"
-        for split in [lazyCard.loaded?.openIn, pill.openIn].compactMap({ $0 }) {
-            let part = split.primary
-            // `primaryLabel` in panel mode, with the primary option's icon (`text-foreground`, every editor is a
-            // brand on macOS) or the generic one in `muted-foreground`. The pill shows the icon alone.
-            part.text = split.compact ? "" : label
-            part.toolTip = split.compact ? label : nil
-            part.image = editor.flatMap(OpenInEditors.image)
-            part.icon = (editor.map(Self.icon) ?? .squareArrowOutUpRight).definition
-            part.iconColor = editor == nil ? nil : Themed.color(\.contrastForeground)
-            part.isEnabled = editor != nil && cwd != nil && remote != .unavailable
-            part.setAccessibilityLabel(label)
+        let part = card.openIn.primary
+        // `primaryLabel` in panel mode, with the primary option's icon (`text-foreground`, every editor is a
+        // brand on macOS) or the generic one in `muted-foreground`.
+        part.text = "Open in \(editor.map(OpenInEditors.label) ?? "editor")"
+        part.image = editor.flatMap(OpenInEditors.image)
+        part.icon = (editor.map(Self.icon) ?? .squareArrowOutUpRight).definition
+        part.iconColor = editor == nil ? nil : Themed.color(\.contrastForeground)
+        part.isEnabled = editor != nil && cwd != nil && remote != .unavailable
+        part.setAccessibilityLabel(part.text)
+    }
+
+    /// Redesign's section: the preferred editor, then a submenu of every editor (picking one opens it and makes it the
+    /// preferred one), with the same SSH notes as the chevron's menu.
+    private func actionsMenuItems() -> [MenuItem] {
+        guard isShown else { return [] }
+        let editor = preferred
+        var main = MenuItem("Open in \(editor.map(OpenInEditors.label) ?? "editor")", icon: editor.map(Self.icon) ?? .squareArrowOutUpRight,
+                            shortcut: ActiveKeymap.label(for: "editor.openFavorite"),
+                            disabled: editor == nil || cwd == nil || remote == .unavailable)
+        main.image = editor.flatMap(OpenInEditors.image)
+        main.iconColor = Themed.color(\.foreground)
+        main.action = { [weak self] in self?.open(nil) }
+        var choices = OpenInEditors.options(available: available).map { option in
+            var item = MenuItem(option.label, icon: Self.icon(option.id), disabled: cwd == nil || remote == .unavailable) { [weak self] in self?.open(option.id) }
+            item.image = OpenInEditors.image(option.id)
+            item.iconColor = Themed.color(\.foreground)
+            return item
         }
+        if choices.isEmpty { choices = [MenuItem("No installed editors found", disabled: true)] }
+        if remote != .localExec, !UserDefaults.standard.bool(forKey: OpenInEditors.remoteHintSeenKey) {
+            choices.append(MenuItem("Opens over SSH. Needs your key on \(environmentLabel)", disabled: true))
+        }
+        if remote == .unavailable { choices = [MenuItem("No SSH route to \(environmentLabel)", disabled: true)] }
+        return [main, .submenu("Open in...", icon: .squareArrowOutUpRight, choices)]
     }
 
     /// The chevron's menu (`editorItems`, OpenInPicker.tsx:322-358): every available editor, the preferred one with
