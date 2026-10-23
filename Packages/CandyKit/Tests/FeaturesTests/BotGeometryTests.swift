@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import T3Store
 import Testing
 @testable import Features
 
@@ -50,4 +51,17 @@ import Testing
         #expect(a.body.boundingBox.insetBy(dx: -BotGeometry.lineWidth(id, size: 40) / 2, dy: -BotGeometry.lineWidth(id, size: 40) / 2)
             .standardized.minX >= -0.5)
     }
+
+    /// The look picked in Settings is the bot the sidebar and chat draw, and survives a save.
+    @Test func theOrchestratorKeepsThePickedLook() throws {
+        var c = OrchestratorConfig()
+        #expect(c.bot == .orchestrator)
+        c.botShape = BotShape.drop.rawValue
+        c.botColor = BotColor.teal.rawValue
+        let saved = try JSONDecoder().decode(OrchestratorConfig.self, from: JSONEncoder().encode(c))
+        #expect(saved.bot == BotIdentity(shape: .drop, color: .teal))
+        c.botShape = BotShape.pumpkin.rawValue
+        #expect(c.bot.color == .orange)
+    }
 }
+

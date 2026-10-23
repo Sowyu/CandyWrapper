@@ -23,10 +23,12 @@ public final class TextareaView: FieldView {
     /// A plain `<textarea>` without the field frame: `block min-h-16 max-h-40 bg-transparent px-1 py-1.5
     /// text-sm outline-none placeholder:text-muted-foreground` (AssistantCitationCommentEditor.tsx:51).
     public var bare = false { didSet { restyle(); invalidateIntrinsicContentSize(); needsLayout = true } }
+    /// A bare textarea's minimum height in place of `min-h-16`, such as one line for a chat field.
+    public var bareMinHeight: CGFloat? { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
 
     /// Padding block, padding inline, min and max height (border included).
     private var box: (paddingY: CGFloat, paddingX: CGFloat, minHeight: CGFloat, maxHeight: CGFloat, border: CGFloat) {
-        if bare { return (6, 4, 64, 160, 0) }
+        if bare { return (6, 4, bareMinHeight ?? 64, 160, 0) }
         let m = size.metrics
         return (m.paddingY, m.paddingX, m.minHeight + 2, Self.maxHeight + 2, 1)
     }

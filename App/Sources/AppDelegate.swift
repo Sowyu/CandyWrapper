@@ -314,6 +314,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.orchestrator = orchestrator
         orchestrator.showPane = { [weak commands] view in commands?.openUtilityPage(.orchestrator, view: view) }
         orchestrator.closePane = { [weak commands] in commands?.closeUtilityPage() }
+        orchestrator.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open(.orchestrator) }
         orchestrator.toast = { [weak threads] title, message, kind in threads?.panel.toasts.show(ToastView(title: title, message: message, kind: kind)) }
         commands.onOrchestratorHidden = { [weak orchestrator] in orchestrator?.paneClosed() }
         commands.extraMenuItems = { [weak orchestrator] id in orchestrator?.menuItems(id) ?? [] }
