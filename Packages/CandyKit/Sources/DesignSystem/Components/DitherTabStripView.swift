@@ -12,14 +12,20 @@ public final class DitherTabStripView: TopbarDragView {
         /// The thread's run, as the sidebar shows it: working, or waiting on the user. Either shows the dot grid.
         public var activity: Activity?
         public enum Activity: Sendable { case working, waiting }
-        public init(id: String, title: String, icon: IconName, activity: Activity? = nil) {
-            self.id = id; self.title = title; self.icon = icon; self.activity = activity
+        /// A thread's project: `image` draws its icon (favicon or monogram) in place of `icon`.
+        public var imageKey: String?
+        public init(id: String, title: String, icon: IconName, activity: Activity? = nil, imageKey: String? = nil) {
+            self.id = id; self.title = title; self.icon = icon; self.activity = activity; self.imageKey = imageKey
         }
     }
 
     public var tabs: [Tab] = [] { didSet { if tabs != oldValue { if drag != nil, tabs.map(\.id) != oldValue.map(\.id) { endDrag(commit: false) }; rebuild() } } }
     public var selected: String? { didSet { if selected != oldValue { for v in views { v.isSelected = v.tab.id == selected } } } }
     public var onSelect: ((String) -> Void)?
+    /// The image for a tab's `imageKey`, drawn at 14pt.
+    public var image: (@MainActor (String) -> NSImage?)? { didSet { refreshImages() } }
+    /// Redraws the tab images, as when a project's favicon arrives.
+    public func refreshImages() { for v in views { v.image = v.tab.imageKey.flatMap { image?($0) } } }
     public var onClose: ((String) -> Void)?
     public var onNew: (() -> Void)?
     /// A tab was dragged to a new index in strip order.
@@ -72,6 +78,7 @@ public final class DitherTabStripView: TopbarDragView {
             return v
         }
         for v in kept.values { v.removeFromSuperview() }
+        refreshImages()
         for v in views { v.isSelected = v.tab.id == selected }
         needsLayout = true
     }
@@ -208,6 +215,7 @@ public final class DitherTabStripView: TopbarDragView {
                 guard tab != oldValue else { return }
                 label.text = tab.title
                 if tab.icon != oldValue.icon { icon.removeFromSuperview(); icon = IconView(name: tab.icon, size: 14); addSubview(icon) }
+                if tab.imageKey == nil { image = nil }
                 setAccessibilityLabel(tab.title)
                 if tab.activity != nil, grid == nil { let g = DotGridSpinnerView(); grid = g; addSubview(g) }
                 refresh()
@@ -222,6 +230,9 @@ public final class DitherTabStripView: TopbarDragView {
         private var press: NSPoint?
         private var dragging = false
         private var icon: IconView
+        private let picture = NSImageView()
+        /// The project's icon; the tab's glyph shows while there is none.
+        var image: NSImage? { didSet { picture.image = image; picture.isHidden = image == nil; icon.isHidden = image != nil; picture.needsDisplay = true } }
         private let label: LabelView
         private let close = ButtonView(nil, icon: .x, variant: .ghostMuted, size: .iconMicro)
         private let frost = BackdropBlurView()
@@ -236,7 +247,9 @@ public final class DitherTabStripView: TopbarDragView {
             label.lineHeight = 18
             close.setAccessibilityLabel("Close tab")
             close.action = { [weak self] in self?.onClose?() }
-            [frost, icon, label, close].forEach(addSubview)
+            picture.imageScaling = .scaleProportionallyUpOrDown
+            picture.isHidden = true
+            [frost, icon, picture, label, close].forEach(addSubview)
             if tab.activity != nil { let g = DotGridSpinnerView(); grid = g; addSubview(g) }
             setAccessibilityRole(.radioButton)
             setAccessibilityLabel(tab.title)
@@ -327,6 +340,7 @@ public final class DitherTabStripView: TopbarDragView {
             frost.frame = bounds
             frost.cornerRadius = DitherChrome.controlRadius
             icon.frame = NSRect(x: 10, y: (bounds.height - 14) / 2, width: 14, height: 14)
+            picture.frame = icon.frame
             let closeX = bounds.width - 6 - 16
             close.frame = NSRect(x: closeX, y: (bounds.height - 16) / 2, width: 16, height: 16)
             grid?.frame = close.frame

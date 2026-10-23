@@ -40,6 +40,14 @@ final class DitherTabsController {
             self?.sync()
         }
         strip.onNew = { [weak self] in self?.openNewThreadTab() }
+        // A thread's tab shows its project's icon, as the sidebar and the menu bar draw it.
+        strip.image = { [weak sidebar] projectId in
+            guard let project = sidebar?.snapshot?.projects.first(where: { $0.id.rawValue == projectId }) else { return nil }
+            return ProjectMonogramView.menuImage(ProjectIconSource(project))
+        }
+        NotificationCenter.default.addObserver(forName: ProjectIconStore.didChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.strip.refreshImages() }
+        }
         sidebar.onOpenInNewTab = { [weak self, weak sidebar] id in self?.inNewTab { sidebar?.actions.openThread(id) } }
         layout.backButton.action = { [weak history] in history?.back() }
         layout.forwardButton.action = { [weak history] in history?.forward() }
@@ -79,7 +87,8 @@ final class DitherTabsController {
                 let title = shell?.title ?? ""
                 let status = shell.map { SidebarModel.resolveSidebarThreadStatus(SidebarThread($0, pendingSubagentRequest: requests[id])) }
                 let activity: DitherTabStripView.Tab.Activity? = status == .working ? .working : status == .waiting ? .waiting : nil
-                return .init(id: key, title: title.isEmpty ? "Untitled" : title, icon: .messageSquare, activity: activity)
+                return .init(id: key, title: title.isEmpty ? "Untitled" : title, icon: .messageSquare, activity: activity,
+                             imageKey: shell?.projectId.rawValue)
             case .draft: return .init(id: key, title: "New thread", icon: .squarePen)
             case .settings: return .init(id: key, title: "Settings", icon: .settings)
             case .pullRequests: return .init(id: key, title: "Pull requests", icon: .gitPullRequestArrow)
