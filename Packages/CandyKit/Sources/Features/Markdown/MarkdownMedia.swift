@@ -155,11 +155,14 @@ public enum MarkdownImages {
     }
 
     /// A tool output loader keeps the same signed resource and downloaded file across size changes.
-    nonisolated static func assetLoader(key: String, resource: JSONValue) -> AsyncImageView.Loader {
+    /// `onFile` sees the downloaded bytes once, while the file still exists (the gallery hashes them).
+    nonisolated static func assetLoader(key: String, resource: JSONValue, onFile: (@Sendable (URL) async -> Void)? = nil) -> AsyncImageView.Loader {
         let download = MarkdownImageDownload {
             guard let asset = await signedURL(resource: resource) else { return nil }
             if let size = asset.size { await record(size, for: key) }
-            return await MarkdownImageDownload.fetch(asset.url)
+            let file = await MarkdownImageDownload.fetch(asset.url)
+            if let file, let onFile { await onFile(file.url) }
+            return file
         }
         return { side in
             guard let file = await download.value() else { return nil }

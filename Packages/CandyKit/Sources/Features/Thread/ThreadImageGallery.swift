@@ -32,8 +32,10 @@ public struct GalleryImage: Hashable, Sendable {
     public var itemId: TurnItemId?
     /// The server's stored copy of a viewed image, when the item's output kept one.
     public var stored: ToolOutputImage?
-    /// The SHA-256 of our kept copy, once we have one.
+    /// The SHA-256 of its bytes, from our kept copy or from a download, once known.
     public var contentHash: String?
+    /// How many times agents viewed these same bytes; the tile stands for all of them.
+    public var views = 1
 
     public init(source: Source, threadId: ThreadId, agent: String, entryId: String, at: T3Timestamp, itemId: TurnItemId? = nil) {
         self.source = source; self.threadId = threadId; self.agent = agent; self.entryId = entryId; self.at = at; self.itemId = itemId
@@ -205,14 +207,30 @@ public enum ThreadImageGallery {
         return regex.matches(in: text, range: NSRange(location: 0, length: ns.length)).map { ns.substring(with: $0.range(at: 1)) }
     }
 
-    /// The gallery: the open thread's images and its children's, newest first, one tile per picture (its newest view).
-    public static func merge(_ lists: [[GalleryImage]]) -> [GalleryImage] {
-        let all = lists.flatMap { $0 }.enumerated().sorted { a, b in
+    /// The gallery: the open thread's images and its children's, newest first, one tile per picture: its newest view,
+    /// counting the others. `loaded` adds hashes learned from downloads (by `GalleryImage.key`), so a server copy, a
+    /// tool output and a kept file with the same bytes are one tile.
+    public static func merge(_ lists: [[GalleryImage]], loaded: [String: String] = [:]) -> [GalleryImage] {
+        let all = lists.flatMap { $0 }.map { image -> GalleryImage in
+            var image = image
+            if image.contentHash == nil { image.contentHash = loaded[image.key] }
+            return image
+        }.enumerated().sorted { a, b in
             let l = a.element.at.epochMs ?? 0, r = b.element.at.epochMs ?? 0
             return l != r ? l > r : a.offset > b.offset
         }.map(\.element)
-        var seen: Set<String> = []
-        return all.filter { seen.insert($0.dedupeKey).inserted }
+        // A path seen before its hash is known shares the hash its other views carry.
+        var hashByKey: [String: String] = [:]
+        for image in all { if let hash = image.contentHash { hashByKey[image.key] = hash } }
+        var index: [String: Int] = [:]
+        var out: [GalleryImage] = []
+        for var image in all {
+            if image.contentHash == nil { image.contentHash = hashByKey[image.key] }
+            if let i = index[image.dedupeKey] { out[i].views += image.views; continue }
+            index[image.dedupeKey] = out.count
+            out.append(image)
+        }
+        return out
     }
 
     /// Names the open thread's children: provider subagents count up in the order they started, delegated tasks keep
@@ -252,6 +270,9 @@ public final class ThreadImageGalleryController {
     private var hashesLoaded: Set<ThreadId> = []
     /// Whether each tile's file existed when first checked, by pixel key. A gone file stays gone; a new view is a new tile.
     private var fileState: [String: Bool] = [:]
+    /// Hashes of downloaded bytes, by `GalleryImage.key`.
+    // ponytail: session only, a hash per loaded tile; bounded by the images a session opens
+    private var loadedHashes: [String: String] = [:]
     /// Tiles every source failed for, by pixel key.
     private var failed: Set<String> = []
     public private(set) var missing: Set<String> = []
@@ -307,6 +328,13 @@ public final class ThreadImageGalleryController {
         for c in collected.values { fetch(c) }
     }
 
+    /// A tile's downloaded bytes hashed to `hash`: identical pictures from different sources become one tile.
+    public func recordHash(_ image: GalleryImage, _ hash: String) {
+        guard image.contentHash == nil, loadedHashes[image.key] != hash else { return }
+        loadedHashes[image.key] = hash
+        sync()
+    }
+
     /// A tile whose every source failed.
     public func markFailed(_ image: GalleryImage) {
         guard failed.insert(image.pixelKey).inserted else { return }
@@ -349,7 +377,7 @@ public final class ThreadImageGalleryController {
     private func sync() {
         let lists = [ThreadImageGallery.assemble(own, counts: counts, hashes: hashes)]
             + children.map { id, c in ThreadImageGallery.assemble(c, agent: names[id] ?? "Subagent", counts: counts, hashes: hashes) }
-        let next = ThreadImageGallery.merge(lists)
+        let next = ThreadImageGallery.merge(lists, loaded: loadedHashes)
         if next != images { images = next }
         missing = Set(images.filter(isMissing).map(\.pixelKey))
         let shown = ThreadImageGallery.visible(images, missing: missing, showMissing: false)
@@ -384,6 +412,11 @@ public final class ThreadImageGalleryController {
         guard pill.window != nil, !pill.isHidden, !images.isEmpty, let window = pill.window else { pill.gallery.isPressed = false; return }
         let view = ThreadImageGalleryView()
         view.onFailed = { [weak self] image in self?.markFailed(image) }
+        view.onHash = { [weak self] image, hash in self?.recordHash(image, hash) }
+        view.onResize = { [weak self] in
+            guard let self, let popup = self.popup, let window = self.pill.window else { return }
+            PopupHost.host(for: window).reposition(popup)
+        }
         view.onShowMissing = { [weak self] on in self?.showMissing = on }
         view.apply(images: images, missing: missing, showMissing: showMissing)
         view.onOpenInThread = { [weak self] image in self?.close(); self?.onOpenInThread?(image) }
