@@ -27,8 +27,10 @@ final class OrchestratorController {
     private(set) var pane: OrchestratorPaneView?
     private var feed: OrchestratorThreadFeed?
     private var projection: ThreadProjection?
-    /// The machine's threads as last seen, the baseline for events; reset with each new session.
-    private var baseline: (session: ObjectIdentifier, threads: [ThreadId: ThreadShell])?
+    /// Each machine's threads as last seen, the baseline for events; reset with each new session.
+    private var baselines: [String: (session: ObjectIdentifier, threads: [ThreadId: ThreadShell])] = [:]
+    /// Runs its `orchestrator-call` blocks on every machine.
+    private let remote: OrchestratorRemote
     private var batch = OrchestratorEventBatch()
     private var flushWork: DispatchWorkItem?
     private var starting = false
@@ -46,6 +48,7 @@ final class OrchestratorController {
         self.environments = environments
         self.sidebar = sidebar
         self.threads = threads
+        remote = OrchestratorRemote(environments: environments, threads: threads)
         store.actions.start = { [weak self] in self?.start() }
         store.actions.open = { [weak self] in self?.open() }
         store.actions.status = { [weak self] in self?.statusText ?? "Not started" }
@@ -54,6 +57,13 @@ final class OrchestratorController {
         sidebar.actions.openOrchestrator = { [weak self] in self?.open() }
         // A rename changes the brief's {{name}}, so it goes out as an updated brief with your next message.
         sidebar.actions.renameOrchestrator = { name in OrchestratorStore.shared.update { $0.name = name } }
+        remote.homeId = { [weak self] in self?.machineId }
+        remote.orchestrator = { [weak self] in self?.threadId }
+        remote.rows = { [weak self] in self?.availableRows($0) ?? [] }
+        remote.reply = { [weak self] text in
+            guard let self, self.active, let env = self.machineId, let id = self.threadId else { return }
+            self.dispatch(text, to: id, env: env)
+        }
         configChanged()
     }
 
@@ -98,7 +108,8 @@ final class OrchestratorController {
         flushWork?.cancel()
         flushWork = nil
         batch.reset()
-        baseline = nil
+        baselines = [:]
+        remote.reset()
         feed?.stop()
         feed = nil
         projection = nil
@@ -112,6 +123,7 @@ final class OrchestratorController {
         // At launch the schedule turns off once its machine's shell has the thread.
         syncSchedules(enabled: false)
         forgetVanishedThread()
+        remote.orchestratorChanged(orchestratorShell)
         relay()
         refreshViews()
     }
@@ -163,7 +175,7 @@ final class OrchestratorController {
         let view = pane ?? {
             let p = OrchestratorPaneView()
             p.onSend = { [weak self] text in self?.send(text) }
-            p.onOpenThread = { [weak self] id in self?.sidebar?.actions.openThread(id) }
+            p.onOpenThread = { [weak self] id in self.map { $0.sidebar?.actions.openThread($0.locate(id)) } }
             p.onRespond = { [weak self] need, decision in self?.respond(need, decision) }
             p.onUndoMemory = { [weak self] id in self?.undoMemory(id) }
             p.onStart = { [weak self] in self?.start() }
@@ -196,6 +208,16 @@ final class OrchestratorController {
         feed = nil
         projection = nil
         refreshViews()
+    }
+
+    /// A link scoped to its own machine names a thread there; one that isn't is on another machine.
+    private func locate(_ id: ThreadId) -> ThreadId {
+        let local = id.localId.rawValue
+        if let env = id.environmentId, shell(env)?.threads.contains(where: { $0.id.rawValue == local }) == true { return id }
+        for env in environments.environmentIds where shell(env)?.threads.contains(where: { $0.id.rawValue == local }) == true {
+            return ThreadId(local).scoped(to: env)
+        }
+        return id
     }
 
     /// Gives the main area back to the thread view; set by the app.
@@ -270,21 +292,22 @@ final class OrchestratorController {
         let scratch = sidebar?.state.scratchRoots[env]
         let projects = (snapshot?.projects ?? []).filter { SidebarModel.normalizeProjectPath($0.workspaceRoot) != scratch }
             .map { (name: $0.title, id: $0.id.rawValue, path: $0.workspaceRoot) }
-        let titles = Dictionary((snapshot?.threads ?? []).map { ($0.id.rawValue, $0.title) }, uniquingKeysWith: { a, _ in a })
+        let machines = remote.machines()
         let handsOff = config.handsOff.compactMap { key -> String? in
             let id = ThreadId(key)
-            guard id.environmentId == env else { return nil }
+            guard let machine = id.environmentId, let m = machines.first(where: { $0.id == machine }) else { return nil }
             let local = id.localId.rawValue
-            return "“\(titles[local] ?? "Untitled")” (t3-thread://v1/\(local))"
+            let title = shell(machine)?.threads.first { $0.id.rawValue == local }?.title ?? "Untitled"
+            return "“\(title)” (t3-thread://v1/\(local))" + (machine == env ? "" : " on \(m.label) (machine \(machine))")
         }.sorted()
         let inputs = OrchestratorBrief.Inputs(name: config.displayName, machine: machineLabel, projects: projects, crewLimit: config.crewLimit,
                                               models: availableRows(env), notebook: config.notebook, handsOff: handsOff,
-                                              askFirstMinutes: config.askFirstMinutes)
+                                              askFirstMinutes: config.askFirstMinutes, machines: machines)
         return (OrchestratorBrief.render(config.prompt, inputs), OrchestratorBrief.fingerprint(config.prompt, inputs))
     }
 
     /// The Models rows whose model this machine's catalog offers; the rest stay out of the brief.
-    private func availableRows(_ env: String) -> [OrchestratorModelRow] {
+    func availableRows(_ env: String) -> [OrchestratorModelRow] {
         guard let providers = threads.composer.config(env)?.providers else { return config.models }
         let catalog = ProviderCatalog(providers)
         return config.models.filter { catalog.entry(ProviderInstanceId(rawValue: $0.instanceId))?.model($0.model) != nil }
@@ -456,16 +479,23 @@ final class OrchestratorController {
     /// Diffs the machine's threads against the last live state and batches what changed. It runs on server pushes only;
     /// one timer is armed per batch window and none while nothing happens.
     private func relay() {
-        guard let env = machineId, let orchestrator = threadId, machine != nil,
-              let session = environments.session(env), let snapshot = shell(env) else { return }
-        let current = snapshot.threads.map { t -> ThreadShell in var s = t; s.id = t.id.scoped(to: env); return s }
-        let key = ObjectIdentifier(session)
-        defer { baseline = (key, Dictionary(current.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })) }
-        // The first state of a session is the baseline; nothing in it is news.
-        guard let old = baseline, old.session == key else { return }
+        guard let home = machineId, let orchestrator = threadId, machine != nil else { return }
         let config = self.config
-        let events = OrchestratorEvent.diff(old: old.threads, new: current, orchestrator: orchestrator,
-                                            handsOff: { config.isHandsOff($0) }, windowMinutes: config.askFirstMinutes, now: Date())
+        var events: [OrchestratorEvent] = []
+        // Every machine's threads: the relay reaches them all (docs/orchestrator.md, "Every machine").
+        for env in environments.environmentIds {
+            guard let session = environments.session(env), let snapshot = shell(env) else { continue }
+            let current = snapshot.threads.map { t -> ThreadShell in var s = t; s.id = t.id.scoped(to: env); return s }
+            let key = ObjectIdentifier(session)
+            let old = baselines[env]
+            baselines[env] = (key, Dictionary(current.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }))
+            // The first state of a session is the baseline; nothing in it is news.
+            guard let old, old.session == key else { continue }
+            events += OrchestratorEvent.diff(old: old.threads, new: current, orchestrator: orchestrator,
+                                             handsOff: { config.isHandsOff($0) }, windowMinutes: config.askFirstMinutes, now: Date(),
+                                             relayedAt: { config.relayedAt[$0.rawValue] },
+                                             machine: env == home ? nil : environments.label(env) ?? env)
+        }
         guard let deadline = batch.add(events, now: Date()) else { return }
         let work = DispatchWorkItem { [weak self] in self?.flush() }
         flushWork = work
@@ -474,9 +504,11 @@ final class OrchestratorController {
 
     private func flush() {
         flushWork = nil
-        let live = Set((machineId.flatMap { shell($0) }?.threads ?? []).filter { $0.archivedAt == nil && $0.deletedAt == nil }.map(\.id.rawValue))
+        let live = Set(environments.environmentIds.flatMap { env in
+            (shell(env)?.threads ?? []).filter { $0.archivedAt == nil && $0.deletedAt == nil }.map { $0.id.scoped(to: env) }
+        })
         guard active, let env = machineId, let id = threadId,
-              let text = batch.flush(now: Date().addingTimeInterval(0.001), keep: { live.contains($0.threadId.localId.rawValue) }) else { return }
+              let text = batch.flush(now: Date().addingTimeInterval(0.001), keep: { live.contains($0.threadId) }) else { return }
         dispatch(text, to: id, env: env)
     }
 
@@ -549,7 +581,8 @@ final class OrchestratorController {
     // MARK: Hands off
 
     func menuItems(_ id: ThreadId) -> [ThreadMenuItem] {
-        guard active, id.environmentId == machineId, !config.isOrchestrator(id) else { return [] }
+        // Every machine: the relay prompts threads anywhere, so Hands off works anywhere.
+        guard active, id.environmentId != nil, !config.isOrchestrator(id) else { return [] }
         return [ThreadMenuItem("hands-off", config.isHandsOff(id) ? "Let the Orchestrator prompt it" : "Hands off")]
     }
 

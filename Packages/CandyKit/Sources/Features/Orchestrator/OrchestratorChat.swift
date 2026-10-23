@@ -67,6 +67,11 @@ public enum OrchestratorChat {
                         let e = eventLine(String(line))
                         out.append(.line(id: "event-\(mid)-\(i)", text: e.text, threadId: e.threadId))
                     }
+                } else if OrchestratorRelay.isResultMessage(text) {
+                    // What the relay ran on other machines (docs/orchestrator.md, "Every machine").
+                    for (i, summary) in OrchestratorRelay.summaries(text).enumerated() {
+                        out.append(.line(id: "result-\(mid)-\(i)", text: summary.prefix(1).uppercased() + summary.dropFirst(), threadId: nil))
+                    }
                 } else if text.hasPrefix(scheduledPrefix) {
                     out.append(.line(id: "scheduled-\(mid)", text: "Scheduled check while CandyWrapper was closed", threadId: nil))
                 } else {

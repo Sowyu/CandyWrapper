@@ -95,6 +95,18 @@ import Testing
         #expect(OrchestratorCrewCard.group(.failed, completedTurn: true) == .stopped)
         #expect(OrchestratorCrewCard.group(.limited, completedTurn: true) == .stopped)
     }
+
+    @Test func relayResultsAndCallsDrawAsLinesNotBubbles() {
+        let messages = [
+            message("m1", "assistant", "Looking.\n\n```orchestrator-call\n{\"tool\":\"list\"}\n```", minutes: 0),
+            message("m2", "user", "Result: listed 3 threads on 2 machines\n## miniko\n- x\n\nResult: sent to “Fixer” on MacBook", minutes: 1),
+        ]
+        let items = OrchestratorChat.items(messages: messages, turnItems: [], running: false, now: start)
+        let lines = items.compactMap { item -> String? in if case .line(_, let text, _) = item { text } else { nil } }
+        #expect(lines == ["Listed 3 threads on 2 machines", "Sent to “Fixer” on MacBook"])
+        let bubbles = items.compactMap { item -> String? in if case .bubble(_, _, let text, _, _) = item { text } else { nil } }
+        #expect(bubbles == ["Looking."])
+    }
 }
 
 /// The Orchestrator's draft lives in the thread composer's store (`ComposerController.setDraftText`, saved to
