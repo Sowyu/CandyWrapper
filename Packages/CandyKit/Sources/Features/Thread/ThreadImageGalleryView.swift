@@ -12,7 +12,7 @@ import T3Store
 public final class ThreadImageGalleryView: DSView {
     /// The widest and tallest the card gets; past `size.height` the grid scrolls.
     static let size = NSSize(width: 540, height: 470)
-    /// Room for the empty and missing state's two lines.
+    /// The empty state's height.
     static let minHeight: CGFloat = 160
     static let inset: CGFloat = 10, gap: CGFloat = 8, columns = 4, header: CGFloat = 36, caption: CGFloat = 18
 
@@ -26,18 +26,12 @@ public final class ThreadImageGalleryView: DSView {
             reload()
         }
     }
-    /// Every image, missing ones included, and the pixel keys of those nothing could load.
-    private(set) var all: [GalleryImage] = []
-    private(set) var missing: Set<String> = []
-    private(set) var showMissing = false
     /// Every source of a tile failed.
     public var onFailed: ((GalleryImage) -> Void)?
     /// A tile's downloaded bytes hashed to this.
     public var onHash: ((GalleryImage, String) -> Void)?
     /// The card's height changed; the popup moves to fit.
     public var onResize: (() -> Void)?
-    /// "Show missing" flipped.
-    public var onShowMissing: ((Bool) -> Void)?
     public var onOpenInThread: ((GalleryImage) -> Void)?
     public var onReveal: ((GalleryImage) -> Void)?
     /// Whether "Reveal in Finder" applies: a host file on this Mac.
@@ -51,7 +45,6 @@ public final class ThreadImageGalleryView: DSView {
     private let grid = GalleryGridView()
     private lazy var scroll = ScrollAreaView(documentView: grid, scrollFade: true)
     private let empty = TextBlockView("No images yet", font: DSFont.ui(12), lineHeight: 17, color: Themed.color(\.mutedForeground))
-    private let missingToggle = ButtonView("Show missing", variant: .ghost, size: .xs)
     private let picture = AsyncImageView()
     private let detail = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private let openInThread = ButtonView("Open in thread", icon: .arrowUpRight, variant: .ghost, size: .xs)
@@ -68,11 +61,7 @@ public final class ThreadImageGalleryView: DSView {
         picture.fallback.text = "Loading…"
         picture.layer?.cornerRadius = 8
         detail.truncation = .middle
-        for view in [title, count, back, previous, next, scroll, empty, missingToggle, picture, detail, openInThread, reveal] as [NSView] { addSubview(view) }
-        missingToggle.action = { [weak self] in
-            guard let self else { return }
-            self.onShowMissing?(!self.showMissing)
-        }
+        for view in [title, count, back, previous, next, scroll, empty, picture, detail, openInThread, reveal] as [NSView] { addSubview(view) }
         grid.loader = { [weak self] image in
             Self.loader(image, onHash: { hash in self?.onHash?(image, hash) }) { self?.onFailed?(image) }
         }
@@ -106,15 +95,6 @@ public final class ThreadImageGalleryView: DSView {
         return min(size.height, max(minHeight, header + grid))
     }
 
-    /// The controller's state: every image, which are missing, and whether missing ones show.
-    public func apply(images all: [GalleryImage], missing: Set<String>, showMissing: Bool) {
-        self.all = all
-        self.missing = missing
-        self.showMissing = showMissing
-        let visible = ThreadImageGallery.visible(all, missing: missing, showMissing: showMissing)
-        if visible != images { images = visible } else { reload() }
-    }
-
     private var shown: GalleryImage? { large.flatMap { images.indices.contains($0) ? images[$0] : nil } }
 
     /// ← and → step through the large view; Escape goes back to the grid, then closes.
@@ -135,19 +115,10 @@ public final class ThreadImageGalleryView: DSView {
     private func reload() {
         let image = shown
         if large != nil, image == nil { large = nil; return }
-        let total = max(all.count, images.count)
-        let missingCount = all.isEmpty ? 0 : missing.count
-        count.text = image == nil ? ThreadImageGallery.countLabel(total: total, missing: missingCount) : "\(large! + 1) of \(images.count)"
+        count.text = image == nil ? "\(images.count)" : "\(large! + 1) of \(images.count)"
         let gridShown = image == nil
         scroll.isHidden = !gridShown || images.isEmpty
         empty.isHidden = !gridShown || !images.isEmpty
-        // The honest limit: a file deleted before we kept a copy, which the server didn't keep either, is gone.
-        empty.text = missingCount > 0
-            ? (missingCount == 1 ? "This image is gone. Its file was" : "These \(missingCount) images are gone. Their files were")
-                + " deleted or overwritten before CandyWrapper kept a copy, and the server didn't keep one."
-            : "No images yet"
-        missingToggle.isHidden = !gridShown || missingCount == 0
-        missingToggle.title = showMissing ? "Hide missing" : "Show missing"
         title.isHidden = !gridShown
         for view in [back, previous, next, picture, detail, openInThread] as [NSView] { view.isHidden = gridShown }
         previous.isHidden = gridShown || images.count < 2
@@ -180,8 +151,6 @@ public final class ThreadImageGalleryView: DSView {
         title.frame = NSRect(x: i + 4, y: headerMid - 9, width: 120, height: 18)
         let countX = large == nil ? title.frame.maxX : back.frame.maxX + 6
         count.frame = NSRect(x: countX, y: headerMid - 9, width: 140, height: 18)
-        let toggleWidth = missingToggle.intrinsicContentSize.width
-        missingToggle.frame = NSRect(x: w - i - toggleWidth, y: headerMid - 12, width: toggleWidth, height: 24)
         next.frame = NSRect(x: w - i - 22, y: headerMid - 12, width: 24, height: 24)
         previous.frame = NSRect(x: next.frame.minX - 26, y: headerMid - 12, width: 24, height: 24)
         let body = NSRect(x: 0, y: Self.header, width: w, height: bounds.height - Self.header)
@@ -344,7 +313,7 @@ final class GalleryCellView: ControlView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     func show(_ image: GalleryImage, loader: @escaping AsyncImageView.Loader) {
-        thumb.set(key: image.pixelKey, fallbackText: "Missing", loader: loader, loadingText: "")
+        thumb.set(key: image.pixelKey, fallbackText: "", loader: loader, loadingText: "")
         caption.text = ThreadImageGalleryView.caption(image)
         toolTip = image.filePath ?? ThreadImageGalleryView.name(image)
         setAccessibilityLabel(ThreadImageGalleryView.name(image) + ", " + caption.text)
