@@ -66,6 +66,10 @@ public struct OrchestratorPaneState: Equatable {
     public var working = false
     /// Images waiting to go with your next message.
     public var pendingImages: [ComposerAttachment] = []
+    /// A question it asked with its question tool (AskUserQuestion), answered above the composer.
+    public var question: PendingUserInput?
+    /// Its thread's id on the server, which the answer names.
+    public var threadLocalId = ""
     public init() {}
 }
 
@@ -92,6 +96,15 @@ public final class OrchestratorPaneView: DSView {
         get { chat.imageLoader }
         set { chat.imageLoader = newValue }
     }
+    /// An answer to its question, a `runtime-request.respond` payload ready for `orchestration.dispatchCommand`.
+    public var onAnswer: ((JSONValue) -> Void)?
+    /// A signed URL for a published page (attachment id, file name), as the thread view loads them.
+    public var webAssetURL: ((String, String) async -> URL?)? {
+        get { chat.webAssetURL }
+        set { chat.webAssetURL = newValue }
+    }
+    /// The answer didn't reach the server: the question takes input again.
+    public func answerFailed() { questionPanel?.isResponding = false }
     /// Shows a saved draft, unless you're typing in the field.
     public func setDraft(_ text: String) { composer.draft = text }
     public var draft: String { composer.draft }
@@ -121,6 +134,10 @@ public final class OrchestratorPaneView: DSView {
     private let divider = CALayer()
     public private(set) var state = OrchestratorPaneState()
     private var showsOverview = false
+    /// The thread composer's question banner, above the composer while a question is open.
+    private var questionPanel: QuestionPanelView?
+    /// What you were writing when the question came; it comes back once the question is answered.
+    private var draftBeforeQuestion = ""
 
     public override init(frame: NSRect) {
         super.init(frame: frame)
@@ -172,12 +189,13 @@ public final class OrchestratorPaneView: DSView {
         let status = !next.started ? "Not started" : !next.connected ? "Offline" : next.working ? "Working"
             : next.needs.isEmpty ? nil : "\(next.needs.count) waiting on you"
         subtitle.text = [next.machine, status].compactMap { $0 }.joined(separator: " · ")
-        composer.placeholder = "Message \(next.name)"
         openThread.isHidden = !next.started
         start.isHidden = next.started
         composer.isHidden = !next.started || showsOverview
         composer.isEnabled = next.connected
         composer.attachments = next.pendingImages
+        if old.question != next.question || old.threadLocalId != next.threadLocalId { syncQuestion() }
+        if questionPanel == nil { composer.placeholder = "Message \(next.name)" }
         // Before the items, so new stacks get the picked bot.
         if old.bot != next.bot { chat.setAvatarIdentity(next.bot) }
         if old.items != next.items || old.undoable != next.undoable || old.undone != next.undone || old.needs != next.needs
@@ -190,6 +208,42 @@ public final class OrchestratorPaneView: DSView {
     }
 
     public func focusComposer() { composer.focus() }
+
+    /// Opens, moves or closes the question banner. While it shows, the composer's field is its free-text answer,
+    /// Return and Send advance it, and an option pick may submit it, as in the thread composer.
+    private func syncQuestion() {
+        guard let input = state.question, !state.threadLocalId.isEmpty else {
+            guard let panel = questionPanel else { return }
+            panel.removeFromSuperview()
+            questionPanel = nil
+            composer.answering = nil
+            composer.placeholder = "Message \(state.name)"
+            composer.setText(draftBeforeQuestion)
+            needsLayout = true
+            return
+        }
+        let panel = questionPanel ?? {
+            let p = QuestionPanelView()
+            p.onSubmit = { [weak self, weak p] payload in p?.isResponding = true; self?.onAnswer?(payload) }
+            p.onDismiss = { [weak self, weak p] payload in p?.isResponding = true; self?.onAnswer?(payload) }
+            p.onChange = { [weak self] in self?.questionChanged() }
+            addSubview(p, positioned: .below, relativeTo: composer)
+            questionPanel = p
+            draftBeforeQuestion = composer.draft
+            composer.answering = (text: { [weak p] t in p?.setCustomAnswer(t) }, advance: { [weak p] in p?.advance() })
+            return p
+        }()
+        panel.configure(input, threadId: ThreadId(state.threadLocalId))
+        questionChanged()
+    }
+
+    private func questionChanged() {
+        guard let panel = questionPanel else { return }
+        composer.placeholder = panel.placeholder
+        composer.answerEditable = panel.editorEnabled
+        if composer.draft != panel.customAnswer { composer.setText(panel.customAnswer) }
+        needsLayout = true
+    }
 
     private var pinnedToBottom = true
 
@@ -237,6 +291,12 @@ public final class OrchestratorPaneView: DSView {
         overviewScroll.frame = NSRect(x: 0, y: bodyTop, width: w, height: max(0, h - bodyTop))
         let cw = min(720, w - 40)
         composer.frame = NSRect(x: (w - cw) / 2, y: h - composerH + 8, width: cw, height: composerH - 24)
+        // The question banner tucks its last 17pt under the composer, as above the thread composer.
+        if let panel = questionPanel {
+            let qh = panel.preferredHeight(width: cw)
+            panel.frame = NSRect(x: composer.frame.minX, y: composer.frame.minY - qh + ComposerBannerView.overlap, width: cw, height: qh)
+            chatScroll.frame.size.height = max(0, panel.frame.minY - 8 - chatScroll.frame.minY)
+        }
         let sw = start.intrinsicContentSize.width
         start.frame = NSRect(x: (w - sw) / 2, y: h - 56, width: sw, height: 36)
         layoutChat()
@@ -257,6 +317,7 @@ final class OrchestratorChatView: DSView {
     var onUndo: ((String) -> Void)?
     var onHeightChange: (() -> Void)?
     var imageLoader: ((String, Int) async -> CGImage?)?
+    var webAssetURL: ((String, String) async -> URL?)?
     private var items: [OrchestratorChatItem] = []
     private var views: [String: NSView] = [:]
     private var order: [String] = []
@@ -310,6 +371,11 @@ final class OrchestratorChatView: DSView {
                     b.load(self.imageLoader)
                     return b
                 }()
+            case .html(_, let page):
+                let card = (views[id] as? OrchestratorHtmlCard) ?? OrchestratorHtmlCard(page)
+                card.assetURL = webAssetURL
+                card.onHeightChange = { [weak self] in self?.relayout() }
+                next[id] = card
             case .read:
                 next[id] = (views[id] as? OrchestratorReadLabel) ?? OrchestratorReadLabel()
             case .typing:
@@ -402,6 +468,12 @@ final class OrchestratorChatView: DSView {
                 out.append((b, NSRect(x: x, y: y, width: size.width, height: size.height)))
                 if !user, last, let bot = avatars[id] { out.append((bot, NSRect(x: x0, y: y + size.height - 24, width: 26, height: 26))) }
                 y += size.height
+            case .html:
+                // As wide as the thread view's reply column allows, in the Orchestrator's lane.
+                let width = min(lane - 34, CGFloat(HtmlRenderReference.columnWidth))
+                let h = (v as! OrchestratorHtmlCard).height(forWidth: width)
+                out.append((v, NSRect(x: x0 + 34, y: y, width: width, height: h)))
+                y += h
             case .image:
                 let size = (v as! OrchestratorImageBubble).size(maxSide: min(240, maxBubble))
                 // Flush with the bubbles' body, inside their tail.
@@ -586,6 +658,86 @@ private extension NSColor {
         var out = self
         view.effectiveAppearance.performAsCurrentDrawingAppearance { out = NSColor(cgColor: self.cgColor) ?? self }
         return out
+    }
+}
+
+/// A page the Orchestrator published with `html_render`, framed as the thread view frames it (`HtmlRenderRowView`): the
+/// same web frame, theme and messages, at the server's measured height until the page reports its own. The web view
+/// exists only while the card is in a shown window.
+// ponytail: no "Open full screen" or page parking across chat rebuilds; borrow HtmlRenderRowView's if pages get heavy
+final class OrchestratorHtmlCard: DSView {
+    let page: HtmlRenderReference
+    private let frameView = ThreadWebFrameView()
+    private let failed = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+    private var contentHeight: Double?
+    private var loading: Task<Void, Never>?
+    var assetURL: ((String, String) async -> URL?)? { didSet { syncContent() } }
+    var onHeightChange: (() -> Void)?
+
+    init(_ page: HtmlRenderReference) {
+        self.page = page
+        super.init(frame: .zero)
+        addSubview(frameView)
+        failed.text = "Unable to load \(page.title)"
+        failed.alignment = .center
+        failed.isHidden = true
+        addSubview(failed)
+        frameView.onMessage = { [weak self] data in self?.received(data) }
+        setAccessibilityLabel(page.title)
+    }
+
+    isolated deinit { loading?.cancel() }
+
+    func height(forWidth width: CGFloat) -> CGFloat {
+        CGFloat(page.frameHeight(width: Double(width), contentHeight: contentHeight))
+    }
+
+    private var onScreen: Bool { window != nil && !isHiddenOrHasHiddenAncestor }
+
+    private func syncContent() {
+        guard onScreen else {
+            loading?.cancel()
+            loading = nil
+            frameView.release()
+            return
+        }
+        guard !frameView.isLive, loading == nil, let assetURL else { return }
+        let page = self.page
+        loading = Task { [weak self] in
+            let url = await assetURL(page.attachmentId, page.fileName)
+            guard let self, !Task.isCancelled else { return }
+            self.loading = nil
+            guard let url, self.onScreen else { self.failed.isHidden = url != nil; return }
+            let dark = self.effectiveAppearance.isDark
+            let themed = URL(string: url.absoluteString.split(separator: "#", maxSplits: 1)[0] + HtmlRenderTheme(dark: dark).fragment) ?? url
+            self.frameView.activate(.init(src: themed, title: page.title, dark: dark))
+        }
+    }
+
+    private func received(_ data: JSONValue) {
+        if let h = HtmlRenderTheme.contentHeight(data), h != contentHeight {
+            contentHeight = h
+            onHeightChange?()
+        }
+        HtmlRenderRowView.handle(data, frame: frameView, model: nil)
+    }
+
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); syncContent() }
+    override func viewDidHide() { super.viewDidHide(); syncContent() }
+    override func viewDidUnhide() { super.viewDidUnhide(); syncContent() }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        if frameView.isLive {
+            frameView.dark = effectiveAppearance.isDark
+            frameView.post(HtmlRenderTheme(dark: frameView.dark).message)
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        frameView.frame = bounds
+        failed.frame = NSRect(x: 0, y: bounds.midY - 8, width: bounds.width, height: 16)
     }
 }
 
@@ -1172,6 +1324,22 @@ final class OrchestratorComposerView: DSView {
         }
     }
 
+    /// While a question is open: edits go to its free-text answer and Return or Send advance it. Nil is a message.
+    var answering: (text: (String) -> Void, advance: () -> Void)? { didSet { refreshSend() } }
+    /// A choice-only question locks the field.
+    var answerEditable = true { didSet { field.isEnabled = isEnabled && (answering == nil || answerEditable) } }
+
+    /// Replaces the field's text, typed or not, without reporting it as a draft.
+    func setText(_ text: String) {
+        guard field.text != text else { return }
+        suppressReport = true
+        field.text = text
+        suppressReport = false
+        refreshSend()
+        superview?.needsLayout = true
+    }
+    private var suppressReport = false
+
     /// The text in the field. Setting it leaves alone a field you're typing in.
     var draft: String {
         get { field.text }
@@ -1198,9 +1366,12 @@ final class OrchestratorComposerView: DSView {
         attach.toolTip = "Attach images"
         attach.action = { [weak self] in self?.chooseImages() }
         field.onChange = { [weak self] text in
-            self?.refreshSend()
-            self?.onDraftChange?(text)
-            self?.superview?.needsLayout = true
+            guard let self else { return }
+            self.refreshSend()
+            if !self.suppressReport {
+                if let answering = self.answering { answering.text(text) } else { self.onDraftChange?(text) }
+            }
+            self.superview?.needsLayout = true
         }
         field.onCommand = { [weak self] sel in
             guard sel == #selector(NSResponder.insertNewline(_:)), !(NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false),
@@ -1230,11 +1401,12 @@ final class OrchestratorComposerView: DSView {
         !field.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || attachments.contains { $0.status == .ready }
     }
 
-    private func refreshSend() { send.isEnabled = isEnabled && hasContent && !uploading }
+    private func refreshSend() { send.isEnabled = isEnabled && (answering != nil || hasContent && !uploading) }
 
     func focus() { window?.makeFirstResponder(field) }
 
     func submit() {
+        if let answering { answering.advance(); return }
         let text = field.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard isEnabled, hasContent, !uploading else { return }
         field.text = ""

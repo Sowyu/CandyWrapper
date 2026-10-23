@@ -42,6 +42,8 @@ final class OrchestratorController {
     // ponytail: kept in memory only; a relaunch drops unsent images, persist them like the thread composer's if that bites
     private var pendingImages: [ComposerAttachment] = []
     private var uploads: [String: Task<Void, Never>] = [:]
+    /// Signed page URLs by attachment id, reused while they have 5 minutes left (HtmlRenderFrame.tsx:62-92).
+    private var pageURLs: [String: (url: URL, expires: Date)] = [:]
     private var wasActive = false
 
     init(environments: Environments, sidebar: SidebarContentView, threads: ThreadController) {
@@ -167,6 +169,9 @@ final class OrchestratorController {
         state.undoable = Set(memoryUndo.keys).subtracting(undone)
         state.undone = undone
         state.pendingImages = pendingImages
+        state.threadLocalId = machine?.threadId ?? ""
+        // A question it asked with its question tool, the oldest first, as the thread composer shows it.
+        state.question = projection.flatMap { PendingRequests.derive($0).activeUserInput }
         pane.set(state)
     }
 
@@ -189,6 +194,8 @@ final class OrchestratorController {
             p.onImages = { [weak self] files in self?.addImages(files) }
             p.onRemoveImage = { [weak self] id in self?.removeImage(id) }
             p.imageLoader = { [weak self] id, side in await self?.sentImage(id, side: side) }
+            p.onAnswer = { [weak self] payload in self?.answer(payload) }
+            p.webAssetURL = { [weak self] id, name in await self?.pageURL(id, name: name) }
             pane = p
             return p
         }()
@@ -371,6 +378,36 @@ final class OrchestratorController {
             } catch {
                 self?.toast("Couldn't send to the Orchestrator", (error as? RPCClientError)?.typedError?.message ?? "\(error)", .error)
                 done?(false)
+            }
+        }
+    }
+
+    // MARK: Pages and questions
+
+    /// A published page's signed inline URL, as the thread view asks for it (`assets.createUrl`, disposition inline).
+    private func pageURL(_ id: String, name: String) async -> URL? {
+        guard let env = machineId, let session = environments.session(env) else { return nil }
+        if let hit = pageURLs[id], hit.expires.timeIntervalSinceNow > 300 { return hit.url }
+        let resource: JSONValue = .object(["_tag": .string("attachment"), "attachmentId": .string(id), "fileName": .string(name),
+                                           "mimeType": .string("text/html"), "disposition": .string("inline")])
+        guard let reply = try? await session.supervisor.request("assets.createUrl", payload: .object(["resource": resource])),
+              let relative = reply["relativeUrl"]?.stringValue,
+              let url = URL(string: relative, relativeTo: session.http.baseURL)?.absoluteURL else { return nil }
+        let expires = reply["expiresAt"]?.doubleValue.map { Date(timeIntervalSince1970: $0 / 1000) } ?? Date().addingTimeInterval(3600)
+        pageURLs[id] = (url, expires)
+        return url
+    }
+
+    /// Your answer to its question, sent the way the thread composer sends one (`runtime-request.respond`).
+    private func answer(_ payload: JSONValue) {
+        guard let env = machineId, let session = environments.session(env) else {
+            pane?.answerFailed()
+            return toast("Couldn't answer the Orchestrator", "\(machineLabel) isn't connected.", .error)
+        }
+        Task { [weak self] in
+            do { _ = try await session.supervisor.request("orchestration.dispatchCommand", payload: payload) } catch {
+                self?.pane?.answerFailed()
+                self?.toast("Couldn't answer the Orchestrator", (error as? RPCClientError)?.typedError?.message ?? "\(error)", .error)
             }
         }
     }

@@ -13,6 +13,8 @@ public enum OrchestratorChatItem: Equatable, Sendable {
     case line(id: String, text: String, threadId: String?)
     /// An image you sent, drawn on its own like a photo in Messages.
     case image(id: String, attachmentId: String, name: String)
+    /// A page the Orchestrator published with `html_render`, shown above its reply as the thread view does.
+    case html(id: String, page: HtmlRenderReference)
     /// A chat bubble; `first` and `last` place it in its sender's stack, and only the last gets a tail.
     case bubble(id: String, fromUser: Bool, text: String, first: Bool, last: Bool)
     case plan(id: String, steps: [OrchestratorReply.PlanStep])
@@ -26,7 +28,7 @@ public enum OrchestratorChatItem: Equatable, Sendable {
     public var id: String {
         switch self {
         case .time(let id, _), .brief(let id, _, _), .line(let id, _, _), .bubble(let id, _, _, _, _), .plan(let id, _),
-             .memory(let id, _, _), .read(let id), .image(let id, _, _): id
+             .memory(let id, _, _), .read(let id), .image(let id, _, _), .html(let id, _): id
         case .typing: "typing"
         }
     }
@@ -43,6 +45,8 @@ public enum OrchestratorChat {
         var toolLinesShown = Set<String>()
         let tools = toolSummaries(turnItems)
         let images = sentImages(turnItems)
+        let pages = htmlPages(turnItems)
+        var pagesShown = Set<String>()
         let sorted = messages.sorted { ($0.createdAt.epochMs ?? 0, $0.id.rawValue) < ($1.createdAt.epochMs ?? 0, $1.id.rawValue) }
         var lastUser: (index: Int, ms: Int64)?
         var lastAssistantMs: Int64?
@@ -83,6 +87,10 @@ public enum OrchestratorChat {
                 if let run = m.runId?.rawValue, let summary = tools[run], toolLinesShown.insert(run).inserted {
                     out.append(.line(id: "tools-\(run)", text: summary, threadId: nil))
                 }
+                // The turn's pages sit above its reply (`HtmlRenderTimelineRow`).
+                if let run = m.runId?.rawValue, pagesShown.insert(run).inserted {
+                    for (i, page) in (pages[run] ?? []).enumerated() { out.append(.html(id: "html-\(run)-\(i)", page: page)) }
+                }
                 let reply = OrchestratorReply.parse(m.text)
                 if !reply.text.isEmpty { out.append(.bubble(id: mid, fromUser: false, text: reply.text, first: true, last: true)) }
                 if let plan = reply.plan, !plan.isEmpty { out.append(.plan(id: "plan-\(mid)", steps: plan)) }
@@ -92,15 +100,28 @@ public enum OrchestratorChat {
                 continue
             }
         }
-        // A running turn that used tools before it wrote anything.
+        // A running turn that used tools or published a page before it wrote anything.
         for (run, summary) in tools where !toolLinesShown.contains(run) && running {
             out.append(.line(id: "tools-\(run)", text: summary, threadId: nil))
+        }
+        for (run, list) in pages where !pagesShown.contains(run) {
+            for (i, page) in list.enumerated() { out.append(.html(id: "html-\(run)-\(i)", page: page)) }
         }
         if let lastUser, running || (lastAssistantMs ?? 0) >= lastUser.ms {
             out.insert(.read(id: "read"), at: lastUser.index + 1)
         }
         if running { out.append(.typing) }
         return stacked(out)
+    }
+
+    /// Each turn's published pages, in order (`ThreadWebContent.htmlRender`, a completed `html_render` call).
+    static func htmlPages(_ items: [TurnItem]) -> [String: [HtmlRenderReference]] {
+        var out: [String: [HtmlRenderReference]] = [:]
+        for item in items.sorted(by: { $0.ordinal < $1.ordinal }) {
+            guard let run = item.runId?.rawValue, let page = ThreadWebContent.htmlRender(item) else { continue }
+            out[run, default: []].append(page)
+        }
+        return out
     }
 
     /// The images each of your messages carried, from its turn item (`attachments` of type image).

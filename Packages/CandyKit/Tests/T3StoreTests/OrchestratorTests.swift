@@ -232,3 +232,15 @@ private func event(_ id: String, _ kind: OrchestratorEvent.Kind = .finished) -> 
         #expect(OrchestratorBrief.fingerprint(c.prompt, inputs("Ada")) != OrchestratorBrief.fingerprint(c.prompt, inputs("Orchestrator")))
     }
 }
+
+@Suite struct OrchestratorBriefToolsTests {
+    /// Both sections reach every brief, an edited prompt's too.
+    @Test func everyBriefRecommendsPagesAndTheQuestionTool() {
+        let c = OrchestratorConfig()
+        let brief = OrchestratorBrief.render("Custom prompt for {{name}}.", .init(
+            name: "Ada", machine: "m", projects: [], crewLimit: 4, models: c.models, notebook: c.notebook, handsOff: [], askFirstMinutes: 10))
+        #expect(brief.contains("check it with html_preview, then publish it with html_render before your reply"))
+        #expect(brief.contains("AskUserQuestion on Claude, request_user_input on Codex"))
+        #expect(brief.contains("Offer 2 to 4 short options"))
+    }
+}

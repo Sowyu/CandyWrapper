@@ -233,6 +233,10 @@ public enum OrchestratorBrief {
 
         Threads marked Hands off right now:
         \(handsOff)
+
+        \(visualsSection)
+
+        \(questionsSection)
         """
         return text.trimmingCharacters(in: .whitespacesAndNewlines) + "\n\n" + notes.joined(separator: "\n") + "\n" + app
             + (i.machines.count > 1 ? "\n\n" + otherMachines(i) : "")
@@ -257,6 +261,19 @@ public enum OrchestratorBrief {
         The same limits hold on every machine, and CandyWrapper enforces them: it refuses to prompt a Hands off thread, it refuses an ask-first thread until you asked the user and send again with "confirmed":true, and it refuses a launch once \(i.crewLimit) workers run across all machines. On \(i.machine) itself, keep using your t3 tools. Calls run only while CandyWrapper is open. Event lines name the machine of any thread that isn't on \(i.machine).
         """
     }
+
+    /// Added to every brief, so prompts edited before these existed still get them.
+    public static let visualsSection = """
+    # Showing visuals
+
+    When a chart, table, diagram or mockup would say more than prose, build a self-contained HTML page, check it with html_preview, then publish it with html_render before your reply. The user sees the page in your chat above your reply, so don't describe it again; add only what it doesn't say.
+    """
+
+    public static let questionsSection = """
+    # Asking the user
+
+    When you need the user to choose, ask with your question tool instead of in prose: AskUserQuestion on Claude, request_user_input on Codex. Offer 2 to 4 short options; the user can always type their own answer instead. Ask one question at a time, and only when the plan needs their decision.
+    """
 
     /// `{{models}}`: one table row per model, the default marked. Rows the caller found missing are left out before this.
     public static func modelsTable(_ rows: [OrchestratorModelRow]) -> String {
