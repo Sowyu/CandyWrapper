@@ -30,6 +30,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var welcomeOnboarding: WelcomeOnboardingController?
     private var snapShots: SnapShotController?
     private var openIn: OpenInController?
+    private var orchestrator: OrchestratorController?
+    /// The Orchestrator's "while closed" schedule was handed to T3 for this quit.
+    private var orchestratorHandedOff = false
     /// Built on the first Cmd+Q hold.
     private var quitOverlay: QuitHoldOverlayView?
     /// The spec's performance HUD, toggled by the hidden menu item below or the palette.
@@ -170,6 +173,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard confirmDitherQuit() else { returnFromCancelledQuit(); return .terminateCancel }
             asked = true
         }
+        // A quit you asked for turns the Orchestrator's schedule on first; the quit resumes once the server answered.
+        if ask, !orchestratorHandedOff, let orchestrator, orchestrator.needsQuitHandOff {
+            orchestratorHandedOff = true
+            orchestrator.handOffBeforeQuit { DispatchQueue.main.async { NSApp.terminate(nil) } }
+            return .terminateCancel
+        }
         guard let server else { environments?.stopAll(); return .terminateNow }
         let reply = server.shouldTerminate(installingUpdate: installing, asked: asked)
         if reply == .terminateCancel { returnFromCancelledQuit() }
@@ -294,6 +303,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let anchor = event.type == .rightMouseDown ? nil : NSPoint(x: 0, y: view.isFlipped ? view.bounds.maxY + 4 : -4)
             commands?.showThreadMenu(id, event: event, view: view, anchor: anchor, rename: { [weak threads] in threads?.panel.header.beginTitleRename() })
         }
+        let orchestrator = OrchestratorController(environments: environments, sidebar: sidebar, threads: threads)
+        self.orchestrator = orchestrator
+        orchestrator.showPane = { [weak commands] view in commands?.openUtilityPage(.orchestrator, view: view) }
+        orchestrator.closePane = { [weak commands] in commands?.closeUtilityPage() }
+        orchestrator.toast = { [weak threads] title, message, kind in threads?.panel.toasts.show(ToastView(title: title, message: message, kind: kind)) }
+        commands.onOrchestratorHidden = { [weak orchestrator] in orchestrator?.paneClosed() }
+        commands.extraMenuItems = { [weak orchestrator] id in orchestrator?.menuItems(id) ?? [] }
+        commands.performExtra = { [weak orchestrator] choice, id in orchestrator?.perform(choice, id) ?? false }
         sidebar.actions.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open() }
         sidebar.accountRow.onOpenMachines = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open(.connections) }
         sidebar.actions.openAutomations = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.show(.scheduledTasks) }
@@ -551,7 +568,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let history = RouteHistory()
         let currentRoute: () -> RouteHistory.Route? = { [weak settings, weak commands, weak threads] in
             if let settings, settings.isOpen { return .settings(settings.section) }
-            if let page = commands?.openUtilityKind { return page == .pullRequests ? .pullRequests : .usage }
+            if let page = commands?.openUtilityKind {
+                switch page {
+                case .pullRequests: return .pullRequests
+                case .usage: return .usage
+                case .orchestrator: return .orchestrator
+                }
+            }
             switch threads?.composer.target {
             case .thread(let id)?: return .thread(id)
             case .draft(let s)?: return .draft(s.draftId)
@@ -601,6 +624,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 settings.close(); commands.openUtilityPage(.pullRequests)
             case .usage:
                 settings.close(); commands.openUtilityPage(.usage)
+            case .orchestrator:
+                guard let orchestrator = self.orchestrator, OrchestratorStore.shared.isActive else { return false }
+                settings.close(); orchestrator.open()
             }
             return true
         }

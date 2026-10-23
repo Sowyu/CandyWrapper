@@ -10,7 +10,7 @@ public enum DitherThreadMenu {
     /// The leading group, the middle group in this order, and the closing group. Ids not listed (none today) join the middle.
     static let leading: [String] = ["settle", "unsettle", "snooze", "unsnooze"]
     static let middle: [String] = ["open-new-tab", "pin", "unpin", "rename", "regenerate-title", "copy", "new-thread-on-branch",
-                                   "filter-by-project", "auto-settle", "project-settings"]
+                                   "filter-by-project", "auto-settle", "project-settings", "hands-off"]
     static let closing: [String] = ["mark-unread", "archive", "delete"]
 
     static let keys: [String: String] = ["settle": "S", "unsettle": "S", "snooze": "Z", "unsnooze": "Z",
@@ -19,7 +19,7 @@ public enum DitherThreadMenu {
         "settle": .check, "unsettle": .undo2, "snooze": .clock, "unsnooze": .alarmClockOff, "open-new-tab": .arrowUpRight,
         "pin": .pin, "unpin": .pinOff, "rename": .squarePen, "regenerate-title": .rotateCw, "copy": .copy,
         "new-thread-on-branch": .gitBranchPlus, "filter-by-project": .listFilter, "auto-settle": .circleCheck,
-        "project-settings": .settings, "mark-unread": .mail, "archive": .archive, "delete": .trash2,
+        "project-settings": .settings, "mark-unread": .mail, "archive": .archive, "delete": .trash2, "hands-off": .shield,
     ]
     /// Capy's shorter labels; the rest keep T3's.
     static let titles: [String: String] = ["settle": "Settle", "unsettle": "Un-settle", "unsnooze": "Wake", "pin": "Pin",

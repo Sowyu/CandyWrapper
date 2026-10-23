@@ -6,7 +6,7 @@ import DesignSystem
 /// stored settings and the wire stay T3's. Other themes keep T3's pages and nav.
 public enum DitherSettingsSection: String, CaseIterable, Sendable {
     case project, general, appearance, notifications, keyboard
-    case models, threads, scheduledTasks
+    case orchestrator, models, threads, scheduledTasks
     case projects, git, tools
     case machines, advanced, about
 
@@ -17,6 +17,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .appearance: "Appearance"
         case .notifications: "Notifications"
         case .keyboard: "Keyboard"
+        case .orchestrator: "Orchestrator"
         case .models: "Models and providers"
         case .threads: "Threads"
         case .scheduledTasks: "Scheduled tasks"
@@ -37,6 +38,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .appearance: "Theme, colors, fonts and motion."
         case .notifications: "How you hear about threads that finish, fail or need you."
         case .keyboard: "Shortcuts for every command."
+        case .orchestrator: "The thread that manages every thread on its machine, and the models it may pick."
         case .models: "The model new threads start with, and the agents that run them."
         case .threads: "How the sidebar sorts and settles threads, usage limits, and archived threads."
         case .scheduledTasks: "Prompts that run on a schedule."
@@ -56,6 +58,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .appearance: .palette
         case .notifications: .inbox
         case .keyboard: .keyboard
+        case .orchestrator: .workflow
         case .models: .bot
         case .threads: .messagesSquare
         case .scheduledTasks: .calendarClock
@@ -71,7 +74,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
     /// The nav, in labelled groups; the first has no label. "This project" shows only for a project scope.
     static let groups: [(label: String?, sections: [DitherSettingsSection])] = [
         (nil, [.general, .appearance, .notifications, .keyboard]),
-        ("Agents", [.models, .threads, .scheduledTasks]),
+        ("Agents", [.orchestrator, .models, .threads, .scheduledTasks]),
         ("Workspace", [.project, .projects, .git, .tools]),
         ("System", [.machines, .advanced, .about]),
     ]
@@ -110,6 +113,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
             .init(.archive),
         ]
         case .scheduledTasks: return [.init(.scheduledTasks, scope: true)]
+        case .orchestrator: return [.init(.orchestrator)]
         case .projects: return [
             .init(.general, scope: true, [G("project-defaults", "New threads", rows: ["new-threads", "worktree-submodules"]),
                                           G("projects-and-threads", "Projects", rows: ["start-from-origin", "add-project-starts-in"])]),
@@ -148,6 +152,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .storage: .advanced
         case .connections: .machines
         case .archive: .threads
+        case .orchestrator: .orchestrator
         case .diagnostics, .licenses: nil
         }
     }

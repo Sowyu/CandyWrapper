@@ -12,6 +12,8 @@ public final class RouteHistory {
         case settings(SettingsSection)
         case pullRequests
         case usage
+        /// Redesign's Orchestrator pane, CandyWrapper's own.
+        case orchestrator
     }
 
     public private(set) var entries: [Route] = []

@@ -237,6 +237,15 @@ public enum OrchestratorBrief {
         return String(h, radix: 16)
     }
 
+    /// Whether the thread needs an updated brief: the prompt, models, limits, projects and Hands off decide it. The
+    /// notebook stays out, since the Orchestrator writes most of it itself.
+    // ponytail: notebook edits in Settings wait for the next session's brief; fold them in if the user edits notes there often
+    public static func fingerprint(_ prompt: String, _ i: Inputs) -> String {
+        var bare = i
+        bare.notebook = OrchestratorNotebook()
+        return digest(render(prompt, bare))
+    }
+
     public static func first(_ brief: String) -> String { "\(firstHeading)\n\n\(brief)" }
 
     /// Your message with the updated brief in front of it.
@@ -417,7 +426,7 @@ public struct OrchestratorEvent: Hashable, Sendable {
         return "Event: “\(title)” \(what) (t3-thread://v1/\(threadId.localId.rawValue)).\(note)"
     }
 
-    static let running: Set<ThreadStatus> = [.preparing, .queued, .starting, .running, .waiting]
+    public static let running: Set<ThreadStatus> = [.preparing, .queued, .starting, .running, .waiting]
 
     /// What changed between two shell states of the machine's threads. Skips the Orchestrator, archived and deleted
     /// threads, and threads with a parent: T3 wakes a parent when its own child finishes (orchestratorMcp.ts:222).

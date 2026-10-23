@@ -31,7 +31,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
 
     public override init(context: SettingsPageContext) {
         super.init(context: context)
-        items = [colorsSection(), interfaceSection(), motionSection(), typographySection()]
+        items = [colorsSection(), orchestratorSection(), interfaceSection(), motionSection(), typographySection()]
     }
 
     /// A search jump to an advanced font row turns Advanced on first (`ADVANCED_TYPOGRAPHY_TARGET_IDS`).
@@ -181,6 +181,31 @@ public final class AppearanceSettingsView: SettingsPageBase {
             host?.close()
             self?.themes.removeThemes([theme.id])
         }
+    }
+
+    // MARK: Orchestrator
+
+    /// CandyWrapper's own: "Experimental Orchestrator features" under the theme picker, only while Redesign is the theme
+    /// (docs/orchestrator.md, "The toggle"). Off by default; it lives in `OrchestratorStore`, not the client settings.
+    private func orchestratorSection() -> SettingsSectionView {
+        let sw = SwitchView(isOn: false)
+        sw.setAccessibilityLabel("Experimental Orchestrator features")
+        sw.onChange = { on in OrchestratorStore.shared.update { $0.enabled = on } }
+        let r = row(nil, title: "Experimental Orchestrator features",
+                    detail: "One thread that manages every thread on its machine: a pinned row with bots in the sidebar, its own chat and an Orchestrator tab here in Settings.",
+                    control: sw)
+        let s = section(nil, "Experimental", [r])
+        binder.add { [weak self, weak s, weak sw] in
+            guard let self, let s else { return }
+            let store = OrchestratorStore.shared
+            sw?.isOn = store.config.enabled
+            if s.isHidden == store.isRedesign {
+                s.isHidden = !store.isRedesign
+                self.onHeightChange?()
+            }
+        }
+        OrchestratorStore.shared.observe { [weak self] in self?.binder.refresh() }
+        return s
     }
 
     // MARK: Interface
