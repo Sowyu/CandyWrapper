@@ -28,6 +28,7 @@ public final class ThreadCostPillView: ControlView {
     private let digits = RollingTextView(font: TL.tabular(13, .medium), lineHeight: 18)
     private lazy var tip: TooltipController = {
         let tip = TooltipController.attach(to: self, text: "", placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4), delay: 0.15)
+        tip.interactive = true
         tip.content = { [weak self] in
             self?.onOpen?()
             return PopoverView(content: ThreadCostDetailsView(self?.breakdown ?? .init()), padding: .none, tooltipStyle: true)

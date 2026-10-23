@@ -2073,9 +2073,9 @@ public final class ThreadPanelView: DSView {
             bannerTop = banner.frame.maxY + 12
         }
         if let content = window?.contentView {
-            toasts.frame = convert(ToastViewport.frame(in: content.bounds), from: content)
+            toasts.frame = convert(ToastViewport.frame(in: content.bounds, dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark)), from: content)
         } else {
-            toasts.frame = ToastViewport.frame(in: bounds)
+            toasts.frame = ToastViewport.frame(in: bounds, dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark))
         }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         // Above the rows, under the header (zPosition 1). The last 6px column (the scrollbar) stays unfaded.

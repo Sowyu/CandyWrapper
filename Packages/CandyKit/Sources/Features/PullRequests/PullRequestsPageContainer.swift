@@ -63,7 +63,7 @@ public final class PullRequestsPageContainer: DSView {
         let pw = open ? Self.panelWidth(window: window?.frame.width ?? bounds.width, container: bounds.width) : 0
         page.frame = NSRect(x: 0, y: 0, width: bounds.width - pw, height: bounds.height)
         rightPanel.frame = NSRect(x: bounds.width - pw, y: 0, width: pw, height: bounds.height)
-        toasts.frame = ToastViewport.frame(in: bounds)
+        toasts.frame = ToastViewport.frame(in: bounds, dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark))
     }
 
     public override var acceptsFirstResponder: Bool { true }
