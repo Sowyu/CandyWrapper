@@ -445,6 +445,17 @@ public final class TimelineView: DSView {
         return true
     }
 
+    /// Scrolls to the row showing a work entry or message, as the image gallery's "Open in thread" does.
+    @discardableResult
+    public func revealEntry(containing entryId: String) -> Bool {
+        let item = items.first { item in
+            if item.id == entryId { return true }
+            if case .work(let entries, _, _) = item.row.kind { return entries.contains { $0.id == entryId } }
+            return false
+        }
+        return item.map { revealFindEntry($0.id) } ?? false
+    }
+
     // MARK: Geometry
 
     /// `resolveChatCanvasLayout` without previews (chatCanvasLayout.ts:26-60): 48px padding (12px

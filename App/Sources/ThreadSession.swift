@@ -319,6 +319,10 @@ final class ThreadController {
     // ponytail: kept for the session, a few numbers per subagent thread; drop entries on archive if it grows
     private var subagentCosts: [ThreadId: (updatedAt: T3Timestamp?, own: ThreadCostEstimate.Breakdown?)] = [:]
     private var readingSubagentCosts: Set<ThreadId> = []
+    /// Redesign's agent image gallery, fed by the open projection and the same child reads as the cost.
+    private(set) var gallery: ThreadImageGalleryController!
+    // ponytail: kept for the session beside `subagentCosts`, a few paths per child; drop on archive if it grows
+    private var subagentImages: [ThreadId: [GalleryImage]] = [:]
     /// Whether the window shows a thread route; Settings and the utility pages hide the figure.
     var costRouteShowsThread = true { didSet { syncCost() } }
     private(set) var terminal: TerminalController!
@@ -418,6 +422,17 @@ final class ThreadController {
             if sidebar.state.scratchRoots[env] != root { sidebar.state.scratchRoots[env] = root }
         }
         lineage = ThreadLineageController(panel: panel)
+        gallery = ThreadImageGalleryController(pill: panel.header.pill)
+        gallery.onOpen = { [weak self] in self?.readSubagentCosts() }
+        gallery.onOpenInThread = { [weak self] image in
+            guard let self, let open = self.openThreadId, let env = open.environmentId else { return }
+            if image.threadId == open.localId { self.panel.timeline.revealEntry(containing: image.entryId) } else { self.open(image.threadId.scoped(to: env)) }
+        }
+        gallery.canReveal = { [weak self] image in self?.localImageURL(image) != nil }
+        gallery.onReveal = { [weak self] image in
+            guard let url = self?.localImageURL(image) else { return }
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
         lineage.shells = { [weak sidebar] in (sidebar?.snapshot?.threads ?? []) + (sidebar?.snapshot?.archivedThreads ?? []) }
         lineage.dispatch = { [weak environments] id, payload in
             guard let environments else { throw Environments.CommandError.notConnected }
@@ -803,6 +818,14 @@ final class ThreadController {
 
     /// The thread view's keybindings (ChatView.tsx:8030-8180, Sidebar.tsx:4872-4910).
     func registerShortcuts(_ shortcuts: Shortcuts) {
+        // ⇧⌘I: Redesign's agent image gallery. CandyWrapper's own key, so it stays out of T3's keybinding contract.
+        shortcuts.onKey { [weak self] event in
+            guard event.charactersIgnoringModifiers?.lowercased() == "i",
+                  event.modifierFlags.intersection([.command, .control, .option, .shift]) == [.command, .shift],
+                  let self, self.gallery.isOpen || self.gallery.images.count > 0, !self.panel.header.pill.isHidden else { return false }
+            self.gallery.toggle()
+            return true
+        }
         composer.registerShortcuts(shortcuts)
         terminal.registerShortcuts(shortcuts)
         scripts.registerShortcuts(shortcuts)
@@ -1000,6 +1023,10 @@ final class ThreadController {
         costThreadId = projection == nil ? nil : id
         // Read subagent usage once as the thread opens, so the figure doesn't jump when the card opens.
         if opened, dither { readSubagentCosts() }
+        gallery.update(threadId: projection == nil ? nil : id, projection: dither ? projection : nil)
+        // While the gallery shows, a parent push reads the children that moved, so their images stream in too.
+        if !opened, dither, gallery.isOpen { readSubagentCosts() }
+        if opened || projection == nil { syncGalleryChildren() }
         var next: ThreadCostEstimate.Breakdown?
         if dither, let projection, let id {
             let byParent = subagentShellsByParent()
@@ -1040,24 +1067,49 @@ final class ThreadController {
         readingSubagentCosts.formUnion(stale.map(\.id))
         let environments = environments
         Task { [weak self] in
-            await withTaskGroup(of: (ThreadId, T3Timestamp?, ThreadCostEstimate.Breakdown?).self) { group in
+            await withTaskGroup(of: (ThreadId, T3Timestamp?, ThreadCostEstimate.Breakdown?, [GalleryImage]?).self) { group in
                 for child in stale {
                     group.addTask {
                         let payload: JSONValue = .object(["threadId": .string(child.id.localId.rawValue)])
-                        guard let json = try? await environments.request(env, "orchestration.getThreadProjection", payload) else { return (child.id, nil, nil) }
-                        return (child.id, child.updatedAt, (try? json.decode(as: ThreadProjection.self)).map(ThreadCostEstimate.own))
+                        guard let json = try? await environments.request(env, "orchestration.getThreadProjection", payload),
+                              let projection = try? json.decode(as: ThreadProjection.self) else { return (child.id, nil, nil, nil) }
+                        return (child.id, child.updatedAt, ThreadCostEstimate.own(projection), ThreadImageGallery.images(projection, agent: ""))
                     }
                 }
-                for await (id, at, own) in group {
+                for await (id, at, own, images) in group {
                     // A failed read keeps the last good figure and retries on the next open.
                     if at == nil, let kept = self?.subagentCosts[id]?.own { self?.subagentCosts[id] = (nil, kept) } else { self?.subagentCosts[id] = (at, own) }
+                    if let images { self?.subagentImages[id] = images }
                 }
             }
             guard let self else { return }
             self.readingSubagentCosts.subtract(stale.map(\.id))
+            self.syncGalleryChildren()
             self.setCost(self.costProjection, id: self.costThreadId)
             self.panel.header.cost.refreshCard()
         }
+    }
+
+    /// Hands the gallery the open thread's children's images, named after their place under it.
+    private func syncGalleryChildren() {
+        guard let root = costThreadId else { gallery.setChildren([:], names: [:]); return }
+        let byParent = subagentShellsByParent()
+        var children: [ThreadShell] = [], queue = [root], seen: Set<ThreadId> = [root]
+        while let parent = queue.popLast() {
+            for child in byParent[parent] ?? [] where seen.insert(child.id).inserted { children.append(child); queue.append(child.id) }
+        }
+        let names = ThreadImageGallery.agentNames(children.map { (id: $0.id.localId, title: $0.title, providerNative: $0.isProviderNativeSubagent, createdAt: $0.createdAt) })
+        var images: [ThreadId: [GalleryImage]] = [:]
+        for child in children { if let list = subagentImages[child.id] { images[child.id.localId] = list } }
+        gallery.setChildren(images, names: names)
+    }
+
+    /// A gallery image's file on this Mac: the primary environment, a path that exists.
+    private func localImageURL(_ image: GalleryImage) -> URL? {
+        guard let env = openThreadId?.environmentId, env == environments.primaryId, var path = image.filePath else { return nil }
+        if path.hasPrefix("~/") { path = NSHomeDirectory() + path.dropFirst() }
+        if !path.hasPrefix("/"), image.threadId == openThreadId?.localId, let root = panel.model.workspaceRoot { path = root + "/" + path }
+        return path.hasPrefix("/") && FileManager.default.fileExists(atPath: path) ? URL(fileURLWithPath: path) : nil
     }
 
     private func syncCost() {

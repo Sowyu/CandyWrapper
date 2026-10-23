@@ -10,6 +10,12 @@ public final class DitherHeaderPillView: DSView {
     /// The working tree's totals; a click shows the diff, as the card's Changes row did.
     public let changes = ButtonView(nil, variant: .ghost, size: .xs)
     public let totals = DiffTotalsView()
+    /// The agent image gallery's toggle, between the actions and the terminal toggle. Shown while the thread has images.
+    public let gallery = ToggleView(nil, icon: .image, variant: .ghost, size: .xs)
+    public var galleryCount = 0 { didSet { if (galleryCount > 0) != (oldValue > 0) { resized() } } }
+    /// A dot on the toggle while images arrived since the gallery last showed.
+    public var galleryUnseen = false { didSet { if galleryUnseen != oldValue { galleryDot.isHidden = !galleryUnseen } } }
+    private let galleryDot = CALayer()
 
     /// Whether the totals show: a checkout that is a repository.
     public var showsVersionControl = false { didSet { if showsVersionControl != oldValue { resized() } } }
@@ -48,6 +54,12 @@ public final class DitherHeaderPillView: DSView {
         changes.setAccessibilityLabel("Show changes")
         changes.toolTip = "Show changes"
         addSubview(changes)
+        gallery.toolTip = "Agent images (⇧⌘I)"
+        gallery.setAccessibilityLabel("Agent images")
+        galleryDot.isHidden = true
+        galleryDot.cornerRadius = 3
+        gallery.layer?.addSublayer(galleryDot)
+        addSubview(gallery)
         setAccessibilityRole(.group)
         setAccessibilityLabel("Thread controls")
     }
@@ -63,7 +75,7 @@ public final class DitherHeaderPillView: DSView {
         var views: [(NSView, Bool)] = []
         if let cost = cost as? ThreadCostPillView { views.append((cost, cost.breakdown != nil)) }
         if toggles.count == 3 {
-            views += [(toggles[0], true), (toggles[1], true), (changes, showsVersionControl && isRepo), (toggles[2], true)]
+            views += [(toggles[0], true), (gallery, galleryCount > 0), (toggles[1], true), (changes, showsVersionControl && isRepo), (toggles[2], true)]
         }
         return views.filter { $0.0.superview === self }
     }
@@ -87,6 +99,10 @@ public final class DitherHeaderPillView: DSView {
         // The cost appearing or a toggle hiding changes the width the tab strip gives the pill.
         if abs(intrinsicContentSize.width - bounds.width) > 0.5 { superview?.needsLayout = true }
         frost.frame = bounds
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        galleryDot.frame = NSRect(x: gallery.bounds.width - 8, y: 3, width: 6, height: 6)
+        galleryDot.backgroundColor = Themed.color(\.primary).cgColor(in: self)
+        CATransaction.commit()
         frost.cornerRadius = DitherChrome.controlRadius
         frost.layer?.borderWidth = 1
         frost.layer?.borderColor = DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor
