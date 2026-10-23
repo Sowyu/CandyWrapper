@@ -1,6 +1,6 @@
 # Orchestrator phase 1: build brief
 
-Goal: In the Redesign theme, "Experimental Orchestrator features" turns on the Orchestrator, the master of every thread on its machine. You talk to it in an iMessage-style chat. It sees and prompts every thread, including the ones you start yourself, picks models from a list you control in Settings, and shows every thread as a live 3D bot in the sidebar. Official T3 Code still sees only normal threads.
+Goal: In the Redesign theme, "Experimental Orchestrator features" turns on the Orchestrator, the master of every thread on its machine. You talk to it in an iMessage-style chat. It sees and prompts every thread, including the ones you start yourself, picks models from a list you control in Settings, and pins itself as a live 3D bot at the top of the sidebar. Official T3 Code still sees only normal threads.
 
 ## Read first
 
@@ -26,11 +26,11 @@ Goal: In the Redesign theme, "Experimental Orchestrator features" turns on the O
 3. Make each Orchestrator an ordinary T3 thread on the chosen machine, one per machine. Fill the prompt's placeholders (name, machine, projects, bots, models, crewLimit) and send it as the first message, drawn as a collapsed "Brief" card. Changes to the prompt or the Models list go out as an "Updated brief" with the next message.
 4. Make it the master of every thread. Follow "Every thread is under the Orchestrator" in the spec: it may prompt any thread, asks first when you wrote in the last 10 minutes, never prompts a thread marked Hands off, and queues instead of interrupting. Add "Hands off" to the thread menu.
 5. Wire up the events. Its own children wake it through T3. While CandyWrapper is open, send the Orchestrator one short line when any other thread finishes a turn, fails or asks for something. Batch events that land within 30 seconds into one message. While CandyWrapper is closed, a T3 scheduled task wakes it on the set interval to check every thread. CandyWrapper turns that schedule off when it opens.
-6. Pin the Orchestrator row at the top of the Redesign sidebar, with its bot, its machine and a needs-you count. Every thread sits under it, grouped by project, each with its own bot and state: working, needs you, unread, done.
+6. Pin the Orchestrator row at the top of the Redesign sidebar, with its bot, its machine and a needs-you count. Threads are never drawn as bots. Every thread row keeps T3's own look, icons and status, exactly as with the toggle off. Only the Orchestrator, and the standing bots in phase 2, get bot faces.
 7. Build the Orchestrator pane. The chat follows "The chat looks like iMessage" in the spec. The Overview tab shows the top 5 needs-you items and a live card per thread, built from server events only. Skip the Digest tab.
 8. Take `orchestrator-plan` and `orchestrator-memory` fenced blocks out of replies. A plan becomes a checklist with each step linked to its thread. Memory goes to the notebook with a "Saved to memory" chip and Undo. The official app sees plain text.
 9. Show every thread's approvals and questions in a "Needs you" card, using T3's own Allow and Deny path. The Orchestrator never approves.
-10. Draw the bots as "The bots" section says: 3D solids in one flat colour, printed capsule eyes, 14 shapes, 11 colours, and spring head turns that follow the pointer. Clamp the eyes off the edge, with turn limits precomputed per shape. Use Core Animation layers and respect Reduce Motion.
+10. Draw the Orchestrator's bot, and the bot drawing for phase 2's standing bots, as "The bots" section says: 3D solids in one flat colour, printed capsule eyes, 14 shapes, 11 colours, and spring head turns that follow the pointer. Clamp the eyes off the edge, with turn limits precomputed per shape. Use Core Animation layers and respect Reduce Motion.
 
 Not in phase 1: standing bots like OpSec, bot schedules, the Digest tab, and showing several machines' Orchestrators together.
 
