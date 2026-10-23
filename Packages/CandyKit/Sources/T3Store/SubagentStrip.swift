@@ -9,9 +9,11 @@ public struct SubagentStrip: Sendable, Equatable {
     public enum Status: String, Sendable { case running, waiting, needsInput, done, failed }
 
     public struct Row: Sendable, Equatable {
-        /// The subagent record's node id.
+        /// The subagent record's node id: the child's latest task.
         public let id: String
-        /// Its place among the thread's subagents, from 1: "Subagent N".
+        /// Stable across the child's tasks: its thread, or the record when it has none yet.
+        public let key: String
+        /// Its place among the thread's subagents by first appearance, from 1: "Subagent N".
         public let number: Int
         /// Local id, like the projection's.
         public let childThreadId: ThreadId?
@@ -54,9 +56,23 @@ public struct SubagentStrip: Sendable, Equatable {
                                   uniquingKeysWith: { a, _ in a })
         let needsInput = Set(PendingSubagentRequests.byThread(shells).keys)
             .union(children.values.filter { PendingSubagentRequests.request($0) != nil }.map(\.id))
-        var active: [Row] = [], finished: [Row] = []
-        for (index, json) in subagents.enumerated() {
+        // One row per child thread: a follow-up task on the same child replaces its row (the user, 2026-10-23), which
+        // keeps the number of its first task. A live task outranks a settled one.
+        var order: [String] = []
+        var latest: [String: ProjectedSubagent] = [:]
+        for json in subagents {
             guard let record = ProjectedSubagent(json) else { continue }
+            let key = record.childThreadId.map { "thread:" + $0.rawValue } ?? "agent:" + record.id
+            if let old = latest[key] {
+                if Self.active.contains(old.status) && !Self.active.contains(record.status) { continue }
+            } else {
+                order.append(key)
+            }
+            latest[key] = record
+        }
+        var active: [Row] = [], finished: [Row] = []
+        for (index, key) in order.enumerated() {
+            guard let record = latest[key] else { continue }
             let child = record.childThreadId.flatMap { children[$0] }
             let agent = record.following(child)
             let live = Self.active.contains(agent.status)
@@ -65,7 +81,7 @@ public struct SubagentStrip: Sendable, Equatable {
             else if live { status = agent.status == "waiting" ? .waiting : .running }
             else { status = ["failed", "cancelled", "interrupted", "error"].contains(agent.status) ? .failed : .done }
             let raw = child?.title ?? agent.title
-            let row = Row(id: record.id, number: index + 1, childThreadId: agent.childThreadId,
+            let row = Row(id: record.id, key: key, number: index + 1, childThreadId: agent.childThreadId,
                           title: ThreadRelationships.subagentDisplayTitle(raw), status: status, driver: agent.driver,
                           providerInstanceId: agent.providerInstanceId, model: agent.model, canStop: canStop(agent))
             if live { active.append(row) }

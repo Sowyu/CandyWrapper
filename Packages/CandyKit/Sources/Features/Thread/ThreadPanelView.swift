@@ -485,6 +485,8 @@ public final class ThreadPanelView: DSView {
     private var queueBadgeCount = 0
     /// While the queue panel is open, a click outside it or its pill closes it, as the stash list does.
     private var queueClickMonitor: Any?
+    /// While the subagent panel is open: a click outside it or its pill closes it, Esc disarms a Stop or closes it.
+    private var subagentPanelMonitor: Any?
     /// Redesign's subagent strip: a pill left of Queued while subagents run or wait, which opens the panel over the
     /// row. Both are built the first time a thread has subagents; `ThreadLineageController` feeds them.
     public let lazySubagentPill = LazyView { SubagentStripPillView() }
@@ -729,7 +731,6 @@ public final class ThreadPanelView: DSView {
         }
         lazySubagentPanel.configure { [weak self] panel in
             panel.isHidden = true
-            panel.onCollapse = { [weak self] in self?.subagentStripExpanded = false }
         }
         // Above every attachment (`z-20`), under the drawers and menus.
         bannerStack.isHidden = true
@@ -1461,6 +1462,7 @@ public final class ThreadPanelView: DSView {
         lazySubagentPanel.loaded?.isHidden = true
         lazyParentPill.loaded?.isHidden = true
         watchQueueClicks(false)
+        watchSubagentPanel(false)
         if composer.contextWindowMeter.superview !== composer {
             composer.addSubview(composer.contextWindowMeter)
             composer.needsLayout = true
@@ -1811,6 +1813,9 @@ public final class ThreadPanelView: DSView {
             let h = panel.preferredHeight(maxHeight: maxH)
             panel.frame = NSRect(x: x, y: top - gap - h, width: width, height: h)
             shown.append(panel)
+            watchSubagentPanel(true)
+        } else {
+            watchSubagentPanel(false)
         }
 
         // Show what is placed, hide the rest, all floating.
@@ -1850,6 +1855,29 @@ public final class ThreadPanelView: DSView {
             if terminalOpen { needsLayout = true }
         }
         if isDraft { timeline.isHidden = true }
+    }
+
+    private func watchSubagentPanel(_ on: Bool) {
+        guard on != (subagentPanelMonitor != nil) else { return }
+        if let monitor = subagentPanelMonitor { NSEvent.removeMonitor(monitor); subagentPanelMonitor = nil; return }
+        subagentPanelMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .keyDown]) { [weak self] event in
+            nonisolated(unsafe) let event = event
+            let swallow = MainActor.assumeIsolated { () -> Bool in
+                guard let self, event.window === self.window, self.subagentStripExpanded,
+                      let panel = self.lazySubagentPanel.loaded else { return false }
+                if event.type == .keyDown {
+                    guard event.keyCode == 53 else { return false }
+                    if !panel.cancelStop() { self.subagentStripExpanded = false }
+                    return true
+                }
+                for view in [panel, self.lazySubagentPill.loaded].compactMap({ $0 }) as [NSView] where !view.isHidden {
+                    if view.bounds.contains(view.convert(event.locationInWindow, from: nil)) { return false }
+                }
+                self.subagentStripExpanded = false
+                return false
+            }
+            return swallow ? nil : event
+        }
     }
 
     private func watchQueueClicks(_ on: Bool) {
