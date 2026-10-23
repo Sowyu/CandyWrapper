@@ -2,7 +2,7 @@
 
 The working name was Captain. The user renamed it Orchestrator on 2026-10-23, since Captain copies Capy.
 
-There is one Orchestrator, and it manages all your threads, across every project. You talk to Orchestrator. It starts threads, prompts them, reads every reply, sends the next prompt and closes threads that are done. It tells you what needs you, and you change the plan by telling it in chat. Next to Orchestrator you keep bots, each with one standing job, like Grok Bot's bots. Orchestrator hands work to bots and to threads. This builds on Capy's Captains (docs.capy.ai/captains), but CandyWrapper has exactly one Orchestrator instead of one per area. This is a plan only. Nothing here is built yet.
+There is one Orchestrator, and it is the master of every thread, across every project. That includes the threads you start yourself, not only the ones it starts. You talk to Orchestrator. It sees every thread, starts threads, prompts any of them, reads every reply, sends the next prompt and closes threads that are done. It tells you what needs you, and you change the plan by telling it in chat. Next to Orchestrator you keep bots, each with one standing job, like Grok Bot's bots. Orchestrator hands work to bots and to threads. This builds on Capy's Captains (docs.capy.ai/captains), but CandyWrapper has exactly one Orchestrator instead of one per area. This is a plan only. Nothing here is built yet.
 
 ```
 You
@@ -13,12 +13,12 @@ You
 
 ## How you use it
 
-1. Turn Orchestrator on. It sees every project T3 has. T3's thread tools take a project id (`OrchestratorMcpThreadListInput`, `orchestratorMcp.ts:312`), so Orchestrator goes through `t3_project_list` and works in each one.
-2. Tell it a goal in its chat. It saves the goal in its plan.
-3. Orchestrator starts the threads it needs, in the right project, each with its own job and prompt. It can also take over threads you started yourself.
-4. Each time a thread finishes a turn or asks something, Orchestrator wakes up, reads the reply, updates its plan and prompts the next step. You don't have to watch.
-5. Orchestrator keeps a digest with three parts: what needs you, what's new and what's in progress, grouped by project. When something needs you, it posts that part in chat.
-6. You steer in plain chat, like "pause the database work until Monday" or "have OpSec check the sidebar branch". Orchestrator passes it on.
+1. Turn Orchestrator on. From then on every thread on its machine is under it: old threads, new threads, threads it starts and threads you start yourself. It sees every project through `t3_project_list`, since T3's thread tools take a project id (`OrchestratorMcpThreadListInput`, `orchestratorMcp.ts:312`).
+2. Tell it a goal in its chat. It saves the goal in its plan, and it may use existing threads for it as well as new ones.
+3. It prompts any thread. It can continue a thread you started, give it a follow-up, steer it when it drifts, or interrupt it when it's stuck.
+4. Each time any thread finishes a turn, fails or asks something, Orchestrator hears about it, reads the new part, updates its plan and decides the next step. You don't have to watch.
+5. Orchestrator keeps a digest of every thread with three parts: what needs you, what's new and what's in progress, grouped by project. When something needs you, it posts that part in chat.
+6. You steer in plain chat, like "pause the database work until Monday" or "finish the release notes thread". Orchestrator passes it on.
 7. When a thread is done, Orchestrator archives it.
 
 ## Which machine Orchestrator runs on
@@ -30,14 +30,22 @@ Each machine CandyWrapper connects to, like this Mac or a remote one through T3 
 - Orchestrator's crew threads run on the same machine. T3's thread tools act on the server they run on, and `t3_thread_launch` takes no machine (`orchestratorMcp.ts`), so a Orchestrator can't start or prompt threads on another machine.
 - The Orchestrator row and chat show the machine, like "Orchestrator · mac-mini".
 
-## Crew threads stay normal threads
+## Every thread is under the Orchestrator
 
-- A crew thread is a full T3 thread. You can open it and watch, but you don't have to.
-- Crew threads open beside Orchestrator's chat, so you can follow one while you talk to Orchestrator.
-- Orchestrator's prompts show in a crew thread as coming from Orchestrator, with its bot. T3 already records which thread sent each message (`senderThreadId`, `orchestratorMcp.ts:438`).
-- If a crew thread asks you something directly, like an approval, you answer it there or from Orchestrator's "needs you" list.
-- You can hand a thread to Orchestrator by dragging it onto Orchestrator, or take it back with "Remove from Orchestrator".
-- Approvals stay with you. Orchestrator can answer a crew thread's questions but can't approve its commands (`orchestratorMcp.ts:228`).
+- Every thread on the machine is the Orchestrator's, whoever started it. Its crew is all of them.
+- Threads stay normal T3 threads. You can still open any thread and type in it yourself.
+- The Orchestrator's prompts show in a thread as coming from Orchestrator, with its bot. T3 already records which thread sent each message (`senderThreadId`, `orchestratorMcp.ts:438`).
+- You and the Orchestrator share threads politely. If you sent the last message in a thread less than 10 minutes ago, the Orchestrator asks you before it prompts that thread. If a turn is running, it queues its message instead of interrupting, unless the thread is clearly stuck.
+- A thread can be marked "Hands off" from its menu. The Orchestrator still reads and reports on it, but never prompts it.
+- Approvals stay with you. The Orchestrator can answer a thread's questions but can't approve its commands (`orchestratorMcp.ts:228`). Every approval from every thread shows in its "Needs you" list.
+
+### How the Orchestrator hears about every thread
+
+T3 wakes a thread only when its own child task finishes (`orchestratorMcp.ts:222`). Threads you started aren't its children, so CandyWrapper and T3 fill the gap together.
+
+1. Its own children wake it directly through T3.
+2. While CandyWrapper is open, it watches the server events it already gets for every thread. When a thread finishes a turn, fails or asks for something, CandyWrapper sends the Orchestrator one short line, like "Event: 'Release notes' finished a turn". Events that land within 30 seconds of each other go out as one message, so a busy minute costs one turn.
+3. While CandyWrapper is closed, a T3 scheduled task (`ScheduledTask`, `orchestratorMcp.ts`) wakes the Orchestrator every 30 minutes to check every thread with `t3_thread_list`. CandyWrapper turns that schedule off again when it opens. You can change the interval or turn the schedule off in the settings tab.
 
 ## Bots
 
@@ -199,7 +207,7 @@ A result that passes all checks closes the step. Archive the thread when its wor
 - Never approve a command or a file change. Approvals belong to the user. Tell the user which thread is waiting and what it wants to run.
 - Never do anything destructive or outward-facing without the user's yes. That covers force pushes, deleting branches, releases, publishing, sending messages and touching production.
 - Follow each project's AGENTS.md or CLAUDE.md. Copy the rules that matter into the worker's prompt.
-- Only prompt threads you started or the user handed you. You may read other threads to report on them.
+- Every thread on this machine is yours to manage, including the ones the user started. If the user sent the last message in a thread less than 10 minutes ago, ask before you prompt it. Never prompt a thread marked Hands off. If a turn is running, queue your message instead of interrupting, unless the thread is clearly stuck.
 - Don't re-read whole threads to stay current. Read the new part. Each read costs the user money.
 - Keep secrets out of prompts, plans and notes.
 
@@ -292,7 +300,7 @@ Grok Bot reads like team chat. Bots sit in the left sidebar, each with its own c
 
 1. A "Crew" section sits at the top of the Redesign sidebar, above the project list.
 2. Orchestrator is pinned first, with its own avatar. Clicking it opens the Orchestrator thread.
-3. Crew rows sit under Orchestrator. A crew row is any thread whose `parentThreadId` is the Orchestrator thread.
+3. Every thread sits under Orchestrator, grouped by project, with its bot and state. Threads it started carry `parentThreadId`, but the list shows every thread.
 4. Each row shows an avatar, a name, a one-line title and a status marker.
 5. The markers are "needs you" for a pending approval or question, "unread" for new results, "working" while a turn runs, and none when idle.
 6. Clicking a crew row opens that thread like any other thread.
@@ -351,10 +359,10 @@ That comes to about 5 days in total. Every step ships on its own behind the togg
 
 Start each phase only when the one before it is done: tests and perf-review pass, it's checked on screen, and the user has used it for a few days.
 
-1. Phase 1, the Orchestrator: toggle, settings tab with the Models list, one Orchestrator per machine, sidebar and crew, chat with Overview and Needs you, plan and memory blocks, 3D bots.
+1. Phase 1, the Orchestrator as master of every thread on its machine: toggle, settings tab with the Models list, one Orchestrator per machine, sidebar and crew, chat with Overview and Needs you, plan and memory blocks, 3D bots.
 2. Phase 2, bots: standing bots with a role prompt, memory and their own chat, starting with OpSec. The Orchestrator hands steps to them. Bot templates and the "New bot" sheet.
 3. Phase 3, running on their own: schedules and event triggers for bots, through T3's scheduled tasks, plus the Digest tab and the dock badge.
-4. Phase 4, reach: handing threads to the Orchestrator by dragging, taking over threads you started, and showing every machine's Orchestrator together.
+4. Phase 4, every machine: showing every machine's Orchestrator together, with one combined Needs you list.
 
 ## Open questions
 
