@@ -29,6 +29,7 @@ Run them from the repo root.
 | Measure performance | `scripts/perf-review`, see `docs/perf/README.md` |
 | Record real server traffic for protocol tests | `scripts/record-transcript.swift`, into `fixtures/transcripts/` with tokens, paths and e-mail scrubbed |
 | Test the secret scan | `scripts/secretscan-test` |
+| Check the Space key's Keychain ACL in release-style signed builds | `scripts/space-keychain-test` |
 | Release, only when the user asks | `scripts/release --notes notes.md <commit>`, see `docs/release.md` |
 
 `scripts/test` wraps `swift test` and first waits out any Origin energy run, as `scripts/preflight`, `scripts/run-app` and `scripts/perf-review` do. Don't call `swift test` directly. It takes several minutes, so run it in the background with a 30-minute limit. `scripts/run-app` runs until the app quits, so start it in the background too. An interrupted test run can leave a `t3 serve --base-dir .../Packages/CandyKit/.build/localserver-...` behind. Stop that PID.

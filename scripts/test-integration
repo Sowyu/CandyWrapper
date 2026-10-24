@@ -5,4 +5,4 @@
 here="${0:A:h}"
 "$here/wait-origin"
 cd "$here/../Packages/CandyKit" && CW_INTEGRATION=1 exec swift test --no-parallel \
-    --filter 'LocalServerIntegrationTests|SandboxIntegrationTests|CredentialStoreTests/saveLoadReplaceDelete|ClerkKeychainStoreTests/roundTripReplacesAndDeletes|RuntimeStoreTests/realInstallIntoATemporaryFolder' "$@"
+    --filter 'LocalServerIntegrationTests|SandboxIntegrationTests|CredentialStoreTests/saveLoadReplaceDelete|ClerkKeychainStoreTests/roundTripReplacesAndDeletes|RuntimeStoreTests/realInstallIntoATemporaryFolder|SpaceKeyStoreTests/loginKeychain' "$@"

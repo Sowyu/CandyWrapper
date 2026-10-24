@@ -170,6 +170,8 @@ The Space key K is 32 random bytes. Every other key comes from it with HKDF-SHA2
 
 Every ciphertext is AES-256-GCM with a fresh random 12-byte nonce, stored as base64 of `nonce || ciphertext || tag`. CryptoKit and javax.crypto both do this natively, so neither platform needs a crypto library.
 
+`SpaceCrypto` in CandyKit implements this section. `fixtures/space/crypto.json` holds golden vectors for every key, AAD and ciphertext below, with fixed nonces, and Android's tests must reproduce them. Ids that enter an AAD must be lowercase UUIDs, so the text is the same on both platforms and needs no JSON escaping. The check value has an empty AAD.
+
 ### On the Space machine
 
 The folder is `~/Library/Application Support/CandyWrapper Space/` on macOS and `$XDG_DATA_HOME/candywrapper-space/` (default `~/.local/share/candywrapper-space/`) on Linux, mode 0700. It sits outside every T3 project and outside `~/.t3`.
@@ -219,7 +221,7 @@ The decrypted payload of a frame:
 - One rule makes apply deterministic for the tree: a `parent` change that would make a page its own ancestor is ignored, and the page keeps its old parent. A page whose parent is missing shows at the top.
 - Every client applies frames in `seq` order and nothing else, so every copy ends up identical.
 
-A snapshot is `{"seq", "ct"}`, where `ct` decrypts to gzip of:
+A snapshot is `{"seq", "ct"}`, where `ct` has the AAD `cws1|<spaceId>|snapshot|<seq>` and decrypts to gzip of:
 
 ```json
 {"format": "candywrapper.space-snapshot", "v": 1, "seq": 2000,
@@ -263,12 +265,12 @@ What this does not stop, stated plainly:
 - Reminder titles pass through macOS's notification store while pending and after delivery. Section 6 covers that.
 - An agent with Screen Recording permission could capture Space while it's on screen. The hardened runtime blocks debugger attach to the app.
 
-The Keychain detail needs a spike. The data protection keychain with an app access group is the strongest option, since `security` can't read it at all, but on macOS it may need a provisioning profile for the Developer ID build. If it does, the file-based login Keychain with an ACL that trusts only CandyWrapper is the fallback, where any other reader triggers a user prompt. Debug builds re-sign on every build (docs/gotchas.md), so tests use an in-memory key.
+The data protection keychain with an app access group would be the strongest option, since `security` can't read it at all, but the spike showed it needs a provisioning profile the release signing doesn't have (docs/research/space-spikes-2026-10-24.md on the space-spike branch). So the key is a generic password in the file-based login Keychain, service `<bundle id>.space-key` and account the Space id, with an ACL whose only trusted application is the signed app (`SpaceKeyStore`). Any other reader gets a user prompt, or a denial with prompts off. Saving never replaces a different key. Debug builds re-sign on every build (docs/gotchas.md), so tests use an in-memory key, and `scripts/space-keychain-test` checks the real item in release-style signed builds.
 
 ### Setting up and adding devices
 
 1. The first device makes the Space: a new Space id, a random key, `space.json` on the Space machine, and an empty log.
-2. It shows the recovery key once: the 32 bytes as 52 base32 characters in groups of four, with Copy and "I saved it". Settings > Space > "Recovery key" shows it again after a Touch ID or password check.
+2. It shows the recovery key once: the 32 bytes as 52 RFC 4648 base32 characters in groups of four separated by spaces, the last character's four spare bits zero, with Copy and "I saved it". Settings > Space > "Recovery key" shows it again after a Touch ID or password check.
 3. A second device that finds a `space.json` on the Space machine asks for the recovery key. It can be typed, or scanned on Android from a QR code that an existing device shows on request for 60 seconds, using the existing `QRCodeView`.
 4. The device checks the key against `check` before it trusts anything, then stores the key in its Keychain.
 
@@ -455,7 +457,7 @@ macOS stores pending and delivered notification text in its own database, outsid
 - The app keeps the original bytes and also makes a preview at 1,600pt on the long edge as HEIC, so phones and lists don't fetch originals.
 - A blob reference is `{"id", "preview", "name", "mime", "size", "w", "h"}`. `w` and `h` are for images only.
 - A blob's id is the HMAC-SHA256 of its bytes under the blob-id key, as hex. It dedupes without letting the Space machine match a known file.
-- Blobs encrypt in 1 MB chunks. Each chunk's AAD is `cws1|<spaceId>|<blobId>|<n>|<last>`, so chunks can't be reordered or cut short.
+- Blobs encrypt in 1 MiB chunks. Each chunk's AAD is `cws1|<spaceId>|<blobId>|<n>|<last>`, with `n` counting from 0 and `last` written `true` or `false`, so chunks can't be reordered or cut short. An empty blob is one empty last chunk.
 - Upload starts at once and the block shows progress. The change that adds the block is pushed after the blob's last chunk is acknowledged, so other devices never see a missing blob.
 - Images render through the app's existing image pipeline, with shared decodes, release of hidden pixels and the expand and zoom viewer. Dragging an image's edge sets `width`.
 - Opening a file in another app writes a decrypted copy to the app's temporary folder, deleted when that app's document closes or when CandyWrapper quits. That copy is readable while it exists, and the open action says so the first time.
