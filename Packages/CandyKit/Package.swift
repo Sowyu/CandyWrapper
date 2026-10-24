@@ -18,6 +18,7 @@ let package = Package(
         .library(name: "Features", targets: ["Features"]),
         .library(name: "SpaceCrypto", targets: ["SpaceCrypto"]),
         .library(name: "SpaceEngine", targets: ["SpaceEngine"]),
+        .library(name: "SpaceLocal", targets: ["SpaceLocal"]),
         .executable(name: "candywrapper-helper", targets: ["CandyHelper"]),
     ],
     dependencies: [
@@ -44,6 +45,7 @@ let package = Package(
         .target(name: "SpaceCrypto", swiftSettings: sizeOptimized),
         // Space's apply, rebase, text merge, conflict copies and undo (docs/space.md sections 2, 3 and 9). Pure logic.
         .target(name: "SpaceEngine", dependencies: ["SpaceModel"], swiftSettings: sizeOptimized),
+        .target(name: "SpaceLocal", dependencies: ["SpaceModel", "SpaceCrypto"], swiftSettings: sizeOptimized),
         // Screens built from DesignSystem components and fed by T3Store (sidebar, timeline, composer...).
         .target(name: "Features", dependencies: ["DesignSystem", "T3Store", "T3Protocol", "SpaceModel", .product(name: "SwiftTerm", package: "SwiftTerm")], resources: [.copy("Resources/candy-town.gray"), .copy("Resources/pele.global.js.lzma"), .copy("Resources/LICENSE-pele.txt"), .copy("Resources/native-licenses.json"),
                          .copy("Resources/SymbolsNerdFontMono-Regular.ttf"), .copy("Resources/LICENSE-symbols-nerd-font.txt")],
@@ -55,6 +57,7 @@ let package = Package(
         .testTarget(name: "T3StoreTests", dependencies: ["T3Store"]),
         .testTarget(name: "SpaceCryptoTests", dependencies: ["SpaceCrypto"]),
         .testTarget(name: "SpaceEngineTests", dependencies: ["SpaceEngine", "SpaceModel"]),
+        .testTarget(name: "SpaceLocalTests", dependencies: ["SpaceLocal"]),
         .testTarget(name: "CandyHelperTests", dependencies: ["CandyHelper"]),
         .testTarget(name: "FeaturesTests", dependencies: ["Features", "SpaceModel", "DesignSystem", "T3Store", "T3Protocol", .product(name: "SwiftTerm", package: "SwiftTerm")], exclude: ["Fixtures"]),
     ]
