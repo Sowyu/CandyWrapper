@@ -78,7 +78,7 @@ The Orchestrator still uses T3's own tools on its own machine, since they need n
 T3 wakes a thread only when its own child task finishes (`orchestratorMcp.ts:222`). Threads you started aren't its children, so CandyWrapper and T3 fill the gap together.
 
 1. Its own children wake it directly through T3.
-2. While CandyWrapper is open, it watches the server events it already gets for every thread. When a thread finishes a turn, fails or asks for something, CandyWrapper sends the Orchestrator one short line, like "Event: 'Release notes' finished a turn". Events that land within 30 seconds of each other go out as one message, so a busy minute costs one turn.
+2. While CandyWrapper is open, it watches the server events it already gets for every thread. When a thread finishes a turn, fails or asks for something, CandyWrapper sends the Orchestrator one short line, like "Event: 'Release notes' finished a turn". Events that land within 2 minutes of the first go out as one message, so a busy couple of minutes costs one turn. Threads you wrote in during the ask-first window are your own conversations, so their events don't wake it unless it started or prompted that thread.
 3. While CandyWrapper is closed, a T3 scheduled task (`ScheduledTask`, `orchestratorMcp.ts`) wakes the Orchestrator every 30 minutes to check every thread with `t3_thread_list`. CandyWrapper turns that schedule off again when it opens. You can change the interval or turn the schedule off in the settings tab.
 
 ## Bots
@@ -332,7 +332,7 @@ These rules beat any other advice in this brief about how to reply.
 - Speak only when something the user cares about is done, or when something needs them.
 - Then use 1 or 2 short sentences, the result first, in normal sentences.
 - No technical details, versions or ids unless asked. No lists or formatting unless asked. Never recap.
-- An event with nothing new for the user gets no reply text at all, just the call or note.
+- When an event brings nothing new for the user, reply with exactly "—" and nothing else besides any call or note. The app hides it.
 - Choices go through the question tool as tap options.
 - Keep your digest and plan up to date as notes in orchestrator-memory blocks (note: digest, note: plan). The app saves blocks and never shows them as text, so never write a note's contents into your reply.
 - Link a thread by its title, like [Release notes](t3-thread://v1/<threadId>).
@@ -358,7 +358,9 @@ The Orchestrator pane reads like a group chat in iMessage, with Orchestrator and
 - A centred time label shows wherever more than 15 minutes pass between messages. A small "Read" shows under your last message once Orchestrator's turn starts.
 - While a bot works, a typing bubble with three dots sits under its last message. It animates only while that turn runs.
 - Plans, approvals and questions show as cards inside the bubble stack, with buttons like Allow and Deny and no tail.
-- Tool calls and crew events collapse into small centred lines like "Scout finished, read 14 files". Clicking one opens that crew thread.
+- Tool calls, events and relay results collapse into small centred lines like "Scout finished, read 14 files". They stay hidden until you click "Show activity" in the header, a setting kept on each device. Clicking a line opens that crew thread.
+- Replies that only say nothing is new stay hidden too. The brief asks for exactly "—" then, and the app also hides short ones like "Nothing new." or "Still running.", since the Orchestrator's harness makes it write something every turn.
+- Opening its thread from anywhere, like a notification, a link or Cmd-K, shows this pane. Only "Open as thread" shows the plain thread view.
 - The composer is a rounded field with a round send button.
 
 ## Memory and personality

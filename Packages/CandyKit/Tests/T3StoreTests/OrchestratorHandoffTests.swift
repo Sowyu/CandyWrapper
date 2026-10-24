@@ -32,7 +32,7 @@ import Testing
         // The batch it gathered before then is dropped, so the phone's event isn't sent again.
         var batch = OrchestratorEventBatch()
         _ = batch.add([OrchestratorEvent(threadId: ThreadId("t"), title: "Fix", kind: .finished, permission: .free)], now: start)
-        let gathered = batch.flush(now: start.addingTimeInterval(30))
+        let gathered = batch.flush(now: start.addingTimeInterval(batch.window))
         #expect(gathered != nil && mac.verdict(task: phoneHolds) == .resync)
         // The Mac's write lands: from now on it relays, and the phone sees the new stamp and stops.
         mac.wrote(updatedAt: "2026-10-24T10:00:05.000Z")
@@ -77,12 +77,30 @@ import Testing
         #expect(OrchestratorHandoff().verdict(task: nil) == .relay)
     }
 
-    /// A thread is adopted only when its first message is a brief.
+    /// A thread is adopted only when its brief came with the thread, so it's the first message, and the newest such
+    /// thread wins. The search alone tells: a projection holds only a thread's last 20 messages.
     @Test func adoptionReadsTheBriefMarker() {
-        #expect(OrchestratorHandoff.isOrchestratorThread(firstUserMessage: OrchestratorBrief.first("You are Ada.")))
-        #expect(!OrchestratorHandoff.isOrchestratorThread(firstUserMessage: "Please read # Orchestrator brief later"))
-        #expect(!OrchestratorHandoff.isOrchestratorThread(firstUserMessage: OrchestratorBrief.updated("x", message: "y")))
-        #expect(!OrchestratorHandoff.isOrchestratorThread(firstUserMessage: nil))
+        let made = T3Timestamp(start)
+        func shell(_ id: String, updated minutes: Double, _ edit: (inout ThreadShell) -> Void = { _ in }) -> ThreadShell {
+            var t = thread(id)
+            t.createdAt = made
+            t.updatedAt = T3Timestamp(start.addingTimeInterval(minutes * 60))
+            edit(&t)
+            return t
+        }
+        func match(_ id: String, _ snippet: String, after seconds: Double = 0.1, source: String = "user") -> ThreadSearchMatch {
+            ThreadSearchMatch(threadId: ThreadId(id), projectId: ProjectId("p"), source: source, snippet: snippet,
+                              messageCreatedAt: T3Timestamp(start.addingTimeInterval(seconds)))
+        }
+        let brief = "# Orchestrator brief # Who you are You are Ada…"
+        let threads = [shell("old", updated: 10), shell("new", updated: 50), shell("quoted", updated: 90), shell("later", updated: 95),
+                       shell("archived", updated: 99) { $0.archivedAt = T3Timestamp(start) }]
+        let matches = [match("old", brief), match("new", brief), match("quoted", "…please read the # Orchestrator brief below…"),
+                       match("later", brief, after: 3600), match("archived", brief), match("gone", brief)]
+        #expect(OrchestratorHandoff.adoptable(matches, threads: threads)?.id == ThreadId("new"))
+        #expect(OrchestratorHandoff.adoptable([match("new", brief, source: "assistant")], threads: threads) == nil)
+        #expect(OrchestratorHandoff.adoptable([match("later", brief, after: 3600)], threads: threads) == nil)
+        #expect(OrchestratorHandoff.adoptable([], threads: threads) == nil)
     }
 
     /// The task's stamp survives decoding from the server's list.

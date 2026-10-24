@@ -47,15 +47,15 @@ private func event(_ id: String, _ kind: OrchestratorEvent.Kind = .finished) -> 
 }
 
 @Suite struct OrchestratorBatchTests {
-    @Test func eventsInsideThirtySecondsGoOutAsOneMessage() {
+    @Test func eventsInsideTwoMinutesGoOutAsOneMessage() {
         var batch = OrchestratorEventBatch()
         let deadline = batch.add([event("a")], now: now)
-        #expect(deadline == now.addingTimeInterval(30))
+        #expect(deadline == now.addingTimeInterval(120))
         // Later events join the open window and arm nothing new.
-        #expect(batch.add([event("b", .failed)], now: now.addingTimeInterval(12)) == nil)
-        #expect(batch.add([event("c", .needsYou)], now: now.addingTimeInterval(29)) == nil)
-        #expect(batch.flush(now: now.addingTimeInterval(29.9)) == nil)
-        let message = batch.flush(now: now.addingTimeInterval(30))
+        #expect(batch.add([event("b", .failed)], now: now.addingTimeInterval(50)) == nil)
+        #expect(batch.add([event("c", .needsYou)], now: now.addingTimeInterval(119)) == nil)
+        #expect(batch.flush(now: now.addingTimeInterval(119.9)) == nil)
+        let message = batch.flush(now: now.addingTimeInterval(120))
         #expect(message?.split(separator: "\n").count == 3)
         #expect(message.map(OrchestratorEventBatch.isEventMessage) == true)
         #expect(batch.pending.isEmpty && batch.deadline == nil)
@@ -64,10 +64,10 @@ private func event(_ id: String, _ kind: OrchestratorEvent.Kind = .finished) -> 
     @Test func anEventAfterTheWindowOpensANewOne() {
         var batch = OrchestratorEventBatch()
         _ = batch.add([event("a")], now: now)
-        _ = batch.flush(now: now.addingTimeInterval(30))
-        let next = batch.add([event("b")], now: now.addingTimeInterval(45))
-        #expect(next == now.addingTimeInterval(75))
-        #expect(batch.flush(now: now.addingTimeInterval(75)) == event("b").line)
+        _ = batch.flush(now: now.addingTimeInterval(120))
+        let next = batch.add([event("b")], now: now.addingTimeInterval(150))
+        #expect(next == now.addingTimeInterval(270))
+        #expect(batch.flush(now: now.addingTimeInterval(270)) == event("b").line)
     }
 
     @Test func aRepeatOfTheSameThreadAndKindSendsOneLine() {
@@ -80,25 +80,25 @@ private func event(_ id: String, _ kind: OrchestratorEvent.Kind = .finished) -> 
     @Test func eventsOfThreadsArchivedInsideTheWindowAreDropped() {
         var batch = OrchestratorEventBatch()
         _ = batch.add([event("a"), event("b")], now: now)
-        #expect(batch.flush(now: now.addingTimeInterval(30), keep: { $0.threadId.rawValue == "b" }) == event("b").line)
-        _ = batch.add([event("a")], now: now.addingTimeInterval(40))
-        #expect(batch.flush(now: now.addingTimeInterval(70), keep: { _ in false }) == nil)
+        #expect(batch.flush(now: now.addingTimeInterval(120), keep: { $0.threadId.rawValue == "b" }) == event("b").line)
+        _ = batch.add([event("a")], now: now.addingTimeInterval(160))
+        #expect(batch.flush(now: now.addingTimeInterval(280), keep: { _ in false }) == nil)
         #expect(batch.deadline == nil && batch.pending.isEmpty)
     }
 
     @Test func nothingArmsWithoutEvents() {
         var batch = OrchestratorEventBatch()
         #expect(batch.add([], now: now) == nil)
-        #expect(batch.flush(now: now.addingTimeInterval(100)) == nil)
+        #expect(batch.flush(now: now.addingTimeInterval(300)) == nil)
     }
 }
 
 @Suite struct OrchestratorEventDiffTests {
     let orchestrator = ThreadId("orch")
 
-    func diff(_ old: [ThreadShell], _ new: [ThreadShell], handsOff: Set<ThreadId> = []) -> [OrchestratorEvent] {
+    func diff(_ old: [ThreadShell], _ new: [ThreadShell], handsOff: Set<ThreadId> = [], touched: Set<ThreadId> = []) -> [OrchestratorEvent] {
         OrchestratorEvent.diff(old: Dictionary(uniqueKeysWithValues: old.map { ($0.id, $0) }), new: new, orchestrator: orchestrator,
-                               handsOff: { handsOff.contains($0) }, windowMinutes: 10, now: now)
+                               handsOff: { handsOff.contains($0) }, windowMinutes: 10, now: now, touched: { touched.contains($0.id) })
     }
 
     @Test func aTurnEndingFailingOrAskingIsAnEvent() {
@@ -120,6 +120,27 @@ private func event(_ id: String, _ kind: OrchestratorEvent.Kind = .finished) -> 
         let new = [thread("orch") { $0.status = .completed }, thread("child") { $0.status = .completed; $0.lineage.parentThreadId = ThreadId("orch") },
                    thread("gone") { $0.status = .completed; $0.archivedAt = ago(0) }]
         #expect(diff(old, new).isEmpty)
+    }
+
+    /// A thread you wrote in within the window is your own conversation: its events wake nobody, unless the
+    /// Orchestrator started it or prompted it.
+    @Test func yourOwnRecentConversationsStayQuiet() {
+        func yours(_ id: String, minutesAgo: Double, _ edit: (inout ThreadShell) -> Void = { _ in }) -> (ThreadShell, ThreadShell) {
+            let before = thread(id) { $0.status = .running; $0.latestUserAuthoredMessageAt = ago(minutesAgo); $0.latestUserMessageAt = ago(minutesAgo); edit(&$0) }
+            var after = before
+            after.status = .completed
+            return (before, after)
+        }
+        let recent = yours("mine", minutesAgo: 3)
+        #expect(diff([recent.0], [recent.1]).isEmpty)
+        // It prompted the thread or the relay launched it: still news, with the ask-first note.
+        #expect(diff([recent.0], [recent.1], touched: [ThreadId("mine")]).map(\.permission) == [.askFirst(minutesAgo: 3)])
+        // T3's tools launched it.
+        let launched = yours("worker", minutesAgo: 3) { $0.createdBy = "agent" }
+        #expect(diff([launched.0], [launched.1]).map(\.kind) == [.finished])
+        // Past the window it's news again.
+        let older = yours("old", minutesAgo: 20)
+        #expect(diff([older.0], [older.1]).map(\.permission) == [.free])
     }
 
     @Test func eventsCarryHandsOff() {
@@ -176,6 +197,17 @@ private func event(_ id: String, _ kind: OrchestratorEvent.Kind = .finished) -> 
 }
 
 @Suite struct OrchestratorReplyTests {
+    @Test func noOpRepliesAreKnownAndNewsIsNot() {
+        for text in ["—", " — ", "-", "Nothing new.", "Nothing new for you.", "Still running.", "Still running, nothing new.",
+                     "Nothing new yet.", "No changes.", "All quiet.", "Both still running.", "nothing to report", "Still working on it."] {
+            #expect(OrchestratorReply.isNoop(text), "\(text)")
+        }
+        for text in ["The build is still running.", "Nothing new, but the release needs your approval.", "Done.",
+                     "The fix is in.", "Still running the tests on the Mac mini, about 5 more minutes.", "Waiting on your approval."] {
+            #expect(!OrchestratorReply.isNoop(text), "\(text)")
+        }
+    }
+
     @Test func planAndMemoryBlocksLeaveTheProse() {
         let reply = OrchestratorReply.parse("""
         Here's the plan.
@@ -260,7 +292,7 @@ private func event(_ id: String, _ kind: OrchestratorEvent.Kind = .finished) -> 
         #expect(brief.contains("Speak only when something the user cares about is done, or when something needs them."))
         #expect(brief.contains("Then use 1 or 2 short sentences, the result first, in normal sentences."))
         #expect(brief.contains("No technical details, versions or ids unless asked. No lists or formatting unless asked. Never recap."))
-        #expect(brief.contains("An event with nothing new for the user gets no reply text at all, just the call or note."))
+        #expect(brief.contains("When an event brings nothing new for the user, reply with exactly \"—\" and nothing else besides any call or note. The app hides it."))
         #expect(brief.contains("Choices go through the question tool as tap options."))
         #expect(brief.contains("never write a note's contents into your reply"))
         for old in ["On it.", "pickup line first", "like a friend texting", "Reply in 1 to 3", "one short line or nothing at all", "straight opinion"] {

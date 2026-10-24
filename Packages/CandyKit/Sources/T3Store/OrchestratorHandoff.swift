@@ -50,6 +50,7 @@ public struct OrchestratorHandoff: Equatable, Sendable {
         }
     }
 
+<<<<<<< Updated upstream
     /// The threads whose `orchestration.searchThreads` match for "Orchestrator brief" is a brief: a user message that starts
     /// with the heading. T3 matches each thread's newest such message and starts the snippet at the message when the
     /// phrase is near its start (ThreadSearch.ts:46-60, 100-125), so this holds however long the thread grew. A thread's
@@ -63,5 +64,20 @@ public struct OrchestratorHandoff: Equatable, Sendable {
     public static func isOrchestratorThread(firstUserMessage text: String?) -> Bool {
         guard let text else { return false }
         return text == OrchestratorBrief.firstHeading || text.hasPrefix(OrchestratorBrief.firstHeading + "\n")
+=======
+    /// The Orchestrator thread to adopt from a search for "Orchestrator brief": the newest live, top-level thread whose
+    /// matched message is a brief written with the thread itself, so its first message. T3 matches each thread's newest
+    /// user message with the phrase, and the snippet starts at the message's start when the phrase opens it
+    /// (ThreadSearch.ts:46-60, 100-127). A thread's projection holds only its last 20 messages, so it can't tell.
+    public static func adoptable(_ matches: [ThreadSearchMatch], threads: [ThreadShell]) -> ThreadShell? {
+        let live = Dictionary(threads.filter { $0.archivedAt == nil && $0.deletedAt == nil && $0.lineage.parentThreadId == nil }
+            .map { ($0.id.rawValue, $0) }, uniquingKeysWith: { a, _ in a })
+        return matches.compactMap { m -> ThreadShell? in
+            guard m.isUser, m.snippet.hasPrefix(OrchestratorBrief.firstHeading + " ") || m.snippet == OrchestratorBrief.firstHeading,
+                  let t = live[m.threadId.rawValue], let sent = m.messageCreatedAt?.epochMs, let made = t.createdAt.epochMs,
+                  abs(sent - made) <= 60_000 else { return nil }
+            return t
+        }.max { ($0.updatedAt.epochMs ?? 0) < ($1.updatedAt.epochMs ?? 0) }
+>>>>>>> Stashed changes
     }
 }

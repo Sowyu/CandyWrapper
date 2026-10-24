@@ -58,6 +58,8 @@ public struct OrchestratorPaneState: Equatable {
     public var started = false
     public var connected = false
     public var items: [OrchestratorChatItem] = []
+    /// Whether the chat shows its activity lines.
+    public var showsActivity = false
     /// Replies whose saved notes can still be undone, and those already undone.
     public var undoable: Set<String> = []
     public var undone: Set<String> = []
@@ -118,6 +120,8 @@ public final class OrchestratorPaneView: DSView {
     /// A click on its bot: Settings > Orchestrator, where its shape and colour change.
     public var onEditBot: (() -> Void)?
     public var onEscape: (() -> Void)?
+    /// "Show activity" in the header: events, relay results and tool lines in the chat.
+    public var onToggleActivity: (() -> Void)?
 
     private let headerBot = BotView(identity: .orchestrator, size: 30)
     private let headerBotButton = ControlView()
@@ -125,6 +129,7 @@ public final class OrchestratorPaneView: DSView {
     private let subtitle = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private let tabs = ToggleGroupView(variant: .segmented, items: [("Chat", nil), ("Overview", nil)], selected: 0)
     private let openThread = ButtonView("Open as thread", icon: .arrowUpRight, variant: .ghost, size: .sm)
+    private let activity = ButtonView("Show activity", variant: .ghost, size: .sm)
     private let chat = OrchestratorChatView()
     private lazy var chatScroll = ScrollAreaView(documentView: chat, scrollFade: true)
     private let overview = OrchestratorOverviewView()
@@ -141,7 +146,7 @@ public final class OrchestratorPaneView: DSView {
 
     public override init(frame: NSRect) {
         super.init(frame: frame)
-        for v in [headerBot, title, subtitle, tabs, openThread, chatScroll, overviewScroll, composer, start] as [NSView] { addSubview(v) }
+        for v in [headerBot, title, subtitle, tabs, activity, openThread, chatScroll, overviewScroll, composer, start] as [NSView] { addSubview(v) }
         addSubview(headerBotButton)
         headerBotButton.setAccessibilityLabel("Change the Orchestrator's look")
         headerBotButton.toolTip = "Change its shape and colour"
@@ -161,9 +166,12 @@ public final class OrchestratorPaneView: DSView {
             self.chatScroll.isHidden = self.showsOverview
             self.overviewScroll.isHidden = !self.showsOverview
             self.composer.isHidden = !self.state.started || self.showsOverview
+            self.activity.isHidden = !self.state.started || self.showsOverview
             self.needsLayout = true
         }
         openThread.action = { [weak self] in self?.onOpenAsThread?() }
+        activity.action = { [weak self] in self?.onToggleActivity?() }
+        activity.toolTip = "Events, relay results and the tools each turn used"
         start.action = { [weak self] in self?.onStart?() }
         composer.onSend = { [weak self] text in self?.onSend?(text) }
         chat.onOpenThread = { [weak self] local in self?.open(local) }
@@ -190,6 +198,11 @@ public final class OrchestratorPaneView: DSView {
             : next.needs.isEmpty ? nil : "\(next.needs.count) waiting on you"
         subtitle.text = [next.machine, status].compactMap { $0 }.joined(separator: " · ")
         openThread.isHidden = !next.started
+        activity.isHidden = !next.started || showsOverview
+        if old.showsActivity != next.showsActivity {
+            activity.title = next.showsActivity ? "Hide activity" : "Show activity"
+            needsLayout = true
+        }
         start.isHidden = next.started
         composer.isHidden = !next.started || showsOverview
         composer.isEnabled = next.connected
@@ -276,7 +289,9 @@ public final class OrchestratorPaneView: DSView {
         tabs.frame = NSRect(x: (w - tw) / 2, y: top + 8, width: tw, height: 28)
         let ow = openThread.intrinsicContentSize.width
         openThread.frame = NSRect(x: w - 16 - ow, y: top + 8, width: ow, height: 28)
-        let textRight = min(tabs.frame.minX - 12, openThread.frame.minX - 12)
+        let aw = activity.intrinsicContentSize.width
+        activity.frame = NSRect(x: openThread.frame.minX - 4 - aw, y: top + 8, width: aw, height: 28)
+        let textRight = min(tabs.frame.minX - 12, (activity.isHidden ? openThread : activity).frame.minX - 12)
         title.frame = NSRect(x: 58, y: top + 4, width: max(0, textRight - 58), height: 20)
         subtitle.frame = NSRect(x: 58, y: top + 23, width: max(0, textRight - 58), height: 16)
         CATransaction.begin()

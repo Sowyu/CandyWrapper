@@ -38,8 +38,11 @@ public enum OrchestratorChat {
     static let timeGapMs: Int64 = 15 * 60_000
     static let scheduledPrefix = "Scheduled check:"
 
-    /// The chat for the Orchestrator thread's messages. `running` is whether its turn runs now.
-    public static func items(messages: [ConversationMessage], turnItems: [TurnItem], running: Bool, now: Date = Date()) -> [OrchestratorChatItem] {
+    /// The chat for the Orchestrator thread's messages. `running` is whether its turn runs now. The activity lines (events,
+    /// relay results, the tools a turn used, scheduled checks, digest updates) show only with `activity`, and replies
+    /// that only say nothing is new never show: its harness makes it write something every turn.
+    public static func items(messages: [ConversationMessage], turnItems: [TurnItem], running: Bool, activity: Bool = false,
+                             now: Date = Date()) -> [OrchestratorChatItem] {
         var out: [OrchestratorChatItem] = []
         var lastMs: Int64?
         var toolLinesShown = Set<String>()
@@ -52,57 +55,69 @@ public enum OrchestratorChat {
         var lastAssistantMs: Int64?
         for m in sorted {
             let ms = m.createdAt.epochMs ?? 0
-            if lastMs.map({ ms - $0 > timeGapMs }) ?? true { out.append(.time(id: "time-\(m.id.rawValue)", label: timeLabel(ms, now: now))) }
-            lastMs = ms
             let mid = m.id.rawValue
+            // This message's items, and where your own bubble or image sits among them.
+            var mine: [OrchestratorChatItem] = []
+            var yours: Int?
+            func line(_ id: String, _ text: String, _ thread: String?) { if activity { mine.append(.line(id: id, text: text, threadId: thread)) } }
             switch m.role {
             case "user":
                 let parts = OrchestratorBrief.split(m.text)
-                if let brief = parts.brief { out.append(.brief(id: "brief-\(mid)", text: brief, updated: parts.updated)) }
+                if let brief = parts.brief { mine.append(.brief(id: "brief-\(mid)", text: brief, updated: parts.updated)) }
                 var text = parts.message.trimmingCharacters(in: .whitespacesAndNewlines)
                 let sent = images[mid] ?? []
-                for (i, image) in sent.enumerated() { out.append(.image(id: "image-\(mid)-\(i)", attachmentId: image.id, name: image.name)) }
+                for (i, image) in sent.enumerated() { mine.append(.image(id: "image-\(mid)-\(i)", attachmentId: image.id, name: image.name)) }
                 // T3's stand-in text for a message of images only stays out of the chat.
                 if !sent.isEmpty, text == ComposerAttachmentRules.attachmentOnlyPrompt { text = "" }
-                if text.isEmpty, !sent.isEmpty { lastUser = (out.count - 1, ms) }
-                guard !text.isEmpty else { continue }
+                if text.isEmpty, !sent.isEmpty { yours = mine.count - 1 }
+                guard !text.isEmpty else { break }
                 if OrchestratorEventBatch.isEventMessage(text) {
-                    for (i, line) in text.split(separator: "\n").enumerated() {
-                        let e = eventLine(String(line))
-                        out.append(.line(id: "event-\(mid)-\(i)", text: e.text, threadId: e.threadId))
+                    for (i, l) in text.split(separator: "\n").enumerated() {
+                        let e = eventLine(String(l))
+                        line("event-\(mid)-\(i)", e.text, e.threadId)
                     }
                 } else if OrchestratorRelay.isResultMessage(text) {
                     // What the relay ran on other machines (docs/orchestrator.md, "Every machine").
                     for (i, summary) in OrchestratorRelay.summaries(text).enumerated() {
-                        out.append(.line(id: "result-\(mid)-\(i)", text: summary.prefix(1).uppercased() + summary.dropFirst(), threadId: nil))
+                        line("result-\(mid)-\(i)", summary.prefix(1).uppercased() + summary.dropFirst(), nil)
                     }
                 } else if text.hasPrefix(scheduledPrefix) {
-                    out.append(.line(id: "scheduled-\(mid)", text: "Scheduled check while CandyWrapper was closed", threadId: nil))
+                    line("scheduled-\(mid)", "Scheduled check while CandyWrapper was closed", nil)
                 } else {
-                    out.append(.bubble(id: mid, fromUser: true, text: text, first: true, last: true))
-                    lastUser = (out.count - 1, ms)
+                    mine.append(.bubble(id: mid, fromUser: true, text: text, first: true, last: true))
+                    yours = mine.count - 1
                 }
             case "assistant":
                 lastAssistantMs = ms
                 if let run = m.runId?.rawValue, let summary = tools[run], toolLinesShown.insert(run).inserted {
-                    out.append(.line(id: "tools-\(run)", text: summary, threadId: nil))
+                    line("tools-\(run)", summary, nil)
                 }
                 // The turn's pages sit above its reply (`HtmlRenderTimelineRow`).
                 if let run = m.runId?.rawValue, pagesShown.insert(run).inserted {
-                    for (i, page) in (pages[run] ?? []).enumerated() { out.append(.html(id: "html-\(run)-\(i)", page: page)) }
+                    for (i, page) in (pages[run] ?? []).enumerated() { mine.append(.html(id: "html-\(run)-\(i)", page: page)) }
                 }
                 let reply = OrchestratorReply.parse(m.text)
-                if !reply.text.isEmpty { out.append(.bubble(id: mid, fromUser: false, text: reply.text, first: true, last: true)) }
-                if let plan = reply.plan, !plan.isEmpty { out.append(.plan(id: "plan-\(mid)", steps: plan)) }
-                if !reply.memories.isEmpty { out.append(.memory(id: "memory-\(mid)", messageId: mid, notes: reply.memories.map(\.note))) }
-                if reply.digest != nil { out.append(.line(id: "digest-\(mid)", text: "Digest updated", threadId: nil)) }
+                if !reply.text.isEmpty, !OrchestratorReply.isNoop(reply.text) {
+                    mine.append(.bubble(id: mid, fromUser: false, text: reply.text, first: true, last: true))
+                }
+                if let plan = reply.plan, !plan.isEmpty { mine.append(.plan(id: "plan-\(mid)", steps: plan)) }
+                if !reply.memories.isEmpty { mine.append(.memory(id: "memory-\(mid)", messageId: mid, notes: reply.memories.map(\.note))) }
+                if reply.digest != nil { line("digest-\(mid)", "Digest updated", nil) }
             default:
-                continue
+                break
             }
+            // Time labels go between what shows, so hidden activity leaves none behind.
+            guard !mine.isEmpty else { continue }
+            if lastMs.map({ ms - $0 > timeGapMs }) ?? true { out.append(.time(id: "time-\(mid)", label: timeLabel(ms, now: now))) }
+            lastMs = ms
+            if let yours { lastUser = (out.count + yours, ms) }
+            out += mine
         }
         // A running turn that used tools or published a page before it wrote anything.
-        for (run, summary) in tools where !toolLinesShown.contains(run) && running {
-            out.append(.line(id: "tools-\(run)", text: summary, threadId: nil))
+        if activity {
+            for (run, summary) in tools where !toolLinesShown.contains(run) && running {
+                out.append(.line(id: "tools-\(run)", text: summary, threadId: nil))
+            }
         }
         for (run, list) in pages where !pagesShown.contains(run) {
             for (i, page) in list.enumerated() { out.append(.html(id: "html-\(run)-\(i)", page: page)) }

@@ -27,7 +27,7 @@ import Testing
             message("m4", "assistant", "```orchestrator-plan\n1. Write ([Scribe](t3-thread://v1/w1))\n```", minutes: 2.1),
             message("m5", "user", "Event: “Scribe” finished a turn (t3-thread://v1/w1).", minutes: 40),
         ]
-        let items = OrchestratorChat.items(messages: messages, turnItems: [], running: true, now: start)
+        let items = OrchestratorChat.items(messages: messages, turnItems: [], running: true, activity: true, now: start)
         let kinds = items.map { item -> String in
             switch item {
             case .time: "time"
@@ -66,6 +66,39 @@ import Testing
         let plan = OrchestratorReply.parse("```orchestrator-plan\n1. Count ([Counter](t3-thread://v1/mcp:32a7))\n```").plan
         #expect(plan?.first?.threadId == "mcp:32a7")
         #expect(plan.map { OrchestratorReply.displayText($0[0]) } == "Count (Counter)")
+    }
+
+    /// By default the chat shows only what you and it said: no event, result or tool lines, no time label left over
+    /// from them, and no reply that only says nothing is new.
+    @Test func activityAndNoOpRepliesStayOutByDefault() throws {
+        let tool = try JSONDecoder().decode(TurnItem.self, from: JSONSerialization.data(withJSONObject: [
+            "id": "ti-1", "threadId": "orch", "type": "dynamic_tool", "ordinal": 1, "status": "completed", "runId": "run-2",
+            "updatedAt": T3Timestamp(start).raw, "toolName": "mcp__t3-code__t3_thread_read",
+        ] as [String: Any]))
+        let messages = [
+            message("m1", "user", "Ship the notes", minutes: 0),
+            message("m2", "assistant", "On it.", minutes: 0.5),
+            message("m3", "user", "Event: “Scribe” finished a turn (t3-thread://v1/w1).", minutes: 40),
+            message("m4", "assistant", "Nothing new.", minutes: 40.5, run: "run-2"),
+            message("m5", "user", "Event: “Scribe” finished a turn (t3-thread://v1/w1).", minutes: 60),
+            message("m6", "assistant", "—", minutes: 60.5),
+            message("m7", "assistant", "The notes are out.", minutes: 80),
+        ]
+        let items = OrchestratorChat.items(messages: messages, turnItems: [tool], running: false, now: start)
+        let kinds = items.map { item -> String in
+            switch item {
+            case .time: "time"
+            case .bubble(_, let user, let text, _, _): "\(user ? "me" : "bot"):\(text)"
+            case .line(_, let text, _): "line:\(text)"
+            case .read: "read"
+            default: "other"
+            }
+        }
+        #expect(kinds == ["time", "me:Ship the notes", "read", "bot:On it.", "time", "bot:The notes are out."])
+        let shown = OrchestratorChat.items(messages: messages, turnItems: [tool], running: false, activity: true, now: start)
+        #expect(shown.contains { if case .line(_, let text, _) = $0 { text == "“Scribe” finished a turn" } else { false } })
+        #expect(shown.contains { if case .line(_, let text, _) = $0 { text.hasPrefix("Used 1 tool") } else { false } })
+        #expect(!shown.contains { if case .bubble(_, _, let text, _, _) = $0 { text == "Nothing new." || text == "—" } else { false } })
     }
 
     /// Images ride on the user-message turn item; a message of images only hides T3's stand-in text.
@@ -117,7 +150,7 @@ import Testing
             message("m1", "assistant", "Looking.\n\n```orchestrator-call\n{\"tool\":\"list\"}\n```", minutes: 0),
             message("m2", "user", "Result: listed 3 threads on 2 machines\n## miniko\n- x\n\nResult: sent to “Fixer” on MacBook", minutes: 1),
         ]
-        let items = OrchestratorChat.items(messages: messages, turnItems: [], running: false, now: start)
+        let items = OrchestratorChat.items(messages: messages, turnItems: [], running: false, activity: true, now: start)
         let lines = items.compactMap { item -> String? in if case .line(_, let text, _) = item { text } else { nil } }
         #expect(lines == ["Listed 3 threads on 2 machines", "Sent to “Fixer” on MacBook"])
         let bubbles = items.compactMap { item -> String? in if case .bubble(_, _, let text, _, _) = item { text } else { nil } }

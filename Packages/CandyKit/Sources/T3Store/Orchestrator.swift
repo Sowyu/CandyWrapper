@@ -99,12 +99,14 @@ public struct OrchestratorConfig: Codable, Hashable, Sendable {
     public var relayedAt: [String: Int64] = [:]
     /// Scoped ids of the threads the relay launched, which count toward the worker limit.
     public var relayWorkers: Set<String> = []
+    /// Whether its chat shows the activity lines: events, relay results and the tools each turn used. This device only.
+    public var showActivity = false
 
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
         case enabled, name, prompt, environmentId, homeProjectId, crewLimit, models, notebook, closedCheckMinutes, askFirstMinutes
-        case handsOff, machines, savedMemoryMessages, botShape, botColor, relayedAt, relayWorkers
+        case handsOff, machines, savedMemoryMessages, botShape, botColor, relayedAt, relayWorkers, showActivity
     }
 
     /// Missing keys keep their defaults, so a newer field never wipes the rest.
@@ -128,6 +130,7 @@ public struct OrchestratorConfig: Codable, Hashable, Sendable {
         botColor = try c.decodeIfPresent(Int.self, forKey: .botColor)
         relayedAt = try c.decodeIfPresent([String: Int64].self, forKey: .relayedAt) ?? [:]
         relayWorkers = try c.decodeIfPresent(Set<String>.self, forKey: .relayWorkers) ?? []
+        showActivity = try c.decodeIfPresent(Bool.self, forKey: .showActivity) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -149,6 +152,7 @@ public struct OrchestratorConfig: Codable, Hashable, Sendable {
         try c.encodeIfPresent(botColor, forKey: .botColor)
         try c.encode(relayedAt, forKey: .relayedAt)
         try c.encode(relayWorkers, forKey: .relayWorkers)
+        try c.encode(showActivity, forKey: .showActivity)
     }
 
     static let defaultName = "Orchestrator"
@@ -285,7 +289,7 @@ public enum OrchestratorBrief {
     - Speak only when something the user cares about is done, or when something needs them.
     - Then use 1 or 2 short sentences, the result first, in normal sentences.
     - No technical details, versions or ids unless asked. No lists or formatting unless asked. Never recap.
-    - An event with nothing new for the user gets no reply text at all, just the call or note.
+    - When an event brings nothing new for the user, reply with exactly "—" and nothing else besides any call or note. The app hides it.
     - Choices go through the question tool as tap options.
     - Keep your digest and plan up to date as notes in orchestrator-memory blocks (note: digest, note: plan). The app saves blocks and never shows them as text, so never write a note's contents into your reply.
     - Link a thread by its title, like [Release notes](t3-thread://v1/<threadId>).
@@ -524,9 +528,13 @@ public struct OrchestratorEvent: Hashable, Sendable {
 
     /// What changed between two shell states of the machine's threads. Skips the Orchestrator, archived and deleted
     /// threads, and threads with a parent: T3 wakes a parent when its own child finishes (orchestratorMcp.ts:222).
+    ///
+    /// A thread you wrote in within the ask-first window is your own conversation: its events don't wake the
+    /// Orchestrator unless it started or prompted that thread (`touched`).
     public static func diff(old: [ThreadId: ThreadShell], new: [ThreadShell], orchestrator: ThreadId,
                             handsOff: (ThreadId) -> Bool, windowMinutes: Int, now: Date,
-                            relayedAt: (ThreadId) -> Int64? = { _ in nil }, machine: String? = nil) -> [OrchestratorEvent] {
+                            relayedAt: (ThreadId) -> Int64? = { _ in nil }, touched: (ThreadShell) -> Bool = { _ in false },
+                            machine: String? = nil) -> [OrchestratorEvent] {
         var out: [OrchestratorEvent] = []
         for t in new where t.id != orchestrator && t.archivedAt == nil && t.deletedAt == nil && t.lineage.parentThreadId == nil {
             guard let before = old[t.id] else { continue }
@@ -537,13 +545,14 @@ public struct OrchestratorEvent: Hashable, Sendable {
             if let r = t.pendingRuntimeRequest, r.id != before.pendingRuntimeRequest?.id { kinds.append(.needsYou) }
             guard !kinds.isEmpty else { continue }
             let permission = OrchestratorPermission.of(t, handsOff: handsOff(t.id), windowMinutes: windowMinutes, now: now, relayedAtMs: relayedAt(t.id))
+            if case .askFirst = permission, !touched(t), t.createdBy != "agent" { continue }
             for k in kinds { out.append(.init(threadId: t.id, title: t.title, kind: k, permission: permission, machine: machine)) }
         }
         return out
     }
 }
 
-/// Events that land within one window go out as one message (docs/orchestrator.md: "a busy minute costs one turn").
+/// Events that land within one window go out as one message (docs/orchestrator.md: "a busy couple of minutes costs one turn").
 /// The first event opens the window; everything until it closes joins that message. Nothing ticks between events:
 /// the caller arms a single one-shot timer for `deadline`.
 public struct OrchestratorEventBatch: Sendable {
@@ -551,7 +560,7 @@ public struct OrchestratorEventBatch: Sendable {
     public private(set) var pending: [OrchestratorEvent] = []
     public private(set) var deadline: Date?
 
-    public init(window: TimeInterval = 30) { self.window = window }
+    public init(window: TimeInterval = 120) { self.window = window }
 
     /// Adds events and returns the deadline to arm when this opened the window, else nil (a timer is already armed).
     public mutating func add(_ events: [OrchestratorEvent], now: Date) -> Date? {
