@@ -8,7 +8,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
     case project, general, appearance, notifications, keyboard
     case orchestrator, models, threads, scheduledTasks
     case projects, git, tools
-    case machines, advanced, about
+    case machines, advanced, experimental, about
 
     public var label: String {
         switch self {
@@ -26,6 +26,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .tools: "Browser and devices"
         case .machines: "Machines and connections"
         case .advanced: "Advanced"
+        case .experimental: "Experimental"
         case .about: "About"
         }
     }
@@ -47,6 +48,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .tools: "The built-in browser, simulators and window capture."
         case .machines: "This machine, your other machines, and the clients paired with them."
         case .advanced: "Background work, storage cleanup, diagnostics and legacy features."
+        case .experimental: "Features still being built. They may change or go away."
         case .about: "Version, updates and licenses."
         }
     }
@@ -67,6 +69,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .tools: .globe
         case .machines: .server
         case .advanced: .slidersHorizontal
+        case .experimental: .flaskConical
         case .about: .info
         }
     }
@@ -76,7 +79,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         (nil, [.general, .appearance, .notifications, .keyboard]),
         ("Agents", [.orchestrator, .models, .threads, .scheduledTasks]),
         ("Workspace", [.project, .projects, .git, .tools]),
-        ("System", [.machines, .advanced, .about]),
+        ("System", [.machines, .advanced, .experimental, .about]),
     ]
 
     /// The content column: the two-pane pages keep T3's wide container.
@@ -114,6 +117,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         ]
         case .scheduledTasks: return [.init(.scheduledTasks, scope: true)]
         case .orchestrator: return [.init(.orchestrator)]
+        case .experimental: return [.init(.experimental)]
         case .projects: return [
             .init(.general, scope: true, [G("project-defaults", "New threads", rows: ["new-threads", "worktree-submodules"]),
                                           G("projects-and-threads", "Projects", rows: ["start-from-origin", "add-project-starts-in"])]),
@@ -153,6 +157,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .connections: .machines
         case .archive: .threads
         case .orchestrator: .orchestrator
+        case .experimental: .experimental
         case .diagnostics, .licenses: nil
         }
     }

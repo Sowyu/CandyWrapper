@@ -288,6 +288,34 @@ public final class ThemeLibrary {
         remove(ids)
     }
 
+    // MARK: The Redesign switch (Settings > Experimental)
+
+    /// The theme in use before the Experimental tab's Redesign switch turned on: `{preference, light?, dark?}`.
+    static let preRedesignKey = "theme.preRedesign"
+
+    /// Redesign paints either appearance, whether the switch or the theme picker chose it.
+    public var isRedesignOn: Bool { ThemeAppearance.allCases.contains { owner(of: $0) == ThemeDefinition.dither.id } }
+
+    /// On remembers the current choice and its mix and picks Redesign. Off brings them back, or the standard
+    /// look when nothing was remembered or the remembered theme is gone.
+    public func setRedesign(_ on: Bool) {
+        guard on != isRedesignOn else { return }
+        if on {
+            var o = ["preference": preference]
+            o["light"] = rawHalves.light
+            o["dark"] = rawHalves.dark
+            defaults.set(try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys]), forKey: Self.preRedesignKey)
+            setTheme(ThemeDefinition.dither.id)
+            return
+        }
+        let saved = defaults.data(forKey: Self.preRedesignKey).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: String] }
+        defaults.removeObject(forKey: Self.preRedesignKey)
+        let usable = { (id: String?) in id.map { ["system", "light", "dark"].contains($0) || (self.definition($0) != nil && !(self.definition($0)?.isDither ?? true)) } ?? false }
+        guard let saved, usable(saved["preference"]) else { useStandard(); return }
+        setTheme(saved["preference"]!)
+        for a in ThemeAppearance.allCases where usable(saved[a.rawValue]) { setThemeHalf(a, saved[a.rawValue]) }
+    }
+
     // MARK: Applying (applyTheme, useTheme.ts:375-412)
 
     /// The theme that paints an appearance (`resolveThemeHalf`).

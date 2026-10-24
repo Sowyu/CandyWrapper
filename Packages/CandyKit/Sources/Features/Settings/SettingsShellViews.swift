@@ -7,6 +7,8 @@ public enum SettingsSection: String, CaseIterable, Sendable {
     case projects, general, appearance, keybindings, snapShots, providers, integrations, scheduledTasks, sourceControl, storage, connections, archive
     /// Redesign's Orchestrator tab, CandyWrapper's own; never in T3's nav.
     case orchestrator
+    /// CandyWrapper's own experimental switches, Redesign among them, so it sits last in T3's nav too.
+    case experimental
     /// Reached from General > Diagnostics; not in the nav (`SETTINGS_BREADCRUMB_LABELS`).
     case diagnostics, licenses
 
@@ -28,6 +30,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .connections: "Connections"
         case .archive: "Archive"
         case .orchestrator: "Orchestrator"
+        case .experimental: "Experimental"
         case .diagnostics: "Diagnostics"
         case .licenses: "Open source licenses"
         }
@@ -48,6 +51,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .connections: .link2
         case .archive: .archive
         case .orchestrator: .workflow
+        case .experimental: .flaskConical
         case .diagnostics: .activity
         case .licenses: .fileText
         }

@@ -202,7 +202,7 @@ The values are the same JSON as `OrchestratorConfig` encodes:
 
 A client skips a value of the wrong type or a count below its minimum and keeps its own.
 
-Stashed prompts from the Orchestrator's composer sync one by one, so two devices that stash at the same time both keep theirs. Stashing writes a new `stash.<id>` key. Restoring or deleting an entry writes null to its key, with a new stamp, so every device drops it. A client removes a null `stash.<id>` from the document and from its stamps once its `at` is more than 30 days old. A client lists the entries newest first by `createdAt`, then by id, and keeps at most 20: stashing the 21st writes null for the oldest. Entries carry text only. A draft with images can't be stashed, since images live in local files or in uploads that expire after a day. Everything else stays on the device: the "Experimental Orchestrator features" toggle, each machine's Orchestrator thread, brief digest and "while closed" task, the relay's bookkeeping, the composer draft and the window layout.
+Stashed prompts from the Orchestrator's composer sync one by one, so two devices that stash at the same time both keep theirs. Stashing writes a new `stash.<id>` key. Restoring or deleting an entry writes null to its key, with a new stamp, so every device drops it. A client removes a null `stash.<id>` from the document and from its stamps once its `at` is more than 30 days old. A client lists the entries newest first by `createdAt`, then by id, and keeps at most 20: stashing the 21st writes null for the oldest. Entries carry text only. A draft with images can't be stashed, since images live in local files or in uploads that expire after a day. Everything else stays on the device: the Orchestrator switch, each machine's Orchestrator thread, brief digest and "while closed" task, the relay's bookkeeping, the composer draft and the window layout.
 
 Every client merges the same way:
 
@@ -407,7 +407,7 @@ You change these by telling Orchestrator, which saves the change with a fenced `
 
 ## The toggle
 
-1. Settings shows "Experimental Orchestrator features" under the theme picker, only while Redesign is the theme. It's off by default.
+1. Settings > Experimental shows the Orchestrator switch next to the Redesign switch. While Redesign is off, the switch is disabled and says it needs Redesign. It's off by default. Before 2026-10-24 it sat under the theme picker as "Experimental Orchestrator features"; it keeps the same stored setting.
 2. Switching away from Redesign hides Orchestrator's UI but keeps the threads. They are normal T3 threads and show up as usual in the default themes.
 3. With the toggle off, CandyWrapper creates no views and holds nothing for Orchestrator.
 
