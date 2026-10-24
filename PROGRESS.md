@@ -61,6 +61,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+- [ ] Orchestrator calls survive a racing event (taken 2026-10-24, orchestrator-call-race): calls from a turn run and get a Result even when an Event starts the next turn as it ends.
 - [x] Orchestrator thread opens as its pane (2026-10-24, orchestrator-open-pane): a notification, a link, Cmd-K or the menu bar opening the Orchestrator's thread shows its pane with the bot chat; only "Open as thread" shows the thread view. Its notifications count as the open thread while the pane shows. On screen against the 3473 sandbox, Cmd-K and an in-app "Thread completed" toast opened the pane, and "Open as thread" still opened the thread view.
 - [ ] CandyWrapper Helper, the always-on relay for the Orchestrator on macOS and Linux (taken 2026-10-24, orchestrator-helper): the design is in `docs/orchestrator-helper.md` and waits for the user's go before anything is built.
 - [ ] Publish v1.13.2 (build 64) (taken 2026-10-24, rel-1132): the subagent done-row fix, the quiet Orchestrator voice, the handoff with the Android app and settings sync.
