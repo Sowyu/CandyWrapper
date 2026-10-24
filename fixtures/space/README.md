@@ -27,4 +27,4 @@ Record ids belong to the snapshot map or `RecordChange.id`, never inside `PageRe
 
 `OrderKey` compares bytes, and `RecordPosition` adds the record-id tie break. `between` generates short rocicorp keys. It also accepts base-62 bounds from other clients; when two arbitrary strings have no representable key between them, such as `0` and `00`, it throws `noKeyBetween`.
 
-No model API performs I/O, starts timers, reads the Keychain or contacts T3. Apply, crypto, storage, filter evaluation and the UI are later pieces.
+No model API performs I/O, starts timers, reads the Keychain or contacts T3. `SpaceCrypto` holds the crypto and `SpaceEngine` applies frames, rebases pending changes, merges text and builds undo. Storage, filter evaluation and the UI are later pieces.

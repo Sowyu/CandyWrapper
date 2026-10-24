@@ -17,6 +17,7 @@ let package = Package(
         .library(name: "T3Store", targets: ["T3Store"]),
         .library(name: "Features", targets: ["Features"]),
         .library(name: "SpaceCrypto", targets: ["SpaceCrypto"]),
+        .library(name: "SpaceEngine", targets: ["SpaceEngine"]),
         .executable(name: "candywrapper-helper", targets: ["CandyHelper"]),
     ],
     dependencies: [
@@ -41,6 +42,8 @@ let package = Package(
         .executableTarget(name: "CandyHelper", dependencies: ["T3Protocol", "T3Transport", "T3Store", "CCurl"], swiftSettings: sizeOptimized),
         // Space's keys, envelopes, blob chunks, recovery key and Keychain item (docs/space.md). CryptoKit and Security only.
         .target(name: "SpaceCrypto", swiftSettings: sizeOptimized),
+        // Space's apply, rebase, text merge, conflict copies and undo (docs/space.md sections 2, 3 and 9). Pure logic.
+        .target(name: "SpaceEngine", dependencies: ["SpaceModel"], swiftSettings: sizeOptimized),
         // Screens built from DesignSystem components and fed by T3Store (sidebar, timeline, composer...).
         .target(name: "Features", dependencies: ["DesignSystem", "T3Store", "T3Protocol", .product(name: "SwiftTerm", package: "SwiftTerm")], resources: [.copy("Resources/candy-town.gray"), .copy("Resources/pele.global.js.lzma"), .copy("Resources/LICENSE-pele.txt"), .copy("Resources/native-licenses.json"),
                          .copy("Resources/SymbolsNerdFontMono-Regular.ttf"), .copy("Resources/LICENSE-symbols-nerd-font.txt")],
@@ -51,6 +54,7 @@ let package = Package(
         .testTarget(name: "T3ClientTests", dependencies: ["T3Client", "T3Transport"]),
         .testTarget(name: "T3StoreTests", dependencies: ["T3Store"]),
         .testTarget(name: "SpaceCryptoTests", dependencies: ["SpaceCrypto"]),
+        .testTarget(name: "SpaceEngineTests", dependencies: ["SpaceEngine", "SpaceModel"]),
         .testTarget(name: "CandyHelperTests", dependencies: ["CandyHelper"]),
         .testTarget(name: "FeaturesTests", dependencies: ["Features", "DesignSystem", "T3Store", "T3Protocol", .product(name: "SwiftTerm", package: "SwiftTerm")], exclude: ["Fixtures"]),
     ]
