@@ -35,8 +35,9 @@
 		6853335632C49221DEDD17A8 /* ServerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDA413FF2F602E6306049C36 /* ServerController.swift */; };
 		6A8818BE7E957814CDAA7A15 /* OrchestratorRemote.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39A95AF911599618460AC6DA /* OrchestratorRemote.swift */; };
 		6AF2070B3B5A4D20CD208209 /* OrchestratorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA645ED32F42DC9F92E9D8B0 /* OrchestratorController.swift */; };
+		6B828CE93CC5BC6BFDBB858A /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 360B9D001D2A45C506332714 /* Sparkle */; };
 		6E2E3C9A01D5E206A9E6517F /* Environments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8812D0A51D97E799EF04BF25 /* Environments.swift */; };
-		704623A56FAA044B892A3B0D /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 360B9D001D2A45C506332714 /* Sparkle */; };
+		704623A56FAA044B892A3B0D /* SpaceLocal in Frameworks */ = {isa = PBXBuildFile; productRef = D6E798A119258B3BFD967F85 /* SpaceLocal */; };
 		70ABDBDC5253F62F37A969A1 /* FilesController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 045DDA2A8C6CDD4119BB7447 /* FilesController.swift */; };
 		71718717C7EBF952C5C3D99D /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92A5E63032239ADD1C5F8E1C /* main.swift */; };
 		7AEB67D7EED3460CC950037F /* ThreadNotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7464DFC6714D57582751B667 /* ThreadNotificationCoordinator.swift */; };
@@ -148,7 +149,8 @@
 				B41DB44EA6F4544C9B9E24BE /* Features in Frameworks */,
 				BDA16E87CBD63885B93ACFBC /* SpaceCrypto in Frameworks */,
 				F5114B7703115945AB79EA89 /* SpaceModel in Frameworks */,
-				704623A56FAA044B892A3B0D /* Sparkle in Frameworks */,
+				704623A56FAA044B892A3B0D /* SpaceLocal in Frameworks */,
+				6B828CE93CC5BC6BFDBB858A /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -293,6 +295,7 @@
 				54CB6DADB388C03EE21F5713 /* Features */,
 				00234492ADF40BA4F2A8CED2 /* SpaceCrypto */,
 				DF2FE46FF9500F0F1BC182B5 /* SpaceModel */,
+				D6E798A119258B3BFD967F85 /* SpaceLocal */,
 				360B9D001D2A45C506332714 /* Sparkle */,
 			);
 			productName = CandyWrapper;
@@ -682,6 +685,10 @@
 		C7D08B4D8BE9EBFA3061FF4B /* T3Client */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = T3Client;
+		};
+		D6E798A119258B3BFD967F85 /* SpaceLocal */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SpaceLocal;
 		};
 		DF2FE46FF9500F0F1BC182B5 /* SpaceModel */ = {
 			isa = XCSwiftPackageProductDependency;

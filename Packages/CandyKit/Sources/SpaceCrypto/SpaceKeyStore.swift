@@ -9,8 +9,9 @@ import Security
 /// data protection Keychain needs a provisioning profile the release signing doesn't have.
 /// Call it off the main thread, since a read can wait on that prompt.
 ///
-/// Debug builds are ad hoc signed and become a new app to the Keychain on every build, so tests and debug
-/// runs use `inMemory()`. `scripts/space-keychain-test` checks the real item in a release-style signed build.
+/// Unit tests use `inMemory()`. A debug app uses its own bundle-specific service and can reopen the item
+/// across launches of the same binary. Ad hoc rebuilds may need access approved again.
+/// `scripts/space-keychain-test` checks updates in release-style signed builds.
 public struct SpaceKeyStore: Sendable {
     public enum Failure: Error, Sendable, Equatable {
         case keychain(OSStatus)
