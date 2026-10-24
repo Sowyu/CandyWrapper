@@ -295,6 +295,10 @@ class SidebarRowBase: ControlView {
     final var onOpen: (@MainActor () -> Void)? // final: see PROGRESS.md gotchas (Swift 6.4 link bug)
     var isKeyboardFocused = false { didSet { if isKeyboardFocused != oldValue { needsDisplay = true; refresh() } } }
     var item: SidebarItem?
+    /// Fading out after leaving the list: a click there reaches the row now in its place, not the thread that left.
+    var isLeaving = false
+
+    override func hitTest(_ point: NSPoint) -> NSView? { isLeaving ? nil : super.hitTest(point) }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)

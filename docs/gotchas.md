@@ -2,6 +2,8 @@
 
 Traps earlier agents hit the hard way. Skim the ones in your area before you code.
 
+- Recycled lists and the clip view (2026-10-24): `setFrameSize` on a scroll view's document can clamp the clip view's bounds, and its `boundsDidChangeNotification` arrives synchronously, in the middle of whatever resized it. The sidebar's observer re-tiled inside `setItems`, which then recycled the same rows again, so one view served two threads: a blank slot, a swapped title, a click opening the other thread. Skip observer work while an update owns the rows, and check with `SidebarMultiMachineTests`, which asserts every slot's view and hit test.
+
 - Measuring colors in screenshots (2026-10-23): the user's screenshots are Display P3. `NSBitmapImageRep.colorAt(...).usingColorSpace(.sRGB)` on an `NSImage`'s `tiffRepresentation` misreads them and our own captures alike (Capy's #2b948b switch read as #5ba19c, and our #5ba19c as #6bafac). Draw the `CGImage` from `CGImageSource` into a `CGContext` in sRGB and read the bytes. Values measured the old way, like Redesign's settings card in 5d2453ea, need a second look.
 
 - Remote desktop locking (2026-10-18): Screen Sharing can restore a previously locked screen when the viewer disconnects, even with sleep disabled. The user asked to keep it available; `/Library/Preferences/com.apple.RemoteManagement` now has `RestoreMachineState = false`. Check this before repeatedly asking for an unlock. [Diagnosis and setting](research/mcp-fullscreen-2026-10-18.md#remote-desktop-interruption).
