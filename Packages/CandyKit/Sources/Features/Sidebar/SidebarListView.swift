@@ -21,6 +21,10 @@ public final class SidebarListView: DSView {
     private var exiting: Set<ObjectIdentifier> = []
     /// Set while a project section folds, so its leaving rows rise toward the header.
     private var foldingUp = false
+    /// Set while `setItems` swaps the rows. Its new height can clamp the scroll position, and the clip view's
+    /// bounds notification then tiled mid-update, recycling rows `setItems` still held: a view sat in the pool
+    /// twice and two threads shared it, leaving one slot empty and the other showing or opening the wrong thread.
+    private var settingItems = false
     private var clipObserver: NSObjectProtocol?
     /// Keyboard focus, as an item key. Arrows move it, Enter opens it.
     public private(set) var focusedKey: String?
@@ -64,6 +68,8 @@ public final class SidebarListView: DSView {
     public func setItems(_ new: [SidebarItem], animated: Bool, generation: Int? = nil) {
         itemsGeneration = generation
         if sort == nil, releasedTops == nil, replaceInPlace(new) { return }
+        settingItems = true
+        defer { settingItems = false }
         var oldTops = Dictionary(uniqueKeysWithValues: items.indices.map { (items[$0].key, tops[$0]) })
         // After a drop the rows glide from where the preview left them, not from their old slots.
         let released = releasedTops
@@ -188,7 +194,10 @@ public final class SidebarListView: DSView {
         clip.postsBoundsChangedNotifications = true
         clip.postsFrameChangedNotifications = true
         clipObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.tile(oldTops: nil) }
+            MainActor.assumeIsolated {
+                guard let self, !self.settingItems else { return } // `setItems` tiles when it ends
+                self.tile(oldTops: nil)
+            }
         }
     }
 
@@ -275,6 +284,7 @@ public final class SidebarListView: DSView {
     private func dequeue(_ kind: SidebarItem.Kind) -> SidebarRowBase {
         if let view = pools[kind]?.popLast() {
             view.isHidden = false
+            view.isLeaving = false
             return view
         }
         createdRowViews += 1
@@ -530,6 +540,7 @@ public final class SidebarListView: DSView {
         guard let layer = view.layer else { recycle(view); return }
         let id = ObjectIdentifier(view)
         exiting.insert(id)
+        view.isLeaving = true
         CATransaction.begin()
         CATransaction.setCompletionBlock { [weak self, weak view] in
             MainActor.assumeIsolated {

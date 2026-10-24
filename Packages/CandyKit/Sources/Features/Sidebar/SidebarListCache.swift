@@ -22,11 +22,13 @@ public final class SidebarListCache {
         var dither: Bool
     }
 
-    /// A thread's place: its shelf and the part of it that shelf sorts by (the id tiebreak never changes).
+    /// A thread's place: its shelf, the part of it that shelf sorts by (the id tiebreak never changes) and its
+    /// project, whose Dither section holds the row.
     struct Placement: Equatable {
         var section: SidebarSection
         var text: String?
         var ms: Int64
+        var project: ProjectId? = nil
     }
 
     /// A listed thread (not archived or deleted): whether the list shows it, whether the clock can move it
@@ -90,6 +92,8 @@ public final class SidebarListCache {
         /// Rows under a Dither project header: the builder sets that after the cache, so a patch sets it again.
         var inProjectSection: [Bool]
         var validUntil: [Int64]
+        /// Dither's project section keys in list order, without Pinned.
+        var projectSections: [String] = []
     }
     private var layout: Layout?
     /// Bumped by every full list, so a holder of an older list knows a patch doesn't fit it.
@@ -265,6 +269,12 @@ public final class SidebarListCache {
 
     /// The shelf `buildShelves` puts the thread on, and the key that shelf's sort reads.
     static func placement(_ t: SidebarThread, capabilities: SidebarModel.Capabilities, nowMs: Int64) -> Placement {
+        var p = shelfPlacement(t, capabilities: capabilities, nowMs: nowMs)
+        p.project = t.shell.projectId
+        return p
+    }
+
+    private static func shelfPlacement(_ t: SidebarThread, capabilities: SidebarModel.Capabilities, nowMs: Int64) -> Placement {
         let section = SidebarModel.resolveSidebarThreadSection(
             snoozed: capabilities.threadSnooze && SidebarModel.effectiveSnoozed(t, nowMs: nowMs),
             settled: capabilities.threadSettlement && t.shell.settledOverride == .settled,
@@ -307,6 +317,7 @@ public final class SidebarListCache {
         layout.sections.reserveCapacity(items.count)
         layout.validUntil.reserveCapacity(items.count)
         for (i, item) in items.enumerated() {
+            if case .projectHeader(let h) = item, !h.isPinned { layout.projectSections.append(h.key) }
             guard case .row(let r) = item, let row = rows[r.id] else {
                 layout.ids.append(nil); layout.sections.append(nil); layout.inProjectSection.append(false)
                 layout.validUntil.append(.max); continue
@@ -327,6 +338,13 @@ public final class SidebarListCache {
         guard var layout, nowMs >= layout.nowMs, state == layout.state else { return nil }
         let ctx = context(snapshot: snapshot, state: state, nowMs: nowMs)
         guard !structural else { self.layout = nil; return nil }
+        // Dither's sections sorted by activity can reorder when a thread changes in place. Manual order reads no thread.
+        if state.dither, state.projectSortOrder != .manual {
+            let shown = Set(layout.projectSections)
+            let order = SidebarModel.sortProjectGroups(ctx.groups, projects: ctx.projects, threads: ctx.threadShells,
+                                                       order: state.projectSortOrder, preferred: state.projectOrder).map(\.key)
+            guard order.filter(shown.contains) == layout.projectSections.filter(Set(order).contains) else { self.layout = nil; return nil }
+        }
         // Item index to the row's current thread: changed threads from `threads`, the rest from their row.
         var due: [Int: SidebarThread] = [:]
         for i in changedInPlace {
