@@ -55,6 +55,24 @@ public struct OrchestratorNotebook: Codable, Hashable, Sendable {
     }
 }
 
+/// A prompt saved from the Orchestrator's composer to send later. Text only: shared with the other devices through the
+/// settings document (docs/orchestrator.md, "Stashed prompts"), where local image files and day-long uploads don't fit.
+public struct OrchestratorStashEntry: Codable, Hashable, Sendable, Identifiable {
+    public var id: String
+    public var prompt: String
+    /// ISO 8601; the stash lists the newest first.
+    public var createdAt: String
+    public init(id: String, prompt: String, createdAt: String) { self.id = id; self.prompt = prompt; self.createdAt = createdAt }
+
+    /// `MAX_STASH_ENTRIES`, as the thread composer's stash.
+    public static let limit = 20
+
+    /// Newest first, then by id, so every device lists them the same way.
+    public static func sorted(_ entries: [OrchestratorStashEntry]) -> [OrchestratorStashEntry] {
+        entries.sorted { ($0.createdAt, $0.id) > ($1.createdAt, $1.id) }
+    }
+}
+
 /// What CandyWrapper remembers about the Orchestrator on one machine.
 public struct OrchestratorMachine: Codable, Hashable, Sendable {
     /// The Orchestrator thread, by the id that machine's server knows.
@@ -101,12 +119,14 @@ public struct OrchestratorConfig: Codable, Hashable, Sendable {
     public var relayWorkers: Set<String> = []
     /// Whether its chat shows the activity lines: events, relay results and the tools each turn used. This device only.
     public var showActivity = false
+    /// Its composer's stashed prompts, newest first, shared with the other devices.
+    public var stash: [OrchestratorStashEntry] = []
 
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
         case enabled, name, prompt, environmentId, homeProjectId, crewLimit, models, notebook, closedCheckMinutes, askFirstMinutes
-        case handsOff, machines, savedMemoryMessages, botShape, botColor, relayedAt, relayWorkers, showActivity
+        case handsOff, machines, savedMemoryMessages, botShape, botColor, relayedAt, relayWorkers, showActivity, stash
     }
 
     /// Missing keys keep their defaults, so a newer field never wipes the rest.
@@ -131,6 +151,7 @@ public struct OrchestratorConfig: Codable, Hashable, Sendable {
         relayedAt = try c.decodeIfPresent([String: Int64].self, forKey: .relayedAt) ?? [:]
         relayWorkers = try c.decodeIfPresent(Set<String>.self, forKey: .relayWorkers) ?? []
         showActivity = try c.decodeIfPresent(Bool.self, forKey: .showActivity) ?? false
+        stash = try c.decodeIfPresent([OrchestratorStashEntry].self, forKey: .stash) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -153,6 +174,7 @@ public struct OrchestratorConfig: Codable, Hashable, Sendable {
         try c.encode(relayedAt, forKey: .relayedAt)
         try c.encode(relayWorkers, forKey: .relayWorkers)
         try c.encode(showActivity, forKey: .showActivity)
+        try c.encode(stash, forKey: .stash)
     }
 
     static let defaultName = "Orchestrator"

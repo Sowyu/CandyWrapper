@@ -60,6 +60,8 @@ public struct OrchestratorPaneState: Equatable {
     public var items: [OrchestratorChatItem] = []
     /// Whether the chat shows its activity lines.
     public var showsActivity = false
+    /// Its composer's stashed prompts, newest first.
+    public var stash: [OrchestratorStashEntry] = []
     /// Replies whose saved notes can still be undone, and those already undone.
     public var undoable: Set<String> = []
     public var undone: Set<String> = []
@@ -110,6 +112,8 @@ public final class OrchestratorPaneView: DSView {
     /// Shows a saved draft, unless you're typing in the field.
     public func setDraft(_ text: String) { composer.draft = text }
     public var draft: String { composer.draft }
+    /// Replaces what you're writing even while you type, as stashing and restoring do. The caller saves the draft.
+    public func replaceDraft(_ text: String) { composer.setText(text) }
     /// A thread by its scoped id.
     public var onOpenThread: ((ThreadId) -> Void)?
     public var onRespond: ((OrchestratorNeed, ApprovalDecision) -> Void)?
@@ -122,6 +126,10 @@ public final class OrchestratorPaneView: DSView {
     public var onEscape: (() -> Void)?
     /// "Show activity" in the header: events, relay results and tool lines in the chat.
     public var onToggleActivity: (() -> Void)?
+    /// The composer's Stash, as the thread composer's: stash the draft, restore an entry into it, delete one.
+    public var onStash: ((String) -> Void)?
+    public var onRestoreStash: ((String) -> Void)?
+    public var onDeleteStash: ((PromptStashEntry) -> Void)?
 
     private let headerBot = BotView(identity: .orchestrator, size: 30)
     private let headerBotButton = ControlView()
@@ -130,6 +138,22 @@ public final class OrchestratorPaneView: DSView {
     private let tabs = ToggleGroupView(variant: .segmented, items: [("Chat", nil), ("Overview", nil)], selected: 0)
     private let openThread = ButtonView("Open as thread", icon: .arrowUpRight, variant: .ghost, size: .sm)
     private let activity = ButtonView("Show activity", variant: .ghost, size: .sm)
+    private let stashBadge = ComposerStashBadgeView()
+    /// Made the first time the list opens.
+    private var stashMenuView: ComposerStashMenuView?
+    private var stashMenu: ComposerStashMenuView {
+        if let m = stashMenuView { return m }
+        let m = ComposerStashMenuView()
+        m.placement = .floating
+        m.onRestore = { [weak self] entry in self?.setStashMenu(false); self?.onRestoreStash?(entry.id) }
+        m.onDelete = { [weak self] entry in self?.onDeleteStash?(entry) }
+        m.onClose = { [weak self] in self?.setStashMenu(false) }
+        addSubview(m, positioned: .below, relativeTo: composer)
+        stashMenuView = m
+        return m
+    }
+    private var stashMenuOpen = false
+    private var stashMonitor: Any?
     private let chat = OrchestratorChatView()
     private lazy var chatScroll = ScrollAreaView(documentView: chat, scrollFade: true)
     private let overview = OrchestratorOverviewView()
@@ -171,6 +195,10 @@ public final class OrchestratorPaneView: DSView {
         }
         openThread.action = { [weak self] in self?.onOpenAsThread?() }
         activity.action = { [weak self] in self?.onToggleActivity?() }
+        stashBadge.placement = .floating
+        stashBadge.isHidden = true
+        stashBadge.onToggleMenu = { [weak self] in self.map { $0.setStashMenu(!$0.stashMenuOpen) } }
+        addSubview(stashBadge, positioned: .below, relativeTo: composer)
         activity.toolTip = "Events, relay results and the tools each turn used"
         start.action = { [weak self] in self?.onStart?() }
         composer.onSend = { [weak self] text in self?.onSend?(text) }
@@ -199,6 +227,12 @@ public final class OrchestratorPaneView: DSView {
         subtitle.text = [next.machine, status].compactMap { $0 }.joined(separator: " · ")
         openThread.isHidden = !next.started
         activity.isHidden = !next.started || showsOverview
+        if old.stash != next.stash {
+            stashBadge.count = next.stash.count
+            stashMenuView?.entries = Self.menuEntries(next.stash)
+            if next.stash.isEmpty { setStashMenu(false) }
+            needsLayout = true
+        }
         if old.showsActivity != next.showsActivity {
             activity.title = next.showsActivity ? "Hide activity" : "Show activity"
             needsLayout = true
@@ -221,6 +255,51 @@ public final class OrchestratorPaneView: DSView {
     }
 
     public func focusComposer() { composer.focus() }
+
+    // MARK: Stash
+
+    /// The composer's stash key (`composer.stash`), passed on by the thread composer while this pane shows.
+    public func stashDraft() {
+        guard state.started, !showsOverview, questionPanel == nil else { return }
+        onStash?(composer.draft)
+    }
+
+    /// After a stash: the badge lifts and its count turns primary for 1.2 s, as on the thread composer.
+    public func pulseStash() {
+        stashBadge.pulse()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in self?.stashBadge.pulsing = false }
+    }
+
+    /// Opens or closes the list, which the thread composer's arrows, Return, Cmd+Backspace and Escape drive.
+    public func setStashMenu(_ open: Bool) {
+        let open = open && !state.stash.isEmpty
+        guard open != stashMenuOpen else { return }
+        stashMenuOpen = open
+        stashBadge.menuOpen = open
+        if let m = stashMonitor { NSEvent.removeMonitor(m); stashMonitor = nil }
+        if open {
+            stashMenu.entries = Self.menuEntries(state.stash)
+            stashMenu.reload()
+            stashMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown]) { [weak self] event in
+                guard let self, event.window === self.window else { return event }
+                if event.type == .keyDown { return self.stashMenu.handleKey(event) ? nil : event }
+                let inside = [self.stashMenu, self.stashBadge].contains { $0.bounds.contains($0.convert(event.locationInWindow, from: nil)) }
+                if !inside { self.setStashMenu(false) }
+                return event
+            }
+        }
+        needsLayout = true
+    }
+
+    /// Its entries in the thread composer's stash rows: text only, so no images or files.
+    static func menuEntries(_ stash: [OrchestratorStashEntry]) -> [PromptStashEntry] {
+        stash.map { PromptStashEntry(id: $0.id, createdAt: $0.createdAt, prompt: $0.prompt) }
+    }
+
+    public override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if newWindow == nil { setStashMenu(false) }
+    }
 
     /// Opens, moves or closes the question banner. While it shows, the composer's field is its free-text answer,
     /// Return and Send advance it, and an option pick may submit it, as in the thread composer.
@@ -306,6 +385,23 @@ public final class OrchestratorPaneView: DSView {
         overviewScroll.frame = NSRect(x: 0, y: bodyTop, width: w, height: max(0, h - bodyTop))
         let cw = min(720, w - 40)
         composer.frame = NSRect(x: (w - cw) / 2, y: h - composerH + 8, width: cw, height: composerH - 24)
+        // The Stash pill floats over the composer's right edge, its list above it, as in Redesign's thread composer.
+        let badgeShown = !composer.isHidden && !state.stash.isEmpty && questionPanel == nil
+        stashBadge.isHidden = !badgeShown
+        if badgeShown {
+            let bw = stashBadge.width(showingTitle: true)
+            stashBadge.frame = NSRect(x: composer.frame.maxX - DitherPill.inset - bw, y: composer.frame.minY - DitherPill.gap - DitherPill.height,
+                                      width: bw, height: DitherPill.height)
+            chatScroll.frame.size.height = max(0, stashBadge.frame.minY - 8 - chatScroll.frame.minY)
+        }
+        let menuShown = badgeShown && stashMenuOpen
+        stashMenuView?.isHidden = !menuShown
+        if menuShown {
+            let maxList = min(384, (window?.contentView?.bounds.height ?? bounds.height) * 0.4)
+            let base = stashBadge.frame.minY
+            let mh = min(stashMenu.preferredHeight(maxList: maxList) - ComposerBannerView.overlap, max(96, base - DitherPill.gap - bodyTop - 8))
+            stashMenu.frame = NSRect(x: composer.frame.minX, y: base - DitherPill.gap - mh, width: cw, height: mh)
+        }
         // The question banner tucks its last 17pt under the composer, as above the thread composer.
         if let panel = questionPanel {
             let qh = panel.preferredHeight(width: cw)

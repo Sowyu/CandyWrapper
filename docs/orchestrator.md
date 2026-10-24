@@ -198,8 +198,11 @@ The values are the same JSON as `OrchestratorConfig` encodes:
 | `handsOff` | Array of `"<environmentId>:<threadId>"` strings, sorted. |
 | `botShape`, `botColor` | Integer, the `BotShape` and `BotColor` raw values, or null for the default flower in violet. |
 | `notebook.rules`, `notebook.crew-rules`, `notebook.plan`, `notebook.digest` | String, empty when the note is empty. |
+| `stash.<id>` | One stashed prompt: `{"prompt": String, "createdAt": ISO 8601}`, or null once it was restored or deleted. `<id>` is a lowercase UUID. |
 
-A client skips a value of the wrong type or a count below its minimum and keeps its own. Everything else stays on the device: the "Experimental Orchestrator features" toggle, each machine's Orchestrator thread, brief digest and "while closed" task, the relay's bookkeeping, the composer draft and the window layout.
+A client skips a value of the wrong type or a count below its minimum and keeps its own.
+
+Stashed prompts from the Orchestrator's composer sync one by one, so two devices that stash at the same time both keep theirs. Stashing writes a new `stash.<id>` key. Restoring or deleting an entry writes null to its key, with a new stamp, so every device drops it. A client removes a null `stash.<id>` from the document and from its stamps once its `at` is more than 30 days old. A client lists the entries newest first by `createdAt`, then by id, and keeps at most 20: stashing the 21st writes null for the oldest. Entries carry text only. A draft with images can't be stashed, since images live in local files or in uploads that expire after a day. Everything else stays on the device: the "Experimental Orchestrator features" toggle, each machine's Orchestrator thread, brief digest and "while closed" task, the relay's bookkeeping, the composer draft and the window layout.
 
 Every client merges the same way:
 
@@ -362,6 +365,7 @@ The Orchestrator pane reads like a group chat in iMessage, with Orchestrator and
 - Replies that only say nothing is new stay hidden too. The brief asks for exactly "—" then, and the app also hides short ones like "Nothing new." or "Still running.", since the Orchestrator's harness makes it write something every turn.
 - Opening its thread from anywhere, like a notification, a link or Cmd-K, shows this pane. Only "Open as thread" shows the plain thread view.
 - The composer is a rounded field with a round send button.
+- The composer has the thread composer's Stash. Mod+S, or the Stash pill over its right edge, saves the draft with a count on the pill. The pill opens the list, where a click or Return puts an entry back into the composer to send, and the stash syncs across devices as "Settings on every device" describes.
 
 ## Memory and personality
 

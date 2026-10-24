@@ -19,6 +19,12 @@ public enum OrchestratorSettingsSync {
     public static let keys = ["name", "prompt", "environmentId", "homeProjectId", "crewLimit", "models", "closedCheckMinutes",
                               "askFirstMinutes", "handsOff", "botShape", "botColor"] + OrchestratorNotebook.names.map { "notebook." + $0 }
 
+    /// Each stashed prompt is a key of its own, `stash.<id>`, so two devices stashing at once both keep theirs. A removed
+    /// one stays as null for `stashTombstoneMs`, so devices that still list it drop it too, then goes.
+    public static let stashPrefix = "stash."
+    public static let stashTombstoneMs: Int64 = 30 * 86_400_000
+    static func isStash(_ key: String) -> Bool { key.hasPrefix(stashPrefix) }
+
     /// When a setting was last set and by which device. The later one wins; on a tie the larger device id does.
     public struct Stamp: Codable, Hashable, Sendable {
         /// Epoch milliseconds on the writing device's clock.
@@ -73,11 +79,24 @@ public enum OrchestratorSettingsSync {
                 out[key] = all[key] ?? .null
             }
         }
+        for entry in config.stash {
+            out[stashPrefix + entry.id] = .object(["prompt": .string(entry.prompt), "createdAt": .string(entry.createdAt)])
+        }
         return out
     }
 
     /// The config with one setting replaced; unchanged when the value has the wrong type or is out of range.
     static func applying(_ key: String, _ value: JSONValue, to config: OrchestratorConfig) -> OrchestratorConfig {
+        if isStash(key) {
+            let id = String(key.dropFirst(stashPrefix.count))
+            var next = config
+            next.stash.removeAll { $0.id == id }
+            if value != .null {
+                guard !id.isEmpty, let prompt = value["prompt"]?.stringValue, let createdAt = value["createdAt"]?.stringValue else { return config }
+                next.stash = OrchestratorStashEntry.sorted(next.stash + [OrchestratorStashEntry(id: id, prompt: prompt, createdAt: createdAt)])
+            }
+            return next
+        }
         if key.hasPrefix("notebook.") {
             guard let text = value.stringValue else { return config }
             var next = config
@@ -99,7 +118,8 @@ public enum OrchestratorSettingsSync {
     public static func stamps(old: OrchestratorConfig, new: OrchestratorConfig, into stamps: [String: Stamp], now: Int64, device: String) -> [String: Stamp] {
         let before = values(old), after = values(new)
         var out = stamps
-        for key in keys where before[key] != after[key] { out[key] = Stamp(at: now, by: device) }
+        // A stashed prompt that went is a change too: its key reads null from now on.
+        for key in Set(before.keys).union(after.keys) where before[key] != after[key] { out[key] = Stamp(at: now, by: device) }
         return out
     }
 
@@ -120,7 +140,7 @@ public enum OrchestratorSettingsSync {
     /// `machine` is the machine the documents live on, which a null `environmentId` in them means. `home` is the
     /// Orchestrator's machine on this device, which its nil `environmentId` means; the same machine unless you just moved it.
     public static func merge(config: OrchestratorConfig, stamps: [String: Stamp], documents: [Document], machine: String,
-                             home: String? = nil) -> Merge {
+                             home: String? = nil, now: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) -> Merge {
         var remote: [String: Entry] = [:]
         for doc in documents {
             for (key, entry) in doc.settings where remote[key].map({ entry.stamp.beats($0.stamp) }) ?? true { remote[key] = entry }
@@ -129,7 +149,8 @@ public enum OrchestratorSettingsSync {
         var nextStamps = stamps
         var out = remote
         let mine = values(config, machine: home ?? machine)
-        for key in keys {
+        let stashKeys = Set(remote.keys).union(stamps.keys).union(mine.keys).filter(isStash)
+        for key in keys + stashKeys.sorted() {
             let local = stamps[key]
             if let entry = remote[key], local.map({ entry.stamp.beats($0) }) ?? true {
                 let value = key == "environmentId" && entry.value == .null ? JSONValue.string(machine) : entry.value
@@ -138,6 +159,11 @@ public enum OrchestratorSettingsSync {
             } else if let local, remote[key].map({ local.beats($0.stamp) }) ?? true {
                 out[key] = Entry(value: mine[key] ?? .null, stamp: local)
             }
+        }
+        // Removed stashed prompts are forgotten once every device had a month to see them go.
+        for key in stashKeys where (out[key].map { $0.value == .null && now - $0.at > stashTombstoneMs } ?? false) {
+            out[key] = nil
+            nextStamps[key] = nil
         }
         // Several documents (two devices made one at once) become one.
         let current = documents.count == 1 && documents[0].settings == out

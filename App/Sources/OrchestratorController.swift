@@ -90,6 +90,11 @@ final class OrchestratorController {
         helper.onChange = { [weak self] in self?.helperChanged() }
         store.observe { [weak self] in self?.configChanged() }
         threads.opensElsewhere = { [weak self] id in self?.openPane(for: id) ?? false }
+        threads.composer.stashElsewhere = { [weak self] in
+            guard let pane = self?.pane, pane.window != nil else { return false }
+            pane.stashDraft()
+            return true
+        }
         _ = ScheduledTasksStore.shared.observe { [weak self] in self?.settingsListChanged() }
         environments.observeShell { [weak self] in self?.shellChanged() }
         sidebar.actions.openOrchestrator = { [weak self] in self?.open() }
@@ -220,6 +225,7 @@ final class OrchestratorController {
         state.needs = needs
         state.crew = crewCards()
         state.showsActivity = config.showActivity
+        state.stash = config.stash
         if let projection {
             let running = projection.runs.contains { OrchestratorEvent.running.contains($0.status) }
             state.items = OrchestratorChat.items(messages: projection.messages, turnItems: projection.turnItems, running: running,
@@ -240,6 +246,9 @@ final class OrchestratorController {
             let p = OrchestratorPaneView()
             p.onSend = { [weak self] text in self?.send(text) }
             p.onToggleActivity = { OrchestratorStore.shared.update { $0.showActivity.toggle() } }
+            p.onStash = { [weak self] text in self?.stash(text) }
+            p.onRestoreStash = { [weak self] id in self?.restoreStash(id) }
+            p.onDeleteStash = { [weak self] entry in self?.confirmDeleteStash(entry) }
             p.onOpenThread = { [weak self] id in self.map { $0.sidebar?.actions.openThread($0.locate(id)) } }
             p.onRespond = { [weak self] need, decision in self?.respond(need, decision) }
             p.onUndoMemory = { [weak self] id in self?.undoMemory(id) }
@@ -280,6 +289,64 @@ final class OrchestratorController {
         openingAsThread = true
         defer { openingAsThread = false }
         sidebar?.actions.openThread(id)
+    }
+
+    // MARK: Stash
+
+    /// The composer's Stash, as the thread composer's (`stashCurrentPrompt`): the draft goes to the stash, newest first and
+    /// at most 20, or an empty composer restores the only entry or opens the list. Text only (OrchestratorStashEntry).
+    private func stash(_ text: String) {
+        guard let pane, let id = threadId else { return }
+        let prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else {
+            if config.stash.count == 1, let only = config.stash.first { restoreStash(only.id) } else { pane.setStashMenu(true) }
+            return
+        }
+        guard pendingImages.isEmpty else {
+            toast("The Orchestrator's stash keeps text only", "Send or remove the images first.", .info)
+            return
+        }
+        var evicted = false
+        store.update { c in
+            let entry = OrchestratorStashEntry(id: UUID().uuidString.lowercased(), prompt: prompt, createdAt: T3Timestamp(Date()).raw)
+            c.stash = OrchestratorStashEntry.sorted([entry] + c.stash)
+            if c.stash.count > OrchestratorStashEntry.limit { c.stash.removeLast(); evicted = true }
+        }
+        pane.replaceDraft("")
+        threads.composer.setDraftText("", for: id)
+        pane.pulseStash()
+        if evicted {
+            toast("Oldest stashed prompt discarded", "The stash holds \(OrchestratorStashEntry.limit) prompts; the oldest was removed to make room.", .warning)
+        }
+    }
+
+    /// `restoreStashEntry`: the entry leaves the stash, and its text joins what you're writing after a blank line.
+    private func restoreStash(_ entryId: String) {
+        guard let pane, let id = threadId, let entry = config.stash.first(where: { $0.id == entryId }) else { return }
+        store.update { $0.stash.removeAll { $0.id == entryId } }
+        let current = pane.draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = current.isEmpty ? entry.prompt : current + "\n\n" + entry.prompt
+        pane.replaceDraft(text)
+        threads.composer.setDraftText(text, for: id)
+        pane.focusComposer()
+    }
+
+    /// As the thread composer: a deleted prompt can't come back, so it asks first.
+    private func confirmDeleteStash(_ entry: PromptStashEntry) {
+        guard let window = pane?.window, !ModalHost.isPresented(in: window) else { return }
+        let preview = entry.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let excerpt = preview.count > 80 ? String(preview.prefix(80)) + "…" : preview
+        let dialog = DialogView(kind: .alertDialog, title: "Delete this stashed prompt?",
+                                message: excerpt.isEmpty ? "It can't be restored." : "\u{201C}\(excerpt)\u{201D} can't be restored.")
+        let cancel = ButtonView("Cancel", variant: .outline)
+        let ok = ButtonView("Delete", variant: .destructive)
+        dialog.footerButtons = [cancel, ok]
+        let host = ModalHost.present(dialog, in: window)
+        cancel.action = { [weak host] in host?.close() }
+        ok.action = { [weak self, weak host] in
+            host?.close()
+            self?.store.update { $0.stash.removeAll { $0.id == entry.id } }
+        }
     }
 
     /// Its thread while the pane shows, so a notification from it is like one from the thread you're reading.
