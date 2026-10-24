@@ -175,6 +175,24 @@ import Testing
         return p
     }
 
+    /// The stash key sends the draft to the stash; the list shows the entries as the thread composer's rows.
+    @Test func theStashKeyStashesTheDraft() {
+        let p = pane(Store())
+        var stashed: String?
+        p.onStash = { stashed = $0 }
+        p.setDraft("Plan the launch")
+        p.stashDraft()
+        #expect(stashed == "Plan the launch")
+        // Stashing clears the field even while you type in it, which a stored draft never does.
+        p.window?.makeFirstResponder(nil)
+        p.replaceDraft("")
+        #expect(p.draft.isEmpty)
+        let rows = OrchestratorPaneView.menuEntries([OrchestratorStashEntry(id: "s1", prompt: "Plan the launch", createdAt: "2026-10-24T10:00:00.000Z")])
+        #expect(rows.map(\.id) == ["s1"])
+        #expect(rows.first?.snippet == "Plan the launch")
+        #expect(rows.first?.attachments.isEmpty == true)
+    }
+
     @Test func aDraftSurvivesLeavingAndComingBack() {
         let store = Store()
         var first: OrchestratorPaneView? = pane(store)

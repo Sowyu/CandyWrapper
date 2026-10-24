@@ -167,6 +167,58 @@ import Testing
         #expect(tie.config.name == "B")
     }
 
+    func stashed(_ id: String, _ prompt: String, minutes: Int = 0) -> OrchestratorStashEntry {
+        OrchestratorStashEntry(id: id, prompt: prompt, createdAt: "2026-10-24T10:\(String(format: "%02d", minutes)):00.000Z")
+    }
+
+    /// Each stashed prompt is a key of its own, so two devices stashing at once keep both, newest first, and a prompt
+    /// one device restored goes on the other too, through a null that stays until a month passed.
+    @Test func stashedPromptsSyncOneByOne() throws {
+        let now: Int64 = 1_800_000_000_000
+        // The Mac stashes A, the phone stashes B at the same time; neither saw the other's.
+        var mac = OrchestratorConfig(), phone = OrchestratorConfig()
+        let emptyMac = mac, emptyPhone = phone
+        mac.stash = [stashed("a", "Ship the notes", minutes: 1)]
+        phone.stash = [stashed("b", "Review the PR", minutes: 2)]
+        let macStamps = Sync.stamps(old: emptyMac, new: mac, into: [:], now: now, device: "mac")
+        let phoneStamps = Sync.stamps(old: emptyPhone, new: phone, into: [:], now: now + 1, device: "phone")
+        #expect(Set(macStamps.keys) == ["stash.a"])
+        let macDoc = try #require(Sync.merge(config: mac, stamps: macStamps, documents: [], machine: "env-a", now: now).write)
+        #expect(macDoc.settings["stash.a"]?.value == .object(["prompt": .string("Ship the notes"), "createdAt": .string("2026-10-24T10:01:00.000Z")]))
+        let phoneAfter = Sync.merge(config: phone, stamps: phoneStamps, documents: [macDoc], machine: "env-a", now: now)
+        #expect(phoneAfter.config.stash.map(\.id) == ["b", "a"])
+        let both = try #require(phoneAfter.write)
+        let macAfter = Sync.merge(config: mac, stamps: macStamps, documents: [both], machine: "env-a", now: now)
+        #expect(macAfter.config.stash.map(\.id) == ["b", "a"])
+        #expect(macAfter.write == nil)
+
+        // The Mac restores A: its key turns null, and the phone drops it.
+        var restored = macAfter.config
+        restored.stash.removeAll { $0.id == "a" }
+        let restoreStamps = Sync.stamps(old: macAfter.config, new: restored, into: macAfter.stamps, now: now + 10, device: "mac")
+        let afterRestore = try #require(Sync.merge(config: restored, stamps: restoreStamps, documents: [both], machine: "env-a", now: now + 10).write)
+        #expect(afterRestore.settings["stash.a"]?.value == .null)
+        let phoneSees = Sync.merge(config: phoneAfter.config, stamps: phoneAfter.stamps, documents: [afterRestore], machine: "env-a", now: now + 10)
+        #expect(phoneSees.config.stash.map(\.id) == ["b"])
+        // A month later the null goes from the document and the stamps.
+        let later = now + 10 + Sync.stashTombstoneMs + 1
+        let pruned = Sync.merge(config: phoneSees.config, stamps: phoneSees.stamps, documents: [afterRestore], machine: "env-a", now: later)
+        #expect(pruned.write?.settings["stash.a"] == nil)
+        #expect(pruned.stamps["stash.a"] == nil)
+        #expect(pruned.write?.settings["stash.b"] != nil)
+    }
+
+    @Test func malformedStashEntriesAreSkipped() throws {
+        let doc = try document("""
+        {"format":"candywrapper.orchestrator-settings","version":1,"settings":{
+          "stash.x":{"value":{"prompt":7},"at":5,"by":"phone"},
+          "stash.y":{"value":"just text","at":5,"by":"phone"},
+          "stash.z":{"value":{"prompt":"Fine","createdAt":"2026-10-24T10:00:00.000Z"},"at":5,"by":"phone"}
+        }}
+        """)
+        #expect(Sync.merge(config: OrchestratorConfig(), stamps: [:], documents: [doc], machine: "env-a").config.stash.map(\.id) == ["z"])
+    }
+
     /// Two documents on one machine become one; keys a newer client wrote survive.
     @Test func duplicatesMergeAndUnknownKeysSurvive() throws {
         let one = Sync.Document(settings: ["name": .init(value: .string("Old"), stamp: stamp(1, "mac")),

@@ -785,7 +785,9 @@ final class ComposerController {
         shortcuts.onKey { [weak self] event in self?.handleStashMenuKey(event) ?? false }
         // `composer.stash` is always claimed, so the key never reaches anything else.
         shortcuts.on("composer.stash") { [weak self] call in
-            guard let self, self.isActive else { return false }
+            guard let self else { return false }
+            // The Orchestrator's pane has a composer of its own, with its own stash.
+            guard self.isActive else { return !call.isRepeat && self.stashElsewhere?() == true }
             if !call.isRepeat { self.stashShortcut() }
             return true
         }
@@ -799,6 +801,8 @@ final class ComposerController {
 
     /// The composer shows for a thread or draft in this window.
     private var isActive: Bool { !composer.isHidden && target != nil && composer.window != nil }
+    /// The stash key while this composer is away: true when another composer, the Orchestrator's, took it.
+    var stashElsewhere: (() -> Bool)?
 
     /// Keybinding context keys the composer owns.
     var shortcutContext: [String: Bool] {
