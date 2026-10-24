@@ -437,9 +437,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func installNotifications(window: NSWindow, environments: Environments, threads: ThreadController, commands: SidebarCommands,
                                       settings: SettingsController) {
         let coordinator = ThreadNotificationCoordinator(environments: environments, window: window)
-        coordinator.openThread = { [weak threads, weak settings, weak commands] in
-            guard settings?.isOpen != true, commands?.isUtilityPageOpen != true,
-                  let id = threads?.openThreadId, let env = id.environmentId else { return nil }
+        coordinator.openThread = { [weak self, weak threads, weak settings, weak commands] in
+            guard settings?.isOpen != true else { return nil }
+            if let id = self?.orchestrator?.visibleThreadId, let env = id.environmentId { return (env, id.localId) }
+            guard commands?.isUtilityPageOpen != true, let id = threads?.openThreadId, let env = id.environmentId else { return nil }
             return (env, id.localId)
         }
         coordinator.toasts = { [weak threads, weak settings] in settings?.visibleToasts ?? threads?.panel.toasts }

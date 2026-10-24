@@ -25,6 +25,29 @@ public struct OrchestratorReply: Equatable, Sendable {
     /// Calls for other machines, from `orchestrator-call` blocks (OrchestratorRelay.swift).
     public var calls: [OrchestratorCall] = []
 
+    /// The phrases a reply with nothing new is made of. Its harness makes it write something every turn.
+    static let noopPhrases = ["nothing new", "still running", "still working", "still going", "still waiting", "no news",
+                              "nothing to report", "no changes", "no change", "all quiet", "nothing yet", "nothing else"]
+    static let noopFiller: Set<String> = ["for", "you", "yet", "here", "so", "far", "just", "and", "both", "all", "of", "them",
+                                          "it", "its", "it's", "they", "they're", "are", "is", "on", "my", "side", "end", "from", "me"]
+
+    /// A reply that only says nothing is new, which the chat hides: "—", as its brief asks for, or a few words like
+    /// "Nothing new." or "Still running." A reply that names anything else, like "The build is still running", shows.
+    public static func isNoop(_ text: String) -> Bool {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if ["—", "–", "-", "--"].contains(t) { return true }
+        guard t.count <= 60 else { return false }
+        var words = " " + t.lowercased().replacingOccurrences(of: "’", with: "'")
+            .map { $0.isLetter || $0 == "'" ? String($0) : " " }.joined()
+            .split(separator: " ").joined(separator: " ") + " "
+        var found = false
+        for phrase in noopPhrases where words.contains(" \(phrase) ") {
+            words = words.replacingOccurrences(of: " \(phrase) ", with: " ")
+            found = true
+        }
+        return found && words.split(separator: " ").allSatisfy { noopFiller.contains(String($0)) }
+    }
+
     /// Splits `text` into prose and blocks. An unclosed block (a reply still streaming) stays out of the prose until
     /// it closes, so it never flashes as code.
     public static func parse(_ text: String) -> OrchestratorReply {

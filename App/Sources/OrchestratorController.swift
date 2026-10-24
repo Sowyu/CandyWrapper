@@ -58,6 +58,8 @@ final class OrchestratorController {
     private var syncedStamps: [String: OrchestratorSettingsSync.Stamp] = [:]
     private var settingsChain: Task<Void, Never>?
     private var settingsPush: DispatchWorkItem?
+    /// While "Open as thread" opens its thread in the thread view, which no other path does.
+    private var openingAsThread = false
 
     init(environments: Environments, sidebar: SidebarContentView, threads: ThreadController) {
         self.environments = environments
@@ -68,6 +70,7 @@ final class OrchestratorController {
         store.actions.open = { [weak self] in self?.open() }
         store.actions.status = { [weak self] in self?.statusText ?? "Not started" }
         store.observe { [weak self] in self?.configChanged() }
+        threads.opensElsewhere = { [weak self] id in self?.openPane(for: id) ?? false }
         _ = ScheduledTasksStore.shared.observe { [weak self] in self?.settingsListChanged() }
         environments.observeShell { [weak self] in self?.shellChanged() }
         sidebar.actions.openOrchestrator = { [weak self] in self?.open() }
@@ -193,9 +196,11 @@ final class OrchestratorController {
         state.working = working
         state.needs = needs
         state.crew = crewCards()
+        state.showsActivity = config.showActivity
         if let projection {
             let running = projection.runs.contains { OrchestratorEvent.running.contains($0.status) }
-            state.items = OrchestratorChat.items(messages: projection.messages, turnItems: projection.turnItems, running: running)
+            state.items = OrchestratorChat.items(messages: projection.messages, turnItems: projection.turnItems, running: running,
+                                                 activity: config.showActivity)
         }
         state.undoable = Set(memoryUndo.keys).subtracting(undone)
         state.undone = undone
@@ -211,11 +216,12 @@ final class OrchestratorController {
         let view = pane ?? {
             let p = OrchestratorPaneView()
             p.onSend = { [weak self] text in self?.send(text) }
+            p.onToggleActivity = { OrchestratorStore.shared.update { $0.showActivity.toggle() } }
             p.onOpenThread = { [weak self] id in self.map { $0.sidebar?.actions.openThread($0.locate(id)) } }
             p.onRespond = { [weak self] need, decision in self?.respond(need, decision) }
             p.onUndoMemory = { [weak self] id in self?.undoMemory(id) }
             p.onStart = { [weak self] in self?.start() }
-            p.onOpenAsThread = { [weak self] in if let id = self?.threadId { self?.sidebar?.actions.openThread(id) } }
+            p.onOpenAsThread = { [weak self] in self?.openAsThread() }
             p.onEditBot = { [weak self] in self?.openSettings() }
             // The draft is the thread's own, kept by the thread composer's store (composer.prompts.v1).
             p.onDraftChange = { [weak self] text in
@@ -238,6 +244,23 @@ final class OrchestratorController {
         view.needsDisplay = true
         view.focusComposer()
     }
+
+    /// Its own thread, opened from anywhere but "Open as thread", shows as this pane with the bot chat.
+    private func openPane(for id: ThreadId) -> Bool {
+        guard active, !openingAsThread, config.isOrchestrator(id) else { return false }
+        open()
+        return true
+    }
+
+    private func openAsThread() {
+        guard let id = threadId else { return }
+        openingAsThread = true
+        defer { openingAsThread = false }
+        sidebar?.actions.openThread(id)
+    }
+
+    /// Its thread while the pane shows, so a notification from it is like one from the thread you're reading.
+    var visibleThreadId: ThreadId? { pane == nil ? nil : threadId }
 
     /// The app took the main area back: the pane and its feed go away.
     func paneClosed() {
@@ -571,6 +594,9 @@ final class OrchestratorController {
             events += OrchestratorEvent.diff(old: old.threads, new: current, orchestrator: orchestrator,
                                              handsOff: { config.isHandsOff($0) }, windowMinutes: config.askFirstMinutes, now: Date(),
                                              relayedAt: { config.relayedAt[$0.rawValue] },
+                                             // ponytail: knows the relay's prompts and launches and T3's tool launches, not prompts from its own
+                                             // T3 tools (a subagent's wake looks the same in the shell); read its tool calls if those go missing
+                                             touched: { config.relayedAt[$0.id.rawValue] != nil || config.relayWorkers.contains($0.id.rawValue) },
                                              machine: env == home ? nil : environments.label(env) ?? env)
         }
         // Until this Mac holds the "while closed" task, the Android app may be relaying: what happened meanwhile is its.
@@ -627,17 +653,20 @@ final class OrchestratorController {
     }
 
     private func adoptIfNeeded() {
-        guard let env = machineId, machine == nil, !starting, !adoptionTried.contains(env), environments.session(env) != nil else { return }
+        // Only once the machine's shell is in: a slow server connects first, and a search then would find nothing to adopt.
+        guard let env = machineId, machine == nil, !starting, !adoptionTried.contains(env), environments.session(env) != nil,
+              shell(env) != nil else { return }
         adoptionTried.insert(env)
         Task { [weak self] in _ = await self?.adopt(env) }
     }
 
     /// Finds an Orchestrator thread already on the machine by the "# Orchestrator brief" its first message starts with,
-    /// newest first, and makes it this Mac's, with its "while closed" task when it has one. The next message you send
-    /// carries this Mac's brief.
+    /// newest first (`OrchestratorHandoff.adoptable`), and makes it this Mac's, with its "while closed" task when it has
+    /// one. The next message you send carries this Mac's brief.
     private func adopt(_ env: String) async -> Bool {
-        guard let session = environments.session(env), let snapshot = shell(env),
+        guard let session = environments.session(env),
               let json = try? await session.supervisor.request("orchestration.searchThreads", payload: .object(["query": .string("Orchestrator brief")])),
+<<<<<<< Updated upstream
               let matches = (try? json.decode(as: ThreadSearchResult.self))?.matches else { return false }
         let live = Dictionary(snapshot.threads.filter { $0.archivedAt == nil && $0.deletedAt == nil && $0.lineage.parentThreadId == nil }
             .map { ($0.id.rawValue, $0) }, uniquingKeysWith: { a, _ in a })
@@ -664,6 +693,18 @@ final class OrchestratorController {
             return true
         }
         return false
+=======
+              let matches = (try? json.decode(as: ThreadSearchResult.self))?.matches,
+              let found = OrchestratorHandoff.adoptable(matches, threads: shell(env)?.threads ?? []) else { return false }
+        let local = found.id.rawValue
+        let tasks = (try? await session.supervisor.request("scheduledTasks.list", payload: .object([:]))).map(ScheduledTask.list) ?? []
+        let check = tasks.first { $0.threadId == local && $0.prompt.hasPrefix("Scheduled check:") }
+        guard config.machines[env] == nil else { return true }
+        store.update { $0.machines[env] = OrchestratorMachine(threadId: local, briefDigest: "", scheduledTaskId: check?.id) }
+        scheduleSynced.remove(env)
+        syncSchedules(enabled: false)
+        return true
+>>>>>>> Stashed changes
     }
 
     // MARK: Needs you and the crew

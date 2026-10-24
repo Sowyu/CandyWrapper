@@ -8,12 +8,15 @@ public struct ThreadSearchMatch: Decodable, Equatable, Sendable {
     public var projectId: ProjectId
     public var source: String
     public var snippet: String
+    /// When the matched message was written.
+    public var messageCreatedAt: T3Timestamp?
 
-    public init(threadId: ThreadId, projectId: ProjectId, source: String, snippet: String) {
+    public init(threadId: ThreadId, projectId: ProjectId, source: String, snippet: String, messageCreatedAt: T3Timestamp? = nil) {
         self.threadId = threadId
         self.projectId = projectId
         self.source = source
         self.snippet = snippet
+        self.messageCreatedAt = messageCreatedAt
     }
 
     public var isUser: Bool { source == "user" }

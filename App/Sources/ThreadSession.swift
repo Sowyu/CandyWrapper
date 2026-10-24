@@ -932,7 +932,13 @@ final class ThreadController {
         open(id, force: true)
     }
 
+    /// Shows a thread somewhere else instead, returning true when it did: the Orchestrator's own thread opens as its
+    /// pane from a notification, a link, search or Cmd-K. Set by `OrchestratorController`.
+    var opensElsewhere: ((ThreadId) -> Bool)?
+
     func open(_ id: ThreadId, force: Bool = false) {
+        // A forced open reloads the thread already showing, as after a reconnect.
+        if !force, opensElsewhere?(id) == true { return }
         sidebar?.state.activeThreadId = id
         UserDefaults.standard.set(id.rawValue, forKey: Self.lastThreadKey)
         guard force || id != session?.threadId || panel.isDraft || noActiveThread.superview != nil else { return }
