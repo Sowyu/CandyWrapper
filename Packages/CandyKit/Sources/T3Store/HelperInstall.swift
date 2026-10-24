@@ -5,7 +5,7 @@ import Foundation
 /// and the Android app type the same thing.
 public enum HelperInstall {
     /// A helper build: its version, where its downloads live and each platform's SHA-256 (scripts/build-helper).
-    public struct Release: Equatable, Sendable {
+    public struct Release: Codable, Equatable, Sendable {
         public var version: String
         public var baseURL: URL
         /// `darwin-universal`, `linux-x86_64` and `linux-aarch64` to the hex SHA-256 of that tarball.

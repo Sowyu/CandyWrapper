@@ -15,9 +15,15 @@ public final class OrchestratorSettingsView: SettingsPageBase {
         super.init(context: context)
         items = [orchestratorSection(), modelsSection(), promptSection(), notebookSection()]
         observer = store.observe { [weak self] in self?.refresh() }
+        actionsObserver = store.observeActions { [weak self] in self?.refresh() }
     }
 
-    isolated deinit { observer.map { OrchestratorStore.shared.removeObserver($0) } }
+    private var actionsObserver: Int?
+
+    isolated deinit {
+        observer.map { OrchestratorStore.shared.removeObserver($0) }
+        actionsObserver.map { OrchestratorStore.shared.removeObserver($0) }
+    }
 
     // MARK: Machine and limits
 
@@ -99,7 +105,30 @@ public final class OrchestratorSettingsView: SettingsPageBase {
         binder.add { [weak self, weak picker] in if let self { picker?.identity = self.config.bot } }
         let lookRow = row(nil, title: "Look", detail: "Its bot's shape and colour, in the sidebar and its chat. The pumpkin is always orange.")
         lookRow.footer = picker
-        return section(nil, "Orchestrator", [nameRow, lookRow, status, machineRow, projectRow, crew, ask, closed])
+        var rows = [nameRow, lookRow, status, machineRow, projectRow, crew, ask, closed]
+        if store.actions.helper != nil { rows.append(helperRow()) }
+        return section(nil, "Orchestrator", rows)
+    }
+
+    /// The CandyWrapper Helper (docs/orchestrator-helper.md): its state, and one button to install, update or reinstall
+    /// it on the Orchestrator's machine, with Remove once it's there.
+    private func helperRow() -> SettingsRowView {
+        let primary = ButtonView("Install", variant: .outline, size: .sm)
+        primary.action = { [weak self] in self?.store.actions.installHelper?() }
+        let remove = ButtonView("Remove", variant: .ghost, size: .sm)
+        remove.action = { [weak self] in self?.store.actions.removeHelper?() }
+        let buttons = ButtonPair(primary, remove)
+        let r = row(nil, title: "Helper", detail: nil, control: buttons)
+        binder.add { [weak self, weak r, weak primary, weak remove, weak buttons] in
+            guard let state = self?.store.actions.helper?() else { return }
+            r?.detail = state.status
+            primary?.title = state.primary
+            primary?.isEnabled = state.canRun
+            remove?.isHidden = !state.installed
+            remove?.isEnabled = state.canRun
+            buttons?.invalidateIntrinsicContentSize()
+        }
+        return r
     }
 
     private func choiceRow(_ title: String, _ detail: String, labels: [String], read: @escaping (OrchestratorConfig) -> Int?,
@@ -629,5 +658,33 @@ final class OrchestratorColorDot: ControlView {
         // A ring outside the dot marks the pick, a faint one shows hover.
         layer?.borderWidth = isSelected ? 2.5 : state.hoverOrPressed ? 1.5 : 0
         layer?.borderColor = (isSelected ? Themed.color(\.foreground) : Themed.color(\.foreground, 0.4)).cgColor(in: self)
+    }
+}
+
+/// Two buttons side by side as one row control; a hidden second one takes no room.
+private final class ButtonPair: NSView {
+    private let first: ButtonView
+    private let second: ButtonView
+    private let gap: CGFloat = 8
+
+    init(_ first: ButtonView, _ second: ButtonView) {
+        self.first = first
+        self.second = second
+        super.init(frame: .zero)
+        addSubview(first)
+        addSubview(second)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var intrinsicContentSize: NSSize {
+        let a = first.intrinsicContentSize, b = second.intrinsicContentSize
+        return second.isHidden ? a : NSSize(width: a.width + gap + b.width, height: max(a.height, b.height))
+    }
+
+    override func layout() {
+        let a = first.intrinsicContentSize, b = second.intrinsicContentSize
+        first.frame = NSRect(x: 0, y: (bounds.height - a.height) / 2, width: a.width, height: a.height)
+        second.frame = NSRect(x: a.width + gap, y: (bounds.height - b.height) / 2, width: b.width, height: b.height)
     }
 }

@@ -32,7 +32,22 @@ public final class OrchestratorStore {
         public var open: (() -> Void)?
         /// Shown in the settings tab: the thread's state, like "Running on mac-mini" or "Not started".
         public var status: (() -> String)?
+        /// The helper row (docs/orchestrator-helper.md); nil hides it.
+        public var helper: (() -> HelperState?)?
+        public var installHelper: (() -> Void)?
+        public var removeHelper: (() -> Void)?
         public init() {}
+    }
+
+    public struct HelperState: Equatable {
+        public var status: String
+        /// Install, Update or Reinstall.
+        public var primary: String
+        public var canRun: Bool
+        public var installed: Bool
+        public init(status: String, primary: String, canRun: Bool, installed: Bool) {
+            self.status = status; self.primary = primary; self.canRun = canRun; self.installed = installed
+        }
     }
     public var actions = Actions()
 
@@ -109,11 +124,27 @@ public final class OrchestratorStore {
         return nextId
     }
 
-    public func removeObserver(_ id: Int) { observers.removeAll { $0.id == id } }
+    public func removeObserver(_ id: Int) {
+        observers.removeAll { $0.id == id }
+        actionObservers.removeAll { $0.id == id }
+    }
 
     private func themeChanged() {
         guard isActive != wasActive else { return }
         notify()
+    }
+
+    private var actionObservers: [(id: Int, block: @MainActor () -> Void)] = []
+
+    /// Something an action reports changed, like the helper's state: the settings tab reads it again. Kept apart from
+    /// config observers, which do real work on a change.
+    public func actionsChanged() { for o in actionObservers { o.block() } }
+
+    @discardableResult
+    public func observeActions(_ block: @escaping @MainActor () -> Void) -> Int {
+        nextId += 1
+        actionObservers.append((nextId, block))
+        return nextId
     }
 
     private func notify() {
