@@ -156,38 +156,36 @@ final class Helper {
 
     // MARK: Finding the Orchestrator
 
-    /// The newest thread whose first message is a brief, as the Mac adopts one (OrchestratorController.adopt).
+    /// The Orchestrator thread on the home machine (`OrchestratorHandoff.findOrchestrator`), as the Mac adopts one.
     private func discover() {
-        // The task list says which brief thread the Mac uses, so wait for it as well as the shell.
-        guard !discovering, tasksReceived, let link = links[homeId], snapshots[homeId] != nil else { return }
+        // The task list says which thread the Mac uses, so wait for it as well as the shell.
+        guard !discovering, tasksReceived, links[homeId] != nil, snapshots[homeId] != nil else { return }
         discovering = true
+        // One loop at a time: an earlier version reset the flag after starting the next pass, so each retry added a loop
+        // and a helper that never found the thread searched dozens of times every 30 s.
         Task {
-            defer { discovering = false }
-            let found = await findOrchestrator(link)
-            guard !found, orchestrator == nil else { return }
-            // Not there yet, or the server was busy: look again in a while, as long as it stays unknown.
-            log("no Orchestrator thread on \(label(homeId)) yet; looking again in 30 s")
-            try? await Task.sleep(for: .seconds(30))
+            while orchestrator == nil {
+                if let link = links[homeId], await findOrchestrator(link) { break }
+                log("no Orchestrator thread on \(label(homeId)) yet; looking again in 30 s")
+                try? await Task.sleep(for: .seconds(30))
+            }
             discovering = false
-            if orchestrator == nil { discover() }
         }
     }
 
     private func findOrchestrator(_ link: MachineLink) async -> Bool {
-        let matches: [ThreadSearchMatch]
-        do {
-            matches = try await link.request("orchestration.searchThreads", .object(["query": .string("Orchestrator brief")]))
-                .decode(as: ThreadSearchResult.self).matches
-        } catch {
-            log("couldn't search \(label(homeId))'s threads: \(MachineLink.describe(error))")
-            return false
+        var matches: [ThreadSearchMatch] = []
+        for query in OrchestratorHandoff.searchQueries {
+            do {
+                matches += try await link.request("orchestration.searchThreads", .object(["query": .string(query)])).decode(as: ThreadSearchResult.self).matches
+            } catch {
+                log("couldn't search \(label(homeId))'s threads: \(MachineLink.describe(error))")
+                return false
+            }
         }
         // The shell as it is now: the one when the search started may have been an early, partial one.
-        guard let snapshot = snapshots[homeId] else { return false }
-        // The threads the Mac would adopt; among them the one a check task points at, then the newest.
-        let checked = Set(tasks.filter { $0.prompt.hasPrefix("Scheduled check:") }.compactMap(\.threadId))
-        func rank(_ t: ThreadShell) -> (Int, Int64) { (checked.contains(t.id.rawValue) ? 1 : 0, t.updatedAt.epochMs ?? 0) }
-        guard let thread = OrchestratorHandoff.orchestratorThreads(matches, threads: snapshot.threads).max(by: { rank($0) < rank($1) }) else { return false }
+        guard orchestrator == nil, let snapshot = snapshots[homeId],
+              let thread = OrchestratorHandoff.findOrchestrator(matches: matches, tasks: tasks, threads: snapshot.threads) else { return orchestrator != nil }
         let local = thread.id.rawValue
         orchestrator = local
         watched = nil

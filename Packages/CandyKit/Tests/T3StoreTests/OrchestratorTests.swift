@@ -86,6 +86,18 @@ private func event(_ id: String, _ kind: OrchestratorEvent.Kind = .finished) -> 
         #expect(batch.deadline == nil && batch.pending.isEmpty)
     }
 
+    /// Events from several machines, even for the same local thread id, all go out in the one message.
+    @Test func noEventIsDroppedAcrossMachines() {
+        var batch = OrchestratorEventBatch()
+        let mine = OrchestratorEvent(threadId: ThreadId("t1").scoped(to: "miniko"), title: "Space 1", kind: .finished, permission: .free)
+        let there = OrchestratorEvent(threadId: ThreadId("t1").scoped(to: "aniko"), title: "Docs", kind: .finished, permission: .free, machine: "aniko")
+        let more = (2...5).map { OrchestratorEvent(threadId: ThreadId("t\($0)").scoped(to: "miniko"), title: "Space \($0)", kind: .finished, permission: .free) }
+        _ = batch.add([mine], now: now)
+        _ = batch.add([there], now: now.addingTimeInterval(10))
+        for (i, e) in more.enumerated() { _ = batch.add([e], now: now.addingTimeInterval(20 + Double(i))) }
+        #expect(batch.flush(now: now.addingTimeInterval(batch.window))?.split(separator: "\n").count == 6)
+    }
+
     @Test func nothingArmsWithoutEvents() {
         var batch = OrchestratorEventBatch()
         #expect(batch.add([], now: now) == nil)
@@ -141,6 +153,40 @@ private func event(_ id: String, _ kind: OrchestratorEvent.Kind = .finished) -> 
         // Past the window it's news again.
         let older = yours("old", minutesAgo: 20)
         #expect(diff([older.0], [older.1]).map(\.permission) == [.free])
+    }
+
+    /// Every way the Orchestrator starts or prompts a thread wakes it when that thread ends a turn, fails or asks.
+    @Test func everyThreadTheOrchestratorLaunchedOrPromptedWakesIt() {
+        func ends(_ id: String, _ end: ThreadStatus = .completed, _ edit: (inout ThreadShell) -> Void) -> (ThreadShell, ThreadShell) {
+            let before = thread(id) { $0.status = .running; edit(&$0) }
+            var after = before
+            after.status = end
+            return (before, after)
+        }
+        // Its own T3 tool, t3_thread_launch: createdBy "agent", no parent, the first message sent by its thread.
+        let launched = ends("mcp:space-1") { $0.createdBy = "agent"; $0.latestUserMessageAt = ago(30); $0.latestUserAuthoredMessageAt = nil }
+        #expect(diff([launched.0], [launched.1]).map(\.kind) == [.finished])
+        // Even when you also wrote there within the window.
+        let launchedYouWrote = ends("mcp:space-2") { $0.createdBy = "agent"; $0.latestUserAuthoredMessageAt = ago(2); $0.latestUserMessageAt = ago(2) }
+        #expect(diff([launchedYouWrote.0], [launchedYouWrote.1]).map(\.kind) == [.finished])
+        // Failing, and asking for something.
+        let failed = ends("mcp:space-3", .failed) { $0.createdBy = "agent" }
+        #expect(diff([failed.0], [failed.1]).map(\.kind) == [.failed])
+        let asking = ends("mcp:space-4", .waiting) {
+            $0.createdBy = "agent"
+        }
+        var asks = asking.1
+        asks.pendingRuntimeRequest = PendingRuntimeRequestSummary(id: RuntimeRequestId("r1"), kind: .command, createdAt: ago(0))
+        #expect(diff([asking.0], [asks]).map(\.kind) == [.needsYou])
+        // Your thread, prompted by its own t3_thread_send after you wrote: the later prompt isn't yours.
+        let prompted = ends("yours-1") { $0.latestUserAuthoredMessageAt = ago(4); $0.latestUserMessageAt = ago(1) }
+        #expect(diff([prompted.0], [prompted.1]).map(\.permission) == [.free])
+        // Launched or prompted through the relay (orchestrator-call), on this machine or another.
+        let relayed = ends("yours-2") { $0.latestUserAuthoredMessageAt = ago(3); $0.latestUserMessageAt = ago(3) }
+        #expect(diff([relayed.0], [relayed.1], touched: [ThreadId("yours-2")]).map(\.kind) == [.finished])
+        let elsewhere = OrchestratorEvent.diff(old: [launched.0.id: launched.0], new: [launched.1], orchestrator: orchestrator,
+                                               handsOff: { _ in false }, windowMinutes: 10, now: now, machine: "aniko")
+        #expect(elsewhere.first?.line.contains("on aniko") == true)
     }
 
     @Test func eventsCarryHandsOff() {

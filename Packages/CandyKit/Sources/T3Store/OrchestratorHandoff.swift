@@ -90,10 +90,29 @@ public struct OrchestratorHandoff: Equatable, Sendable {
         Set(matches.filter(isBrief).map(\.threadId.rawValue))
     }
 
-    /// The Orchestrator thread to adopt: the newest live, top-level thread whose brief came with the thread itself, so it's
-    /// the first message.
-    public static func adoptable(_ matches: [ThreadSearchMatch], threads: [ThreadShell]) -> ThreadShell? {
-        orchestratorThreads(matches, threads: threads).max { ($0.updatedAt.epochMs ?? 0) < ($1.updatedAt.epochMs ?? 0) }
+    /// Whether the helper relayed: an event message reached the Orchestrator since `since` (epoch ms), allowing for 5 s of
+    /// clock difference. A connected helper that hasn't found the thread relays nothing, so the Mac checks before it
+    /// stands by for a batch.
+    public static func eventArrived(_ messages: [ConversationMessage], since: Int64) -> Bool {
+        messages.contains { $0.role == "user" && OrchestratorEventBatch.isEventMessage($0.text) && ($0.createdAt.epochMs ?? 0) >= since - 5_000 }
+    }
+
+    /// The two searches that find Orchestrator threads. T3 returns only each thread's newest user message with the phrase
+    /// (ThreadSearch.ts:100-127), so a thread where the user later mentioned the brief hides its first brief; an updated
+    /// brief, sent with the next message after a settings change, then often shows instead.
+    public static let searchQueries = ["Orchestrator brief", "Updated brief"]
+
+    /// The Orchestrator thread on a machine, for the Mac's adoption and the helper alike, from both searches' matches and
+    /// the machine's scheduled tasks. First the live, top-level threads a "while closed" check task is bound to, since only
+    /// CandyWrapper makes those; then threads whose match is their first brief or an updated brief. The newest wins in each.
+    public static func findOrchestrator(matches: [ThreadSearchMatch], tasks: [ScheduledTask], threads: [ThreadShell]) -> ThreadShell? {
+        let live = Dictionary(threads.filter { $0.archivedAt == nil && $0.deletedAt == nil && $0.lineage.parentThreadId == nil }
+            .map { ($0.id.rawValue, $0) }, uniquingKeysWith: { a, _ in a })
+        func newest(_ list: [ThreadShell]) -> ThreadShell? { list.max { ($0.updatedAt.epochMs ?? 0) < ($1.updatedAt.epochMs ?? 0) } }
+        let checked = tasks.filter { $0.prompt.hasPrefix(OrchestratorCheckTask.promptPrefix) }.compactMap { $0.threadId.flatMap { live[$0] } }
+        if let thread = newest(checked) { return thread }
+        let updated = matches.filter { $0.isUser && $0.snippet.hasPrefix(OrchestratorBrief.updatedHeading + " ") }.compactMap { live[$0.threadId.rawValue] }
+        return newest(orchestratorThreads(matches, threads: threads) + updated)
     }
 
     /// Every live, top-level thread whose brief came with the thread itself; the helper picks among them too.
