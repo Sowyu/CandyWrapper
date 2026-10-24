@@ -35,6 +35,10 @@ final class Helper {
     private var batch = OrchestratorEventBatch()
     private var flushTask: Task<Void, Never>?
 
+    /// `run` stops the process once every machine refused its token; a short-lived helper (the inline hand-back during
+    /// uninstall) must not, or uninstall would stop halfway.
+    var exitWhenRefused = false
+
     init(machines: [HelperMachine], links: [MachineLink]) {
         order = machines
         homeId = machines.first(where: \.isHome)?.id ?? machines.first?.id ?? ""
@@ -59,26 +63,30 @@ final class Helper {
     // MARK: Events from the machines
 
     private var states: [String: String] = [:]
+    private var notes: [String: String] = [:]
+    private var routes: [String: String] = [:]
     private let startedAt = Date()
 
     /// `status.json`, for `install` and `status`. Written when a connection changes, not on every push.
-    private func setState(_ id: String, _ state: String) {
-        guard states[id] != state else { return }
+    private func setState(_ id: String, _ state: String, note: String? = nil) {
+        guard states[id] != state || notes[id] != note else { return }
         states[id] = state
-        let status = HelperStatus(version: helperVersion, pid: getpid(), startedAt: startedAt, machines: states)
+        notes[id] = note
+        let status = HelperStatus(version: helperVersion, pid: getpid(), startedAt: startedAt, machines: states, notes: notes, routes: routes)
         try? HelperStore.write("status.json", status)
-        // Refused everywhere: a clean exit, so the service stays down until a renewal (KeepAlive SuccessfulExit,
-        // Restart=on-failure) instead of restarting forever.
-        if states.count == links.count, states.values.allSatisfy({ $0 == "rejected" }) {
-            log("every machine refused the helper's sign-in; stopping until CandyWrapper renews it")
-            exit(0)
+        // Refused everywhere: exit 78 (EX_CONFIG), which the service shows as failed and doesn't restart
+        // (RestartPreventExitStatus, KeepAlive only on a crash) until CandyWrapper renews the sign-in.
+        if exitWhenRefused, states.count == links.count, states.values.allSatisfy({ $0 == "rejected" }) {
+            log("every machine refused the helper's sign-in; stopping with exit 78 until CandyWrapper renews it")
+            exit(78)
         }
     }
 
     private func handle(_ machine: HelperMachine, _ event: MachineLink.Event) {
         switch event {
-        case .connected(_, let config):
-            log("connected to \(machine.label)")
+        case .connected(_, let config, let route):
+            log("connected to \(machine.label) at \(hostPort(route))")
+            routes[machine.id] = route.absoluteString
             setState(machine.id, "connected")
             configs[machine.id] = config
             if machine.id == homeId { tasksReceived = false }
@@ -93,11 +101,11 @@ final class Helper {
             tasksChanged()
         case .disconnected(let why):
             if snapshots.removeValue(forKey: machine.id) != nil || states[machine.id] == nil { log("lost \(machine.label): \(why)") }
-            setState(machine.id, "offline")
+            setState(machine.id, "offline", note: why)
         case .rejected(let why):
             snapshots[machine.id] = nil
             log("\(machine.label) refused the helper's sign-in (\(why)); it needs a renewal from CandyWrapper")
-            setState(machine.id, "rejected")
+            setState(machine.id, "rejected", note: why)
         }
     }
 

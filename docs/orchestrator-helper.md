@@ -55,7 +55,7 @@ The install, as the client runs it:
 2. It types one line, `HelperInstall.installCommand`: a `sh -c '…'` script, so zsh, bash and fish all run it, with a leading space to keep it out of history. The script reads `uname -s -m`, downloads the matching tarball from the release with `curl` or `wget` into `versions/<version>/`, and checks its SHA-256 with `sha256sum` or `shasum -a 256`.
 3. The expected hashes come with the client, so a swapped release file fails the check. That pins the exact binary, which makes a separate signature check unnecessary.
 4. The script runs the new binary's `install`. It turns echo off, prints `CWH-READY`, and the client then types the pairing lines.
-5. `install` finds the T3 server's loopback port by asking every port the user listens on for its public descriptor until one answers as the home machine (`lsof` on macOS, `/proc/net/tcp` on Linux). T3 strips its own variables from terminals (`Manager.ts:1291-1300`), so the port can't come from the environment. The helper prefers that address for its own machine and falls back to the URL the client uses.
+5. `install` finds the T3 server's loopback port by asking every port the user listens on for its public descriptor until one answers as the home machine (`lsof` on macOS, `/proc/net/tcp` on Linux). T3 strips its own variables from terminals (`Manager.ts:1291-1300`), so the port can't come from the environment. The helper prefers that address for its own machine and falls back to the URL the client uses. A port only counts if the helper's new token signs in there: on aniko an old server left on the same T3 home answered as the same machine but refused the token with HTTP 401. If the loopback refuses later, the helper switches to the URL it paired at. The helper never follows a redirect, so a request and its token stay on the server they name.
 6. It signs in to each machine, points `current` at the new version, writes the service (section 4) and restarts it. It then waits up to 30 seconds for the helper to report its own machine connected in `status.json`, and switches back to the previous version if it doesn't.
 7. It prints `CWH-RESULT ok …` or `CWH-RESULT failed <reason>`, plus `CWH-WARNING …` when lingering is off. The script builds its own markers from pieces, so the terminal echoing the typed line never reads as a result. The client then closes the terminal with `deleteHistory`.
 
@@ -111,8 +111,8 @@ Trade-offs:
 
 Recommended: the same service setup T3 uses for itself, under the user's account, never as root.
 
-- On macOS a LaunchAgent, `com.sowyu.candywrapper.helper`, in `~/Library/LaunchAgents`, with `RunAtLoad`, `KeepAlive` and a `ThrottleInterval` of 10 s. Logs go to `~/Library/Logs/CandyWrapper Helper/`.
-- On Linux a systemd user unit, `candywrapper-helper.service`, with `Restart=always`, `RestartSec=5` and `WantedBy=default.target`. Logs go to the journal.
+- On macOS a LaunchAgent, `com.sowyu.candywrapper.helper`, in `~/Library/LaunchAgents`, with `RunAtLoad`, `KeepAlive` on a crash and a `ThrottleInterval` of 10 s. Logs go to `~/Library/Logs/CandyWrapper Helper/`.
+- On Linux a systemd user unit, `candywrapper-helper.service`, with `Restart=on-failure`, `RestartSec=5`, `RestartPreventExitStatus=78` and `WantedBy=default.target`. Logs go to the journal.
 - If lingering is off on Linux, the helper stops when the user logs out. The script checks `loginctl show-user`, and Settings shows T3's own message with the `sudo loginctl enable-linger` command for the user to run. A machine that already runs T3 as a boot service has lingering on.
 
 Idle cost: the helper holds one WebSocket per machine and reacts to server pushes, like the Mac's relay. Beside the 30-second event batch while events arrive, it pings each connection every 45 seconds, so a socket a tunnel or NAT dropped without a close gets noticed and reconnected. It does not poll for updates.
@@ -124,7 +124,7 @@ Updates: the client runs them, never a timer in the helper.
 - If the new version fails to come up within 30 seconds, the script switches the link back and restarts the old one.
 - The call format lives in the brief, the settings format in the settings task, and both in the shared Swift code, so the helper and the Mac app always speak the same version after an update.
 
-Crash loops: when every machine rejects the helper's token, it hands the task back as in section 6 and exits with a status the service treats as final, so it doesn't restart forever.
+Crash loops: when every machine refuses the helper's token, it exits with 78 (EX_CONFIG). systemd shows the unit as failed and launchd shows 78 as the last exit code, and neither restarts it. `status.json` and the log say which address refused it and what T3 answered, with anything token-like redacted.
 
 ## 5. Exactly one relays at a time
 

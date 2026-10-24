@@ -62,6 +62,10 @@ struct HelperStatus: Codable, Equatable {
     var startedAt: Date
     /// Machine id to `connected`, `offline` or `rejected`.
     var machines: [String: String]
+    /// Why a machine is offline or refused, redacted.
+    var notes: [String: String]? = nil
+    /// The URL each machine is reached at: the home loopback or the URL CandyWrapper paired at.
+    var routes: [String: String]? = nil
 }
 
 /// The service that keeps the helper running, under the user's account (docs/orchestrator-helper.md, section 4): a
@@ -90,6 +94,8 @@ enum HelperService {
         ExecStart=\(HelperFiles.currentBinary.path) run
         \(environment)Restart=on-failure
         RestartSec=5
+        # 78: every machine refused the sign-in. Shown as failed, not restarted, until CandyWrapper renews it.
+        RestartPreventExitStatus=78
 
         [Install]
         WantedBy=default.target
@@ -129,8 +135,9 @@ enum HelperService {
             "Label": name,
             "ProgramArguments": [HelperFiles.currentBinary.path, "run"],
             "RunAtLoad": true,
-            // A clean exit (every machine refused its token) stays down; a crash comes back.
-            "KeepAlive": ["SuccessfulExit": false],
+            // Back after a crash only: a stop (exit 0) or every machine refusing its token (exit 78, shown as the
+            // last exit code) stays down until CandyWrapper renews it.
+            "KeepAlive": ["Crashed": true],
             "ThrottleInterval": 10,
             "ProcessType": "Background",
             "StandardOutPath": logFile.path,
@@ -177,42 +184,48 @@ enum HelperService {
     }
 }
 
-/// The home server's loopback address: every port this machine listens on, asked for its public descriptor until one
-/// answers as the home machine. Nothing but the descriptor goes to any port.
+/// The home server's loopback address. Every port this machine listens on is asked for its public descriptor (no
+/// redirects followed); a port that answers as the home machine must then accept the helper's own token, because an
+/// old server left running on the same T3 home answers with the same machine id but keeps its own sign-ins. On aniko on
+/// 2026-10-24 a stale server on 3333 did that, and the helper's first request there got HTTP 401.
 enum Loopback {
-    static func find(homeId: String) async -> URL? {
-        let ports = listening().prefix(200)
-        return await withTaskGroup(of: URL?.self) { group in
-            for port in ports {
-                group.addTask {
-                    let url = URL(string: "http://127.0.0.1:\(port)")!
-                    var http = EnvironmentHTTP(baseURL: url)
-                    http.timeout = 1
-                    return (try? await http.descriptor())?.environmentId == homeId ? url : nil
-                }
-            }
-            for await url in group where url != nil {
-                group.cancelAll()
-                return url
-            }
-            return nil
-        }
+    struct Server {
+        var url: URL
+        var descriptor: EnvironmentDescriptor
+        /// `GET /api/auth/session` answered as a T3 server does without a token.
+        var answersAuth: Bool
     }
 
-    /// Every T3 server listening on this machine, for `find-servers`: its loopback URL and descriptor.
-    static func servers() async -> [(url: URL, descriptor: EnvironmentDescriptor)] {
-        await withTaskGroup(of: (URL, EnvironmentDescriptor)?.self) { group in
+    /// Where the helper's token signs in, preferring `prefer` (the URL it paired at) when that is local itself.
+    static func find(homeId: String, token: String, prefer: URL? = nil) async -> URL? {
+        let candidates = await servers().filter { $0.descriptor.environmentId == homeId }.map(\.url)
+        let ordered = candidates.sorted { a, _ in a.port == prefer?.port && ["127.0.0.1", "localhost"].contains(prefer?.host() ?? "") }
+        for url in ordered {
+            if let state = try? await helperHTTP(url, timeout: 2).session(token: token), state.authenticated { return url }
+            log("\(hostPort(url)) answers as this machine but refuses the helper's token; not using it")
+        }
+        return nil
+    }
+
+    /// Every T3 server listening here, newest version first: its loopback URL, descriptor and whether it answers auth.
+    static func servers() async -> [Server] {
+        let found = await withTaskGroup(of: Server?.self) { group in
             for port in listening().prefix(200) {
                 group.addTask {
                     let url = URL(string: "http://127.0.0.1:\(port)")!
-                    var http = EnvironmentHTTP(baseURL: url)
-                    http.timeout = 1
-                    return (try? await http.descriptor()).map { (url, $0) }
+                    guard let d = try? await helperHTTP(url, timeout: 1).descriptor() else { return nil }
+                    let auth = (try? await helperHTTP(url, timeout: 1).session(token: nil)) != nil
+                    return Server(url: url, descriptor: d, answersAuth: auth)
                 }
             }
-            var found: [(url: URL, descriptor: EnvironmentDescriptor)] = []
-            for await hit in group { if let hit { found.append((hit.0, hit.1)) } }
-            return found.sorted { $0.url.absoluteString < $1.url.absoluteString }
+            var all: [Server] = []
+            for await s in group { if let s { all.append(s) } }
+            return all
+        }
+        return found.sorted { a, b in
+            if a.answersAuth != b.answersAuth { return a.answersAuth }
+            let order = a.descriptor.serverVersion.compare(b.descriptor.serverVersion, options: .numeric)
+            return order != .orderedSame ? order == .orderedDescending : (a.url.port ?? 0) < (b.url.port ?? 0)
         }
     }
 

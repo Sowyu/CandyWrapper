@@ -74,7 +74,7 @@ func readSecretLines(ready: String? = nil) -> [String] {
     var failed = Set<String>()
     for e in entries {
         do {
-            let (descriptor, token) = try await EnvironmentHTTP(baseURL: e.url).pair(code: e.code, identity: identity(home: home.label))
+            let (descriptor, token) = try await helperHTTP(e.url).pair(code: e.code, identity: identity(home: home.label))
             guard descriptor.environmentId == e.id else { throw HelperError("the address answers as another machine (\(descriptor.label))") }
             try HelperSecrets.save(token.accessToken, for: e.id)
             paired.append(HelperMachine(id: e.id, label: e.label, url: e.url, isHome: e.id == homeId, loopbackURL: e.id == homeId ? loopback : nil))
@@ -120,6 +120,7 @@ case "run":
     guard !links.isEmpty else { fail("no tokens: CandyWrapper needs to pair the helper again", code: 78) }
     log("CandyWrapper Helper \(helperVersion) starting on \(home.label), reaching \(links.count) machine\(links.count == 1 ? "" : "s")")
     let helper = Helper(machines: machines, links: links)
+    helper.exitWhenRefused = true
     // A clean stop hands the task back, like the Mac quitting.
     for sig in [SIGTERM, SIGINT] {
         signal(sig, SIG_IGN)
@@ -145,17 +146,28 @@ case "pair":
 case "install":
     guard let homeId = option("--home") else { fail(usage, code: 2) }
     let lines = readSecretLines(ready: Sentinel.ready)
-    let loopbackArg = option("--loopback") ?? "auto"
-    let loopback: URL? = switch loopbackArg {
-    case "auto": await Loopback.find(homeId: homeId)
-    case "none": nil
-    default: URL(string: loopbackArg)
-    }
-    let result = await pairAll(homeId: homeId, loopback: loopback, lines: lines)
+    let result = await pairAll(homeId: homeId, loopback: nil, lines: lines)
     // Its own machine is a must; another that can't be reached from here (asleep, or only on another Mac's loopback)
     // is a warning, and the helper relays to the rest.
     guard !result.failed.contains(homeId) else { Sentinel.failed("couldn't sign in to \(result.messages.joined(separator: "; "))") }
     for f in result.messages { print("CWH-WARNING couldn't sign in to \(f)") }
+    // The loopback only where the new token signs in: an old server on the same T3 home answers as this machine too.
+    var machines = HelperStore.machines
+    let loopback: URL?
+    if let i = machines.firstIndex(where: { $0.id == homeId }), let token = HelperSecrets.load(homeId) {
+        switch option("--loopback") ?? "auto" {
+        case "none": loopback = nil
+        case "auto": loopback = await Loopback.find(homeId: homeId, token: token, prefer: machines[i].url)
+        case let given:
+            let url = URL(string: given)
+            var works = false
+            if let url { works = (try? await helperHTTP(url, timeout: 2).session(token: token))?.authenticated == true }
+            if !works { print("CWH-WARNING \(given) doesn't accept the helper's token; not using it") }
+            loopback = works ? url : nil
+        }
+        machines[i].loopbackURL = loopback
+        try? HelperStore.write("machines.json", machines)
+    } else { loopback = nil }
     let folder = HelperFiles.ownFolder
     let begin = Date()
     let previous: URL?
@@ -171,7 +183,10 @@ case "install":
         guard let status = HelperStore.read("status.json", as: HelperStatus.self), status.startedAt >= begin.addingTimeInterval(-1),
               status.version == helperVersion else { continue }
         if status.machines[homeId] == "connected" { outcome = ""; break }
-        if status.machines[homeId] == "rejected" { outcome = "its own machine refused the sign-in"; break }
+        if status.machines[homeId] == "rejected" {
+            outcome = "its own machine refused the sign-in" + (status.notes?[homeId].map { ": \($0)" } ?? "")
+            break
+        }
     }
     guard outcome.isEmpty else {
         if let previous, previous.resolvingSymlinksInPath() != folder.resolvingSymlinksInPath() {
@@ -187,17 +202,34 @@ case "install":
     Sentinel.ok("\(helperVersion) \(loopback.map { "loopback \($0.absoluteString)" } ?? "no loopback")")
 
 case "uninstall":
+    let service = FileManager.default.fileExists(atPath: HelperService.file.path)
+    let files = [HelperStore.home, HelperFiles.data].filter { FileManager.default.fileExists(atPath: $0.path) }
+    guard service || !files.isEmpty else {
+        // Say so instead of claiming a removal, and point at a test install this run can't see.
+        if !HelperStore.isCustomHome { print("nothing installed here; a test install is removed with CANDY_HELPER_HOME=<its folder> set") }
+        Sentinel.ok("not installed")
+        exit(0)
+    }
     // A running helper hands the task back itself when the service stops it; a stopped one can't, so do it here.
     if runningHelperPid == nil { await handBackInline() }
     HelperService.remove()
     for _ in 0..<20 where runningHelperPid != nil { try? await Task.sleep(for: .milliseconds(250)) }
     HelperSecrets.removeAll()
-    for folder in Set([HelperStore.home.path, HelperFiles.data.path]) { try? FileManager.default.removeItem(atPath: folder) }
+    var removed: [String] = []
+    if service, !FileManager.default.fileExists(atPath: HelperService.file.path) { removed.append(HelperService.file.lastPathComponent) }
+    for folder in Set(files.map(\.path)) {
+        try? FileManager.default.removeItem(atPath: folder)
+        if !FileManager.default.fileExists(atPath: folder) { removed.append(folder) }
+    }
     #if !os(Linux)
     try? FileManager.default.removeItem(at: HelperService.logFile)
     // Only when empty: a real install and a test home share the folder.
     rmdir(HelperService.logFile.deletingLastPathComponent().path)
     #endif
+    let left = (service && FileManager.default.fileExists(atPath: HelperService.file.path) ? [HelperService.file.path] : [])
+        + files.map(\.path).filter { FileManager.default.fileExists(atPath: $0) }
+    for r in removed { print("removed \(r)") }
+    guard left.isEmpty else { Sentinel.failed("couldn't remove \(left.joined(separator: ", "))") }
     Sentinel.ok("uninstalled")
 
 case "handback":
@@ -234,7 +266,17 @@ case "print-uninstall":
     print(HelperInstall.uninstallCommand(testHome: option("--test-home")), terminator: "")
 
 case "find-servers":
-    for s in await Loopback.servers() { print("\(s.url.absoluteString)\t\(s.descriptor.label)\t\(s.descriptor.environmentId)") }
+    // url, label, machine id, version, then notes: one that doesn't answer auth, or shares its id with a newer one.
+    let servers = await Loopback.servers()
+    for s in servers {
+        var notes: [String] = []
+        if !s.answersAuth { notes.append("doesn't answer auth") }
+        if let first = servers.first(where: { $0.descriptor.environmentId == s.descriptor.environmentId }), first.url != s.url {
+            notes.append("same machine id as \(hostPort(first.url)), likely an old server on the same T3 home")
+        }
+        print([s.url.absoluteString, s.descriptor.label, s.descriptor.environmentId, s.descriptor.serverVersion, notes.joined(separator: "; ")]
+            .joined(separator: "\t"))
+    }
 
 case "check-ws":
     guard args.count == 2, let url = URL(string: args[1]) else { fail(usage, code: 2) }
