@@ -691,7 +691,7 @@ def table(result, baseline):
     return "\n".join(rows), regressions
 
 
-def latest_saved(out_dir, exclude):
+def latest_saved(out_dir, exclude, space_only=False):
     runs = []
     for path in glob.glob(out_dir + "/*.json"):
         if os.path.abspath(path) == os.path.abspath(exclude):
@@ -701,7 +701,7 @@ def latest_saved(out_dir, exclude):
         except ValueError:
             continue
         # Runs on another workload (or the shared sandbox, before workloads) measured other threads.
-        if data.get("workload") == WORKLOAD:
+        if data.get("workload") == WORKLOAD and bool(data.get("space_only", False)) == space_only:
             runs.append((data.get("created", ""), path, data))
     if not runs:
         return (None, None)
@@ -756,7 +756,7 @@ def main():
     quiet = {"max_load": args.max_load, "noisy": False, "waits": []}
     result = {"commit": sha, "source": src, "created": datetime.datetime.now().isoformat(timespec="seconds"),
               "machine": run(["sysctl", "-n", "hw.model"]).strip(), "repeat": args.repeat, "idle_seconds": args.idle_seconds,
-              "workload": WORKLOAD}
+              "workload": WORKLOAD, "space_only": args.space_only}
 
     if not args.no_app:
         app_path = build_app(src, sha, args.osize)
@@ -819,7 +819,7 @@ def main():
             noise.append("baseline %s ran workload %s, this run workload %d: the threads differ"
                          % (os.path.basename(base_path), baseline.get("workload"), WORKLOAD))
     else:
-        base_path, baseline = latest_saved(args.out_dir, stem + ".json")
+        base_path, baseline = latest_saved(args.out_dir, stem + ".json", space_only=args.space_only)
     result["baseline"] = os.path.basename(base_path) if base_path else None
     text, regressions = table(result, baseline)
     result["regressions"] = regressions

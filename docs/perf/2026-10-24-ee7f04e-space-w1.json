@@ -1,0 +1,82 @@
+{
+ "baseline": "2026-10-24-6f6f14b-w1.json",
+ "commit": "ee7f04e",
+ "created": "2026-10-24T15:46:37",
+ "idle_seconds": 30,
+ "machine": "Mac16,10",
+ "metrics": {
+  "bench.space_search_build": {
+   "detail": {
+    "blocks": 100000,
+    "build_heap_growth_bytes": 48075616,
+    "index_heap_bytes": 39927232,
+    "p95_ms": 6134.24625,
+    "pages": 22000
+   },
+   "max": 6134.24625,
+   "median": 6134.24625,
+   "min": 6134.24625,
+   "runs": 1
+  },
+  "bench.space_search_common": {
+   "detail": {
+    "p95_ms": 6.81575
+   },
+   "max": 6.82725,
+   "median": 6.760125,
+   "min": 6.717583,
+   "runs": 21
+  },
+  "bench.space_search_missing": {
+   "detail": {
+    "p95_ms": 0.00775
+   },
+   "max": 0.011667,
+   "median": 0.005125,
+   "min": 0.004875,
+   "runs": 21
+  },
+  "bench.space_search_sparse": {
+   "detail": {
+    "p95_ms": 2.021292
+   },
+   "max": 2.079458,
+   "median": 1.961959,
+   "min": 1.949083,
+   "runs": 21
+  },
+  "bench.space_search_titles": {
+   "detail": {
+    "p95_ms": 11.538542
+   },
+   "max": 11.624083,
+   "median": 11.340292,
+   "min": 11.286333,
+   "runs": 21
+  }
+ },
+ "notes": [
+  "Space-only review; the app does not link SpacePlanning. No app or UI benchmark metrics were measured.",
+  "Search p95 at target size: sparse 2.021 ms, missing 0.008 ms, common content 6.816 ms, broad titles 11.539 ms.",
+  "Retained index heap: 39,927,232 bytes, measured by clearing the index while keeping the input models alive. First-build heap growth: 48,075,616 bytes. These are heap measurements, not total app footprint.",
+  "The baseline has no Space metrics. All five are new; this run does not compare app or UI performance."
+ ],
+ "quiet": {
+  "max_load": 3.0,
+  "noisy": false,
+  "waits": [
+   {
+    "before": "space",
+    "load": 2.84,
+    "load_before": 4.11,
+    "quiet": true,
+    "waited_s": 579
+   }
+  ]
+ },
+ "regressions": [],
+ "repeat": 3,
+ "source": "/Users/mrm/.t3/worktrees/CandyWrapper/space-9-search",
+ "space_only": true,
+ "workload": 1
+}

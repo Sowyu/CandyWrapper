@@ -263,8 +263,8 @@ public struct SearchIndex: Sendable {
         pageGrams[slot] = grams.isEmpty ? nil : grams.sorted()
     }
 
-    /// Prefix queries only need grams at word boundaries. Two-byte buckets also
-    /// narrow one-letter queries; their tag cannot collide with any three-byte gram.
+    /// Word-boundary trigrams narrow prefix queries. Tagged one- and two-byte
+    /// buckets cover shorter terms without colliding with full trigrams.
     private static func prefixGrams(_ bytes: [UInt8]) -> [UInt32] {
         var result: [UInt32] = []
         for index in bytes.indices where bytes[index] == 32 && index + 1 < bytes.count {
