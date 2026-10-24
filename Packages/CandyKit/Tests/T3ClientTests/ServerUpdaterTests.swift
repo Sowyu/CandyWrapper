@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import T3Client
+@testable import T3Transport
 import T3Protocol
 
 /// `ServerUpdater` against a fake server that plays T3's frames for each update path

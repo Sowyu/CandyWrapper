@@ -2,6 +2,7 @@ import Foundation
 import Testing
 import T3Protocol
 @testable import T3Client
+@testable import T3Transport
 
 // WP6.4b: the sign-in sheet's state machine, account discovery to catalog entries, and sign-out
 // cleanup. No network: Clerk is `FakeClerk`, the relay is `FakeHTTP`. Nothing contacts

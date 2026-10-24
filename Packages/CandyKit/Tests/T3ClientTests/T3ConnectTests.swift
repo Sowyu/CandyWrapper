@@ -3,6 +3,7 @@ import Foundation
 import Testing
 import T3Protocol
 @testable import T3Client
+@testable import T3Transport
 
 // T3 Connect client tests. No network: every request goes to `FakeHTTP`. Response shapes come
 // from packages/contracts/src/relay.ts and auth.ts (cited per fixture). Tokens here are fakes.

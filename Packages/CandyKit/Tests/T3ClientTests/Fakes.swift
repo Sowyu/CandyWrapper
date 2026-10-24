@@ -1,5 +1,6 @@
 import Foundation
 @testable import T3Client
+@testable import T3Transport
 import T3Protocol
 
 /// In-memory RPCSocket. The test plays the server.

@@ -1,4 +1,13 @@
 import Foundation
+#if canImport(Musl)
+import Musl
+private let posixWrite = Musl.write
+#elseif canImport(Glibc)
+import Glibc
+private let posixWrite = Glibc.write
+#else
+private let posixWrite = Darwin.write
+#endif
 
 /// Writes for the rebuildable caches (`ShellCache`, `ThreadCache`).
 ///
@@ -17,7 +26,7 @@ enum CacheFile {
         data.withUnsafeBytes { buffer in
             var offset = 0
             while offset < buffer.count {
-                let n = Darwin.write(fd, buffer.baseAddress! + offset, buffer.count - offset)
+                let n = posixWrite(fd, buffer.baseAddress! + offset, buffer.count - offset)
                 if n < 0 {
                     if errno == EINTR { continue }
                     failure = errno

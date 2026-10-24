@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import T3Client
+@testable import T3Transport
 import T3Protocol
 
 /// Runs against the sandbox server from scripts/sandbox-server (127.0.0.1:47391). Never points at the

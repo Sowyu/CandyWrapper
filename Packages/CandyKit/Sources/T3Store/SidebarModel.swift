@@ -1,5 +1,4 @@
 import Foundation
-import os
 import T3Protocol
 
 // Sidebar derived state, ported from the official web sidebar v2 and the shared client runtime.
@@ -717,7 +716,7 @@ public enum SidebarModel {
             get { currentLock.withLock { $0 } }
             set { currentLock.withLock { $0 = newValue } }
         }
-        static let currentLock = OSAllocatedUnfairLock(initialState: ProjectGrouping())
+        static let currentLock = PortableLock(initialState: ProjectGrouping())
     }
 
     /// A logical project: one or more physical projects shown under one label.
@@ -812,7 +811,7 @@ public enum SidebarModel {
         var grouping: ProjectGrouping
         var preferred: String?
     }
-    static let groupsCache = OSAllocatedUnfairLock<(key: GroupsKey, groups: [ProjectGroup])?>(initialState: nil)
+    static let groupsCache = PortableLock<(key: GroupsKey, groups: [ProjectGroup])?>(initialState: nil)
 
     static func computeProjectGroups(_ projects: [ProjectShell], grouping: ProjectGrouping,
                                              preferredEnvironmentId: String?) -> [ProjectGroup] {

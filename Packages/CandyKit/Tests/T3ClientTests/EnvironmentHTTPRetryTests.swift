@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import T3Client
+@testable import T3Transport
 
 /// Answers 401 to the first request and 200 `{}` after, recording each request's Authorization header.
 final class RefuseOnceProtocol: URLProtocol, @unchecked Sendable {

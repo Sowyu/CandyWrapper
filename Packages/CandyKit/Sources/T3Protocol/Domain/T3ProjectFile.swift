@@ -40,8 +40,14 @@ public struct T3ProjectFile: Equatable, Sendable {
         }
         func flag(_ value: Any?) -> Bool?? {
             guard let value else { return .some(nil) }
+            #if canImport(Darwin)
             guard let n = value as? NSNumber, CFGetTypeID(n) == CFBooleanGetTypeID() else { return nil }
             return .some(n.boolValue)
+            #else
+            // swift-corelibs-foundation's JSONSerialization gives a real Bool for true and false, and NSNumber for numbers.
+            guard let b = value as? Bool, type(of: value) == Bool.self else { return nil }
+            return .some(b)
+            #endif
         }
         if let schema = root["$schema"], !(schema is String) { return nil }
         guard let iconPath = trimmed(root["iconPath"], max: 512) else { return nil }

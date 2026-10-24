@@ -30,7 +30,7 @@ public actor ShellCache {
 
     /// `~/Library/Application Support/CandyWrapper/ShellCache`.
     public static var defaultDirectory: URL {
-        URL.applicationSupportDirectory.appending(path: "CandyWrapper/ShellCache", directoryHint: .isDirectory)
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appending(path: "CandyWrapper/ShellCache", directoryHint: .isDirectory)
     }
 
     public init(directory: URL = ShellCache.defaultDirectory, quietPeriod: Duration = .seconds(2)) {

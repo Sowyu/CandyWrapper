@@ -70,11 +70,11 @@ public enum OpenTiming {
 }
 
 /// A value behind a lock, usable from any thread.
-final class NSLockedBox<Value>: @unchecked Sendable {
+package final class NSLockedBox<Value>: @unchecked Sendable {
     private let lock = NSLock()
     private var value: Value
-    init(_ value: Value) { self.value = value }
-    func with<T>(_ body: (inout Value) -> T) -> T {
+    package init(_ value: Value) { self.value = value }
+    package func with<T>(_ body: (inout Value) -> T) -> T {
         lock.lock()
         defer { lock.unlock() }
         return body(&value)

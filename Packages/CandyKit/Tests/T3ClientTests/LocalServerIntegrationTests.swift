@@ -2,6 +2,7 @@ import Darwin
 import Foundation
 import Testing
 @testable import T3Client
+@testable import T3Transport
 import T3Protocol
 
 /// Launches a real `t3 serve` through LocalServerLauncher against a throwaway home under

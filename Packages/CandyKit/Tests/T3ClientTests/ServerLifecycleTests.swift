@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import T3Client
+@testable import T3Transport
 import T3Protocol
 
 /// A manual clock: timers fire only when the test advances time.

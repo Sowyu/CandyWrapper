@@ -1,5 +1,6 @@
 import Testing
 @testable import T3Client
+@testable import T3Transport
 
 struct SlowRPCRequestTests {
     @Test func thresholdsFollowMethodCost() {
