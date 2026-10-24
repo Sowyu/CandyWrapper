@@ -28,7 +28,8 @@ final class Helper {
     /// device"); nil until a client wrote one.
     private var settings: OrchestratorConfig?
 
-    private var watched: (generation: Int, running: Bool)?
+    /// The Orchestrator's last seen state; `since` and `activeAtStart` as in `OrchestratorHandoff.callsToRun`.
+    private var watched: (generation: Int, running: Bool, run: RunId?, since: Int64, activeAtStart: RunId?)?
     private var handled: Set<String> = []
     private var baselines: [String: (generation: Int, threads: [ThreadId: ThreadShell])] = [:]
     private var batch = OrchestratorEventBatch()
@@ -110,10 +111,14 @@ final class Helper {
         }
         guard let shell = snapshot.threads.first(where: { $0.id.rawValue == orchestrator }) else { return }
         let running = OrchestratorEvent.running.contains(shell.status)
-        defer { watched = (generation, running) }
-        guard let was = watched, was.generation == generation, was.running, !running else { return }
-        let run = shell.latestRunId
-        Task { await runCalls(run: run) }
+        guard let was = watched, was.generation == generation else {
+            watched = (generation, running, shell.latestRunId, shell.updatedAt.epochMs ?? 0, running ? shell.latestRunId : nil)
+            return
+        }
+        watched = (generation, running, shell.latestRunId, was.since, was.activeAtStart)
+        // An event can start the next turn the moment one ends, so a new turn counts as an end too.
+        guard OrchestratorHandoff.turnEnded(wasRunning: was.running, wasRun: was.run, running: running, run: shell.latestRunId) else { return }
+        Task { await runCalls(since: was.since, activeAtStart: was.activeAtStart) }
     }
 
     // MARK: Finding the Orchestrator
@@ -154,6 +159,7 @@ final class Helper {
         let briefs = OrchestratorHandoff.briefThreads(matches)
         guard let local = briefs.filter({ live[$0] != nil }).max(by: { rank($0) < rank($1) }) else { return false }
         orchestrator = local
+        watched = nil
         log("found the Orchestrator thread “\(live[local]?.title ?? local)” (\(local)) on \(label(homeId))")
         tasksChanged()
         return true
@@ -209,15 +215,15 @@ final class Helper {
 
     // MARK: Calls
 
-    private func runCalls(run: RunId?) async {
+    private func runCalls(since: Int64, activeAtStart: RunId?) async {
         // As the Mac and the phone do: wait, so another relay's "Result:" can land, and run only unanswered calls.
         try? await Task.sleep(for: OrchestratorHandoff.callDelay)
         guard let orchestrator, let link = links[homeId],
               let json = try? await link.request("orchestration.getThreadProjection", .object(["threadId": .string(orchestrator)])),
               let projection = try? json.decode(as: ThreadProjection.self) else { return }
-        let mine = projection.messages.filter { $0.role == "assistant" && !$0.streaming && (run == nil || $0.runId == run) }
-        let replies = OrchestratorHandoff.unansweredReplies(projection.messages, run: run, handled: handled)
-        handled.formUnion(mine.map(\.id.rawValue))
+        let replies = OrchestratorHandoff.callsToRun(projection.messages, runs: projection.runs, since: since,
+                                                     activeAtStart: activeAtStart, handled: handled)
+        handled.formUnion(replies.map(\.id.rawValue))
         let calls = replies.sorted { ($0.createdAt.epochMs ?? 0) < ($1.createdAt.epochMs ?? 0) }.flatMap { OrchestratorReply.parse($0.text).calls }
         guard !calls.isEmpty else { return }
         log("running \(calls.count) call\(calls.count == 1 ? "" : "s"): \(calls.map { $0.tool?.rawValue ?? "?" }.joined(separator: ", "))")

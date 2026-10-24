@@ -62,7 +62,7 @@ CandyWrapper checks the limits in code before it relays a call, on top of the br
 - `launch` refuses once the worker limit is reached. It counts the running threads the relay launched on other machines plus the running children of the Orchestrator thread.
 - A message CandyWrapper relays reaches the server as yours, because T3 marks every client command `createdBy: "user"` (`ws.ts:1830`). CandyWrapper remembers when it relayed to each thread, so its own message doesn't start the ask-first window.
 
-The Orchestrator still uses T3's own tools on its own machine, since they need no extra turn. Calls run only while CandyWrapper is open. The "while closed" check uses T3's tools, so it sees only its own machine. Calls from a turn that ended while CandyWrapper was closed are never run later.
+The Orchestrator still uses T3's own tools on its own machine, since they need no extra turn. Calls run only while CandyWrapper is open. The "while closed" check uses T3's tools, so it sees only its own machine. Calls from a turn that ended while CandyWrapper was closed are never run later. A turn's calls run even when an event starts the next turn the moment it ends, and every call gets a "Result:" message.
 
 ## Every thread is under the Orchestrator
 

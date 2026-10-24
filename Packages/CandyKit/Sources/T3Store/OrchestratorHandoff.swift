@@ -50,6 +50,25 @@ public struct OrchestratorHandoff: Equatable, Sendable {
         }
     }
 
+    /// Whether one of the Orchestrator's turns may have just ended: it went idle, or another turn started. An event sent
+    /// while a turn runs queues behind it and starts the moment it ends, so the shell can go from one turn to the next
+    /// without ever showing it idle.
+    public static func turnEnded(wasRunning: Bool, wasRun: RunId?, running: Bool, run: RunId?) -> Bool {
+        (wasRunning && !running) || run != wasRun
+    }
+
+    /// The replies whose calls run now: finished, from a turn that ended, not run here yet and with no "Result:" after
+    /// them, from any turn rather than only the newest, so a turn whose end raced an event still gets its Result.
+    /// `since` is the thread's last update when this session first saw it, and `activeAtStart` the turn running then:
+    /// only replies after that, or from that turn, count, so a turn that ended while CandyWrapper was closed never runs.
+    public static func callsToRun(_ messages: [ConversationMessage], runs: [Run], since: Int64, activeAtStart: RunId?,
+                                  handled: Set<String>) -> [ConversationMessage] {
+        let active = Set(runs.filter { OrchestratorEvent.running.contains($0.status) }.map(\.id))
+        return unansweredReplies(messages, run: nil, handled: handled).filter { m in
+            !(m.runId.map(active.contains) ?? false) && ((m.createdAt.epochMs ?? 0) > since || (activeAtStart != nil && m.runId == activeAtStart))
+        }
+    }
+
     /// Whether a search match for "Orchestrator brief" is a brief: a user message that starts with the heading. T3 matches
     /// each thread's newest such message and starts the snippet at the message when the phrase is near its start
     /// (ThreadSearch.ts:46-60, 100-127), so this holds however long the thread grew. A thread's projection carries only
