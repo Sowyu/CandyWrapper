@@ -690,9 +690,8 @@ final class OrchestratorController {
                                              machine: env == home ? nil : environments.label(env) ?? env)
         }
         // Until this Mac holds the "while closed" task, the Android app may be relaying: what happened meanwhile is its.
-        if handoff.ownStamp == nil, machine?.scheduledTaskId != nil { return }
-        // The helper relays while it's connected.
-        if helper.connected { return }
+        // While the helper is connected the Mac gathers anyway, and sends only what the helper didn't (flush).
+        if handoff.ownStamp == nil, machine?.scheduledTaskId != nil, !helper.connected { return }
         guard let deadline = batch.add(events, now: Date()) else { return }
         let work = DispatchWorkItem { [weak self] in self?.flush() }
         flushWork = work
@@ -704,10 +703,25 @@ final class OrchestratorController {
         let live = Set(environments.environmentIds.flatMap { env in
             (shell(env)?.threads ?? []).filter { $0.archivedAt == nil && $0.deletedAt == nil }.map { $0.id.scoped(to: env) }
         })
+        let opened = batch.deadline.map { Int64($0.addingTimeInterval(-batch.window).timeIntervalSince1970 * 1000) } ?? 0
         guard active, let env = machineId, let id = threadId,
               let text = batch.flush(now: Date().addingTimeInterval(0.001), keep: { live.contains($0.threadId) }) else { return }
         Task { [weak self] in
-            guard let self, await self.mayRelay() else { return }
+            guard let self else { return }
+            if self.helper.connected {
+                // The helper relays the same batch. A minute after it's due, the Mac looks for it in the thread and sends
+                // its own only when no event arrived: a connected helper that hasn't found the thread relays nothing.
+                try? await Task.sleep(for: .seconds(60))
+                guard self.active else { return }
+                if self.helper.connected {
+                    guard let json = try? await self.environments.request(env, "orchestration.getThreadProjection", .object(["threadId": .string(id.localId.rawValue)])),
+                          let projection = try? json.decode(as: ThreadProjection.self),
+                          !OrchestratorHandoff.eventArrived(projection.messages, since: opened) else { return }
+                    self.dispatch(text, to: id, env: env)
+                    return
+                }
+            }
+            guard await self.mayRelay() else { return }
             self.dispatch(text, to: id, env: env)
         }
     }
@@ -772,18 +786,23 @@ final class OrchestratorController {
         Task { [weak self] in _ = await self?.adopt(env) }
     }
 
-    /// Finds an Orchestrator thread already on the machine by the "# Orchestrator brief" its first message starts with,
-    /// newest first (`OrchestratorHandoff.adoptable`), and makes it this Mac's, with its "while closed" task when it has
-    /// one. The next message you send carries this Mac's brief.
+    /// Finds the Orchestrator thread already on the machine (`OrchestratorHandoff.findOrchestrator`): the one a "while
+    /// closed" check task is bound to, else the newest whose first or updated brief the search finds. It becomes this
+    /// Mac's, with its check task. The next message you send carries this Mac's brief.
     private func adopt(_ env: String) async -> Bool {
         guard let session = environments.session(env),
-              let json = try? await session.supervisor.request("orchestration.searchThreads", payload: .object(["query": .string("Orchestrator brief")])),
-              let matches = (try? json.decode(as: ThreadSearchResult.self))?.matches,
-              let found = OrchestratorHandoff.adoptable(matches, threads: shell(env)?.threads ?? []) else { return false }
+              let listed = try? await session.supervisor.request("scheduledTasks.list", payload: .object([:])) else { return false }
+        let tasks = ScheduledTask.list(listed)
+        var matches: [ThreadSearchMatch] = []
+        for query in OrchestratorHandoff.searchQueries {
+            guard let json = try? await session.supervisor.request("orchestration.searchThreads", payload: .object(["query": .string(query)])),
+                  let found = (try? json.decode(as: ThreadSearchResult.self))?.matches else { return false }
+            matches += found
+        }
+        guard let found = OrchestratorHandoff.findOrchestrator(matches: matches, tasks: tasks, threads: shell(env)?.threads ?? []) else { return false }
         let local = found.id.rawValue
-        let tasks = (try? await session.supervisor.request("scheduledTasks.list", payload: .object([:]))).map(ScheduledTask.list) ?? []
-        let check = OrchestratorCheckTask.canonical(tasks, thread: local)
         guard config.machines[env] == nil else { return true }
+        let check = OrchestratorCheckTask.canonical(tasks, thread: local)
         store.update { $0.machines[env] = OrchestratorMachine(threadId: local, briefDigest: "", scheduledTaskId: check?.id) }
         scheduleSynced.remove(env)
         syncSchedules(enabled: false)

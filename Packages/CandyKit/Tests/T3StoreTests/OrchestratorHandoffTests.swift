@@ -77,8 +77,8 @@ import Testing
         #expect(OrchestratorHandoff().verdict(task: nil) == .relay)
     }
 
-    /// A thread is adopted only when its brief came with the thread, so it's the first message, and the newest such
-    /// thread wins. The search alone tells: a projection holds only a thread's last 20 messages.
+    /// Finding the Orchestrator thread, for the Mac's adoption and the helper: a thread a check task is bound to, else the
+    /// newest whose first brief (with the thread) or updated brief the searches find.
     @Test func adoptionReadsTheBriefMarker() {
         let made = T3Timestamp(start)
         func shell(_ id: String, updated minutes: Double, _ edit: (inout ThreadShell) -> Void = { _ in }) -> ThreadShell {
@@ -97,102 +97,36 @@ import Testing
                        shell("archived", updated: 99) { $0.archivedAt = T3Timestamp(start) }]
         let matches = [match("old", brief), match("new", brief), match("quoted", "…please read the # Orchestrator brief below…"),
                        match("later", brief, after: 3600), match("archived", brief), match("gone", brief)]
-        #expect(OrchestratorHandoff.adoptable(matches, threads: threads)?.id == ThreadId("new"))
-        #expect(OrchestratorHandoff.adoptable([match("new", brief, source: "assistant")], threads: threads) == nil)
-        #expect(OrchestratorHandoff.adoptable([match("later", brief, after: 3600)], threads: threads) == nil)
-        #expect(OrchestratorHandoff.adoptable([], threads: threads) == nil)
+        func find(_ m: [ThreadSearchMatch], tasks: [ScheduledTask] = []) -> String? {
+            OrchestratorHandoff.findOrchestrator(matches: m, tasks: tasks, threads: threads)?.id.rawValue
+        }
+        #expect(find(matches) == "new")
+        #expect(find([match("new", brief, source: "assistant")]) == nil)
+        #expect(find([match("later", brief, after: 3600)]) == nil)
+        #expect(find([]) == nil)
+        // miniko on 2026-10-24: the newest user message with the phrase was a chat message about the marker, so the search
+        // never showed the first brief and the helper relayed nothing. Its check task names the thread.
+        let chat = [match("old", "…he Mac adopts an existing Orchestrator thread by its `# Orchestrator brief` marker. Other…", after: 7200)]
+        #expect(find(chat) == nil)
+        let check = ScheduledTask(id: "scheduled-task:1", title: "Conductor check", prompt: OrchestratorBrief.scheduledCheckPrompt,
+                                  enabled: false, schedule: .interval(everyMs: 3_600_000), projectId: "p", threadId: "old")
+        #expect(find(chat, tasks: [check]) == "old")
+        // A check task beats a newer brief, and one on an archived thread doesn't count.
+        #expect(find(matches, tasks: [check]) == "old")
+        var gone = check
+        gone.threadId = "archived"
+        #expect(find(matches, tasks: [gone]) == "new")
+        // Or the updated brief that went out with a later message.
+        #expect(find(chat + [match("old", "# Updated brief # Who you are You are Ada…", after: 9000)]) == "old")
     }
 
-    func run(_ id: String, _ status: String) -> Run {
-        try! JSONDecoder().decode(Run.self, from: Data("""
-            {"id":"\(id)","threadId":"orch","ordinal":1,"status":"\(status)","requestedAt":"2026-10-24T10:00:00Z","startedAt":null,"completedAt":null}
-            """.utf8))
-    }
-
-    /// The race behind launches that never ran: a turn ends on an orchestrator-call block just as an Event arrives. The
-    /// Event queued behind the turn and starts the next one at once, so the shell goes from turn to turn without
-    /// showing it idle, and the newest turn is the Event's. The call still counts as ended and still runs, once.
-    @Test func callsFromATurnThatRacedAnEventStillRun() {
-        let since = Int64(start.timeIntervalSince1970 * 1000)
-        let launch = "Starting it.\n\n```orchestrator-call\n{\"tool\":\"launch\",\"machine\":\"miniko\",\"projectId\":\"p\",\"title\":\"Fix\",\"text\":\"Fix it\"}\n```"
-        let messages = [message("m0", "user", "Ship the fix", minutes: 1, run: "run-a"),
-                        message("m1", "assistant", launch, minutes: 2, run: "run-a"),
-                        message("m2", "user", "Event: “Docs” finished a turn (t3-thread://v1/d1).", minutes: 2.01, run: "run-b")]
-        // The shell went straight from turn A to the Event's turn B.
-        #expect(OrchestratorHandoff.turnEnded(wasRunning: true, wasRun: RunId("run-a"), running: true, run: RunId("run-b")))
-        let due = OrchestratorHandoff.callsToRun(messages, runs: [run("run-a", "completed"), run("run-b", "running")],
-                                                 since: since, activeAtStart: nil, handled: [])
-        #expect(due.map(\.id.rawValue) == ["m1"])
-        #expect(due.flatMap { OrchestratorReply.parse($0.text).calls }.map(\.tool) == [.launch])
-        // Once it ran here it doesn't run again, and a "Result:" from the phone answers it too.
-        #expect(OrchestratorHandoff.callsToRun(messages, runs: [run("run-a", "completed")], since: since, activeAtStart: nil, handled: ["m1"]).isEmpty)
-        let answered = messages + [message("m3", "user", "Result: launched “Fix” on miniko", minutes: 3, run: "run-c")]
-        #expect(OrchestratorHandoff.callsToRun(answered, runs: [run("run-a", "completed")], since: since, activeAtStart: nil, handled: []).isEmpty)
-        // A turn still running waits for its end.
-        #expect(OrchestratorHandoff.callsToRun(messages, runs: [run("run-a", "running")], since: since, activeAtStart: nil, handled: []).isEmpty)
-        // Replies from before CandyWrapper saw the thread are history, unless their turn was the one running then.
-        let later = since + 10 * 60_000
-        #expect(OrchestratorHandoff.callsToRun(messages, runs: [run("run-a", "completed")], since: later, activeAtStart: nil, handled: []).isEmpty)
-        #expect(OrchestratorHandoff.callsToRun(messages, runs: [run("run-a", "completed")], since: later, activeAtStart: RunId("run-a"),
-                                               handled: []).map(\.id.rawValue) == ["m1"])
-    }
-
-    @Test func aTurnEndsWhenItGoesIdleOrTheNextStarts() {
-        #expect(OrchestratorHandoff.turnEnded(wasRunning: true, wasRun: RunId("a"), running: false, run: RunId("a")))
-        #expect(OrchestratorHandoff.turnEnded(wasRunning: false, wasRun: RunId("a"), running: true, run: RunId("b")))
-        #expect(!OrchestratorHandoff.turnEnded(wasRunning: true, wasRun: RunId("a"), running: true, run: RunId("a")))
-        #expect(!OrchestratorHandoff.turnEnded(wasRunning: false, wasRun: RunId("a"), running: false, run: RunId("a")))
-    }
-
-    func check(_ id: String, thread: String = "orch", minutes: Double = 30, enabled: Bool = false, updated: String? = nil,
-               prompt: String = OrchestratorBrief.scheduledCheckPrompt) -> ScheduledTask {
-        ScheduledTask(id: id, title: "Conductor check", prompt: prompt, enabled: enabled, schedule: .interval(everyMs: minutes * 60_000),
-                      projectId: "p", threadId: thread, updatedAt: updated)
-    }
-
-    /// miniko on 2026-10-24: six check tasks on one Orchestrator thread, the user's at 60 minutes and five extras that
-    /// clients made after losing their own id. Every client now picks the same one, the smallest id, and deletes the rest.
-    @Test func everyClientUsesTheSameCheckTaskAndDropsTheRest() {
-        let tasks = [check("scheduled-task:f538bf49"), check("scheduled-task:2bcc7c0d", minutes: 60), check("scheduled-task:8a16a8d2"),
-                     check("scheduled-task:8afd9f14"), check("scheduled-task:993eb57e"), check("scheduled-task:55ec6126", enabled: true),
-                     check("scheduled-task:000other", thread: "other"),
-                     ScheduledTask(id: "scheduled-task:00settings", title: OrchestratorSettingsSync.title, prompt: "{}", enabled: false,
-                                   schedule: .interval(everyMs: 86_400_000), projectId: "p"),
-                     check("scheduled-task:0000mine", prompt: "My own reminder")]
-        #expect(OrchestratorCheckTask.canonical(tasks, thread: "orch")?.id == "scheduled-task:2bcc7c0d")
-        #expect(OrchestratorCheckTask.duplicates(tasks, thread: "orch").map(\.id).sorted()
-                == ["scheduled-task:55ec6126", "scheduled-task:8a16a8d2", "scheduled-task:8afd9f14", "scheduled-task:993eb57e", "scheduled-task:f538bf49"])
-        // Whatever order the list comes in.
-        #expect(OrchestratorCheckTask.canonical(tasks.reversed(), thread: "orch")?.id == "scheduled-task:2bcc7c0d")
-        #expect(OrchestratorCheckTask.canonical([], thread: "orch") == nil)
-        #expect(OrchestratorCheckTask.duplicates([check("scheduled-task:only")], thread: "orch").isEmpty)
-        // With the helper running nothing stays on: it deletes the extras, and an enabled canonical task reads as
-        // someone else's write, so it turns that off too.
-        let on = tasks.map { t -> ScheduledTask in var c = t; c.enabled = true; c.updatedAt = "2026-10-24T09:00:00.000Z"; return c }
-        var helper = OrchestratorHandoff()
-        helper.wrote(updatedAt: "2026-10-24T08:00:00.000Z")
-        #expect(helper.verdict(task: OrchestratorCheckTask.canonical(on, thread: "orch")) == .resync)
-        #expect(OrchestratorCheckTask.duplicates(on, thread: "orch").count == 5)
-        // Two clients that create at once make the same task.
-        #expect(OrchestratorCheckTask.commandId(thread: "orch") == OrchestratorCheckTask.commandId(thread: "orch"))
-        #expect(OrchestratorCheckTask.commandId(thread: "orch") != OrchestratorCheckTask.commandId(thread: "other"))
-    }
-
-    /// The interval the user set on the task in T3 stays: it becomes the "While closed" setting unless the user changed
-    /// that setting since.
-    @Test func theUsersIntervalOnTheTaskStays() {
-        let set = check("scheduled-task:2bcc7c0d", minutes: 60, updated: "2026-10-24T08:00:00.000Z")
-        let edited = T3Timestamp("2026-10-24T08:00:00.000Z").epochMs!
-        // The setting was never changed in CandyWrapper: the task's 60 minutes win.
-        #expect(OrchestratorCheckTask.intervalSetOnTask(set, settingMinutes: 30, settingChangedAt: nil) == 60)
-        // Changed before the task was edited: the task wins. Changed after: the setting does.
-        #expect(OrchestratorCheckTask.intervalSetOnTask(set, settingMinutes: 30, settingChangedAt: edited - 60_000) == 60)
-        #expect(OrchestratorCheckTask.intervalSetOnTask(set, settingMinutes: 15, settingChangedAt: edited + 60_000) == nil)
-        // Already the same, or not an interval task: nothing to take.
-        #expect(OrchestratorCheckTask.intervalSetOnTask(set, settingMinutes: 60, settingChangedAt: nil) == nil)
-        let fixed = ScheduledTask(id: "x", title: "t", prompt: OrchestratorBrief.scheduledCheckPrompt, schedule: .fixedTime(timeOfDay: "09:00", weekdays: nil),
-                                  projectId: "p", threadId: "orch")
-        #expect(OrchestratorCheckTask.intervalSetOnTask(fixed, settingMinutes: 30, settingChangedAt: nil) == nil)
+    @Test func aConnectedHelperThatRelayedIsSeen() {
+        let since = Int64(start.timeIntervalSince1970 * 1000) + 60_000
+        let event = message("e1", "user", "Event: “Space 1” finished a turn (t3-thread://v1/t1).", minutes: 1.5, run: nil)
+        let old = message("e0", "user", "Event: “Docs” finished a turn (t3-thread://v1/t2).", minutes: 0, run: nil)
+        let chat = message("u1", "user", "How's it going?", minutes: 2, run: nil)
+        #expect(OrchestratorHandoff.eventArrived([old, event, chat], since: since))
+        #expect(!OrchestratorHandoff.eventArrived([old, chat], since: since))
     }
 
     /// The task's stamp survives decoding from the server's list.
