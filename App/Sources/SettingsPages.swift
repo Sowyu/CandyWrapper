@@ -309,7 +309,11 @@ extension SettingsController {
         let primary = environments.primaryId.flatMap { composer?.config($0) }
         c.serverKeybindings = primary?.keybindings ?? []
         c.keybindingsConfigPath = primary?.keybindingsConfigPath
-        c.scheduledTasks = ScheduledTasksStore.shared.lists
+        // The Orchestrator's settings ride on a task of their own (OrchestratorSettingsSync); it isn't one you run.
+        c.scheduledTasks = ScheduledTasksStore.shared.lists.mapValues { load in
+            guard case .loaded(let tasks) = load else { return load }
+            return .loaded(tasks.filter { $0.title != OrchestratorSettingsSync.title })
+        }
     }
 
     /// `useMemberProjectFiles` (SettingsScopeContext.tsx:20-55): each selected checkout's t3.json, so file-backed

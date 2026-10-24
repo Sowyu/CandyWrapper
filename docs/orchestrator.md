@@ -130,6 +130,8 @@ The tab holds:
 - The Models list, described below.
 - The notebook: rules, worker rules, plan and digest, each editable.
 
+The Mac and the Android app share these settings and the Look, as "Settings on every device" below describes.
+
 ### The Models list
 
 You decide which models the Orchestrator may use and when. Each row has:
@@ -151,6 +153,74 @@ The default rows:
 | Audits | GPT-6.1-Sol (`codex`, `gpt-6.1-sol`) | reasoningEffort medium | Reviewing code or a branch, checking someone else's work, finding problems without changing anything. |
 | Everyday work (default) | Claude Opus 5.5 (`claudeAgent`, `claude-opus-5-5`) | effort medium | Simpler tasks that still need good judgement: normal features, fixes and edits. |
 | Quick changes | GPT-6.1-Sol (`codex`, `gpt-6.1-sol`) | reasoningEffort high | Fast, quick changes that don't need the best quality code, like renames, config values and small one-file fixes. |
+
+### Settings on every device
+
+CandyWrapper on the Mac and CandyWrapper on Android show and use the same Orchestrator settings. T3 has no free-form store, so the settings live in the prompt of one scheduled task on the Orchestrator's machine, with no T3 change. The task is always off, so it never runs. The code is `OrchestratorSettingsSync` in T3Store, and `OrchestratorSettingsSyncTests` covers reading, writing, the first-launch migration and two devices editing at once.
+
+The task, as `scheduledTasks.upsert` takes it:
+
+- `title` is exactly "CandyWrapper Orchestrator settings", which is how every client finds it.
+- `prompt` is the settings document below.
+- `enabled` is always false.
+- `schedule` is `{"type":"interval","everyMs":86400000}`.
+- `threadId` is left out, so the task belongs to no thread.
+- A new task gets the home project, else the machine's first project, with `workspaceStrategy` `{"type":"root"}`, `runtimeMode` "approval-required", `interactionMode` "default", the Orchestrator's default model row as `modelSelection`, and `creationSource` "web".
+- An update sends the task's `id` and keeps its `projectId`, `workspaceStrategy`, `modelSelection`, `runtimeMode` and `interactionMode`.
+
+The document is JSON:
+
+```json
+{
+  "format": "candywrapper.orchestrator-settings",
+  "version": 1,
+  "settings": {
+    "name": {"value": "Ada", "at": 1792800000000, "by": "4c1fe0a2-3b7d-4c56-9a8e-0d2f1b6c7e90"},
+    "crewLimit": {"value": 6, "at": 1792800000000, "by": "4c1fe0a2-3b7d-4c56-9a8e-0d2f1b6c7e90"}
+  }
+}
+```
+
+Each entry says when the setting was last set. `at` is epoch milliseconds on the writing device's clock, and `by` is that device's id, a lowercase UUID it makes once and keeps. A setting missing from `settings` was never set, so each client uses its own default. A client ignores a prompt that doesn't parse or whose `format` differs, and it keeps the keys it doesn't know when it writes, so a newer client's settings survive.
+
+The values are the same JSON as `OrchestratorConfig` encodes:
+
+| Key | Value |
+|---|---|
+| `name` | String. An empty name shows as "Orchestrator". |
+| `prompt` | String, the prompt with its `{{…}}` placeholders. |
+| `environmentId` | String, the machine's environment id. Null means the machine this document lives on. |
+| `homeProjectId` | String, a project id on that machine, or null for its first project. |
+| `crewLimit` | Integer, 1 or more. |
+| `models` | Array of `{"id","label","instanceId","model","options":[{"id","value"}],"useWhen","notes","isDefault"}`. |
+| `closedCheckMinutes` | Integer, 1 or more, or null for no "while closed" check. |
+| `askFirstMinutes` | Integer, 0 or more. |
+| `handsOff` | Array of `"<environmentId>:<threadId>"` strings, sorted. |
+| `botShape`, `botColor` | Integer, the `BotShape` and `BotColor` raw values, or null for the default flower in violet. |
+| `notebook.rules`, `notebook.crew-rules`, `notebook.plan`, `notebook.digest` | String, empty when the note is empty. |
+
+A client skips a value of the wrong type or a count below its minimum and keeps its own. Everything else stays on the device: the "Experimental Orchestrator features" toggle, each machine's Orchestrator thread, brief digest and "while closed" task, the relay's bookkeeping, the composer draft and the window layout.
+
+Every client merges the same way:
+
+1. Read every task with that title on the Orchestrator's machine, sorted by `id`.
+2. For each key, the entry with the larger `at` wins. On an equal `at`, the larger `by` wins, compared as strings.
+3. Merge the documents with each other first, then with the device's own settings and their stamps.
+4. A document entry that wins replaces the device's value and stamp.
+5. A device setting that wins, or that the document lacks, goes into the document with the device's stamp.
+6. When the result differs from the document, or there was more than one task, write it to the task with the smallest `id` and delete the others. With no task and nothing stamped, write nothing.
+
+When to sync:
+
+- Read when the machine's task list loads and each time `scheduledTasks.subscribe` sends a new list. The Mac follows that stream while the Orchestrator is active.
+- A device with no settings yet looks on the machine where it found the Orchestrator's thread by its "# Orchestrator brief" message.
+- A local edit stamps the setting with the device's id and the current time, and goes up a second after the last change.
+- A device that keeps "the primary machine" as no machine writes that machine's id, never null, since the primary differs per device.
+- After you move the Orchestrator to another machine, write the document to the old machine too, so devices still reading there follow it.
+
+On its first launch with sync, a client makes its device id and stamps every setting that differs from its default with the current time. Settings still at their default get no stamp. The normal merge then sends what you changed up and takes the document's values for the rest, so nothing you set is lost.
+
+CandyWrapper on the Mac hides the task from Settings > Scheduled Tasks. The official app lists it as a task that's off. Deleting it loses nothing, since the next sync writes it again from the devices' copies.
 
 ## The custom prompt
 

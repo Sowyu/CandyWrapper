@@ -50,6 +50,14 @@ final class OrchestratorController {
     /// Signed page URLs by attachment id, reused while they have 5 minutes left (HtmlRenderFrame.tsx:62-92).
     private var pageURLs: [String: (url: URL, expires: Date)] = [:]
     private var wasActive = false
+    /// The settings documents last seen on its machine, by prompt; nil until that machine's task list loads.
+    private var seenSettings: [String]?
+    /// The machine the settings sync with, to tell when it moved.
+    private var settingsMachine: String?
+    /// The stamps last merged, to tell your edits from the other devices'.
+    private var syncedStamps: [String: OrchestratorSettingsSync.Stamp] = [:]
+    private var settingsChain: Task<Void, Never>?
+    private var settingsPush: DispatchWorkItem?
 
     init(environments: Environments, sidebar: SidebarContentView, threads: ThreadController) {
         self.environments = environments
@@ -60,6 +68,7 @@ final class OrchestratorController {
         store.actions.open = { [weak self] in self?.open() }
         store.actions.status = { [weak self] in self?.statusText ?? "Not started" }
         store.observe { [weak self] in self?.configChanged() }
+        _ = ScheduledTasksStore.shared.observe { [weak self] in self?.settingsListChanged() }
         environments.observeShell { [weak self] in self?.shellChanged() }
         sidebar.actions.openOrchestrator = { [weak self] in self?.open() }
         // A rename changes the brief's {{name}}, so it goes out as an updated brief with your next message.
@@ -111,6 +120,8 @@ final class OrchestratorController {
             return
         }
         wasActive = true
+        watchSettings()
+        settingsEdited()
         syncSchedules(enabled: false)
         refreshViews()
     }
@@ -130,10 +141,17 @@ final class OrchestratorController {
         if pane != nil { closePane() }
         sidebar?.orchestrator = nil
         sidebar?.state.hiddenThreadIds = []
+        ScheduledTasksStore.shared.watch("orchestrator", [])
+        settingsPush?.cancel()
+        settingsPush = nil
+        seenSettings = nil
+        settingsMachine = nil
     }
 
     private func shellChanged() {
         guard active else { return }
+        // At launch the primary machine is known only once its shell arrives.
+        watchSettings()
         // At launch the schedule turns off once its machine's shell has the thread.
         syncSchedules(enabled: false)
         forgetVanishedThread()
@@ -755,6 +773,85 @@ final class OrchestratorController {
         guard let previous = memoryUndo[messageId], !undone.contains(messageId) else { return }
         undone.insert(messageId)
         store.update { c in for (note, text) in previous.reversed() { c.notebook[note] = text } }
+    }
+
+    // MARK: Settings on every device
+
+    /// Follows its machine's scheduled tasks while it's active, where the settings document lives (`OrchestratorSettingsSync`).
+    private func watchSettings() {
+        guard let env = machineId, env != settingsMachine else { return }
+        if let old = settingsMachine {
+            // You moved it: the old machine's document sends devices still reading there to the new one.
+            if store.stamps["environmentId"]?.by == store.device { syncSettings(old) }
+            seenSettings = nil
+        }
+        settingsMachine = env
+        ScheduledTasksStore.shared.watch("orchestrator", [env])
+    }
+
+    /// The list's first load, or a write from another device.
+    private func settingsListChanged() {
+        guard active, let env = machineId, case .loaded(let tasks)? = ScheduledTasksStore.shared.lists[env] else { return }
+        let prompts = tasks.filter { $0.title == OrchestratorSettingsSync.title }.map(\.prompt).sorted()
+        guard prompts != seenSettings else { return }
+        seenSettings = prompts
+        syncSettings(env)
+    }
+
+    /// Your edit goes up a second after the last change, so typing in the prompt writes once.
+    private func settingsEdited() {
+        guard store.stamps.contains(where: { key, stamp in stamp.by == store.device && syncedStamps[key] != stamp }) else { return }
+        settingsPush?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.active, let env = self.machineId else { return }
+            self.syncSettings(env)
+        }
+        settingsPush = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
+    }
+
+    /// One sync at a time, so writes land in order.
+    private func syncSettings(_ env: String) {
+        let previous = settingsChain
+        settingsChain = Task { [weak self] in
+            await previous?.value
+            await self?.pushSettings(env)
+        }
+    }
+
+    /// Merges the machine's settings documents with this Mac's, then writes the result back when it differs.
+    private func pushSettings(_ env: String) async {
+        guard active, let session = environments.session(env),
+              let json = try? await session.supervisor.request("scheduledTasks.list", payload: .object([:])), active else { return }
+        // Two devices may each have made one; every side keeps the smallest id and deletes the rest.
+        let found = ScheduledTask.list(json).filter { $0.title == OrchestratorSettingsSync.title }.sorted { $0.id < $1.id }
+        let merge = OrchestratorSettingsSync.merge(config: config, stamps: store.stamps, documents: found.compactMap { .parse($0.prompt) },
+                                                   machine: env, home: machineId)
+        syncedStamps = merge.stamps
+        store.applyMerged(merge)
+        guard let doc = merge.write else { return }
+        var input: [String: JSONValue]
+        if let task = found.first {
+            input = ["id": .string(task.id), "projectId": .string(task.projectId), "workspaceStrategy": task.workspaceStrategy,
+                     "modelSelection": task.modelSelection, "runtimeMode": .string(task.runtimeMode), "interactionMode": .string(task.interactionMode)]
+        } else {
+            let projects = shell(env)?.projects ?? []
+            guard let project = projects.first(where: { $0.id.rawValue == config.homeProjectId }) ?? projects.first,
+                  let selection = ownSelection(env) else { return }
+            input = ["projectId": .string(project.id.rawValue), "workspaceStrategy": .object(["type": .string("root")]),
+                     "modelSelection": ThreadSession.encode(selection), "runtimeMode": .string("approval-required"),
+                     "interactionMode": .string("default")]
+        }
+        // Always off, so it never runs; the interval only has to be one T3 accepts.
+        input["title"] = .string(OrchestratorSettingsSync.title)
+        input["prompt"] = .string(doc.prompt)
+        input["enabled"] = .bool(false)
+        input["schedule"] = .object(["type": .string("interval"), "everyMs": .number(86_400_000)])
+        input["creationSource"] = .string("web")
+        _ = try? await session.supervisor.request("scheduledTasks.upsert", payload: .object(input))
+        for extra in found.dropFirst() {
+            _ = try? await session.supervisor.request("scheduledTasks.delete", payload: .object(["id": .string(extra.id)]))
+        }
     }
 
     // MARK: The "while closed" schedule
