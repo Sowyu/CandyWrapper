@@ -144,6 +144,57 @@ import Testing
         #expect(!OrchestratorHandoff.turnEnded(wasRunning: false, wasRun: RunId("a"), running: false, run: RunId("a")))
     }
 
+    func check(_ id: String, thread: String = "orch", minutes: Double = 30, enabled: Bool = false, updated: String? = nil,
+               prompt: String = OrchestratorBrief.scheduledCheckPrompt) -> ScheduledTask {
+        ScheduledTask(id: id, title: "Conductor check", prompt: prompt, enabled: enabled, schedule: .interval(everyMs: minutes * 60_000),
+                      projectId: "p", threadId: thread, updatedAt: updated)
+    }
+
+    /// miniko on 2026-10-24: six check tasks on one Orchestrator thread, the user's at 60 minutes and five extras that
+    /// clients made after losing their own id. Every client now picks the same one, the smallest id, and deletes the rest.
+    @Test func everyClientUsesTheSameCheckTaskAndDropsTheRest() {
+        let tasks = [check("scheduled-task:f538bf49"), check("scheduled-task:2bcc7c0d", minutes: 60), check("scheduled-task:8a16a8d2"),
+                     check("scheduled-task:8afd9f14"), check("scheduled-task:993eb57e"), check("scheduled-task:55ec6126", enabled: true),
+                     check("scheduled-task:000other", thread: "other"),
+                     ScheduledTask(id: "scheduled-task:00settings", title: OrchestratorSettingsSync.title, prompt: "{}", enabled: false,
+                                   schedule: .interval(everyMs: 86_400_000), projectId: "p"),
+                     check("scheduled-task:0000mine", prompt: "My own reminder")]
+        #expect(OrchestratorCheckTask.canonical(tasks, thread: "orch")?.id == "scheduled-task:2bcc7c0d")
+        #expect(OrchestratorCheckTask.duplicates(tasks, thread: "orch").map(\.id).sorted()
+                == ["scheduled-task:55ec6126", "scheduled-task:8a16a8d2", "scheduled-task:8afd9f14", "scheduled-task:993eb57e", "scheduled-task:f538bf49"])
+        // Whatever order the list comes in.
+        #expect(OrchestratorCheckTask.canonical(tasks.reversed(), thread: "orch")?.id == "scheduled-task:2bcc7c0d")
+        #expect(OrchestratorCheckTask.canonical([], thread: "orch") == nil)
+        #expect(OrchestratorCheckTask.duplicates([check("scheduled-task:only")], thread: "orch").isEmpty)
+        // With the helper running nothing stays on: it deletes the extras, and an enabled canonical task reads as
+        // someone else's write, so it turns that off too.
+        let on = tasks.map { t -> ScheduledTask in var c = t; c.enabled = true; c.updatedAt = "2026-10-24T09:00:00.000Z"; return c }
+        var helper = OrchestratorHandoff()
+        helper.wrote(updatedAt: "2026-10-24T08:00:00.000Z")
+        #expect(helper.verdict(task: OrchestratorCheckTask.canonical(on, thread: "orch")) == .resync)
+        #expect(OrchestratorCheckTask.duplicates(on, thread: "orch").count == 5)
+        // Two clients that create at once make the same task.
+        #expect(OrchestratorCheckTask.commandId(thread: "orch") == OrchestratorCheckTask.commandId(thread: "orch"))
+        #expect(OrchestratorCheckTask.commandId(thread: "orch") != OrchestratorCheckTask.commandId(thread: "other"))
+    }
+
+    /// The interval the user set on the task in T3 stays: it becomes the "While closed" setting unless the user changed
+    /// that setting since.
+    @Test func theUsersIntervalOnTheTaskStays() {
+        let set = check("scheduled-task:2bcc7c0d", minutes: 60, updated: "2026-10-24T08:00:00.000Z")
+        let edited = T3Timestamp("2026-10-24T08:00:00.000Z").epochMs!
+        // The setting was never changed in CandyWrapper: the task's 60 minutes win.
+        #expect(OrchestratorCheckTask.intervalSetOnTask(set, settingMinutes: 30, settingChangedAt: nil) == 60)
+        // Changed before the task was edited: the task wins. Changed after: the setting does.
+        #expect(OrchestratorCheckTask.intervalSetOnTask(set, settingMinutes: 30, settingChangedAt: edited - 60_000) == 60)
+        #expect(OrchestratorCheckTask.intervalSetOnTask(set, settingMinutes: 15, settingChangedAt: edited + 60_000) == nil)
+        // Already the same, or not an interval task: nothing to take.
+        #expect(OrchestratorCheckTask.intervalSetOnTask(set, settingMinutes: 60, settingChangedAt: nil) == nil)
+        let fixed = ScheduledTask(id: "x", title: "t", prompt: OrchestratorBrief.scheduledCheckPrompt, schedule: .fixedTime(timeOfDay: "09:00", weekdays: nil),
+                                  projectId: "p", threadId: "orch")
+        #expect(OrchestratorCheckTask.intervalSetOnTask(fixed, settingMinutes: 30, settingChangedAt: nil) == nil)
+    }
+
     /// The task's stamp survives decoding from the server's list.
     @Test func scheduledTasksKeepTheirStamp() throws {
         let json = try JSONValue(parsing: Data(#"{"tasks":[{"id":"check","title":"t","prompt":"p","enabled":false,"schedule":{"type":"interval","everyMs":60000},"projectId":"p","updatedAt":"2026-10-24T10:00:05.000Z"}]}"#.utf8))

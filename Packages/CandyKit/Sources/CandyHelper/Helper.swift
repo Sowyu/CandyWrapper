@@ -22,6 +22,8 @@ final class Helper {
     private var tasks: [ScheduledTask] = []
     private var handoff = OrchestratorHandoff()
     private var taking = false
+    /// Duplicate check tasks already asked to go, so each list push doesn't ask again.
+    private var deleting: Set<String> = []
     private var reportedNoTask = false
     private var tasksReceived = false
     /// From the "CandyWrapper Orchestrator settings" task the clients share (docs/orchestrator.md, "Settings on every
@@ -210,7 +212,28 @@ final class Helper {
             }
         }
         guard let orchestrator else { return }
-        let task = tasks.first { $0.threadId == orchestrator && $0.prompt.hasPrefix("Scheduled check:") }
+        // The same task every client uses. While the helper runs no check task may be on: it relays all the time, so
+        // the thread's other check tasks go, and one that won't go is turned off. The canonical one it holds off below.
+        let task = OrchestratorCheckTask.canonical(tasks, thread: orchestrator)
+        let extras = OrchestratorCheckTask.duplicates(tasks, thread: orchestrator).filter { !deleting.contains($0.id) }
+        if !extras.isEmpty, let link = links[homeId] {
+            deleting.formUnion(extras.map(\.id))
+            Task {
+                var deleted = 0
+                for extra in extras {
+                    do {
+                        _ = try await link.request("scheduledTasks.delete", .object(["id": .string(extra.id)]))
+                        deleted += 1
+                    } catch {
+                        if extra.enabled { _ = try? await link.request("scheduledTasks.setEnabled", .object(["id": .string(extra.id), "enabled": .bool(false)])) }
+                        // The next list push tries again.
+                        deleting.remove(extra.id)
+                        log("couldn't delete a duplicate \"while closed\" task: \(MachineLink.describe(error))")
+                    }
+                }
+                if deleted > 0 { log("deleted \(deleted) duplicate \"while closed\" task\(deleted == 1 ? "" : "s")") }
+            }
+        }
         if task == nil, !reportedNoTask {
             reportedNoTask = true
             log("no \"while closed\" task for the Orchestrator among \(tasks.count) tasks yet; nothing to hold")
@@ -232,7 +255,7 @@ final class Helper {
     /// On a clean stop: the schedule takes over, as when the Mac quits. Left off when the user turned the check off.
     func handBack() async {
         guard let orchestrator, let link = links[homeId],
-              let task = tasks.first(where: { $0.threadId == orchestrator && $0.prompt.hasPrefix("Scheduled check:") }) else { return }
+              let task = OrchestratorCheckTask.canonical(tasks, thread: orchestrator) else { return }
         guard settings?.closedCheckMinutes != nil else { return }
         do {
             _ = try await link.request("scheduledTasks.setEnabled", .object(["id": .string(task.id), "enabled": .bool(true)]))
