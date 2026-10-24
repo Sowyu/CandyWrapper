@@ -93,12 +93,17 @@ public struct OrchestratorHandoff: Equatable, Sendable {
     /// The Orchestrator thread to adopt: the newest live, top-level thread whose brief came with the thread itself, so it's
     /// the first message.
     public static func adoptable(_ matches: [ThreadSearchMatch], threads: [ThreadShell]) -> ThreadShell? {
+        orchestratorThreads(matches, threads: threads).max { ($0.updatedAt.epochMs ?? 0) < ($1.updatedAt.epochMs ?? 0) }
+    }
+
+    /// Every live, top-level thread whose brief came with the thread itself; the helper picks among them too.
+    public static func orchestratorThreads(_ matches: [ThreadSearchMatch], threads: [ThreadShell]) -> [ThreadShell] {
         let live = Dictionary(threads.filter { $0.archivedAt == nil && $0.deletedAt == nil && $0.lineage.parentThreadId == nil }
             .map { ($0.id.rawValue, $0) }, uniquingKeysWith: { a, _ in a })
         return matches.compactMap { m -> ThreadShell? in
             guard isBrief(m), let t = live[m.threadId.rawValue], let sent = m.messageCreatedAt?.epochMs, let made = t.createdAt.epochMs,
                   abs(sent - made) <= 60_000 else { return nil }
             return t
-        }.max { ($0.updatedAt.epochMs ?? 0) < ($1.updatedAt.epochMs ?? 0) }
+        }
     }
 }

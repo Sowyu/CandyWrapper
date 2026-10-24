@@ -182,16 +182,14 @@ final class Helper {
         }
         // The shell as it is now: the one when the search started may have been an early, partial one.
         guard let snapshot = snapshots[homeId] else { return false }
-        let live = Dictionary(snapshot.threads.filter { $0.archivedAt == nil && $0.deletedAt == nil && $0.lineage.parentThreadId == nil }
-            .map { ($0.id.rawValue, $0) }, uniquingKeysWith: { a, _ in a })
-        // A thread a check task points at is the one the Mac uses; then the newest.
+        // The threads the Mac would adopt; among them the one a check task points at, then the newest.
         let checked = Set(tasks.filter { $0.prompt.hasPrefix("Scheduled check:") }.compactMap(\.threadId))
-        func rank(_ id: String) -> (Int, Int64) { (checked.contains(id) ? 1 : 0, live[id]?.updatedAt.epochMs ?? 0) }
-        let briefs = OrchestratorHandoff.briefThreads(matches)
-        guard let local = briefs.filter({ live[$0] != nil }).max(by: { rank($0) < rank($1) }) else { return false }
+        func rank(_ t: ThreadShell) -> (Int, Int64) { (checked.contains(t.id.rawValue) ? 1 : 0, t.updatedAt.epochMs ?? 0) }
+        guard let thread = OrchestratorHandoff.orchestratorThreads(matches, threads: snapshot.threads).max(by: { rank($0) < rank($1) }) else { return false }
+        let local = thread.id.rawValue
         orchestrator = local
         watched = nil
-        log("found the Orchestrator thread “\(live[local]?.title ?? local)” (\(local)) on \(label(homeId))")
+        log("found the Orchestrator thread “\(thread.title)” (\(local)) on \(label(homeId))")
         tasksChanged()
         return true
     }
