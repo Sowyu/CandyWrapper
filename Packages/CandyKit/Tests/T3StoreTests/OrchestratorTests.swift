@@ -263,6 +263,13 @@ private func event(_ id: String, _ kind: OrchestratorEvent.Kind = .finished) -> 
         #expect(brief.contains("never recap"))
         #expect(brief.contains("reply with one short line or nothing at all"))
         #expect(brief.contains("never write a note's contents into your reply"))
+        // The Grok Bot habits.
+        #expect(brief.contains("send a quick pickup line first, like \"On it.\""))
+        #expect(brief.contains("lead with the result in a one-line summary, and nothing else"))
+        #expect(brief.contains("stuck on something only the user can do, say just that one thing"))
+        #expect(brief.contains("as quick options to tap, not as questions in text"))
+        #expect(brief.contains("Write normal sentences with proper capitals. No slang."))
+        #expect(brief.contains("give a straight opinion on what you would do instead of listing options"))
         for old in ["One line per thread", "using the digest format", "Lead with what needs them, then what's new"] {
             #expect(!brief.contains(old), "old reply rule left in: \(old)")
         }
