@@ -22,25 +22,39 @@ struct SpacePlanningPerfBenchmarks {
         var before = malloc_statistics_t()
         malloc_zone_statistics(nil, &before)
         let start = clock.now
-        let index = SearchIndex(pages: pages, blocks: blocks)
+        var index = SearchIndex(pages: pages, blocks: blocks)
         let build = milliseconds(start.duration(to: clock.now))
         var after = malloc_statistics_t()
         malloc_zone_statistics(nil, &after)
-        emit("space_search_build", samples: [build], details: ["pages": pages.count, "blocks": blocks.count,
-                                                               "index_heap_bytes": Int(after.size_in_use) - Int(before.size_in_use)])
+        let buildHeapGrowth = Int(after.size_in_use) - Int(before.size_in_use)
+        let sampleCount = Int(ProcessInfo.processInfo.environment["CW_SPACE_BENCH_SAMPLES"] ?? "21") ?? 21
         for (label, query) in [("sparse", "10000"), ("missing", "absent"), ("common", "cafe plan"), ("titles", "project")] {
             _ = index.search(query)
             var samples: [Double] = []
-            for _ in 0..<21 {
+            for _ in 0..<max(1, sampleCount) {
                 let start = clock.now
                 let result = index.search(query)
                 samples.append(milliseconds(start.duration(to: clock.now)))
                 if label == "missing" { #expect(result.content.isEmpty && result.titles.isEmpty) }
                 if label == "common" { #expect(result.content.count == 50) }
-                if label == "titles" { #expect(result.titles.count == 22_000) }
+                if label == "titles" {
+                    #expect(result.titles.count == 50)
+                    #expect(result.titlePageIDs.count == 22_000)
+                    #expect(result.treePageIDs.count == 22_000)
+                }
             }
             emit("space_search_" + label, samples: samples, details: [:])
         }
+        var retainedHeap = 0
+        withExtendedLifetime((pages, blocks)) {
+            var live = malloc_statistics_t(), cleared = malloc_statistics_t()
+            malloc_zone_statistics(nil, &live)
+            index.removeAll()
+            malloc_zone_statistics(nil, &cleared)
+            retainedHeap = Int(live.size_in_use) - Int(cleared.size_in_use)
+        }
+        emit("space_search_build", samples: [build], details: ["pages": pages.count, "blocks": blocks.count,
+             "index_heap_bytes": retainedHeap, "build_heap_growth_bytes": buildHeapGrowth])
     }
 
     private func milliseconds(_ duration: Duration) -> Double {

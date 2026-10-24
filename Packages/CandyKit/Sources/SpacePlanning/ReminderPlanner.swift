@@ -32,7 +32,7 @@ public enum ReminderPlanner {
         let hierarchy = PageHierarchy(pages)
         var planned: [PlannedReminder] = []
         for (pageID, page) in pages {
-            guard page.props[FieldID.done] != .checkbox(true), hierarchy.path(to: pageID) != nil else { continue }
+            guard page.props[FieldID.done] != .checkbox(true), hierarchy.visibleIDs.contains(pageID) else { continue }
             for (fieldID, property) in page.props {
                 guard case .date(let value) = property, let reminder = value.remind else { continue }
                 try value.validate()
