@@ -59,7 +59,7 @@ public actor ThreadCache {
 
     /// `~/Library/Application Support/CandyWrapper/ThreadCache`.
     public static var defaultDirectory: URL {
-        URL.applicationSupportDirectory.appending(path: "CandyWrapper/ThreadCache", directoryHint: .isDirectory)
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appending(path: "CandyWrapper/ThreadCache", directoryHint: .isDirectory)
     }
 
     /// The app's cache: `CANDY_THREAD_CACHE` names another directory (perf runs), `off` turns it off.
@@ -92,6 +92,15 @@ public actor ThreadCache {
         String(id.map { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") ? $0 : "_" })
     }
 
+    /// LZ4 through NSData. The Linux helper never caches threads, so there it reads every file as a miss.
+    nonisolated static func lz4(_ data: Data, compress: Bool) -> Data? {
+        #if canImport(Darwin)
+        try? (compress ? (data as NSData).compressed(using: .lz4) : (data as NSData).decompressed(using: .lz4)) as Data
+        #else
+        nil
+        #endif
+    }
+
     // MARK: Reading
 
     /// The cached snapshot, decoded on the caller's thread; nil when absent, unreadable or from
@@ -99,7 +108,7 @@ public actor ThreadCache {
     public nonisolated func load(_ key: Key) -> ThreadDetailSnapshot? {
         let url = fileURL(key)
         guard let mapped = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
-        guard let data = try? (mapped as NSData).decompressed(using: .lz4) as Data,
+        guard let data = Self.lz4(mapped, compress: false),
               let stored = try? JSONValue(parsing: data).decode(as: Stored.self),
               stored.version == Self.currentVersion, stored.environmentId == key.environmentId, stored.threadId == key.threadId
         else {
@@ -172,7 +181,7 @@ public actor ThreadCache {
         let local = Set(stored.projection.visibleTurnItems.lazy.filter { $0.isLocal || $0.sourceThreadId == threadId }.map(\.item.id))
         compact.projection.turnItems.removeAll { local.contains($0.id) }
         guard let json = try? JSONValueEncoder().encode(compact).utf8,
-              let data = try? (json as NSData).compressed(using: .lz4) as Data
+              let data = Self.lz4(json, compress: true)
         else { return }
         guard data.count <= maxEntryBytes else {
             try? FileManager.default.removeItem(at: url)

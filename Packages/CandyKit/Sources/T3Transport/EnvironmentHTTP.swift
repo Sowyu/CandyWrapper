@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import T3Protocol
 
 /// How this client names itself to the server (protocol.md 2.2). Attribution only.
@@ -7,12 +10,18 @@ public struct ClientIdentity: Sendable, Equatable {
     public var appVersion: String
     /// `direct`, `ssh` or `relay`.
     public var connectionMethod: String
+    /// `AuthClientMetadataDeviceType`: the app is `desktop`, the helper `bot`.
+    public var deviceType: String
+    /// `clientOs`: `macOS`, `Linux`, ...
+    public var os: String
 
-    public init(label: String = "CandyWrapper", appVersion: String, connectionMethod: String = "direct") {
+    public init(label: String = "CandyWrapper", appVersion: String, connectionMethod: String = "direct", deviceType: String = "desktop", os: String = "macOS") {
         self.label = label
         // The server drops values over 64 characters.
         self.appVersion = String(appVersion.prefix(64))
         self.connectionMethod = connectionMethod
+        self.deviceType = deviceType
+        self.os = os
     }
 }
 
@@ -76,7 +85,8 @@ public struct EnvironmentHTTP: Sendable {
         guard descriptor.isCompatible else {
             throw EnvironmentHTTPError.invalidResponse("orchestration protocol \(descriptor.protocolVersion) is not supported")
         }
-        let token = try await exchangeToken(TokenExchangeRequest(subjectToken: code, clientLabel: identity.label))
+        let token = try await exchangeToken(TokenExchangeRequest(subjectToken: code, clientLabel: identity.label,
+                                                                 clientDeviceType: identity.deviceType, clientOS: identity.os))
         return (descriptor, token)
     }
 
@@ -133,6 +143,7 @@ public struct EnvironmentHTTP: Sendable {
         try await post("api/auth/clients/revoke-others", String?.none, token: token, as: RevokeOthersResult.self).revokedCount
     }
 
+    #if canImport(Darwin)
     /// GET of a signed asset URL from `assets.createUrl` (`/api/assets/<token>/<name>`, protocol.md 5).
     /// The signed path is the credential. Bodies over `maxBytes` are refused, like T3's `readBounded`.
     public func asset(_ relativeURL: String, token: String?, maxBytes: Int) async throws -> Data {
@@ -165,6 +176,7 @@ public struct EnvironmentHTTP: Sendable {
             throw EnvironmentHTTPError.network(error.localizedDescription)
         }
     }
+    #endif
 
     /// `ws(s)://host/ws?wsTicket=...&client...&orchestrationProtocol=2`, in the official order
     /// (authorization/remote.ts:40-84, compatibility.ts:38-42).
@@ -176,8 +188,8 @@ public struct EnvironmentHTTP: Sendable {
             URLQueryItem(name: "wsTicket", value: ticket),
             URLQueryItem(name: "clientSurface", value: "desktop"),
             URLQueryItem(name: "clientAppVersion", value: identity.appVersion),
-            URLQueryItem(name: "clientDeviceType", value: "desktop"),
-            URLQueryItem(name: "clientOs", value: "macOS"),
+            URLQueryItem(name: "clientDeviceType", value: identity.deviceType),
+            URLQueryItem(name: "clientOs", value: identity.os),
             URLQueryItem(name: "connectionMethod", value: identity.connectionMethod),
             URLQueryItem(name: "orchestrationProtocol", value: String(T3Protocol.orchestrationProtocolVersion)),
         ]

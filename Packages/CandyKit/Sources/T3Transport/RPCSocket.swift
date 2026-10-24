@@ -1,4 +1,10 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
+/// For a host that stopped answering on an open connection (client-runtime/src/errors/network.ts:4-5).
+public let unresponsiveHostHint = "It may be overloaded, asleep, or off the network."
 
 /// The text-frame socket RPCConnection runs on. URLSessionRPCSocket in the app, a fake in tests.
 public protocol RPCSocket: Sendable {
@@ -153,7 +159,7 @@ public final class URLSessionRPCSocket: RPCSocket {
 }
 
 /// Runs `body`, throwing `error` if it takes longer than `timeout`. The body is cancelled on timeout.
-func withTimeout<T: Sendable>(_ timeout: Duration, error: Error = CancellationError(),
+package func withTimeout<T: Sendable>(_ timeout: Duration, error: Error = CancellationError(),
                               _ body: @escaping @Sendable () async throws -> T) async throws -> T {
     try await withThrowingTaskGroup(of: T.self) { group in
         group.addTask { try await body() }

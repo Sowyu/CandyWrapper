@@ -2,6 +2,7 @@ import Foundation
 import Testing
 import T3Protocol
 @testable import T3Client
+@testable import T3Transport
 
 /// Pairing input, route order and the Connections status words, against T3's source.
 struct ConnectionsTests {
