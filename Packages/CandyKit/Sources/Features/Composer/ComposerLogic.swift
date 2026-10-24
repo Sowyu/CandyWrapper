@@ -177,16 +177,10 @@ public enum ComposerLogic {
                                            messageId: String, text: String, context: JSONValue? = nil,
                                            attachments: [JSONValue] = [],
                                            workspaceStrategy: JSONValue = .object(["type": .string("root")])) -> JSONValue {
-        var message: [String: JSONValue] = ["messageId": .string(messageId), "text": .string(text), "attachments": .array(attachments)]
-        // Inline chips' records ride only when there are any (commands.ts:680-684).
-        if let context { message["context"] = context }
-        return .object([
-            "commandId": .string(commandId), "creationSource": .string("web"), "threadId": .string(threadId),
-            "projectId": .string(projectId), "title": .string(title), "generateTitle": .bool(true),
-            "modelSelection": modelSelection, "runtimeMode": .string(runtimeMode),
-            "interactionMode": .string(interactionMode), "workspaceStrategy": workspaceStrategy,
-            "initialMessage": .object(message),
-        ])
+        OrchestrationCommands.launchThread(commandId: commandId, threadId: threadId, projectId: projectId, title: title,
+                                           modelSelection: modelSelection, runtimeMode: runtimeMode, interactionMode: interactionMode,
+                                           messageId: messageId, text: text, context: context, attachments: attachments,
+                                           workspaceStrategy: workspaceStrategy)
     }
 
     // MARK: Run state
@@ -310,9 +304,9 @@ public enum ComposerLogic {
     /// an intent, the rest start immediately and name the mode.
     public static func dispatch(_ mode: SendMode) -> (mode: JSONValue, deliveryIntent: String?) {
         switch mode {
-        case .queue: return (.object(["type": .string("queue_after_active")]), nil)
-        case .auto: return (.object(["type": .string("start_immediately")]), "auto")
-        case .steer: return (.object(["type": .string("start_immediately")]), "steer")
+        case .queue: OrchestrationCommands.dispatchMode(queue: true)
+        case .auto: OrchestrationCommands.dispatchMode(queue: false)
+        case .steer: OrchestrationCommands.dispatchMode(queue: false, intent: "steer")
         }
     }
 

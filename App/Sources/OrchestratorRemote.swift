@@ -85,19 +85,6 @@ final class OrchestratorRemote {
             update: { OrchestratorStore.shared.update($0) },
             rows: { [weak self] in self?.rows($0) ?? [] },
             runtimeMode: { [weak self] in self?.threads.composer.config($0)?.settings.defaultRuntimeMode.rawValue ?? "full-access" },
-            message: { id, text, selection, queue in
-                ComposerController.standaloneCommand(threadId: ThreadId(id), messageId: MessageId(UUID().uuidString.lowercased()),
-                                                     text: text, selection: selection, queue: queue)
-            },
-            launch: { id, project, title, text, selection, runtime, workspace in
-                var payload = ComposerLogic.launchThreadPayload(commandId: UUID().uuidString.lowercased(), threadId: id, projectId: project, title: title,
-                                                                modelSelection: ThreadSession.encode(selection), runtimeMode: runtime,
-                                                                interactionMode: "default", messageId: UUID().uuidString.lowercased(), text: text,
-                                                                workspaceStrategy: workspace)
-                // The Orchestrator names its workers; T3 would retitle them from the prompt.
-                if case .object(var o) = payload { o["generateTitle"] = .bool(false); payload = .object(o) }
-                return payload
-            },
             orchestrator: { [weak self] in self?.orchestrator() })
     }
 

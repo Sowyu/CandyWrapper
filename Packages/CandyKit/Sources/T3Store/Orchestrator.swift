@@ -364,6 +364,13 @@ public enum OrchestratorBrief {
     Scheduled check: CandyWrapper is closed. List every thread on this machine with t3_thread_list (each project), read only what changed since your last look, update your plan, and take the next step where one is due. Follow the Hands off and ask-first rules from your brief.
     """
 
+    /// The task's prompt: the check, then the settings the relay checks, which the helper and the check itself read
+    /// (docs/orchestrator-helper.md, section 5). A brief reaches the thread only with your next message; the task is
+    /// rewritten as soon as a setting changes and costs no turn.
+    public static func scheduledCheck(settings: OrchestratorRelaySettings) -> String {
+        scheduledCheckPrompt + "\n\nCandyWrapper's current Hands off list and limits, which win over your brief's:\n\n" + settings.block
+    }
+
     /// The spec's default prompt (docs/orchestrator.md, "Default prompt").
     public static let defaultPrompt = """
     # Who you are
@@ -582,5 +589,52 @@ public struct OrchestratorEventBatch: Sendable {
     public static func isEventMessage(_ text: String) -> Bool {
         let lines = text.split(separator: "\n", omittingEmptySubsequences: true)
         return !lines.isEmpty && lines.allSatisfy { $0.hasPrefix("Event: ") }
+    }
+}
+
+// MARK: - Relay settings
+
+/// What a relay checks before it acts: the worker limit, the ask-first window, Hands off and the Models rows. The Mac
+/// writes them into the "while closed" task as a fenced `orchestrator-config` block; the helper reads them there.
+public struct OrchestratorRelaySettings: Codable, Equatable, Sendable {
+    public static let fence = "orchestrator-config"
+
+    public var crewLimit: Int
+    public var askFirstMinutes: Int
+    /// Scoped thread ids.
+    public var handsOff: [String]
+    /// Every row; each relay keeps the ones a machine's catalog offers.
+    public var models: [OrchestratorModelRow]
+    public var closedCheckMinutes: Int?
+
+    public init(_ config: OrchestratorConfig) {
+        crewLimit = config.crewLimit
+        askFirstMinutes = config.askFirstMinutes
+        handsOff = config.handsOff.sorted()
+        models = config.models
+        closedCheckMinutes = config.closedCheckMinutes
+    }
+
+    /// Onto a config: the relay's own memory (`relayedAt`, `relayWorkers`) stays.
+    public func apply(to config: inout OrchestratorConfig) {
+        config.crewLimit = crewLimit
+        config.askFirstMinutes = askFirstMinutes
+        config.handsOff = Set(handsOff)
+        config.models = models
+        config.closedCheckMinutes = closedCheckMinutes
+    }
+
+    public var block: String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        let json = (try? encoder.encode(self)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
+        return "```\(Self.fence)\n\(json)\n```"
+    }
+
+    /// The last block in `text`, nil when there is none or it doesn't decode.
+    public static func parse(_ text: String) -> Self? {
+        guard let start = text.range(of: "```\(fence)\n", options: .backwards),
+              let end = text.range(of: "\n```", range: start.upperBound..<text.endIndex) else { return nil }
+        return try? JSONDecoder().decode(Self.self, from: Data(text[start.upperBound..<end.lowerBound].utf8))
     }
 }
