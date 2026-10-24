@@ -23,6 +23,7 @@ usage: candywrapper-helper <command>
   print-install --version <v> --base <url> --sums <SHA256SUMS> --home <id> [--test-home <dir>]
   print-uninstall [--test-home <dir>]
                               the line a CandyWrapper client types into a T3 terminal (HelperInstall), for manual installs
+  find-servers                every T3 server on this machine: its loopback URL, label and machine id
   check-ws <wss-url>          a WebSocket and TLS check that needs no T3
   check-descriptor <url>      a server's public descriptor, no auth
   version
@@ -231,6 +232,9 @@ case "print-install":
 
 case "print-uninstall":
     print(HelperInstall.uninstallCommand(testHome: option("--test-home")), terminator: "")
+
+case "find-servers":
+    for s in await Loopback.servers() { print("\(s.url.absoluteString)\t\(s.descriptor.label)\t\(s.descriptor.environmentId)") }
 
 case "check-ws":
     guard args.count == 2, let url = URL(string: args[1]) else { fail(usage, code: 2) }

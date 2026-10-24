@@ -199,6 +199,23 @@ enum Loopback {
         }
     }
 
+    /// Every T3 server listening on this machine, for `find-servers`: its loopback URL and descriptor.
+    static func servers() async -> [(url: URL, descriptor: EnvironmentDescriptor)] {
+        await withTaskGroup(of: (URL, EnvironmentDescriptor)?.self) { group in
+            for port in listening().prefix(200) {
+                group.addTask {
+                    let url = URL(string: "http://127.0.0.1:\(port)")!
+                    var http = EnvironmentHTTP(baseURL: url)
+                    http.timeout = 1
+                    return (try? await http.descriptor()).map { (url, $0) }
+                }
+            }
+            var found: [(url: URL, descriptor: EnvironmentDescriptor)] = []
+            for await hit in group { if let hit { found.append((hit.0, hit.1)) } }
+            return found.sorted { $0.url.absoluteString < $1.url.absoluteString }
+        }
+    }
+
     static func listening() -> [Int] {
         #if os(Linux)
         // /proc/net/tcp{,6}: the local address is hex `ip:port`, and state 0A is LISTEN. No tool needed.
