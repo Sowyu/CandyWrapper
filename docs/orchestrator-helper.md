@@ -1,4 +1,6 @@
-# CandyWrapper Helper (design, not built)
+# CandyWrapper Helper
+
+Built on 2026-10-24 to this design, with the changes noted where they happened. Checked against 3473 and 3566 sandboxes on this Mac and on aniko (Debian 13, x86_64). The Android app needs no change to coexist with it (section 5); it can reuse `HelperInstall` for its own button later.
 
 The helper is a small background program that does the Orchestrator's relay job all the time. It carries `orchestrator-call` blocks and cross-machine events between the Orchestrator thread and every connected machine, exactly as the Mac app does while it's open (docs/orchestrator.md, "Every machine"). Any CandyWrapper client installs, updates and removes it with one button.
 
