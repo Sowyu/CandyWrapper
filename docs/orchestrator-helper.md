@@ -51,13 +51,13 @@ The helper goes on the Orchestrator's machine, the one the Orchestrator thread r
 
 The install, as the client runs it:
 
-1. The client opens a terminal on that machine with `terminal.open`, its own terminal id and the Orchestrator thread as the thread. The user never sees it.
-2. It writes one command line: a short script that reads `uname -s -m`, downloads the matching helper from the CandyWrapper GitHub release with `curl` or `wget`, and checks its SHA-256 with `shasum -a 256` or `sha256sum`.
-3. The expected hashes are compiled into the client, so a swapped release file fails the check. On macOS the script also checks the code signature and Team ID.
-4. The script unpacks it to `~/.local/share/candywrapper-helper/<version>/` and points a `current` link at it.
-5. The script also records the T3 server's loopback port: the terminal's shell is a child of the server, so it reads the listening port of its parent process (`lsof` on macOS, `ss` on Linux). The helper prefers that address for its own machine and falls back to the URL the client uses.
-6. The script installs the service (section 4) and starts the helper in pairing mode. Pairing is described in section 3.
-7. The script prints one sentinel line with the result. The client waits for it, then closes the terminal, which deletes its history file.
+1. The client mints one-time pairing codes for every machine (section 3), then opens a terminal on the Orchestrator's machine with `terminal.open`, its own terminal id and the Orchestrator thread as the thread. The user never sees it.
+2. It types one line, `HelperInstall.installCommand`: a `sh -c '…'` script, so zsh, bash and fish all run it, with a leading space to keep it out of history. The script reads `uname -s -m`, downloads the matching tarball from the release with `curl` or `wget` into `versions/<version>/`, and checks its SHA-256 with `sha256sum` or `shasum -a 256`.
+3. The expected hashes come with the client, so a swapped release file fails the check. That pins the exact binary, which makes a separate signature check unnecessary.
+4. The script runs the new binary's `install`. It turns echo off, prints `CWH-READY`, and the client then types the pairing lines.
+5. `install` finds the T3 server's loopback port by asking every port the user listens on for its public descriptor until one answers as the home machine (`lsof` on macOS, `/proc/net/tcp` on Linux). T3 strips its own variables from terminals (`Manager.ts:1291-1300`), so the port can't come from the environment. The helper prefers that address for its own machine and falls back to the URL the client uses.
+6. It signs in to each machine, points `current` at the new version, writes the service (section 4) and restarts it. It then waits up to 30 seconds for the helper to report its own machine connected in `status.json`, and switches back to the previous version if it doesn't.
+7. It prints `CWH-RESULT ok …` or `CWH-RESULT failed <reason>`, plus `CWH-WARNING …` when lingering is off. The script builds its own markers from pieces, so the terminal echoing the typed line never reads as a result. The client then closes the terminal with `deleteHistory`.
 
 The same run serves install, update and renewal, so there is one code path to test. Settings shows each step's result in plain words, like "Downloading", "Signing in to 3 machines" or "Running".
 
