@@ -20,6 +20,9 @@ usage: candywrapper-helper <command>
   handback                    hand the "while closed" task back to the schedule
   status                      the machines this helper reaches, without secrets
   forget                      delete every token and the machine list
+  print-install --version <v> --base <url> --sums <SHA256SUMS> --home <id> [--test-home <dir>]
+  print-uninstall [--test-home <dir>]
+                              the line a CandyWrapper client types into a T3 terminal (HelperInstall), for manual installs
   check-ws <wss-url>          a WebSocket and TLS check that needs no T3
   check-descriptor <url>      a server's public descriptor, no auth
   version
@@ -186,6 +189,8 @@ case "uninstall":
     for folder in Set([HelperStore.home.path, HelperFiles.data.path]) { try? FileManager.default.removeItem(atPath: folder) }
     #if !os(Linux)
     try? FileManager.default.removeItem(at: HelperService.logFile)
+    // Only when empty: a real install and a test home share the folder.
+    rmdir(HelperService.logFile.deletingLastPathComponent().path)
     #endif
     Sentinel.ok("uninstalled")
 
@@ -205,6 +210,22 @@ case "forget":
     try? FileManager.default.removeItem(at: HelperStore.home.appending(path: "machines.json"))
     try? FileManager.default.removeItem(at: HelperStore.home.appending(path: "memory.json"))
     print("forgot every machine")
+
+case "print-install":
+    guard let version = option("--version"), let base = option("--base").flatMap(URL.init(string:)), let sumsFile = option("--sums"),
+          let homeId = option("--home"), let text = try? String(contentsOfFile: sumsFile, encoding: .utf8) else { fail(usage, code: 2) }
+    // SHA256SUMS lines: "<hex>  candywrapper-helper-<version>-<platform>.tar.gz".
+    var sums: [String: String] = [:]
+    for line in text.split(separator: "\n") {
+        let f = line.split(separator: " ", omittingEmptySubsequences: true)
+        guard f.count == 2 else { continue }
+        let name = f[1].replacingOccurrences(of: "candywrapper-helper-\(version)-", with: "").replacingOccurrences(of: ".tar.gz", with: "")
+        sums[name] = String(f[0])
+    }
+    print(HelperInstall.installCommand(.init(version: version, baseURL: base, sums: sums), homeId: homeId, testHome: option("--test-home")), terminator: "")
+
+case "print-uninstall":
+    print(HelperInstall.uninstallCommand(testHome: option("--test-home")), terminator: "")
 
 case "check-ws":
     guard args.count == 2, let url = URL(string: args[1]) else { fail(usage, code: 2) }
