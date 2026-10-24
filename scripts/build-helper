@@ -33,10 +33,13 @@ swift build -c release --package-path $pkg --scratch-path $scratch/mac --product
 mac=$scratch/mac/out/Products/Release/candywrapper-helper
 strip -x -S $mac
 if [[ $sign == --sign ]]; then
-  KC=$HOME/Library/Keychains/candywrapper-release.keychain-db
-  pw=$(security find-generic-password -s dev.candywrapper.release-keychain -w)
-  print -r -- "unlock-keychain -p $pw $KC" | security -i >/dev/null
-  trap 'security lock-keychain $KC 2>/dev/null' EXIT
+  # scripts/release unlocks the keychain itself and sets CANDY_KEYCHAIN_READY, so this doesn't lock it under the release.
+  if [[ -z ${CANDY_KEYCHAIN_READY:-} ]]; then
+    KC=$HOME/Library/Keychains/candywrapper-release.keychain-db
+    pw=$(security find-generic-password -s dev.candywrapper.release-keychain -w)
+    print -r -- "unlock-keychain -p $pw $KC" | security -i >/dev/null
+    trap 'security lock-keychain $KC 2>/dev/null' EXIT
+  fi
   codesign --force --sign "Apple Development" --options runtime --timestamp=none --identifier com.sowyu.candywrapper.helper $mac
   [[ $(codesign -dv $mac 2>&1) == *$'\n'"TeamIdentifier=8Q677AYRU7"$'\n'* ]] || { print -u2 "the helper is not signed by team 8Q677AYRU7"; exit 1 }
 else

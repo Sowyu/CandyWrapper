@@ -126,7 +126,9 @@ public final class OrchestratorSettingsView: SettingsPageBase {
             primary?.isEnabled = state.canRun
             remove?.isHidden = !state.installed
             remove?.isEnabled = state.canRun
+            // The row sizes its control from the intrinsic width, so it lays out again when Remove comes or goes.
             buttons?.invalidateIntrinsicContentSize()
+            r?.needsLayout = true
         }
         return r
     }
