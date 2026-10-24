@@ -101,6 +101,29 @@ import Testing
         #expect(!shown.contains { if case .bubble(_, _, let text, _, _) = $0 { text == "Nothing new." || text == "—" } else { false } })
     }
 
+    /// T3 delivers a delegated task's result into the thread as a user message. It's activity, never your bubble.
+    @Test func delegatedTaskDeliveriesAreActivityNotYourMessages() throws {
+        // The user's screenshot: the bare delivery, as T3 3473 writes it (Orchestrator.ts:614-633).
+        let delivered = message("m2", "user", "Delegated task node:delegated-task:command%3Amcp%3Af59f4d6c-948c-4cb0-b656-0bcae36f7f6d%3Adelegate-task%3Adc63307c [completed]:\nYour message only says \"placeholder\", so I don't have a task to work on yet. What should I do?", minutes: 1)
+        // With a title and T3's own marker, failed.
+        var marked = message("m3", "user", "Delegated task t-9 (Fixer) [failed]:\nTests still fail.\n\nDelegated task t-10 (Docs) [completed]. Use task_status with taskId t-10 to read the result.", minutes: 2)
+        marked.delegatedCompletion = .object(["parentRunId": .string("run-1"), "generation": .number(1), "taskIds": .array([.string("t-9"), .string("t-10")])])
+        var question = message("m4", "user", "Delegated task t-11 asked a question and is still working. Read it with t3_pending_request_read.", minutes: 3)
+        question.notification = .object(["summary": .string("Delegated task \"Scout\" has a question")])
+        let messages = [message("m1", "user", "ok but it doesnt seem like their making anything rn whats going on", minutes: 0), delivered, marked, question,
+                        message("m5", "user", "Please read the Delegated task notes later", minutes: 4)]
+        func bubbles(_ items: [OrchestratorChatItem]) -> [String] {
+            items.compactMap { if case .bubble(_, let user, let text, _, _) = $0 { "\(user ? "me" : "bot"):\(text)" } else { nil } }
+        }
+        let hidden = OrchestratorChat.items(messages: messages, turnItems: [], running: false, now: start)
+        #expect(bubbles(hidden) == ["me:ok but it doesnt seem like their making anything rn whats going on", "me:Please read the Delegated task notes later"])
+        #expect(!hidden.contains { if case .line = $0 { true } else { false } })
+        let shown = OrchestratorChat.items(messages: messages, turnItems: [], running: false, activity: true, now: start)
+        let lines = shown.compactMap { if case .line(_, let text, _) = $0 { text } else { nil } }
+        #expect(lines == ["A delegated task finished", "“Fixer” failed", "“Docs” finished", "A delegated task has a question"])
+        #expect(bubbles(shown) == bubbles(hidden))
+    }
+
     /// Images ride on the user-message turn item; a message of images only hides T3's stand-in text.
     @Test func sentImagesShowBeforeTheBubble() throws {
         let item = try JSONDecoder().decode(TurnItem.self, from: JSONSerialization.data(withJSONObject: [
