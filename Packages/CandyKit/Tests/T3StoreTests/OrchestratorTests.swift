@@ -252,35 +252,36 @@ private func event(_ id: String, _ kind: OrchestratorEvent.Kind = .finished) -> 
                                                       notebook: c.notebook, handsOff: [], askFirstMinutes: 10))
     }
 
-    /// The default brief talks like a short, casual chat: the rules once, and none of the old report-style ones.
+    /// The default brief keeps it quiet: the rules once, and none of the chatty ones before them.
     @Test func theDefaultBriefCarriesTheVoiceOnce() {
         let brief = render(OrchestratorBrief.defaultPrompt)
         #expect(brief.components(separatedBy: "# Talking to the user").count == 2)
-        #expect(brief.contains("Reply in 1 to 3 short sentences, in plain, casual words"))
-        #expect(brief.contains("No lists, headers, bold, tables or code blocks unless the user asks"))
-        #expect(brief.contains("Leave out commit hashes, file names, test counts, run ids and tool names"))
-        #expect(brief.contains("When something needs the user, say that first, in one line."))
-        #expect(brief.contains("never recap"))
-        #expect(brief.contains("reply with one short line or nothing at all"))
+        #expect(brief.contains("Stay quiet while work runs. No message for routine steps, retries, relays, reads, sends or pickup lines."))
+        #expect(brief.contains("Speak only when something the user cares about is done, or when something needs them."))
+        #expect(brief.contains("Then use 1 or 2 short sentences, the result first, in normal sentences."))
+        #expect(brief.contains("No technical details, versions or ids unless asked. No lists or formatting unless asked. Never recap."))
+        #expect(brief.contains("An event with nothing new for the user gets no reply text at all, just the call or note."))
+        #expect(brief.contains("Choices go through the question tool as tap options."))
         #expect(brief.contains("never write a note's contents into your reply"))
-        // The Grok Bot habits.
-        #expect(brief.contains("send a quick pickup line first, like \"On it.\""))
-        #expect(brief.contains("lead with the result in a one-line summary, and nothing else"))
-        #expect(brief.contains("stuck on something only the user can do, say just that one thing"))
-        #expect(brief.contains("as quick options to tap, not as questions in text"))
-        #expect(brief.contains("Write normal sentences with proper capitals. No slang."))
-        #expect(brief.contains("give a straight opinion on what you would do instead of listing options"))
-        for old in ["One line per thread", "using the digest format", "Lead with what needs them, then what's new"] {
-            #expect(!brief.contains(old), "old reply rule left in: \(old)")
+        for old in ["On it.", "pickup line first", "like a friend texting", "Reply in 1 to 3", "one short line or nothing at all", "straight opinion"] {
+            #expect(!brief.contains(old), "\(old)")
         }
     }
 
-    /// An edited prompt, or an older default saved before this, gets the rules last, where they win.
     @Test func editedAndOlderPromptsGetTheVoiceLast() {
         let edited = render("You are {{name}}. Keep it short.")
         #expect(edited.hasSuffix(OrchestratorBrief.voiceSection))
         let older = render("# Talking to the user\n\n- One line per thread: name, state, next step.")
         #expect(older.hasSuffix(OrchestratorBrief.voiceSection))
         #expect(older.contains("These rules beat any other advice in this brief about how to reply."))
+        // A saved prompt carries an older copy of the rules, here the one with the "On it." pickup line: it goes,
+        // and what follows it stays.
+        let saved = render("# Who you are\n\nYou are {{name}}.\n\n# Talking to the user\n\n- When you take on a task, send a quick pickup line first, like \"On it.\", then do the work.\n\n# Limits\n\nAt most {{crewLimit}} workers.")
+        #expect(!older.contains("One line per thread"))
+        #expect(!saved.contains("On it."))
+        #expect(saved.components(separatedBy: "# Talking to the user").count == 2)
+        #expect(saved.contains("You are Ada."))
+        #expect(saved.contains("# Limits\n\nAt most 4 workers."))
+        #expect(saved.hasSuffix(OrchestratorBrief.voiceSection))
     }
 }
