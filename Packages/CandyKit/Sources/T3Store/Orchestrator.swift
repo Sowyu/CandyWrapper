@@ -238,10 +238,20 @@ public enum OrchestratorBrief {
 
         \(questionsSection)
         """
-        // Last, so the voice rules are the final word; the default prompt carries them already.
-        let voice = prompt.contains(voiceSection) ? "" : "\n\n" + voiceSection
-        return text.trimmingCharacters(in: .whitespacesAndNewlines) + "\n\n" + notes.joined(separator: "\n") + "\n" + app
-            + (i.machines.count > 1 ? "\n\n" + otherMachines(i) : "") + voice
+        // Last, so the voice rules are the final word. Any copy in the prompt goes, since saved prompts carry older rules.
+        return withoutVoice(text).trimmingCharacters(in: .whitespacesAndNewlines) + "\n\n" + notes.joined(separator: "\n") + "\n" + app
+            + (i.machines.count > 1 ? "\n\n" + otherMachines(i) : "") + "\n\n" + voiceSection
+    }
+
+    /// The prompt without its "# Talking to the user" sections, each up to the next top-level heading.
+    static func withoutVoice(_ prompt: String) -> String {
+        var kept: [Substring] = []
+        var skipping = false
+        for line in prompt.split(separator: "\n", omittingEmptySubsequences: false) {
+            if line.hasPrefix("# ") { skipping = line == "# Talking to the user" }
+            if !skipping { kept.append(line) }
+        }
+        return kept.joined(separator: "\n")
     }
 
     /// How to reach threads on machines other than its own (docs/orchestrator.md, "Every machine").
@@ -271,20 +281,14 @@ public enum OrchestratorBrief {
 
     These rules beat any other advice in this brief about how to reply.
 
-    - Reply in 1 to 3 short sentences, in plain, casual words, like a friend texting.
-    - No lists, headers, bold, tables or code blocks unless the user asks for them.
-    - Don't get technical unless the user asks. Leave out commit hashes, file names, test counts, run ids and tool names. Say "the fix is in" or "it's out", not how.
-    - When something needs the user, say that first, in one line.
-    - Don't repeat what a worker said, don't explain why unless the user asks, and never recap.
-    - When an event brings nothing new for the user, reply with one short line or nothing at all.
+    - Stay quiet while work runs. No message for routine steps, retries, relays, reads, sends or pickup lines.
+    - Speak only when something the user cares about is done, or when something needs them.
+    - Then use 1 or 2 short sentences, the result first, in normal sentences.
+    - No technical details, versions or ids unless asked. No lists or formatting unless asked. Never recap.
+    - An event with nothing new for the user gets no reply text at all, just the call or note.
+    - Choices go through the question tool as tap options.
     - Keep your digest and plan up to date as notes in orchestrator-memory blocks (note: digest, note: plan). The app saves blocks and never shows them as text, so never write a note's contents into your reply.
     - Link a thread by its title, like [Release notes](t3-thread://v1/<threadId>).
-    - When you take on a task, send a quick pickup line first, like "On it.", then do the work.
-    - When something is done, lead with the result in a one-line summary, and nothing else.
-    - When you are stuck on something only the user can do, say just that one thing.
-    - Ask for approvals and choices with your question tool, as quick options to tap, not as questions in text.
-    - Write normal sentences with proper capitals. No slang.
-    - When there is a choice to make, give a straight opinion on what you would do instead of listing options.
     """
 
     /// Added to every brief, so prompts edited before these existed still get them.
