@@ -644,12 +644,17 @@ final class OrchestratorController {
         var seen = Set<String>()
         let candidates = matches.filter(\.isUser).map(\.threadId.rawValue).filter { live[$0] != nil && seen.insert($0).inserted }
             .sorted { (live[$0]?.updatedAt.epochMs ?? 0) > (live[$1]?.updatedAt.epochMs ?? 0) }
+        // A match that is a brief says so on its own; reading a projection is the fallback.
+        let briefs = OrchestratorHandoff.briefThreads(matches)
+        let ordered = candidates.filter { briefs.contains($0) } + candidates.filter { !briefs.contains($0) }
         // ponytail: reads the 5 newest matches; widen it if a machine keeps more threads that quote a brief
-        for local in candidates.prefix(5) {
-            guard let reply = try? await session.supervisor.request("orchestration.getThreadProjection", payload: .object(["threadId": .string(local)])),
-                  let projection = try? reply.decode(as: ThreadProjection.self) else { continue }
-            let first = projection.messages.filter { $0.role == "user" }.min { ($0.createdAt.epochMs ?? 0) < ($1.createdAt.epochMs ?? 0) }
-            guard OrchestratorHandoff.isOrchestratorThread(firstUserMessage: first?.text) else { continue }
+        for local in ordered.prefix(5) {
+            if !briefs.contains(local) {
+                guard let reply = try? await session.supervisor.request("orchestration.getThreadProjection", payload: .object(["threadId": .string(local)])),
+                      let projection = try? reply.decode(as: ThreadProjection.self) else { continue }
+                let first = projection.messages.filter { $0.role == "user" }.min { ($0.createdAt.epochMs ?? 0) < ($1.createdAt.epochMs ?? 0) }
+                guard OrchestratorHandoff.isOrchestratorThread(firstUserMessage: first?.text) else { continue }
+            }
             guard config.machines[env] == nil else { return true }
             let tasks = (try? await session.supervisor.request("scheduledTasks.list", payload: .object([:]))).map(ScheduledTask.list) ?? []
             let check = tasks.first { $0.threadId == local && $0.prompt.hasPrefix("Scheduled check:") }

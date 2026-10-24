@@ -50,6 +50,15 @@ public struct OrchestratorHandoff: Equatable, Sendable {
         }
     }
 
+    /// The threads whose `orchestration.searchThreads` match for "Orchestrator brief" is a brief: a user message that starts
+    /// with the heading. T3 matches each thread's newest such message and starts the snippet at the message when the
+    /// phrase is near its start (ThreadSearch.ts:46-60, 100-125), so this holds however long the thread grew. A thread's
+    /// projection carries only its newest messages, so its first message can't tell once it passed that window.
+    public static func briefThreads(_ matches: [ThreadSearchMatch]) -> Set<String> {
+        Set(matches.filter { $0.isUser && ($0.snippet == OrchestratorBrief.firstHeading || $0.snippet.hasPrefix(OrchestratorBrief.firstHeading + " ")) }
+            .map(\.threadId.rawValue))
+    }
+
     /// Whether a thread is an Orchestrator's: its first message is a brief.
     public static func isOrchestratorThread(firstUserMessage text: String?) -> Bool {
         guard let text else { return false }
