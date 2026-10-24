@@ -4,8 +4,12 @@ import T3Store
 import Security
 #endif
 
-/// Set by scripts/build-helper; "dev" in a plain build.
-let helperVersion = "dev"
+/// The `VERSION` file the release puts next to the binary; "dev" in a plain build.
+let helperVersion: String = {
+    let file = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath().deletingLastPathComponent().appending(path: "VERSION")
+    let text = (try? String(contentsOf: file, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return text.isEmpty ? "dev" : text
+}()
 
 #if os(Linux)
 let helperOS = "Linux"

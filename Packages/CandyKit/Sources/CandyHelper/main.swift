@@ -14,7 +14,10 @@ usage: candywrapper-helper <command>
   run                         relay until stopped (what the service runs)
   pair --home <id> [--loopback <url>]
                               read "<machine id>\\t<label>\\t<url>\\t<pairing code>" lines on stdin and sign in to each
-  handback                    hand the "while closed" task back to the schedule, for uninstall
+  install --home <id> [--loopback auto|none|<url>]
+                              pair from stdin like pair, then run this version as the service; prints CWH-RESULT
+  uninstall                   hand the task back, stop and remove the service, the tokens and the files
+  handback                    hand the "while closed" task back to the schedule
   status                      the machines this helper reaches, without secrets
   forget                      delete every token and the machine list
   check-ws <wss-url>          a WebSocket and TLS check that needs no T3
@@ -33,7 +36,8 @@ func identity(home: String) -> ClientIdentity {
 }
 
 /// Reads stdin with echo off when it's a terminal, so pairing codes never show in a scrollback.
-func readSecretLines() -> [String] {
+/// `ready` goes out once echo is off, so whoever types the codes waits for it.
+func readSecretLines(ready: String? = nil) -> [String] {
     var saved = termios()
     let tty = isatty(0) == 1 && tcgetattr(0, &saved) == 0
     if tty {
@@ -41,6 +45,7 @@ func readSecretLines() -> [String] {
         quiet.c_lflag &= ~tcflag_t(ECHO)
         tcsetattr(0, TCSANOW, &quiet)
     }
+    if let ready { print(ready); fflush(stdout) }
     defer { if tty { tcsetattr(0, TCSANOW, &saved) } }
     var lines: [String] = []
     while let line = readLine() {
@@ -49,6 +54,53 @@ func readSecretLines() -> [String] {
         lines.append(trimmed)
     }
     return lines
+}
+
+/// Signs in to every machine on the lines and saves the list; returns the failures by label.
+@MainActor func pairAll(homeId: String, loopback: URL?, lines: [String]) async -> [String] {
+    var entries: [(id: String, label: String, url: URL, code: String)] = []
+    for line in lines {
+        let f = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+        guard f.count == 4, let url = URL(string: f[2]) else { return ["a pairing line didn't read: expected 4 tab-separated fields"] }
+        entries.append((f[0], f[1], url, f[3]))
+    }
+    guard let home = entries.first(where: { $0.id == homeId }) else { return ["no line for the home machine \(homeId)"] }
+    var paired: [HelperMachine] = []
+    var failures: [String] = []
+    for e in entries {
+        do {
+            let (descriptor, token) = try await EnvironmentHTTP(baseURL: e.url).pair(code: e.code, identity: identity(home: home.label))
+            guard descriptor.environmentId == e.id else { throw HelperError("the address answers as another machine (\(descriptor.label))") }
+            try HelperSecrets.save(token.accessToken, for: e.id)
+            paired.append(HelperMachine(id: e.id, label: e.label, url: e.url, isHome: e.id == homeId, loopbackURL: e.id == homeId ? loopback : nil))
+            print("paired \(e.label)")
+        } catch {
+            failures.append("\(e.label): \(MachineLink.describe(error))")
+        }
+    }
+    // The list is whole each time: a machine left out is forgotten. One that failed keeps its old entry and token.
+    let kept = HelperStore.machines.filter { old in !paired.contains { $0.id == old.id } && entries.contains { $0.id == old.id } }
+    for old in HelperStore.machines where !entries.contains(where: { $0.id == old.id }) { HelperSecrets.remove(old.id) }
+    do { try HelperStore.write("machines.json", paired + kept) } catch { failures.append("couldn't save machines.json: \(error)") }
+    return failures
+}
+
+/// Connects to the home machine just long enough to hand the task back.
+@MainActor func handBackInline() async {
+    let machines = HelperStore.machines
+    guard let home = machines.first(where: \.isHome), let token = HelperSecrets.load(home.id) else { return }
+    let link = MachineLink(machine: home, token: token, identity: identity(home: home.label))
+    let helper = Helper(machines: [home], links: [link])
+    let running = Task { await helper.run() }
+    // Long enough for the home machine's tasks and the Orchestrator thread to arrive.
+    try? await Task.sleep(for: .seconds(8))
+    await helper.handBack()
+    running.cancel()
+}
+
+var runningHelperPid: Int32? {
+    guard let status = HelperStore.read("status.json", as: HelperStatus.self), kill(status.pid, 0) == 0 else { return nil }
+    return status.pid
 }
 
 switch args.first {
@@ -80,46 +132,70 @@ case "run":
 
 case "pair":
     guard let homeId = option("--home") else { fail(usage, code: 2) }
-    let loopback = option("--loopback").flatMap(URL.init(string:))
-    var entries: [(id: String, label: String, url: URL, code: String)] = []
-    for line in readSecretLines() {
-        let f = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
-        guard f.count == 4, let url = URL(string: f[2]) else { fail("a pairing line didn't read: expected 4 tab-separated fields", code: 2) }
-        entries.append((f[0], f[1], url, f[3]))
+    let failures = await pairAll(homeId: homeId, loopback: option("--loopback").flatMap(URL.init(string:)), lines: readSecretLines())
+    for f in failures { print("failed \(f)") }
+    exit(failures.isEmpty ? 0 : 1)
+
+case "install":
+    guard let homeId = option("--home") else { fail(usage, code: 2) }
+    let lines = readSecretLines(ready: Sentinel.ready)
+    let loopbackArg = option("--loopback") ?? "auto"
+    let loopback: URL? = switch loopbackArg {
+    case "auto": await Loopback.find(homeId: homeId)
+    case "none": nil
+    default: URL(string: loopbackArg)
     }
-    guard let home = entries.first(where: { $0.id == homeId }) else { fail("no line for the home machine \(homeId)", code: 2) }
-    var paired: [HelperMachine] = []
-    for e in entries {
-        do {
-            let (descriptor, token) = try await EnvironmentHTTP(baseURL: e.url).pair(code: e.code, identity: identity(home: home.label))
-            guard descriptor.environmentId == e.id else { throw HelperError("the address answers as another machine (\(descriptor.label))") }
-            try HelperSecrets.save(token.accessToken, for: e.id)
-            paired.append(HelperMachine(id: e.id, label: e.label, url: e.url, isHome: e.id == homeId, loopbackURL: e.id == homeId ? loopback : nil))
-            print("paired \(e.label)")
-        } catch {
-            print("failed \(e.label): \(MachineLink.describe(error))")
+    let failures = await pairAll(homeId: homeId, loopback: loopback, lines: lines)
+    guard failures.isEmpty else { Sentinel.failed("couldn't sign in to \(failures.joined(separator: "; "))") }
+    let folder = HelperFiles.ownFolder
+    let begin = Date()
+    let previous: URL?
+    do {
+        previous = try HelperFiles.link(folder)
+        try HelperService.write()
+        try HelperService.restart()
+    } catch { Sentinel.failed("\(MachineLink.describe(error))") }
+    // Up within 30 s and connected to its own machine, or back to the version before.
+    var outcome = "it didn't start within 30 seconds"
+    for _ in 0..<60 {
+        try? await Task.sleep(for: .milliseconds(500))
+        guard let status = HelperStore.read("status.json", as: HelperStatus.self), status.startedAt >= begin.addingTimeInterval(-1),
+              status.version == helperVersion else { continue }
+        if status.machines[homeId] == "connected" { outcome = ""; break }
+        if status.machines[homeId] == "rejected" { outcome = "its own machine refused the sign-in"; break }
+    }
+    guard outcome.isEmpty else {
+        if let previous, previous.resolvingSymlinksInPath() != folder.resolvingSymlinksInPath() {
+            _ = try? HelperFiles.link(previous)
+            try? HelperService.restart()
+            Sentinel.failed("\(outcome); went back to \(previous.lastPathComponent)")
         }
+        HelperService.stop()
+        Sentinel.failed(outcome)
     }
-    // The list is whole each time: a machine left out is forgotten.
-    for old in HelperStore.machines where !paired.contains(where: { $0.id == old.id }) && !entries.contains(where: { $0.id == old.id }) {
-        HelperSecrets.remove(old.id)
-    }
-    do { try HelperStore.write("machines.json", paired) } catch { fail("couldn't save machines.json: \(error)") }
-    exit(paired.count == entries.count ? 0 : 1)
+    HelperFiles.prune(keep: [folder] + (previous.map { [$0] } ?? []))
+    if let warning = HelperService.lingerWarning { print("CWH-WARNING \(warning)") }
+    Sentinel.ok("\(helperVersion) \(loopback.map { "loopback \($0.absoluteString)" } ?? "no loopback")")
+
+case "uninstall":
+    // A running helper hands the task back itself when the service stops it; a stopped one can't, so do it here.
+    if runningHelperPid == nil { await handBackInline() }
+    HelperService.remove()
+    for _ in 0..<20 where runningHelperPid != nil { try? await Task.sleep(for: .milliseconds(250)) }
+    HelperSecrets.removeAll()
+    for folder in Set([HelperStore.home.path, HelperFiles.data.path]) { try? FileManager.default.removeItem(atPath: folder) }
+    #if !os(Linux)
+    try? FileManager.default.removeItem(at: HelperService.logFile)
+    #endif
+    Sentinel.ok("uninstalled")
 
 case "handback":
-    let machines = HelperStore.machines
-    guard let home = machines.first(where: \.isHome), let token = HelperSecrets.load(home.id) else { exit(0) }
-    let link = MachineLink(machine: home, token: token, identity: identity(home: home.label))
-    let helper = Helper(machines: [home], links: [link])
-    let running = Task { await helper.run() }
-    // Wait for the home machine's tasks and the Orchestrator thread, then hand back.
-    try? await Task.sleep(for: .seconds(8))
-    await helper.handBack()
-    running.cancel()
-    exit(0)
+    await handBackInline()
 
 case "status":
+    if let status = HelperStore.read("status.json", as: HelperStatus.self) {
+        print("version \(status.version), pid \(status.pid)\(runningHelperPid == nil ? " (not running)" : ""), started \(status.startedAt.ISO8601Format())")
+    }
     for m in HelperStore.machines {
         print("\(m.label)\t\(m.id)\t\(m.url.absoluteString)\(m.isHome ? "\thome" : "")\t\(HelperSecrets.load(m.id) == nil ? "no token" : "token saved")")
     }

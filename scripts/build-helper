@@ -1,0 +1,54 @@
+#!/bin/zsh
+# Builds the CandyWrapper Helper's three downloads (docs/orchestrator-helper.md): a universal macOS binary and static
+# Linux x86_64 and arm64 binaries, each in candywrapper-helper-<version>-<platform>.tar.gz with a VERSION file, and
+# SHA256SUMS beside them. The CandyWrapper client pins those sums.
+# Usage: scripts/build-helper <version> <out-folder> [--sign]
+#   --sign signs the macOS binary like scripts/release (Apple Development, team 8Q677AYRU7), so its Keychain items
+#   stay readable across updates. Without it the binary is ad-hoc signed, which is fine for test homes only.
+# The Linux builds need swift.org's toolchain and its Static Linux SDK (Xcode's toolchain can't build them):
+#   SWIFT_LINUX_TOOLCHAIN, default ~/CandyWrapper-research/tools/swift-6.4.1.xctoolchain
+set -euo pipefail
+here=${0:A:h:h}
+version=${1:?version}; out=${2:?out folder}; sign=${3:-}
+[[ $version =~ '^[0-9A-Za-z.+-]+$' ]] || { print -u2 "a version is letters, digits, dots, plus and minus"; exit 1 }
+linux=${SWIFT_LINUX_TOOLCHAIN:-$HOME/CandyWrapper-research/tools/swift-6.4.1.xctoolchain}/usr/bin/swift
+[[ -x $linux ]] || { print -u2 "no swift.org toolchain at $linux"; exit 1 }
+"$here/scripts/preflight"
+mkdir -p $out; out=${out:A}
+pkg=$here/Packages/CandyKit
+scratch=/tmp/cw-dd-build-helper
+umask 022
+
+pack() { # <platform> <binary>
+  local dir=$(mktemp -d /tmp/cw-dd-helper-pack.XXXXXX)
+  cp $2 $dir/candywrapper-helper
+  chmod 755 $dir/candywrapper-helper
+  print -r -- $version > $dir/VERSION
+  tar -C $dir -czf $out/candywrapper-helper-$version-$1.tar.gz candywrapper-helper VERSION
+  rm -rf $dir
+}
+
+# macOS: one universal binary from Xcode's toolchain.
+swift build -c release --package-path $pkg --scratch-path $scratch/mac --product candywrapper-helper --arch arm64 --arch x86_64
+mac=$scratch/mac/out/Products/Release/candywrapper-helper
+strip -x -S $mac
+if [[ $sign == --sign ]]; then
+  KC=$HOME/Library/Keychains/candywrapper-release.keychain-db
+  pw=$(security find-generic-password -s dev.candywrapper.release-keychain -w)
+  print -r -- "unlock-keychain -p $pw $KC" | security -i >/dev/null
+  trap 'security lock-keychain $KC 2>/dev/null' EXIT
+  codesign --force --sign "Apple Development" --options runtime --timestamp=none --identifier com.sowyu.candywrapper.helper $mac
+  [[ $(codesign -dv $mac 2>&1) == *$'\n'"TeamIdentifier=8Q677AYRU7"$'\n'* ]] || { print -u2 "the helper is not signed by team 8Q677AYRU7"; exit 1 }
+else
+  codesign --force --sign - --identifier com.sowyu.candywrapper.helper $mac
+fi
+pack darwin-universal $mac
+
+# Linux: static, so the machine needs no Swift runtime or libraries.
+for arch in x86_64 aarch64; do
+  $linux build -c release --package-path $pkg --scratch-path $scratch/linux --swift-sdk $arch-swift-linux-musl --product candywrapper-helper -Xlinker -s
+  pack linux-$arch $scratch/linux/out/Products/Release-staticlinux-$arch/candywrapper-helper
+done
+
+cd $out && shasum -a 256 candywrapper-helper-$version-*.tar.gz > SHA256SUMS
+cat SHA256SUMS

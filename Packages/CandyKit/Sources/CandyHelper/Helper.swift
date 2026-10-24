@@ -56,10 +56,28 @@ final class Helper {
 
     // MARK: Events from the machines
 
+    private var states: [String: String] = [:]
+    private let startedAt = Date()
+
+    /// `status.json`, for `install` and `status`. Written when a connection changes, not on every push.
+    private func setState(_ id: String, _ state: String) {
+        guard states[id] != state else { return }
+        states[id] = state
+        let status = HelperStatus(version: helperVersion, pid: getpid(), startedAt: startedAt, machines: states)
+        try? HelperStore.write("status.json", status)
+        // Refused everywhere: a clean exit, so the service stays down until a renewal (KeepAlive SuccessfulExit,
+        // Restart=on-failure) instead of restarting forever.
+        if states.count == links.count, states.values.allSatisfy({ $0 == "rejected" }) {
+            log("every machine refused the helper's sign-in; stopping until CandyWrapper renews it")
+            exit(0)
+        }
+    }
+
     private func handle(_ machine: HelperMachine, _ event: MachineLink.Event) {
         switch event {
         case .connected(_, let config):
             log("connected to \(machine.label)")
+            setState(machine.id, "connected")
             configs[machine.id] = config
             if machine.id == homeId { tasksReceived = false }
         case .shell(let generation, let snapshot):
@@ -72,10 +90,12 @@ final class Helper {
             if orchestrator == nil { discover() }
             tasksChanged()
         case .disconnected(let why):
-            if snapshots.removeValue(forKey: machine.id) != nil { log("lost \(machine.label): \(why)") }
+            if snapshots.removeValue(forKey: machine.id) != nil || states[machine.id] == nil { log("lost \(machine.label): \(why)") }
+            setState(machine.id, "offline")
         case .rejected(let why):
             snapshots[machine.id] = nil
             log("\(machine.label) refused the helper's sign-in (\(why)); it needs a renewal from CandyWrapper")
+            setState(machine.id, "rejected")
         }
     }
 
