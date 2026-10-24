@@ -15,6 +15,8 @@ public struct OrchestratorHandoff: Equatable, Sendable {
         case relay
         /// Not the Mac's to relay yet: drop what it gathered and write the task back first.
         case resync
+        /// The helper is connected and relays (docs/orchestrator-helper.md, section 5): leave the task alone.
+        case standBy
     }
 
     /// The task's `updatedAt` right after this Mac last wrote it off, since it opened or woke. Nil until then.
@@ -33,7 +35,8 @@ public struct OrchestratorHandoff: Equatable, Sendable {
 
     /// Before relaying, with the task as the server has it now. Nil when the machine has no such task: nobody else
     /// can be relaying, as the phone reads the Mac's state from it.
-    public func verdict(task: ScheduledTask?) -> Verdict {
+    public func verdict(task: ScheduledTask?, helperConnected: Bool = false) -> Verdict {
+        if helperConnected { return .standBy }
         guard let task else { return .relay }
         guard let own = ownStamp, task.updatedAt == own, !task.enabled else { return .resync }
         return .relay
@@ -55,6 +58,11 @@ public struct OrchestratorHandoff: Equatable, Sendable {
     /// without ever showing it idle.
     public static func turnEnded(wasRunning: Bool, wasRun: RunId?, running: Bool, run: RunId?) -> Bool {
         (wasRunning && !running) || run != wasRun
+    }
+
+    /// The helper's sessions among a machine's clients: a bot whose label `HelperInstall.sessionLabel` made.
+    public static func helperSessions(_ sessions: [AuthClientSession]) -> [AuthClientSession] {
+        sessions.filter { $0.client.deviceType == "bot" && HelperInstall.version(fromSessionLabel: $0.client.label ?? "") != nil }
     }
 
     /// The replies whose calls run now: finished, from a turn that ended, not run here yet and with no "Result:" after

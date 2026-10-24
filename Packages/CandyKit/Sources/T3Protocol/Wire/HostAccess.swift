@@ -198,6 +198,8 @@ public struct AuthClientSession: Decodable, Sendable, Equatable {
     public var client: Client
     public var issuedAt: T3Timestamp
     public var lastConnectedAt: T3Timestamp?
+    /// Bearer sessions last 30 days and can't be refreshed (SessionStore.ts:432).
+    public var expiresAt: T3Timestamp?
     public var connected: Bool
     public var current: Bool
     public var granted: [String] { permissions ?? scopes ?? [] }

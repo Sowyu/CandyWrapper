@@ -40,6 +40,9 @@ final class OrchestratorController {
     private var scheduleSynced: Set<String> = []
     /// Whether this Mac or the Android app relays for the Orchestrator (`OrchestratorHandoff`).
     private var handoff = OrchestratorHandoff()
+    /// The helper on its machine; while it's connected it relays and this Mac stands by.
+    let helper: HelperController
+    private var helperWasConnected = false
     /// Machines already searched this session for an Orchestrator thread to adopt.
     private var adoptionTried: Set<String> = []
     private var wakeObserver: NSObjectProtocol?
@@ -66,9 +69,25 @@ final class OrchestratorController {
         self.sidebar = sidebar
         self.threads = threads
         remote = OrchestratorRemote(environments: environments, threads: threads)
+        helper = HelperController(environments: environments)
         store.actions.start = { [weak self] in self?.start() }
         store.actions.open = { [weak self] in self?.open() }
         store.actions.status = { [weak self] in self?.statusText ?? "Not started" }
+        store.actions.helper = { [weak self] in
+            guard let h = self?.helper else { return nil }
+            return .init(status: h.status, primary: h.primaryTitle, canRun: h.canRun, installed: h.installed)
+        }
+        store.actions.installHelper = { [weak self] in Task { await self?.helper.install() } }
+        store.actions.removeHelper = { [weak self] in Task { await self?.helper.uninstall() } }
+        helper.home = { [weak self] in self?.machineId }
+        helper.orchestratorThread = { [weak self] in self?.threadId }
+        helper.workspace = { [weak self] in
+            guard let self, let env = self.machineId, let shell = self.orchestratorShell else { return nil }
+            return self.shell(env)?.projects.first { $0.id == shell.projectId }?.workspaceRoot
+        }
+        helper.machines = { [weak self] in self?.remote.machines() ?? [] }
+        helper.toast = { [weak self] in self?.toast($0, $1, $2) }
+        helper.onChange = { [weak self] in self?.helperChanged() }
         store.observe { [weak self] in self?.configChanged() }
         threads.opensElsewhere = { [weak self] id in self?.openPane(for: id) ?? false }
         _ = ScheduledTasksStore.shared.observe { [weak self] in self?.settingsListChanged() }
@@ -123,6 +142,7 @@ final class OrchestratorController {
             return
         }
         wasActive = true
+        helper.watch(active: true)
         watchSettings()
         settingsEdited()
         syncSchedules(enabled: false)
@@ -131,6 +151,7 @@ final class OrchestratorController {
 
     /// The toggle went off or the theme changed: drop every view and every piece of relay state.
     private func tearDown() {
+        helper.watch(active: false)
         flushWork?.cancel()
         flushWork = nil
         batch.reset()
@@ -153,6 +174,8 @@ final class OrchestratorController {
 
     private func shellChanged() {
         guard active else { return }
+        // The helper's machine or its session can change with any shell push; watch() returns at once when neither did.
+        helper.watch(active: true)
         // At launch the primary machine is known only once its shell arrives.
         watchSettings()
         // At launch the schedule turns off once its machine's shell has the thread.
@@ -601,6 +624,8 @@ final class OrchestratorController {
         }
         // Until this Mac holds the "while closed" task, the Android app may be relaying: what happened meanwhile is its.
         if handoff.ownStamp == nil, machine?.scheduledTaskId != nil { return }
+        // The helper relays while it's connected.
+        if helper.connected { return }
         guard let deadline = batch.add(events, now: Date()) else { return }
         let work = DispatchWorkItem { [weak self] in self?.flush() }
         flushWork = work
@@ -620,7 +645,23 @@ final class OrchestratorController {
         }
     }
 
-    // MARK: Handoff with the Android app
+    // MARK: Handoff with the Android app and the helper
+
+    /// The helper came or went. Gone, this Mac takes the task back right away, as when it opens; back, it drops what it
+    /// gathered. Either way the settings tab shows the new state.
+    private func helperChanged() {
+        let now = helper.connected
+        defer { helperWasConnected = now; store.actionsChanged() }
+        guard active, now != helperWasConnected else { return }
+        flushWork?.cancel()
+        flushWork = nil
+        batch.reset()
+        handoff.forget()
+        if !now {
+            scheduleSynced.removeAll()
+            syncSchedules(enabled: false)
+        }
+    }
 
     /// Before relaying: whether this Mac still holds the "while closed" task. When someone else wrote it since (the
     /// Android app taking over), or the Mac hasn't since it opened or woke, the Mac writes it back off, which tells the
@@ -628,7 +669,11 @@ final class OrchestratorController {
     private func mayRelay() async -> Bool {
         guard active, let env = machineId, let machine = config.machines[env] else { return false }
         let task = await scheduledTask(env, id: machine.scheduledTaskId)
-        guard handoff.verdict(task: task) == .resync else { return true }
+        switch handoff.verdict(task: task, helperConnected: helper.connected) {
+        case .relay: return true
+        case .standBy: handoff.forget(); return false
+        case .resync: break
+        }
         await syncSchedule(env, machine, enabled: false)
         return false
     }
@@ -924,11 +969,12 @@ final class OrchestratorController {
     }
 
     /// A quit should turn the "while closed" schedule on first.
-    var needsQuitHandOff: Bool { active && machine != nil && config.closedCheckMinutes != nil && connected }
+    var needsQuitHandOff: Bool { active && machine != nil && config.closedCheckMinutes != nil && connected && !helper.connected }
 
     /// The app is quitting: the schedule takes over. Calls `done` when the server answered or after a second and a half.
     func handOffBeforeQuit(_ done: @escaping () -> Void) {
-        guard active, let env = machineId, let machine = config.machines[env], config.closedCheckMinutes != nil else { return done() }
+        // The helper holds the task and keeps relaying after this Mac quits.
+        guard active, !helper.connected, let env = machineId, let machine = config.machines[env], config.closedCheckMinutes != nil else { return done() }
         var finished = false
         let finish = { if !finished { finished = true; done() } }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { finish() }

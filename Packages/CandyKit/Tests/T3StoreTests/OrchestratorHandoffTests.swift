@@ -149,4 +149,28 @@ import Testing
         let json = try JSONValue(parsing: Data(#"{"tasks":[{"id":"check","title":"t","prompt":"p","enabled":false,"schedule":{"type":"interval","everyMs":60000},"projectId":"p","updatedAt":"2026-10-24T10:00:05.000Z"}]}"#.utf8))
         #expect(ScheduledTask.list(json).first?.updatedAt == "2026-10-24T10:00:05.000Z")
     }
+
+    /// A connected helper relays (docs/orchestrator-helper.md, section 5): whatever the task says, the Mac stands by, and
+    /// once the helper is gone the Mac takes the task back as when it opens.
+    @Test func aConnectedHelperMakesTheMacStandBy() {
+        var mac = OrchestratorHandoff()
+        mac.wrote(updatedAt: "2026-10-24T10:00:05.000Z")
+        let macHolds = task(enabled: false, stamp: "2026-10-24T10:00:05.000Z")
+        #expect(mac.verdict(task: macHolds, helperConnected: true) == .standBy)
+        #expect(mac.verdict(task: nil, helperConnected: true) == .standBy)
+        // The helper took the task (a newer stamp) and then dropped off: the Mac takes it back before relaying.
+        let helperHeld = task(enabled: false, stamp: "2026-10-24T10:05:00.000Z")
+        #expect(mac.verdict(task: helperHeld, helperConnected: false) == .resync)
+    }
+
+    @Test func helperSessionsAreBotsWithTheHelperLabel() {
+        func session(_ label: String, _ device: String) -> AuthClientSession {
+            AuthClientSession(sessionId: label + device, subject: "one-time-token", scopes: [], client: .init(label: label, deviceType: device),
+                              issuedAt: T3Timestamp(start), connected: true, current: false)
+        }
+        let all = [session(HelperInstall.sessionLabel(version: "1.14.0", home: "miniko"), "bot"),
+                   session(HelperInstall.sessionLabel(version: "1.14.0", home: "miniko"), "desktop"),
+                   session("CandyWrapper", "desktop")]
+        #expect(OrchestratorHandoff.helperSessions(all).map(\.client.deviceType) == ["bot"])
+    }
 }

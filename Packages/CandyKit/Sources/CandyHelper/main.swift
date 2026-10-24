@@ -59,17 +59,18 @@ func readSecretLines(ready: String? = nil) -> [String] {
     return lines
 }
 
-/// Signs in to every machine on the lines and saves the list; returns the failures by label.
-@MainActor func pairAll(homeId: String, loopback: URL?, lines: [String]) async -> [String] {
+/// Signs in to every machine on the lines and saves the list; returns the ids that failed and why, by label.
+@MainActor func pairAll(homeId: String, loopback: URL?, lines: [String]) async -> (failed: Set<String>, messages: [String]) {
     var entries: [(id: String, label: String, url: URL, code: String)] = []
     for line in lines {
         let f = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
-        guard f.count == 4, let url = URL(string: f[2]) else { return ["a pairing line didn't read: expected 4 tab-separated fields"] }
+        guard f.count == 4, let url = URL(string: f[2]) else { return ([homeId], ["a pairing line didn't read: expected 4 tab-separated fields"]) }
         entries.append((f[0], f[1], url, f[3]))
     }
-    guard let home = entries.first(where: { $0.id == homeId }) else { return ["no line for the home machine \(homeId)"] }
+    guard let home = entries.first(where: { $0.id == homeId }) else { return ([homeId], ["no line for the home machine \(homeId)"]) }
     var paired: [HelperMachine] = []
     var failures: [String] = []
+    var failed = Set<String>()
     for e in entries {
         do {
             let (descriptor, token) = try await EnvironmentHTTP(baseURL: e.url).pair(code: e.code, identity: identity(home: home.label))
@@ -78,14 +79,15 @@ func readSecretLines(ready: String? = nil) -> [String] {
             paired.append(HelperMachine(id: e.id, label: e.label, url: e.url, isHome: e.id == homeId, loopbackURL: e.id == homeId ? loopback : nil))
             print("paired \(e.label)")
         } catch {
+            failed.insert(e.id)
             failures.append("\(e.label): \(MachineLink.describe(error))")
         }
     }
     // The list is whole each time: a machine left out is forgotten. One that failed keeps its old entry and token.
     let kept = HelperStore.machines.filter { old in !paired.contains { $0.id == old.id } && entries.contains { $0.id == old.id } }
     for old in HelperStore.machines where !entries.contains(where: { $0.id == old.id }) { HelperSecrets.remove(old.id) }
-    do { try HelperStore.write("machines.json", paired + kept) } catch { failures.append("couldn't save machines.json: \(error)") }
-    return failures
+    do { try HelperStore.write("machines.json", paired + kept) } catch { failed.insert(homeId); failures.append("couldn't save machines.json: \(error)") }
+    return (failed, failures)
 }
 
 /// Connects to the home machine just long enough to hand the task back.
@@ -135,9 +137,9 @@ case "run":
 
 case "pair":
     guard let homeId = option("--home") else { fail(usage, code: 2) }
-    let failures = await pairAll(homeId: homeId, loopback: option("--loopback").flatMap(URL.init(string:)), lines: readSecretLines())
-    for f in failures { print("failed \(f)") }
-    exit(failures.isEmpty ? 0 : 1)
+    let result = await pairAll(homeId: homeId, loopback: option("--loopback").flatMap(URL.init(string:)), lines: readSecretLines())
+    for f in result.messages { print("failed \(f)") }
+    exit(result.messages.isEmpty ? 0 : 1)
 
 case "install":
     guard let homeId = option("--home") else { fail(usage, code: 2) }
@@ -148,8 +150,11 @@ case "install":
     case "none": nil
     default: URL(string: loopbackArg)
     }
-    let failures = await pairAll(homeId: homeId, loopback: loopback, lines: lines)
-    guard failures.isEmpty else { Sentinel.failed("couldn't sign in to \(failures.joined(separator: "; "))") }
+    let result = await pairAll(homeId: homeId, loopback: loopback, lines: lines)
+    // Its own machine is a must; another that can't be reached from here (asleep, or only on another Mac's loopback)
+    // is a warning, and the helper relays to the rest.
+    guard !result.failed.contains(homeId) else { Sentinel.failed("couldn't sign in to \(result.messages.joined(separator: "; "))") }
+    for f in result.messages { print("CWH-WARNING couldn't sign in to \(f)") }
     let folder = HelperFiles.ownFolder
     let begin = Date()
     let previous: URL?
