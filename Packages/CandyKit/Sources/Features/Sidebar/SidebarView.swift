@@ -52,6 +52,8 @@ public struct SidebarActions {
     public var openUsage: () -> Void = {}
     /// Dither's nav row: Settings, Scheduled tasks.
     public var openAutomations: () -> Void = {}
+    /// The Space row (Redesign with Space on): the sidebar switches to Space mode.
+    public var openSpace: () -> Void = {}
     /// Files dropped on a thread row (`handleThreadFileDrop`): open the thread and attach them there.
     public var dropFiles: (ThreadId, [URL]) -> Void = { _, _ in }
     /// The inline rename committed: thread, typed title, title before (`commitThreadRename`).
@@ -87,6 +89,37 @@ public final class SidebarContentView: DSView {
     /// Dither (after Capy): nav rows under the search field.
     let navRows = [SidebarNavRowView(.squarePen, "New thread"), SidebarNavRowView(.gitPullRequestArrow, "Pull requests"),
                    SidebarNavRowView(.calendarClock, "Automations"), SidebarNavRowView(.settings, "Settings")]
+    /// The Space row under Automations, shown only with `space` set under Redesign.
+    let spaceRow = SidebarNavRowView(icon: IconView(definition: SpaceIcons.notebook, size: 16), "Space")
+    /// Space's sidebar (docs/space.md "Space mode"). Nil while the Space switch is off, so nothing of Space exists.
+    public var space: SpaceSidebarView? {
+        didSet {
+            guard space !== oldValue else { return }
+            oldValue?.removeFromSuperview()
+            if let space { addSubview(space, positioned: .below, relativeTo: accountRow) } else { spaceMode = false }
+            needsLayout = true
+        }
+    }
+    /// Space mode: the threads, their nav rows and labels hide, and Space's sidebar shows. A 150ms opacity fade,
+    /// instant with Reduce Motion.
+    public var spaceMode = false {
+        didSet {
+            guard spaceMode != oldValue else { return }
+            needsLayout = true
+            layoutSubtreeIfNeeded()
+            let incoming: [NSView] = spaceMode ? [space].compactMap { $0 } : threadModeViews.filter { !$0.isHidden }
+            let instant = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || window == nil
+            // ponytail: the outgoing views hide at once and only the incoming ones fade; a two-sided fade if it reads abrupt
+            for v in incoming { v.alphaValue = instant ? 1 : 0 }
+            if !instant { HoverReveal.fade(incoming, visible: true, duration: 0.15) }
+        }
+    }
+    /// Whether Space mode shows right now: on, with Space's sidebar, under Redesign.
+    var showsSpaceMode: Bool { spaceMode && space != nil && ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    /// What Space mode hides.
+    private var threadModeViews: [NSView] {
+        [search, scrollArea, navSection, addProjectButton, filterButton, spaceRow] + navRows + [orchestratorRow].compactMap { $0 }
+    }
     /// Dither (after Capy): the account row, a pill floating at the foot of the sidebar.
     public let accountRow = SidebarAccountRowView()
     /// Redesign with the Orchestrator on: its pinned row above the threads, which all sit under it. Nil removes the row.
@@ -400,6 +433,7 @@ public final class SidebarContentView: DSView {
         navRows[1].action = { [weak self] in self?.actions.openPullRequests() }
         navRows[2].action = { [weak self] in self?.actions.openAutomations() }
         navRows[3].action = { [weak self] in self?.actions.openSettings() }
+        spaceRow.action = { [weak self] in self?.actions.openSpace() }
         accountRow.onOpenSettings = { [weak self] in self?.actions.openSettings() }
         accountRow.onOpenUsage = { [weak self] in self?.actions.openUsage() }
         usageButton.action = { [weak self] in self?.actions.openUsage() }
@@ -915,7 +949,8 @@ public final class SidebarContentView: DSView {
         search.frame = NSRect(x: 8, y: rowY, width: max(0, right - 4 - 8), height: searchHeight)
         // Footer: `flex-col gap-2 px-2 py-1`: the undo notice, then 32px icon buttons 4px apart.
         // Dither (after Capy): the account row takes the footer, a 44pt pill floating 8 in from the sidebar's edges.
-        let accountFooter = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !isOnUtilityPage
+        let spaceShown = showsSpaceMode
+        let accountFooter = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && (!isOnUtilityPage || spaceShown)
         let menuTop = accountFooter ? h - 8 - SidebarAccountRowView.height : h - 36
         var footerTop = accountFooter ? menuTop - 8 : h - 40
         var stackTop = menuTop
@@ -931,12 +966,20 @@ public final class SidebarContentView: DSView {
         }
         let capy = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         var listTop: CGFloat = capyBrand ? rowY + searchHeight + 2 : 100
+        if spaceRow.superview == nil { addSubview(spaceRow) }
+        spaceRow.isHidden = true
         for (i, row) in navRows.enumerated() {
             if row.superview == nil { addSubview(row) }
             row.isHidden = !capy || i == 1 && !showsPullRequests
             if row.isHidden { continue }
             row.frame = NSRect(x: 8, y: listTop, width: max(0, w - 16), height: SidebarNavRowView.height)
             listTop += SidebarNavRowView.height + 2
+            // Space sits directly under Automations, before Settings.
+            if i == 2 && capy && space != nil {
+                spaceRow.isHidden = false
+                spaceRow.frame = NSRect(x: 8, y: listTop, width: max(0, w - 16), height: SidebarNavRowView.height)
+                listTop += SidebarNavRowView.height + 2
+            }
         }
         if let row = orchestratorRow {
             row.isHidden = !capy
@@ -976,7 +1019,7 @@ public final class SidebarContentView: DSView {
             accountRow.frame = NSRect(x: SidebarAccountRowView.inset, y: menuTop, width: max(0, w - 2 * SidebarAccountRowView.inset),
                                       height: SidebarAccountRowView.height)
         }
-        backButton.isHidden = !isOnUtilityPage
+        backButton.isHidden = !isOnUtilityPage || spaceShown
         // `SidebarMenu` is a `gap-1` row; Back is `flex-1`, the update pill `ml-auto shrink-0`.
         let pillRoom: CGFloat = updatePill.isHidden ? 0 : 32 + 4
         backButton.frame = NSRect(x: 8, y: menuTop, width: max(0, w - 16 - pillRoom), height: 32)
@@ -988,6 +1031,16 @@ public final class SidebarContentView: DSView {
         scrollArea.frame = NSRect(x: 0, y: listTop, width: w, height: max(0, footerTop - listTop))
         list.frame.size.width = w
         list.needsLayout = true
+        // Space mode: the brand row and the account footer stay; everything between is Space's.
+        if !spaceShown { search.isHidden = false; scrollArea.isHidden = false }
+        if let space {
+            space.isHidden = !spaceShown
+            if spaceShown {
+                for v in threadModeViews { v.isHidden = true }
+                space.frame = NSRect(x: 0, y: rowY, width: w, height: max(0, h - rowY))
+                space.footerTop = footerTop - rowY
+            }
+        }
     }
 }
 

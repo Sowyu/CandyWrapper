@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var snapShots: SnapShotController?
     private var openIn: OpenInController?
     private var orchestrator: OrchestratorController?
+    private var space: SpaceController?
     /// The Orchestrator's "while closed" schedule was handed to T3 for this quit.
     private var orchestratorHandedOff = false
     /// Built on the first Cmd+Q hold.
@@ -319,6 +320,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         commands.onOrchestratorHidden = { [weak orchestrator] in orchestrator?.paneClosed() }
         commands.extraMenuItems = { [weak orchestrator] id in orchestrator?.menuItems(id) ?? [] }
         commands.performExtra = { [weak orchestrator] choice, id in orchestrator?.perform(choice, id) ?? false }
+        let space = SpaceController(sidebar: sidebar, commands: commands)
+        self.space = space
         sidebar.actions.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open() }
         sidebar.accountRow.onOpenMachines = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open(.connections) }
         sidebar.actions.openAutomations = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.show(.scheduledTasks) }
@@ -575,13 +578,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // Route history for `navigation.back` and `navigation.forward` (AppSidebarLayout.tsx:168-213).
         let history = RouteHistory()
-        let currentRoute: () -> RouteHistory.Route? = { [weak settings, weak commands, weak threads] in
+        let currentRoute: () -> RouteHistory.Route? = { [weak settings, weak commands, weak threads, weak space] in
             if let settings, settings.isOpen { return .settings(settings.section) }
             if let page = commands?.openUtilityKind {
                 switch page {
                 case .pullRequests: return .pullRequests
                 case .usage: return .usage
                 case .orchestrator: return .orchestrator
+                case .space: if let route = space?.route { return route }
                 }
             }
             switch threads?.composer.target {
@@ -636,6 +640,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .orchestrator:
                 guard let orchestrator = self.orchestrator, OrchestratorStore.shared.isActive else { return false }
                 settings.close(); orchestrator.open()
+            case .spacePage, .spaceTrash:
+                guard let space = self.space, space.routeExists(route) else { return false }
+                settings.close()
+                return space.open(route)
             }
             return true
         }
@@ -651,6 +659,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ditherTabs = DitherTabsController(layout: layout, sidebar: sidebar, history: history, current: currentRoute,
                                           newThread: { [weak palette] opened in palette?.newThreadFromSidebar(shift: true, then: opened) })
         commands.historyBack = { [weak history] in history?.back() ?? false }
+        if let tabs = ditherTabs, let space {
+            tabs.spaceTitle = { [weak space] route in space?.tabTitle(route) ?? "" }
+            tabs.spaceExists = { [weak space] route in space?.routeExists(route) ?? false }
+            _ = space.store.observe { [weak tabs] in tabs?.sync() }
+            SpaceSettings.shared.observe { [weak tabs] in tabs?.sync() }
+        }
+        // Space mode takes the new-thread and file picker keys, ⌘N and ⌘P by default, for a new page and page search.
+        shortcuts.onKey { [weak space, weak shortcuts] event in
+            guard let space, space.isModeShown, let command = shortcuts?.command(for: event) else { return false }
+            switch command {
+            case "chat.new": space.newPage()
+            case "filePicker.toggle": space.focusSearch()
+            default: return false
+            }
+            return true
+        }
         commands.closePalette = { [weak palette] in palette?.close() }
         // Escape drops a multi-selection (_chat.tsx:98-102). Settings and Usage sit outside the chat layout,
         // so there Escape only goes back (useEscapeToGoBack, UsagePage.tsx:115).

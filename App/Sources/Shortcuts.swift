@@ -152,6 +152,9 @@ final class Shortcuts {
         return used
     }
 
+    /// The command a key event runs now, for a mode that takes a command over (Space mode's ⌘N and ⌘P).
+    func command(for event: NSEvent) -> String? { KeyStroke(event).flatMap(resolve) }
+
     /// Whether the sidebar's undo notice owns Mod+Z inside text fields (`threadUndoClaimsShortcut` while the sidebar shows).
     var undoClaimsShortcut: () -> Bool = { false }
     /// Hands Mod+Z back to text fields (`releaseThreadUndoShortcut`).

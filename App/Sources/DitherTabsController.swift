@@ -20,6 +20,9 @@ final class DitherTabsController {
     private var list = DitherTabList()
     /// Set only while + or Cmd-click navigates, so the route it shows lands in a new tab.
     private var opensNewTab = false
+    /// A Space tab's title, and whether its page still exists.
+    var spaceTitle: (RouteHistory.Route) -> String = { _ in "" }
+    var spaceExists: (RouteHistory.Route) -> Bool = { _ in false }
 
     init(layout: SidebarLayoutView, sidebar: SidebarContentView, history: RouteHistory,
          current: @escaping () -> RouteHistory.Route?, newThread: @escaping (@escaping @MainActor () -> Void) -> Void) {
@@ -76,6 +79,13 @@ final class DitherTabsController {
                 return threads.contains { $0.id == id && $0.archivedAt == nil }
             }
         }
+        // Space tabs close with their page, and all of them when Space turns off.
+        list.prune { route in
+            switch route {
+            case .spacePage, .spaceTrash: spaceExists(route)
+            default: true
+            }
+        }
         let threads = sidebar.snapshot?.threads ?? []
         // The sidebar's status, so a tab's grid follows its row: subagents waiting on the user count for their parent.
         let requests = list.tabs.contains { if case .thread = $0 { true } else { false } } ? PendingSubagentRequests.byThread(threads) : [:]
@@ -94,6 +104,8 @@ final class DitherTabsController {
             case .pullRequests: return .init(id: key, title: "Pull requests", icon: .gitPullRequestArrow)
             case .usage: return .init(id: key, title: "Usage", icon: .chartNoAxesColumn)
             case .orchestrator: return .init(id: key, title: OrchestratorStore.shared.config.displayName, icon: .workflow)
+            case .spacePage: return .init(id: key, title: spaceTitle(route), icon: .fileText)
+            case .spaceTrash: return .init(id: key, title: "Trash", icon: .trash2)
             }
         }
         strip.selected = list.selectedKey

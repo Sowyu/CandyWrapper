@@ -430,7 +430,7 @@ Trash opens as a tab listing trashed pages, newest first, with Restore and Delet
 
 - A page opens as a tab in the tab band, since Redesign's tabs are routes. The tab shows the page icon and title. The header pill's cost and diff controls hide on Space tabs.
 - Entering Space mode with no Space tab open opens the last page, or a "No pages yet" empty view with a New page button.
-- In Space mode, ⌘N makes a page instead of a thread, and ⌘P opens page search. The piece that builds this checks ⌘P for clashes first.
+- In Space mode, ⌘N makes a page instead of a thread, and ⌘P opens page search. ⌘P is T3's `filePicker.toggle` (Keybindings.swift:351), so Space takes the new-thread and file picker commands, whatever keys they're bound to, only while Space mode shows.
 - Space pages never appear in the command palette, recent threads or the menu bar.
 
 ## 6. Reminders
