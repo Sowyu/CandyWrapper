@@ -24,8 +24,9 @@ final class Helper {
     private var taking = false
     private var reportedNoTask = false
     private var tasksReceived = false
-    /// From the task's `orchestrator-config` block; nil until CandyWrapper wrote one.
-    private var settings: OrchestratorRelaySettings?
+    /// From the "CandyWrapper Orchestrator settings" task the clients share (docs/orchestrator.md, "Settings on every
+    /// device"); nil until a client wrote one.
+    private var settings: OrchestratorConfig?
 
     private var watched: (generation: Int, running: Bool)?
     private var handled: Set<String> = []
@@ -120,30 +121,42 @@ final class Helper {
     /// The newest thread whose first message is a brief, as the Mac adopts one (OrchestratorController.adopt).
     private func discover() {
         // The task list says which brief thread the Mac uses, so wait for it as well as the shell.
-        guard !discovering, tasksReceived, let link = links[homeId], let snapshot = snapshots[homeId] else { return }
+        guard !discovering, tasksReceived, let link = links[homeId], snapshots[homeId] != nil else { return }
         discovering = true
         Task {
             defer { discovering = false }
-            guard let json = try? await link.request("orchestration.searchThreads", .object(["query": .string("Orchestrator brief")])),
-                  let matches = (try? json.decode(as: ThreadSearchResult.self))?.matches else { return }
-            let live = Dictionary(snapshot.threads.filter { $0.archivedAt == nil && $0.deletedAt == nil && $0.lineage.parentThreadId == nil }
-                .map { ($0.id.rawValue, $0) }, uniquingKeysWith: { a, _ in a })
-            var seen = Set<String>()
-            // A thread a check task points at is the one the Mac uses; then the newest.
-            let checked = Set(tasks.filter { $0.prompt.hasPrefix("Scheduled check:") }.compactMap(\.threadId))
-            let candidates = matches.filter(\.isUser).map(\.threadId.rawValue).filter { live[$0] != nil && seen.insert($0).inserted }
-                .sorted { (checked.contains($0) ? 1 : 0, live[$0]?.updatedAt.epochMs ?? 0) > (checked.contains($1) ? 1 : 0, live[$1]?.updatedAt.epochMs ?? 0) }
-            for local in candidates.prefix(5) {
-                guard let reply = try? await link.request("orchestration.getThreadProjection", .object(["threadId": .string(local)])),
-                      let projection = try? reply.decode(as: ThreadProjection.self) else { continue }
-                let first = projection.messages.filter { $0.role == "user" }.min { ($0.createdAt.epochMs ?? 0) < ($1.createdAt.epochMs ?? 0) }
-                guard OrchestratorHandoff.isOrchestratorThread(firstUserMessage: first?.text) else { continue }
-                orchestrator = local
-                log("found the Orchestrator thread “\(live[local]?.title ?? local)” (\(local)) on \(label(homeId))")
-                tasksChanged()
-                return
-            }
+            let found = await findOrchestrator(link)
+            guard !found, orchestrator == nil else { return }
+            // Not there yet, or the server was busy: look again in a while, as long as it stays unknown.
+            log("no Orchestrator thread on \(label(homeId)) yet; looking again in 30 s")
+            try? await Task.sleep(for: .seconds(30))
+            discovering = false
+            if orchestrator == nil { discover() }
         }
+    }
+
+    private func findOrchestrator(_ link: MachineLink) async -> Bool {
+        let matches: [ThreadSearchMatch]
+        do {
+            matches = try await link.request("orchestration.searchThreads", .object(["query": .string("Orchestrator brief")]))
+                .decode(as: ThreadSearchResult.self).matches
+        } catch {
+            log("couldn't search \(label(homeId))'s threads: \(MachineLink.describe(error))")
+            return false
+        }
+        // The shell as it is now: the one when the search started may have been an early, partial one.
+        guard let snapshot = snapshots[homeId] else { return false }
+        let live = Dictionary(snapshot.threads.filter { $0.archivedAt == nil && $0.deletedAt == nil && $0.lineage.parentThreadId == nil }
+            .map { ($0.id.rawValue, $0) }, uniquingKeysWith: { a, _ in a })
+        // A thread a check task points at is the one the Mac uses; then the newest.
+        let checked = Set(tasks.filter { $0.prompt.hasPrefix("Scheduled check:") }.compactMap(\.threadId))
+        func rank(_ id: String) -> (Int, Int64) { (checked.contains(id) ? 1 : 0, live[id]?.updatedAt.epochMs ?? 0) }
+        let briefs = OrchestratorHandoff.briefThreads(matches)
+        guard let local = briefs.filter({ live[$0] != nil }).max(by: { rank($0) < rank($1) }) else { return false }
+        orchestrator = local
+        log("found the Orchestrator thread “\(live[local]?.title ?? local)” (\(local)) on \(label(homeId))")
+        tasksChanged()
+        return true
     }
 
     // MARK: The "while closed" task
@@ -152,12 +165,17 @@ final class Helper {
     /// (`OrchestratorHandoff.verdict`): the Mac stands by while the helper is connected and the phone relays only
     /// while the task is on.
     private func tasksChanged() {
+        // Read only: every synced setting wins over the defaults, and the helper never writes the document.
+        let documents = tasks.filter { $0.title == OrchestratorSettingsSync.title }.compactMap { OrchestratorSettingsSync.Document.parse($0.prompt) }
+        if !documents.isEmpty {
+            let merged = OrchestratorSettingsSync.merge(config: OrchestratorConfig(), stamps: [:], documents: documents, machine: homeId).config
+            if merged != settings {
+                settings = merged
+                log("read CandyWrapper's settings: \(merged.handsOff.count) Hands off, worker limit \(merged.crewLimit)")
+            }
+        }
         guard let orchestrator else { return }
         let task = tasks.first { $0.threadId == orchestrator && $0.prompt.hasPrefix("Scheduled check:") }
-        if let task, let parsed = OrchestratorRelaySettings.parse(task.prompt), parsed != settings {
-            settings = parsed
-            log("read CandyWrapper's settings: \(parsed.handsOff.count) Hands off, worker limit \(parsed.crewLimit)")
-        }
         if task == nil, !reportedNoTask {
             reportedNoTask = true
             log("no \"while closed\" task for the Orchestrator among \(tasks.count) tasks yet; nothing to hold")
@@ -234,8 +252,7 @@ final class Helper {
     }
 
     private func config() -> OrchestratorConfig {
-        var c = OrchestratorConfig()
-        settings?.apply(to: &c)
+        var c = settings ?? OrchestratorConfig()
         c.relayedAt = memory.relayedAt
         c.relayWorkers = memory.relayWorkers
         return c
@@ -252,7 +269,7 @@ final class Helper {
 
     /// The Models rows this machine's catalog offers, as the Mac's `availableRows`.
     private func rows(_ machine: String) -> [OrchestratorModelRow] {
-        let all = settings?.models ?? []
+        let all = (settings ?? OrchestratorConfig()).models
         guard let providers = configs[machine]?.providers else { return all }
         let catalog = ProviderCatalog(providers)
         return all.filter { catalog.entry(ProviderInstanceId(rawValue: $0.instanceId))?.model($0.model) != nil }

@@ -122,7 +122,7 @@ Updates: the client runs them, never a timer in the helper.
 - The helper's session label carries its version, like "CandyWrapper Helper 1.14.0 on miniko".
 - When an open client sees an older version, it runs the install flow, which downloads the new version next to the old one, switches the `current` link, re-pairs and restarts the service.
 - If the new version fails to come up within 30 seconds, the script switches the link back and restarts the old one.
-- The call format lives in the brief, the settings format in the task, and both in the shared Swift code, so the helper and the Mac app always speak the same version after an update.
+- The call format lives in the brief, the settings format in the settings task, and both in the shared Swift code, so the helper and the Mac app always speak the same version after an update.
 
 Crash loops: when every machine rejects the helper's token, it hands the task back as in section 6 and exits with a status the service treats as final, so it doesn't restart forever.
 
@@ -147,9 +147,9 @@ The helper extends that:
 
 The 2-second wait and the "Result:" check make a short overlap harmless, so the hand-over doesn't need to be instant.
 
-Where the helper reads its settings: from the "while closed" task itself. The Mac writes the worker limit, ask-first minutes, Hands off ids, Models rows and the check interval into the task's prompt as a fenced `orchestrator-config` JSON block (`OrchestratorBrief.scheduledCheck(settings:)`), and rewrites it when a setting changes. The helper already watches that task through `scheduledTasks.subscribe`, so a Hands off change reaches it within a second and costs no turn. A first draft put the block in the brief, but a brief reaches the thread only with your next message (`OrchestratorController.send`), which could leave the helper on a stale Hands off list. The check run sees the same block, which keeps its Hands off list current too.
+Where the helper reads its settings: from the "CandyWrapper Orchestrator settings" task the Mac and the Android app already share (docs/orchestrator.md, "Settings on every device", `OrchestratorSettingsSync`). The helper only reads it: it merges the documents into the defaults with no stamps of its own, so every synced setting wins, and it never writes one back. It watches that task through the same `scheduledTasks.subscribe` as the check task, so a Hands off change reaches it within a second and costs no turn. A brief wouldn't do, because a brief reaches the thread only with your next message (`OrchestratorController.send`).
 
-The helper finds the Orchestrator thread the way the Mac adopts one, by the "# Orchestrator brief" first line (`OrchestratorHandoff.isOrchestratorThread`), preferring the brief thread a check task points at. Until it has read a settings block, it answers calls with one refusal asking for CandyWrapper to be opened once, and still relays events.
+The helper finds the Orchestrator thread the way the Mac adopts one, through `orchestration.searchThreads` for "Orchestrator brief", preferring the brief thread a check task points at. A thread's projection holds only its newest messages, so the first message can't be read once a thread passes that window. Both the helper and the Mac now trust a search match whose snippet starts with the brief heading (`OrchestratorHandoff.briefThreads`, ThreadSearch.ts:46-60, 100-125). Until it has read a settings document, the helper answers calls with one refusal asking for CandyWrapper to be opened once, and still relays events.
 
 Trade-offs:
 
@@ -175,7 +175,7 @@ If the helper's machine is unreachable, the client still revokes the sessions on
 1. Prove the Swift Static Linux SDK builds a binary from T3Protocol and T3Store and holds a WebSocket to a sandbox server. About 2 hours. If WebSockets fail, try swift-nio before falling back to Go.
 2. Build the helper's client, relay loop, event batch and handoff on top of the shared code, and test it on this Mac against the two 3473 sandboxes. About 1 to 2 days.
 3. Add the install script, the services, pairing, renewal and uninstall. About half a day.
-4. Add the Mac side: the `standBy` verdict, the quit change, the settings block in the "while closed" task, written on every change and kept even when the check is off, and the Helper row in Settings. About half a day.
+4. Add the Mac side: the `standBy` verdict, the quit change, and the Helper row in Settings (the settings already sync through their own task). About half a day.
 5. Check it on screen and test crash recovery, revocation and the Mac and helper trading the task, all against sandboxes. About half a day.
 
 The release that ships the helper's binaries needs `scripts/release` to build and attach them, and the client to carry their hashes. That waits for the user, like any release.
