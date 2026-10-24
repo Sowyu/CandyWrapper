@@ -83,6 +83,9 @@ public enum OrchestratorChat {
                     }
                 } else if text.hasPrefix(scheduledPrefix) {
                     line("scheduled-\(mid)", "Scheduled check while CandyWrapper was closed", nil)
+                } else if let lines = automaticLines(m, text: text) {
+                    // T3's own deliveries, like a delegated task's result, come as user messages but aren't yours.
+                    for (i, l) in lines.enumerated() { line("automatic-\(mid)-\(i)", l, nil) }
                 } else {
                     mine.append(.bubble(id: mid, fromUser: true, text: text, first: true, last: true))
                     yours = mine.count - 1
@@ -163,6 +166,37 @@ public enum OrchestratorChat {
             guard case .bubble(let id, let user, let text, _, _) = item else { return item }
             return .bubble(id: id, fromUser: user, text: text, first: sender(i - 1) != user, last: sender(i + 1) != user)
         }
+    }
+
+    /// The activity lines for a message T3 delivered on its own into the thread, like a delegated task's result
+    /// ("Delegated task <id> (<title>) [completed]: …", Orchestrator.ts:614-633) or its question
+    /// (DelegatedTaskQuestionReactor.ts:38-43), or nil for a message you wrote. T3 marks these with `delegatedCompletion`
+    /// or `notification`; the text is the fallback.
+    static func automaticLines(_ m: ConversationMessage, text: String) -> [String]? {
+        let delegated = text.hasPrefix("Delegated task")
+        guard m.delegatedCompletion != nil || m.notification != nil || delegated else { return nil }
+        let parsed = text.components(separatedBy: "\n\n").compactMap(delegatedLine)
+        if !parsed.isEmpty { return parsed }
+        if let summary = m.notification?["summary"]?.stringValue, !summary.isEmpty { return [summary] }
+        return ["Delegated task update"]
+    }
+
+    /// "“Fixer” finished" from one "Delegated task <id> (<title>) [<status>]…" paragraph.
+    static func delegatedLine(_ paragraph: String) -> String? {
+        guard let m = paragraph.firstMatch(of: /^Delegated tasks? \S+(?: \((?<title>[^\n]+?)\))?(?: \[(?<status>[a-z_]+)\]| (?<rest>[a-z][^.:\n]*))?/) else { return nil }
+        let who = m.output.title.map { "“\($0)”" } ?? "A delegated task"
+        let what: String
+        switch m.output.status.map(String.init) {
+        case "completed": what = "finished"
+        case "failed": what = "failed"
+        case "cancelled": what = "was cancelled"
+        case "interrupted": what = "was interrupted"
+        case let other?: what = other
+        case nil:
+            let rest = m.output.rest.map(String.init) ?? ""
+            what = rest.contains("question") ? "has a question" : rest.hasPrefix("reached") ? "finished" : (rest.isEmpty ? "finished" : rest)
+        }
+        return "\(who) \(what)"
     }
 
     /// "“Release notes” finished a turn" and the thread it names, from an event line.

@@ -376,7 +376,7 @@ The Orchestrator pane reads like a group chat in iMessage, with Orchestrator and
 - A centred time label shows wherever more than 15 minutes pass between messages. A small "Read" shows under your last message once Orchestrator's turn starts.
 - While a bot works, a typing bubble with three dots sits under its last message. It animates only while that turn runs.
 - Plans, approvals and questions show as cards inside the bubble stack, with buttons like Allow and Deny and no tail.
-- Tool calls, events and relay results collapse into small centred lines like "Scout finished, read 14 files". They stay hidden until you click "Show activity" in the header, a setting kept on each device. Clicking a line opens that crew thread.
+- Tool calls, events, relay results and T3's own deliveries, like "Delegated task … [completed]" when a task it delegated ends, collapse into small centred lines like "Scout finished, read 14 files". T3 sends those deliveries as user messages, but they never draw as yours. They stay hidden until you click "Show activity" in the header, a setting kept on each device. Clicking a line opens that crew thread.
 - Replies that only say nothing is new stay hidden too. The brief asks for exactly "—" then, and the app also hides short ones like "Nothing new." or "Still running.", since the Orchestrator's harness makes it write something every turn.
 - Opening its thread from anywhere, like a notification, a link or Cmd-K, shows this pane. Only "Open as thread" shows the plain thread view.
 - The composer is a rounded field with a round send button.
