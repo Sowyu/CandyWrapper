@@ -1,6 +1,7 @@
 # Progress
 
 - [ ] Space piece 9, in-memory search index and pure reminder planner (taken 2026-10-24, space-9-search). Implementing against SpaceModel only, with ranking, incremental update and time zone/DST tests.
+- [ ] Space on this Mac: local setup, recovery sheet and persistent sidebar store (taken 2026-10-24, space-local-wiring). Wire pieces 3, 4 and 6 behind the existing page-store protocol; verify setup, relaunch, encrypted disk and the sandbox UI.
 
 - [x] Space piece 8, fields, sort and filter engine with type conversion (2026-10-24, space-8-fields): Foundation-only `SpaceFields` depends on `SpaceModel` alone. It queries and groups child pages, previews conversion losses and accepts an explicit clock and device zone. All 27 engine tests pass, including every type pair, mixed and empty sorts, all filter operators, exact decimals, Unicode and date/DST boundaries. Query and conversion conventions are in `docs/space-fields.md`. No UI or app link. All 1,910 tests pass with `scripts/test --fast --no-parallel`; diff reviewed. The 27 tests also pass in Release. Full-suite and benchmark caveats are tracked below.
 - [ ] Recheck six existing thread/cache benchmark alerts against a base control (2026-10-24, space-8-fields). The quiet 43-metric run against the last saved run, ce6dde1, flags long-thread panel creation, cache write/load and stream/tool/append updates. These paths do not link SpaceFields and are unchanged by its diff. Values and the review method are in `docs/space-fields.md`, Validation.
