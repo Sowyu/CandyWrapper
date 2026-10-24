@@ -86,6 +86,10 @@ public actor RPCConnection {
     /// True while the liveness watchdog runs. For tests.
     var watchdogRunning: Bool { watchdog != nil }
 
+    /// Sees every frame that doesn't decode, with the decoder's error, before the connection closes over it. The helper
+    /// logs its length and first bytes, redacted; the app leaves it unset.
+    nonisolated(unsafe) public static var onUndecodableFrame: (@Sendable (Data, String) -> Void)?
+
     /// Starts reading and writing. Call once, before the first request.
     public func start() {
         guard receiveTask == nil else { return }
@@ -94,7 +98,7 @@ public actor RPCConnection {
         receiveTask = Task.detached { [weak self] in
             while true {
                 let messages: [RPCServerMessage]
-                let frame: Data
+                var frame = Data()
                 do {
                     frame = try await socket.receive()
                     if OpenTiming.active {
@@ -107,7 +111,8 @@ public actor RPCConnection {
                 } catch let e as RPCTransportError {
                     await self?.shutDown(.transport(e))
                     return
-                } catch is DecodingError {
+                } catch let error as DecodingError {
+                    RPCConnection.onUndecodableFrame?(frame, String(describing: error))
                     await self?.shutDown(.transport(.invalidFrame("undecodable frame")))
                     return
                 } catch {

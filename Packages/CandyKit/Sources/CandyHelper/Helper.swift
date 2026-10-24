@@ -63,6 +63,11 @@ final class Helper {
     // MARK: Events from the machines
 
     private var states: [String: String] = [:]
+    /// Connection attempts in a row that ended in a protocol error, per machine; a shell that decodes resets it.
+    private var protocolFailures: [String: Int] = [:]
+    private var lastReason: [String: String] = [:]
+    // ponytail: 4 tries is about 15 s of backoff; raise it if a server that's restarting ever trips it
+    static let protocolFailureLimit = 4
     private var notes: [String: String] = [:]
     private var routes: [String: String] = [:]
     private let startedAt = Date()
@@ -82,6 +87,16 @@ final class Helper {
         }
     }
 
+    /// Every machine failing again and again for a reason a retry won't fix (or refusing the token): exit 76, which the
+    /// service shows as failed and doesn't restart. A machine that is merely offline, asleep or restarting keeps being
+    /// retried, since the helper should be there when it comes back.
+    private func stopIfStuck() {
+        guard exitWhenRefused, !links.isEmpty,
+              links.keys.allSatisfy({ protocolFailures[$0, default: 0] >= Self.protocolFailureLimit || states[$0] == "rejected" }) else { return }
+        log("every machine keeps failing for a reason a retry won't fix; stopping with exit 76 (last: \(lastReason.values.first ?? "?"))")
+        exit(76)
+    }
+
     private func handle(_ machine: HelperMachine, _ event: MachineLink.Event) {
         switch event {
         case .connected(_, let config, let route):
@@ -91,7 +106,9 @@ final class Helper {
             configs[machine.id] = config
             if machine.id == homeId { tasksReceived = false }
         case .shell(let generation, let snapshot):
+            if snapshots[machine.id] == nil { setState(machine.id, "ready") }
             snapshots[machine.id] = snapshot
+            protocolFailures[machine.id] = 0
             if machine.id == homeId { homeChanged(generation, snapshot) }
             relayEvents(machine.id, generation, snapshot)
         case .tasks(let list):
@@ -99,9 +116,15 @@ final class Helper {
             tasksReceived = true
             if orchestrator == nil { discover() }
             tasksChanged()
-        case .disconnected(let why):
-            if snapshots.removeValue(forKey: machine.id) != nil || states[machine.id] == nil { log("lost \(machine.label): \(why)") }
+        case .disconnected(let why, let protocolError):
+            snapshots[machine.id] = nil
+            let count = protocolError ? protocolFailures[machine.id, default: 0] + 1 : 0
+            protocolFailures[machine.id] = count
+            // Every new reason goes to the log, and a repeated one every tenth time, so a stuck retry still shows.
+            if lastReason[machine.id] != why || count % 10 == 1 { log("lost \(machine.label): \(why)\(count > 1 ? " (\(count) times in a row)" : "")") }
+            lastReason[machine.id] = why
             setState(machine.id, "offline", note: why)
+            stopIfStuck()
         case .rejected(let why):
             snapshots[machine.id] = nil
             log("\(machine.label) refused the helper's sign-in (\(why)); it needs a renewal from CandyWrapper")
