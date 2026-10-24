@@ -735,7 +735,7 @@ final class OrchestratorController {
     /// phone to stop, and drops what it gathered.
     private func mayRelay() async -> Bool {
         guard active, let env = machineId, let machine = config.machines[env] else { return false }
-        let task = await scheduledTask(env, id: machine.scheduledTaskId)
+        let task = await scheduledTask(env, thread: machine.threadId)
         switch handoff.verdict(task: task, helperConnected: helper.connected) {
         case .relay: return true
         case .standBy: handoff.forget(); return false
@@ -745,11 +745,11 @@ final class OrchestratorController {
         return false
     }
 
-    /// The machine's "while closed" task as the server has it now; nil when there is none or the server can't say.
-    private func scheduledTask(_ env: String, id: String?) async -> ScheduledTask? {
-        guard let id, let session = environments.session(env),
+    /// The thread's "while closed" task as the server has it now; nil when there is none or the server can't say.
+    private func scheduledTask(_ env: String, thread: String) async -> ScheduledTask? {
+        guard let session = environments.session(env),
               let json = try? await session.supervisor.request("scheduledTasks.list", payload: .object([:])) else { return nil }
-        return ScheduledTask.list(json).first { $0.id == id }
+        return OrchestratorCheckTask.canonical(ScheduledTask.list(json), thread: thread)
     }
 
     /// The Mac woke: it can't know who held the task while it slept, so it drops what it gathered and takes it back.
@@ -782,7 +782,7 @@ final class OrchestratorController {
               let found = OrchestratorHandoff.adoptable(matches, threads: shell(env)?.threads ?? []) else { return false }
         let local = found.id.rawValue
         let tasks = (try? await session.supervisor.request("scheduledTasks.list", payload: .object([:]))).map(ScheduledTask.list) ?? []
-        let check = tasks.first { $0.threadId == local && $0.prompt.hasPrefix("Scheduled check:") }
+        let check = OrchestratorCheckTask.canonical(tasks, thread: local)
         guard config.machines[env] == nil else { return true }
         store.update { $0.machines[env] = OrchestratorMachine(threadId: local, briefDigest: "", scheduledTaskId: check?.id) }
         scheduleSynced.remove(env)
@@ -993,38 +993,73 @@ final class OrchestratorController {
         Task { await syncSchedule(env, machine, enabled: enabled) }
     }
 
+    /// Reads the machine's tasks fresh, uses the thread's one check task (`OrchestratorCheckTask`), deletes the others
+    /// and writes it on or off. It makes a task only when the thread has none, and never after a failed read.
     private func syncSchedule(_ env: String, _ machine: OrchestratorMachine, enabled: Bool) async {
-        guard let session = environments.session(env), let selection = ownSelection(env),
-              let projectId = shell(env)?.threads.first(where: { $0.id.rawValue == machine.threadId })?.projectId else { return }
-        guard let minutes = config.closedCheckMinutes else {
-            if let id = machine.scheduledTaskId {
-                if let result = try? await session.supervisor.request("scheduledTasks.setEnabled", payload: .object(["id": .string(id), "enabled": .bool(false)])) {
-                    handoff.wrote(updatedAt: result["task"]?["updatedAt"]?.stringValue)
-                } else {
-                    scheduleSynced.remove(env)
+        guard let session = environments.session(env),
+              let json = try? await session.supervisor.request("scheduledTasks.list", payload: .object([:])) else {
+            scheduleSynced.remove(env)
+            return
+        }
+        let tasks = ScheduledTask.list(json)
+        let current = OrchestratorCheckTask.canonical(tasks, thread: machine.threadId)
+        if current?.id != config.machines[env]?.scheduledTaskId { store.update { $0.machines[env]?.scheduledTaskId = current?.id } }
+        defer {
+            // After the write, which matters more at quit.
+            let extras = OrchestratorCheckTask.duplicates(tasks, thread: machine.threadId)
+            if !extras.isEmpty {
+                Task {
+                    for extra in extras { _ = try? await session.supervisor.request("scheduledTasks.delete", payload: .object(["id": .string(extra.id)])) }
                 }
             }
+        }
+        guard var minutes = config.closedCheckMinutes else {
+            guard let current else { return }
+            if let result = try? await session.supervisor.request("scheduledTasks.setEnabled", payload: .object(["id": .string(current.id), "enabled": .bool(false)])) {
+                handoff.wrote(updatedAt: result["task"]?["updatedAt"]?.stringValue)
+            } else {
+                scheduleSynced.remove(env)
+            }
             return
+        }
+        // An interval the user set on the task in T3 since they last changed "While closed" here becomes the setting.
+        if let current, let set = OrchestratorCheckTask.intervalSetOnTask(current, settingMinutes: minutes, settingChangedAt: store.stamps["closedCheckMinutes"]?.at) {
+            store.update { $0.closedCheckMinutes = set }
+            minutes = set
         }
         var input: [String: JSONValue] = [
             "title": .string("\(config.displayName) check"), "prompt": .string(OrchestratorBrief.scheduledCheckPrompt), "enabled": .bool(enabled),
             "schedule": .object(["type": .string("interval"), "everyMs": .number(Double(minutes) * 60_000)]),
-            "projectId": .string(projectId.rawValue), "threadId": .string(machine.threadId),
-            "workspaceStrategy": .object(["type": .string("root")]), "modelSelection": ThreadSession.encode(selection),
-            "runtimeMode": .string(threads.composer.config(env)?.settings.defaultRuntimeMode.rawValue ?? "full-access"),
-            "interactionMode": .string("default"), "creationSource": .string("web"),
+            "threadId": .string(machine.threadId), "creationSource": .string("web"),
         ]
-        if let id = machine.scheduledTaskId { input["id"] = .string(id) }
+        if let current {
+            // The task as it is, so a write changes only its title, interval and state.
+            input["id"] = .string(current.id)
+            input["requireExisting"] = .bool(true)
+            input["projectId"] = .string(current.projectId)
+            input["workspaceStrategy"] = current.workspaceStrategy
+            input["modelSelection"] = current.modelSelection
+            input["runtimeMode"] = .string(current.runtimeMode)
+            input["interactionMode"] = .string(current.interactionMode)
+        } else {
+            guard let selection = ownSelection(env),
+                  let projectId = shell(env)?.threads.first(where: { $0.id.rawValue == machine.threadId })?.projectId else { return }
+            input["commandId"] = .string(OrchestratorCheckTask.commandId(thread: machine.threadId))
+            input["projectId"] = .string(projectId.rawValue)
+            input["workspaceStrategy"] = .object(["type": .string("root")])
+            input["modelSelection"] = ThreadSession.encode(selection)
+            input["runtimeMode"] = .string(threads.composer.config(env)?.settings.defaultRuntimeMode.rawValue ?? "full-access")
+            input["interactionMode"] = .string("default")
+        }
         do {
             let result = try await session.supervisor.request("scheduledTasks.upsert", payload: .object(input))
-            if let id = result["task"]?["id"]?.stringValue, id != machine.scheduledTaskId {
+            if let id = result["task"]?["id"]?.stringValue, id != config.machines[env]?.scheduledTaskId {
                 store.update { $0.machines[env]?.scheduledTaskId = id }
             }
             // Off is this Mac holding the task; on hands it to the schedule and the Android app.
             if enabled { handoff.forget() } else { handoff.wrote(updatedAt: result["task"]?["updatedAt"]?.stringValue) }
         } catch {
-            // A task removed elsewhere: make a new one next time.
-            if machine.scheduledTaskId != nil { store.update { $0.machines[env]?.scheduledTaskId = nil } }
+            // Tried again on the next sync, from a fresh read: losing the id here used to make a new task each time.
             scheduleSynced.remove(env)
         }
     }

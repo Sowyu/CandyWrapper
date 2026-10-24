@@ -64,6 +64,21 @@ CandyWrapper checks the limits in code before it relays a call, on top of the br
 
 The Orchestrator still uses T3's own tools on its own machine, since they need no extra turn. Calls run only while CandyWrapper is open, unless the CandyWrapper Helper is installed on the Orchestrator's machine (Settings > Orchestrator > Helper, docs/orchestrator-helper.md): it runs the same relay all the time, and the Mac stands by while it's connected. Without it, the "while closed" check uses T3's tools, so it sees only its own machine, and calls from a turn that ended while CandyWrapper was closed are never run later. A turn's calls run even when an event starts the next turn the moment it ends, and every call gets a "Result:" message.
 
+### The while closed check
+
+Each Orchestrator thread has exactly one "while closed" check task, and every client (the Mac, the helper and the Android app) uses the same one. A check task is a scheduled task bound to the thread whose prompt starts with "Scheduled check:". `OrchestratorCheckTask` in T3Store holds the rules:
+
+- Read the machine's scheduled tasks fresh before each write, and never act on a failed read.
+- Use the thread's check task with the smallest `id`, compared as strings, and delete the thread's other check tasks.
+- Create one only when the thread has none, with `commandId` set to `orchestrator-check:<threadId>`, so two clients that create at the same moment make one task.
+- Update it with its `id` and `requireExisting: true`, keeping its project, workspace, model, runtime and interaction mode. An update without `requireExisting` brings a deleted task back.
+- Keep the user's interval. When the task's interval differs from "While closed" and the task changed after that setting's stamp, or the setting was never set, the setting takes the task's interval.
+- Turn it off while the client relays and on when it stops, as the handoff describes. A failed write keeps the task and tries again later.
+- While the helper is connected on the Orchestrator's machine, no check task is on. The helper relays all the time, deletes the thread's other check tasks, turns off one it can't delete and holds the one task off. The Mac doesn't turn it on when it quits, and the phone never claims a task that's off. The helper turns the task on only when it stops cleanly.
+- The Android app picks the most recently updated check task today. It must pick the smallest `id` like the others, or it can claim and later turn on a task the rest delete.
+
+Clients used to keep their own task id, and any failed write or failed read made the next sync create a new task. On 2026-10-24 one thread on miniko had six, two of them on at once.
+
 ## Every thread is under the Orchestrator
 
 - Every thread on the machine is the Orchestrator's, whoever started it. Its crew is all of them.

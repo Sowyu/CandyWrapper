@@ -107,3 +107,42 @@ public struct OrchestratorHandoff: Equatable, Sendable {
         }
     }
 }
+
+/// The Orchestrator thread's one "while closed" check task, the same for every client (the Mac, the helper and the
+/// Android app; docs/orchestrator.md, "The while closed check"). Clients used to keep their own task id and make a new
+/// task whenever they lost it, so one thread ended up with several, some on at once, each waking it.
+public enum OrchestratorCheckTask {
+    public static let promptPrefix = "Scheduled check:"
+
+    /// The command id a client creates the task with. T3 makes the task id from it (`scheduled-task:<commandId>`,
+    /// ScheduledTaskService.ts:1071-1075), so two clients that create at the same moment make the same one task.
+    public static func commandId(thread: String) -> String { "orchestrator-check:" + thread }
+
+    public static func isCheck(_ task: ScheduledTask, thread: String) -> Bool {
+        task.threadId == thread && task.prompt.hasPrefix(promptPrefix)
+    }
+
+    /// The task every client uses: the thread's check task with the smallest id, a choice that doesn't depend on who
+    /// asks or when.
+    public static func canonical(_ tasks: [ScheduledTask], thread: String) -> ScheduledTask? {
+        tasks.filter { isCheck($0, thread: thread) }.min { $0.id < $1.id }
+    }
+
+    /// The thread's other check tasks, which the client deletes.
+    public static func duplicates(_ tasks: [ScheduledTask], thread: String) -> [ScheduledTask] {
+        let keep = canonical(tasks, thread: thread)?.id
+        return tasks.filter { isCheck($0, thread: thread) && $0.id != keep }
+    }
+
+    /// The task's interval in whole minutes when the user set it on the task itself, in T3, after they last changed
+    /// "While closed" in CandyWrapper (`settingChangedAt`, the setting's stamp; nil when never set). The setting takes
+    /// that value, so a write never undoes the user's choice. Nil when the setting stands.
+    public static func intervalSetOnTask(_ task: ScheduledTask, settingMinutes: Int, settingChangedAt: Int64?) -> Int? {
+        guard case .interval(let everyMs) = task.schedule, everyMs >= 60_000 else { return nil }
+        let minutes = Int((everyMs / 60_000).rounded())
+        guard minutes != settingMinutes else { return nil }
+        guard let changed = settingChangedAt else { return minutes }
+        guard let edited = task.updatedAt.flatMap({ T3Timestamp($0).epochMs }), edited > changed else { return nil }
+        return minutes
+    }
+}
