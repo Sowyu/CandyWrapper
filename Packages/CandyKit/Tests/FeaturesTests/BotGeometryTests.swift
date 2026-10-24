@@ -30,6 +30,8 @@ import Testing
     func everyShapeCanTurn(_ shape: BotShape) {
         let limits = BotGeometry.turnLimits(shape)
         #expect(limits.count == 32)
+        // The baked table must match the geometry; regenerate it from `computedTurnLimits` when this fails.
+        #expect(zip(limits, BotGeometry.computedTurnLimits(shape)).allSatisfy { abs($0 - $1) < 1e-9 }, "\(shape.name): turnLimitTable is stale")
         #expect(BotGeometry.eyesClear(shape, .front), "\(shape.name) fails facing front")
         #expect(limits.min()! > 0.15, "\(shape.name) can barely turn: \(limits.map { String(format: "%.2f", $0) })")
     }

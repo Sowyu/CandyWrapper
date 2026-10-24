@@ -248,6 +248,7 @@ extension SettingsController {
         case .licenses: SettingsOpenSourceLicensesView(context: c)
         case .scheduledTasks: ScheduledTasksSettingsView(context: c)
         case .orchestrator: OrchestratorSettingsView(context: c)
+        case .experimental: ExperimentalSettingsView(context: c)
         default: SnapShotSettingsView(context: c)
         }
         v.onHeightChange = { [weak self] in self?.page.pageChanged() }
