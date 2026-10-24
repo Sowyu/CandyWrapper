@@ -218,6 +218,8 @@ The decrypted payload of a frame:
 - `at` is the device's clock, shown in history.
 - `set` maps a key, or a two-level path `props.<id>`, `fields.<id>` or `views.<type>`, to a value. Null removes a path. A record exists once any change sets it.
 - Applying a frame sets each value. Keys a client doesn't know are kept and written back, so a newer client's data survives an older one.
+- Within one change, keys apply in UTF-8 byte order, so `props` replaces the map before `props.<id>` sets inside it. A two-level path splits at the first dot. Null on a path whose map is missing does nothing.
+- Revs follow the frame's `recs`, not the decrypted changes, so the Space machine and every client agree.
 - One rule makes apply deterministic for the tree: a `parent` change that would make a page its own ancestor is ignored, and the page keeps its old parent. A page whose parent is missing shows at the top.
 - Every client applies frames in `seq` order and nothing else, so every copy ends up identical.
 
@@ -480,6 +482,7 @@ Undo:
 
 - Each window keeps its own undo stack through `NSUndoManager`, grouped the way `NSTextView` groups typing.
 - Undoing writes a new change that puts the old values back, so it syncs like any edit.
+- Undoing the creation of a record trashes it, since records are never removed.
 - If another device has changed a key since, undo leaves that key alone and does the rest.
 - Undo covers block edits, moves, trash, field and view changes and item changes in every view.
 
