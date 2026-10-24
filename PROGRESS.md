@@ -67,6 +67,7 @@ The current state and the open work. Before you stop, tick what you finished, ad
 
 ## Open tasks
 
+- [ ] Space piece 4, apply and rebase (taken 2026-10-24, space-4-apply).
 - [x] Space piece 2: model types, stable JSON and golden fixtures (taken 2026-10-24, space-2-model). Foundation-only `SpaceModel` covers records, rich text, every field and view, date values and zone-preserving edits, weekly occurrences, reminders, UUID v4 ids, fractional order keys and log/snapshot payloads. Unknown keys and explicit nulls survive edits. The eight model JSON fixtures in `fixtures/space/` round-trip to identical bytes; its README documents the shared API and format. All 13 model tests, 1,840 fast-lane tests and 2,020 full-suite tests pass. The target also builds for x86_64 Linux. Diff reviewed; no UI, launch-path or T3 integration.
 
 - [x] Orchestrator chat hides delegated task deliveries (2026-10-24, orchestrator-delegated): T3 delivers "Delegated task <id> (<title>) [<status>]: …" (Orchestrator.ts:614-633) and its question wakes into the thread as user messages, marked with `delegatedCompletion` or `notification`. The Orchestrator chat now draws them as activity lines like "“Fixer” finished", hidden until Show activity, and never as the user's bubble or Read receipt; the text is the fallback when a server leaves the markers out. Tested with the user's exact message; the fast lane passed.
