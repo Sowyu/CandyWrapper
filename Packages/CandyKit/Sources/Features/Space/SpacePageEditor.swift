@@ -1202,7 +1202,9 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
     /// Display size: beside a 220pt caption column, at most 270pt tall.
     func imageSize(_ p: SpaceParagraph) -> CGSize? {
         guard p.type == .image else { return nil }
-        let column = max(200, textView.textContainer?.size.width ?? SpacePageMetrics.column)
+        // Before the first layout the container has no width yet; size for the full column until it does.
+        let containerWidth = textView.textContainer?.size.width ?? 0
+        let column = containerWidth > 240 ? containerWidth : SpacePageMetrics.column
         let maxWidth = column - SpacePageMetrics.captionWidth - 20
         var natural = CGSize(width: 4, height: 3)
         if let w = p.blob?.w, let h = p.blob?.h, w > 0, h > 0 { natural = CGSize(width: w, height: h) }
@@ -1211,6 +1213,15 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
         var height = width * natural.height / natural.width
         if height > 270 { height = 270; width = height * natural.width / natural.height }
         return CGSize(width: width.rounded(), height: height.rounded())
+    }
+
+    /// Image sizes follow the column, so their paragraphs restyle when it changes width.
+    func columnWidthChanged() {
+        let images = keys.filter { paragraphs[$0]?.type == .image }
+        guard !images.isEmpty else { return }
+        applying = true
+        for key in images { if let r = range(of: key) { restyle(r) } }
+        applying = false
     }
 
     func drawImage(_ p: SpaceParagraph, in rect: CGRect) {
