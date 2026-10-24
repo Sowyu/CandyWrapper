@@ -115,14 +115,14 @@ Recommended: the same service setup T3 uses for itself, under the user's account
 - On Linux a systemd user unit, `candywrapper-helper.service`, with `Restart=always`, `RestartSec=5` and `WantedBy=default.target`. Logs go to the journal.
 - If lingering is off on Linux, the helper stops when the user logs out. The script checks `loginctl show-user`, and Settings shows T3's own message with the `sudo loginctl enable-linger` command for the user to run. A machine that already runs T3 as a boot service has lingering on.
 
-Idle cost: the helper holds one WebSocket per machine and reacts only to server pushes, like the Mac's relay. It has no timers apart from the 30-second event batch while events arrive. It does not poll for updates.
+Idle cost: the helper holds one WebSocket per machine and reacts to server pushes, like the Mac's relay. Beside the 30-second event batch while events arrive, it pings each connection every 45 seconds, so a socket a tunnel or NAT dropped without a close gets noticed and reconnected. It does not poll for updates.
 
 Updates: the client runs them, never a timer in the helper.
 
 - The helper's session label carries its version, like "CandyWrapper Helper 1.14.0 on miniko".
 - When an open client sees an older version, it runs the install flow, which downloads the new version next to the old one, switches the `current` link, re-pairs and restarts the service.
 - If the new version fails to come up within 30 seconds, the script switches the link back and restarts the old one.
-- The relay format lives in the brief and the shared Swift code, so the helper and the Mac app always speak the same version after an update.
+- The call format lives in the brief, the settings format in the task, and both in the shared Swift code, so the helper and the Mac app always speak the same version after an update.
 
 Crash loops: when every machine rejects the helper's token, it hands the task back as in section 6 and exits with a status the service treats as final, so it doesn't restart forever.
 
@@ -147,7 +147,9 @@ The helper extends that:
 
 The 2-second wait and the "Result:" check make a short overlap harmless, so the hand-over doesn't need to be instant.
 
-Where the helper reads its settings: from the newest brief in the Orchestrator thread, which it finds the way the Mac adopts threads, by the "# Orchestrator brief" first line (`OrchestratorHandoff.isOrchestratorThread`). It finds the check task as the one whose `threadId` is that thread. To make the brief easy to read without parsing prose, the Mac appends a small fenced `orchestrator-config` JSON block with the worker limit, ask-first minutes, Hands off ids, Models rows and the "while closed" interval. The brief tells the Orchestrator the block is for the app. Every settings change already sends an updated brief, so this adds no turns.
+Where the helper reads its settings: from the "while closed" task itself. The Mac writes the worker limit, ask-first minutes, Hands off ids, Models rows and the check interval into the task's prompt as a fenced `orchestrator-config` JSON block (`OrchestratorBrief.scheduledCheck(settings:)`), and rewrites it when a setting changes. The helper already watches that task through `scheduledTasks.subscribe`, so a Hands off change reaches it within a second and costs no turn. A first draft put the block in the brief, but a brief reaches the thread only with your next message (`OrchestratorController.send`), which could leave the helper on a stale Hands off list. The check run sees the same block, which keeps its Hands off list current too.
+
+The helper finds the Orchestrator thread the way the Mac adopts one, by the "# Orchestrator brief" first line (`OrchestratorHandoff.isOrchestratorThread`), preferring the brief thread a check task points at. Until it has read a settings block, it answers calls with one refusal asking for CandyWrapper to be opened once, and still relays events.
 
 Trade-offs:
 
@@ -173,7 +175,7 @@ If the helper's machine is unreachable, the client still revokes the sessions on
 1. Prove the Swift Static Linux SDK builds a binary from T3Protocol and T3Store and holds a WebSocket to a sandbox server. About 2 hours. If WebSockets fail, try swift-nio before falling back to Go.
 2. Build the helper's client, relay loop, event batch and handoff on top of the shared code, and test it on this Mac against the two 3473 sandboxes. About 1 to 2 days.
 3. Add the install script, the services, pairing, renewal and uninstall. About half a day.
-4. Add the Mac side: the `standBy` verdict, the quit change, the config block in the brief and the Helper row in Settings. About half a day.
+4. Add the Mac side: the `standBy` verdict, the quit change, the settings block in the "while closed" task, written on every change and kept even when the check is off, and the Helper row in Settings. About half a day.
 5. Check it on screen and test crash recovery, revocation and the Mac and helper trading the task, all against sandboxes. About half a day.
 
 The release that ships the helper's binaries needs `scripts/release` to build and attach them, and the client to carry their hashes. That waits for the user, like any release.

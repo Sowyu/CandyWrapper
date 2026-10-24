@@ -17,8 +17,8 @@ private let posixWrite = Darwin.write
 /// This writes a temporary file beside the target and renames it over, without a sync: an app crash
 /// loses nothing, and an OS crash or power loss can leave the newest file empty or torn. Both caches
 /// validate what they read and treat a bad file as a miss, and the server refills them.
-enum CacheFile {
-    static func write(_ data: Data, to url: URL) throws {
+package enum CacheFile {
+    package static func write(_ data: Data, to url: URL) throws {
         let temp = url.deletingLastPathComponent().appending(path: ".\(url.lastPathComponent).\(UUID().uuidString).tmp").path
         let fd = open(temp, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o600)
         guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }

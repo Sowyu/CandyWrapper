@@ -4682,14 +4682,7 @@ extension ComposerController {
     /// which the server resolves (`start_immediately` plus `deliveryIntent: auto`); queued app messages
     /// go behind the active run.
     static func standaloneCommand(threadId: ThreadId, messageId: MessageId, text: String, selection: ModelSelection, queue: Bool) -> JSONValue {
-        let (dispatchMode, deliveryIntent) = ComposerLogic.dispatch(queue ? .queue : .auto)
-        var command: [String: JSONValue] = [
-            "type": .string("message.dispatch"), "commandId": .string(UUID().uuidString.lowercased()),
-            "threadId": .string(threadId.localId.rawValue), "messageId": .string(messageId.rawValue),
-            "createdBy": .string("user"), "creationSource": .string("web"), "text": .string(text),
-            "attachments": .array([]), "dispatchMode": dispatchMode, "modelSelection": ThreadSession.encode(selection)]
-        if let deliveryIntent { command["deliveryIntent"] = .string(deliveryIntent) }
-        return .object(command)
+        OrchestrationCommands.message(threadId: threadId.localId.rawValue, messageId: messageId.rawValue, text: text, selection: selection, queue: queue)
     }
 
 }

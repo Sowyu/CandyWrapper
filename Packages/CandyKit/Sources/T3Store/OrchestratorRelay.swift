@@ -111,12 +111,29 @@ public struct OrchestratorRelayHost {
     public init(machines: @escaping () -> [OrchestratorMachineRef], snapshot: @escaping (String) -> ShellSnapshot?,
                 request: @escaping (String, String, JSONValue) async throws -> JSONValue, config: @escaping () -> OrchestratorConfig,
                 update: @escaping ((inout OrchestratorConfig) -> Void) -> Void, rows: @escaping (String) -> [OrchestratorModelRow],
-                runtimeMode: @escaping (String) -> String, message: @escaping (String, String, ModelSelection, Bool) -> JSONValue,
-                launch: @escaping (String, String, String, String, ModelSelection, String, JSONValue) -> JSONValue,
+                runtimeMode: @escaping (String) -> String,
+                message: @escaping (String, String, ModelSelection, Bool) -> JSONValue = OrchestratorRelayHost.message,
+                launch: @escaping (String, String, String, String, ModelSelection, String, JSONValue) -> JSONValue = OrchestratorRelayHost.launch,
                 orchestrator: @escaping () -> ThreadId?, now: @escaping () -> Date = Date.init) {
         self.machines = machines; self.snapshot = snapshot; self.request = request; self.config = config; self.update = update
         self.rows = rows; self.runtimeMode = runtimeMode; self.message = message; self.launch = launch
         self.orchestrator = orchestrator; self.now = now
+    }
+}
+
+extension OrchestratorRelayHost {
+    /// A `message.dispatch` for a thread, queued behind a running turn when asked.
+    nonisolated public static func message(_ threadId: String, _ text: String, _ selection: ModelSelection, _ queue: Bool) -> JSONValue {
+        OrchestrationCommands.message(threadId: threadId, messageId: UUID().uuidString.lowercased(), text: text, selection: selection, queue: queue)
+    }
+
+    /// A worker's launch. The Orchestrator names its workers; T3 would retitle them from the prompt.
+    nonisolated public static func launch(_ threadId: String, _ projectId: String, _ title: String, _ text: String, _ selection: ModelSelection,
+                                          _ runtimeMode: String, _ workspace: JSONValue) -> JSONValue {
+        OrchestrationCommands.launchThread(commandId: UUID().uuidString.lowercased(), threadId: threadId, projectId: projectId, title: title,
+                                           modelSelection: OrchestrationCommands.encode(selection), runtimeMode: runtimeMode,
+                                           interactionMode: "default", messageId: UUID().uuidString.lowercased(), text: text,
+                                           workspaceStrategy: workspace, generateTitle: false)
     }
 }
 
