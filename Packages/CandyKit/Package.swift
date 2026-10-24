@@ -50,7 +50,7 @@ let package = Package(
         .target(name: "SpaceEngine", dependencies: ["SpaceModel"], swiftSettings: sizeOptimized),
         .target(name: "SpaceLocal", dependencies: ["SpaceModel", "SpaceCrypto"], swiftSettings: sizeOptimized),
         // Screens built from DesignSystem components and fed by T3Store (sidebar, timeline, composer...).
-        .target(name: "Features", dependencies: ["DesignSystem", "T3Store", "T3Protocol", "SpaceModel", .product(name: "SwiftTerm", package: "SwiftTerm")], resources: [.copy("Resources/candy-town.gray"), .copy("Resources/pele.global.js.lzma"), .copy("Resources/LICENSE-pele.txt"), .copy("Resources/native-licenses.json"),
+        .target(name: "Features", dependencies: ["DesignSystem", "T3Store", "T3Protocol", "SpaceModel", "SpaceEngine", "SpaceLocal", "SpaceCrypto", .product(name: "SwiftTerm", package: "SwiftTerm")], resources: [.copy("Resources/candy-town.gray"), .copy("Resources/pele.global.js.lzma"), .copy("Resources/LICENSE-pele.txt"), .copy("Resources/native-licenses.json"),
                          .copy("Resources/SymbolsNerdFontMono-Regular.ttf"), .copy("Resources/LICENSE-symbols-nerd-font.txt")],
                 swiftSettings: sizeOptimized),
         .testTarget(name: "SpaceModelTests", dependencies: ["SpaceModel"]),

@@ -1,8 +1,8 @@
 import Foundation
 import SpaceModel
 
-/// Where Space's pages live. The sidebar and the page tabs read and write pages only through this, so the apply
-/// engine, the local copy and sync (pieces 4, 6 and 7 of docs/space.md) can stand behind it later. Space data never
+/// Where Space's pages live. The sidebar and page tabs share this contract with the encrypted local store,
+/// tests and previews. Sync can join the same path later (piece 7 of docs/space.md). Space data never
 /// leaves the app through it: no agent, thread or Orchestrator surface reads it.
 @MainActor
 public protocol SpacePageStore: AnyObject {
@@ -16,7 +16,7 @@ public protocol SpacePageStore: AnyObject {
     func removeObserver(_ token: Int)
 }
 
-/// The store until the local copy lands: pages live for this run only.
+/// A store for isolated tests and previews. Pages live for this run only.
 @MainActor
 public final class InMemorySpacePageStore: SpacePageStore {
     public private(set) var pages: [PageID: PageRecord]

@@ -1,0 +1,188 @@
+import Foundation
+import SpaceCrypto
+import SpaceEngine
+import SpaceLocal
+import SpaceModel
+import Testing
+@testable import Features
+
+@MainActor
+struct PersistentSpacePageStoreTests {
+    private func root() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("space-workspace-test-\(UUID().uuidString)")
+    }
+
+    @Test func setupRecoverySaveRelaunchLoadAndDisable() async throws {
+        let root = root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let keys = SpaceKeyStore.inMemory()
+        let first = PersistentSpacePageStore()
+        let setup = try await first.open(applicationSupport: root, keyStore: keys)
+        let recovery = try #require(setup.recoveryKey)
+        #expect(try keys.load(spaceId: setup.header.spaceId.rawValue) == RecoveryKey.decode(recovery))
+        #expect(setup.keys.verifyCheck(setup.header.check))
+        try setup.acknowledgeRecovery()
+        let parent = first.createPage(title: "Local secret parent")
+        let child = first.createPage(in: parent, title: "Local secret child")
+        first.rename(child, "Local secret renamed")
+        first.trash(parent)
+        first.restore(parent)
+        #expect(first.isSaving)
+        let expected = first.pages
+        try await first.close()
+        #expect(first.pages.isEmpty)
+        #expect(try keys.load(spaceId: setup.header.spaceId.rawValue) != nil)
+        let next = PersistentSpacePageStore()
+        let reopened = try await next.open(applicationSupport: root, keyStore: keys)
+        #expect(reopened.header == setup.header)
+        #expect(reopened.device == setup.device)
+        #expect(reopened.recoveryKey == nil)
+        #expect(next.pages == expected)
+        #expect(next.pages[child]?.parent == parent)
+        let local = try await reopened.local.load()
+        #expect(local.pending.isEmpty)
+        #expect(local.confirmedSequence == 5)
+        try await next.close()
+    }
+
+    @Test func recoveryReturnsUntilExplicitlyAcknowledged() async throws {
+        let root = root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let keys = SpaceKeyStore.inMemory()
+        let first = PersistentSpacePageStore()
+        let setup = try await first.open(applicationSupport: root, keyStore: keys)
+        try await first.close()
+        let next = PersistentSpacePageStore()
+        let reopened = try await next.open(applicationSupport: root, keyStore: keys)
+        #expect(reopened.recoveryKey == setup.recoveryKey)
+        try await next.close()
+    }
+
+    @Test func removedOptionalKeysAndPermanentRemovalSurviveRestart() async throws {
+        let root = root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let keys = SpaceKeyStore.inMemory()
+        let first = PersistentSpacePageStore()
+        _ = try await first.open(applicationSupport: root, keyStore: keys)
+        let parent = first.createPage(title: "Parent")
+        let child = first.createPage(in: parent, title: "Child")
+        first.trash(child, now: 100)
+        first.restore(child)
+        #expect(first.move(child, to: nil, before: nil))
+        var record = try #require(first.pages[child])
+        record.extra["future"] = .object(["kept": .bool(true)])
+        first.put([child: record])
+        first.remove(parent)
+        try await first.close()
+        let next = PersistentSpacePageStore()
+        _ = try await next.open(applicationSupport: root, keyStore: keys)
+        #expect(next.pages[parent] == nil)
+        #expect(next.pages[child]?.parent == nil)
+        #expect(next.pages[child]?.trashedAt == nil)
+        #expect(next.pages[child]?.extra["future"] == .object(["kept": .bool(true)]))
+        try await next.close()
+    }
+
+    @Test func resumesDurablePendingAfterInterruptedSave() async throws {
+        let root = root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let keys = SpaceKeyStore.inMemory()
+        let setup = try SpaceLocalSetup(applicationSupport: root, keyStore: keys)
+        let id = PageID()
+        let record = PageRecord(order: try OrderKey("a0"), title: "Pending secret", created: 1)
+        let op = SpacePendingOperation(op: OpID(), dev: setup.device,
+                                       recs: [RecordRevision(id: id, base: nil)],
+                                       payload: OpPayload(at: 1, changes: [try .page(id, record)]))
+        try await setup.local.replacePending([op])
+        await setup.local.close()
+        let next = PersistentSpacePageStore()
+        let reopened = try await next.open(applicationSupport: root, keyStore: keys)
+        var expected = SpaceState()
+        expected.apply(op.payload.changes)
+        #expect(next.pages[id] == expected.page(id))
+        #expect(try await reopened.local.load().pending.isEmpty)
+        #expect(try await reopened.local.load().frames.first?.op == op.op)
+        try await next.close()
+    }
+
+    @Test func missingKeyAndCorruptionNeverCreateAnEmptyReplacement() async throws {
+        let root = root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let keys = SpaceKeyStore.inMemory()
+        let first = PersistentSpacePageStore()
+        let setup = try await first.open(applicationSupport: root, keyStore: keys)
+        let id = first.createPage(title: "Kept secret")
+        try await first.close()
+        let key = try #require(try keys.load(spaceId: setup.header.spaceId.rawValue))
+        try keys.delete(spaceId: setup.header.spaceId.rawValue)
+        let missing = PersistentSpacePageStore()
+        await #expect(throws: SpaceLocalSetupError.self) { try await missing.open(applicationSupport: root, keyStore: keys) }
+        try keys.save(key, spaceId: setup.header.spaceId.rawValue)
+        let next = PersistentSpacePageStore()
+        let reopened = try await next.open(applicationSupport: root, keyStore: keys)
+        #expect(next.pages[id]?.title == "Kept secret")
+        try await next.close()
+        let pending = SpaceLocalStore.directory(applicationSupport: root, spaceID: reopened.header.spaceId).appendingPathComponent("pending.cws")
+        try Data("corrupt".utf8).write(to: pending)
+        let broken = PersistentSpacePageStore()
+        await #expect(throws: (any Error).self) { try await broken.open(applicationSupport: root, keyStore: keys) }
+        #expect(!broken.isOpen)
+    }
+
+    @Test func observerEditsKeepTheirOrderAndSavingFailureIsVisible() async throws {
+        let root = root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let keys = SpaceKeyStore.inMemory()
+        let store = PersistentSpacePageStore()
+        let setup = try await store.open(applicationSupport: root, keyStore: keys)
+        var renamed = false
+        let token = store.observe {
+            if !renamed, let id = store.pages.keys.first {
+                renamed = true
+                store.rename(id, "Observer rename")
+            }
+        }
+        let id = store.createPage(title: "Initial")
+        try await store.flush()
+        store.removeObserver(token)
+        #expect(!store.isSaving)
+        let local = try await setup.local.load()
+        var state = try SpaceState(snapshot: local.snapshot)
+        for frame in local.frames { try state.apply(frame, await setup.local.payload(of: frame)) }
+        #expect(state.page(id)?.title == "Observer rename")
+        await setup.local.close()
+        var failures = 0
+        store.onFailure = { failures += 1 }
+        store.rename(id, "Unsaved edit")
+        await #expect(throws: (any Error).self) { try await store.flush() }
+        #expect(failures == 1)
+        #expect(store.failure != nil)
+        store.rename(id, "Rejected edit")
+        #expect(store.pages[id]?.title == "Unsaved edit")
+    }
+
+    @Test func recursiveGrepFindsNoPlaintextOrRecoveryKeyOnDisk() async throws {
+        let root = root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let keys = SpaceKeyStore.inMemory()
+        let store = PersistentSpacePageStore()
+        let setup = try await store.open(applicationSupport: root, keyStore: keys)
+        let secret = "CWS-PRIVATE-needle-\(UUID().uuidString)"
+        let page = store.createPage(title: secret)
+        store.rename(page, secret + " edited")
+        store.trash(page)
+        try await store.flush()
+        try setup.acknowledgeRecovery()
+        try await store.close()
+        for needle in [secret, try #require(setup.recoveryKey)] {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/grep")
+            process.arguments = ["-R", "-a", "-l", "-F", "--", needle, root.path]
+            process.standardOutput = Pipe()
+            process.standardError = Pipe()
+            try process.run()
+            process.waitUntilExit()
+            #expect(process.terminationStatus == 1, "grep must find no plaintext in any local file")
+        }
+    }
+}

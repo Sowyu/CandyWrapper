@@ -30,6 +30,8 @@ public final class SpaceSidebarView: DSView {
     public let store: SpacePageStore
     let backRow = SidebarNavRowView(.chevronLeft, "Threads")
     let title = LabelView("Space", font: SB.font(15, .medium), color: SB.c(\.sidebarForeground))
+    private let status = LabelView("", font: SB.font(10), color: SB.c(\.sidebarMutedForeground))
+    public var storageStatus: String = "" { didSet { status.text = storageStatus } }
     let trashButton = SidebarContentView.headerButton(.trash2, "Trash")
     let search = SidebarSearchFieldView()
     let tree: SpaceTreeView
@@ -57,7 +59,7 @@ public final class SpaceSidebarView: DSView {
         search.placeholder = "Search pages"
         search.field.setAccessibilityLabel("Search pages")
         search.clearButton.setAccessibilityLabel("Clear page search")
-        [backRow, title, trashButton, search, scroll, empty, newPageRow].forEach(addSubview)
+        [backRow, title, status, trashButton, search, scroll, empty, newPageRow].forEach(addSubview)
         backRow.action = { [weak self] in self?.actions.back() }
         trashButton.action = { [weak self] in self?.actions.openTrash() }
         newPageRow.action = { [weak self] in self?.newPage(in: nil) }
@@ -118,6 +120,7 @@ public final class SpaceSidebarView: DSView {
         super.viewDidChangeEffectiveAppearance()
         title.color = SB.c(\.sidebarForeground)
         empty.color = SB.c(\.sidebarMutedForeground)
+        status.color = SB.c(\.sidebarMutedForeground)
     }
 
     public override func layout() {
@@ -127,6 +130,7 @@ public final class SpaceSidebarView: DSView {
         backRow.frame = NSRect(x: 8, y: y, width: max(0, w - 16), height: SidebarNavRowView.height)
         y += SidebarNavRowView.height + 10
         title.frame = NSRect(x: 16, y: y + 2, width: max(0, w - 16 - 40), height: 20)
+        status.frame = NSRect(x: 86, y: y + 5, width: max(0, w - 126), height: 16)
         trashButton.frame = NSRect(x: w - 8 - 24, y: y, width: 24, height: 24)
         y += 24 + 6
         search.frame = NSRect(x: 8, y: y, width: max(0, w - 16), height: SidebarNavRowView.height)

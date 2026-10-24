@@ -183,14 +183,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let deadline = Date().addingTimeInterval(1.6)
             while !handedOff, Date() < deadline { RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05)) }
         }
+        if let space, space.hasPendingWrites {
+            Task {
+                guard await space.flush() else {
+                    cancelQuit()
+                    NSApp.reply(toApplicationShouldTerminate: false)
+                    return
+                }
+                let reply = finishQuit(installing: installing, asked: asked)
+                if reply != .terminateLater { NSApp.reply(toApplicationShouldTerminate: reply == .terminateNow) }
+            }
+            return .terminateLater
+        }
+        return finishQuit(installing: installing, asked: asked)
+    }
+
+    private func finishQuit(installing: Bool, asked: Bool) -> NSApplication.TerminateReply {
         guard let server else { environments?.stopAll(); return .terminateNow }
         let reply = server.shouldTerminate(installingUpdate: installing, asked: asked)
-        if reply == .terminateCancel {
-            returnFromCancelledQuit()
-            // CandyWrapper stays open, so the schedule goes back off.
-            if orchestratorHandedOff { orchestratorHandedOff = false; orchestrator?.quitCancelled() }
-        }
+        if reply == .terminateCancel { cancelQuit() }
         return reply
+    }
+
+    private func cancelQuit() {
+        returnFromCancelledQuit()
+        // CandyWrapper stays open, so the schedule goes back off.
+        if orchestratorHandedOff { orchestratorHandedOff = false; orchestrator?.quitCancelled() }
     }
 
     /// Set by Cmd-Q and the Quit menu item, so a logout, `kill` or a test snapshot quits without asking.
@@ -320,7 +338,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         commands.onOrchestratorHidden = { [weak orchestrator] in orchestrator?.paneClosed() }
         commands.extraMenuItems = { [weak orchestrator] id in orchestrator?.menuItems(id) ?? [] }
         commands.performExtra = { [weak orchestrator] choice, id in orchestrator?.perform(choice, id) ?? false }
-        let space = SpaceController(sidebar: sidebar, commands: commands)
+        let space = SpaceController(sidebar: sidebar, commands: commands, window: window)
         self.space = space
         sidebar.actions.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open() }
         sidebar.accountRow.onOpenMachines = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open(.connections) }
