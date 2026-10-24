@@ -18,6 +18,7 @@ public final class SpacePageView: DSView {
     private let emptyTitle = LabelView("No pages yet", font: DSFont.ui(32, weight: .semibold), color: Themed.color(\.mutedForeground))
     private let newPage = ButtonView("New page", icon: .plus, variant: .secondary, size: .sm)
     private var token: Int?
+    private var laidOutWidth: CGFloat?
 
     public init(store: SpaceDocumentStore, blobs: SpaceBlobSource? = nil) {
         self.store = store
@@ -58,6 +59,7 @@ public final class SpacePageView: DSView {
     private func clearContent() {
         editor?.scrollView.removeFromSuperview()
         editor = nil
+        laidOutWidth = nil
         stub?.removeFromSuperview()
         stub = nil
         header.removeFromSuperview()
@@ -159,6 +161,10 @@ public final class SpacePageView: DSView {
             let tv = editor.textView
             let inset = NSSize(width: x, height: h)
             if tv.textContainerInset != inset { tv.textContainerInset = inset }
+            if tv.textContainer?.size.width != laidOutWidth {
+                laidOutWidth = tv.textContainer?.size.width
+                editor.columnWidthChanged()
+            }
             header.frame = NSRect(x: x, y: 0, width: column, height: h)
         } else if let stub {
             stub.frame = bounds
