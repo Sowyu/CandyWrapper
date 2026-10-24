@@ -1,0 +1,58 @@
+{
+  "about" : "Golden crypto vectors for Space (docs/space.md, Keys). Every platform must reproduce these bytes. Nonces are fixed here only; real seals use a fresh random nonce.",
+  "blob" : {
+    "blobId" : "5838b6af90e501bc5c90bd1275d66e6f38cc749e293eaf8213c2b061c39be3c7",
+    "chunks" : [
+      {
+        "aad" : "cws1|0f8fad5b-d9cb-469f-a165-70867728950e|5838b6af90e501bc5c90bd1275d66e6f38cc749e293eaf8213c2b061c39be3c7|0|true",
+        "ct" : "MDEyMzQ1Njc4OTo7Crh59bTmDiyD5wu0VPPvqUIwA1YLVIlE2LQ=",
+        "last" : true,
+        "n" : 0,
+        "nonce" : "303132333435363738393a3b"
+      }
+    ],
+    "chunkSize" : 1048576,
+    "data" : "hello blob"
+  },
+  "check" : {
+    "aad" : "",
+    "ct" : "AAECAwQFBgcICQoLPXk1Cf1dQdpjRyaO7KLsH2+bGoUF5UMdpIu6g86hj5iqSw==",
+    "nonce" : "000102030405060708090a0b",
+    "plaintext" : "candywrapper space"
+  },
+  "derived" : {
+    "cws1 blob" : "baff66e0f0af4992de6d7403c37f849adc010577a74cfc65371ad3221d937447",
+    "cws1 blob-id" : "aff2e3cf61e75fd1c79f1c4f9dbb7f8f6f292b26405ab28d2f04297c9e745292",
+    "cws1 check" : "3bc6207dce7215943ad5dc919338d6273a31b781fe666b73934d456985471347",
+    "cws1 local" : "7739afce3086e6a5767014a43d9366cfc0fd05a179995613e1808cc487abdc94",
+    "cws1 ops" : "adb2d8a9f51939b8bd352e24e2ef474e38a5f07178f969901cbf61ee5dae225d"
+  },
+  "frame" : {
+    "aad" : "cws1|0f8fad5b-d9cb-469f-a165-70867728950e|7c9e6679-7425-40de-944b-e07fc1f90ae7|16fd2706-8baf-433b-82eb-8c7fada847da|[[\"a8098c1a-f86e-41b4-b7b4-6b6a0f3b0b36\",805],[\"e0b1c5a2-3f4d-4b6e-9a7c-1d2e3f4a5b6c\",null]]",
+    "ct" : "EBESExQVFhcYGRobLZc4iF0NN9oxN9H+qlWYoyXMS7E19MGi/JpRdLlAaBPKUVYmbdArb548xXmIOnSuEt1pgFbpHVUhx5LoJYpX1scdu0oggBl42dqy1DsrQfe3iawV+D4QzgtfGpoN1N0u1h8jr5sgJk99kTQjKFGKriOCtt/VOE4xYOqGIInsGzlLxhqtxoDyfGsODXNyPw==",
+    "dev" : "16fd2706-8baf-433b-82eb-8c7fada847da",
+    "nonce" : "101112131415161718191a1b",
+    "op" : "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "payload" : "{\"v\":1,\"at\":1792800000000,\"changes\":[{\"kind\":\"page\",\"id\":\"a8098c1a-f86e-41b4-b7b4-6b6a0f3b0b36\",\"set\":{\"title\":\"Groceries\"}}]}",
+    "recs" : [
+      [
+        "a8098c1a-f86e-41b4-b7b4-6b6a0f3b0b36",
+        805
+      ],
+      [
+        "e0b1c5a2-3f4d-4b6e-9a7c-1d2e3f4a5b6c",
+        null
+      ]
+    ]
+  },
+  "key" : "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "recoveryKey" : "AAAQ EAYE AUDA OCAJ BIFQ YDIO B4IB CEQT CQKR MFYY DENB WHA5 DYPQ",
+  "snapshot" : {
+    "aad" : "cws1|0f8fad5b-d9cb-469f-a165-70867728950e|snapshot|2000",
+    "ct" : "ICEiIyQlJicoKSorEqD6Z5odvbqSL5+t4iWYqxLH6BtNP8Ar7rk3/KtctQ==",
+    "nonce" : "202122232425262728292a2b",
+    "plaintext" : "not really gzip",
+    "seq" : 2000
+  },
+  "spaceId" : "0f8fad5b-d9cb-469f-a165-70867728950e"
+}
