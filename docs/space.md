@@ -107,13 +107,29 @@ Colors are a fixed set of names, `gray`, `brown`, `orange`, `yellow`, `green`, `
 ### Date values
 
 ```json
-{"start": "2026-10-27T09:00", "end": "2026-10-27T10:30", "repeat": "weekly", "remind": {"before": 15}}
+{"start": "2026-10-27T09:00", "end": "2026-10-27T10:30", "tz": "Australia/Melbourne", "repeat": "weekly", "remind": {"before": 15}}
 ```
 
-- `start` is `YYYY-MM-DD` for an all-day date or `YYYY-MM-DDTHH:MM` for a time. `end` is optional and uses the same form.
-- Times are floating wall-clock times with no time zone. 9:00 stays 9:00 when you travel. That is the right call for personal plans and avoids time zone bugs on two platforms.
+```json
+{"start": "2026-10-27", "remind": {"before": 0}}
+```
+
+The rule follows Google Calendar and RFC 5545 (`DTSTART;TZID`), and Notion behaves the same way for timed dates. The user chose it on 2026-10-24.
+
+- A date-only value has `start`, and optionally `end`, as `YYYY-MM-DD` and no `tz`. It means that calendar date wherever the device is, so a due date of the 27th is the 27th in every zone.
+- A timed value has `start`, and optionally `end`, as `YYYY-MM-DDTHH:MM`, the wall-clock time in `tz`. `tz` is an IANA zone id and is required. `start` and `end` are always both timed or both date-only.
+- A new timed value takes the device's current zone as `tz`.
+- Every device shows a timed value converted to its own current zone. A 9:00 Melbourne meeting shows as 23:00 the day before on a device set to London.
+- Editing the time keeps `tz`. The device converts the time the user picked from its own zone back into `tz` and stores that wall-clock time. Only clearing the time or setting a new date from empty takes the device's zone again.
+- The date popover shows the value's zone, like "Melbourne time", only when it differs from the device's zone.
+- An unknown `tz` id reads as the device's current zone, and the value is written back unchanged.
 - `repeat` is null or `weekly`. Weekly is what a timetable needs. Other rules are out of v1.
-- `remind` is null, `{"before": <minutes>}` or `{"at": "YYYY-MM-DDTHH:MM"}`. All-day dates remind at 9:00 minus `before`.
+- A weekly timed value repeats on the same weekday at the same wall-clock time in `tz`, from `start` on. Each occurrence is placed in `tz` first and then converted to the device's zone, so a 9:00 Melbourne slot stays 9:00 in Melbourne through daylight saving changes and can shift by an hour, or to another day, when viewed from elsewhere.
+- Each occurrence's end is its start plus the first occurrence's length in minutes.
+- A weekly date-only value repeats on the same weekday, in every zone.
+- A wall-clock time that doesn't exist in `tz`, inside a spring-forward gap, moves later by the length of the gap. A time that happens twice, in a fall-back overlap, takes the earlier one. This is java.time's `ZonedDateTime.of` rule, and the Mac implements it explicitly so both platforms agree.
+- `remind` is null, `{"before": <minutes>}` or `{"at": "YYYY-MM-DDTHH:MM"}`. On a timed value `at` is in `tz`. On a date-only value, `before` counts back from 9:00 on that date and `at` is a wall-clock time, both in the device's current zone.
+- Date filters, the timetable's week and "overdue" use the device's current zone. A date-only due date is overdue once its date has ended there, and a timed one once its moment has passed.
 
 ### View settings
 
@@ -367,7 +383,7 @@ Filter ops by type:
 ### Timetable
 
 - A week grid. Columns are days from Monday, or Monday to Friday when `days` is 5. Rows are hours from `from` to `to` at 48pt an hour, and the grid scrolls for earlier and later hours.
-- It places every item whose `field` date has a time, from `start` to `end`, or one hour long without an end. Weekly items show in every week from their start date on. All-day items sit in a strip above the grid.
+- It places every item whose `field` date has a time, from `start` to `end`, or one hour long without an end, converted to the device's zone as "Date values" describes. Weekly items show in every week from their start date on. All-day items sit in a strip above the grid.
 - Overlapping items share the column side by side.
 - The header has "‹ This week ›" and "Today". Today's column header uses the accent.
 - Dragging on empty grid creates an item for that range and focuses its title. Dragging an item moves it, its bottom edge resizes it, both snapping to 15 minutes.
@@ -419,11 +435,12 @@ Every device schedules its own reminders from its local copy with `UNUserNotific
 
 1. A reminder comes from any date value with `remind`, on any item that isn't Done or trashed.
 2. The planner schedules the soonest 50 within the next 30 days as `UNCalendarNotificationTrigger` requests, since Apple caps pending local notifications at 64 per app. Weekly items schedule each week as its own request.
-3. It plans again when a change touches a date, Done or trash, when a reminder fires and when the app starts. Each request id is `space.<pageId>.<fieldId>.<start>`, so planning again replaces requests instead of doubling them.
-4. The notification's title is the item title, and its body is the parent page and the time, like "Groceries · 9:00".
-5. Actions are "Mark done", which writes the change and syncs, and "Snooze 10 min", which stays on that device.
-6. Clicking opens the item in Space.
-7. `ThreadNotificationCoordinator` is the app's notification delegate, so it hands `space.` ids to the Space reminder controller.
+3. A timed reminder's date components carry the value's `tz`, so it fires at that moment wherever the device is. A date-only reminder's components carry no zone, so it fires at its wall-clock time in whatever zone the device is in.
+4. It plans again when a change touches a date, Done or trash, when a reminder fires, when the app starts and when the system time zone changes. Each request id is `space.<pageId>.<fieldId>.<start>`, so planning again replaces requests instead of doubling them.
+5. The notification's title is the item title, and its body is the parent page and the time, like "Groceries · 9:00", in the device's zone.
+6. Actions are "Mark done", which writes the change and syncs, and "Snooze 10 min", which stays on that device.
+7. Clicking opens the item in Space.
+8. `ThreadNotificationCoordinator` is the app's notification delegate, so it hands `space.` ids to the Space reminder controller.
 
 Permission: setting the first reminder asks for notification permission if the user hasn't granted it. Turning Space off withdraws all `space.` requests and delivered notifications.
 
@@ -501,7 +518,7 @@ Target size: 2,000 pages, 100,000 blocks, 20,000 items and 2 GB of attachments. 
 - Formulas, relations, rollups, created and edited fields, inline databases inside other pages.
 - Toggle blocks, callouts, simple tables, embeds, math, Mermaid, synced blocks, backlinks.
 - Templates, cover images, page fonts and widths.
-- Repeat rules beyond weekly, time zones, a moving "now" line in the timetable. A now line would need a timer, so today's column is tinted instead.
+- Repeat rules beyond weekly, a time zone picker on dates, a moving "now" line in the timetable. A now line would need a timer, so today's column is tinted instead.
 - Import from Notion and export. Markdown export is the likely first follow-up.
 - Key rotation, account-based recovery, pruning history.
 - Spotlight, widgets, Shortcuts, Quick Look.
@@ -542,10 +559,12 @@ About 28 agent-days in total. With four lanes at once it's about 9 working days:
 
 A useful first milestone for the user to try is Space on this Mac only, with the Space machine set to the local one: pieces 2, 3, 4, 6, 11 and 12. It needs no pipe, so it ships before the sync work is done.
 
-## Open decisions for the user
+## Decided by the user on 2026-10-24
 
-1. Recovery: if every device and the recovery key are lost, Space is unreadable. The alternative is the key wrapped by a passphrase and stored on the Space machine, which an agent there could attack offline if the passphrase is weak.
-2. Redesign only: Space follows the Orchestrator and hides under other themes. Say if it should work in the default themes too.
-3. Reminder text: notifications show the item title, which macOS keeps in its own notification store. A "Hide titles in reminders" option is easy to add.
-4. The helper binary on miniko: Space needs it there, with no service and no tokens. If the pipe spike fails, the fallback touches T3's attachment store and needs the user's approval.
-5. Floating times: plans keep their wall-clock time when you travel, with no time zones.
+1. Recovery: losing every device and the recovery key loses Space, and that's acceptable. No passphrase-wrapped key goes on the Space machine.
+2. Space is Redesign only, like the Orchestrator.
+3. Reminder notifications show item titles.
+4. Space uses the helper binary on miniko, with no service and no tokens.
+5. Time zones follow other apps: timed values store their zone and show in the device's zone, date-only values stay on their date, and weekly slots stay tied to the zone they were made in. The exact rule is in "Date values".
+
+The two spikes in piece 1 go to another agent.
