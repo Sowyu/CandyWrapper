@@ -1,0 +1,271 @@
+{
+  "date": "2026-10-24",
+  "platform": {
+    "os": "macOS 27.0.1",
+    "build": "26A434",
+    "architecture": "arm64"
+  },
+  "transportOutcome": "FAIL",
+  "keychainPrimaryOutcome": "FAIL",
+  "realT3ConnectTested": false,
+  "substitute": {
+    "modeledRTTMS": 100,
+    "MbpsPerDirection": 10,
+    "allMeasuredWebSocketTrafficShaped": true
+  },
+  "fixture": {
+    "sizesMiB": [
+      1,
+      5,
+      20
+    ],
+    "chunkBytes": 1048576,
+    "AESGCM": true,
+    "outerBase64JSON": true,
+    "oneTerminalWriteInFlight": true,
+    "bulkDownloadWithoutApplicationAcks": true
+  },
+  "transport": [
+    {
+      "label": "local",
+      "serverVersion": "0.1.2-nightly.20261021.3473",
+      "connectLinked": false,
+      "images": [
+        {
+          "MiB": 1,
+          "encryptedBytes": 1048604,
+          "terminalWrites": 29,
+          "uploadFrameChars": 1864357,
+          "uploadSeconds": 0.11619904199999997,
+          "uploadMiBps": 8.605922930070285,
+          "downloadSeconds": 0.09798641699999999,
+          "downloadMiBps": 10.20549613524495,
+          "sha256Matched": true,
+          "uploadSHA256Matched": true
+        },
+        {
+          "MiB": 5,
+          "encryptedBytes": 5243020,
+          "terminalWrites": 145,
+          "uploadFrameChars": 9321801,
+          "uploadSeconds": 0.5981136250000001,
+          "uploadMiBps": 8.359615616514336,
+          "downloadSeconds": 0.34791895800000017,
+          "downloadMiBps": 14.371162838444686,
+          "sha256Matched": true,
+          "uploadSHA256Matched": true
+        },
+        {
+          "MiB": 20,
+          "encryptedBytes": 20972080,
+          "terminalWrites": 580,
+          "uploadFrameChars": 37287220,
+          "uploadSeconds": 2.376170625,
+          "uploadMiBps": 8.416903983904776,
+          "downloadFailed": "terminal output stream ended after 6 of 20 frames",
+          "downloadElapsedSeconds": 0.9165250829999998,
+          "downloadReceivedChars": 12733046,
+          "streamExit": {
+            "_tag": "Success",
+            "value": null
+          },
+          "uploadSHA256Matched": true
+        }
+      ],
+      "rawTTY": {
+        "echo": false,
+        "canonical": false
+      },
+      "text": {
+        "n": 100,
+        "p50MS": 0.3533749999999891,
+        "p95MS": 0.421541999999997,
+        "maxMS": 0.5086670000000182
+      },
+      "history": [
+        {
+          "bytes": 8388608
+        }
+      ],
+      "receivedOutputChars": 23927218,
+      "idleOutputCharsIn2Seconds": 0,
+      "closeMS": 10.102041000000561,
+      "historyRemoved": true,
+      "peerExited": true
+    },
+    {
+      "label": "shaped-100ms-10Mbps",
+      "serverVersion": "0.1.2-nightly.20261021.3473",
+      "connectLinked": false,
+      "images": [
+        {
+          "MiB": 1,
+          "encryptedBytes": 1048604,
+          "terminalWrites": 29,
+          "uploadFrameChars": 1864357,
+          "uploadSeconds": 4.63863675,
+          "uploadMiBps": 0.21558057978995662,
+          "downloadSeconds": 2.8448742090000003,
+          "downloadMiBps": 0.351509390761959,
+          "sha256Matched": true,
+          "uploadSHA256Matched": true
+        },
+        {
+          "MiB": 5,
+          "encryptedBytes": 5243020,
+          "terminalWrites": 145,
+          "uploadFrameChars": 9321801,
+          "uploadSeconds": 23.109441167,
+          "uploadMiBps": 0.21636178754248453,
+          "downloadFailed": "terminal output stream ended after 0 of 5 frames",
+          "downloadElapsedSeconds": 0.615332708000004,
+          "downloadReceivedChars": 122880,
+          "streamExit": {
+            "_tag": "Success",
+            "value": null
+          },
+          "uploadSHA256Matched": true
+        }
+      ],
+      "rawTTY": {
+        "echo": false,
+        "canonical": false
+      },
+      "text": {
+        "n": 100,
+        "p50MS": 106.18649999999974,
+        "p95MS": 107.26758299999872,
+        "maxMS": 108.35475000000017
+      },
+      "history": [
+        {
+          "bytes": 8388608
+        }
+      ],
+      "receivedOutputChars": 1991873,
+      "idleOutputCharsIn2Seconds": 0,
+      "closeMS": 122.30950000000007,
+      "historyRemoved": true,
+      "peerExited": true
+    },
+    {
+      "label": "shaped-100ms-10Mbps-20",
+      "serverVersion": "0.1.2-nightly.20261021.3473",
+      "connectLinked": false,
+      "images": [
+        {
+          "MiB": 20,
+          "encryptedBytes": 20972080,
+          "terminalWrites": 580,
+          "uploadFrameChars": 37287220,
+          "uploadSeconds": 92.53195491700001,
+          "uploadMiBps": 0.21614154826772813,
+          "downloadFailed": "terminal output stream ended after 0 of 20 frames",
+          "downloadElapsedSeconds": 0.6153576250000015,
+          "downloadReceivedChars": 122880,
+          "streamExit": {
+            "_tag": "Success",
+            "value": null
+          },
+          "uploadSHA256Matched": true
+        }
+      ],
+      "rawTTY": {
+        "echo": false,
+        "canonical": false
+      },
+      "text": {},
+      "history": [
+        {
+          "bytes": 8388608
+        }
+      ],
+      "receivedOutputChars": 126792,
+      "idleOutputCharsIn2Seconds": 0,
+      "closeMS": 122.75966600000743,
+      "historyRemoved": true,
+      "peerExited": true
+    }
+  ],
+  "keychain": {
+    "team": "8Q677AYRU7",
+    "identity": "Apple Development",
+    "hardenedRuntime": true,
+    "stripped": true,
+    "provisioningProfile": false,
+    "fallbackOutcome": "PASS",
+    "runs": [
+      {
+        "binary": "keychain-plain",
+        "mode": "dp",
+        "exit": 0,
+        "result": {
+          "add": -34018,
+          "addMessage": "A required entitlement is not present.",
+          "addMS": 0.164208,
+          "deleteAfter": -34018,
+          "deleteBefore": -34018,
+          "matches32Bytes": false,
+          "mode": "dp",
+          "read": -34018,
+          "readMessage": "A required entitlement is not present.",
+          "readMS": 0.144458
+        }
+      },
+      {
+        "binary": "keychain-group",
+        "mode": "dp",
+        "exit": -9,
+        "result": ""
+      },
+      {
+        "binary": "keychain-access-only",
+        "mode": "dp",
+        "exit": -9,
+        "result": ""
+      },
+      {
+        "binary": "keychain-plain",
+        "mode": "acl-write",
+        "exit": 0,
+        "result": {
+          "add": 0,
+          "addMessage": "No error.",
+          "addMS": 12.491375,
+          "deleteAfter": null,
+          "deleteBefore": -25300,
+          "matches32Bytes": true,
+          "mode": "acl-write",
+          "read": 0,
+          "readMessage": "No error.",
+          "readMS": 1.242166
+        }
+      },
+      {
+        "binary": "keychain-plain",
+        "mode": "acl-read",
+        "exit": 0,
+        "result": "read=0; matches32Bytes=true"
+      },
+      {
+        "binary": "keychain-outsider",
+        "mode": "acl-read",
+        "exit": 0,
+        "result": "read=-25293; matches32Bytes=false"
+      },
+      {
+        "binary": "keychain-same-team-other-app",
+        "mode": "acl-read",
+        "exit": 0,
+        "result": "read=-25293; matches32Bytes=false"
+      },
+      {
+        "binary": "keychain-plain",
+        "mode": "acl-delete",
+        "exit": 0,
+        "result": "delete=0"
+      }
+    ],
+    "systemLogReason": "No matching profile found; no eligible provisioning profiles found"
+  }
+}

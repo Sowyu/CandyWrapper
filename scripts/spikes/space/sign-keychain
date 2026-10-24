@@ -1,0 +1,46 @@
+#!/bin/zsh -f
+# Match scripts/release's identity, hardened runtime and timestamp choice, without changing its setup.
+set -euo pipefail
+root=${0:A:h:h:h:h}
+$root/scripts/preflight
+out=${1:?usage: sign-keychain private-output-folder}
+[[ ${out:A} == $HOME/CandyWrapper-research/sandbox/* ]] || { print -u2 "sandbox output only"; exit 2; }
+mkdir -p $out
+xcrun swiftc -Osize -target arm64-apple-macos14.0 $root/scripts/spikes/space/keychain.swift -o $out/keychain-plain
+strip -x -S $out/keychain-plain
+cp $out/keychain-plain $out/keychain-group
+cp $out/keychain-plain $out/keychain-access-only
+cp $out/keychain-plain $out/keychain-same-team-other-app
+cat > $out/group.plist <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>com.apple.application-identifier</key><string>8Q677AYRU7.dev.candywrapper.space-spike</string>
+<key>com.apple.developer.team-identifier</key><string>8Q677AYRU7</string>
+<key>keychain-access-groups</key><array><string>8Q677AYRU7.dev.candywrapper.space-spike</string></array>
+</dict></plist>
+PLIST
+cat > $out/access-only.plist <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>keychain-access-groups</key><array><string>8Q677AYRU7.dev.candywrapper.space-spike</string></array>
+</dict></plist>
+PLIST
+KC=$HOME/Library/Keychains/candywrapper-release.keychain-db
+# Keep the password in memory and on stdin, exactly as scripts/release does.
+unlock() {
+  local pw=$(security find-generic-password -s dev.candywrapper.release-keychain -w)
+  print -r -- "unlock-keychain -p $pw $KC" | security -i >/dev/null
+}
+unlock
+trap 'security lock-keychain $KC 2>/dev/null' EXIT
+codesign --force --sign 'Apple Development' --options runtime --timestamp=none --identifier dev.candywrapper.space-spike $out/keychain-plain
+codesign --force --sign 'Apple Development' --options runtime --timestamp=none --identifier dev.candywrapper.space-spike --entitlements $out/group.plist $out/keychain-group
+codesign --force --sign 'Apple Development' --options runtime --timestamp=none --identifier dev.candywrapper.space-spike --entitlements $out/access-only.plist $out/keychain-access-only
+codesign --force --sign 'Apple Development' --options runtime --timestamp=none --identifier dev.candywrapper.space-spike.other $out/keychain-same-team-other-app
+for binary in keychain-plain keychain-group keychain-access-only keychain-same-team-other-app; do
+  codesign --verify --strict $out/$binary
+  signature=$(codesign -dv $out/$binary 2>&1)
+  [[ $signature == *$'\n'TeamIdentifier=8Q677AYRU7$'\n'* ]] || exit 1
+  print "$binary verified; Team 8Q677AYRU7; runtime; no profile"
+done
