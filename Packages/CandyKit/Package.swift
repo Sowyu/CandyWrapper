@@ -41,6 +41,7 @@ let package = Package(
         .testTarget(name: "T3ProtocolTests", dependencies: ["T3Protocol"]),
         .testTarget(name: "T3ClientTests", dependencies: ["T3Client", "T3Transport"]),
         .testTarget(name: "T3StoreTests", dependencies: ["T3Store"]),
+        .testTarget(name: "CandyHelperTests", dependencies: ["CandyHelper"]),
         .testTarget(name: "FeaturesTests", dependencies: ["Features", "DesignSystem", "T3Store", "T3Protocol", .product(name: "SwiftTerm", package: "SwiftTerm")], exclude: ["Fixtures"]),
     ]
 )

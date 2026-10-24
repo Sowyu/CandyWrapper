@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import T3Store
+import T3Transport
 #if canImport(Security)
 import Security
 #endif
@@ -160,4 +164,47 @@ struct HelperError: LocalizedError {
 /// One line on stderr, which launchd and journald keep. Callers pass labels, call names and error text, never tokens.
 func log(_ text: String) {
     FileHandle.standardError.write(Data("\(Date().ISO8601Format()) \(text)\n".utf8))
+}
+
+/// Masks anything that could be a credential before it reaches a log: pairing codes (12 upper-case letters and digits),
+/// bearer tokens and tickets (long base64url, often dot-joined) and hex secrets. Error tags like `invalid_credential`,
+/// machine ids (UUIDs), hosts, ports and versions stay readable.
+func redact(_ text: String) -> String {
+    guard let regex = try? NSRegularExpression(pattern: #"[A-Za-z0-9_\-.]{12,}"#) else { return text }
+    var out = text
+    for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).reversed() {
+        guard let range = Range(match.range, in: text) else { continue }
+        let word = String(text[range])
+        if word.range(of: #"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"#, options: .regularExpression) != nil { continue }
+        let digit = word.contains(where: \.isNumber), upper = word.contains(where: \.isUppercase)
+        if (digit && upper) || (digit && word.count >= 32) { out.replaceSubrange(range, with: "[redacted]") }
+    }
+    return out
+}
+
+/// "127.0.0.1:3773" for a log line.
+func hostPort(_ url: URL) -> String { "\(url.host() ?? "?")\(url.port.map { ":\($0)" } ?? "")" }
+
+/// The helper's HTTP: no cookies, like the app's, and no redirects, so a request never lands on a server other than the
+/// one it names and a bearer token never follows a redirect anywhere.
+let helperSession: URLSession = {
+    let config = URLSessionConfiguration.ephemeral
+    config.httpShouldSetCookies = false
+    config.httpCookieAcceptPolicy = .never
+    config.httpCookieStorage = nil
+    config.urlCache = nil
+    return URLSession(configuration: config, delegate: NoRedirects(), delegateQueue: nil)
+}()
+
+private final class NoRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        completionHandler(nil)
+    }
+}
+
+func helperHTTP(_ url: URL, timeout: TimeInterval = 10) -> EnvironmentHTTP {
+    var http = EnvironmentHTTP(baseURL: url, session: helperSession)
+    http.timeout = timeout
+    return http
 }
