@@ -10,6 +10,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "SpaceModel", targets: ["SpaceModel"]),
+        .library(name: "SpaceFields", targets: ["SpaceFields"]),
         .library(name: "DesignSystem", targets: ["DesignSystem"]),
         .library(name: "T3Protocol", targets: ["T3Protocol"]),
         .library(name: "T3Transport", targets: ["T3Transport"]),
@@ -28,6 +29,8 @@ let package = Package(
     targets: [
         // Private Space format. Foundation only, shared with the helper and Linux.
         .target(name: "SpaceModel", swiftSettings: sizeOptimized),
+        // Pure field queries and conversion for Space views. No UI or storage.
+        .target(name: "SpaceFields", dependencies: ["SpaceModel"], swiftSettings: sizeOptimized),
         .target(name: "DesignSystem", exclude: ["Icons/LICENSE-lucide.txt", "Icons/LICENSE-hugeicons.txt"], resources: [.copy("Resources/surface-grain.rgba")], swiftSettings: sizeOptimized),
         // Wire and domain types from docs/protocol.md. No I/O.
         .target(name: "T3Protocol", swiftSettings: sizeOptimized),
@@ -51,6 +54,7 @@ let package = Package(
                          .copy("Resources/SymbolsNerdFontMono-Regular.ttf"), .copy("Resources/LICENSE-symbols-nerd-font.txt")],
                 swiftSettings: sizeOptimized),
         .testTarget(name: "SpaceModelTests", dependencies: ["SpaceModel"]),
+        .testTarget(name: "SpaceFieldsTests", dependencies: ["SpaceFields", "SpaceModel"]),
         .testTarget(name: "DesignSystemTests", dependencies: ["DesignSystem"]),
         .testTarget(name: "T3ProtocolTests", dependencies: ["T3Protocol"]),
         .testTarget(name: "T3ClientTests", dependencies: ["T3Client", "T3Transport"]),

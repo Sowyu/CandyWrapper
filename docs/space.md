@@ -346,6 +346,8 @@ The page header holds the breadcrumb, the title at 28pt, and a view switch at th
 
 Items keep one manual order everywhere: their `order` among the page's content. Dragging an item in any view without a sort changes that order.
 
+The pure Swift engine and its detailed query and conversion conventions are described in [Space fields engine](space-fields.md).
+
 Filter ops by type:
 
 - Text and URL: contains, does not contain, is, is empty, is not empty.
