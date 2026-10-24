@@ -111,6 +111,23 @@ app=$out/CandyWrapper.app
 fw=$app/Contents/Frameworks/Sparkle.framework/Versions/B
 print "version $ver ($bnum), out $out"
 
+# 3b. The CandyWrapper Helper's downloads (docs/orchestrator-helper.md), signed like the app, and their SHA-256 sums in
+#     the app as helper-manifest.json, which the Helper button installs from. They go up with the release in step 7.
+print "building the helper (log $work/helper.log)"
+unlock
+CANDY_KEYCHAIN_READY=1 $src/scripts/build-helper $ver $out/helper --sign > $work/helper.log 2>&1 || { tail -30 $work/helper.log; exit 1 }
+helper_base=${dlprefix:-https://github.com/$REPO_SLUG/releases/download/v$ver}
+/usr/bin/python3 -I - $out/helper/SHA256SUMS $ver ${helper_base%/} $app/Contents/Resources/helper-manifest.json <<'PY'
+import json, sys
+sums_file, ver, base, out = sys.argv[1:]
+sums = {}
+for line in open(sums_file):
+    digest, name = line.split()
+    sums[name.removeprefix("candywrapper-helper-%s-" % ver).removesuffix(".tar.gz")] = digest
+assert set(sums) == {"darwin-universal", "linux-x86_64", "linux-aarch64"}, sums
+json.dump({"version": ver, "baseURL": base, "sums": sums}, open(out, "w"), sort_keys=True)
+PY
+
 # 4. Strip the executable, thin Sparkle to arm64, then sign inside-out: Sparkle's helpers, the framework,
 #    the app. No --deep: each piece gets the hardened runtime and this identity on its own.
 strip -x -S $app/Contents/MacOS/CandyWrapper
@@ -218,7 +235,7 @@ fi
 
 # 7. Publish: the version release with the zip and the DMG, then the feed on the `appcast` release.
 /usr/bin/python3 -I - $out $ver $sha $zip $dmg $notes_file "$channel" $REPO_SLUG <<'PY'
-import hashlib, json, subprocess, sys, time, urllib.error, urllib.request
+import hashlib, json, os, subprocess, sys, time, urllib.error, urllib.request
 out, ver, sha, zipname, dmgname, notes_file, channel, repo = sys.argv[1:]
 cred = subprocess.run(["git", "credential", "fill"], input="protocol=https\nhost=github.com\n\n",
                       capture_output=True, text=True, check=True).stdout
@@ -261,6 +278,9 @@ except urllib.error.HTTPError as e:
 print("release", rel["html_url"])
 upload(rel, zipname, "application/zip")
 upload(rel, dmgname, "application/x-apple-diskimage")
+# The helper's tarballs and their sums, where helper-manifest.json points.
+for name in sorted(os.listdir(out + "/helper")):
+    upload(rel, "helper/" + name, "text/plain" if name == "SHA256SUMS" else "application/gzip", as_name=name)
 try:
     feed = call(api + "/releases/tags/appcast")
 except urllib.error.HTTPError as e:
