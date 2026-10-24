@@ -126,4 +126,43 @@ struct SearchIndexTests {
         }.value
         #expect(result.content.first?.page.pageID == id(1))
     }
+
+    @Test func sharedTrigramsSurviveDeletionAndOrderChanges() {
+        var index = SearchIndex(pages: [id(1): page("Notes")],
+                                blocks: [id(11): block("needle first"), id(12): block("needle second", order: "a1")])
+        index.updateBlock(id(11), record: nil)
+        #expect(index.search("needle").content.first?.blockID == id(12))
+        index.updateBlock(id(11), record: block("needle late", order: "a2"))
+        #expect(index.search("needle").content.first?.blockID == id(12))
+        index.updateBlock(id(11), record: block("needle early"))
+        #expect(index.search("needle").content.first?.blockID == id(11))
+        index.updateBlock(id(12), record: nil)
+        index.updateBlock(id(11), record: nil)
+        #expect(index.search("needle").content.isEmpty)
+    }
+
+    @Test func shortPrefixesAndBlocksArrivingBeforeTheirPage() {
+        var index = SearchIndex(blocks: [id(11): block("xylophone")])
+        #expect(index.search("x", submitted: true).content.isEmpty)
+        index.updatePage(id(1), record: page("Notes"))
+        #expect(index.search("x", submitted: true).content.first?.blockID == id(11))
+        #expect(index.search("xy", submitted: true).content.first?.blockID == id(11))
+        #expect(index.search("xyl").content.first?.blockID == id(11))
+        index.updatePage(id(1), record: nil)
+        #expect(index.search("xyl").content.isEmpty)
+        index.updatePage(id(1), record: page("Restored"))
+        #expect(index.search("xyl").content.first?.page.title == "Restored")
+    }
+
+    @Test func titleLimitsKeepEveryMatchAndAncestorForTheSidebar() {
+        let pages = Dictionary(uniqueKeysWithValues: (1...120).map { (id($0), page("Needle \($0)", parent: $0 == 1 ? nil : 1)) })
+        let index = SearchIndex(pages: pages)
+        let result = index.search("needle")
+        #expect(result.titles.count == 50)
+        #expect(result.titlePageIDs == Set(pages.keys))
+        #expect(result.treePageIDs == Set(pages.keys))
+        #expect(index.search("needle", titleLimit: 0).titles.isEmpty)
+        #expect(index.search("needle", titleLimit: -1).titlePageIDs == result.titlePageIDs)
+        #expect(index.search("needle", titleLimit: 200).titles.count == 120)
+    }
 }
