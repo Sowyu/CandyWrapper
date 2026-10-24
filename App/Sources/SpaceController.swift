@@ -9,7 +9,9 @@ import SpaceLocal
 /// sidebar view, no pane, no store reads. Space data stays in this app; no agent, thread or Orchestrator path reads it.
 @MainActor
 final class SpaceController {
-    let store: SpacePageStore
+    let store: SpaceDocumentStore
+    /// Page images through the local copy's blob cache, once the copy is open.
+    private var blobs: SpaceLocalBlobs?
     private var lifecycle: Task<Void, Never>?
     private var recoverySheet: NSAlert?
     private let settings = SpaceSettings.shared
@@ -17,12 +19,12 @@ final class SpaceController {
     private weak var sidebar: SidebarContentView?
     private weak var commands: SidebarCommands?
     /// The pane on screen, made when it shows and dropped when it hides.
-    private var pageView: SpacePagePlaceholderView?
+    private var pageView: SpacePageView?
     private var trashView: SpaceTrashView?
     /// What the Space pane shows now, nil while it is hidden.
     private(set) var route: RouteHistory.Route?
 
-    init(sidebar: SidebarContentView, commands: SidebarCommands, window: NSWindow, store: SpacePageStore = PersistentSpacePageStore()) {
+    init(sidebar: SidebarContentView, commands: SidebarCommands, window: NSWindow, store: SpaceDocumentStore = PersistentSpacePageStore()) {
         self.window = window
         self.sidebar = sidebar
         self.commands = commands
@@ -67,6 +69,9 @@ final class SpaceController {
                 sidebar.space = nil
             }
             if let persistent = store as? PersistentSpacePageStore, persistent.isOpen, lifecycle == nil {
+                pageView?.commitTyping()
+                pageView = nil
+                blobs = nil
                 lifecycle = Task { [weak self] in
                     do { try await persistent.close() }
                     catch { self?.showStorageFailure() }
@@ -85,6 +90,7 @@ final class SpaceController {
                                                            appropriateFor: nil, create: true)
                     .appendingPathComponent(Bundle.main.bundleIdentifier ?? "dev.candywrapper.app", isDirectory: true)
                 let setup = try await persistent.open(applicationSupport: support, keyStore: SpaceKeyStore())
+                blobs = SpaceLocalBlobs(local: setup.local, keys: setup.keys)
                 if settings.isActive, let recovery = setup.recoveryKey {
                     let saved = await showRecovery(recovery)
                     if saved { try await Task.detached { try setup.acknowledgeRecovery() }.value }
@@ -137,10 +143,12 @@ final class SpaceController {
     }
 
     var hasPendingWrites: Bool {
+        pageView?.commitTyping()
         guard let persistent = store as? PersistentSpacePageStore else { return false }
         return persistent.isSaving || persistent.failure != nil
     }
     func flush() async -> Bool {
+        pageView?.commitTyping()
         do { try await (store as? PersistentSpacePageStore)?.flush(); return true }
         catch { showStorageFailure(); return false }
     }
@@ -179,8 +187,9 @@ final class SpaceController {
             let id = raw.isEmpty ? nil : try? PageID(raw)
             if !raw.isEmpty && !(id.map(store.isLive) ?? false) { return false }
             trashView = nil
-            let page = pageView ?? SpacePagePlaceholderView(store: store)
+            let page = pageView ?? SpacePageView(store: store, blobs: blobs)
             page.onNewPage = { [weak self] in self?.enterMode(); self?.newPage() }
+            page.onOpenPage = { [weak self] id in self?.open(.spacePage(id.rawValue)) }
             page.show(id)
             pageView = page
             view = page

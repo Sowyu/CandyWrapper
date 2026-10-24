@@ -55,7 +55,12 @@ public struct SpaceReplica: Hashable, Sendable {
         for change in changes where change.kind == .block && change.set["text"] != nil {
             bases[change.id.rawValue] = TextBase(rev: confirmed.revs[change.id] ?? 0, text: current.text(of: change.id))
         }
-        let before = current
+        // Only the touched records are kept, so an edit never copies the whole state.
+        var before = SpaceState()
+        for change in changes {
+            if change.kind == .page { before.pages[change.id] = current.pages[change.id] }
+            else if change.kind == .block { before.blocks[change.id] = current.blocks[change.id] }
+        }
         current.apply(changes)
         pending.append(PendingOp(op: op, payload: OpPayload(at: at, changes: changes), bases: bases))
         return UndoEntry(changes, before: before, after: current)
@@ -189,6 +194,22 @@ public struct UndoEntry: Hashable, Sendable {
         var after: JSONValue?
     }
     var slots: [Slot] = []
+
+    public var isEmpty: Bool { slots.isEmpty }
+
+    /// One entry for two edits in a row, like a typing run: each key restores its value from before
+    /// the first edit and checks against its value after the second.
+    public func merging(_ later: UndoEntry) -> UndoEntry {
+        var out = self
+        for slot in later.slots {
+            if let i = out.slots.firstIndex(where: { $0.kind == slot.kind && $0.id == slot.id && $0.key == slot.key }) {
+                out.slots[i].after = slot.after
+            } else if !out.slots.contains(where: { $0.id == slot.id && $0.key == "trashed" && $0.restore == .bool(true) && $0.kind == slot.kind }) {
+                out.slots.append(slot)
+            }
+        }
+        return out
+    }
 
     init(_ changes: [RecordChange], before: SpaceState, after: SpaceState) {
         for change in changes {

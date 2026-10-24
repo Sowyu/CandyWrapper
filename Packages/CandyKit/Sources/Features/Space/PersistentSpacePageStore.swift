@@ -4,18 +4,22 @@ import SpaceEngine
 import SpaceLocal
 import SpaceModel
 
-/// Immediate edits for the synchronous sidebar contract, followed by a serial durable write.
+/// Immediate edits for the synchronous sidebar and editor contracts, followed by a serial durable write.
 /// `isSaving` stays true until encrypted pending and confirmation reach disk. Failures stay visible
 /// and block further edits and quitting; they never fall back to an empty in-memory store.
+/// The screen reads a main-thread `SpaceReplicaStore`, so the page editor gets blocks and undo entries; each of its
+/// edits, undo included, goes to the writer in the order it was made.
 @MainActor
-public final class PersistentSpacePageStore: SpacePageStore {
-    public private(set) var pages: [PageID: PageRecord] = [:]
+public final class PersistentSpacePageStore: SpaceDocumentStore {
+    public var pages: [PageID: PageRecord] { local.pages }
     public private(set) var isSaving = false
     public private(set) var failure: Error?
     public private(set) var isOpen = false
     public var onFailure: (@MainActor () -> Void)?
     public var onSavingChange: (@MainActor () -> Void)?
-    private var state = SpaceState()
+    /// What the screen shows. ponytail: its pending list grows by one op per edit while Space is open; feed it the
+    /// writer's confirmed frames when sync (piece 7) lands.
+    private var local = SpaceReplicaStore()
     private var writer: LocalPageWriter?
     private var closing = false
     private var writeRevision = 0
@@ -33,11 +37,11 @@ public final class PersistentSpacePageStore: SpacePageStore {
         }.value
         do {
             let writer = LocalPageWriter(setup: setup)
-            state = try await writer.load()
+            let state = try await writer.load()
             self.writer = writer
             failure = nil
             isOpen = true
-            publish()
+            attach(SpaceReplicaStore(replica: SpaceReplica(device: setup.device, label: "This Mac", confirmed: state)))
             return setup
         } catch {
             await setup.local.close()
@@ -45,32 +49,50 @@ public final class PersistentSpacePageStore: SpacePageStore {
         }
     }
 
+    private func attach(_ store: SpaceReplicaStore) {
+        local = store
+        store.onEdit = { [weak self] op in self?.enqueue(op.payload.changes, at: op.payload.at) }
+        _ = store.observe { [weak self] in self?.publish() }
+        publish()
+    }
+
+    private var canEdit: Bool { isOpen && !closing && failure == nil }
+
     public func put(_ records: [PageID: PageRecord]) {
-        guard isOpen, !closing, failure == nil else { return }
-        do {
-            let changes = try records.keys.sorted().compactMap { id -> RecordChange? in
-                let replacement = try RecordChange.page(id, records[id]!).set
-                let old = state.pages[id] ?? [:]
-                var set: [String: SpaceModel.JSONValue] = [:]
-                for key in Set(old.keys).union(replacement.keys) where old[key] != replacement[key] {
-                    set[key] = replacement[key] ?? .null
-                }
-                return set.isEmpty ? nil : RecordChange(kind: .page, id: id, set: set)
-            }
-            enqueue(changes)
-        } catch { fail(error) }
+        guard canEdit else { return }
+        var changes: [RecordChange] = []
+        for (id, record) in records.sorted(by: { $0.key < $1.key }) {
+            guard case .object(let new)? = try? SpaceModel.JSONValue(encoding: record) else { continue }
+            if let change = SpaceReplicaStore.diff(.page, id, old: local.replica.current.pages[id], new: new) { changes.append(change) }
+        }
+        local.edit(changes)
     }
 
     /// Null every key through apply, leaving an unrenderable empty record and its encrypted history.
     public func remove(_ id: PageID) {
-        guard isOpen, !closing, failure == nil, let old = state.pages[id], !old.isEmpty else { return }
-        enqueue([RecordChange(kind: .page, id: id, set: old.mapValues { _ in .null })])
+        guard canEdit, let old = local.replica.current.pages[id], !old.isEmpty else { return }
+        local.edit([RecordChange(kind: .page, id: id, set: old.mapValues { _ in .null })])
     }
 
-    private func enqueue(_ changes: [RecordChange]) {
+    public func block(_ id: BlockID) -> BlockRecord? { local.block(id) }
+    public func content(of page: PageID) -> [SpaceContent] { local.content(of: page) }
+    public var edited: [PageID: Int64] { local.edited }
+    public var lastChanged: Set<RecordID> { local.lastChanged }
+
+    @discardableResult
+    public func edit(_ changes: [RecordChange], at: Int64) -> UndoEntry? {
+        guard canEdit else { return nil }
+        return local.edit(changes, at: at)
+    }
+
+    @discardableResult
+    public func undo(_ entry: UndoEntry, at: Int64) -> UndoEntry? {
+        guard canEdit else { return nil }
+        return local.undo(entry, at: at)
+    }
+
+    private func enqueue(_ changes: [RecordChange], at: Int64) {
         guard !changes.isEmpty, let writer else { return }
-        let at = SpaceClock.now()
-        state.apply(changes)
         writeRevision += 1
         queuedWrites += 1
         isSaving = true
@@ -87,7 +109,6 @@ public final class PersistentSpacePageStore: SpacePageStore {
             catch { fail(error) }
         }
         onSavingChange?()
-        publish(changes)
     }
 
     public func flush() async throws {
@@ -107,11 +128,9 @@ public final class PersistentSpacePageStore: SpacePageStore {
         await writer?.close()
         writer = nil
         tail = nil
-        state = SpaceState()
-        pages = [:]
         isOpen = false
         isSaving = false
-        publish()
+        attach(SpaceReplicaStore())
     }
 
     public func observe(_ callback: @escaping @MainActor () -> Void) -> Int {
@@ -120,14 +139,7 @@ public final class PersistentSpacePageStore: SpacePageStore {
         return nextToken
     }
     public func removeObserver(_ token: Int) { observers[token] = nil }
-    private func publish(_ changes: [RecordChange]? = nil) {
-        if let changes {
-            for change in changes where change.kind == .page { pages[change.id] = state.page(change.id) }
-        } else {
-            pages = state.pages.compactMapValues { try? SpaceModel.JSONValue.object($0).decoded(PageRecord.self) }
-        }
-        for callback in observers.values { callback() }
-    }
+    private func publish() { for callback in observers.values { callback() } }
     private func fail(_ error: Error) { failure = error; onFailure?() }
 }
 

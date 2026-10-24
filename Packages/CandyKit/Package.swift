@@ -67,6 +67,6 @@ let package = Package(
         .testTarget(name: "SpaceEngineTests", dependencies: ["SpaceEngine", "SpaceModel"]),
         .testTarget(name: "SpaceLocalTests", dependencies: ["SpaceLocal"]),
         .testTarget(name: "CandyHelperTests", dependencies: ["CandyHelper"]),
-        .testTarget(name: "FeaturesTests", dependencies: ["Features", "SpaceModel", "DesignSystem", "T3Store", "T3Protocol", .product(name: "SwiftTerm", package: "SwiftTerm")], exclude: ["Fixtures"]),
+        .testTarget(name: "FeaturesTests", dependencies: ["Features", "SpaceModel", "SpaceEngine", "DesignSystem", "T3Store", "T3Protocol", .product(name: "SwiftTerm", package: "SwiftTerm")], exclude: ["Fixtures"]),
     ]
 )

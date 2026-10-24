@@ -68,7 +68,7 @@ Records hold no derived values like "last edited". That comes from the log, so e
 | `order` | Order key, in the same space as child pages' `order`. |
 | `type` | `p`, `h1`, `h2`, `h3`, `bullet`, `number`, `quote`, `code`, `divider`, `image`, `file`. |
 | `indent` | 0 to 5. Lists and paragraphs nest by indent, not by a tree. |
-| `text` | Rich text. Empty for `divider`, `image` and `file`. |
+| `text` | Rich text. Empty for `divider` and `file`. On `image` it is the caption, shown beside the image. |
 | `lang` | Code blocks only, a language id like `swift`, or null. |
 | `blob` | `image` and `file` only, a blob reference. See section 7. |
 | `width` | `image` only, display width in points, or null to fit the column. |
@@ -362,8 +362,8 @@ Filter ops by type:
 - Dividers, images, files and item rows are attachments with view providers.
 - Markdown shortcuts at line start: `# `, `## `, `### `, `- `, `1. `, `[] `, `> `, three backticks, `---`. Tab and Shift-Tab change indent.
 - `/` opens a block menu in the existing `PopupHost`: Text, Headings, Bulleted list, Numbered list, To-do, Quote, Code, Divider, Image, File, Page, Board, Table, Timetable. The last four create a child page in that view.
-- In a to-do list, items render as checklist rows: a checkbox, the title, and a due chip when `due` is set, red when overdue. A ticked row dims its title. Return on a row makes the next item.
-- In other pages, items render as page link rows with their icon and title.
+- In a to-do list, items with a `done` value render as checklist rows: a checkbox, the title, and a due chip when `due` is set, red when overdue. A ticked row dims its title. Return on a row makes the next item. New to-dos get `done: false`, so a to-do list can still hold page links.
+- Other child pages render as page link rows with their icon and title.
 - Hovering a block shows a drag handle and a + at its left, 16pt each, at the existing sidebar hover timing.
 - Paste of Markdown or HTML becomes blocks. Copy puts Markdown and rich text on the pasteboard.
 - `@` opens a page picker and inserts a page mention.

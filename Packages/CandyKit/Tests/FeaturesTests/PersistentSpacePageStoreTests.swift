@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SpaceCrypto
 import SpaceEngine
@@ -42,6 +43,34 @@ struct PersistentSpacePageStoreTests {
         let local = try await reopened.local.load()
         #expect(local.pending.isEmpty)
         #expect(local.confirmedSequence == 5)
+        try await next.close()
+    }
+
+    /// The page editor's blocks, to-dos and undo go through the encrypted writer and come back after a reopen.
+    @Test func editorBlocksAndUndoSurviveReopen() async throws {
+        let root = root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let keys = SpaceKeyStore.inMemory()
+        let first = PersistentSpacePageStore()
+        _ = try await first.open(applicationSupport: root, keyStore: keys)
+        let page = first.createPage(title: "Weekly plan")
+        let editor = SpacePageEditor(store: first, page: page)
+        for c in "# Notes" { editor.textView.insertText(String(c), replacementRange: editor.textView.selectedRange()) }
+        editor.textView.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+        for c in "[] Pay rent" { editor.textView.insertText(String(c), replacementRange: editor.textView.selectedRange()) }
+        editor.textView.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+        for c in "Gone" { editor.textView.insertText(String(c), replacementRange: editor.textView.selectedRange()) }
+        editor.flushTyping()
+        editor.performUndo()
+        let expected = first.content(of: page)
+        #expect(expected.count == 3, "heading, the to-do, and the empty to-do left after undoing its typing")
+        try await first.close()
+        let next = PersistentSpacePageStore()
+        _ = try await next.open(applicationSupport: root, keyStore: keys)
+        #expect(next.content(of: page) == expected)
+        guard case .block(_, let heading)? = next.content(of: page).first else { Issue.record("no heading"); return }
+        #expect(heading.type == .h1 && heading.text.t == "Notes")
+        #expect(next.pages[page]?.isTodoList == true)
         try await next.close()
     }
 
