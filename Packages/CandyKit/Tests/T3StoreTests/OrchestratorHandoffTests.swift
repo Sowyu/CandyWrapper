@@ -103,6 +103,47 @@ import Testing
         #expect(OrchestratorHandoff.adoptable([], threads: threads) == nil)
     }
 
+    func run(_ id: String, _ status: String) -> Run {
+        try! JSONDecoder().decode(Run.self, from: Data("""
+            {"id":"\(id)","threadId":"orch","ordinal":1,"status":"\(status)","requestedAt":"2026-10-24T10:00:00Z","startedAt":null,"completedAt":null}
+            """.utf8))
+    }
+
+    /// The race behind launches that never ran: a turn ends on an orchestrator-call block just as an Event arrives. The
+    /// Event queued behind the turn and starts the next one at once, so the shell goes from turn to turn without
+    /// showing it idle, and the newest turn is the Event's. The call still counts as ended and still runs, once.
+    @Test func callsFromATurnThatRacedAnEventStillRun() {
+        let since = Int64(start.timeIntervalSince1970 * 1000)
+        let launch = "Starting it.\n\n```orchestrator-call\n{\"tool\":\"launch\",\"machine\":\"miniko\",\"projectId\":\"p\",\"title\":\"Fix\",\"text\":\"Fix it\"}\n```"
+        let messages = [message("m0", "user", "Ship the fix", minutes: 1, run: "run-a"),
+                        message("m1", "assistant", launch, minutes: 2, run: "run-a"),
+                        message("m2", "user", "Event: “Docs” finished a turn (t3-thread://v1/d1).", minutes: 2.01, run: "run-b")]
+        // The shell went straight from turn A to the Event's turn B.
+        #expect(OrchestratorHandoff.turnEnded(wasRunning: true, wasRun: RunId("run-a"), running: true, run: RunId("run-b")))
+        let due = OrchestratorHandoff.callsToRun(messages, runs: [run("run-a", "completed"), run("run-b", "running")],
+                                                 since: since, activeAtStart: nil, handled: [])
+        #expect(due.map(\.id.rawValue) == ["m1"])
+        #expect(due.flatMap { OrchestratorReply.parse($0.text).calls }.map(\.tool) == [.launch])
+        // Once it ran here it doesn't run again, and a "Result:" from the phone answers it too.
+        #expect(OrchestratorHandoff.callsToRun(messages, runs: [run("run-a", "completed")], since: since, activeAtStart: nil, handled: ["m1"]).isEmpty)
+        let answered = messages + [message("m3", "user", "Result: launched “Fix” on miniko", minutes: 3, run: "run-c")]
+        #expect(OrchestratorHandoff.callsToRun(answered, runs: [run("run-a", "completed")], since: since, activeAtStart: nil, handled: []).isEmpty)
+        // A turn still running waits for its end.
+        #expect(OrchestratorHandoff.callsToRun(messages, runs: [run("run-a", "running")], since: since, activeAtStart: nil, handled: []).isEmpty)
+        // Replies from before CandyWrapper saw the thread are history, unless their turn was the one running then.
+        let later = since + 10 * 60_000
+        #expect(OrchestratorHandoff.callsToRun(messages, runs: [run("run-a", "completed")], since: later, activeAtStart: nil, handled: []).isEmpty)
+        #expect(OrchestratorHandoff.callsToRun(messages, runs: [run("run-a", "completed")], since: later, activeAtStart: RunId("run-a"),
+                                               handled: []).map(\.id.rawValue) == ["m1"])
+    }
+
+    @Test func aTurnEndsWhenItGoesIdleOrTheNextStarts() {
+        #expect(OrchestratorHandoff.turnEnded(wasRunning: true, wasRun: RunId("a"), running: false, run: RunId("a")))
+        #expect(OrchestratorHandoff.turnEnded(wasRunning: false, wasRun: RunId("a"), running: true, run: RunId("b")))
+        #expect(!OrchestratorHandoff.turnEnded(wasRunning: true, wasRun: RunId("a"), running: true, run: RunId("a")))
+        #expect(!OrchestratorHandoff.turnEnded(wasRunning: false, wasRun: RunId("a"), running: false, run: RunId("a")))
+    }
+
     /// The task's stamp survives decoding from the server's list.
     @Test func scheduledTasksKeepTheirStamp() throws {
         let json = try JSONValue(parsing: Data(#"{"tasks":[{"id":"check","title":"t","prompt":"p","enabled":false,"schedule":{"type":"interval","everyMs":60000},"projectId":"p","updatedAt":"2026-10-24T10:00:05.000Z"}]}"#.utf8))
