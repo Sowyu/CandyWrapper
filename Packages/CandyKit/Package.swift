@@ -32,7 +32,9 @@ let package = Package(
         // Normalized state and reducers fed by T3Client streams.
         .target(name: "T3Store", dependencies: ["T3Protocol"], swiftSettings: sizeOptimized),
         // The always-on Orchestrator relay for macOS and Linux (docs/orchestrator-helper.md). Foundation only.
-        .executableTarget(name: "CandyHelper", dependencies: ["T3Protocol", "T3Transport", "T3Store"], swiftSettings: sizeOptimized),
+        // libcurl's WebSocket frames for the helper on Linux (CurlRPCSocket); only imported there or with CANDY_CURL_WS.
+        .systemLibrary(name: "CCurl"),
+        .executableTarget(name: "CandyHelper", dependencies: ["T3Protocol", "T3Transport", "T3Store", "CCurl"], swiftSettings: sizeOptimized),
         // Screens built from DesignSystem components and fed by T3Store (sidebar, timeline, composer...).
         .target(name: "Features", dependencies: ["DesignSystem", "T3Store", "T3Protocol", .product(name: "SwiftTerm", package: "SwiftTerm")], resources: [.copy("Resources/candy-town.gray"), .copy("Resources/pele.global.js.lzma"), .copy("Resources/LICENSE-pele.txt"), .copy("Resources/native-licenses.json"),
                          .copy("Resources/SymbolsNerdFontMono-Regular.ttf"), .copy("Resources/LICENSE-symbols-nerd-font.txt")],

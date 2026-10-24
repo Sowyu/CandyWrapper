@@ -11,7 +11,9 @@ actor MachineLink {
         case connected(generation: Int, config: ServerProviderConfig?, route: URL)
         case shell(generation: Int, ShellSnapshot)
         case tasks([ScheduledTask])
-        case disconnected(String)
+        /// `protocolError`: the server spoke in a way this build can't read (an undecodable frame, a refused upgrade),
+        /// which a retry won't fix.
+        case disconnected(String, protocolError: Bool)
         /// The machine refused the token: revoked, expired or never valid.
         case rejected(String)
     }
@@ -52,7 +54,7 @@ actor MachineLink {
                 // A revoked token stays revoked; a renewal restarts the helper with a new one.
                 delay = 300
             } catch {
-                continuation.yield(.disconnected(Self.describe(error)))
+                continuation.yield(.disconnected(Self.describe(error), protocolError: Self.isProtocolError(error)))
             }
             try? await Task.sleep(for: .seconds(delay))
             delay = min(delay * 2, 60)
@@ -82,7 +84,7 @@ actor MachineLink {
         } catch EnvironmentHTTPError.status(let code, let body) where code == 401 || code == 403 {
             throw Rejected(reason: "\(Self.statusText(code, body)) from \(hostPort(route))")
         }
-        let socket = try await URLSessionRPCSocket.open(url: http.webSocketURL(ticket: ticket.ticket, identity: identity))
+        let socket = try await openHelperSocket(http.webSocketURL(ticket: ticket.ticket, identity: identity))
         let conn = RPCConnection(socket: socket)
         await conn.start()
         connection = conn
@@ -139,6 +141,14 @@ actor MachineLink {
             throw HelperError("\(machine.url.host() ?? "the address") now answers as another machine (\(descriptor.label))")
         }
         return machine.url
+    }
+
+    static func isProtocolError(_ error: Error) -> Bool {
+        let transport: RPCTransportError? = if case RPCClientError.transport(let t) = error { t } else { error as? RPCTransportError }
+        switch transport {
+        case .invalidFrame?, .upgradeRejected?: return true
+        default: return false
+        }
     }
 
     /// Runs a request whose 401 or 403 means the token is refused.

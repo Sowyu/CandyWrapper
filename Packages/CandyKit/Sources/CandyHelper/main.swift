@@ -121,6 +121,12 @@ case "run":
     log("CandyWrapper Helper \(helperVersion) starting on \(home.label), reaching \(links.count) machine\(links.count == 1 ? "" : "s")")
     let helper = Helper(machines: machines, links: links)
     helper.exitWhenRefused = true
+    // A frame that doesn't decode goes to the log with its length and first bytes, redacted, before the connection closes.
+    RPCConnection.onUndecodableFrame = { frame, error in
+        let head = redact(String(decoding: frame.prefix(160), as: UTF8.self)).debugDescription
+        let tail = redact(String(decoding: frame.suffix(48), as: UTF8.self)).debugDescription
+        log("undecodable frame of \(frame.count) bytes, starts \(head), ends \(tail); \(redact(String(error.prefix(400))))")
+    }
     // A clean stop hands the task back, like the Mac quitting.
     for sig in [SIGTERM, SIGINT] {
         signal(sig, SIG_IGN)
@@ -176,13 +182,19 @@ case "install":
         try HelperService.write()
         try HelperService.restart()
     } catch { Sentinel.failed("\(MachineLink.describe(error))") }
-    // Up within 30 s and connected to its own machine, or back to the version before.
+    // Up within 30 s with its own machine's shell read, or back to the version before. Connecting isn't enough: on aniko
+    // the socket opened and every snapshot then failed to decode.
     var outcome = "it didn't start within 30 seconds"
+    var stillRunning = true
     for _ in 0..<60 {
         try? await Task.sleep(for: .milliseconds(500))
         guard let status = HelperStore.read("status.json", as: HelperStatus.self), status.startedAt >= begin.addingTimeInterval(-1),
               status.version == helperVersion else { continue }
-        if status.machines[homeId] == "connected" { outcome = ""; break }
+        let note = status.notes?[homeId].map { ": \($0)" } ?? ""
+        if status.machines[homeId] == "ready" { outcome = ""; break }
+        outcome = status.machines[homeId] == "connected" ? "it connected but didn't read its machine within 30 seconds"
+            : "it didn't connect within 30 seconds\(note)"
+        if kill(status.pid, 0) != 0 { outcome = "it stopped\(note)"; stillRunning = false; break }
         if status.machines[homeId] == "rejected" {
             outcome = "its own machine refused the sign-in" + (status.notes?[homeId].map { ": \($0)" } ?? "")
             break
@@ -194,7 +206,7 @@ case "install":
             try? HelperService.restart()
             Sentinel.failed("\(outcome); went back to \(previous.lastPathComponent)")
         }
-        HelperService.stop()
+        if stillRunning { HelperService.stop() }
         Sentinel.failed(outcome)
     }
     HelperFiles.prune(keep: [folder] + (previous.map { [$0] } ?? []))

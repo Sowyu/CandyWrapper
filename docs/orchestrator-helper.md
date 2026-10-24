@@ -35,7 +35,7 @@ Why Swift: the helper then runs the exact relay, call parser, limit checks and h
 Trade-offs:
 
 - A static Swift binary with Foundation is large, roughly 40 to 60 MB before compression. The T3 runtime next to it is 160 MB, so it's acceptable.
-- WebSockets on Linux come from swift-corelibs-foundation, which uses libcurl. Whether the Static Linux SDK's curl has WebSocket support is the first thing to prove. If it doesn't, the client uses swift-nio's WebSocket handler instead, which also links statically.
+- WebSockets on Linux don't use URLSessionWebSocketTask. swift-corelibs-foundation passes each curl write callback, 16 KB at most, on as a whole message (WebSocketURLProtocol.swift:101-180 at swift-6.4.1-RELEASE). On aniko every shell snapshot over 16 KB then failed to decode. The helper uses libcurl's own frame API instead, `curl_ws_recv` and `curl_ws_send` through a small `CCurl` module map, and rebuilds messages from curl's `bytesleft` and `CURLWS_CONT` (`CurlRPCSocket`, `WebSocketAssembler`). curl, OpenSSL and zlib are in the Static Linux SDK already. macOS keeps URLSession.
 - The Static Linux SDK isn't installed here yet (`swift sdk list` is empty). Installing it takes a few hundred MB of disk.
 
 Rejected:

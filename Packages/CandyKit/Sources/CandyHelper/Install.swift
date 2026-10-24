@@ -60,7 +60,7 @@ struct HelperStatus: Codable, Equatable {
     var version: String
     var pid: Int32
     var startedAt: Date
-    /// Machine id to `connected`, `offline` or `rejected`.
+    /// Machine id to `connected` (socket open), `ready` (its shell read), `offline` or `rejected`.
     var machines: [String: String]
     /// Why a machine is offline or refused, redacted.
     var notes: [String: String]? = nil
@@ -94,8 +94,9 @@ enum HelperService {
         ExecStart=\(HelperFiles.currentBinary.path) run
         \(environment)Restart=on-failure
         RestartSec=5
-        # 78: every machine refused the sign-in. Shown as failed, not restarted, until CandyWrapper renews it.
-        RestartPreventExitStatus=78
+        # 78: every machine refused the sign-in. 76: every machine keeps failing in a way a retry won't fix.
+        # Both show as failed and aren't restarted until CandyWrapper installs or renews it again.
+        RestartPreventExitStatus=76 78
 
         [Install]
         WantedBy=default.target
