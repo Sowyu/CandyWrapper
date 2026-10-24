@@ -19,6 +19,8 @@ public struct DitherTabList {
         case .pullRequests: "pull-requests"
         case .usage: "usage"
         case .orchestrator: "orchestrator"
+        case .spacePage(let id): "space:\(id)"
+        case .spaceTrash: "space-trash"
         }
     }
 
