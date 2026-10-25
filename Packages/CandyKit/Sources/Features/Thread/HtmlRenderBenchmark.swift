@@ -131,10 +131,6 @@ public final class HtmlRenderBenchmark: DSView {
             guard let frame = weakFrame.value, let web = frame.webView, !frame.isHiddenOrHasHiddenAncestor,
                   frame.convert(frame.bounds, to:scroll.contentView).intersects(scroll.contentView.bounds) else { continue }
             record("resident-at-scroll", ["page":title,"label":label,"height":frame.bounds.height])
-            web.takeSnapshot(with:nil) { [weak self] image, error in
-                guard let self else { return }
-                self.record("resident-snapshot", ["page":title,"label":label,"snapshotMs":(ProcessInfo.processInfo.systemUptime-visitStart)*1000,"success":image != nil,"error":error.map(String.init(describing:)) ?? ""])
-            }
         }
         try? await Task.sleep(for:.seconds(2))
         var visible: [[String:Any]] = []
