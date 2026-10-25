@@ -126,6 +126,14 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
             keys.append(key)
             texts.append(text)
         }
+        // TextKit 2 makes no layout fragment for an empty last paragraph, so a page that ends in an image, file or
+        // divider gets an unsaved empty line after it; the block draws in its own fragment and there's a line to type on.
+        if let last = keys.last, !last.isItem, let p = paragraphs[last], Self.needsLineAfter(p) {
+            let key = SpaceParagraphKey.block(BlockID())
+            paragraphs[key] = SpaceParagraph()
+            keys.append(key)
+            texts.append(RichText())
+        }
         // An empty last paragraph has no character to carry its key, so the tail names it.
         tailKey = texts.last?.t.isEmpty == true ? keys.last : nil
         if content.isEmpty {
@@ -1230,7 +1238,16 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
             dirty.insert(key)
             flush(discrete: true, name: "Image")
         }
+        // The last line can't draw an image (see load), so it gets a line after it; the caret stays on the caption.
+        if keys.last == key {
+            let caret = textView.selectedRange()
+            insertParagraph(after: key, SpaceParagraph())
+            textView.setSelectedRange(caret)
+            fixTypingAttributes()
+        }
     }
+
+    static func needsLineAfter(_ p: SpaceParagraph) -> Bool { [.image, .file, .divider].contains(p.type) }
 
     static func mime(for ext: String) -> String {
         switch ext.lowercased() {

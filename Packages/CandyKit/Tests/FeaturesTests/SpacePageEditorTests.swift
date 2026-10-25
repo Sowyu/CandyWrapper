@@ -287,7 +287,14 @@ struct SpacePageEditorTests {
         editor.insertBlobs([(png, "red.png", "image/png")])
         for _ in 0..<50 where !content(store, page).contains(where: { $0.hasPrefix("image:") }) { try await Task.sleep(nanoseconds: 20_000_000) }
         editor.flushTyping()
-        #expect(content(store, page) == ["p:first", "image:"])
+        #expect(content(store, page).prefix(2) == ["p:first", "image:"])
+        // TextKit 2 gives an empty last line no fragment to draw in, so the image never ends the text.
+        #expect(editor.keys.count == 3 && editor.paragraphs[editor.keys[1]]?.type == .image)
+        editor.load(keepSelection: false)
+        #expect(editor.paragraphs[editor.keys.last!]?.type == .p, "a reload keeps a line after the image")
+        let saved = content(store, page)
+        editor.flushTyping()
+        #expect(content(store, page) == saved, "the reload's line stays unsaved until typed into")
     }
 
     @Test func reminderTimeIsSavedOnTheDueDay() throws {
