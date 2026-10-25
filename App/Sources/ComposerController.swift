@@ -342,7 +342,7 @@ final class ComposerController {
         queue.onReorder = { [weak self] runId, before in
             self?.queueCommand("queued-run.reorder", ["runId": .string(runId.rawValue), "beforeRunId": before.map { .string($0.rawValue) } ?? .null])
         }
-        queue.onSteer = { [weak self] runId in self?.promoteToSteer(runId) }
+        queue.onSteer = { [weak self] runId in self?.sendQueued(runId) }
         queue.onEdit = { [weak self] item in self?.beginEdit(item) }
         queue.onCancelEdit = { [weak self] in self?.endEdit() }
         panel.approvalPanel.onRespond = { [weak self] _, payload in
@@ -758,14 +758,14 @@ final class ComposerController {
             if !call.isRepeat { self.pickers.jumpModel(index) }
             return true
         }
-        // `thread.steerQueuedMessage`: steers the first queued message; swallowed even on repeat or
-        // with nothing to steer (QueuedRunsControl.tsx:208-214). A draft leaves the key alone.
+        // `thread.steerQueuedMessage`: sends the first queued message, as a steer or, on a stopped thread,
+        // as its own turn (`steerNext`, QueuedRunsControl.tsx:197-202). Repeats are swallowed; with nothing
+        // to send the key falls through. A draft leaves the key alone.
         shortcuts.on("thread.steerQueuedMessage") { [weak self] call in
             guard let self, self.isActive, case .thread = self.target else { return false }
             let queue = self.panel.queue.state
-            if !call.isRepeat, queue.canPromoteToSteer, !self.queueBusy, let first = queue.items.first?.runId {
-                self.promoteToSteer(first)
-            }
+            guard let first = queue.items.first?.runId, queue.canSendNow || queue.canPromoteToSteer else { return false }
+            if !call.isRepeat, !self.queueBusy { self.sendQueued(first) }
             return true
         }
         // `thread.editQueuedMessage` (alt+arrowup while the composer has focus, ChatView.tsx:8232-8241):
@@ -1418,6 +1418,7 @@ final class ComposerController {
         // ponytail: ignores the PR-watch background work that also creates a runtime; add it with PR watches
         placeholder.disconnected = !ComposerLogic.QueueState.hasStartedSession(projection)
         placeholder.approvalPending = requests.activeApproval != nil
+        placeholder.approvalFeedback = requests.activeApproval?.supportsFeedback == true
         // A send declines the shown approvals, so it steers the waiting turn instead of queueing behind it
         // (`followUpBehavior`, ChatComposer.tsx:2286-2292).
         composer.steerByDefault = followUpSteers || !requests.approvals.isEmpty
@@ -1799,6 +1800,26 @@ final class ComposerController {
             }
             let changedBefore = changed()
             let answering = approvals.contains { responding.contains($0.requestId) }
+            // The shown approval takes the message as decline feedback when its provider supports it
+            // (useComposerSend.ts:481-484,991-1027, `sendApprovalFeedback` threadRequests.ts:21-30).
+            if let feedbackTarget = requests.activeApproval, feedbackTarget.supportsFeedback, feedbackTarget.canRespond {
+                if !attachments.isEmpty || !ComposerContext.referencedIds(trimmed).isEmpty {
+                    if let picksKey { threadErrors.set(picksKey, "Send approval feedback without attachments or added context.") }
+                    return
+                }
+                guard !changedBefore, !answering, !trimmed.isEmpty else { return }
+                let payload = RuntimeRequestCommands.respond(threadId: threadId.localId, requestId: feedbackTarget.requestId,
+                                                             decision: .decline, feedback: messageText.trimmingCharacters(in: .whitespacesAndNewlines))
+                declineInFlight = true
+                respond(payload, failure: ComposerFeedback.Failure.approval) { [weak self] sent in
+                    guard let self else { return }
+                    self.declineInFlight = false
+                    guard sent, !changed(), self.target == .thread(threadId) else { return }
+                    self.composer.text = ""
+                    self.remember("")
+                }
+                return
+            }
             let before = Set(requests.approvals.map(\.requestId))
             declineInFlight = true
             Task { [weak self] in
@@ -2364,6 +2385,16 @@ final class ComposerController {
                 // T3 only logs these (QueuedRunsControl.tsx:168-245 through useAtomCommand).
                 self?.report(.queueCommand, key: nil)
             }
+        }
+    }
+
+    /// `sendQueuedMessage` (QueuedRunsControl.tsx:175-192): a stopped thread starts the queued run as its
+    /// own turn with `queued-run.start`; a running one steers it in.
+    private func sendQueued(_ runId: RunId) {
+        if panel.queue.state.canSendNow {
+            queueCommand("queued-run.start", ["runId": .string(runId.rawValue)])
+        } else {
+            promoteToSteer(runId)
         }
     }
 
@@ -4772,10 +4803,12 @@ extension ComposerController {
             var actions: [String] = []
             if ThreadUsageLimitRecovery.canSchedule(thread) {
                 actions = [pending ? "Saving..." : ThreadUsageLimitRecovery.scheduled(thread) ? "Cancel auto-resume" : "Resume at reset"]
-                if !ThreadUsageLimitRecovery.snoozed(thread) { actions.append(pending ? "Saving..." : "Snooze until reset") }
+                // The snooze button stays as "Wake now" while snoozed (UsageLimitRecoveryBanner.tsx:95-102).
+                actions.append(pending ? "Saving..." : ThreadUsageLimitRecovery.snoozed(thread) ? "Wake now" : "Snooze until reset")
             }
             panel.recoveryBanner.apply(.init(variant: .warning, icon: .gauge, title: "Usage limit reached", description: description, actions: actions))
-            panel.recoveryBanner.disabledActions = pending ? Set(actions.indices) : (reset ?? .distantPast) <= Date() ? [1] : []
+            let resetPassed = (reset ?? .distantPast) <= Date()
+            panel.recoveryBanner.disabledActions = pending ? Set(actions.indices) : resetPassed && !ThreadUsageLimitRecovery.snoozed(thread) ? [1] : []
         }
         let resetKey = limited ? thread.map { $0.id.rawValue + ":" + ($0.usageLimitResetAt?.raw ?? "") } : nil
         if resetKey != recoveryResetKey {
@@ -4789,10 +4822,11 @@ extension ComposerController {
     }
     private func updateThreadRecovery(_ index: Int?) {
         guard let index, let thread = shellThread, !recoveryPending.contains(thread.id), ThreadUsageLimitRecovery.canSchedule(thread), let supervisor = shell?.supervisor else { return }
-        if index == 1, (thread.usageLimitResetAt?.date ?? .distantPast) <= Date() {
+        let snoozed = ThreadUsageLimitRecovery.snoozed(thread)
+        if index == 1, !snoozed, (thread.usageLimitResetAt?.date ?? .distantPast) <= Date() {
             toast(.warning, "The reset time has passed. Retry the thread manually."); return
         }
-        guard let payload = ThreadUsageLimitRecovery.update(thread: thread, autoResume: index == 0 ? !ThreadUsageLimitRecovery.scheduled(thread) : nil, snooze: index == 1 ? true : nil) else { return }
+        guard let payload = ThreadUsageLimitRecovery.update(thread: thread, autoResume: index == 0 ? !ThreadUsageLimitRecovery.scheduled(thread) : nil, snooze: index == 1 ? !snoozed : nil) else { return }
         recoveryPending.insert(thread.id); recoveryErrors[thread.id] = nil; updateThreadBanners()
         Task { [weak self] in
             do { _ = try await supervisor.request("orchestration.dispatchCommand", payload: payload) }
@@ -4938,6 +4972,11 @@ extension ComposerController {
         }
         let now = Date()
         let held = projection?.runs.contains { $0.status == .queued && $0.queueHeld == true } ?? false
+        // The offer stays off while the resolved idle compaction mode is `off` (ChatView.tsx:2516-2522).
+        if let environmentId = targetEnvironmentId,
+           ServerSettingsValues(serverConfigs[environmentId]?.settings.raw).resolveIdleCompaction(instanceId: pickers.current.instanceId?.rawValue ?? "claudeAgent") == "off" {
+            dismissed = true
+        }
         let tokens = ComposerCompaction.resumeTokens(usage: contextWindow, driver: provider?.driver, dismissed: dismissed,
                                                      compactDisabled: gate.disabled, hasHeldQueuedRuns: held,
                                                      multipleModels: pickers.currentMultiple != nil, now: now)

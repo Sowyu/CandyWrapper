@@ -380,7 +380,7 @@ public final class ThreadPanelView: DSView {
     public let waitingIndicator = DitherWaitingView()
     /// The pill behind the context ring under Redesign; the ring itself is the composer's meter, moved here.
     private let ringPill = DitherPillSurface()
-    /// "Branch changed — was <branch>" (ChatView.tsx:7801-7837), keyed like T3's `branch-mismatch:<key>`.
+    /// "Branch changed from <branch>" (ChatView.tsx:7801-7837), keyed like T3's `branch-mismatch:<key>`.
     public let lazyBranchBanner = LazyView { ComposerNoticeBannerView() }
     public var branchBanner: ComposerNoticeBannerView { lazyBranchBanner.view }
     public var branchMismatchKey: String? { didSet { if branchMismatchKey != oldValue { needsLayout = true } } }

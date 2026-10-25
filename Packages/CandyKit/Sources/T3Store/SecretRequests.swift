@@ -4,8 +4,12 @@ import T3Protocol
 /// A `secret_request` turn item's card (packages/client-runtime/src/secretRequest.ts): the agent asked for a
 /// secret through T3's `request_secret` tool. The value travels only in `secrets.answerRequest`.
 public enum SecretRequests {
-    /// Shown under the field: the one promise the card makes about the value.
-    public static let privacyNote = "Stored securely, never shown to the agent"
+    /// Shown under the field: the one promise the card makes about the value. A `file` request lets the
+    /// agent's commands read it, so its card promises less (`secretRequestPrivacyNote`, secretRequest.ts:9-12).
+    public static func privacyNote(delivery: String?) -> String {
+        delivery == "file" ? "Kept out of chat, in a private file this agent's commands can read for 24 hours"
+            : "Stored securely, never shown to the agent"
+    }
     public static let defaultPlaceholder = "Paste the secret"
     public static let genericFailure = "Could not answer the request. Try again."
 

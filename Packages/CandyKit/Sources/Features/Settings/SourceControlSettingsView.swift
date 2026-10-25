@@ -148,7 +148,7 @@ public final class SourceControlSettingsView: ScopedSettingsPage {
     private func repositoriesSection() -> SettingsSectionView {
         let pull = serverSwitch("automatic-pull", "", key: "defaultAutoPull", reset: "default automatic pull", label: "Default automatic pull")
         let credits = serverSwitch("remove-agent-credits-on-merge",
-                                   "Remove recognized agent credit lines from GitHub merge and squash messages, keeping human co-authors. Includes auto-merge. Excludes merge queues, stack merges, and existing commits.",
+                                   "Remove recognized agent credit lines from merge and squash messages on hosts that support it, keeping human co-authors. Includes auto-merge. Excludes merge queues, stack merges, and existing commits.",
                                    key: "removeAgentCreditsOnMerge", reset: "agent credit removal", label: "Remove agent credits when merging")
         (credits.accessories.last as? ResetSlot)?.tooltip = "Keep agent credits"
         let methods: [(value: String, label: String)] = [("last", "Last selected"), ("merge", "Merge commit"), ("squash", "Squash and merge"),

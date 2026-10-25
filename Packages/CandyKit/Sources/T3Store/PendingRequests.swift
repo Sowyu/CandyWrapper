@@ -50,9 +50,16 @@ public struct PendingApproval: Hashable, Sendable {
     public var options: [ApprovalOption]?
     /// Only `live` requests can be answered; anything else reads as `not_resumable`.
     public var canRespond: Bool
+    /// The agent's own reason for asking (`approval_request.reason`, orchestrationV2.ts:1433).
+    public var reason: String?
+    /// Why a full-access thread still asks: `ask_rule` or `provider_check` (orchestrationV2.ts:1434).
+    public var fullAccessOverride: String?
+    /// A decline can carry feedback for the agent (`responseCapability.supportsFeedback`, threadRequests.ts:158-160).
+    public var supportsFeedback: Bool
 
     public init(requestId: String, requestKind: RuntimeRequestKind, createdAt: T3Timestamp? = nil, detail: String? = nil,
-                appName: String? = nil, options: [ApprovalOption]? = nil, canRespond: Bool = true) {
+                appName: String? = nil, options: [ApprovalOption]? = nil, canRespond: Bool = true,
+                reason: String? = nil, fullAccessOverride: String? = nil, supportsFeedback: Bool = false) {
         self.requestId = requestId
         self.requestKind = requestKind
         self.createdAt = createdAt
@@ -60,6 +67,21 @@ public struct PendingApproval: Hashable, Sendable {
         self.appName = appName
         self.options = options
         self.canRespond = canRespond
+        self.reason = reason
+        self.fullAccessOverride = fullAccessOverride
+        self.supportsFeedback = supportsFeedback
+    }
+
+    /// `FULL_ACCESS_OVERRIDE_QUESTION` (threadRequests.ts:58).
+    public static let fullAccessOverrideQuestion = "Why am I being asked this?"
+
+    /// `fullAccessOverrideExplanation` (threadRequests.ts:60-66).
+    public var fullAccessOverrideExplanation: String? {
+        switch fullAccessOverride {
+        case "ask_rule"?: "Full access skips approvals, but an ask rule in the agent's own settings matches this action, so it still asks. Remove or narrow that rule to stop these prompts."
+        case "provider_check"?: "Full access skips approvals, but the agent still stops for a few safety checks of its own that no setting can skip, such as a delete whose path it can't verify. T3 Code can't turn these off, so check the request and approve it if it's what you expect."
+        default: nil
+        }
     }
 
     public var effectiveOptions: [ApprovalOption] { options ?? ApprovalOption.defaults }
@@ -78,9 +100,9 @@ public struct PendingApproval: Hashable, Sendable {
         }
     }
 
-    /// The panel's detail line (the source uses an em dash in the gone message).
+    /// The panel's detail line (ComposerPendingApprovalPanel.tsx:84-86).
     public var detailText: String {
-        if !canRespond { return "Provider process is gone — interrupt or restart the run to respond." }
+        if !canRespond { return "Provider process is gone. Interrupt or restart the run to respond." }
         if let detail, !detail.isEmpty { return detail }
         return label
     }
@@ -205,7 +227,10 @@ public struct PendingRequests: Hashable, Sendable {
                 detail: item?.string("prompt").flatMap { $0.isEmpty ? nil : $0 },
                 appName: item?.string("appName").flatMap { $0.isEmpty ? nil : $0 },
                 options: item?["options"].flatMap { try? $0.decode(as: [ApprovalOption].self) },
-                canRespond: capability == "live"))
+                canRespond: capability == "live",
+                reason: item?.string("reason").flatMap { $0.isEmpty ? nil : $0 },
+                fullAccessOverride: item?.string("fullAccessOverride"),
+                supportsFeedback: capability == "live" && request.responseCapability?.supportsFeedback == true))
         }
         result.approvals = oldestFirst(result.approvals, \.createdAt)
         result.userInputs = oldestFirst(result.userInputs, \.createdAt)
@@ -456,10 +481,14 @@ public enum RuntimeRequestCommands {
     public static func newCommandId() -> String { UUID().uuidString.lowercased() }
 
     /// An approval: `{type, commandId, threadId, requestId, decision}`.
-    public static func respond(threadId: ThreadId, requestId: String, decision: ApprovalDecision,
+    /// A decline may carry `feedback` for the agent (commands.ts, b7e802bdec); older servers ignore it.
+    public static func respond(threadId: ThreadId, requestId: String, decision: ApprovalDecision, feedback: String? = nil,
                                commandId: String = newCommandId()) -> JSONValue {
-        .object(["type": .string("runtime-request.respond"), "commandId": .string(commandId),
-                 "threadId": .string(threadId.rawValue), "requestId": .string(requestId), "decision": .string(decision.rawValue)])
+        var fields: [String: JSONValue] = ["type": .string("runtime-request.respond"), "commandId": .string(commandId),
+                                           "threadId": .string(threadId.rawValue), "requestId": .string(requestId),
+                                           "decision": .string(decision.rawValue)]
+        if let feedback { fields["feedback"] = .string(feedback) }
+        return .object(fields)
     }
 
     /// Question answers: `{type, commandId, threadId, requestId, answers}`. No `decision`, and

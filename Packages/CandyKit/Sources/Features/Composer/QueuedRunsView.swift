@@ -103,9 +103,10 @@ public final class QueuedRunsView: ComposerBannerView {
             row.index = i
             row.configure(item, editing: item.runId != nil && item.runId == editingRunId,
                           canReorder: state.canReorder && item.runId != nil, busy: isBusy || item.runId == nil,
-                          canSteer: state.canPromoteToSteer,
+                          canSend: state.canSendNow || state.canPromoteToSteer, sendNow: state.canSendNow,
                           editTip: "Edit in the composer" + (i == queued - 1 && item.runId != nil ? editShortcutLabel.map { " (\($0))" } ?? "" : ""),
-                          steerTip: "Send as a steer instead" + (i == 0 ? steerShortcutLabel.map { " (\($0))" } ?? "" : ""))
+                          steerTip: (state.canSendNow ? "Start a turn with this message" : "Send as a steer instead")
+                            + (i == 0 ? steerShortcutLabel.map { " (\($0))" } ?? "" : ""))
         }
         if let focusedRun, let row = rows.first(where: { $0.runId == focusedRun }), row !== focused, let window {
             window.makeFirstResponder(row.grip)
@@ -244,7 +245,7 @@ private final class HeaderRow: ControlView {
     }
 }
 
-/// One queued message: grip, text, then Edit, Steer and Remove, or Cancel while editing.
+/// One queued message: grip, text, then Edit, Steer (Send now when stopped) and Remove, or Cancel while editing.
 private final class QueuedRowView: DSView {
     weak var owner: QueuedRunsView?
     var index = 0
@@ -282,7 +283,8 @@ private final class QueuedRowView: DSView {
         cancel.action = { [weak self] in self?.owner?.cancelEdit() }
     }
 
-    func configure(_ item: ComposerLogic.QueueState.Item, editing: Bool, canReorder: Bool, busy: Bool, canSteer: Bool,
+    /// `sendNow`: the thread is stopped, so the button starts a turn with the message (QueuedRunsControl.tsx:447-462).
+    func configure(_ item: ComposerLogic.QueueState.Item, editing: Bool, canReorder: Bool, busy: Bool, canSend: Bool, sendNow: Bool,
                    editTip: String, steerTip steerText: String) {
         self.editing = editing
         runId = item.runId
@@ -299,8 +301,9 @@ private final class QueuedRowView: DSView {
         grip.isHidden = !canReorder
         grip.isEnabled = !busy
         for b in [edit, steer, remove] { b.isHidden = editing; b.isEnabled = !busy }
-        steer.isEnabled = !busy && canSteer
-        steerTip.text = canSteer ? steerText : "There is no active run to steer"
+        steer.isEnabled = !busy && canSend
+        steer.title = sendNow ? "Send now" : "Steer"
+        steerTip.text = steerText
         cancel.isHidden = !editing
         needsDisplay = true
         needsLayout = true

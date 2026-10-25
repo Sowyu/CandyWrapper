@@ -115,6 +115,9 @@ struct ComposerLogicTests {
         #expect(L.lengthValidationMessage(String(repeating: "a", count: 121_500))?.hasPrefix("Prompt is 1,500 characters over") == true)
         #expect(L.placeholder(.init()) == "Ask anything, @tag files/folders, $use skills, or / for commands")
         #expect(L.placeholder(.init(approvalPending: true, disconnected: true)) == "Send a message to decline and redirect the agent")
+        var feedback = L.PlaceholderInput(approvalPending: true)
+        feedback.approvalFeedback = true
+        #expect(L.placeholder(feedback) == "Send feedback to decline this request")
     }
 
     /// The send after declining pending approvals and its four race toasts (ChatView.tsx:5222-5263, a93b03c8a5).
@@ -141,7 +144,7 @@ struct ComposerLogicTests {
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         var streamId: String?, reducer: ThreadReducer?
         var seen: [[String]] = []
-        var steerable = false, reorderable = false
+        var steerable = false, reorderable = false, sendNowWhileRunning = false
         for line in try String(contentsOf: root.appendingPathComponent("fixtures/transcripts/07-queue.jsonl"), encoding: .utf8).split(separator: "\n") {
             guard let record = try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
                   let body = record["body"] as? [String: Any] else { continue }
@@ -154,12 +157,15 @@ struct ComposerLogicTests {
                 let texts = state.items.map { $0.text.replacingOccurrences(of: "Reply with one word: ", with: "") }
                 if seen.last != texts { seen.append(texts) }
                 if !state.items.isEmpty { steerable = steerable || state.canPromoteToSteer; reorderable = reorderable || state.canReorder }
+                if state.activeRunId != nil, state.canSendNow { sendNowWhileRunning = true }
             }
         }
         #expect(seen == [[], ["alpha"], ["alpha", "beta"], ["alpha", "beta", "gamma"], ["alpha2", "beta", "gamma"],
                          ["gamma", "alpha2", "beta"], ["gamma", "beta", "alpha2"], ["gamma", "alpha2"], ["gamma"], []])
-        #expect(steerable && reorderable)
+        #expect(steerable && reorderable && !sendNowWhileRunning)
         let started = try #require(reducer?.projection)
+        // Settled, the thread can start a queued message as its own turn (threadWorkflows.ts:156-160).
+        #expect(L.QueueState(projection: started).canSendNow)
         #expect(L.QueueState.hasStartedSession(started))
         #expect(L.QueueState.supportsProviderHandoff(started))
     }

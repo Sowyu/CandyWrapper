@@ -115,9 +115,10 @@ public enum ComposerCompaction {
         return usage.used
     }
 
-    /// `compactBeforeSend` (ChatView.tsx:9270-9273): the offer is on and the message is not itself `/compact`.
+    /// `compactBeforeSend` (ChatView.logic.ts:1515-1520): the offer is on and the message is not itself a
+    /// `/compact`, with or without instructions (`COMPACT_COMMAND_PATTERN` /^\/compact(?:\s|$)/i, :927).
     public static func compactsBeforeSend(resumeTokens: Double?, keepFullHistory: Bool, text: String) -> Bool {
-        resumeTokens != nil && !keepFullHistory && text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "/compact"
+        resumeTokens != nil && !keepFullHistory && text.range(of: #"^/compact(\s|$)"#, options: [.regularExpression, .caseInsensitive]) == nil
     }
 
     /// `shouldReserveContextWindowMeter` (ContextWindowMeter.logic.ts:124-137): hold the meter's slot while a

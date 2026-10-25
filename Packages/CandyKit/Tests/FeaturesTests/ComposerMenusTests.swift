@@ -18,6 +18,11 @@ struct ComposerMenusTests {
         #expect(ComposerTriggers.detect("see @src/Ch", cursor: 11) == ComposerTrigger(kind: .path, query: "src/Ch", rangeStart: 4, rangeEnd: 11))
         #expect(ComposerTriggers.detect("use $ui", cursor: 7) == ComposerTrigger(kind: .skill, query: "ui", rangeStart: 4, rangeEnd: 7))
         #expect(ComposerTriggers.detect("use €ui", cursor: 7)?.kind == .skill)
+        // Money is not a skill (1ee0241730).
+        #expect(ComposerTriggers.detect("costs $5", cursor: 8) == nil)
+        #expect(ComposerTriggers.detect("about €9.99", cursor: 11) == nil)
+        #expect(ComposerTriggers.detect("($10k)", cursor: 6) == nil)
+        #expect(ComposerTriggers.detect("use $", cursor: 5)?.kind == .skill)
         #expect(ComposerTriggers.detect("fix #12", cursor: 7) == ComposerTrigger(kind: .pullRequest, query: "12", rangeStart: 4, rangeEnd: 7))
         #expect(ComposerTriggers.detect("fix #", cursor: 5)?.kind == .pullRequest)
         #expect(ComposerTriggers.detect("fix #-x", cursor: 7) == nil)

@@ -582,6 +582,7 @@ extension SettingsController {
         labels += client("confirmThreadDelete", "Delete confirmation") + client("confirmQuit", "Quit shortcut")
         labels += client("menuBarItemEnabled", "Menu bar icon")
         labels += server("textGenerationModelSelection", "Text generation model")
+        labels += server("threadTitleInstructions", "Thread title instructions")  // SettingsPanels.tsx:520-522
         return labels
     }
 
@@ -618,7 +619,7 @@ extension SettingsController {
         var patch: [String: JSONValue] = [:]
         for key in ["sidebarAutoSettleAfterDays", "sidebarAutoSettleOnMerge", "autoResumeLimitedThreads", "snoozeLimitedThreads", "responseStreamingMode",
                     "enableProviderUpdateChecks", "continueThreadsAfterServerUpdate", "defaultThreadEnvMode", "newWorktreesStartFromOrigin",
-                    "addProjectBaseDirectory", "textGenerationModelSelection"] where !s.isDefault(key) {
+                    "addProjectBaseDirectory", "textGenerationModelSelection", "threadTitleInstructions"] where !s.isDefault(key) {
             patch[key] = ServerSettingsValues.fields[key]!.defaultValue
         }
         if BackgroundActivity.isChanged(s) { patch["backgroundActivity"] = BackgroundActivity.defaultSettings }

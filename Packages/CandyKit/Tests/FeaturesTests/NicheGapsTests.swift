@@ -82,7 +82,7 @@ struct NicheGapsTests {
         #expect(!none.dismissible)
         let v = ComposerNoticeBannerView()
         v.apply(.init(variant: .neutral, icon: .gitBranch, title: "feature-x", actions: ["Restore branch"],
-                      dismissLabel: "Dismiss branch change notice", titlePrefix: "Branch changed \u{2014} was", titleCode: true))
+                      dismissLabel: "Dismiss branch change notice", titlePrefix: "Branch changed from", titleCode: true))
         #expect(v.dismissControl?.accessibilityLabel() == "Dismiss branch change notice")
         let failed = ComposerServerUpdateNotice(status: .failed("boom")).content
         #expect(failed.dismissible && failed.dismissLabel == "Dismiss update notice")

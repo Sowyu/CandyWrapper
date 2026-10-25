@@ -22,7 +22,7 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         public var compact: Bool
         /// The item's `priority` in the banner stack.
         public var priority: ComposerBannerStackItem.Priority?
-        /// Muted text before the title, in normal weight and never cut ("Branch changed — was").
+        /// Muted text before the title, in normal weight and never cut ("Branch changed from").
         public var titlePrefix: String?
         /// The title is a `<code>`: monospace, cut at its end.
         public var titleCode: Bool
@@ -267,8 +267,10 @@ final class NoticeDetailsPopupView: DSView, PopupContent {
     private let text = TextBlockView()
     static let maxContentWidth: CGFloat = 480 - 16 - 2
     static let maxHeight: CGFloat = 384
+    private let maxContentWidth: CGFloat
 
-    init(text value: String) {
+    init(text value: String, maxWidth: CGFloat = 480, label: String = "Notice details") {
+        maxContentWidth = maxWidth - 16 - 2
         super.init(frame: .zero)
         decoration.host = self
         decoration.outset = 16
@@ -286,12 +288,12 @@ final class NoticeDetailsPopupView: DSView, PopupContent {
         text.color = Themed.color(\.contrastPopoverForeground)
         addSubview(text)
         setAccessibilityRole(.group)
-        setAccessibilityLabel("Notice details")
+        setAccessibilityLabel(label)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
-    private var contentWidth: CGFloat { min(Self.maxContentWidth, ceil(text.naturalWidth) + 1) }
+    private var contentWidth: CGFloat { min(maxContentWidth, ceil(text.naturalWidth) + 1) }
 
     var popupSize: CGSize {
         let w = contentWidth

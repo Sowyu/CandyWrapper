@@ -85,7 +85,7 @@ public enum KeybindingsLogic {
         case "composer.sendAlternate": return "Composer: Opposite Queue or Steer Action"
         case "composer.sendBackground": return "Composer: Start in Background"
         case "composer.sendAndNewThread": return "Composer: Send and Start New Thread"
-        case "thread.steerQueuedMessage": return "Queue: Send First Queued Message as Steer"
+        case "thread.steerQueuedMessage": return "Queue: Send First Queued Message"
         case "thread.editQueuedMessage": return "Queue: Edit Last Queued Message"
         case "thread.copyReference": return "Pull Request: Copy Link or Thread ID"
         case "view.reopenClosed": return "Reopen Closed Tab"

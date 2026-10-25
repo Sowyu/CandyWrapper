@@ -15,7 +15,7 @@ final class SecretRequestRowView: TimelineRowView {
     private let save = ButtonView("Save securely", variant: .default, size: .default)
     private let errorLabel = TextBlockView("", font: TL.font(12), lineHeight: 16, color: TL.c(\.destructive))
     private let shield = IconView(name: .shieldCheck, size: 14)
-    private let privacy = LabelView(SecretRequests.privacyNote, font: TL.font(12))
+    private let privacy = LabelView(SecretRequests.privacyNote(delivery: nil), font: TL.font(12))
     private let decline = ButtonView("Decline", variant: .ghostMuted, size: .xs)
     /// The answered and pending-elsewhere line.
     private var lineIcon = IconView(name: .lock, size: 14)
@@ -58,6 +58,7 @@ final class SecretRequestRowView: TimelineRowView {
         reason.text = why
         reason.isHidden = why.isEmpty
         field.placeholder = p.item.string("placeholder") ?? SecretRequests.defaultPlaceholder
+        privacy.text = SecretRequests.privacyNote(delivery: p.item.string("delivery"))
         if changedRequest { field.text = "" }
         // The field clears once the answer is accepted; the card turns into its answered line after.
         if wasSubmitting, !item.ui.secretSubmitting, item.ui.secretError == nil { field.text = "" }

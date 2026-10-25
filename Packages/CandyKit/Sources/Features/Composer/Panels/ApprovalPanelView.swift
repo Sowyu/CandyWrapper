@@ -33,6 +33,10 @@ public final class ApprovalPanelView: ComposerBannerView {
     /// One line: mono `whitespace-pre`. Several lines or app access prose: a wrapped block.
     private let detailLine = glassLabel(font: DSFont.mono(12), color: Themed.color(\.foreground), lineHeight: 16)
     private let detailBlock = glassBlock(font: DSFont.mono(12), color: Themed.color(\.foreground), lineHeight: 16)
+    /// `InlineButton tone="muted"` that opens the full-access explanation on hover (ComposerPendingApprovalPanel.tsx:54-68).
+    private let whyLink = ThreadStatusLineAction()
+    /// The agent's reason, `text-2xs text-muted-foreground wrap-break-word` under the detail (:88-92).
+    private let reasonBlock = glassBlock(font: DSFont.ui(11), color: Themed.color(\.mutedForeground), lineHeight: 16)
     private var buttons: [(ApprovalOption, ButtonView)] = []
     private let more = ButtonView(nil, icon: .ellipsis, variant: .outline, size: .iconXs).menuTrigger()
 
@@ -44,6 +48,19 @@ public final class ApprovalPanelView: ComposerBannerView {
         more.setAccessibilityLabel("More approval options")
         more.action = { [weak self] in self?.openMenu() }
         addSubview(more)
+        whyLink.label.font = DSFont.ui(11, weight: .medium)
+        whyLink.label.text = PendingApproval.fullAccessOverrideQuestion
+        whyLink.label.smoothsFont = false
+        whyLink.isHidden = true
+        // `PopoverTrigger openOnHover` (300ms), `tooltipStyle side="top"`, `max-w-[min(22rem,calc(100vw-2rem))]`.
+        let tip = TooltipController.attach(to: whyLink, text: "", placement: PopupPlacement(side: .top, align: .center, sideOffset: 4), delay: 0.3)
+        tip.content = { [weak self] in
+            NoticeDetailsPopupView(text: self?.approval?.fullAccessOverrideExplanation ?? "", maxWidth: 352,
+                                   label: PendingApproval.fullAccessOverrideQuestion)
+        }
+        whyLink.action = { [weak tip] in tip?.show(instant: true) }
+        reasonBlock.isHidden = true
+        [whyLink, reasonBlock].forEach(addSubview)
     }
 
     public func configure(_ approval: PendingApproval, pendingCount: Int, threadId: ThreadId) {
@@ -55,6 +72,9 @@ public final class ApprovalPanelView: ComposerBannerView {
         appLabel.isHidden = approval.appName == nil
         countLabel.text = "1/\(pendingCount)"
         countLabel.isHidden = pendingCount <= 1
+        whyLink.isHidden = approval.fullAccessOverrideExplanation == nil
+        reasonBlock.text = approval.reason ?? ""
+        reasonBlock.isHidden = approval.reason == nil
 
         let text = approval.detailText
         let prose = approval.requestKind == .mcpElicitation
@@ -127,8 +147,13 @@ public final class ApprovalPanelView: ComposerBannerView {
     }
 
     /// The banner's full height at `width`, the 17px under the composer included.
+    private func reasonHeight(width: CGFloat) -> CGFloat {
+        reasonBlock.isHidden ? 0 : 4 + reasonBlock.height(forWidth: width)
+    }
+
     public func preferredHeight(width: CGFloat) -> CGFloat {
-        let content = 16 + 4 + detailHeight(width: max(0, contentWidth(width)))
+        let cw = max(0, contentWidth(width))
+        let content = 16 + 4 + detailHeight(width: cw) + reasonHeight(width: cw)
         let actionsRow: CGFloat = width < Self.narrow ? 12 + 24 : 0
         return Self.pad + content + actionsRow + Self.pad + Self.overlap
     }
@@ -146,14 +171,22 @@ public final class ApprovalPanelView: ComposerBannerView {
         lx += kindWidth + 8
         let countWidth = countLabel.isHidden ? 0 : ceil(countLabel.textWidth)
         countLabel.frame = NSRect(x: x + cw - countWidth, y: pad, width: countWidth, height: 16)
-        appLabel.frame = NSRect(x: lx, y: pad, width: max(0, x + cw - lx - (countWidth > 0 ? countWidth + 8 : 0)), height: 16)
+        // The app name truncates first (`min-w-0 truncate`); the link keeps its width (`shrink-0` content).
+        let rowEnd = x + cw - (countWidth > 0 ? countWidth + 8 : 0)
+        let whyWidth = whyLink.isHidden ? 0 : whyLink.preferredWidth
+        let appWidth = appLabel.isHidden ? 0 : max(0, min(ceil(appLabel.textWidth), rowEnd - lx - (whyWidth > 0 ? whyWidth + 8 : 0)))
+        appLabel.frame = NSRect(x: lx, y: pad, width: appWidth, height: 16)
+        if appWidth > 0 { lx += appWidth + 8 }
+        whyLink.frame = NSRect(x: lx, y: pad, width: max(0, min(whyWidth, rowEnd - lx)), height: 16)
 
         let dh = detailHeight(width: cw)
         detailLine.frame = NSRect(x: x, y: pad + 20, width: cw, height: 16)
         detailBlock.frame = NSRect(x: x, y: pad + 20, width: cw, height: dh)
+        let rh = reasonHeight(width: cw)
+        reasonBlock.frame = NSRect(x: x, y: pad + 20 + dh + 4, width: cw, height: max(0, rh - 4))
 
         // Actions: right aligned, centered on the content row, or on their own row when narrow.
-        let content = 20 + dh
+        let content = 20 + dh + rh
         let ay = w < Self.narrow ? pad + content + 12 : pad + (content - 24) / 2
         var ax = w - pad - actionsWidth
         for view in actionViews {

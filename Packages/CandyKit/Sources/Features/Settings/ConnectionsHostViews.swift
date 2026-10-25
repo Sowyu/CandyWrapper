@@ -786,7 +786,7 @@ final class PairingLinkRowView: DSView, SettingsGroupRow {
             showsQR = shareable
             if shareable {
                 if let qr { qr.value = text } else {
-                    let v = QRCodeView(value: text, size: 168, level: .medium, marginSize: 1, title: "Pairing link — scan to open on another device")
+                    let v = QRCodeView(value: text, size: 168, level: .medium, marginSize: 1, title: "Pairing link. Scan to open on another device")
                     qrBox.addSubview(v)
                     qr = v
                 }

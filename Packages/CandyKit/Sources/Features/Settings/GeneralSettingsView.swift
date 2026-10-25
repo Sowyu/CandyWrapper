@@ -48,6 +48,31 @@ public final class GeneralSettingsView: SettingsPageBase {
         return super.anchor(id)
     }
 
+    /// "Compact idle threads" (SettingsPanels.tsx:973-1020, `scopedIdleCompaction` scopedSettings.ts:149-155): targets
+    /// compare by the mode each resolves to, and "Never" is offered only when every target can store it.
+    private func idleCompactionRow() -> SettingsRowView {
+        let modes = ServerSettingsValues.idleCompactionModes
+        let select = settingsSelect(modes.map(\.label), width: 224)
+        select.setAccessibilityLabel("Compact idle threads")
+        let r = row("compact-idle-threads",
+                    detail: "When to compact an idle Claude thread over 200,000 tokens: after you return, just before its prompt cache expires, or never. Each Claude provider can override this.",
+                    control: select)
+        _ = bindServerRow(r, keys: ["idleCompaction", "compactIdleThreads"], reset: "compact idle threads",
+                          isDefault: { [weak self] in self?.server.globalIdleCompaction == "onReturn" },
+                          resetPatch: { ["idleCompaction": .string("onReturn")] })
+        select.onChange = { [weak self] i in self?.context.patchServer(["idleCompaction": .string(modes[i].value)]) }
+        binder.add { [weak self, weak select] in
+            guard let self, let select else { return }
+            let targets = self.context.scope.targets
+            let resolved = Set(targets.map(\.settings.globalIdleCompaction))
+            select.placeholder = self.context.scope.connected.isEmpty ? "Unavailable" : "Mixed"
+            select.selectedIndex = resolved.count > 1 ? nil : modes.firstIndex { $0.value == self.server.globalIdleCompaction }
+            // A server from before modes has only the on/off switch, so it cannot store "Never".
+            select.disabledOptions = targets.allSatisfy(\.settings.readsIdleCompactionModes) ? [] : [modes.count - 1]
+        }
+        return r
+    }
+
     // MARK: New threads (ProjectDefaultsSettings.tsx:252-385)
 
     private func newThreadsSection() -> SettingsSectionView {
@@ -138,10 +163,8 @@ public final class GeneralSettingsView: SettingsPageBase {
         let shelf = clientSwitch("working-shelf",
                                  "Fold working and monitoring threads into a Working section. They return to the top of the inbox when they need you.",
                                  key: "sidebarWorkingShelfEnabled", reset: "working section")
-        // SettingsPanels.tsx:995-1022, before the auto-settle rows.
-        let compact = serverSwitch("compact-idle-threads",
-                                   "Compact long idle Claude threads just before their prompt cache expires, so coming back costs less.",
-                                   key: "compactIdleThreads", reset: "compact idle Claude threads")
+        // SettingsPanels.tsx:973-1020, before the auto-settle rows.
+        let compact = idleCompactionRow()
         let merged = serverSwitch("auto-settle-merged-threads",
                                   "Settle a thread when its pull request merges. Closed pull requests still settle automatically.",
                                   key: "sidebarAutoSettleOnMerge", reset: "auto-settle on merge")
@@ -393,7 +416,38 @@ public final class GeneralSettingsView: SettingsPageBase {
                     control: picker)
         _ = bindServerRow(r, keys: ["textGenerationModelSelection"], reset: "text generation model")
         binder.add { [weak picker] in picker?.refresh() }
-        return section("text-generation", "Text generation", [r])
+        return section("text-generation", "Text generation", [r, threadTitleInstructionsRow()])
+    }
+
+    /// ThreadTitleInstructionsSettings.tsx (51273020db): a 4-row textarea that saves on blur when edited.
+    private func threadTitleInstructionsRow() -> SettingsRowView {
+        let key = "threadTitleInstructions"
+        let placeholder = "Keep titles to a few words. Lead with the main subject."
+        let field = TextareaView(placeholder: placeholder, size: .default)
+        field.setAccessibilityLabel("Thread title instructions")
+        let r = row(nil, title: "Thread title instructions", detail: "Appended to the prompt for new and regenerated thread titles.")
+        anchors["thread-title-instructions"] = r
+        r.footer = TextareaFooter(field)
+        _ = bindServerRow(r, keys: [key], reset: "thread title instructions",
+                          isDefault: { [weak self] in self.map { !$0.context.scope.isMixed([key]) && $0.server.string(key).isEmpty } ?? true },
+                          resetPatch: { [key: .string("")] })
+        var edited = false
+        field.onChange = { [weak self] _ in edited = true; self?.onHeightChange?() }
+        onBlur(field) { [weak self] text in
+            guard let self else { return }
+            let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if edited, self.context.scope.isMixed([key]) || value != self.server.string(key) {
+                self.context.patchServer([key: .string(value)])
+            }
+            edited = false
+        }
+        binder.add { [weak self, weak field] in
+            guard let self, let field, !field.state.focused else { return }
+            let mixed = self.context.scope.isMixed([key])
+            field.text = mixed ? "" : self.server.string(key)
+            field.placeholder = mixed ? "Mixed. Enter instructions to apply to all selected targets." : placeholder
+        }
+        return r
     }
 
     private func aboutSection() -> SettingsSectionView {
