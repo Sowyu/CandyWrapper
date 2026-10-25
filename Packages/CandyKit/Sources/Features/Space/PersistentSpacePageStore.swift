@@ -37,11 +37,13 @@ public final class PersistentSpacePageStore: SpaceDocumentStore {
         }.value
         do {
             let writer = LocalPageWriter(setup: setup)
-            let state = try await writer.load()
+            let (state, edited) = try await writer.load()
             self.writer = writer
             failure = nil
             isOpen = true
-            attach(SpaceReplicaStore(replica: SpaceReplica(device: setup.device, label: "This Mac", confirmed: state)))
+            let store = SpaceReplicaStore(replica: SpaceReplica(device: setup.device, label: "This Mac", confirmed: state))
+            store.edited = edited
+            attach(store)
             return setup
         } catch {
             await setup.local.close()
@@ -184,18 +186,32 @@ private actor LocalPageWriter {
         replica = SpaceReplica(device: setup.device, label: "This Mac")
     }
 
-    func load() async throws -> SpaceState {
+    /// The state, and the "Edited" time per page that the log holds, so the line shows right after a relaunch.
+    func load() async throws -> (SpaceState, [PageID: Int64]) {
         let stored = try await setup.local.load()
         var confirmed = try SpaceState(snapshot: stored.snapshot)
-        for frame in stored.frames { try confirmed.apply(frame, await setup.local.payload(of: frame)) }
+        var edited: [PageID: Int64] = [:]
+        func note(_ payload: OpPayload, _ pages: [PageID]) {
+            for page in pages { edited[page] = max(edited[page] ?? 0, payload.at) }
+        }
+        for frame in stored.frames {
+            let payload = try await setup.local.payload(of: frame)
+            let before = SpaceReplicaStore.editedPages(payload.changes, in: confirmed)
+            try confirmed.apply(frame, payload)
+            note(payload, before + SpaceReplicaStore.editedPages(payload.changes, in: confirmed))
+        }
         let pending = try stored.pending.map { operation in
             PendingOp(op: operation.op, payload: operation.payload,
                       bases: try operation.context["bases"]?.decoded([String: TextBase].self) ?? [:])
         }
         replica = SpaceReplica(device: setup.device, label: "This Mac", confirmed: confirmed, pending: pending)
         // A crash after pending was fsynced resumes that exact op before new edits can start.
-        for operation in replica.pending { try await confirm(operation) }
-        return replica.current
+        for operation in replica.pending {
+            let before = SpaceReplicaStore.editedPages(operation.payload.changes, in: replica.confirmed)
+            try await confirm(operation)
+            note(operation.payload, before + SpaceReplicaStore.editedPages(operation.payload.changes, in: replica.confirmed))
+        }
+        return (replica.current, edited)
     }
 
     /// Keeps the screen's op id, so the frames it returns confirm the screen's own pending op.

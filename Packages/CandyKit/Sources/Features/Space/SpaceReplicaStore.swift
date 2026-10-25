@@ -51,8 +51,8 @@ public final class SpaceReplicaStore: SpaceDocumentStore {
     /// Deleted forever. ponytail: hidden for this run only, since records are never removed; purge them in the
     /// snapshot when the local copy lands.
     private var removed: Set<PageID> = []
-    /// The last local edit per page, for the "Edited" line. ponytail: in memory, read it from the log once sync lands.
-    public private(set) var edited: [PageID: Int64] = [:]
+    /// The last edit per page, for the "Edited" line. The local copy seeds it from its log when it opens.
+    public internal(set) var edited: [PageID: Int64] = [:]
     /// The records the last change touched, readable from an observer callback.
     public private(set) var lastChanged: Set<RecordID> = []
     /// Runs after each local edit with the op it queued, so the local copy can persist it before it shows.
@@ -180,6 +180,21 @@ public final class SpaceReplicaStore: SpaceDocumentStore {
     }
 
     public func removeObserver(_ token: Int) { observers[token] = nil }
+
+    /// The pages a logged change marks as edited, by the rule live edits follow in `touched`: a page change marks
+    /// the page and its parent, a block change its page. Call it on the state before and after the change, so a
+    /// move marks both parents.
+    nonisolated public static func editedPages(_ changes: [RecordChange], in state: SpaceState) -> [PageID] {
+        func id(_ object: SpaceState.Object?, _ key: String) -> PageID? {
+            if case .string(let raw)? = object?[key] { return try? PageID(raw) }
+            return nil
+        }
+        return changes.flatMap { change -> [PageID] in
+            if change.kind == .page { return [change.id] + [id(state.pages[change.id], "parent")].compactMap { $0 } }
+            if change.kind == .block { return [id(state.blocks[change.id], "page")].compactMap { $0 } }
+            return []
+        }
+    }
 
     // MARK: Caches
 

@@ -74,6 +74,27 @@ struct PersistentSpacePageStoreTests {
         try await next.close()
     }
 
+    /// The "Edited" line reads the same times after a relaunch: a block edit marks its page, a child page its parent.
+    @Test func editedTimesSurviveReopen() async throws {
+        let root = root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let keys = SpaceKeyStore.inMemory()
+        let first = PersistentSpacePageStore()
+        _ = try await first.open(applicationSupport: root, keyStore: keys)
+        let parent = PageID(), child = PageID(), other = PageID()
+        first.edit([try RecordChange.page(parent, PageRecord(order: OrderKey("a0"), title: "Week", created: 0)),
+                    try RecordChange.page(other, PageRecord(order: OrderKey("a1"), title: "Other", created: 0))], at: 1_000)
+        first.edit([try RecordChange.page(child, PageRecord(parent: parent, order: OrderKey("a0"), title: "Lab", created: 0))], at: 2_000)
+        first.edit([try RecordChange.block(BlockID(), BlockRecord(page: other, order: OrderKey("a0"), type: .p, text: RichText(t: "Hi")))], at: 3_000)
+        let expected = first.edited
+        #expect(expected == [parent: 2_000, child: 2_000, other: 3_000])
+        try await first.close()
+        let next = PersistentSpacePageStore()
+        _ = try await next.open(applicationSupport: root, keyStore: keys)
+        #expect(next.edited == expected)
+        try await next.close()
+    }
+
     /// Saved edits leave the screen's pending list, so memory doesn't grow with every edit, and undo still works.
     @Test func confirmedEditsLeaveTheScreenAndUndoStillWorks() async throws {
         let root = root()
