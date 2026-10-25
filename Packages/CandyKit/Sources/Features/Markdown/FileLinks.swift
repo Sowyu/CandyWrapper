@@ -43,6 +43,8 @@ public enum FileLinks {
         let explicit = matches(relativePrefix, candidate) || candidate.hasPrefix("/") || isWindowsAbsolutePath(candidate)
         if !explicit {
             let withoutPosition = replace(positionSuffix, in: candidate)
+            // Markdown destinations accept `patches/`; inline code still needs a file-shaped last segment (6de7da548d).
+            if withoutPosition.hasSuffix("/") { return nil }
             let firstSegment = withoutPosition.split(separator: "/", omittingEmptySubsequences: false).first.map(String.init) ?? withoutPosition
             if looksLikeHostname(firstSegment, hasPosition: hasPosition) { return nil }
             var base = withoutPosition
@@ -285,7 +287,7 @@ public enum FileLinks {
         return String(trimmed)
     }
 
-    /// `workspaceRelativeFilePath` (path.ts): "." for the root itself, nil outside it.
+    /// `workspaceRelativeFilePath` (path.ts:85-110): "." for the root itself, nil outside it.
     static func workspaceRelative(_ path: String, root: String?) -> String? {
         guard let root, !root.isEmpty else { return nil }
         let p = stripSlashPrefixedWindowsDrive(path.replacingOccurrences(of: "\\", with: "/"))
@@ -297,7 +299,14 @@ public enum FileLinks {
         while trimmed.hasSuffix("/") { trimmed.removeLast() }
         if trimmed == rc { return "." }
         guard pc.hasPrefix(rc + "/") else { return nil }
-        return String(p.dropFirst(r.count + 1))
+        let relative = String(p.dropFirst(r.count + 1))
+        // `/repo/../x` starts with the root but escapes it, so it opens as a host file (edce5f0e53).
+        var depth = 0
+        for segment in relative.split(separator: "/", omittingEmptySubsequences: false) {
+            if segment == ".." { depth -= 1 } else if !segment.isEmpty, segment != "." { depth += 1 }
+            if depth < 0 { return nil }
+        }
+        return relative
     }
 
     /// `mediaMimeTypeFromExtension` != null (filePreview.ts): images, video and audio open in the media viewer.
@@ -317,7 +326,8 @@ public enum FileLinks {
     }
 
     nonisolated(unsafe) static let relativePrefix = regex(#"^(~/|\.{1,2}/)"#)
-    nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2}$"#)
+    /// The last segment is optional, so a folder link may end in `/` (`patches/`); a bare name still fails (6de7da548d).
+    nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2})?$"#)
     nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
