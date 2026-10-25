@@ -160,6 +160,7 @@ final class SettingsController {
             guard let self, let window = self.window else { return }
             self.t3.presentSignIn(in: window)
         }
+        pageContext.signInToConnect = nav.onSignIn
         nav.onAccount = { [weak self] trigger in
             guard let self, let window = self.window else { return }
             self.t3.showAccountMenu(from: trigger, window: window)

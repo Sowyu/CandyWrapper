@@ -250,6 +250,7 @@ extension SettingsController {
         case .orchestrator: OrchestratorSettingsView(context: c)
         case .connectors: ConnectorsSettingsView(context: c)
         case .experimental: ExperimentalSettingsView(context: c)
+        case .beta: BetaSettingsView(context: c)
         default: SnapShotSettingsView(context: c)
         }
         v.onHeightChange = { [weak self] in self?.page.pageChanged() }
@@ -291,6 +292,7 @@ extension SettingsController {
         let c = pageContext
         c.client = ClientSettingsStore.shared.current
         c.appearanceMode = AppearanceMode.current.rawValue
+        c.connectSignedOut = t3.loaded && t3.signedIn == nil
         let ids = environments.environmentIds
         let scoped = ids.map { id -> SettingsScopeEnvironment in
             let config = composer?.config(id)

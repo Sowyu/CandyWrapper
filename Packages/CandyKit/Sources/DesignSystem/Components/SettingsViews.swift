@@ -41,6 +41,10 @@ public final class SettingsRowView: DSView {
         }
     }
     private var statusLinkView: StatusLinkView?
+    /// A link inside the description (`<Link className="underline underline-offset-2">`), such as the Beta page's
+    /// "Connections": `title` is a run of `detail` that gets underlined and opens on click.
+    public var detailLink: (title: String, action: @MainActor () -> Void)? { didSet { needsLayout = true } }
+    private var detailLinkViews: [DetailLinkView] = []
     /// A description in `text-destructive`, such as a failed cleanup entry.
     public var detailIsError = false { didSet { detailText.color = detailIsError ? Themed.color(\.destructive) : Themed.color(\.contrastMutedForeground, 0.8); applyDither() } }
     /// `aria-disabled`: opacity .64 (and muted text, which the dimmed foreground approximates).
@@ -221,6 +225,7 @@ public final class SettingsRowView: DSView {
             ax += s.width + 6
         }
         detailText.frame = f.detail
+        layoutDetailLink()
         if let row = detailView as? SettingsGroupRow {
             row.frame = f.detail
         } else if let detailView {
@@ -418,6 +423,50 @@ public final class SettingsSectionView: DSView {
 
 extension SettingsSectionView: SettingsGroupRow {}
 extension SettingsGroupView: SettingsGroupRow {}
+
+extension SettingsRowView {
+    /// One hit area per line the link's run covers, each drawing the underline under its piece.
+    fileprivate func layoutDetailLink() {
+        var pieces: [(rect: CGRect, baseline: CGFloat)] = []
+        if let link = detailLink, let detail, !detailText.isHidden {
+            let range = (detail as NSString).range(of: link.title)
+            if range.location != NSNotFound { pieces = detailText.runRects(range, width: detailText.bounds.width) }
+        }
+        while detailLinkViews.count > pieces.count { detailLinkViews.removeLast().removeFromSuperview() }
+        while detailLinkViews.count < pieces.count {
+            let v = DetailLinkView()
+            addSubview(v)
+            detailLinkViews.append(v)
+        }
+        for (v, piece) in zip(detailLinkViews, pieces) {
+            v.frame = piece.rect.offsetBy(dx: detailText.frame.minX, dy: detailText.frame.minY)
+            v.baseline = piece.baseline - piece.rect.minY
+            v.color = detailText.color
+            v.action = detailLink?.action
+            v.setAccessibilityLabel(detailLink?.title)
+            v.needsDisplay = true
+        }
+    }
+}
+
+/// A piece of a description link: draws `underline-offset-2` under the text the row already drew, and takes the click.
+final class DetailLinkView: ControlView {
+    var baseline: CGFloat = 0
+    var color: NSColor = .clear
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        scalesWhenPressed = false
+        setAccessibilityRole(.link)
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override var wantsUpdateLayer: Bool { false }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        ctx.setFillColor(color.cgColor(in: self))
+        ctx.fill(CGRect(x: 0, y: baseline + 2, width: bounds.width, height: 1))
+    }
+}
 
 /// The status line's link: 12pt underlined text in the status color that opens on click.
 final class StatusLinkView: ControlView {

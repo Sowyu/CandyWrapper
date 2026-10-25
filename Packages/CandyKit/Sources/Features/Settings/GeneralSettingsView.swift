@@ -135,9 +135,6 @@ public final class GeneralSettingsView: SettingsPageBase {
         let snooze = serverSwitch("snooze-limited-threads",
                                   "Snooze usage-limit stops until the reported reset time. Combine with auto-resume to continue when they wake.",
                                   key: "snoozeLimitedThreads", reset: nil)
-        let shelf = clientSwitch("working-shelf",
-                                 "Fold working and monitoring threads into a Working section. They return to the top of the inbox when they need you.",
-                                 key: "sidebarWorkingShelfEnabled", reset: "working section")
         // SettingsPanels.tsx:995-1022, before the auto-settle rows.
         let compact = serverSwitch("compact-idle-threads",
                                    "Compact long idle Claude threads just before their prompt cache expires, so coming back costs less.",
@@ -180,7 +177,7 @@ public final class GeneralSettingsView: SettingsPageBase {
             daysRow?.isHidden = !supported || self.server["sidebarAutoSettleAfterDays"] == .null
             if let days, !days.state.focused { days.text = self.server["sidebarAutoSettleAfterDays"].intValue.map(String.init) ?? "" }
         }
-        let s = section("organization", "Organization", [grouping, order, resume, snooze, shelf, compact, merged, inactive, daysRow, keep])
+        let s = section("organization", "Organization", [grouping, order, resume, snooze, compact, merged, inactive, daysRow, keep])
         binder.add { [weak s] in
             guard let s else { return }
             // Hidden rows leave the card, like T3's conditional rendering.
