@@ -341,8 +341,8 @@ struct SpacePageEditorTests {
 
     /// docs/space.md section 10 asks for key to glyph under 8 ms at p95 and first paint under 50 ms on a 1,000-block
     /// page. Each sample inserts one character, lays out the viewport and draws the edited line. The numbers go to
-    /// stdout and the temp folder; the test fails only on a large regression, since a plain TextKit 2 view already
-    /// measures about 9 ms and 87 ms on this machine (docs/space-editor.md).
+    /// stdout and the temp folder, beside a plain TextKit 2 view's first paint from the same run, since this shared
+    /// Mac's speed varies about fourfold (docs/space-editor.md). The test fails only on a large regression.
     @Test func typingLatencyOnAThousandBlockPage() throws {
         let store = SpaceReplicaStore(label: "Test Mac")
         let page = store.createPage(title: "Big", now: 1)
@@ -403,13 +403,30 @@ struct SpacePageEditorTests {
         editor.flushTyping()
         let flush = Date().timeIntervalSince(flushStart) * 1000
         inserts.sort()
+        // A plain TextKit 2 view with the same text, after the editor so its fonts are warm: the editor's share of
+        // first paint is at most the difference.
+        let plainWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 800), styleMask: [.titled], backing: .buffered, defer: false)
+        let plainText = (0..<1000).map { "Block \($0): Lab 4 needs the cache simulator from week 9. Start it on Saturday morning." }.joined(separator: "\n")
+        let plainStart = Date()
+        let plainScroll = NSScrollView(frame: plainWindow.contentView!.bounds)
+        let plain = NSTextView(usingTextLayoutManager: true)
+        plain.frame = NSRect(x: 0, y: 0, width: 1100, height: 800)
+        plain.isVerticallyResizable = true
+        plain.font = DSFont.ui(14)
+        plainScroll.documentView = plain
+        plainWindow.contentView = plainScroll
+        plain.string = plainText
+        plainScroll.layoutSubtreeIfNeeded()
+        let plainRep = plain.bitmapImageRepForCachingDisplay(in: plain.visibleRect)!
+        plain.cacheDisplay(in: plain.visibleRect, to: plainRep)
+        let plainPaint = Date().timeIntervalSince(plainStart) * 1000
         #if DEBUG
         let build = "Debug"
         #else
         let build = "Release"
         #endif
-        let line = String(format: "space-typing %@: p50 %.2f ms, p95 %.2f ms (insert alone p95 %.2f ms, AppKit insert alone p95 %.2f ms), first paint %.1f ms, flush %.2f ms",
-                          build, p50, p95, inserts[Int(Double(inserts.count) * 0.95)], bare[95], firstPaint, flush)
+        let line = String(format: "space-typing %@: p50 %.2f ms, p95 %.2f ms (insert alone p95 %.2f ms, AppKit insert alone p95 %.2f ms), first paint %.1f ms (plain TextKit 2 view %.1f ms), flush %.2f ms",
+                          build, p50, p95, inserts[Int(Double(inserts.count) * 0.95)], bare[95], firstPaint, plainPaint, flush)
         print(line)
         try? line.write(toFile: NSTemporaryDirectory() + "space-typing-latency.txt", atomically: true, encoding: .utf8)
         #expect(p95 < 40, "\(line)")

@@ -21,20 +21,37 @@ Piece 12 of the build plan in [Space](space.md): Page view on TextKit 2. The cod
 
 ## Performance
 
-Measured by `SpacePageEditorTests.typingLatencyOnAThousandBlockPage` on 2026-10-24 on the shared Mac mini M4, with other agents' builds running. Run it with `scripts/test -c release --filter typingLatencyOnAThousandBlockPage`. It's left out of the fast lane.
+Measured by `SpacePageEditorTests.typingLatencyOnAThousandBlockPage` on the shared Mac mini M4. Run it with `scripts/test -c release --filter typingLatencyOnAThousandBlockPage`. It's left out of the fast lane. It prints a plain TextKit 2 view's first paint beside the editor's, measured in the same run.
 
-| Measure on a 1,000-block page | Budget | Editor, Release | Plain TextKit 2 view, same steps |
-|---|---|---|---|
-| Key to glyph p95: insert, viewport layout, draw the edited line | 8 ms | 12.6 ms | 9.0 ms |
-| Insert alone p95 | | 4.07 ms | 4.05 ms |
-| First paint | 50 ms | 183 ms | 87 ms |
-| Typing flush, one block | | 4.4 ms | |
+This Mac's speed varies about fourfold between runs with the same code, so compare numbers only within one session. AppKit's bare insert on the editor's text view, which the line also prints, shows the state. It read 0.74 ms in one quiet stretch at 03:40 on 2026-10-25, and 3.3 to 5.1 ms for the rest of the day, even with the load average near 2 and nothing else busy.
 
-The editor's own work per key is about 0.1 ms over AppKit's insert. Both budgets fail even for a bare TextKit 2 view under this harness, where a plain insert takes 1.6 ms at 10 paragraphs and 2.7 to 3.9 ms at 1,000, against 0.9 ms for TextKit 1. The rest of the editor's gap is its layout fragments and paragraph styles.
+On 2026-10-25 I built main (`572e0731`) and this change in Release, then ran them alternately five times each, in the slow state:
+
+| Measure on a 1,000-block page | Budget | Before, median of 5 | After, median of 5 | Plain TextKit 2 view |
+|---|---|---|---|---|
+| First paint | 50 ms | 205 ms (187 to 226) | 166 ms (144 to 173) | 35 to 43 ms |
+| Key to glyph p95: insert, viewport layout, draw the edited line | 8 ms | 12.7 ms (11.0 to 13.0) | 12.1 ms (11.4 to 14.6) | |
+| Insert alone p95 | | 4.0 ms | 4.2 ms | |
+| AppKit insert alone p95, same text view | | 4.1 ms | 4.0 ms | |
+
+First paint is lower in every one of the five pairs. Typing is unchanged, since the editor adds only about 0.2 ms to AppKit's insert and the rest is TextKit's viewport layout and drawing. In the fast state at 03:40, main measured 41.3 ms first paint and 2.30 ms key to glyph across five runs, inside both budgets, so the budgets hold only on a quiet machine.
+
+The profile, from `sample` on a loop that opens the page 300 times, showed `SpacePageEditor.load` taking nearly all of the editor's first-paint time. TextKit's own `setAttributedString` took about 1% of the samples, because it lays out only the viewport. What changed:
+
+- `SpaceReplicaStore.content(of:)` sorted whole `SpaceContent` records, copying two records per compare. It now sorts positions. This was about a quarter of `load`.
+- `FontRuntime.font` built its cache key with string interpolation of an enum, which goes through reflection on every `DSFont` call. It now uses a struct key. This speeds up every `DSFont.ui` call in the app.
+- `load` sets each paragraph's style as it builds the string, instead of a second pass that re-parsed every paragraph's key.
+- The editor makes base attributes and paragraph styles once per look, not once per paragraph. Both caches empty when `FontRuntime.generation` changes.
+- Text with no bold, italic or code marks skips `fixFonts`, and text without newlines skips the newline replace.
+
+The rest of first paint is TextKit's layout and the first window's one-time costs. Lazy layout of off-screen blocks wouldn't help, since TextKit 2 already lays out only the viewport.
+
+The budgets need a quiet Mac to judge. I propose keeping 8 ms and 50 ms for a quiet machine. On a noisy one, I propose checking the editor against the plain view from the same run: key to glyph within 1 ms of plain TextKit 2, and first paint within three times plain's.
 
 ## Not done here
 
 - Image upload, previews, width drag and the shared image pipeline are piece 16. Images go into the local copy's encrypted blob cache and draw from it, decoded once at display size.
 - The main-thread replica in `PersistentSpacePageStore` keeps every op of the session as pending, since nothing confirms it yet. Sync (piece 7) should feed it the writer's frames.
-- "Pick a date…" opens a native `NSDatePicker` popover. DesignSystem's `CalendarView` inside a `PopupHost` `PopoverView` got no clicks or hover from the editor, and that needs its own look.
+- An image that is the page's first block doesn't draw: TextKit 2 drops `paragraphSpacingBefore` on the first paragraph, which is where the image's height is reserved (`SpacePageMetrics.paragraphStyle`), so its fragment is 18pt tall and clips the image. The caption keeps its place beside it. After any other block the image draws, and its caption stays beside it across a relaunch (checked on screen 2026-10-25).
+- "Pick a date…" opens DesignSystem's `CalendarView` in a `PopoverView`. It used to get no hover and leak presses into the editor, for two reasons. Its tracking area used `.inVisibleRect`, which in a popup spans the whole host, the trap `MenuView` already notes. It also didn't override `mouseDown`, so the press went up the responder chain to `MainWindow` and on to `SpacePageTextView.mouseDown`, which can add a to-do. It now tracks its bounds, follows the pointer through `HoverSyncPointerClient` and keeps the press.
 - The device label for conflict copies is "This Mac" until settings (piece 10) names the device.

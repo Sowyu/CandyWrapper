@@ -3,7 +3,7 @@ import AppKit
 /// T3's `Calendar` (`components/ui/calendar.tsx`, react-day-picker, mode single, outside days shown),
 /// desktop values: 36px cells, 14px day text, 10px radius. Spec: docs/research/recovered/ui-components-a.md 21.
 /// One month, Sunday first, en-US captions ("October 2026") and two-letter weekdays, as DayPicker's defaults.
-public final class CalendarView: DSView {
+public final class CalendarView: DSView, HoverSyncPointerClient {
     public var month: DateComponents { didSet { needsDisplay = true; invalidateIntrinsicContentSize() } }
     public var selected: DateComponents? { didSet { needsDisplay = true } }
     public var today: DateComponents { didSet { needsDisplay = true } }
@@ -155,13 +155,16 @@ public final class CalendarView: DSView {
     public override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let trackingArea { removeTrackingArea(trackingArea) }
-        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
+        // Popup visible rects reach over the host, so track only the calendar.
+        let area = NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways], owner: self, userInfo: nil)
         addTrackingArea(area)
         trackingArea = area
     }
 
-    private func hit(_ event: NSEvent) -> (nav: Int?, day: (Int, Int)?) {
-        let p = convert(event.locationInWindow, from: nil)
+    // Keep the press out of the editor's responder chain; selection happens on release.
+    public override func mouseDown(with event: NSEvent) {}
+
+    private func hit(at p: NSPoint) -> (nav: Int?, day: (Int, Int)?) {
         for i in 0..<2 where navRect(i).contains(p) { return (i, nil) }
         for row in weeks.indices { for col in 0..<7 where dayRect(row: row, col: col).contains(p) { return (nil, (row, col)) } }
         return (nil, nil)
@@ -171,7 +174,16 @@ public final class CalendarView: DSView {
     public func previewHover(row: Int, col: Int) { hovered = (row, col) }
 
     public override func mouseMoved(with event: NSEvent) {
-        let h = hit(event)
+        let h = hit(at: convert(event.locationInWindow, from: nil))
+        hoveredNav = h.nav
+        hovered = h.day.map { (row: $0.0, col: $0.1) }
+    }
+
+    public override func mouseEntered(with event: NSEvent) { hoverPointerMoved() }
+
+    public func hoverPointerMoved() {
+        guard let window else { return }
+        let h = hit(at: convert(window.mouseLocationOutsideOfEventStream, from: nil))
         hoveredNav = h.nav
         hovered = h.day.map { (row: $0.0, col: $0.1) }
     }
@@ -179,7 +191,7 @@ public final class CalendarView: DSView {
     public override func mouseExited(with event: NSEvent) { hovered = nil; hoveredNav = nil }
 
     public override func mouseUp(with event: NSEvent) {
-        let h = hit(event)
+        let h = hit(at: convert(event.locationInWindow, from: nil))
         if let nav = h.nav { showMonth(offset: nav == 0 ? -1 : 1); return }
         guard let (row, col) = h.day else { return }
         let day = weeks[row][col].0
