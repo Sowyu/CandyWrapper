@@ -122,13 +122,14 @@ public final class DitherArtView: NSView {
         let bounds = CGRect(origin: .zero, size: frame.size)
         wave.root.frame = frame
         wave.grid.frame = bounds
+        let k = Int((DitherArt.dot * scale).rounded())
         wave.grid.contents = DitherArt.waveGrid(columns: Int(frame.width / DitherArt.dot), rows: Int(frame.height / DitherArt.dot),
-                                                pixelsPerDot: Int((DitherArt.dot * scale).rounded()))
+                                                pixelsPerDot: k)
         // The band repeats every `wavePeriod`, so moving it one period and starting over has no seam.
         let period = DitherArt.wavePeriod, angle = DitherArt.waveAngle
         let diagonal = hypot(frame.width, frame.height)
         let cycles = Int(((diagonal + period) / period).rounded(.up))
-        let profile = DitherArt.waveProfile(cycles: cycles)
+        let profile = DitherArt.waveProfile(cycles: cycles, depth: DitherArt.waveDepth(pixelsPerDot: k))
         wave.band.bounds = CGRect(x: 0, y: 0, width: CGFloat(cycles) * period, height: diagonal)
         wave.band.colors = profile.map { color.copy(alpha: $0.alpha)! }
         wave.band.locations = profile.map { NSNumber(value: $0.at) }
@@ -212,6 +213,13 @@ public final class DitherArtView: NSView {
         if emphasis == .hero, !wasHero, let art = art(behind: source) { art.playReveal() }
     }
 
+    /// A page joined or left the window, as the thread panel and a utility page trade places: every art takes the scrim
+    /// of what shows now. Before, the last page's scrim stayed until something else redrew the art.
+    @MainActor
+    public static func pagesMoved() {
+        for art in arts.allObjects { art.updateScrim() }
+    }
+
     /// The art showing behind `source`, if any.
     @MainActor
     static func art(behind source: NSView) -> DitherArtView? {
@@ -279,6 +287,12 @@ public final class DitherArtView: NSView {
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        refresh()
+    }
+
+    /// A move between a 1x and a 2x screen redraws the wave's grid for the new device pixels.
+    public override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
         refresh()
     }
 
@@ -368,6 +382,7 @@ public final class DitherArtView: NSView {
     }
 
     var contentsForTesting: CGImage? { art.contents.map { $0 as! CGImage } }
+    var scrimAlphaForTesting: CGFloat { scrim.backgroundColor.flatMap { NSColor(cgColor: $0)?.alphaComponent } ?? 0 }
 }
 
 private struct DitherArtImage: @unchecked Sendable { let image: CGImage? }
@@ -388,10 +403,9 @@ public enum DitherArt {
 
     enum Page: Sendable { case hero, thread, settings, page }
 
-    /// The working wave: how far a crest goes toward the full grid, how far apart crests are in points, how long one
-    /// takes to move that far, its angle off horizontal and how long it takes to ease in or out.
-    // ponytail: tuned by eye on a 1x screen; retune `waveDepth` if 2x dots read as too still.
-    nonisolated static let waveDepth: Double = 0.25
+    /// The working wave: how much of a dot's brightness a crest takes, how far apart crests are in points, how long
+    /// one takes to move that far, its angle off horizontal and how long it takes to ease in or out.
+    nonisolated static let waveStrength: Double = 0.24
     nonisolated static let wavePeriod: CGFloat = 900
     nonisolated static let waveDuration: CFTimeInterval = 4.5
     nonisolated static let waveAngle: CGFloat = -0.3
@@ -421,12 +435,18 @@ public enum DitherArt {
         return ctx.makeImage()
     }
 
-    /// The band's stops across `cycles` periods: a crest of `waveDepth` in the middle of each, nothing between.
-    nonisolated static func waveProfile(cycles: Int) -> [(at: Double, alpha: Double)] {
+    /// The band's alpha at a crest. The grid covers (2k - 1) / k² of a dot k device pixels wide, 3/4 at 1x and 7/16 at
+    /// 2x, so the band grows denser with the scale and a crest takes `waveStrength` of every dot on any screen.
+    nonisolated static func waveDepth(pixelsPerDot k: Int) -> Double {
+        min(1, waveStrength * Double(k * k) / Double(max(2 * k - 1, 1)))
+    }
+
+    /// The band's stops across `cycles` periods: a crest of `depth` in the middle of each, nothing between.
+    nonisolated static func waveProfile(cycles: Int, depth: Double) -> [(at: Double, alpha: Double)] {
         let perCycle = 12, n = max(cycles, 1) * perCycle
         return (0...n).map { i in
             let phase = Double(i % perCycle) / Double(perCycle)
-            return (Double(i) / Double(n), waveDepth * (0.5 - 0.5 * cos(2 * .pi * phase)))
+            return (Double(i) / Double(n), depth * (0.5 - 0.5 * cos(2 * .pi * phase)))
         }
     }
 

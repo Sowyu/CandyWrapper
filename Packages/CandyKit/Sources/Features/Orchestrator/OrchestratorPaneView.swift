@@ -457,6 +457,13 @@ public final class OrchestratorPaneView: DSView {
     }
 
     public override func cancelOperation(_ sender: Any?) { onEscape?() }
+
+    /// Redesign's art shows under the chat as under a thread. Its bubbles are solid, so the text reads without the
+    /// heavy scrim of other pages.
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        DitherArtView.setEmphasis(window == nil ? nil : .thread, from: self)
+    }
 }
 
 // MARK: - Chat

@@ -241,8 +241,14 @@ public final class SpacePageView: DSView {
 /// Breadcrumb, title, edited line and the view switch, look B of the page mockup.
 final class SpacePageHeaderView: DSView, NSTextFieldDelegate {
     let height: CGFloat = 186
+    /// The placeholder's line box sits a point above the field's: LabelView centers the line in its box, a point lower
+    /// than the field draws it, so at 2x the placeholder covers the typed title's pixels exactly.
+    static let placeholderDrop: CGFloat = -1
     private let crumb = LabelView("", font: DSFont.ui(12), color: Themed.color(\.secondaryLabel))
     private let title = NSTextField()
+    /// "Untitled" while the title is empty, also while it's being edited. The header lays it out on the line the typed
+    /// title takes; AppKit's own placeholder drew half a line high on the user's Mac, over the breadcrumb.
+    private let placeholder = LabelView("Untitled", font: DSFont.ui(34, weight: .semibold), color: Themed.color(\.placeholder))
     private let meta = NSTextField(labelWithString: "")
     let viewSwitch = SpaceViewSwitch()
     let historyButton = ButtonView(icon: .history, variant: .ghost, size: .iconSm)
@@ -265,7 +271,9 @@ final class SpacePageHeaderView: DSView, NSTextFieldDelegate {
         title.focusRingType = .none
         title.font = DSFont.ui(34, weight: .semibold)
         title.textColor = Themed.color(\.foreground)
-        title.placeholderAttributedString = NSAttributedString(string: "Untitled", attributes: [.font: DSFont.ui(34, weight: .semibold), .foregroundColor: Themed.color(\.placeholder)])
+        title.setAccessibilityPlaceholderValue("Untitled")
+        title.clipsToBounds = true
+        placeholder.lineHeight = 42
         title.lineBreakMode = .byTruncatingTail
         title.cell?.usesSingleLineMode = true
         title.delegate = self
@@ -282,7 +290,7 @@ final class SpacePageHeaderView: DSView, NSTextFieldDelegate {
         addIconButton.toolTip = "Add icon"
         addIconButton.iconColor = Themed.color(\.mutedForeground)
         addIconButton.action = { [weak self] in guard let self else { return }; self.onIcon(self.addIconButton.frame) }
-        [crumb, title, meta, viewSwitch, historyButton, iconView, addIconButton].forEach(addSubview)
+        [crumb, placeholder, title, meta, viewSwitch, historyButton, iconView, addIconButton].forEach(addSubview)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -290,6 +298,7 @@ final class SpacePageHeaderView: DSView, NSTextFieldDelegate {
     func update(crumb names: [String], title text: String, meta m: (edited: String?, counts: String?), view: ViewType) {
         crumb.text = names.joined(separator: "  ›  ")
         if title.currentEditor() == nil, title.stringValue != text { title.stringValue = text }
+        placeholder.isHidden = !title.stringValue.isEmpty
         let s = NSMutableAttributedString()
         if let edited = m.edited {
             s.append(NSAttributedString(string: "Edited ", attributes: [.font: DSFont.ui(12, weight: .medium), .foregroundColor: Themed.color(\.mutedForeground)]))
@@ -310,7 +319,10 @@ final class SpacePageHeaderView: DSView, NSTextFieldDelegate {
         }
     }
 
-    func controlTextDidChange(_ obj: Notification) { onTitle(title.stringValue) }
+    func controlTextDidChange(_ obj: Notification) {
+        placeholder.isHidden = !title.stringValue.isEmpty
+        onTitle(title.stringValue)
+    }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         if selector == #selector(NSResponder.insertNewline(_:)) || selector == #selector(NSResponder.moveDown(_:)) {
@@ -334,6 +346,7 @@ final class SpacePageHeaderView: DSView, NSTextFieldDelegate {
         let tx: CGFloat = iconView.isHidden ? -2 : 44
         let right = addIconButton.isHidden ? historyButton.frame.minX : addIconButton.frame.minX
         title.frame = NSRect(x: tx, y: 80, width: max(0, right - 12 - tx), height: 42)
+        placeholder.frame = NSRect(x: tx + 2, y: 80 + Self.placeholderDrop, width: title.frame.width, height: 42)
         meta.frame = NSRect(x: 0, y: 134, width: w, height: 16)
     }
 }
