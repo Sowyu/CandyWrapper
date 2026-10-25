@@ -1,0 +1,19 @@
+{
+  "phase_marks": 48,
+  "servers": {
+    "3473": {
+      "http_snapshot_accept_encoding": "gzip, deflate",
+      "http_snapshot_content_encoding": "gzip",
+      "http_snapshot_gets": 6,
+      "retained_snapshot_gets": 0,
+      "websocket_deflate_upgrades": 12
+    },
+    "main": {
+      "http_snapshot_accept_encoding": "gzip, deflate",
+      "http_snapshot_content_encoding": "gzip",
+      "http_snapshot_gets": 6,
+      "retained_snapshot_gets": 0,
+      "websocket_deflate_upgrades": 12
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "capture_finished_utc": "2026-10-25T18:17:48.516917+00:00",
+  "capture_started_utc": "2026-10-25T18:15:17.163911+00:00",
+  "clients": {
+    "new": {
+      "binary_sha256": "737c318e8d8ea82ca74e05f3c3136864b11dbac546e1b293ce4ad84720912f88",
+      "build_jobs": 2,
+      "commit": "341775ef141430f5cf1e9fcb6c7d371a95ecfb19",
+      "configuration": "release",
+      "dependencies": "system libraries and frameworks only"
+    },
+    "old": {
+      "binary_sha256": "ab02bb845d4064be03deddfbbb78a0be959f15c252381aa807b572aa6d8051a8",
+      "build_jobs": 2,
+      "commit": "8c8e6d3026128894bd48b6d410320fdf0ab4c16b",
+      "configuration": "release",
+      "dependencies": "system libraries and frameworks only"
+    }
+  },
+  "common_boot_streams": [
+    "subscribeServerConfig",
+    "subscribeServerLifecycle"
+  ],
+  "harness_sha256": {
+    "scripts/fast-load/Swift/Package.swift": "07bc983736a8cbbf258083ee8ed0e0f3d2ee0b76966d8de2a78487f6b6de9ec6",
+    "scripts/fast-load/Swift/Sources/main.swift": "3a73803ab8177a3c9f32867f388b09c306dfb9a85071bd37c55e7be346a94408",
+    "scripts/fast-load/manage.py": "6048d2578a701f881b57c744a48789d5032507c7482fa4084a3336b7254711b3",
+    "scripts/fast-load/matrix.py": "c5c28bd6f36bbb9ab17ec4a306dd4c6d3395cda72168f0b96889f009de1a122e",
+    "scripts/fast-load/proxy.py": "065291376b834947589f2af361645a6b2ceb3899bcf823d0f65c18d917d4f831",
+    "scripts/fast-load/run.py": "70381d0a72d02731d90cd46686f1f5bc8b3cece60ca76e0d513a2d103063bf6a",
+    "scripts/fast-load/seed.py": "269b97c24634ec0a9f2f57ec3ea76d6040d3c016bb80f99746ddfc24cbca3808",
+    "scripts/fast-load/summarize.py": "b0a8c4fa39b39c6dd1dd16caeb8ad5aca6443a2a581854b688339942d1d708b0"
+  },
+  "kbps_per_direction": 400,
+  "main_archive_mismatches": 0,
+  "main_sha": "5b35402623d7d1d88eaa472807272a6c2e78012a",
+  "matrix_exit": 0,
+  "new_unary_config_rpc": false,
+  "previous_attempt": "Discarded on compiler/test overlap; preserved separately in sandbox, excluded from final results.",
+  "resource_monitor_21202": "Stopped before HTML quiet capture; not restarted by the harness.",
+  "rounds": 3,
+  "rtt_ms": 400,
+  "runtime_3473_sha": "1688f965682d331da16a8c39f049592361f69c8d",
+  "timed_started_utc": "2026-10-25T18:15:32.386098+00:00",
+  "verified_main_archive_blobs": 2058
+}

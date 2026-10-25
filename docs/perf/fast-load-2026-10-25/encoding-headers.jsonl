@@ -1,0 +1,216 @@
+{"down": 4097613, "event": "mark", "http_down": 1865520, "http_up": 35131, "label": "/old-3473-r1-cold-start", "server": "3473", "socket_down": 2232093, "socket_up": 19741, "time": 9349.393337166, "up": 54872}
+{"accept-encoding": "gzip, deflate", "connection": 44, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "3473", "time": 9349.395198666}
+{"connection": 44, "content-encoding": "gzip", "content-length": "646", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9349.607485625}
+{"accept-encoding": "gzip, deflate", "connection": 44, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "3473", "time": 9349.828950291}
+{"connection": 44, "content-length": "244", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9350.054646666}
+{"accept-encoding": "gzip, deflate", "connection": 45, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "time": 9350.271273416, "upgrade": "websocket"}
+{"connection": 45, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "status": "101", "time": 9350.49704425, "upgrade": "websocket"}
+{"down": 4522398, "event": "mark", "http_down": 1866899, "http_up": 36440, "label": "/old-3473-r1-cold-ready", "server": "3473", "socket_down": 2655499, "socket_up": 20808, "time": 9359.706946958, "up": 57248}
+{"down": 4522398, "event": "mark", "http_down": 1866899, "http_up": 36440, "label": "/old-3473-r1-retained-reconnect-start", "server": "3473", "socket_down": 2655499, "socket_up": 20808, "time": 9359.797817, "up": 57248}
+{"accept-encoding": "gzip, deflate", "connection": 46, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "3473", "time": 9359.798821416}
+{"connection": 46, "content-encoding": "gzip", "content-length": "646", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9360.009985375}
+{"accept-encoding": "gzip, deflate", "connection": 46, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "3473", "time": 9360.231447083}
+{"connection": 46, "content-length": "244", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9360.456993458}
+{"accept-encoding": "gzip, deflate", "connection": 47, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "time": 9360.671740708, "upgrade": "websocket"}
+{"connection": 47, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "status": "101", "time": 9360.895501958, "upgrade": "websocket"}
+{"down": 4542637, "event": "mark", "http_down": 1868278, "http_up": 37749, "label": "/old-3473-r1-retained-reconnect-ready", "server": "3473", "socket_down": 2674359, "socket_up": 21945, "time": 9361.954564166, "up": 59694}
+{"down": 4542637, "event": "mark", "http_down": 1868278, "http_up": 37749, "label": "/new-3473-r1-cold-start", "server": "3473", "socket_down": 2674359, "socket_up": 21997, "time": 9362.873884791, "up": 59746}
+{"accept-encoding": "gzip, deflate", "connection": 48, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "3473", "time": 9362.875710666}
+{"connection": 48, "content-encoding": "gzip", "content-length": "646", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9363.087148833}
+{"accept-encoding": "gzip, deflate", "connection": 48, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "3473", "time": 9363.309511208}
+{"connection": 48, "content-length": "244", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9363.535477458}
+{"accept-encoding": "gzip, deflate", "connection": 49, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "time": 9363.752070041, "upgrade": "websocket"}
+{"connection": 49, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "status": "101", "time": 9363.975076833, "upgrade": "websocket"}
+{"accept-encoding": "gzip, deflate", "connection": 48, "direction": "up", "event": "headers", "method": "GET", "path": "/api/orchestration/threads/fast-load-big-thread/bounded", "server": "3473", "time": 9364.184399541}
+{"connection": 48, "content-encoding": "gzip", "content-length": "374270", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9364.456985625}
+{"accept-encoding": "gzip, deflate", "connection": 50, "direction": "up", "event": "headers", "method": "GET", "path": "/api/orchestration/shell", "server": "3473", "time": 9365.381997833}
+{"connection": 50, "content-encoding": "gzip", "content-length": "30226", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9365.727810041}
+{"down": 4967833, "event": "mark", "http_down": 2274628, "http_up": 41110, "label": "/new-3473-r1-cold-ready", "server": "3473", "socket_down": 2693205, "socket_up": 23130, "time": 9374.392612166, "up": 64240}
+{"down": 4967833, "event": "mark", "http_down": 2274628, "http_up": 41110, "label": "/new-3473-r1-retained-reconnect-start", "server": "3473", "socket_down": 2693205, "socket_up": 23130, "time": 9374.484374375, "up": 64240}
+{"accept-encoding": "gzip, deflate", "connection": 51, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "3473", "time": 9374.485262333}
+{"connection": 51, "content-encoding": "gzip", "content-length": "646", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9374.697995291}
+{"accept-encoding": "gzip, deflate", "connection": 51, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "3473", "time": 9374.920129}
+{"connection": 51, "content-length": "244", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9375.145899833}
+{"accept-encoding": "gzip, deflate", "connection": 52, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "time": 9375.362090041, "upgrade": "websocket"}
+{"connection": 52, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "status": "101", "time": 9375.582908833, "upgrade": "websocket"}
+{"down": 4988071, "event": "mark", "http_down": 2276007, "http_up": 42419, "label": "/new-3473-r1-retained-reconnect-ready", "server": "3473", "socket_down": 2712064, "socket_up": 24279, "time": 9376.639609125, "up": 66698}
+{"down": 4988071, "event": "mark", "http_down": 2276007, "http_up": 42419, "label": "/new-3473-r2-cold-start", "server": "3473", "socket_down": 2712064, "socket_up": 24330, "time": 9411.701844875, "up": 66749}
+{"accept-encoding": "gzip, deflate", "connection": 53, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "3473", "time": 9411.703491875}
+{"connection": 53, "content-encoding": "gzip", "content-length": "646", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9411.915091458}
+{"accept-encoding": "gzip, deflate", "connection": 53, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "3473", "time": 9412.137059791}
+{"connection": 53, "content-length": "244", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9412.363027333}
+{"accept-encoding": "gzip, deflate", "connection": 54, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "time": 9412.578803625, "upgrade": "websocket"}
+{"connection": 54, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "status": "101", "time": 9412.802174291, "upgrade": "websocket"}
+{"accept-encoding": "gzip, deflate", "connection": 53, "direction": "up", "event": "headers", "method": "GET", "path": "/api/orchestration/threads/fast-load-big-thread/bounded", "server": "3473", "time": 9413.011238708}
+{"connection": 53, "content-encoding": "gzip", "content-length": "374270", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9413.308331416}
+{"accept-encoding": "gzip, deflate", "connection": 55, "direction": "up", "event": "headers", "method": "GET", "path": "/api/orchestration/shell", "server": "3473", "time": 9414.236188083}
+{"connection": 55, "content-encoding": "gzip", "content-length": "30226", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9414.57219925}
+{"down": 5413267, "event": "mark", "http_down": 2682357, "http_up": 45780, "label": "/new-3473-r2-cold-ready", "server": "3473", "socket_down": 2730910, "socket_up": 25463, "time": 9423.2426025, "up": 71243}
+{"down": 5413267, "event": "mark", "http_down": 2682357, "http_up": 45780, "label": "/new-3473-r2-retained-reconnect-start", "server": "3473", "socket_down": 2730910, "socket_up": 25463, "time": 9423.334394291, "up": 71243}
+{"accept-encoding": "gzip, deflate", "connection": 56, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "3473", "time": 9423.335266333}
+{"connection": 56, "content-encoding": "gzip", "content-length": "646", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9423.546490125}
+{"accept-encoding": "gzip, deflate", "connection": 56, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "3473", "time": 9423.7687145}
+{"connection": 56, "content-length": "244", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9423.993835458}
+{"accept-encoding": "gzip, deflate", "connection": 57, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "time": 9424.212970958, "upgrade": "websocket"}
+{"connection": 57, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "status": "101", "time": 9424.43601675, "upgrade": "websocket"}
+{"down": 5433505, "event": "mark", "http_down": 2683736, "http_up": 47089, "label": "/new-3473-r2-retained-reconnect-ready", "server": "3473", "socket_down": 2749769, "socket_up": 26612, "time": 9425.501183875, "up": 73701}
+{"down": 5433505, "event": "mark", "http_down": 2683736, "http_up": 47089, "label": "/old-3473-r2-cold-start", "server": "3473", "socket_down": 2749769, "socket_up": 26663, "time": 9426.405710625, "up": 73752}
+{"accept-encoding": "gzip, deflate", "connection": 58, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "3473", "time": 9426.408975958}
+{"connection": 58, "content-encoding": "gzip", "content-length": "646", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9426.620086625}
+{"accept-encoding": "gzip, deflate", "connection": 58, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "3473", "time": 9426.841526166}
+{"connection": 58, "content-length": "244", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9427.067021833}
+{"accept-encoding": "gzip, deflate", "connection": 59, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "time": 9427.282602625, "upgrade": "websocket"}
+{"connection": 59, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "status": "101", "time": 9427.506854875, "upgrade": "websocket"}
+{"down": 5857765, "event": "mark", "http_down": 2685115, "http_up": 48398, "label": "/old-3473-r2-cold-ready", "server": "3473", "socket_down": 3172650, "socket_up": 27753, "time": 9437.083138708, "up": 76151}
+{"down": 5857765, "event": "mark", "http_down": 2685115, "http_up": 48398, "label": "/old-3473-r2-retained-reconnect-start", "server": "3473", "socket_down": 3172650, "socket_up": 27753, "time": 9437.174107166, "up": 76151}
+{"accept-encoding": "gzip, deflate", "connection": 60, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "3473", "time": 9437.175144791}
+{"connection": 60, "content-encoding": "gzip", "content-length": "646", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9437.389267208}
+{"accept-encoding": "gzip, deflate", "connection": 60, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "3473", "time": 9437.611174833}
+{"connection": 60, "content-length": "244", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9437.837105}
+{"accept-encoding": "gzip, deflate", "connection": 61, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "time": 9438.053614916, "upgrade": "websocket"}
+{"connection": 61, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "status": "101", "time": 9438.274325083, "upgrade": "websocket"}
+{"down": 5877992, "event": "mark", "http_down": 2686494, "http_up": 49707, "label": "/old-3473-r2-retained-reconnect-ready", "server": "3473", "socket_down": 3191498, "socket_up": 28865, "time": 9439.314570291, "up": 78572}
+{"down": 5877992, "event": "mark", "http_down": 2686494, "http_up": 49707, "label": "/old-3473-r3-cold-start", "server": "3473", "socket_down": 3191498, "socket_up": 28930, "time": 9456.967022666, "up": 78637}
+{"accept-encoding": "gzip, deflate", "connection": 62, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "3473", "time": 9456.968711666}
+{"connection": 62, "content-encoding": "gzip", "content-length": "646", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9457.18073075}
+{"accept-encoding": "gzip, deflate", "connection": 62, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "3473", "time": 9457.403105291}
+{"connection": 62, "content-length": "244", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9457.628829625}
+{"accept-encoding": "gzip, deflate", "connection": 63, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "time": 9457.84517325, "upgrade": "websocket"}
+{"connection": 63, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "status": "101", "time": 9458.067656791, "upgrade": "websocket"}
+{"down": 6302253, "event": "mark", "http_down": 2687873, "http_up": 51016, "label": "/old-3473-r3-cold-ready", "server": "3473", "socket_down": 3614380, "socket_up": 30030, "time": 9467.6193605, "up": 81046}
+{"down": 6302253, "event": "mark", "http_down": 2687873, "http_up": 51016, "label": "/old-3473-r3-retained-reconnect-start", "server": "3473", "socket_down": 3614380, "socket_up": 30030, "time": 9467.709636583, "up": 81046}
+{"accept-encoding": "gzip, deflate", "connection": 64, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "3473", "time": 9467.71063925}
+{"connection": 64, "content-encoding": "gzip", "content-length": "646", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9467.924014291}
+{"accept-encoding": "gzip, deflate", "connection": 64, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "3473", "time": 9468.145495666}
+{"connection": 64, "content-length": "244", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9468.370973083}
+{"accept-encoding": "gzip, deflate", "connection": 65, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "time": 9468.587349875, "upgrade": "websocket"}
+{"connection": 65, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "status": "101", "time": 9468.8067205, "upgrade": "websocket"}
+{"down": 6322491, "event": "mark", "http_down": 2689252, "http_up": 52325, "label": "/old-3473-r3-retained-reconnect-ready", "server": "3473", "socket_down": 3633239, "socket_up": 31169, "time": 9469.862501291, "up": 83494}
+{"down": 6322491, "event": "mark", "http_down": 2689252, "http_up": 52325, "label": "/new-3473-r3-cold-start", "server": "3473", "socket_down": 3633239, "socket_up": 31221, "time": 9470.747656208, "up": 83546}
+{"accept-encoding": "gzip, deflate", "connection": 66, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "3473", "time": 9470.74929675}
+{"connection": 66, "content-encoding": "gzip", "content-length": "646", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9470.960653291}
+{"accept-encoding": "gzip, deflate", "connection": 66, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "3473", "time": 9471.181931}
+{"connection": 66, "content-length": "244", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9471.407864541}
+{"accept-encoding": "gzip, deflate", "connection": 67, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "time": 9471.624367375, "upgrade": "websocket"}
+{"connection": 67, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "status": "101", "time": 9471.84587325, "upgrade": "websocket"}
+{"accept-encoding": "gzip, deflate", "connection": 66, "direction": "up", "event": "headers", "method": "GET", "path": "/api/orchestration/threads/fast-load-big-thread/bounded", "server": "3473", "time": 9472.054625875}
+{"connection": 66, "content-encoding": "gzip", "content-length": "374270", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9472.340994583}
+{"accept-encoding": "gzip, deflate", "connection": 68, "direction": "up", "event": "headers", "method": "GET", "path": "/api/orchestration/shell", "server": "3473", "time": 9473.265600083}
+{"connection": 68, "content-encoding": "gzip", "content-length": "30226", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9473.586854416}
+{"down": 6747688, "event": "mark", "http_down": 3095602, "http_up": 55686, "label": "/new-3473-r3-cold-ready", "server": "3473", "socket_down": 3652086, "socket_up": 32354, "time": 9482.261586541, "up": 88040}
+{"down": 6747688, "event": "mark", "http_down": 3095602, "http_up": 55686, "label": "/new-3473-r3-retained-reconnect-start", "server": "3473", "socket_down": 3652086, "socket_up": 32354, "time": 9482.337675875, "up": 88040}
+{"accept-encoding": "gzip, deflate", "connection": 69, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "3473", "time": 9482.33846825}
+{"connection": 69, "content-encoding": "gzip", "content-length": "646", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9482.550761791}
+{"accept-encoding": "gzip, deflate", "connection": 69, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "3473", "time": 9482.772925916}
+{"connection": 69, "content-length": "244", "direction": "down", "event": "headers", "server": "3473", "status": "200", "time": 9482.9991025}
+{"accept-encoding": "gzip, deflate", "connection": 70, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "time": 9483.215180125, "upgrade": "websocket"}
+{"connection": 70, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "status": "101", "time": 9483.436330416, "upgrade": "websocket"}
+{"down": 6767926, "event": "mark", "http_down": 3096981, "http_up": 56995, "label": "/new-3473-r3-retained-reconnect-ready", "server": "3473", "socket_down": 3670945, "socket_up": 33503, "time": 9484.50850925, "up": 90498}
+{"down": 629806, "event": "mark", "http_down": 197192, "http_up": 29308, "label": "/old-main-r1-cold-start", "server": "main", "socket_down": 432614, "socket_up": 16643, "time": 9363.595026125, "up": 45951}
+{"accept-encoding": "gzip, deflate", "connection": 29, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "main", "time": 9363.597050125}
+{"connection": 29, "content-encoding": "gzip", "content-length": "628", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9363.808343708}
+{"accept-encoding": "gzip, deflate", "connection": 29, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "main", "time": 9364.030576083}
+{"connection": 29, "content-length": "244", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9364.256866666}
+{"accept-encoding": "gzip, deflate", "connection": 30, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "main", "time": 9364.473517916, "upgrade": "websocket"}
+{"connection": 30, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "main", "status": "101", "time": 9364.698486916, "upgrade": "websocket"}
+{"down": 719421, "event": "mark", "http_down": 198553, "http_up": 30617, "label": "/old-main-r1-cold-ready", "server": "main", "socket_down": 520868, "socket_up": 17743, "time": 9367.532024625, "up": 48360}
+{"down": 719421, "event": "mark", "http_down": 198553, "http_up": 30617, "label": "/old-main-r1-retained-reconnect-start", "server": "main", "socket_down": 520868, "socket_up": 17743, "time": 9367.554675958, "up": 48360}
+{"accept-encoding": "gzip, deflate", "connection": 29, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "main", "time": 9367.555708083}
+{"connection": 29, "content-encoding": "gzip", "content-length": "628", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9367.766448416}
+{"accept-encoding": "gzip, deflate", "connection": 29, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "main", "time": 9367.988453125}
+{"connection": 29, "content-length": "244", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9368.210707083}
+{"accept-encoding": "gzip, deflate", "connection": 31, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "main", "time": 9368.426968708, "upgrade": "websocket"}
+{"connection": 31, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "main", "status": "101", "time": 9368.651915916, "upgrade": "websocket"}
+{"down": 739681, "event": "mark", "http_down": 199914, "http_up": 31926, "label": "/old-main-r1-retained-reconnect-ready", "server": "main", "socket_down": 539767, "socket_up": 18891, "time": 9370.072416041, "up": 50817}
+{"down": 739681, "event": "mark", "http_down": 199914, "http_up": 31926, "label": "/new-main-r1-cold-start", "server": "main", "socket_down": 539767, "socket_up": 18939, "time": 9372.003330583, "up": 50865}
+{"accept-encoding": "gzip, deflate", "connection": 32, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "main", "time": 9372.004990625}
+{"connection": 32, "content-encoding": "gzip", "content-length": "628", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9372.214907125}
+{"accept-encoding": "gzip, deflate", "connection": 32, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "main", "time": 9372.437086375}
+{"connection": 32, "content-length": "244", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9372.661345583}
+{"accept-encoding": "gzip, deflate", "connection": 33, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "main", "time": 9372.876982333, "upgrade": "websocket"}
+{"connection": 33, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "main", "status": "101", "time": 9373.099828083, "upgrade": "websocket"}
+{"accept-encoding": "gzip, deflate", "connection": 32, "direction": "up", "event": "headers", "method": "GET", "path": "/api/orchestration/threads/fast-load-big-thread/bounded", "server": "main", "time": 9373.307626166}
+{"connection": 32, "content-encoding": "gzip", "content-length": "39578", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9373.562327083}
+{"accept-encoding": "gzip, deflate", "connection": 34, "direction": "up", "event": "headers", "method": "GET", "path": "/api/orchestration/shell", "server": "main", "time": 9374.491990375}
+{"connection": 34, "content-encoding": "gzip", "content-length": "3803", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9374.770504708}
+{"down": 803813, "event": "mark", "http_down": 245129, "http_up": 35326, "label": "/new-main-r1-cold-ready", "server": "main", "socket_down": 558684, "socket_up": 20096, "time": 9376.0275025, "up": 55422}
+{"down": 803813, "event": "mark", "http_down": 245129, "http_up": 35326, "label": "/new-main-r1-retained-reconnect-start", "server": "main", "socket_down": 558684, "socket_up": 20096, "time": 9376.051207625, "up": 55422}
+{"accept-encoding": "gzip, deflate", "connection": 32, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "main", "time": 9376.052325416}
+{"connection": 32, "content-encoding": "gzip", "content-length": "628", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9376.265422666}
+{"accept-encoding": "gzip, deflate", "connection": 32, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "main", "time": 9376.487329583}
+{"connection": 32, "content-length": "244", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9376.712306375}
+{"accept-encoding": "gzip, deflate", "connection": 35, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "main", "time": 9376.9284385, "upgrade": "websocket"}
+{"connection": 35, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "main", "status": "101", "time": 9377.153152041, "upgrade": "websocket"}
+{"down": 824073, "event": "mark", "http_down": 246490, "http_up": 36635, "label": "/new-main-r1-retained-reconnect-ready", "server": "main", "socket_down": 577583, "socket_up": 21296, "time": 9378.568702916, "up": 57931}
+{"down": 824073, "event": "mark", "http_down": 246490, "http_up": 36635, "label": "/new-main-r2-cold-start", "server": "main", "socket_down": 577583, "socket_up": 21344, "time": 9380.430474875, "up": 57979}
+{"accept-encoding": "gzip, deflate", "connection": 36, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "main", "time": 9380.432082625}
+{"connection": 36, "content-encoding": "gzip", "content-length": "628", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9380.643127083}
+{"accept-encoding": "gzip, deflate", "connection": 36, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "main", "time": 9380.865630291}
+{"connection": 36, "content-length": "244", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9381.090300291}
+{"accept-encoding": "gzip, deflate", "connection": 37, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "main", "time": 9381.30686725, "upgrade": "websocket"}
+{"connection": 37, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "main", "status": "101", "time": 9381.529981583, "upgrade": "websocket"}
+{"accept-encoding": "gzip, deflate", "connection": 36, "direction": "up", "event": "headers", "method": "GET", "path": "/api/orchestration/threads/fast-load-big-thread/bounded", "server": "main", "time": 9381.738936625}
+{"connection": 36, "content-encoding": "gzip", "content-length": "39578", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9381.993594}
+{"accept-encoding": "gzip, deflate", "connection": 38, "direction": "up", "event": "headers", "method": "GET", "path": "/api/orchestration/shell", "server": "main", "time": 9382.92227775}
+{"connection": 38, "content-encoding": "gzip", "content-length": "3803", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9383.187591541}
+{"down": 888205, "event": "mark", "http_down": 291705, "http_up": 40035, "label": "/new-main-r2-cold-ready", "server": "main", "socket_down": 596500, "socket_up": 22501, "time": 9384.464540166, "up": 62536}
+{"down": 888205, "event": "mark", "http_down": 291705, "http_up": 40035, "label": "/new-main-r2-retained-reconnect-start", "server": "main", "socket_down": 596500, "socket_up": 22501, "time": 9384.486895625, "up": 62536}
+{"accept-encoding": "gzip, deflate", "connection": 36, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "main", "time": 9384.488004375}
+{"connection": 36, "content-encoding": "gzip", "content-length": "628", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9384.702241458}
+{"accept-encoding": "gzip, deflate", "connection": 36, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "main", "time": 9384.9238705}
+{"connection": 36, "content-length": "244", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9385.148007166}
+{"accept-encoding": "gzip, deflate", "connection": 39, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "main", "time": 9385.364488916, "upgrade": "websocket"}
+{"connection": 39, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "main", "status": "101", "time": 9385.586565083, "upgrade": "websocket"}
+{"down": 908465, "event": "mark", "http_down": 293066, "http_up": 41344, "label": "/new-main-r2-retained-reconnect-ready", "server": "main", "socket_down": 615399, "socket_up": 23701, "time": 9386.995617416, "up": 65045}
+{"down": 908465, "event": "mark", "http_down": 293066, "http_up": 41344, "label": "/old-main-r2-cold-start", "server": "main", "socket_down": 615399, "socket_up": 23749, "time": 9388.883065875, "up": 65093}
+{"accept-encoding": "gzip, deflate", "connection": 40, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "main", "time": 9388.884790333}
+{"connection": 40, "content-encoding": "gzip", "content-length": "628", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9389.096734916}
+{"accept-encoding": "gzip, deflate", "connection": 40, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "main", "time": 9389.318831791}
+{"connection": 40, "content-length": "244", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9389.542705958}
+{"accept-encoding": "gzip, deflate", "connection": 41, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "main", "time": 9389.7592705, "upgrade": "websocket"}
+{"connection": 41, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "main", "status": "101", "time": 9389.981324333, "upgrade": "websocket"}
+{"down": 998149, "event": "mark", "http_down": 294427, "http_up": 42653, "label": "/old-main-r2-cold-ready", "server": "main", "socket_down": 703722, "socket_up": 24838, "time": 9392.806135166, "up": 67491}
+{"down": 998149, "event": "mark", "http_down": 294427, "http_up": 42653, "label": "/old-main-r2-retained-reconnect-start", "server": "main", "socket_down": 703722, "socket_up": 24838, "time": 9392.829699541, "up": 67491}
+{"accept-encoding": "gzip, deflate", "connection": 40, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "main", "time": 9392.830652416}
+{"connection": 40, "content-encoding": "gzip", "content-length": "628", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9393.043391291}
+{"accept-encoding": "gzip, deflate", "connection": 40, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "main", "time": 9393.265202416}
+{"connection": 40, "content-length": "244", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9393.491826875}
+{"accept-encoding": "gzip, deflate", "connection": 42, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "main", "time": 9393.706150833, "upgrade": "websocket"}
+{"connection": 42, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "main", "status": "101", "time": 9393.9295885, "upgrade": "websocket"}
+{"down": 1018409, "event": "mark", "http_down": 295788, "http_up": 43962, "label": "/old-main-r2-retained-reconnect-ready", "server": "main", "socket_down": 722621, "socket_up": 25986, "time": 9395.34061175, "up": 69948}
+{"down": 1018409, "event": "mark", "http_down": 295788, "http_up": 43962, "label": "/old-main-r3-cold-start", "server": "main", "socket_down": 722621, "socket_up": 26034, "time": 9425.722537291, "up": 69996}
+{"accept-encoding": "gzip, deflate", "connection": 43, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "main", "time": 9425.724232333}
+{"connection": 43, "content-encoding": "gzip", "content-length": "628", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9425.934327791}
+{"accept-encoding": "gzip, deflate", "connection": 43, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "main", "time": 9426.154793875}
+{"connection": 43, "content-length": "244", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9426.378836416}
+{"accept-encoding": "gzip, deflate", "connection": 44, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "main", "time": 9426.595331666, "upgrade": "websocket"}
+{"connection": 44, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "main", "status": "101", "time": 9426.818909708, "upgrade": "websocket"}
+{"down": 1108024, "event": "mark", "http_down": 297149, "http_up": 45271, "label": "/old-main-r3-cold-ready", "server": "main", "socket_down": 810875, "socket_up": 27123, "time": 9429.640229583, "up": 72394}
+{"down": 1108024, "event": "mark", "http_down": 297149, "http_up": 45271, "label": "/old-main-r3-retained-reconnect-start", "server": "main", "socket_down": 810875, "socket_up": 27123, "time": 9429.663036, "up": 72394}
+{"accept-encoding": "gzip, deflate", "connection": 43, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "main", "time": 9429.663976291}
+{"connection": 43, "content-encoding": "gzip", "content-length": "628", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9429.87542575}
+{"accept-encoding": "gzip, deflate", "connection": 43, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "main", "time": 9430.096230291}
+{"connection": 43, "content-length": "244", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9430.321528291}
+{"accept-encoding": "gzip, deflate", "connection": 45, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "main", "time": 9430.536695875, "upgrade": "websocket"}
+{"connection": 45, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "main", "status": "101", "time": 9430.756971166, "upgrade": "websocket"}
+{"down": 1128284, "event": "mark", "http_down": 298510, "http_up": 46580, "label": "/old-main-r3-retained-reconnect-ready", "server": "main", "socket_down": 829774, "socket_up": 28271, "time": 9432.1738585, "up": 74851}
+{"down": 1128284, "event": "mark", "http_down": 298510, "http_up": 46580, "label": "/new-main-r3-cold-start", "server": "main", "socket_down": 829774, "socket_up": 28319, "time": 9434.056215375, "up": 74899}
+{"accept-encoding": "gzip, deflate", "connection": 46, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "main", "time": 9434.057860125}
+{"connection": 46, "content-encoding": "gzip", "content-length": "628", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9434.269279375}
+{"accept-encoding": "gzip, deflate", "connection": 46, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "main", "time": 9434.491680208}
+{"connection": 46, "content-length": "244", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9434.716449625}
+{"accept-encoding": "gzip, deflate", "connection": 47, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "main", "time": 9434.933057208, "upgrade": "websocket"}
+{"connection": 47, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "main", "status": "101", "time": 9435.157256583, "upgrade": "websocket"}
+{"accept-encoding": "gzip, deflate", "connection": 46, "direction": "up", "event": "headers", "method": "GET", "path": "/api/orchestration/threads/fast-load-big-thread/bounded", "server": "main", "time": 9435.364721916}
+{"connection": 46, "content-encoding": "gzip", "content-length": "39578", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9435.621411625}
+{"accept-encoding": "gzip, deflate", "connection": 48, "direction": "up", "event": "headers", "method": "GET", "path": "/api/orchestration/shell", "server": "main", "time": 9436.5495615}
+{"connection": 48, "content-encoding": "gzip", "content-length": "3803", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9436.821233916}
+{"down": 1192416, "event": "mark", "http_down": 343725, "http_up": 49980, "label": "/new-main-r3-cold-ready", "server": "main", "socket_down": 848691, "socket_up": 29476, "time": 9438.081582041, "up": 79456}
+{"down": 1192416, "event": "mark", "http_down": 343725, "http_up": 49980, "label": "/new-main-r3-retained-reconnect-start", "server": "main", "socket_down": 848691, "socket_up": 29476, "time": 9438.10426825, "up": 79456}
+{"accept-encoding": "gzip, deflate", "connection": 46, "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "main", "time": 9438.10534125}
+{"connection": 46, "content-encoding": "gzip", "content-length": "628", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9438.318566791}
+{"accept-encoding": "gzip, deflate", "connection": 46, "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "main", "time": 9438.539540041}
+{"connection": 46, "content-length": "244", "direction": "down", "event": "headers", "server": "main", "status": "200", "time": 9438.764255791}
+{"accept-encoding": "gzip, deflate", "connection": 49, "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "main", "time": 9438.98049775, "upgrade": "websocket"}
+{"connection": 49, "direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "main", "status": "101", "time": 9439.203728416, "upgrade": "websocket"}
+{"down": 1212676, "event": "mark", "http_down": 345086, "http_up": 51289, "label": "/new-main-r3-retained-reconnect-ready", "server": "main", "socket_down": 867590, "socket_up": 30676, "time": 9440.610036041, "up": 81965}

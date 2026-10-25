@@ -70,6 +70,8 @@ if __name__ == "__main__":
     timed = [value for value in values if value["phase"] in ["cold", "retained-reconnect"]]
     if len(timed) != 2 or any(not value["synchronized"] or value["failure"] for value in timed):
         raise RuntimeError("Client did not synchronize both timed phases")
+    if timed[0]["content"] != timed[1]["content"] or timed[0]["shell_threads"] != timed[1]["shell_threads"]:
+        raise RuntimeError("Retained reconnect changed restored content")
     validation = next(value for value in values if value["phase"] == "history-validation")["content"]
     expected = next(json.loads(line) for line in (BASE / "dataset.jsonl").read_text().splitlines()
                     if json.loads(line)["server"] == args.server)
