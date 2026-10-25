@@ -1,10 +1,16 @@
 #!/bin/sh
 # Blocks a push whose new commits would leak something private (scripts/secretscan).
-# Git passes "<local ref> <local sha> <remote ref> <remote sha>" lines on stdin. Only commits that no
-# remote-tracking branch has yet get checked, so old history never trips it.
+# Git passes "<local ref> <local sha> <remote ref> <remote sha>" lines on stdin. The identity guard
+# checks all ancestry; the broader secret scan checks commits absent from remote-tracking branches.
+updates=$(cat)
+guard=$(git config --path --get privacy.identityGuard) || guard=scripts/identity-guard
+scanner=$(git config --path --get privacy.secretScanner) || scanner=scripts/secretscan
+printf '%s\n' "$updates" | "$guard" pre-push "$@" || exit $?
 status=0
 while read -r _ sha _ _; do
   case "$sha" in *[!0]*) ;; *) continue ;; esac   # all zeros: a deletion sends no commits
-  scripts/secretscan "$sha" --not --remotes || status=1
-done
+  "$scanner" "$sha" --not --remotes || status=1
+done <<EOF
+$updates
+EOF
 exit $status

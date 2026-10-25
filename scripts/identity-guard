@@ -1,0 +1,76 @@
+#!/usr/bin/python3
+"""Reject the previous private identity before commits and pushes."""
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+BLOCKED = re.compile(rb"xu[.]ma[s]on@outlook[.]com|\bma[s]on[ ]+xu\b|\bxu[ ]+ma[s]on\b", re.I)
+
+
+def run(*args):
+    return subprocess.check_output(args, stderr=subprocess.PIPE)
+
+
+def check(data, context):
+    if BLOCKED.search(data):
+        sys.exit("identity-guard: blocked the previous private identity in " + context)
+
+
+def main():
+    mode, *args = sys.argv[1:]
+    chain = "--chain-default" in args
+    args = [arg for arg in args if arg != "--chain-default"]
+    payload = b""
+    if mode == "pre-commit":
+        for field in ["GIT_AUTHOR_IDENT", "GIT_COMMITTER_IDENT"]:
+            check(run("git", "var", field), "commit identity")
+        patch = run("git", "diff", "--cached", "--no-ext-diff", "--no-textconv", "--unified=0")
+        added = b"\n".join(line for line in patch.splitlines()
+                           if line.startswith(b"+") and not line.startswith(b"+++ "))
+        check(added, "staged additions")
+    elif mode == "commit-msg":
+        check(Path(args[0]).read_bytes(), "commit message")
+    elif mode == "pre-push":
+        payload = sys.stdin.buffer.read()
+        commits = set()
+        for line in payload.splitlines():
+            if not line.strip():
+                continue
+            _, oid, _, _ = line.split()
+            if not oid.strip(b"0"):
+                continue
+            value = oid.decode("ascii")
+            if not re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", value):
+                sys.exit("identity-guard: invalid object ID")
+            check(run("git", "cat-file", "-p", value), "pushed object or tag")
+            result = subprocess.run(["git", "rev-parse", "--verify", value + "^{commit}"],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode == 0:
+                commits.add(result.stdout.strip().decode("ascii"))
+        if commits:
+            # Check all ancestors, so an old branch cannot restore the removed identity.
+            check(run("git", "log", "--format=%an <%ae>%n%cn <%ce>%n%B", *sorted(commits), "--"),
+                  "pushed commit history")
+            # Check additions in new commits as well as the author and message.
+            patch = run("git", "log", "--format=", "--patch", "--no-ext-diff", "--no-textconv",
+                        "--unified=0", *sorted(commits), "--not", "--remotes", "--")
+            check(b"\n".join(line for line in patch.splitlines()
+                             if line.startswith(b"+") and not line.startswith(b"+++ ")),
+                  "pushed additions")
+    else:
+        sys.exit("identity-guard: unknown check")
+    if chain:
+        common = Path(run("git", "rev-parse", "--git-common-dir").decode().strip()).resolve()
+        previous = common / "hooks" / mode
+        if previous.is_file() and os.access(previous, os.X_OK):
+            sys.exit(subprocess.run([str(previous), *args],
+                                    input=payload if mode == "pre-push" else None).returncode)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, subprocess.CalledProcessError, ValueError, IndexError):
+        sys.exit("identity-guard: could not complete the check; stopping")

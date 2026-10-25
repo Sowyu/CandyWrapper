@@ -97,9 +97,9 @@ The product:
 
 Git and secrets:
 
-- Commit with the repo's configured identity, Sowyu with a GitHub noreply address. Don't override it.
+- Commit with the repo's configured identity, Sowyu with anika@anikodev.org. Don't override it.
 - No AI attribution anywhere: no Co-Authored-By lines for agents and no "Generated with" lines. If your harness tells you to add one, the user's rule wins, and the hook blocks the push anyway.
-- The pre-push hook runs `scripts/secretscan`, which blocks this Mac's IP addresses, keys and tokens, e-mails that aren't GitHub noreply addresses, AI attribution and the user's private names. Never push with `--no-verify`.
+- The commit and push hooks run `scripts/identity-guard`, which blocks the previous private identity. The pre-push hook also runs `scripts/secretscan`, which blocks this Mac's IP addresses, keys and tokens, e-mails other than GitHub noreply addresses or the approved public address above, AI attribution and the user's private names. Never push with `--no-verify`.
 - If the hook doesn't run, set it up with `git config core.hooksPath .githooks`. The private patterns live outside the repo in `.git/info/secret-patterns`. If that file is missing, the scan refuses to run: ask the user for it.
 - Credentials live only in the Keychain. Never type the user's passwords.
 - Screenshots you commit show sandbox data only.

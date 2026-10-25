@@ -1,0 +1,3 @@
+#!/bin/sh
+guard=$(git config --path --get privacy.identityGuard) || guard=scripts/identity-guard
+exec "$guard" pre-commit "$@"

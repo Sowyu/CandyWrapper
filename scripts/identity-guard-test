@@ -1,0 +1,112 @@
+#!/usr/bin/python3
+"""Exercise real commit and push hooks in disposable local repositories."""
+import os
+from pathlib import Path
+import shlex
+import subprocess
+import tempfile
+import unittest
+
+GUARD = Path(__file__).resolve().with_name("identity-guard")
+OLD = "xu." + "ma" + "son@outlook.com"
+PUBLIC = "anika@anikodev.org"
+
+
+class IdentityGuardTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="identity-guard-test-")
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        self.git("init", "-q")
+        self.git("config", "user.name", "Sowyu")
+        self.git("config", "user.email", PUBLIC)
+        hooks = self.root / "hooks"
+        hooks.mkdir()
+        for mode in ["pre-commit", "commit-msg", "pre-push"]:
+            hook = hooks / mode
+            hook.write_text("#!/bin/sh\nexec " + shlex.quote(str(GUARD)) + " " + mode
+                            + ' --chain-default "$@"\n')
+            hook.chmod(0o755)
+        self.git("config", "core.hooksPath", str(hooks))
+        self.git("commit", "-qm", "base", "--allow-empty")
+
+    def git(self, *args, env=None, input=None, ok=True):
+        environment = os.environ.copy()
+        for key in list(environment):
+            if key.startswith(("GIT_AUTHOR_", "GIT_COMMITTER_")):
+                environment.pop(key)
+        environment.update(env or {})
+        result = subprocess.run(["git", *args], cwd=self.repo, env=environment,
+                                input=input, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if ok:
+            self.assertEqual(result.returncode, 0, result.stderr.decode())
+        else:
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(b"identity-guard", result.stderr)
+        return result
+
+    def remote(self):
+        remote = self.root / "remote.git"
+        subprocess.run(["git", "init", "--bare", "-q", str(remote)], check=True)
+        return str(remote)
+
+    def test_approved_identity_commits_and_pushes(self):
+        self.git("commit", "-qm", "approved", "--allow-empty")
+        remote = self.remote()
+        self.git("push", remote, "HEAD:refs/heads/main")
+        self.git("push", remote, "HEAD:refs/heads/main")
+        self.git("push", remote, "HEAD:refs/heads/temporary")
+        self.git("push", remote, ":refs/heads/temporary")
+
+    def test_case_insensitive_author_override_is_blocked(self):
+        self.git("commit", "-qm", "bad", "--allow-empty",
+                 env={"GIT_AUTHOR_EMAIL": OLD.upper()}, ok=False)
+
+    def test_committer_override_is_blocked(self):
+        self.git("commit", "-qm", "bad", "--allow-empty",
+                 env={"GIT_COMMITTER_EMAIL": OLD}, ok=False)
+
+    def test_staged_addition_is_blocked(self):
+        (self.repo / "contact").write_text(OLD)
+        self.git("add", "contact")
+        self.git("commit", "-qm", "bad", ok=False)
+
+    def test_commit_message_is_blocked(self):
+        self.git("commit", "-qm", OLD, "--allow-empty", ok=False)
+
+    def test_removing_old_text_is_allowed(self):
+        (self.repo / "contact").write_text(OLD)
+        self.git("add", "contact")
+        # Seed the fixture without hooks, so the test can exercise removing old text.
+        empty = self.root / "empty-hooks"
+        empty.mkdir()
+        self.git("-c", "core.hooksPath=" + str(empty), "commit", "-qm", "fixture")
+        self.git("rm", "contact")
+        self.git("commit", "-qm", "remove old contact")
+
+    def test_pushing_an_old_ancestor_is_blocked(self):
+        tree = self.git("rev-parse", "HEAD^{tree}").stdout.strip().decode()
+        parent = self.git("rev-parse", "HEAD").stdout.strip().decode()
+        old = self.git("commit-tree", tree, "-p", parent, input=b"old\n",
+                       env={"GIT_AUTHOR_EMAIL": OLD}).stdout.strip().decode()
+        clean = self.git("commit-tree", tree, "-p", old, input=b"clean tip\n").stdout.strip().decode()
+        self.git("push", self.remote(), clean + ":refs/heads/restored", ok=False)
+
+    def test_old_tagger_is_blocked(self):
+        self.git("tag", "-am", "tag", "old", env={"GIT_COMMITTER_EMAIL": OLD})
+        self.git("push", self.remote(), "refs/tags/old", ok=False)
+
+    def test_existing_default_hook_is_preserved(self):
+        hook = self.repo / ".git/hooks/pre-commit"
+        marker = self.root / "existing-hook-ran"
+        hook.write_text("#!/bin/sh\ntouch " + shlex.quote(str(marker)) + "\n")
+        hook.chmod(0o755)
+        self.git("commit", "-qm", "chained", "--allow-empty")
+        self.assertTrue(marker.exists())
+
+
+
+if __name__ == "__main__":
+    unittest.main()
