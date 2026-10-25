@@ -119,8 +119,12 @@ final class ThreadSession {
             }
         }
         let store = self.store
+        let loader = ThreadSnapshotLoader(http: shell.http, token: shell.token, threadId: threadId.localId)
         subscription = shell.supervisor.subscribe("orchestration.subscribeThread", payload: {
-            ThreadSession.encode(await store.subscribeInput())
+            if await store.subscribeInput().afterSequence == nil, let snapshot = await loader.load(), !Task.isCancelled {
+                await store.applySnapshot(snapshot)
+            }
+            return ThreadSession.encode(await store.subscribeInput())
         }, handler: { event in
             guard case .value(let json) = event,
                   let item = OpenTiming.measure("typed decode", ThreadSession.label(json), { ThreadSession.decode(json) })
