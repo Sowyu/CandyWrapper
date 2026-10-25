@@ -172,7 +172,8 @@ public final class ToastView: DSView {
         var height: CGFloat = 0
     }
 
-    /// Inline content: `py-3 pl-3.5`, `pr-6` with an action or `pr-10` without, `gap-1.5`, items centered.
+    /// Inline content: `py-3 pl-3.5`, `pr-6` with an action or `pr-3.5` without, `gap-1.5`, items centered. Without
+    /// an action only the title row keeps `pr-6` clear of the close button (toast.tsx:288,330-337, T3 e54e71d725).
     private func frames(width: CGFloat) -> Frames {
         var f = Frames()
         let actionSize = actionButton?.intrinsicContentSize ?? .zero
@@ -193,9 +194,10 @@ public final class ToastView: DSView {
             f.height = y + max(actionSize.height, secondary.height) + 11
             return f
         }
-        let right = width - 1 - (actionButton == nil ? 40 : 24 + actionSize.width + 6)
+        let right = width - 1 - (actionButton == nil ? 14 : 24 + actionSize.width + 6)
+        let titleRight = actionButton == nil ? right - 24 : right
         let textX = left + (iconView == nil ? 0 : 16 + 8)
-        let titleHeight = titleText.height(forWidth: right - textX)
+        let titleHeight = titleText.height(forWidth: titleRight - textX)
         // With details the description shares its row with the chevron (`gap-1.5`, `size-3.5`).
         let messageRight = details == nil ? right : right - 6 - 14
         var messageHeight = hasMessage ? messageText.height(forWidth: messageRight - left) : 0
@@ -217,7 +219,7 @@ public final class ToastView: DSView {
         let top: CGFloat = 1 + 12
         let columnTop = top + (row - column) / 2
         f.icon = CGRect(x: left, y: columnTop + 2, width: 16, height: 16)
-        f.title = CGRect(x: textX, y: columnTop, width: right - textX, height: titleHeight)
+        f.title = CGRect(x: textX, y: columnTop, width: titleRight - textX, height: titleHeight)
         f.message = CGRect(x: left, y: columnTop + titleHeight + 2, width: messageRight - left, height: messageHeight)
         f.messageLink.origin.y += f.message.minY
         f.descriptionButton = CGRect(x: messageRight - buttonSize.width, y: f.message.maxY + 8, width: buttonSize.width, height: buttonSize.height)
