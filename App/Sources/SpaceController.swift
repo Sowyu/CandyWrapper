@@ -113,7 +113,9 @@ final class SpaceController {
                                                            appropriateFor: nil, create: true)
                     .appendingPathComponent(Bundle.main.bundleIdentifier ?? "dev.candywrapper.app", isDirectory: true)
                 let setup = try await persistent.open(applicationSupport: support, keyStore: SpaceKeyStore())
-                blobs = SpaceLocalBlobs(local: setup.local, keys: setup.keys)
+                let blobs = SpaceLocalBlobs(local: setup.local, keys: setup.keys)
+                blobs.onFailure = { [weak self] title, text in self?.showAlert(title, text) }
+                self.blobs = blobs
                 if settings.isActive, let recovery = setup.recoveryKey {
                     let saved = await showRecovery(recovery)
                     if saved { try await Task.detached { try setup.acknowledgeRecovery() }.value }
@@ -194,10 +196,15 @@ final class SpaceController {
     func refreshReminders() { reminders.refresh() }
 
     private func showStorageFailure() {
+        showAlert("Space could not open or save on this Mac",
+                  "Your encrypted copy and key have been kept. Recent edits may not be saved. Check available disk space and Keychain access, then reopen Space.")
+    }
+
+    private func showAlert(_ title: String, _ text: String) {
         guard let window, window.attachedSheet == nil else { return }
         let alert = NSAlert()
-        alert.messageText = "Space could not open or save on this Mac"
-        alert.informativeText = "Your encrypted copy and key have been kept. Recent edits may not be saved. Check available disk space and Keychain access, then reopen Space."
+        alert.messageText = title
+        alert.informativeText = text
         alert.beginSheetModal(for: window)
     }
 

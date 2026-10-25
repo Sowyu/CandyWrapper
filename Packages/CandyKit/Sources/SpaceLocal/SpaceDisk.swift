@@ -5,7 +5,7 @@ import SpaceModel
 
 public enum SpaceLocalError: Error, Equatable, Sendable {
     case storeInUse, incompleteStore, corruptStore, sequenceMismatch, operationMismatch
-    case invalidBlobID, blobTooLarge, reopenRequired
+    case invalidBlobID, blobTooLarge, blobStorageFull, reopenRequired
 }
 
 // Tests throw at every boundary, then reopen with a fresh disk object. Only ciphertext reaches a handle.

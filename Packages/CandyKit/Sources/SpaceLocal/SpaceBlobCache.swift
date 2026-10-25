@@ -49,15 +49,11 @@ extension SpaceLocalStore {
             _ = try cachedBlob(id: id)
             return
         }
+        // Until sync, every blob here is the only copy of an original, so nothing is ever evicted to make room.
+        // A full store refuses the new blob before any write, and the store stays usable.
+        // ponytail: no eviction at all, evict only blobs the Space machine has acknowledged once sync lands.
+        guard cache.bytes + size <= cacheLimit else { throw SpaceLocalError.blobStorageFull }
         do {
-            // Delete first, then stage the new ciphertext. Neither a temp nor an orphan can exceed
-            // the cap. Blobs are disposable; a crash may cause a miss, never a partial blob hit.
-            for oldest in cache.oldestFirst() {
-                if cache.bytes <= cacheLimit - size { break }
-                try disk.remove("blobs/\(oldest).cws")
-                cache.entries.removeValue(forKey: oldest)
-            }
-            try persistCache()
             var encrypted = Data()
             let count = max(1, (plaintext.count + SpaceKeys.blobChunkSize - 1) / SpaceKeys.blobChunkSize)
             for n in 0..<count {
@@ -137,7 +133,8 @@ extension SpaceLocalStore {
         return UInt64(full) * encoded(SpaceKeys.blobChunkSize) + (remainder == 0 ? 0 : encoded(remainder))
     }
 
-    static func loadCache(_ disk: SpaceDisk, limit: UInt64) throws -> CacheIndex {
+    /// Indexed blobs are originals and stay, even past the limit. Only files the index never recorded are deleted.
+    static func loadCache(_ disk: SpaceDisk) throws -> CacheIndex {
         var index = disk.exists("cache.cws")
             ? try SpaceJSON.decode(CacheIndex.self, from: disk.open(disk.read("cache.cws"), purpose: "cache"))
             : CacheIndex()
@@ -159,12 +156,6 @@ extension SpaceLocalStore {
             if index.entries[id] == nil || file.pathExtension != "cws" {
                 try disk.remove("blobs/" + file.lastPathComponent)
             }
-        }
-        for id in index.oldestFirst() {
-            if index.bytes <= limit { break }
-            try disk.remove("blobs/\(id).cws")
-            index.entries.removeValue(forKey: id)
-            changed = true
         }
         if changed {
             try disk.atomicWrite(disk.seal(SpaceJSON.encode(index), purpose: "cache"), to: "cache.cws")

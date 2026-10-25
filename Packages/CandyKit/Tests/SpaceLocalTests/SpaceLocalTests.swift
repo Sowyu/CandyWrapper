@@ -66,8 +66,8 @@ private func setup(_ directory: URL) async throws {
 private func edit(_ directory: URL, probe: Probe, action: String) async throws {
     let store = try SpaceLocalStore(directory: directory, keys: keys, cacheLimit: 400, fault: probe.visit)
     if action == "snapshot" { try await store.confirm(frame()) }
-    if action == "eviction" {
-        let old = Data(repeating: 1, count: 200)
+    if action == "second" {
+        let old = Data(repeating: 1, count: 50)
         try await store.cacheBlob(old, id: keys.blobId(of: old))
     }
     if action == "touch" {
@@ -80,7 +80,7 @@ private func edit(_ directory: URL, probe: Probe, action: String) async throws {
     case "confirm": try await store.confirm(frame())
     case "snapshot": try await store.saveSnapshot(snapshot(1))
     case "touch": _ = try await store.cachedBlob(id: keys.blobId(of: Data(secret.utf8)))
-    case "cache", "eviction":
+    case "cache", "second":
         let data = Data(secret.utf8)
         try await store.cacheBlob(data, id: keys.blobId(of: data))
     default: Issue.record("Unknown action")
@@ -92,8 +92,8 @@ private func edit(_ directory: URL, probe: Probe, action: String) async throws {
 private func interrupt(_ directory: URL, probe: Probe, action: String, at: Int) async throws {
     let store = try SpaceLocalStore(directory: directory, keys: keys, cacheLimit: 400, fault: probe.visit)
     if action == "snapshot" { try await store.confirm(frame()) }
-    if action == "eviction" {
-        let old = Data(repeating: 1, count: 200)
+    if action == "second" {
+        let old = Data(repeating: 1, count: 50)
         try await store.cacheBlob(old, id: keys.blobId(of: old))
     }
     if action == "touch" {
@@ -170,7 +170,7 @@ struct SpaceLocalTests {
         await store.close()
     }
 
-    @Test(arguments: ["pending", "confirm", "snapshot", "cache", "eviction", "touch"])
+    @Test(arguments: ["pending", "confirm", "snapshot", "cache", "second", "touch"])
     func interruptedAtEveryWriteBoundaryRecovers(_ action: String) async throws {
         let sample = try root()
         defer { try? FileManager.default.removeItem(at: sample) }
@@ -205,6 +205,10 @@ struct SpaceLocalTests {
                 let data = Data(secret.utf8)
                 if let cached = try await store.cachedBlob(id: keys.blobId(of: data)) { #expect(cached == data) }
                 #expect(try await store.cachedBlobBytes() <= 400)
+                if action == "second" {
+                    let old = Data(repeating: 1, count: 50)
+                    #expect(try await store.cachedBlob(id: keys.blobId(of: old)) == old, "a failed write never deletes an earlier blob")
+                }
             }
             #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("transaction.cws").path))
             #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).allSatisfy { !$0.hasPrefix(".tmp-") })
@@ -352,17 +356,17 @@ struct SpaceLocalTests {
 }
 
 struct SpaceBlobCacheTests {
-    @Test func ciphertextBytesAndLRUSurviveRestart() async throws {
+    @Test func fullStoreRefusesTheNewBlobAndKeepsEveryOriginal() async throws {
         let directory = try root()
         defer { try? FileManager.default.removeItem(at: directory) }
         let a = Data(repeating: 1, count: 20), b = Data(repeating: 2, count: 20), c = Data(repeating: 3, count: 20)
         try await seedAndTouch(directory, a, b)
         let store = try SpaceLocalStore(directory: directory, keys: keys, cacheLimit: 150, fault: { _ in })
-        try await store.cacheBlob(c, id: keys.blobId(of: c))
-        #expect(try await store.cachedBlob(id: keys.blobId(of: b)) == nil)
-        #expect(try await store.cachedBlob(id: keys.blobId(of: a)) == a)
-        #expect(try await store.cachedBlob(id: keys.blobId(of: c)) == c)
         let bytes = try await store.cachedBlobBytes()
+        await #expect(throws: SpaceLocalError.blobStorageFull) { try await store.cacheBlob(c, id: keys.blobId(of: c)) }
+        #expect(try await store.cachedBlob(id: keys.blobId(of: a)) == a)
+        #expect(try await store.cachedBlob(id: keys.blobId(of: b)) == b)
+        #expect(try await store.cachedBlob(id: keys.blobId(of: c)) == nil)
         let files = try FileManager.default.contentsOfDirectory(at: directory.appendingPathComponent("blobs"), includingPropertiesForKeys: nil)
         let actual = try files.reduce(UInt64(0)) { total, file in
             total + UInt64(try Data(contentsOf: file).count)
@@ -373,6 +377,14 @@ struct SpaceBlobCacheTests {
             try await store.cacheBlob(tooBig, id: keys.blobId(of: tooBig))
         }
         #expect(try await store.cachedBlobBytes() == bytes)
+        // A refusal leaves the store healthy for edits.
+        try await store.replacePending([pending()])
+        await store.close()
+        // Reopening under a smaller limit keeps both originals too.
+        let reopened = try SpaceLocalStore(directory: directory, keys: keys, cacheLimit: 70, fault: { _ in })
+        #expect(try await reopened.cachedBlob(id: keys.blobId(of: a)) == a)
+        #expect(try await reopened.cachedBlob(id: keys.blobId(of: b)) == b)
+        await reopened.close()
     }
 
     private func seedAndTouch(_ directory: URL, _ a: Data, _ b: Data) async throws {
@@ -383,20 +395,21 @@ struct SpaceBlobCacheTests {
         await store.close()
     }
 
-    @Test func actualOneGBLimitEvictsSparseFilesInLRUOrder() async throws {
+    @Test func actualOneGBLimitKeepsEveryOriginalAndRefusesMore() async throws {
         let directory = try root()
         defer { try? FileManager.default.removeItem(at: directory) }
         try await setup(directory)
         // Sparse stand-ins exercise the real byte limit without allocating or writing a gigabyte.
-        // Blob authentication is checked separately on reads, not while evicting unopened entries.
         try sparseCache(directory)
         let store = try SpaceLocalStore(directory: directory, keys: keys)
         #expect(SpaceLocalStore.blobCacheLimit == 1_000_000_000)
-        #expect(try await store.cachedBlobBytes() == 600_000_000)
+        #expect(try await store.cachedBlobBytes() == 1_000_000_001)
         let names = try FileManager.default.contentsOfDirectory(atPath: directory.appendingPathComponent("blobs").path)
-        #expect(!names.contains(String(repeating: "a", count: 64) + ".cws"))
-        #expect(names.contains(String(repeating: "b", count: 64) + ".cws"))
-        #expect(names.contains(String(repeating: "c", count: 64) + ".cws"))
+        for letter in ["a", "b", "c"] { #expect(names.contains(String(repeating: letter, count: 64) + ".cws")) }
+        let more = Data(secret.utf8)
+        await #expect(throws: SpaceLocalError.blobStorageFull) { try await store.cacheBlob(more, id: keys.blobId(of: more)) }
+        #expect(try await store.cachedBlobBytes() == 1_000_000_001)
+        await store.close()
     }
 
     private func sparseCache(_ directory: URL) throws {

@@ -237,7 +237,7 @@ The Mac keeps its copy in its Application Support folder named by its bundle id,
 - `snapshot.cws`, the confirmed state at some seq, encrypted with the local key.
 - `log.cws`, every confirmed frame since that snapshot, the same JSONL with `ct` re-encrypted under the local key.
 - `pending.cws`, local changes the Space machine hasn't confirmed yet, written before the UI shows them as saved.
-- `blobs/`, an encrypted cache of blobs, at most 1 GB, least recently used first out.
+- `blobs/`, the encrypted blobs, at most 1 GB. Until sync lands they are the only copies of their originals, so none is ever evicted: a new attachment that doesn't fit is refused with a message, and earlier ones stay. Once the Space machine holds a blob, this copy may be evicted, least recently used first.
 
 Nothing in this folder is readable without the Keychain key. Decrypted images and text live only in memory.
 

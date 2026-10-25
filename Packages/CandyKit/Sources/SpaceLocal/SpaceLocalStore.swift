@@ -70,7 +70,7 @@ public actor SpaceLocalStore {
             }
             guard files.allSatisfy(disk.exists) else { throw SpaceLocalError.incompleteStore }
             state = try Self.load(disk)
-            cache = try Self.loadCache(disk, limit: self.cacheLimit)
+            cache = try Self.loadCache(disk)
         } catch {
             disk.close()
             throw error
