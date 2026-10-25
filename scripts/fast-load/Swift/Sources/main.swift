@@ -14,6 +14,7 @@ struct Input: Decodable {
 actor Progress {
     var shell = false
     var thread = false
+    var config = false
     var firstProjection: Double?
     var firstShell: Double?
     var failure: String?
@@ -37,28 +38,39 @@ actor Progress {
         let duration = start.duration(to: .now).components
         return Double(duration.seconds) + Double(duration.attoseconds) / 1e18
     }
-    var complete: Bool { shell && thread }
+    func configReady() { config = true }
+    var complete: Bool { shell && thread && config }
 }
 
 #if CANDY_SHELL_FIRST
-/// Mirrors ShellSession.prepareShell/subscribeInput/receive (a67b58ba).
+/// Mirrors ShellSession with a shared config feed and descriptor-keyed warm policy.
 /// The AppKit session cannot be linked by this Foundation-only executable.
 actor ShellBootstrap {
     let store: ShellStore
     let supervisor: ConnectionSupervisor
     let http: EnvironmentHTTP
     let token: String
+    let feed: ServerConfigFeed
+    var negotiatedVersion: String?
     var omissions = ShellOmissions()
     var completionMarker = false
     var resumePrepared = false
     var resuming = false
 
-    init(store: ShellStore, supervisor: ConnectionSupervisor, http: EnvironmentHTTP, token: String) {
-        self.store = store; self.supervisor = supervisor; self.http = http; self.token = token
+    init(store: ShellStore, supervisor: ConnectionSupervisor, http: EnvironmentHTTP, token: String, feed: ServerConfigFeed) {
+        self.store = store; self.supervisor = supervisor; self.http = http; self.token = token; self.feed = feed
     }
 
-    func prepare() async {
-        let config = try? await supervisor.request("server.getConfig")
+    func prepare(generation: Int) async {
+        let version = await supervisor.serverVersion
+        if let version, version == negotiatedVersion, await store.canResume(omissions: omissions) {
+            resumePrepared = true
+            resuming = true
+            if !completionMarker { await store.resumed(); resuming = false }
+            return
+        }
+        let config = await feed.initialConfig(generation: generation)
+        negotiatedVersion = config == nil ? nil : version
         omissions = ShellOmissions(config: config ?? .null)
         completionMarker = config?["shellResumeCompletionMarker"]?.boolValue == true
         if await store.canResume(omissions: omissions) {
@@ -157,7 +169,9 @@ func run(_ input: Input) async throws {
     let wireSubscription = UUID()
     #endif
     #if CANDY_SHELL_FIRST
-    let shellBootstrap = ShellBootstrap(store: shell, supervisor: supervisor, http: http, token: input.token)
+    let configFeed = ServerConfigFeed(supervisor: supervisor)
+    await configFeed.start()
+    let shellBootstrap = ShellBootstrap(store: shell, supervisor: supervisor, http: http, token: input.token, feed: configFeed)
     #endif
     #if CANDY_HTTP_FIRST
     let loader = ThreadSnapshotLoader(http: http, token: input.token, threadId: ThreadId(rawValue: input.threadId))
@@ -168,6 +182,28 @@ func run(_ input: Input) async throws {
         let progress = Progress()
         if await thread.currentUpdate()?.projection != nil { await progress.projectionReady() }
         if await shell.snapshot != nil { await progress.shellReady() }
+        // Both modes include the existing app's config and lifecycle boot streams.
+        // The first diagnostic matrix excluded these common boot streams. The final
+        // comparison includes them in both modes to match the running app.
+        let expectedGeneration = await supervisor.state.generation + 1
+        #if CANDY_SHELL_FIRST
+        let configSubscription = Task {
+            var generation = 0
+            for await event in await configFeed.events() {
+                if Task.isCancelled { return }
+                if case .subscribed(let value) = event { generation = value }
+                if case .value(let value) = event, generation == expectedGeneration,
+                   value["type"]?.stringValue == "snapshot" { await progress.configReady() }
+            }
+        }
+        #else
+        let configSubscription = supervisor.subscribe("subscribeServerConfig", payload: {
+            .object(["environmentThemes": .bool(true), "usageLimitSources": .bool(true), "usageLimitsCommand": .bool(true)])
+        }, handler: { event in
+            if case .value(let value) = event, value["type"]?.stringValue == "snapshot" { await progress.configReady() }
+        })
+        #endif
+        let lifecycleSubscription = supervisor.subscribe("subscribeServerLifecycle", payload: { .object([:]) }, handler: { _ in })
         let shellSubscription = supervisor.subscribe("orchestration.subscribeShell", payload: {
             #if CANDY_SHELL_FIRST
             return await shellBootstrap.payload()
@@ -178,8 +214,8 @@ func run(_ input: Input) async throws {
             #endif
         }, handler: { event in
             #if CANDY_SHELL_FIRST
-            if case .subscribed = event {
-                await shellBootstrap.prepare()
+            if case .subscribed(let generation) = event {
+                await shellBootstrap.prepare(generation: generation)
                 if await shell.snapshot != nil { await progress.shellReady() }
             }
             #endif
@@ -265,10 +301,17 @@ func run(_ input: Input) async throws {
         fflush(stdout)
         shellSubscription.cancel()
         threadSubscription.cancel()
+        configSubscription.cancel()
+        lifecycleSubscription.cancel()
         await supervisor.disconnect()
         await shellSubscription.value
         await threadSubscription.value
+        await configSubscription.value
+        await lifecycleSubscription.value
     }
+    #if CANDY_SHELL_FIRST
+    await configFeed.stop()
+    #endif
     // History correctness runs after both timed phases, over the unthrottled
     // sandbox origin. It cannot inflate the measured cold/reconnect traffic.
     var validationHTTP = EnvironmentHTTP(baseURL: URL(string: "http://127.0.0.1:\(input.port - 100)")!)
