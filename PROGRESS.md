@@ -1,5 +1,7 @@
 # Progress
 
+- [ ] Catch up with T3 Nightly 3669 (taken 2026-10-25, nightly-3669): the scheduled `docs/nightly-catch-up.md` run. The lazy shell, deduplicated bodies and compact IDs in that range stay with t3-fast-load.
+
 - [ ] Adopt upstream fast-load protocol with old-server fallbacks and two-server throttled sandbox measurements (taken 2026-10-25, t3-fast-load).
 
 - [ ] Speed up HTML render pages in normal threads and Conductor with a ten-page sandbox benchmark, unchanged visuals and cache/height tests (taken 2026-10-25, html-render-speed).
