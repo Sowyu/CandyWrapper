@@ -1952,6 +1952,8 @@ public final class ThreadPanelView: DSView {
         super.viewDidMoveToWindow()
         if window != nil { DitherArtView.setEmphasis(isDraft ? .hero : .thread, from: self) } else { DitherArtView.pagesMoved() }
     }
+    public override func viewDidHide() { super.viewDidHide(); DitherArtView.pagesMoved() }
+    public override func viewDidUnhide() { super.viewDidUnhide(); DitherArtView.pagesMoved() }
 
     public override func layout() {
         super.layout()

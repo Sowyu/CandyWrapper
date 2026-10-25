@@ -458,12 +458,14 @@ public final class OrchestratorPaneView: DSView {
 
     public override func cancelOperation(_ sender: Any?) { onEscape?() }
 
-    /// Redesign's art shows under the chat as under a thread. Its bubbles are solid, so the text reads without the
-    /// heavy scrim of other pages.
+    /// Redesign's art shows under the chat behind the heavy page scrim (the user, 2026-10-25), also while a thread
+    /// panel that's out of sight registers again.
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        DitherArtView.setEmphasis(window == nil ? nil : .thread, from: self)
+        DitherArtView.setEmphasis(window == nil ? nil : .page, from: self)
     }
+    public override func viewDidHide() { super.viewDidHide(); DitherArtView.pagesMoved() }
+    public override func viewDidUnhide() { super.viewDidUnhide(); DitherArtView.pagesMoved() }
 }
 
 // MARK: - Chat

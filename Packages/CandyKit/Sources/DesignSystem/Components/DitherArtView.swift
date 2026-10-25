@@ -193,21 +193,15 @@ public final class DitherArtView: NSView {
         return current
     }
 
-    /// How much of the art a page shows.
-    public enum Emphasis: Sendable { case hero, thread, settings }
+    /// How much of the art a page shows. `page` is the heavy scrim, for the Orchestrator's pane and like pages.
+    public enum Emphasis: Sendable { case hero, thread, settings, page }
 
-    /// The thread panel calls this: while `source` shows inside the art's panel, the art takes `emphasis`'s scrim.
-    /// Pass nil when the source leaves. Pages that never call it get the heavy page scrim.
+    /// A page calls this: while `source` is the frontmost registered page showing inside the art's panel, the art
+    /// takes `emphasis`'s scrim. Pass nil when the source leaves. Pages that never call it get the heavy page scrim.
     @MainActor
     public static func setEmphasis(_ emphasis: Emphasis?, from source: NSView) {
-        let wasHero = heroSources.contains(source)
-        heroSources.remove(source); threadSources.remove(source); settingsSources.remove(source)
-        switch emphasis {
-        case .hero: heroSources.add(source)
-        case .thread: threadSources.add(source)
-        case .settings: settingsSources.add(source)
-        case nil: break
-        }
+        let wasHero = sources.object(forKey: source)?.emphasis == .hero
+        if let emphasis { sources.setObject(EmphasisBox(emphasis: emphasis), forKey: source) } else { sources.removeObject(forKey: source) }
         // The full art goes up first, then opening a new thread resolves its dots in.
         for art in arts.allObjects { art.updateScrim() }
         if emphasis == .hero, !wasHero, let art = art(behind: source) { art.playReveal() }
@@ -260,9 +254,8 @@ public final class DitherArtView: NSView {
             }
         }
     }
-    @MainActor private static let heroSources = NSHashTable<NSView>.weakObjects()
-    @MainActor private static let threadSources = NSHashTable<NSView>.weakObjects()
-    @MainActor private static let settingsSources = NSHashTable<NSView>.weakObjects()
+    /// Each registered page and its emphasis, weakly held.
+    @MainActor private static let sources = NSMapTable<NSView, EmphasisBox>.weakToStrongObjects()
     @MainActor private static let arts = NSHashTable<DitherArtView>.weakObjects()
 
     public override func updateLayer() {
@@ -307,16 +300,35 @@ public final class DitherArtView: NSView {
         art.frame = CGRect(x: 0, y: bounds.height - h, width: w, height: h)
     }
 
-    /// What the panel shows over the art: the new thread, an open thread or any other page.
+    /// What the panel shows over the art: the frontmost registered page that's visible inside it decides, whatever
+    /// order the pages registered in, and an unregistered page gets the heavy scrim.
     var page: DitherArt.Page {
         guard let panel = superview, window != nil else { return .page }
-        func shows(_ table: NSHashTable<NSView>) -> Bool {
-            table.allObjects.contains { $0.window === window && $0.isDescendant(of: panel) && !$0.isHiddenOrHasHiddenAncestor }
+        let showing = (Self.sources.keyEnumerator().allObjects as? [NSView] ?? []).filter {
+            $0.window === window && $0.isDescendant(of: panel) && !$0.isHiddenOrHasHiddenAncestor && !$0.visibleRect.isEmpty
         }
-        if shows(Self.heroSources) { return .hero }
-        if shows(Self.threadSources) { return .thread }
-        if shows(Self.settingsSources) { return .settings }
-        return .page
+        guard let front = showing.max(by: { Self.isInFront($1, of: $0) }), let emphasis = Self.sources.object(forKey: front)?.emphasis else {
+            return .page
+        }
+        switch emphasis {
+        case .hero: return .hero
+        case .thread: return .thread
+        case .settings: return .settings
+        case .page: return .page
+        }
+    }
+
+    /// Whether `a` draws over `b`: under the nearest ancestor they share, the later subview is in front, and a view is
+    /// in front of its own ancestors.
+    static func isInFront(_ a: NSView, of b: NSView) -> Bool {
+        func chain(_ v: NSView) -> [NSView] { sequence(first: v, next: \.superview).reversed() }
+        let ca = chain(a), cb = chain(b)
+        var i = 0
+        while i < ca.count, i < cb.count, ca[i] === cb[i] { i += 1 }
+        if i == cb.count { return i < ca.count }
+        if i == ca.count || i == 0 { return false }
+        let siblings = ca[i - 1].subviews
+        return (siblings.firstIndex { $0 === ca[i] } ?? 0) > (siblings.firstIndex { $0 === cb[i] } ?? 0)
     }
 
     /// Main thread only, like every view method.
@@ -386,6 +398,7 @@ public final class DitherArtView: NSView {
 }
 
 private struct DitherArtImage: @unchecked Sendable { let image: CGImage? }
+private final class EmphasisBox { let emphasis: DitherArtView.Emphasis; init(emphasis: DitherArtView.Emphasis) { self.emphasis = emphasis } }
 private struct DitherArtFrames: @unchecked Sendable { let images: [CGImage] }
 
 /// The art's rendering. Touches no AppKit view, so it runs on any thread.
