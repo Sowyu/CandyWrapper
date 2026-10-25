@@ -353,6 +353,12 @@ final class SpaceBoardCanvas: DSView, NSTextFieldDelegate {
     override var acceptsFirstResponder: Bool { true }
     override var wantsUpdateLayer: Bool { false }
 
+    /// A title still being typed when the user switches view or page is kept.
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil { endEditing(commit: true) }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
     func update(columns: [SpaceBoardColumn], cards: [PageID: SpaceBoardCard], sorted: Bool, canAddOption: Bool) {
         let width = Self.laneWidth - 2 * Self.pad - 20
         var heights: [PageID: CGFloat] = [:]
