@@ -1946,6 +1946,13 @@ public final class ThreadPanelView: DSView {
         needsLayout = true
     }
 
+    /// A utility page takes the panel's place and gives it back: the art behind takes the right scrim each time. The
+    /// panel registers on every return, so a thread shown without passing the new-thread page still gets its scrim.
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { DitherArtView.setEmphasis(isDraft ? .hero : .thread, from: self) } else { DitherArtView.pagesMoved() }
+    }
+
     public override func layout() {
         super.layout()
         let sheet = viewportWidth <= 980 && !rightPanelMaximized
