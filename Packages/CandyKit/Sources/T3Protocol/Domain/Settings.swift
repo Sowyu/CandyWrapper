@@ -176,6 +176,8 @@ public struct ServerSettingsValues: Equatable, Sendable {
         "sidebarAutoSettleKeepPullRequests": SettingSpec(.bool, .bool(false)),
         "sidebarAutoSettleOnMerge": SettingSpec(.bool, .bool(true)),
         "compactIdleThreads": SettingSpec(.bool, .bool(false)),
+        // Settings > Beta's Guest links (settings.ts:1166 at 3669); servers before 3669 don't send it.
+        "guestSharingEnabled": SettingSpec(.bool, .bool(false)),
         "backgroundActivity": SettingSpec(.any, BackgroundActivity.defaultSettings),
         "backgroundActivityProfile": SettingSpec(.literals(["balanced", "performance", "battery-saver"]), .string("balanced")),
         "automaticGitFetchInterval": SettingSpec(.any, .number(30_000)),

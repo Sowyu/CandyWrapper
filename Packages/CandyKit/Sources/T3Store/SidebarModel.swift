@@ -81,11 +81,12 @@ public struct SidebarThread: Sendable, Equatable, Identifiable {
 // MARK: - Status
 
 public enum SidebarThreadStatus: String, Sendable {
-    case approval, input, working, waiting, failed, limited, ready
+    /// `request`: a guest message waits for the owner (Sidebar.logic.ts:915-918).
+    case approval, input, request, working, waiting, failed, limited, ready
 }
 
 public enum SidebarTopStatus: String, Sendable {
-    case approval, done, failed, limited, input, waiting, woke, working
+    case approval, done, failed, limited, input, request, waiting, woke, working
 }
 
 public enum SidebarSection: String, Sendable, CaseIterable {
@@ -102,6 +103,7 @@ public struct ThreadStatusPill: Sendable, Equatable {
         case failed = "Failed"
         case pendingApproval = "Pending Approval"
         case awaitingInput = "Awaiting Input"
+        case guestRequest = "Guest Request"
         case waiting = "Waiting"
         case planReady = "Plan Ready"
 
@@ -110,6 +112,7 @@ public struct ThreadStatusPill: Sendable, Equatable {
             switch self {
             case .pendingApproval: 5
             case .awaitingInput: 4
+            case .guestRequest: 3.75
             case .failed: 3.5
             case .working, .connecting: 3
             case .waiting: 2.5
@@ -177,10 +180,12 @@ public enum SidebarModel {
     /// A running turn that waits on another thread reads as waiting.
     public static func resolveSidebarThreadStatus(
         hasPendingApprovals: Bool, hasPendingUserInput: Bool, runtime: ThreadRuntimeSummary?,
-        blockedOnThreadWait: Bool = false
+        blockedOnThreadWait: Bool = false, pendingGuestMessageCount: Int = 0
     ) -> SidebarThreadStatus {
         if hasPendingApprovals { return .approval }
         if hasPendingUserInput { return .input }
+        // A guest is waiting on the owner; the agent's own requests come first.
+        if pendingGuestMessageCount > 0 { return .request }
         guard let runtime else { return .ready }
         if runtime.status == .running, blockedOnThreadWait { return .waiting }
         if activeRunStatuses.contains(runtime.status) { return .working }
@@ -194,7 +199,8 @@ public enum SidebarModel {
         resolveSidebarThreadStatus(
             hasPendingApprovals: thread.hasPendingApprovals || thread.pendingSubagentRequest == .approval,
             hasPendingUserInput: thread.hasPendingUserInput || thread.pendingSubagentRequest == .userInput,
-            runtime: thread.runtime, blockedOnThreadWait: thread.shell.blockedOnThreadWait == true)
+            runtime: thread.runtime, blockedOnThreadWait: thread.shell.blockedOnThreadWait == true,
+            pendingGuestMessageCount: thread.shell.pendingGuestMessageCount ?? 0)
     }
 
     /// Port of `resolveSidebarV2TopStatus` (Sidebar.logic.ts:1015-1039). The UI labels `working`
@@ -207,6 +213,7 @@ public enum SidebarModel {
         case .waiting: return .waiting
         case .approval: return .approval
         case .input: return .input
+        case .request: return .request
         case .failed: return .failed
         case .limited: return .limited
         case .ready: break
@@ -224,7 +231,7 @@ public enum SidebarModel {
     public static func shouldRecedeSidebarThread(
         status: SidebarThreadStatus, isUnread: Bool, isWoke: Bool, isActive: Bool, isSelected: Bool
     ) -> Bool {
-        if isActive || isSelected || status == .input { return false }
+        if isActive || isSelected || status == .input || status == .request { return false }
         if status == .working || status == .waiting { return true }
         if status == .ready || status == .approval { return !isUnread && !isWoke }
         return false
@@ -243,10 +250,11 @@ public enum SidebarModel {
         hasPendingApprovals: Bool, hasPendingUserInput: Bool, interactionMode: InteractionMode,
         hasActionableProposedPlan: Bool, latestRun: ThreadRunSummary?, runtime: ThreadRuntimeSummary?,
         lastVisitedAt: T3Timestamp?, pendingBackgroundTasks: [PendingBackgroundTask],
-        blockedOnThreadWait: Bool = false
+        blockedOnThreadWait: Bool = false, pendingGuestMessageCount: Int = 0
     ) -> ThreadStatusPill? {
         if hasPendingApprovals { return ThreadStatusPill(label: .pendingApproval, pulse: false) }
         if hasPendingUserInput { return ThreadStatusPill(label: .awaitingInput, pulse: false) }
+        if pendingGuestMessageCount > 0 { return ThreadStatusPill(label: .guestRequest, pulse: false) }
         let blocked = runtime?.status == .running && blockedOnThreadWait
         if (runtime?.status == .running && !blocked) || runtime?.status == .waiting {
             return ThreadStatusPill(label: .working, pulse: true)
@@ -277,7 +285,8 @@ public enum SidebarModel {
             hasActionableProposedPlan: thread.shell.hasActionableProposedPlan, latestRun: thread.latestRun,
             runtime: thread.runtime, lastVisitedAt: lastVisitedAt,
             pendingBackgroundTasks: thread.shell.backgroundTasks,
-            blockedOnThreadWait: thread.shell.blockedOnThreadWait == true)
+            blockedOnThreadWait: thread.shell.blockedOnThreadWait == true,
+            pendingGuestMessageCount: thread.shell.pendingGuestMessageCount ?? 0)
     }
 
     /// Port of `resolveProjectStatusIndicator` (Sidebar.logic.ts:1244-1260). First of the highest

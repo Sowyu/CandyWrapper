@@ -80,6 +80,30 @@ public enum ThreadCommands {
         command("thread.delete", threadId, commandId)
     }
 
+    /// `closeGuestShare` (commands.ts:437-442): Stop sharing.
+    public static func closeGuestShare(_ threadId: ThreadId, commandId: String = newCommandId()) -> JSONValue {
+        command("thread.guest-share.close", threadId, commandId)
+    }
+
+    /// `resolveGuestMessage` (commands.ts:444-474). Dismiss names the message; Send dispatches it with empty
+    /// text and no attachments, because the server fills in the guest's text and files.
+    public static func resolveGuestMessage(_ threadId: ThreadId, guestMessageId: String, send: Bool,
+                                           commandId: String = newCommandId()) -> JSONValue {
+        guard send else {
+            return command("thread.guest-message.dismiss", threadId, commandId, ["guestMessageId": .string(guestMessageId)])
+        }
+        return command("message.dispatch", threadId, commandId, [
+            "messageId": .string(commandId), "guestMessageId": .string(guestMessageId), "text": .string(""),
+            "attachments": .array([]), "dispatchMode": .object(["type": .string("queue_after_active")]),
+            "createdBy": .string("user"), "creationSource": .string("web"),
+        ])
+    }
+
+    /// `guestShare.create`'s input (guestShare.ts:58).
+    public static func createGuestShare(_ threadId: ThreadId) -> JSONValue {
+        .object(["threadId": .string(threadId.rawValue)])
+    }
+
     /// `stopThreadSession` (client-runtime operations/commands.ts:919-935): one `provider-session.detach`
     /// per provider session, each with `<commandId>:detach:<sessionId>`.
     public static func detachSessions(_ threadId: ThreadId, sessionIds: [String], commandId: String = newCommandId()) -> [JSONValue] {
@@ -518,12 +542,15 @@ public enum ThreadActionMenu {
         public var supportsPinning = true
         public var supportsTitleRegeneration = true
         public var snoozePresets: [SnoozePreset] = []
+        /// Guest links need their own grant and the server's beta, so the caller checks them instead of `canOperate`
+        /// (threadActionMenu.logic.ts:90-91, guestShareAvailability.ts).
+        public var canShareWithGuest = false
         public init() {}
     }
 
     /// Actions that change the thread; the rest stay open to read-only connections.
     public static func requiresOperate(_ id: String) -> Bool {
-        !["new-thread-on-branch", "project-settings", "mark-unread", "copy", "copy-path", "copy-branch", "copy-thread-id"].contains(id)
+        !["new-thread-on-branch", "project-settings", "mark-unread", "share-guest", "copy", "copy-path", "copy-branch", "copy-thread-id"].contains(id)
     }
 
     public static func items(_ s: State) -> [ThreadMenuItem] {
@@ -545,6 +572,7 @@ public enum ThreadActionMenu {
             items.append(.init("regenerate-title", s.isRegeneratingTitle ? "Regenerating…" : "Regenerate title", disabled: s.isRegeneratingTitle))
         }
         items.append(.init("mark-unread", "Mark unread"))
+        if s.canShareWithGuest { items.append(.init("share-guest", "Share with guest")) }
         if let filter = s.projectFilter {
             items.append(.init("filter-by-project", filter.isActive ? "Show all projects" : "Filter by \(filter.label)"))
         }

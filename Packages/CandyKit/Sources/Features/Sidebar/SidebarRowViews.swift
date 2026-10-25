@@ -27,6 +27,7 @@ enum SB {
         case .waiting: c(\.mutedForeground)
         case .approval: c(\.warningForeground)
         case .input: base("indigo-600", "indigo-300")
+        case .request: GuestColors.foreground
         case .limited, .woke: c(\.warning)
         case .failed: c(\.error)
         case .done: c(\.success)
@@ -37,6 +38,7 @@ enum SB {
         switch s {
         case .working: .circleDashed
         case .input: .messageCircleQuestion
+        case .request: .userRound
         case .approval: .shieldQuestion
         case .failed, .limited: .circleAlert
         case .done: .circleCheck
@@ -727,7 +729,7 @@ final class SidebarCardRowView: SidebarRowBase {
         title.text = r.title
         title.font = SB.font(capyRow ? 13 : 14, r.recedes ? .regular : .medium)
         title.color = r.recedes ? SB.c(\.secondaryLabel)
-            : r.isUnread || r.isWoke || r.status == .input ? SB.c(\.foreground)
+            : r.isUnread || r.isWoke || r.status == .input || r.status == .request ? SB.c(\.foreground)
             : r.status == .failed ? SB.c(\.foreground, 0.95) : SB.c(\.foreground, 0.9)
         title.alphaValue = r.isRegeneratingTitle ? 0.55 : 1
         let showsScratch = r.branch == nil && r.scratchMachineLabel != nil
@@ -994,7 +996,7 @@ final class SidebarSlimRowView: SidebarRowBase {
             title.color = SB.c(\.secondaryLabel, 0.7) // `[&:not(:hover)_*]:text-secondary-label/70`
         } else {
             title.color = r.recedes ? SB.c(\.secondaryLabel, 0.7)
-                : r.isActive || r.isWoke || r.status == .input ? SB.c(\.foreground)
+                : r.isActive || r.isWoke || r.status == .input || r.status == .request ? SB.c(\.foreground)
                 : r.isUnread ? SB.c(\.mutedForeground) : SB.c(\.secondaryLabel, 0.7)
         }
         title.alphaValue = r.isRegeneratingTitle ? 0.55 : 1 // `opacity-55` (Sidebar.tsx:1691)

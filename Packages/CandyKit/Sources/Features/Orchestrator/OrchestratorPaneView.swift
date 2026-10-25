@@ -13,7 +13,7 @@ public struct OrchestratorCrewCard: Equatable {
     /// The group for a thread's sidebar status, given whether its latest turn completed.
     public static func group(_ status: SidebarThreadStatus, completedTurn: Bool) -> Group {
         switch status {
-        case .working, .waiting, .approval, .input: .running
+        case .working, .waiting, .approval, .input, .request: .running
         case .ready: completedTurn ? .finished : .stopped
         case .failed, .limited: .stopped
         }
