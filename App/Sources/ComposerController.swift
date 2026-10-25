@@ -783,7 +783,7 @@ final class ComposerController {
         // QueuedRunsControl.tsx:216-231), which declines while an edit is open or a command runs.
         shortcuts.on("thread.editQueuedMessage") { [weak self] call in
             guard let self, self.isActive, case .thread = self.target, self.composer.isCaretAtStart,
-                  let latest = self.panel.queue.state.items.last(where: { $0.runId != nil }),
+                  let latest = self.panel.queue.state.items.last(where: { $0.runId != nil }), latest.isEditable,
                   self.queuedEdit == nil, !self.queueBusy else { return false }
             if !call.isRepeat {
                 self.panel.queue.expand()

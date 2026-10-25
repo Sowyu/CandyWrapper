@@ -177,6 +177,8 @@ public struct ServerSettingsValues: Equatable, Sendable {
         "sidebarAutoSettleOnMerge": SettingSpec(.bool, .bool(true)),
         // A boolean, or the mode string a server from d13fc84670 kept there (settings.ts:1163-1166).
         "compactIdleThreads": SettingSpec(.any, .bool(false)),
+        // Settings > Beta's Guest links (settings.ts:1166 at 3669); servers before 3669 don't send it.
+        "guestSharingEnabled": SettingSpec(.bool, .bool(false)),
         "backgroundActivity": SettingSpec(.any, BackgroundActivity.defaultSettings),
         "backgroundActivityProfile": SettingSpec(.literals(["balanced", "performance", "battery-saver"]), .string("balanced")),
         "automaticGitFetchInterval": SettingSpec(.any, .number(30_000)),

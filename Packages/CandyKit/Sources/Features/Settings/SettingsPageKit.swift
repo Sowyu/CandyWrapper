@@ -68,6 +68,10 @@ public final class SettingsPageContext {
     public var writeModelPreferences: ((_ environmentId: String, _ instanceId: String, _ hidden: [String], _ order: [String]) -> Void)?
     /// Opens another settings page.
     public var openSection: ((SettingsSection) -> Void)?
+    /// T3 Connect has loaded and nobody is signed in (`isSignedIn === false`); false while it loads.
+    public var connectSignedOut = false
+    /// Opens T3 Connect's sign-in.
+    public var signInToConnect: (() -> Void)?
     /// Leaves Settings for the thread view (after removing the open project).
     public var closeSettings: (() -> Void)?
     /// Copies text and shows a toast with the title.

@@ -75,6 +75,7 @@ public struct SidebarRowModel: Equatable, Sendable {
         case .waiting: "Waiting"
         case .approval: "Approval"
         case .input: "Input"
+        case .request: "Request"
         case .limited: "Limited"
         case .failed: "Failed"
         case .woke: "Woke"

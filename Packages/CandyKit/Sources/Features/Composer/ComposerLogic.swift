@@ -324,8 +324,12 @@ public enum ComposerLogic {
             public var runId: RunId?
             public var messageId: MessageId?
             public var text: String
-            public init(runId: RunId?, messageId: MessageId?, text: String) {
-                self.runId = runId; self.messageId = messageId; self.text = text
+            /// A guest's queued message: the guest's name before its text, and the owner can cancel it but not
+            /// rewrite it (QueuedRunsControl.tsx:122-130 at 3669).
+            public var guestName: String?
+            public var isEditable: Bool { guestName == nil }
+            public init(runId: RunId?, messageId: MessageId?, text: String, guestName: String? = nil) {
+                self.runId = runId; self.messageId = messageId; self.text = text; self.guestName = guestName
             }
         }
         public var items: [Item] = []
@@ -357,8 +361,15 @@ public enum ComposerLogic {
             let automatic = Set(p.messages.filter { $0.delegatedCompletion != nil || $0.notification != nil }.map(\.id))
             let queued = p.runs.filter { $0.status == .queued && !($0.userMessageId.map(automatic.contains) ?? false) }
                 .sorted { ($0.queuePosition ?? $0.ordinal, $0.ordinal) < ($1.queuePosition ?? $1.ordinal, $1.ordinal) }
-            let texts = Dictionary(p.messages.map { ($0.id, $0.text) }, uniquingKeysWith: { _, b in b })
-            items = queued.map { Item(runId: $0.id, messageId: $0.userMessageId, text: $0.userMessageId.flatMap { texts[$0] } ?? "Queued message") }
+            let messages = Dictionary(p.messages.map { ($0.id, $0) }, uniquingKeysWith: { _, b in b })
+            let texts = messages.mapValues(\.text)
+            items = queued.map { run in
+                let message = run.userMessageId.flatMap { messages[$0] }
+                // A queued guest message shows the guest's words; the agent still gets the attributed text
+                // (threadWorkflows.ts:146-147 at 3669).
+                let guest = GuestMessageAttribution(message?.context?["guest"])
+                return Item(runId: run.id, messageId: run.userMessageId, text: guest?.text ?? message?.text ?? "Queued message", guestName: guest?.name)
+            }
             // Optimistic queued sends the projection doesn't list yet go last.
             items += saving.filter { texts[$0.id] == nil }.map { Item(runId: nil, messageId: $0.id, text: $0.text) }
             isHeld = p.runs.contains { $0.status == .queued && $0.queueHeld == true }

@@ -21,7 +21,7 @@ PATHS = {"/settings/projects": "projects", "/settings/general": "general", "/set
          "/settings/appearance": "appearance",
          "/settings/keybindings": "keybindings", "/settings/snap-shot": "snapShots", "/settings/providers": "providers",
          "/settings/integrations": "integrations", "/settings/scheduled-tasks": "scheduledTasks",
-         "/settings/source-control": "sourceControl", "/settings/storage": "storage", "/settings/connections": "connections",
+         "/settings/source-control": "sourceControl", "/settings/storage": "storage", "/settings/connections": "connections", "/settings/beta": "beta",
          "/settings/archived": "archive"}
 
 

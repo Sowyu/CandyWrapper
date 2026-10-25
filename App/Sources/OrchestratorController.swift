@@ -857,7 +857,7 @@ final class OrchestratorController {
                                                               lastVisitedAt: SidebarModel.resolveThreadLastVisitedAt(server: t.lastVisitedAt, local: nil))
                 let top = SidebarModel.resolveSidebarV2TopStatus(status: status, isUnread: unread, isWoke: false)
                 let state = switch status {
-                case .approval, .input: "Needs you"
+                case .approval, .input, .request: "Needs you"
                 case .working, .waiting: "Working"
                 case .failed: "Failed"
                 case .limited: "Usage limit"

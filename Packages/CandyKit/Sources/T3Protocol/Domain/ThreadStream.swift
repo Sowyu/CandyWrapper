@@ -169,7 +169,7 @@ public struct ThreadEventType: OpenStringEnum {
         "thread.unpinned", "thread.pin-reordered", "thread.active-reordered", "thread.visited",
         "thread.marked-unread", "thread.metadata-updated", "thread.pull-request-synced",
         "thread.runtime-mode-updated", "thread.interaction-mode-updated", "thread.model-selection-updated",
-        "thread.provider-switched",
+        "thread.provider-switched", "thread.guest-share-updated",
     ]
 
     static let known: Set<String> = threadPayloadTypes.union([

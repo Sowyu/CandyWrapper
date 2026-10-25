@@ -247,7 +247,15 @@ final class UserMessageRowView: TimelineRowView {
         guard case .message(let m, _, _, _, _, _) = item.row.kind else { return }
         let presentation = UserMessagePresentation.resolve(m)
         text = presentation.text
-        attribution.isHidden = presentation.attribution != .t3code
+        // "Sent by T3 Code", or in its place a guest's name (`GuestMessageName`, guestMessageStyle.tsx at 3669),
+        // which VoiceOver skips because the row's heading names the guest (TimelineUserMessageRow.tsx:433-438).
+        attribution.text = presentation.guestName ?? "Sent by T3 Code"
+        attribution.color = presentation.guestName == nil ? TL.c(\.mutedForeground, 0.7) : GuestColors.foreground
+        attribution.setAccessibilityElement(presentation.guestName == nil)
+        attribution.isHidden = presentation.attribution != .t3code && presentation.guestName == nil
+        // A guest's message sits on `bg-guest-surface` (TimelineUserMessageRow.tsx:443-447 at 3669).
+        let fill = presentation.guestName == nil ? TL.c(\.messageSurface) : GuestColors.surface
+        if bubble.fill !== fill { bubble.fill = fill }
         fold = presentation.attribution == .agent || presentation.isAutomation ? presentation.attribution : nil
         foldHeader.isHidden = fold == nil
         if let fold {

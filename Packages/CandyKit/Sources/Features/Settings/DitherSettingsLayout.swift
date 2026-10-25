@@ -111,7 +111,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
             .init(.providers),
         ]
         case .threads: return [
-            .init(.general, scope: true, [G("organization", "Sidebar", rows: ["project-grouping", "project-order", "working-shelf",
+            .init(.general, scope: true, [G("organization", "Sidebar", rows: ["project-grouping", "project-order",
                                                                               "auto-settle-merged-threads", "auto-settle-inactive-threads",
                                                                               "days-before-auto-settle", "auto-settle-keep-pull-requests"])]),
             .init(.general, [G("organization", "Usage limits", rows: ["auto-resume-limited-threads", "snooze-limited-threads",
@@ -121,7 +121,8 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .scheduledTasks: return [.init(.scheduledTasks, scope: true)]
         case .orchestrator: return [.init(.orchestrator)]
         case .connectors: return [.init(.connectors)]
-        case .experimental: return [.init(.experimental)]
+        // T3's Beta page joins CandyWrapper's own experiments.
+        case .experimental: return [.init(.experimental), .init(.beta)]
         case .projects: return [
             .init(.general, scope: true, [G("project-defaults", "New threads", rows: ["new-threads", "worktree-submodules"]),
                                           G("projects-and-threads", "Projects", rows: ["start-from-origin", "add-project-starts-in"])]),
@@ -162,7 +163,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .archive: .threads
         case .orchestrator: .orchestrator
         case .connectors: .connectors
-        case .experimental: .experimental
+        case .experimental, .beta: .experimental
         case .diagnostics, .licenses: nil
         }
     }

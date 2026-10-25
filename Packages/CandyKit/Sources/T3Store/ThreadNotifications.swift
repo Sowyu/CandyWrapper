@@ -40,13 +40,14 @@ public struct ThreadNotificationEvent: Sendable, Equatable {
     public let kind: Kind
     public let status: SidebarThreadStatus
 
-    /// "Thread completed", "Approval needed", "Usage limit reached", "Thread failed" or "Input needed".
+    /// "Thread completed", "Approval needed", "Usage limit reached", "Thread failed", "Guest request" or "Input needed".
     public var title: String {
         if kind == .completion { return "Thread completed" }
         switch status {
         case .approval: return "Approval needed"
         case .limited: return "Usage limit reached"
         case .failed: return "Thread failed"
+        case .request: return "Guest request"
         default: return "Input needed"
         }
     }
@@ -153,7 +154,7 @@ public struct ThreadNotificationTracker: Sendable {
             let thread = SidebarThread(raw, pendingSubagentRequest: subagentRequest)
             var status = SidebarModel.resolveSidebarThreadStatus(thread)
             if status == .ready, thread.latestRun?.status == .failed { status = .failed }
-            let attention: String? = [.input, .approval, .failed, .limited].contains(status)
+            let attention: String? = [.input, .request, .approval, .failed, .limited].contains(status)
                 ? "\(thread.latestRun?.runId.rawValue ?? ""):\(status.rawValue)" : nil
             // Commands left running (a dev server) read as ready; subagents and awaited work wait.
             let settled = status == .ready && thread.latestRun?.status == .completed

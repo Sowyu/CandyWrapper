@@ -72,6 +72,8 @@ public struct ThreadShell: Codable, Hashable, Sendable, Identifiable {
     public var lastVisitedAt: Tristate<T3Timestamp>
     public var titleRegeneration: TitleRegeneration?
     public var deletedAt: T3Timestamp?
+    /// Guest messages waiting for the owner to send or dismiss (orchestrationV2.ts:1930-1931). Absent before 3669.
+    public var pendingGuestMessageCount: Int?
 
     public var backgroundTasks: [PendingBackgroundTask] { pendingBackgroundTasks ?? [] }
 }

@@ -158,6 +158,22 @@ public final class TextBlockView: DSView {
         text.isEmpty ? 0 : layout(forWidth: width).height
     }
 
+    /// The pieces of `range` on each wrapped line at `width`, top-left origin, each with its line's baseline y.
+    public func runRects(_ range: NSRange, width: CGFloat) -> [(rect: CGRect, baseline: CGFloat)] {
+        guard !text.isEmpty, width > 0 else { return [] }
+        let made = layout(forWidth: width)
+        let scale = window?.backingScaleFactor ?? 2
+        return made.lines.enumerated().compactMap { i, line in
+            let lr = CTLineGetStringRange(line.line)
+            let start = max(range.location, lr.location), end = min(NSMaxRange(range), lr.location + lr.length)
+            guard start < end else { return nil }
+            let x0 = CTLineGetOffsetForStringIndex(line.line, start, nil), x1 = CTLineGetOffsetForStringIndex(line.line, end, nil)
+            let top = CGFloat(i) * made.lineHeight
+            return (CGRect(x: x0, y: top, width: x1 - x0, height: made.lineHeight),
+                    line.baseline(top: top, lineHeight: made.lineHeight, scale: scale))
+        }
+    }
+
     /// Unwrapped advance of the whole text, for shrink-to-fit layouts.
     public var naturalWidth: CGFloat { TextLine(NSAttributedString(string: text, attributes: [.font: font])).width }
 

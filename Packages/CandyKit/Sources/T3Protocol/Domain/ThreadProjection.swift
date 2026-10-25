@@ -22,11 +22,13 @@ public struct AppThread: Codable, Hashable, Sendable, Identifiable {
     public let deletedAt: T3Timestamp?
     public let createdAt: T3Timestamp?
     public let updatedAt: T3Timestamp?
+    /// The thread's guest link (orchestrationV2.ts:443). Absent from servers before 3669 and while nobody shares it.
+    public let guestShare: ThreadGuestShare?
     public let raw: JSONValue
 
     private enum CodingKeys: String, CodingKey {
         case id, projectId, title, providerInstanceId, branch, worktreePath, lineage, createdBy
-        case creationSource, activeProviderThreadId, historyOrigin, archivedAt, deletedAt, createdAt, updatedAt
+        case creationSource, activeProviderThreadId, historyOrigin, archivedAt, deletedAt, createdAt, updatedAt, guestShare
     }
 
     public init(from decoder: Decoder) throws {
@@ -46,6 +48,7 @@ public struct AppThread: Codable, Hashable, Sendable, Identifiable {
         deletedAt = try c.decodeIfPresent(T3Timestamp.self, forKey: .deletedAt)
         createdAt = try c.decodeIfPresent(T3Timestamp.self, forKey: .createdAt)
         updatedAt = try c.decodeIfPresent(T3Timestamp.self, forKey: .updatedAt)
+        guestShare = (try? c.decodeIfPresent(ThreadGuestShare.self, forKey: .guestShare)) ?? nil
         raw = try JSONValue(from: decoder)
     }
 
@@ -151,6 +154,8 @@ public struct ConversationMessage: Codable, Hashable, Sendable, Identifiable {
     public var scheduledTaskId: String?
     /// The script a provider-native workflow runs, not prose (orchestrationV2.ts:1095-1099).
     public var workflowScript: Bool?
+    /// `OrchestrationMessageContext`; a sent guest message carries `guest` here (composerContext.ts:257-272 at 3669).
+    public var context: JSONValue?
 }
 
 extension ConversationMessage {

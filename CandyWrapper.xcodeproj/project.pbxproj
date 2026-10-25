@@ -17,6 +17,7 @@
 		27D7A20860C5FC0743F11294 /* PaletteCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D6B2CDA8C1F9CE6535E0281 /* PaletteCommands.swift */; };
 		357598EFD233BDAF295B0732 /* SidebarCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DD09308DB9CC604E83A39AE /* SidebarCommands.swift */; };
 		38E1F11C178FB54F368FA71E /* SnapShotController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FD3D942C50CAEEB238FC95F /* SnapShotController.swift */; };
+		3C1F1FA126739922739F3BF9 /* GuestShareController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 614592DC5412B5847C711810 /* GuestShareController.swift */; };
 		3CFF0922C65AA380DE470C28 /* TerminalController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FBAA6B0719E3E582513EAF9 /* TerminalController.swift */; };
 		430141F12B09A7C8C83D92E3 /* ShellSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 606083DF126114F0273EEEDD /* ShellSession.swift */; };
 		465C7E33430B6D30F8D83E09 /* AddProjectToMachineController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94B3C485C72229F33DBF2C8C /* AddProjectToMachineController.swift */; };
@@ -101,6 +102,7 @@
 		5DD09308DB9CC604E83A39AE /* SidebarCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarCommands.swift; sourceTree = "<group>"; };
 		5E6841D4497EC3DD03F5BCCA /* RuntimeUpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeUpdateController.swift; sourceTree = "<group>"; };
 		606083DF126114F0273EEEDD /* ShellSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellSession.swift; sourceTree = "<group>"; };
+		614592DC5412B5847C711810 /* GuestShareController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuestShareController.swift; sourceTree = "<group>"; };
 		67881179B1757F1808884AA9 /* RunningThreadKeepAlive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunningThreadKeepAlive.swift; sourceTree = "<group>"; };
 		6C34A11F5C95E15EC5E6FFAC /* LegacyThreadMigrationToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyThreadMigrationToast.swift; sourceTree = "<group>"; };
 		71BA027EC2BDC6A0154A676E /* OpenInController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenInController.swift; sourceTree = "<group>"; };
@@ -197,6 +199,7 @@
 				53CA0D184BBD9C9A87D29CE0 /* FakeT3Connect.swift */,
 				045DDA2A8C6CDD4119BB7447 /* FilesController.swift */,
 				55FB4EFB4DBDAF423D7789DC /* GitController.swift */,
+				614592DC5412B5847C711810 /* GuestShareController.swift */,
 				5CEE730F143C640FB3EE85DE /* HelperController.swift */,
 				31C34F45503302E5FDFE2CAD /* HiddenTerminal.swift */,
 				6C34A11F5C95E15EC5E6FFAC /* LegacyThreadMigrationToast.swift */,
@@ -393,6 +396,7 @@
 				0DA8B41B8FE43EBBD0E9B605 /* FakeT3Connect.swift in Sources */,
 				70ABDBDC5253F62F37A969A1 /* FilesController.swift in Sources */,
 				46A3DE50DC00EBEB78F8D6DB /* GitController.swift in Sources */,
+				3C1F1FA126739922739F3BF9 /* GuestShareController.swift in Sources */,
 				04ECF7F57E1454A8D356EB34 /* HelperController.swift in Sources */,
 				8B5000EC121D76409EE8339E /* HiddenTerminal.swift in Sources */,
 				1E09C034649033BE9342F193 /* LegacyThreadMigrationToast.swift in Sources */,

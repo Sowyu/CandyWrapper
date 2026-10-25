@@ -4,7 +4,7 @@ import DesignSystem
 /// The settings pages in T3's nav order (settingsSearch.ts `SETTINGS_SECTION_LABELS`, SettingsSidebarNav.tsx
 /// icons). "Project" only shows while a project scope is chosen (`isSettingsOverviewVisible`).
 public enum SettingsSection: String, CaseIterable, Sendable {
-    case projects, general, appearance, keybindings, snapShots, providers, integrations, scheduledTasks, sourceControl, storage, connections, archive
+    case projects, general, appearance, keybindings, snapShots, providers, integrations, scheduledTasks, sourceControl, storage, connections, beta, archive
     /// Redesign's Orchestrator tab, CandyWrapper's own; never in T3's nav.
     case orchestrator
     /// Redesign's Connectors tab, CandyWrapper's own; never in T3's nav.
@@ -30,6 +30,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .sourceControl: "Source Control"
         case .storage: "Storage"
         case .connections: "Connections"
+        case .beta: "Beta"
         case .archive: "Archive"
         case .orchestrator: "Orchestrator"
         case .connectors: "Connectors"
@@ -52,6 +53,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .sourceControl: .gitBranch
         case .storage: .hardDrive
         case .connections: .link2
+        case .beta: .flaskConical
         case .archive: .archive
         case .orchestrator: .workflow
         case .connectors: .plug2
