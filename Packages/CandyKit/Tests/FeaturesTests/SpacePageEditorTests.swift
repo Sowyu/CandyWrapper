@@ -243,6 +243,22 @@ struct SpacePageEditorTests {
         #expect(SpacePageEditor.dueText(p, now: now, zone: zone)!.late == false, "a date-only due date is late once its day ends")
     }
 
+    @Test func pageCommandOnAnEmptyMiddleLineKeepsTheTypedTitle() {
+        let (editor, store, page) = make()
+        type(editor, "first")
+        command(editor, #selector(NSResponder.insertNewline(_:)))
+        command(editor, #selector(NSResponder.insertNewline(_:)))
+        type(editor, "last")
+        editor.flushTyping()
+        let middle = editor.textView.string.distance(from: editor.textView.string.startIndex, to: editor.textView.string.firstIndex(of: "l")!) - 1
+        editor.textView.setSelectedRange(NSRange(location: middle, length: 0))
+        type(editor, "/page")
+        editor.runBlockCommand(.page(.page), replacing: middle)
+        type(editor, "Lab 4 notes")
+        editor.flushTyping()
+        #expect(content(store, page) == ["p:first", "<page> Lab 4 notes", "p:last"])
+    }
+
     @Test func reminderTimeIsSavedOnTheDueDay() throws {
         let (editor, store, _) = make()
         type(editor, "[] Pay rent")

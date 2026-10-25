@@ -875,11 +875,11 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
         if let i = index[key] { keys[i] = item }
         if tailKey == key { tailKey = item }
         reindex()
+        // An empty line still has its separator, which names the paragraph; retag it too, or typing
+        // after the swap lands on the old key and is dropped.
         applying = true
-        if r.length > 0 {
-            let full = NSRange(location: r.location, length: min(r.length + 1, storage.length - r.location))
-            storage.addAttribute(.spaceBlock, value: item.raw, range: full)
-        }
+        let full = NSRange(location: r.location, length: min(r.length + 1, storage.length - r.location))
+        if full.length > 0 { storage.addAttribute(.spaceBlock, value: item.raw, range: full) }
         applying = false
         // Text marks don't apply to titles; the paragraph takes the row look.
         applying = true
