@@ -83,8 +83,12 @@ struct WP717Tests {
         #expect(inserted[0].key < "z")
     }
     @Test func publishedThemesAreTransient() throws {
+        // The library applies its changes to the global theme runtime; put it back for the tests alongside.
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
         let defaults = UserDefaults(suiteName: "cw.wp717.tests.\(UUID().uuidString)")!
         let library = ThemeLibrary(defaults: defaults)
+        library.controlsAppearance = false
         let seeded: JSONValue = .object(["id": .string("published-test"), "name": .string("Published"), "appearance": .string("dark"), "canvas": .string("#101010"), "accent": .string("#3578ab")])
         library.setEnvironmentThemes([seeded])
         #expect(library.environmentThemes.count == 1)
