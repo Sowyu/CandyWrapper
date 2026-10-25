@@ -117,7 +117,7 @@ struct SubagentCardPresentation {
         default: "Stopped"
         }
     }
-    /// The small label after the title: only beside a detail, and never for a plain completed card.
+    /// The status in its own column right of the text: only beside a detail, and never for a plain completed card.
     var showsStatusBesideTitle: Bool { !memberRow && detail != nil && (event != nil || status != "completed") }
     /// `SubagentElapsed` from the record, or the event's time.
     func trailing(now: Int64) -> String { event?.timestamp ?? elapsed(now: now) }
@@ -212,7 +212,8 @@ final class SubagentCardLinkView: ControlView {
     private let avatar = FillView(), dot = FillView()
     private var glyph: NSView?
     private let title = LabelView("", font: TL.font(12, .medium))
-    private let status = LabelView("", font: TL.font(10))
+    /// `shrink-0 text-xs` between the text column and the time (V2LifecycleRow.tsx:458-464, 2d620f5dcc).
+    private let status = LabelView("", font: TL.font(12))
     private let detail = MiddleTruncateView("", font: TL.font(11))
     private let plainDetail = LabelView("", font: TL.font(11))
     private let elapsed = LabelView("", font: SB.tabular(12))
@@ -226,7 +227,7 @@ final class SubagentCardLinkView: ControlView {
         super.init(frame: frame)
         scalesWhenPressed = false
         avatar.radius = 12; dot.radius = 4
-        title.lineHeight = 16; status.lineHeight = 14
+        title.lineHeight = 16; status.lineHeight = 16
         detail.lineHeight = 17.875; detail.showsTitle = false
         plainDetail.lineHeight = 17.875; elapsed.lineHeight = 16
         for v in [avatar, dot, title, status, detail, plainDetail, elapsed, chevron] { addSubview(v) }
@@ -311,14 +312,17 @@ final class SubagentCardLinkView: ControlView {
         if !chevron.isHidden { chevron.frame = NSRect(x: right - 14, y: 16 + dy, width: 14, height: 14); right -= 24 }
         let ew = ceil(elapsed.textWidth)
         elapsed.frame = NSRect(x: right - ew, y: 15 + dy, width: ew, height: 16); right -= ew + 10
+        if !status.text.isEmpty {
+            let sw = ceil(status.textWidth)
+            status.frame = NSRect(x: right - sw, y: 15 + dy, width: sw, height: 16); right -= sw + 10
+        }
         let lead: CGFloat = dotGrid == nil ? 0 : 16
-        let available = max(0, right - 42), sw = status.text.isEmpty ? 0 : ceil(status.textWidth) + 8
-        let tw = min(ceil(title.textWidth), max(0, available - sw - lead))
+        let available = max(0, right - 42)
+        let tw = min(ceil(title.textWidth), max(0, available - lead))
         let lone = detail.isHidden && plainDetail.isHidden
         let titleY: CGFloat = lone ? (bounds.height - 16) / 2 : 6
         dotGrid?.frame = NSRect(x: 40, y: titleY, width: 14, height: 16)
         title.frame = NSRect(x: 42 + lead, y: titleY, width: tw, height: 16)
-        status.frame = NSRect(x: 42 + lead + tw + 8, y: 8, width: max(0, sw - 8), height: 14)
         detail.frame = NSRect(x: 42, y: 22, width: available, height: 17.875)
         plainDetail.frame = detail.frame
     }
