@@ -95,18 +95,13 @@ public final class ConnectorsSettingsView: SettingsPageBase {
     }
 
     private func serverRow(_ item: ConnectorRows.Item, busy: Bool) -> SettingsRowView {
-        let controls = ConnectorControls(item: item, busy: busy)
+        let controls = ConnectorControls(item: item, busy: busy, removable: true)
         controls.onAgent = { [weak self] agent in
             self?.store.apply(item.changes(to: item.isOn(agent) != true, agent: agent, skill: false))
         }
         controls.onSwitch = { [weak self] on in self?.store.apply(item.changes(to: on, skill: false)) }
-        let r = SettingsRowView(title: item.name, detail: item.detail, control: controls)
-        let remove = ButtonView(nil, icon: .trash2, variant: .ghostMuted, size: .iconXs)
-        remove.setAccessibilityLabel("Remove \(item.name)")
-        remove.isEnabled = !busy
-        remove.action = { [weak self] in self?.confirmRemove(item) }
-        r.accessories = [remove]
-        return r
+        controls.onRemove = { [weak self] in self?.confirmRemove(item) }
+        return SettingsRowView(title: item.name, detail: item.detail, control: controls)
     }
 
     private func skillRow(_ item: ConnectorRows.Item, busy: Bool) -> SettingsRowView {
@@ -215,11 +210,21 @@ final class ConnectorsNoteRow: DSView, SettingsGroupRow {
 final class ConnectorControls: DSView {
     private var chips: [(ConfigAgent, AgentChip)] = []
     private let toggle = SwitchView(isOn: false)
+    private var remove: ButtonView?
     var onAgent: ((ConfigAgent) -> Void)?
     var onSwitch: ((Bool) -> Void)?
+    var onRemove: (() -> Void)?
 
-    init(item: ConnectorRows.Item, busy: Bool) {
+    init(item: ConnectorRows.Item, busy: Bool, removable: Bool = false) {
         super.init(frame: .zero)
+        if removable {
+            let b = ButtonView(nil, icon: .trash2, variant: .ghostMuted, size: .iconXs)
+            b.setAccessibilityLabel("Remove \(item.name)")
+            b.isEnabled = !busy
+            b.action = { [weak self] in self?.onRemove?() }
+            addSubview(b)
+            remove = b
+        }
         for agent in item.agents {
             let chip = AgentChip(agent.label)
             chip.state3 = item.isOn(agent)
@@ -243,22 +248,27 @@ final class ConnectorControls: DSView {
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
+    /// Every agent keeps its slot, so the chips and the remove buttons line up from row to row.
+    private static let slots: [(ConfigAgent, CGFloat)] = ConfigAgent.allCases.map { ($0, AgentChip($0.label).intrinsicContentSize.width) }
+    private var slotsWidth: CGFloat { Self.slots.reduce(0) { $0 + $1.1 + 6 } }
+
     override var intrinsicContentSize: NSSize {
-        let chipsW = chips.reduce(0) { $0 + $1.1.intrinsicContentSize.width + 6 }
         let sw = toggle.intrinsicContentSize
-        return NSSize(width: chipsW + (chips.isEmpty ? 0 : 8) + sw.width, height: max(20, sw.height))
+        return NSSize(width: (remove == nil ? 0 : 32) + slotsWidth + 2 + sw.width, height: max(24, sw.height))
     }
 
     override func layout() {
         super.layout()
-        var x: CGFloat = 0
-        for (_, chip) in chips {
-            let s = chip.intrinsicContentSize
-            chip.frame = NSRect(x: x, y: (bounds.height - s.height) / 2, width: s.width, height: s.height)
-            x += s.width + 6
-        }
         let sw = toggle.intrinsicContentSize
         toggle.frame = NSRect(x: bounds.width - sw.width, y: (bounds.height - sw.height) / 2, width: sw.width, height: sw.height)
+        var x = bounds.width - sw.width - 8 - slotsWidth + 6
+        remove?.frame = NSRect(x: x - 32, y: (bounds.height - 24) / 2, width: 24, height: 24)
+        for (agent, width) in Self.slots {
+            if let chip = chips.first(where: { $0.0 == agent })?.1 {
+                chip.frame = NSRect(x: x, y: (bounds.height - 18) / 2, width: width, height: 18)
+            }
+            x += width + 6
+        }
     }
 }
 

@@ -1,0 +1,59 @@
+#!/bin/sh
+# Sets up the Connectors tab for a test app (docs/connectors.md): a local helper release from this checkout and a
+# throwaway home folder with sample Claude and Codex config, so no real ~/.claude.json or ~/.codex/config.toml is
+# read or written. Prints the variables to pass to scripts/run-app.
+# Usage: scripts/connectors-sandbox [--reset]
+set -eu
+here="$(cd "$(dirname "$0")/.." && pwd)"
+research="$HOME/CandyWrapper-research"
+home="$research/sandbox/connectors-home"
+release=/tmp/cw-connectors-release
+version=0.0.0-connectors
+[ "${1:-}" = "--reset" ] && rm -rf "$home"
+(cd "$here/Packages/CandyKit" && swift build --product candywrapper-helper >/dev/null)
+rm -rf "$release"; mkdir -p "$release/stage"
+cp "$here/Packages/CandyKit/.build/debug/candywrapper-helper" "$release/stage/"
+tar czf "$release/candywrapper-helper-$version-darwin-universal.tar.gz" -C "$release/stage" candywrapper-helper
+sum=$(shasum -a 256 "$release/candywrapper-helper-$version-darwin-universal.tar.gz" | cut -d" " -f1)
+printf '{"version":"%s","baseURL":"file://%s","sums":{"darwin-universal":"%s"}}\n' "$version" "$release" "$sum" > "$release/helper-manifest.json"
+if [ ! -d "$home" ]; then
+  mkdir -p "$home/.claude/skills" "$home/.codex" "$home/.agents/skills"
+  cat > "$home/.claude.json" <<'JSON'
+{
+  "numStartups": 3,
+  "mcpServers": {
+    "craft": {
+      "type": "http",
+      "url": "https://api.craft.do/v1/links/Zri0wpSandboxOnly/mcp",
+      "headers": {
+        "Authorization": "Bearer sandbox-not-a-token"
+      }
+    },
+    "github": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@github/mcp-server"]
+    }
+  }
+}
+JSON
+  cat > "$home/.codex/config.toml" <<'TOML'
+# Sandbox Codex config for the Connectors tab.
+model = "gpt-5"
+
+[mcp_servers.craft]
+url = "https://api.craft.do/v1/links/Zri0wpSandboxOnly/mcp"
+bearer_token_env_var = "CRAFT_TOKEN"
+
+[mcp_servers.zapier]
+url = "https://mcp.zapier.com/api/mcp"
+enabled = false
+TOML
+  for s in "ui-design:Frontend and visual work" "unslop:Plain writing rules" "cloudflare:Workers, KV, R2 and more"; do
+    mkdir -p "$home/.claude/skills/${s%%:*}"
+    printf -- '---\nname: %s\ndescription: %s\n---\n' "${s%%:*}" "${s#*:}" > "$home/.claude/skills/${s%%:*}/SKILL.md"
+  done
+  mkdir -p "$home/.agents/skills/review"
+  printf -- '---\nname: review\ndescription: Review a diff before it ships\n---\n' > "$home/.agents/skills/review/SKILL.md"
+fi
+echo "CANDY_HELPER_MANIFEST=$release/helper-manifest.json CANDY_HELPER_TEST_HOME=$release/helper-home CANDY_CONNECTORS_CONFIG_HOME=$home"

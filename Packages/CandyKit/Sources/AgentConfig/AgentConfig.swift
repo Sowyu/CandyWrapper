@@ -1,4 +1,9 @@
 import Foundation
+#if canImport(Musl)
+import Musl
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 /// The agents whose MCP servers and skills the Connectors tab manages.
 public enum ConfigAgent: String, Codable, CaseIterable, Sendable {
