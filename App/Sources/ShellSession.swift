@@ -175,9 +175,13 @@ final class ShellSession {
         switch item {
         case .threadUpdated(let sequence, _, let thread) where sequence > previousSequence:
             missingThreads.remove(thread.id)
-            if await store.needsCountRefresh { refreshCounts() }
+            if await store.needsCountRefresh {
+                if olderRead == nil { olderAttempted = 0 }
+                refreshCounts()
+            }
         case .threadRemoved(let sequence, _, let id) where sequence > previousSequence:
             missingThreads.insert(id)
+            if olderRead == nil { olderAttempted = 0 }
             if await store.needsCountRefresh { refreshCounts() }
         default: break
         }
