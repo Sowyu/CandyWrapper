@@ -904,7 +904,10 @@ final class SidebarCommands {
         layout.mainContent = view
         utilityPage = view
         utilityKind = page
-        sidebar.isOnUtilityPage = true // clears the active row and draft while the page shows
+        // Clears the active row and draft while the page shows. The Orchestrator opens like a thread: the sidebar
+        // keeps its list, buttons and footer, and its own row shows it's open.
+        sidebar.isOnUtilityPage = page != .orchestrator
+        sidebar.showsOtherPage = page == .orchestrator
         if page == .pullRequests {
             pullRequestsPage.didShow()
             window?.makeFirstResponder(pullRequestsPage.container)
@@ -927,6 +930,7 @@ final class SidebarCommands {
         utilityKind = nil
         layout.mainContent = threads.panel
         sidebar?.isOnUtilityPage = false
+        sidebar?.showsOtherPage = false
         sidebar?.state.activeThreadId = threads.openThreadId
         threads.composer.syncSidebarDrafts()
         threads.focusComposerOnReturn()

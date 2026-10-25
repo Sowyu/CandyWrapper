@@ -133,7 +133,7 @@ public final class SidebarContentView: DSView {
     public var state = SidebarListState() {
         didSet {
             // Inline, so the fix-up does not run this observer again.
-            if isOnUtilityPage { state.activeThreadId = nil; state.activeDraftId = nil }
+            if showsNoRoute { state.activeThreadId = nil; state.activeDraftId = nil }
             if state.hiddenThreadIds != oldValue.hiddenThreadIds { refreshListSnapshot() }
             if state != oldValue { rebuild(animated: true) }
         }
@@ -205,6 +205,10 @@ public final class SidebarContentView: DSView {
     /// On Pull Requests or Usage the footer shows only Back (`isSidebarUtilityPage`).
     /// Those pages have no route thread or draft, so no row is active (Sidebar.tsx:2490-2494), whoever sets one.
     public var isOnUtilityPage = false { didSet { if isOnUtilityPage { clearActiveRows() }; needsLayout = true } }
+    /// The main area shows something that isn't a thread or draft but leaves the sidebar as it is: the Orchestrator's
+    /// pane, whose own row shows it's open. No thread row is active meanwhile.
+    public var showsOtherPage = false { didSet { if showsOtherPage { clearActiveRows() } } }
+    private var showsNoRoute: Bool { isOnUtilityPage || showsOtherPage }
 
     private func clearActiveRows() {
         if state.activeThreadId != nil { state.activeThreadId = nil }
