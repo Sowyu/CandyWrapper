@@ -1,4 +1,5 @@
 import Foundation
+import SpaceEngine
 import SpaceModel
 
 /// Where Space's pages live. The sidebar and page tabs share this contract with the encrypted local store,
@@ -195,12 +196,15 @@ public extension SpacePageStore {
         put([id: record])
     }
 
-    /// A copy right after the page, with its child pages copied too.
+    /// A copy right after the page, with its child pages copied too. With blocks, each copied page's live blocks get
+    /// fresh ids under the copy, blob references kept, all in the same single edit.
     @discardableResult
     func duplicate(_ id: PageID, now: Int64 = SpaceClock.now()) -> PageID? {
         guard let source = pages[id] else { return nil }
+        let document = self as? SpaceDocumentStore
         let next = SpaceTree.children(of: source.parent, in: pages).drop { $0 != id }.dropFirst().first
         var out: [PageID: PageRecord] = [:]
+        var blocks: [BlockID: BlockRecord] = [:]
         func copy(_ from: PageID, parent: PageID?, order: OrderKey) -> PageID {
             let new = PageID()
             var r = pages[from]!
@@ -208,6 +212,10 @@ public extension SpacePageStore {
             r.order = order
             r.created = now
             out[new] = r
+            for case .block(_, var block) in document?.content(of: from) ?? [] {
+                block.page = new
+                blocks[BlockID()] = block
+            }
             for child in pages.filter({ $0.value.parent == from && !$0.value.trashed }).map(\.key) {
                 _ = copy(child, parent: new, order: pages[child]!.order)
             }
@@ -215,7 +223,10 @@ public extension SpacePageStore {
         }
         let copyId = copy(id, parent: source.parent, order: SpaceTree.order(in: source.parent, before: next, moving: nil, pages))
         out[copyId]!.title = source.title.isEmpty ? "" : source.title + " copy"
-        put(out)
+        guard let document else { put(out); return copyId }
+        let changes = out.sorted { $0.key < $1.key }.compactMap { try? RecordChange.page($0.key, $0.value) }
+            + blocks.sorted { $0.key < $1.key }.compactMap { try? RecordChange.block($0.key, $0.value) }
+        document.edit(changes, at: now)
         return copyId
     }
 

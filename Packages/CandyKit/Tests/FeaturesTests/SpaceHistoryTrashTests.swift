@@ -25,6 +25,31 @@ struct SpaceHistoryTrashTests {
         RecordChange(kind: .block, id: id, set: ["text": try! JSONValue(encoding: RichText(t: text))])
     }
 
+    @Test func duplicateCopiesBlocksWithFreshIdsInOneEdit() throws {
+        let store = SpaceReplicaStore()
+        let page = newPage(store, "Trip", at: 0)
+        let child = newPage(store, "Packing", parent: page, at: 0)
+        let image = BlobReference(id: String(repeating: "a", count: 64), name: "map.png", mime: "image/png", size: 10)
+        let text = BlockID(), picture = BlockID(), inner = BlockID(), gone = BlockID()
+        store.edit([block(text, "Fly Tuesday", on: page), block(picture, "Map", on: page, blob: image),
+                    block(inner, "Socks", on: child), block(gone, "Old", on: page)], at: 1)
+        store.edit([RecordChange(kind: .block, id: gone, set: ["trashed": .bool(true)])], at: 2)
+        let ops = store.replica.pending.count
+        let copy = try #require(store.duplicate(page, now: 3))
+        #expect(store.replica.pending.count == ops + 1, "pages and blocks go in as one edit")
+        #expect(store.pages[copy]?.title == "Trip copy")
+        let blocks = store.content(of: copy).compactMap { c -> (BlockID, BlockRecord)? in if case .block(let id, let r) = c { (id, r) } else { nil } }
+        #expect(blocks.map(\.1.text.t).sorted() == ["Fly Tuesday", "Map"], "trashed blocks stay behind")
+        #expect(Set(blocks.map(\.0)).isDisjoint(with: [text, picture, inner, gone]))
+        #expect(blocks.allSatisfy { $0.1.page == copy })
+        #expect(blocks.first { $0.1.text.t == "Map" }?.1.blob == image, "the copy points at the same blob")
+        let childCopy = try #require(store.content(of: copy).compactMap { c -> PageID? in if case .page(let id, _) = c { id } else { nil } }.first)
+        #expect(childCopy != child)
+        let innerCopy = store.content(of: childCopy).compactMap { c -> BlockRecord? in if case .block(_, let r) = c { r } else { nil } }
+        #expect(innerCopy.map(\.text.t) == ["Socks"] && innerCopy.first?.page == childCopy)
+        #expect(store.content(of: page).count == 3 && store.block(text)?.page == page, "the original is untouched")
+    }
+
     @Test func historyListsVersionsAndRestoreIsOneUndoableEdit() async throws {
         let store = SpaceReplicaStore()
         let page = newPage(store, "Essay", at: 0)
