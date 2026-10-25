@@ -65,6 +65,23 @@ struct SpaceHistoryTests {
         #expect(SpaceHistory.restore(versions[1], in: current).isEmpty)
     }
 
+    /// docs/space.md section 9: child pages stay where they are, since history covers the page's own text. A child
+    /// made after the version stays live, with its own blocks, and keeps its place.
+    @Test func restoreKeepsChildPagesMadeSinceTheVersion() throws {
+        let a = BlockID(), inner = BlockID(), child = PageID()
+        var ops = [op(mac, 0, try RecordChange.page(page, PageRecord(order: try OrderKey("a0"), title: "Plan", created: 0)), block(a, "Text"))]
+        ops.append(op(mac, 20 * minute, try RecordChange.page(child, PageRecord(parent: page, order: try OrderKey("a1"), title: "Lab", created: 0)),
+                      block(inner, "Inside the child", on: child)))
+        var current = SpaceState()
+        for o in ops { current.apply(o.payload.changes) }
+        let versions = SpaceHistory.versions(of: page, base: SpaceState(), ops: ops)
+        let changes = SpaceHistory.restore(try #require(versions.last), in: current)
+        #expect(!changes.contains { $0.id == child || $0.id == inner })
+        current.apply(changes)
+        #expect(current.page(child)?.trashed == false && current.page(child)?.parent == page)
+        #expect(current.block(inner)?.trashed == false)
+    }
+
     @Test func historyStartsFromTheSnapshotsBlocks() throws {
         let a = BlockID()
         var base = SpaceState()
