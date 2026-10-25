@@ -352,7 +352,11 @@ public final class TimelineView: DSView {
     /// Replaces the rows. Unchanged rows keep their views and heights. `change` says which rows
     /// differ from the current ones, so an update on a long thread touches only those.
     func setItems(_ new: [TimelineItem], change: TimelineChange = .all) {
-        if change == .thread { followsEnd = true; lastNearTopId = nil }
+        if change == .thread {
+            followsEnd = true
+            lastNearTopId = nil
+            context.releasePages()
+        }
         let anchor = captureAnchor()
         let old = items
         items = new
@@ -414,8 +418,6 @@ public final class TimelineView: DSView {
         }
         restore(anchor)
         OpenTiming.measure("timeline tile", "\(visible.count) row views") { tile() }
-        // The old thread's rows parked their pages while recycling just now.
-        if change == .thread { context.releasePages() }
         disclosureRowId = nil
         updateMinimapPosition()
         if OpenTiming.active, !new.isEmpty { markFirstFrame() }

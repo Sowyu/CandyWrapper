@@ -389,7 +389,10 @@ public final class OrchestratorPaneView: DSView {
         onLoadEarlier?()
     }
 
-    @objc private func chatScrolled() { loadEarlierIfNeeded() }
+    @objc private func chatScrolled() {
+        chat.syncVisiblePages()
+        loadEarlierIfNeeded()
+    }
 
     /// For tests: scrolls the chat to a y offset from its top.
     func scrollChat(toY y: CGFloat) {
@@ -488,10 +491,13 @@ final class OrchestratorChatView: DSView {
     /// Its name over the first bubble of each of its stacks, as a group chat names the sender.
     private var names: [String: LabelView] = [:]
     private var environmentId = ""
+    private let htmlPreviews = HtmlRenderPreviewCache()
     static let maxBubble: CGFloat = 520
 
     func set(items: [OrchestratorChatItem], needs: [OrchestratorNeed], undoable: Set<String>, undone: Set<String>, environmentId: String,
              name: String) {
+        let environmentChanged = self.environmentId != environmentId
+        if environmentChanged { htmlPreviews.clear() }
         self.items = items
         self.environmentId = environmentId
         var next: [String: NSView] = [:]
@@ -533,7 +539,11 @@ final class OrchestratorChatView: DSView {
                     return b
                 }()
             case .html(_, let page):
-                let card = (views[id] as? OrchestratorHtmlCard) ?? OrchestratorHtmlCard(page)
+                let old = environmentChanged ? nil : views[id] as? OrchestratorHtmlCard
+                let card: OrchestratorHtmlCard
+                if let old, old.page == page { card = old }
+                else { card = OrchestratorHtmlCard(page) }
+                card.frameView.previewCache = htmlPreviews
                 card.assetURL = webAssetURL
                 card.onHeightChange = { [weak self] in self?.relayout() }
                 next[id] = card
@@ -681,7 +691,23 @@ final class OrchestratorChatView: DSView {
     override func layout() {
         super.layout()
         for (v, f) in frames(forWidth: bounds.width).frames where v.frame != f { v.frame = f }
+        syncVisiblePages()
     }
+
+    /// Only cards intersecting the clip view own web views, including after an older history page lands.
+    func syncVisiblePages() {
+        let shown = window != nil && !isHiddenOrHasHiddenAncestor
+        let cards = views.values.compactMap { $0 as? OrchestratorHtmlCard }
+        htmlPreviews.setActive(shown && !cards.isEmpty)
+        let viewport = visibleRect
+        // Release departing pages before starting incoming ones, so the budget never evicts a visible page.
+        for card in cards where !shown || !card.frame.intersects(viewport) { card.setContentVisible(false) }
+        for card in cards where shown && card.frame.intersects(viewport) { card.setContentVisible(true) }
+    }
+
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); syncVisiblePages() }
+    override func viewDidHide() { super.viewDidHide(); syncVisiblePages() }
+    override func viewDidUnhide() { super.viewDidUnhide(); syncVisiblePages() }
 }
 
 private extension OrchestratorChatItem {
@@ -824,13 +850,14 @@ private extension NSColor {
 
 /// A page the Orchestrator published with `html_render`, framed as the thread view frames it (`HtmlRenderRowView`): the
 /// same web frame, theme and messages, at the server's measured height until the page reports its own. The web view
-/// exists only while the card is in a shown window.
-// ponytail: no "Open full screen" or page parking across chat rebuilds; borrow HtmlRenderRowView's if pages get heavy
+/// exists only while the card intersects the viewport. The chat owns cached pixels while it is shown.
+// ponytail: no "Open full screen"; borrow HtmlRenderRowView's when the Conductor needs it
 final class OrchestratorHtmlCard: DSView {
     let page: HtmlRenderReference
-    private let frameView = ThreadWebFrameView()
+    let frameView = ThreadWebFrameView()
     private let failed = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
-    private var contentHeight: Double?
+    private var contentHeights = HtmlRenderHeights()
+    private var contentVisible = false
     private var loading: Task<Void, Never>?
     var assetURL: ((String, String) async -> URL?)? { didSet { syncContent() } }
     var onHeightChange: (() -> Void)?
@@ -839,6 +866,8 @@ final class OrchestratorHtmlCard: DSView {
         self.page = page
         super.init(frame: .zero)
         addSubview(frameView)
+        frameView.previewAttachmentId = page.attachmentId
+        frameView.isHidden = true
         failed.text = "Unable to load \(page.title)"
         failed.alignment = .center
         failed.isHidden = true
@@ -847,16 +876,25 @@ final class OrchestratorHtmlCard: DSView {
         setAccessibilityLabel(page.title)
     }
 
-    isolated deinit { loading?.cancel() }
+    isolated deinit { loading?.cancel(); frameView.release() }
 
     func height(forWidth width: CGFloat) -> CGFloat {
-        CGFloat(page.frameHeight(width: Double(width), contentHeight: contentHeight))
+        CGFloat(page.frameHeight(width: Double(width), contentHeight: contentHeights.height(width: Double(width))))
     }
 
     private var onScreen: Bool { window != nil && !isHiddenOrHasHiddenAncestor }
 
+    func setContentVisible(_ visible: Bool) {
+        guard visible != contentVisible else { return }
+        contentVisible = visible
+        frameView.isHidden = !visible
+        frameView.dark = effectiveAppearance.isDark
+        frameView.needsLayout = true
+        syncContent()
+    }
+
     private func syncContent() {
-        guard onScreen else {
+        guard onScreen && contentVisible else {
             loading?.cancel()
             loading = nil
             frameView.release()
@@ -868,7 +906,9 @@ final class OrchestratorHtmlCard: DSView {
             let url = await assetURL(page.attachmentId, page.fileName)
             guard let self, !Task.isCancelled else { return }
             self.loading = nil
-            guard let url, self.onScreen else { self.failed.isHidden = url != nil; return }
+            guard self.onScreen && self.contentVisible else { return }
+            guard let url else { self.failed.isHidden = false; return }
+            self.failed.isHidden = true
             let dark = self.effectiveAppearance.isDark
             let themed = URL(string: url.absoluteString.split(separator: "#", maxSplits: 1)[0] + HtmlRenderTheme(dark: dark).fragment) ?? url
             self.frameView.activate(.init(src: themed, title: page.title, dark: dark))
@@ -876,8 +916,7 @@ final class OrchestratorHtmlCard: DSView {
     }
 
     private func received(_ data: JSONValue) {
-        if let h = HtmlRenderTheme.contentHeight(data), h != contentHeight {
-            contentHeight = h
+        if let h = HtmlRenderTheme.contentHeight(data), contentHeights.set(h, width: Double(frameView.frame.width)) {
             onHeightChange?()
         }
         HtmlRenderRowView.handle(data, frame: frameView, model: nil)
@@ -892,6 +931,7 @@ final class OrchestratorHtmlCard: DSView {
         if frameView.isLive {
             frameView.dark = effectiveAppearance.isDark
             frameView.post(HtmlRenderTheme(dark: frameView.dark).message)
+            frameView.refreshPreview()
         }
     }
 

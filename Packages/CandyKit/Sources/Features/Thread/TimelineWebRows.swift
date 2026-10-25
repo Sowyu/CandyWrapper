@@ -7,11 +7,10 @@ import T3Store
 /// thread's own background, at the server's measured height for this width until the page reports its own.
 /// Loading and failure hold the same box. "Open full screen" shows on hover (T3 3105 aba3a6ddc). 8pt under it (`pb-2`).
 ///
-/// Scrolling never reloads the page. Off the viewport the row hides its web view and keeps it; a recycled row parks
-/// it in `TimelineContext` for the next row that shows the same render. The page goes when the timeline hides or
-/// switches thread, or when `ThreadWebFrameBudget` needs the slot.
+/// Off the viewport the row drops its web view. Returning rows draw cached pixels while the live page loads
+/// from WebKit's HTTP cache. The cache belongs to the shown timeline and keeps no offscreen page running.
 final class HtmlRenderRowView: TimelineRowView {
-    private(set) var frameView = ThreadWebFrameView()
+    let frameView = ThreadWebFrameView()
     private let failed = LabelView("", font: TL.font(12))
     private let open = ButtonView(nil, icon: .maximize2, variant: .glass, size: .iconXs)
     private var reference: HtmlRenderReference?
@@ -38,31 +37,18 @@ final class HtmlRenderRowView: TimelineRowView {
         frameView.onMessage = { [weak self] in self?.received($0) }
     }
 
-    /// Puts `page` in the row in place of the current frame view.
-    private func install(_ page: ThreadWebFrameView) {
-        frameView.removeFromSuperview()
-        frameView.onMessage = nil
-        page.onMessage = { [weak self] in self?.received($0) }
-        page.onEvicted = nil
-        page.isHidden = !contentVisible
-        addSubview(page, positioned: .below, relativeTo: failed)
-        frameView = page
-        needsLayout = true
-    }
-
     override func configure(_ item: TimelineItem) {
         super.configure(item)
         guard case .htmlRender(let ref) = item.row.kind else { return }
         if ref.attachmentId != reference?.attachmentId {
+            loading?.cancel()
+            loading = nil
             frameView.release()
             failed.isHidden = true
-            if let page = context.takePage(ref.attachmentId) {
-                install(page)
-                ThreadWebFrameBudget.touch(page)
-                let dark = effectiveAppearance.isDark
-                if page.dark != dark { page.dark = dark; page.post(HtmlRenderTheme(dark: dark).message) }
-            }
         }
+        frameView.previewCache = context.htmlPreviews
+        frameView.previewAttachmentId = ref.attachmentId
+        frameView.dark = effectiveAppearance.isDark
         reference = ref
         failed.text = "Unable to load \(ref.title)"
         load()
@@ -72,6 +58,7 @@ final class HtmlRenderRowView: TimelineRowView {
     /// Asks for the page's URL, which reuses a fresh one or mints one near expiry, then frames it with the theme in its fragment.
     private func load() {
         guard let ref = reference, !frameView.isLive, loading == nil, wantsContent else { return }
+        context.htmlPreviews.setActive(true)
         let id = ref.attachmentId
         loading = Task { [weak self] in
             guard !Task.isCancelled else { return }
@@ -104,15 +91,14 @@ final class HtmlRenderRowView: TimelineRowView {
     override func viewDidHide() { super.viewDidHide(); syncContent() }
     override func viewDidUnhide() { super.viewDidUnhide(); syncContent() }
 
-    /// Off the viewport the page stays loaded but hidden, so WebKit stops drawing it, and a pending load stops.
-    /// Out of a shown timeline the page goes. A page loaded later asks `webAssetURL` again, as a kept signed URL
+    /// Off the viewport the page and any pending load go. A page loaded later asks `webAssetURL` again, as a kept signed URL
     /// may have expired. The height comes from the model's `htmlHeights`, so none of this moves the rows around it.
     private func syncContent() {
         frameView.isHidden = !contentVisible
         if !wantsContent {
             loading?.cancel()
             loading = nil
-            if !onScreen { frameView.release() }
+            frameView.release()
         } else { load() }
     }
 
@@ -120,11 +106,9 @@ final class HtmlRenderRowView: TimelineRowView {
         super.prepareForReuse()
         loading?.cancel()
         loading = nil
-        if frameView.isLive, let id = reference?.attachmentId {
-            let page = frameView
-            install(ThreadWebFrameView())
-            context.park(page, for: id)
-        } else { frameView.release() }
+        frameView.release()
+        frameView.previewCache = nil
+        frameView.previewAttachmentId = nil
         reference = nil
         contentVisible = true
         frameView.isHidden = false
@@ -136,6 +120,7 @@ final class HtmlRenderRowView: TimelineRowView {
         if frameView.isLive {
             frameView.dark = effectiveAppearance.isDark
             frameView.post(HtmlRenderTheme(dark: frameView.dark).message)
+            frameView.refreshPreview()
         }
     }
 

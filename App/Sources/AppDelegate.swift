@@ -720,6 +720,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static func threadPreview() -> NSView? {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "--thread-preview") else { return nil }
+        #if DEBUG
+        if isTestBuild, let b = args.firstIndex(of: "--html-benchmark"), b + 4 < args.count {
+            return try? HtmlRenderBenchmark(manifestPath: args[b + 1], kind: args[b + 2], mode: args[b + 3], output: args[b + 4])
+        }
+        #endif
         let title = i + 1 < args.count && !args[i + 1].hasPrefix("--") ? args[i + 1] : ThreadPreview.markdownThread
         #if DEBUG
         // Isolated test builds can replay a sandbox projection and its local image files.
