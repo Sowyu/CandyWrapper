@@ -4816,11 +4816,12 @@ private final class ThreadPromptRewindObserver {
         self.messageId = messageId
         store = ThreadStore(threadId: threadId, onChange: {})
         let store = self.store
+        let wireSubscription = UUID()
         subscription = supervisor.subscribe("orchestration.subscribeThread", payload: {
-            ThreadSession.encode(await store.subscribeInput())
+            ThreadSession.encode(await store.subscribeInput(subscription: wireSubscription))
         }) { [weak self] event in
-            guard case .value(let json) = event, let item = ThreadSession.decode(json) else { return }
-            await store.apply([item])
+            guard case .value(let json) = event else { return }
+            try await ThreadSession.applyWire(json, to: store, subscription: wireSubscription)
             guard let update = await store.takeUpdate(), let projection = update.projection else { return }
             let contains = projection.messages.contains { $0.id == messageId }
             await self?.received(contains)
