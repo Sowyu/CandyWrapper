@@ -50,8 +50,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.token_file:
         path = Path(args.token_file).expanduser().resolve()
-        if path != BASE / args.server / "session.token":
-            parser.error("UI grants are allowed only at the isolated server's session.token path")
+        if path.parent != BASE / args.server or path.name not in ["session.token", "ui.token"]:
+            parser.error("UI grants are allowed only at the isolated server's session.token or ui.token path")
         credential = token(args.server)
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as stream:
@@ -75,5 +75,7 @@ if __name__ == "__main__":
                     if json.loads(line)["server"] == args.server)
     if validation["visible_message_items"] != expected["messages"] or validation["blank_visible_message_items"]:
         raise RuntimeError("History contains missing or blank message bodies")
+    if validation["visible_items"] != expected["turn_items"]:
+        raise RuntimeError("History is missing timeline rows")
     if validation["full_visible_message_sha256"] != expected["full_visible_message_sha256"]:
         raise RuntimeError("Fully paged message bodies differ from the synthetic source")
