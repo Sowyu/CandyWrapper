@@ -397,6 +397,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keepAlive.retain = { [weak threads] id, store in threads?.retainStore(id, store) }
             threads.keepAlive = keepAlive
         }
+        // The Dither art's working wave follows the sidebar's Working status on any connected machine.
+        environments.observeShell { [weak environments] in
+            guard let environments else { return }
+            DitherArtView.working = environments.environmentIds.contains { env in
+                environments.session(env) != nil && (environments.snapshot(env)?.threads ?? []).contains {
+                    $0.lineage.relationshipToParent != .subagent && $0.archivedAt == nil
+                        && SidebarModel.resolveSidebarThreadStatus(SidebarThread($0)) == .working
+                }
+            }
+        }
         slowRPCObserver = NotificationCenter.default.addObserver(forName: SlowRPCRequestTracker.didChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.updateSlowRPCToast() }
         }

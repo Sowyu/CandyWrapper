@@ -112,4 +112,27 @@ struct DitherTabStripAccessibilityTests {
         #expect(normal.label >= 0.7)
         #expect(high.label > normal.label && high.icon > normal.icon)
     }
+
+    /// The working wave runs only while a thread works on a page that shows the art, never under Reduce Motion, and its
+    /// band repeats seamlessly with crests of `waveDepth`.
+    @Test func workingWaveRunsOnlyWhileWorkingAndRepeats() throws {
+        func runs(_ page: DitherArt.Page = .thread, working: Bool = true, motion: Bool = false, transparency: Bool = false, art: Bool = true) -> Bool {
+            DitherArt.waves(working: working, reduceMotion: motion, reduceTransparency: transparency, page: page, hasArt: art)
+        }
+        #expect(runs() && runs(.hero))
+        #expect(!runs(working: false) && !runs(motion: true) && !runs(transparency: true) && !runs(art: false))
+        #expect(!runs(.settings) && !runs(.page))
+        let profile = DitherArt.waveProfile(cycles: 3)
+        #expect(profile.first?.alpha == 0 && profile.last?.alpha == 0 && profile.last?.at == 1)
+        #expect(abs((profile.map(\.alpha).max() ?? 0) - DitherArt.waveDepth) < 1e-9)
+        #expect(zip(profile, profile.dropFirst()).allSatisfy { $0.at < $1.at })
+
+        // The grid covers exactly each dot's right column and bottom row of device pixels.
+        let grid = try #require(DitherArt.waveGrid(columns: 3, rows: 2, pixelsPerDot: 4))
+        #expect(grid.width == 12 && grid.height == 8)
+        let alpha = [UInt8](grid.dataProvider!.data! as Data), row = grid.bytesPerRow
+        for y in 0..<8 {
+            for x in 0..<12 { #expect((alpha[y * row + x] == 255) == (x % 4 == 3 || y % 4 == 3)) }
+        }
+    }
 }
