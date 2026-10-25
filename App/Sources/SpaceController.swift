@@ -84,7 +84,7 @@ final class SpaceController {
             sidebar.spaceMode = settings.sidebarMode
             sidebar.space?.selectedPage = selectedPage
         } else {
-            if let sheet = recoverySheet, let window = sheet.window.sheetParent { window.endSheet(sheet.window, returnCode: .alertThirdButtonReturn) }
+            if let sheet = recoverySheet, let window = sheet.window.sheetParent { window.endSheet(sheet.window, returnCode: .alertSecondButtonReturn) }
             // Typing still waiting for its flush goes in while the pane and the store are both still there.
             pageView?.commitTyping()
             if sidebar.space != nil {
@@ -157,32 +157,24 @@ final class SpaceController {
     }
     #endif
 
+    /// The key shows for writing down only. It never goes to the pasteboard, which any process of this user can read.
     private func showRecovery(_ key: String) async -> Bool {
-        guard let window else { return false }
-        while settings.isActive {
-            let alert = NSAlert()
-            alert.messageText = "Save your Space recovery key"
-            alert.informativeText = "Space stays encrypted on this Mac, with no sync. Keep this key somewhere safe. If you lose this Mac and this key, your pages cannot be recovered."
-            let field = NSTextField(wrappingLabelWithString: key)
-            field.font = .monospacedSystemFont(ofSize: 16, weight: .medium)
-            field.isSelectable = true
-            field.frame = NSRect(x: 0, y: 0, width: 440, height: 65)
-            alert.accessoryView = field
-            alert.addButton(withTitle: "I saved it")
-            alert.addButton(withTitle: "Copy")
-            alert.addButton(withTitle: "Turn Space off")
-            recoverySheet = alert
-            let response = await withCheckedContinuation { continuation in
-                alert.beginSheetModal(for: window) { continuation.resume(returning: $0) }
-            }
-            recoverySheet = nil
-            if response == .alertFirstButtonReturn { return true }
-            if response == .alertSecondButtonReturn {
-                NSPasteboard.general.prepareForNewContents(with: [.currentHostOnly])
-                NSPasteboard.general.setString(key, forType: .string)
-            } else { return false }
+        guard let window, settings.isActive else { return false }
+        let alert = NSAlert()
+        alert.messageText = "Write down your Space recovery key"
+        alert.informativeText = "Space stays encrypted on this Mac, with no sync. Write this key on paper or save it in your password manager by typing it in. If you lose this Mac and this key, your pages cannot be recovered."
+        let field = NSTextField(wrappingLabelWithString: key)
+        field.font = .monospacedSystemFont(ofSize: 16, weight: .medium)
+        field.frame = NSRect(x: 0, y: 0, width: 440, height: 65)
+        alert.accessoryView = field
+        alert.addButton(withTitle: "I saved it")
+        alert.addButton(withTitle: "Turn Space off")
+        recoverySheet = alert
+        let response = await withCheckedContinuation { continuation in
+            alert.beginSheetModal(for: window) { continuation.resume(returning: $0) }
         }
-        return false
+        recoverySheet = nil
+        return response == .alertFirstButtonReturn
     }
 
     private func showReminderFailure() {

@@ -272,7 +272,7 @@ The data protection keychain with an app access group would be the strongest opt
 ### Setting up and adding devices
 
 1. The first device makes the Space: a new Space id, a random key, `space.json` on the Space machine, and an empty log.
-2. It shows the recovery key once: the 32 bytes as 52 RFC 4648 base32 characters in groups of four separated by spaces, the last character's four spare bits zero, with Copy and "I saved it". Settings > Space > "Recovery key" shows it again after a Touch ID or password check.
+2. It shows the recovery key once: the 32 bytes as 52 RFC 4648 base32 characters in groups of four separated by spaces, the last character's four spare bits zero, with "I saved it". There is no Copy button and no export to a file, since any process of this user can read the pasteboard and the user's files; the key is written down or typed into a password manager. Settings > Space > "Recovery key" shows it again after a Touch ID or password check.
 3. A second device that finds a `space.json` on the Space machine asks for the recovery key. It can be typed, or scanned on Android from a QR code that an existing device shows on request for 60 seconds, using the existing `QRCodeView`.
 4. The device checks the key against `check` before it trusts anything, then stores the key in its Keychain.
 
