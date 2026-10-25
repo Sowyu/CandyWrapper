@@ -2,6 +2,7 @@ import Foundation
 import T3Protocol
 import T3Store
 import T3Transport
+import AgentConfig
 #if canImport(Musl)
 import Musl
 #elseif canImport(Glibc)
@@ -21,8 +22,13 @@ usage: candywrapper-helper <command>
   status                      the machines this helper reaches, without secrets
   forget                      delete every token and the machine list
   print-install --version <v> --base <url> --sums <SHA256SUMS> --home <id> [--test-home <dir>]
+  print-config --version <v> --base <url> --sums <SHA256SUMS> [--set] [--test-home <dir>] [--config-home <dir>]
   print-uninstall [--test-home <dir>]
                               the line a CandyWrapper client types into a T3 terminal (HelperInstall), for manual installs
+  config get [--config-home <dir>]
+                              the MCP servers and skills of Claude and Codex here, without secrets; prints CWH-CONFIG
+  config set [--config-home <dir>]
+                              apply changes read from stdin (base64 JSON lines, then a lone dot); prints CWH-CONFIG
   find-servers                every T3 server on this machine: its loopback URL, label and machine id
   check-ws <wss-url>          a WebSocket and TLS check that needs no T3
   check-descriptor <url>      a server's public descriptor, no auth
@@ -261,9 +267,9 @@ case "forget":
     try? FileManager.default.removeItem(at: HelperStore.home.appending(path: "memory.json"))
     print("forgot every machine")
 
-case "print-install":
+case "print-install", "print-config":
     guard let version = option("--version"), let base = option("--base").flatMap(URL.init(string:)), let sumsFile = option("--sums"),
-          let homeId = option("--home"), let text = try? String(contentsOfFile: sumsFile, encoding: .utf8) else { fail(usage, code: 2) }
+          let text = try? String(contentsOfFile: sumsFile, encoding: .utf8) else { fail(usage, code: 2) }
     // SHA256SUMS lines: "<hex>  candywrapper-helper-<version>-<platform>.tar.gz".
     var sums: [String: String] = [:]
     for line in text.split(separator: "\n") {
@@ -272,7 +278,13 @@ case "print-install":
         let name = f[1].replacingOccurrences(of: "candywrapper-helper-\(version)-", with: "").replacingOccurrences(of: ".tar.gz", with: "")
         sums[name] = String(f[0])
     }
-    print(HelperInstall.installCommand(.init(version: version, baseURL: base, sums: sums), homeId: homeId, testHome: option("--test-home")), terminator: "")
+    let release = HelperInstall.Release(version: version, baseURL: base, sums: sums)
+    if args[0] == "print-config" {
+        print(HelperInstall.configCommand(release, set: args.contains("--set"), testHome: option("--test-home"), configHome: option("--config-home")), terminator: "")
+    } else {
+        guard let homeId = option("--home") else { fail(usage, code: 2) }
+        print(HelperInstall.installCommand(release, homeId: homeId, testHome: option("--test-home")), terminator: "")
+    }
 
 case "print-uninstall":
     print(HelperInstall.uninstallCommand(testHome: option("--test-home")), terminator: "")
@@ -307,6 +319,31 @@ case "check-descriptor":
         let d = try await EnvironmentHTTP(baseURL: url).descriptor()
         print("\(d.label)\t\(d.environmentId)\tprotocol \(d.protocolVersion)")
     } catch { fail("failed: \(error)") }
+
+case "config":
+    // The Connectors tab (docs/connectors.md). `--config-home` or CANDY_CONFIG_HOME points it at a test home.
+    let home = option("--config-home") ?? ProcessInfo.processInfo.environment["CANDY_CONFIG_HOME"] ?? ProcessInfo.processInfo.environment["HOME"]
+    guard let home, args.count >= 2 else { fail(usage, code: 2) }
+    let store = AgentConfigStore(home: URL(fileURLWithPath: home, isDirectory: true))
+    switch args[1] {
+    case "get":
+        print(ConfigWire.marker + ConfigWire.encode(store.snapshot()))
+        Sentinel.ok("config")
+    case "set":
+        // Echo off: a new server's token travels in these lines.
+        let lines = readSecretLines(ready: Sentinel.ready)
+        guard let changes = ConfigWire.decodeChanges(lines.joined()) else { Sentinel.failed("the changes didn't read") }
+        do {
+            try store.apply(changes)
+            print(ConfigWire.marker + ConfigWire.encode(store.snapshot()))
+            Sentinel.ok("config")
+        } catch {
+            print(ConfigWire.marker + ConfigWire.encode(store.snapshot()))
+            Sentinel.failed("\(error)")
+        }
+    default:
+        fail(usage, code: 2)
+    }
 
 case "version":
     print(helperVersion)

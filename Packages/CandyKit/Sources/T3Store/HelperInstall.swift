@@ -38,24 +38,38 @@ public enum HelperInstall {
     /// accept, and a leading space keeps it out of history where the shell honours that. The markers are built from
     /// parts, so the shell echoing this line never reads as a result. `testHome` sets `CANDY_HELPER_HOME`.
     public static func installCommand(_ release: Release, homeId: String, testHome: String? = nil) -> String {
+        " sh -c '\(fetch(release, testHome: testHome))exec \"$f/candywrapper-helper\" install --home \(quoteless(homeId))'\n"
+    }
+
+    /// Runs `candywrapper-helper config get|set` from this release's folder on any machine, downloading and checking
+    /// that version first when it isn't there, without installing a service (docs/connectors.md). `configHome` sets
+    /// `--config-home` for a test home.
+    public static func configCommand(_ release: Release, set: Bool, testHome: String? = nil, configHome: String? = nil) -> String {
+        let home = configHome.map { " --config-home \(quoteless($0))" } ?? ""
+        let reuse = "if [ ! -x \"$d/versions/$v/candywrapper-helper\" ];then "
+        return " sh -c '\(fetch(release, testHome: testHome, prefix: reuse))fi;exec \"$d/versions/$v/candywrapper-helper\" config \(set ? "set" : "get")\(home)'\n"
+    }
+
+    /// The script up to a checked, unpacked `$f/candywrapper-helper` for this machine. `prefix` goes between finding
+    /// the folder and downloading, so a caller can skip the download.
+    static func fetch(_ release: Release, testHome: String?, prefix: String = "") -> String {
         func sum(_ p: String) -> String { release.sums[p] ?? "missing" }
         let data = testHome.map { "d=\(quoteless($0));export CANDY_HELPER_HOME=\"$d\";" } ?? ""
-        let script = """
+        return """
         set -eu;R=CWH-RES;R=${R}ULT;v=\(quoteless(release.version));b=\(quoteless(release.baseURL.absoluteString));\
         case "$(uname -s)-$(uname -m)" in \
         Darwin-*) p=darwin-universal;s=\(sum("darwin-universal"));d="$HOME/Library/Application Support/CandyWrapper Helper";; \
         Linux-x86_64) p=linux-x86_64;s=\(sum("linux-x86_64"));d="${XDG_DATA_HOME:-$HOME/.local/share}/candywrapper-helper";; \
         Linux-aarch64|Linux-arm64) p=linux-aarch64;s=\(sum("linux-aarch64"));d="${XDG_DATA_HOME:-$HOME/.local/share}/candywrapper-helper";; \
-        *) echo "$R failed this machine ($(uname -sm)) has no helper build";exit 1;; esac;\(data)\
+        *) echo "$R failed this machine ($(uname -sm)) has no helper build";exit 1;; esac;\(data)\(prefix)\
         f="$d/versions/$v";mkdir -p "$f";t="$f/download.tgz";u="$b/candywrapper-helper-$v-$p.tar.gz";\
         if command -v curl >/dev/null 2>&1;then curl -fsSL "$u" -o "$t" || { echo "$R failed the download from $u did not work";exit 1; };\
         elif command -v wget >/dev/null 2>&1;then wget -qO "$t" "$u" || { echo "$R failed the download from $u did not work";exit 1; };\
         else echo "$R failed this machine has neither curl nor wget";exit 1;fi;\
         h=$( (sha256sum "$t" 2>/dev/null || shasum -a 256 "$t") | cut -d" " -f1);\
         [ "$h" = "$s" ] || { rm -f "$t";echo "$R failed the checksum of the download did not match";exit 1; };\
-        tar xzf "$t" -C "$f";rm -f "$t";exec "$f/candywrapper-helper" install --home \(quoteless(homeId))
+        tar xzf "$t" -C "$f";rm -f "$t";
         """
-        return " sh -c '\(script)'\n"
     }
 
     /// Removes the helper through its own `uninstall`, or says it wasn't there.
@@ -77,6 +91,8 @@ public enum HelperInstall {
         case ok(String)
         case failed(String)
         case warning(String)
+        /// `config` printed a machine's MCP servers and skills: base64 JSON, `ConfigWire` in AgentConfig.
+        case config(String)
     }
 
     /// The marker lines in a stretch of terminal output, colours and carriage returns removed. Only lines that start
@@ -86,6 +102,7 @@ public enum HelperInstall {
         return plain.split(whereSeparator: \.isNewline).compactMap { raw -> Line? in
             let line = raw.trimmingCharacters(in: .whitespaces)
             if line == "CWH-READY" { return .ready }
+            if line.hasPrefix("CWH-CONFIG ") { return .config(String(line.dropFirst("CWH-CONFIG ".count))) }
             for (prefix, make) in [("CWH-RESULT ok", Line.ok), ("CWH-RESULT failed", Line.failed), ("CWH-WARNING", Line.warning)] as [(String, (String) -> Line)]
             where line.hasPrefix(prefix) {
                 return make(line.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces))

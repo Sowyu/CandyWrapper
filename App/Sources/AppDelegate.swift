@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var snapShots: SnapShotController?
     private var openIn: OpenInController?
     private var orchestrator: OrchestratorController?
+    private var connectors: ConnectorsController?
     /// The Orchestrator's "while closed" schedule was handed to T3 for this quit.
     private var orchestratorHandedOff = false
     /// Built on the first Cmd+Q hold.
@@ -322,6 +323,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         orchestrator.closePane = { [weak commands] in commands?.closeUtilityPage() }
         orchestrator.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open(.orchestrator) }
         orchestrator.toast = { [weak threads] title, message, kind in threads?.panel.toasts.show(ToastView(title: title, message: message, kind: kind)) }
+        let connectors = ConnectorsController(environments: environments)
+        self.connectors = connectors
+        connectors.toast = { [weak settings] title, message, kind in settings?.toast(title, message, kind) }
         commands.onOrchestratorHidden = { [weak orchestrator] in orchestrator?.paneClosed() }
         commands.extraMenuItems = { [weak orchestrator] id in orchestrator?.menuItems(id) ?? [] }
         commands.performExtra = { [weak orchestrator] choice, id in orchestrator?.perform(choice, id) ?? false }

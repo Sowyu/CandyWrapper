@@ -7,6 +7,8 @@ public enum SettingsSection: String, CaseIterable, Sendable {
     case projects, general, appearance, keybindings, snapShots, providers, integrations, scheduledTasks, sourceControl, storage, connections, archive
     /// Redesign's Orchestrator tab, CandyWrapper's own; never in T3's nav.
     case orchestrator
+    /// Redesign's Connectors tab, CandyWrapper's own; never in T3's nav.
+    case connectors
     /// CandyWrapper's own experimental switches, Redesign among them, so it sits last in T3's nav too.
     case experimental
     /// Reached from General > Diagnostics; not in the nav (`SETTINGS_BREADCRUMB_LABELS`).
@@ -30,6 +32,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .connections: "Connections"
         case .archive: "Archive"
         case .orchestrator: "Orchestrator"
+        case .connectors: "Connectors"
         case .experimental: "Experimental"
         case .diagnostics: "Diagnostics"
         case .licenses: "Open source licenses"
@@ -51,6 +54,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .connections: .link2
         case .archive: .archive
         case .orchestrator: .workflow
+        case .connectors: .plug2
         case .experimental: .flaskConical
         case .diagnostics: .activity
         case .licenses: .fileText
@@ -61,7 +65,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
     public var isAvailable: Bool { true }
 
     /// The nav lists Project only for a project scope (`isSettingsOverviewVisible`).
-    static let navSections = allCases.filter { $0 != .diagnostics && $0 != .licenses && $0 != .orchestrator }
+    static let navSections = allCases.filter { $0 != .diagnostics && $0 != .licenses && $0 != .orchestrator && $0 != .connectors }
 
     /// SettingsSidebarNav.tsx `SnapShotIcon` (a `createLucideIcon` glyph outside the generated set).
     static let snapShotIcon = IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [

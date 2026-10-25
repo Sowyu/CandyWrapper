@@ -170,45 +170,8 @@ final class HelperController {
         toast(title, (error as? RPCClientError)?.typedError?.message ?? "\(error)", .error)
     }
 
-    /// Opens a terminal no one sees, types `command` in slices a PTY's small input queue keeps up with, answers
-    /// `CWH-READY` with `input`, and returns the marker lines once a result arrives. The terminal and its history go.
     private func runInTerminal(_ session: ShellSession, env: String, thread: ThreadId, cwd: String, command: String, input: String?) async -> [HelperInstall.Line] {
-        let terminal = "candywrapper-helper-\(UUID().uuidString.prefix(8).lowercased())"
-        let local = thread.localId.rawValue
-        let base: [String: JSONValue] = ["threadId": .string(local), "terminalId": .string(terminal)]
-        func with(_ extra: [String: JSONValue]) -> JSONValue { .object(base.merging(extra) { a, _ in a }) }
-        let output = OutputBox()
-        let attach = with(["cwd": .string(cwd), "cols": .number(200), "rows": .number(50)])
-        let stream = session.supervisor.subscribe(TerminalRPC.attach, payload: { attach }) { event in
-            guard case .value(let json) = event, json["type"]?.stringValue == "output", let data = json["data"]?.stringValue else { return }
-            await output.append(data)
-        }
-        defer {
-            stream.cancel()
-            Task { _ = try? await environments.request(env, TerminalRPC.close, with(["deleteHistory": .bool(true)])) }
-        }
-        do {
-            // Wait for the shell's first prompt before typing.
-            for _ in 0..<40 where await output.text.isEmpty { try await Task.sleep(for: .milliseconds(250)) }
-            var rest = Substring(command)
-            while !rest.isEmpty {
-                _ = try await environments.request(env, TerminalRPC.write, with(["data": .string(String(rest.prefix(256)))]))
-                rest = rest.dropFirst(256)
-                try await Task.sleep(for: .milliseconds(40))
-            }
-            var sentInput = input == nil
-            // ponytail: 3 minutes covers a 25 MB download on a slow line; raise it if installs time out there
-            for _ in 0..<720 {
-                try await Task.sleep(for: .milliseconds(250))
-                let lines = HelperInstall.scan(await output.text)
-                if !sentInput, lines.contains(.ready), let input {
-                    sentInput = true
-                    _ = try await environments.request(env, TerminalRPC.write, with(["data": .string(input)]))
-                }
-                if lines.contains(where: { if case .ok = $0 { true } else if case .failed = $0 { true } else { false } }) { return lines }
-            }
-        } catch {}
-        return []
+        await HiddenTerminal.run(environments, session: session, env: env, thread: thread.localId.rawValue, cwd: cwd, command: command, input: input)
     }
 
     /// Revokes the helper's sign-ins on every machine, all of them or all but the newest.
@@ -220,11 +183,5 @@ final class HelperController {
             if keepNewest, !helpers.isEmpty { helpers.removeFirst() }
             for s in helpers { try? await shell.http.revokeClient(sessionId: s.sessionId, token: shell.token) }
         }
-    }
-
-    private actor OutputBox {
-        private(set) var text = ""
-        // ponytail: keeps the last 64 KB; the markers are always in the newest lines
-        func append(_ s: String) { text = String((text + s).suffix(65_536)) }
     }
 }

@@ -46,6 +46,8 @@
 		844DD7E2AF76CFC5EED8FFED /* ScheduledTasksStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA354B9817B6D7ADE437AB8B /* ScheduledTasksStore.swift */; };
 		86490D7A879DABA1B452C9CA /* SettingsPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3AD2B66BFFAE98BD79A1639 /* SettingsPages.swift */; };
 		87959F581610CF381EEC6C11 /* UsageController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35F79E1B4BAC92B09DE28732 /* UsageController.swift */; };
+		8B5000EC121D76409EE8339E /* HiddenTerminal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31C34F45503302E5FDFE2CAD /* HiddenTerminal.swift */; };
+		8EF4E37990764D849AAC2FCA /* ConnectorsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33B41C0351125703267D7257 /* ConnectorsController.swift */; };
 		95C9CA154F0B56C69199D763 /* ComposerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56396DA448A1952FDC05BF3E /* ComposerController.swift */; };
 		9609FDB88DD924EBE32D30CA /* PaletteAddProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB4A3C4266BFC2E4F7D1B326 /* PaletteAddProject.swift */; };
 		98518441987B7F297A77A955 /* RuntimeUpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E6841D4497EC3DD03F5BCCA /* RuntimeUpdateController.swift */; };
@@ -55,7 +57,7 @@
 		A7EF5B31A6D5CD4E006AA901 /* RunningThreadKeepAlive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67881179B1757F1808884AA9 /* RunningThreadKeepAlive.swift */; };
 		B41DB44EA6F4544C9B9E24BE /* Features in Frameworks */ = {isa = PBXBuildFile; productRef = 54CB6DADB388C03EE21F5713 /* Features */; };
 		B423C6F5B35C38DA8DE052DC /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9180310B966F99CABD99C1F5 /* UpdateController.swift */; };
-		BDA16E87CBD63885B93ACFBC /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 360B9D001D2A45C506332714 /* Sparkle */; };
+		BDA16E87CBD63885B93ACFBC /* AgentConfig in Frameworks */ = {isa = PBXBuildFile; productRef = EC8A3EA1E208175FE308C2B6 /* AgentConfig */; };
 		BDDAD381D146759DB3794FBE /* snap-shot-click.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 2F5325F9CBCE93872073AE32 /* snap-shot-click.mp3 */; };
 		BF1F29DA6CF47B45F5F97BB4 /* notification-input.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 162121B8686607C8F5B9672C /* notification-input.mp3 */; };
 		C96452D36BFF7AE73672A212 /* T3Client in Frameworks */ = {isa = PBXBuildFile; productRef = C7D08B4D8BE9EBFA3061FF4B /* T3Client */; };
@@ -68,6 +70,7 @@
 		E1C507709202FD4039E66D29 /* CodexAuthCallbackReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08F7F6C5F7484632BD71DBDD /* CodexAuthCallbackReceiver.swift */; };
 		EB86443F1218E9073AE558A0 /* T3ConnectController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B1A20A927434B822A78FBE /* T3ConnectController.swift */; };
 		EDCEDD28D34C606C2F67CDED /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 0DD18B055E5BF454B9B77F4B /* AppIcon.icon */; };
+		F5114B7703115945AB79EA89 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 360B9D001D2A45C506332714 /* Sparkle */; };
 		FD527A8A503C35A242372CD0 /* Shortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 527913F33E671EBA3009A953 /* Shortcuts.swift */; };
 /* End PBXBuildFile section */
 
@@ -80,6 +83,8 @@
 		21423E229A8AD862537E9ECA /* SettingsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsController.swift; sourceTree = "<group>"; };
 		2926272AC3C094AAEFF9248C /* PullRequestsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PullRequestsPage.swift; sourceTree = "<group>"; };
 		2F5325F9CBCE93872073AE32 /* snap-shot-click.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "snap-shot-click.mp3"; sourceTree = "<group>"; };
+		31C34F45503302E5FDFE2CAD /* HiddenTerminal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiddenTerminal.swift; sourceTree = "<group>"; };
+		33B41C0351125703267D7257 /* ConnectorsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectorsController.swift; sourceTree = "<group>"; };
 		34FA0C9EAFA2AAF296BE7988 /* UpdateEverything.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateEverything.swift; sourceTree = "<group>"; };
 		35F79E1B4BAC92B09DE28732 /* UsageController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageController.swift; sourceTree = "<group>"; };
 		37909056866A108B1B58D3C6 /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
@@ -142,7 +147,8 @@
 				C96452D36BFF7AE73672A212 /* T3Client in Frameworks */,
 				7C70E3ADB96731F3DE5963C8 /* T3Store in Frameworks */,
 				B41DB44EA6F4544C9B9E24BE /* Features in Frameworks */,
-				BDA16E87CBD63885B93ACFBC /* Sparkle in Frameworks */,
+				BDA16E87CBD63885B93ACFBC /* AgentConfig in Frameworks */,
+				F5114B7703115945AB79EA89 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -183,6 +189,7 @@
 				B45A4AF73DCE28967A5B7B5E /* BrowserController.swift */,
 				08F7F6C5F7484632BD71DBDD /* CodexAuthCallbackReceiver.swift */,
 				56396DA448A1952FDC05BF3E /* ComposerController.swift */,
+				33B41C0351125703267D7257 /* ConnectorsController.swift */,
 				E6328A5E8DA411428DDB1363 /* DesktopManagedController.swift */,
 				3FB28D3B3DDFE3381D8B0971 /* DevicePanelController.swift */,
 				F3F9CF3EEFBA5031F1DD6EF6 /* DitherTabsController.swift */,
@@ -191,6 +198,7 @@
 				045DDA2A8C6CDD4119BB7447 /* FilesController.swift */,
 				55FB4EFB4DBDAF423D7789DC /* GitController.swift */,
 				5CEE730F143C640FB3EE85DE /* HelperController.swift */,
+				31C34F45503302E5FDFE2CAD /* HiddenTerminal.swift */,
 				6C34A11F5C95E15EC5E6FFAC /* LegacyThreadMigrationToast.swift */,
 				92A5E63032239ADD1C5F8E1C /* main.swift */,
 				37909056866A108B1B58D3C6 /* MainWindow.swift */,
@@ -284,6 +292,7 @@
 				C7D08B4D8BE9EBFA3061FF4B /* T3Client */,
 				8A26017E3FA14E25E7143DA8 /* T3Store */,
 				54CB6DADB388C03EE21F5713 /* Features */,
+				EC8A3EA1E208175FE308C2B6 /* AgentConfig */,
 				360B9D001D2A45C506332714 /* Sparkle */,
 			);
 			productName = CandyWrapper;
@@ -376,6 +385,7 @@
 				237342D7C8F16250C670D589 /* BrowserController.swift in Sources */,
 				E1C507709202FD4039E66D29 /* CodexAuthCallbackReceiver.swift in Sources */,
 				95C9CA154F0B56C69199D763 /* ComposerController.swift in Sources */,
+				8EF4E37990764D849AAC2FCA /* ConnectorsController.swift in Sources */,
 				DA045A39A44D87162AAD179E /* DesktopManagedController.swift in Sources */,
 				CC7E68D849C3162650E6B75F /* DevicePanelController.swift in Sources */,
 				80DAB922301CBC091192A970 /* DitherTabsController.swift in Sources */,
@@ -384,6 +394,7 @@
 				70ABDBDC5253F62F37A969A1 /* FilesController.swift in Sources */,
 				46A3DE50DC00EBEB78F8D6DB /* GitController.swift in Sources */,
 				04ECF7F57E1454A8D356EB34 /* HelperController.swift in Sources */,
+				8B5000EC121D76409EE8339E /* HiddenTerminal.swift in Sources */,
 				1E09C034649033BE9342F193 /* LegacyThreadMigrationToast.swift in Sources */,
 				54C4D215B2B1BC4CFEDB0F22 /* MainWindow.swift in Sources */,
 				083F1349CB27E53849FF66AD /* MenuBarController.swift in Sources */,
@@ -668,6 +679,10 @@
 		C7D08B4D8BE9EBFA3061FF4B /* T3Client */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = T3Client;
+		};
+		EC8A3EA1E208175FE308C2B6 /* AgentConfig */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AgentConfig;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
