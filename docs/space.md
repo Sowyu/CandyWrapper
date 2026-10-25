@@ -363,7 +363,8 @@ Filter ops by type:
 - Markdown shortcuts at line start: `# `, `## `, `### `, `- `, `1. `, `[] `, `> `, three backticks, `---`. Tab and Shift-Tab change indent.
 - `/` opens a block menu in the existing `PopupHost`: Text, Headings, Bulleted list, Numbered list, To-do, Quote, Code, Divider, Image, File, Page, Board, Table, Timetable. The last four create a child page in that view.
 - In a to-do list, items with a `done` value render as checklist rows: a checkbox, the title, and a due chip when `due` is set, red when overdue. A ticked row dims its title. Return on a row makes the next item. New to-dos get `done: false`, so a to-do list can still hold page links.
-- Other child pages render as page link rows with their icon and title.
+- Other child pages render as page link rows with their icon and title. A click on a link row opens its page, even with the caret in it. The title stays editable from the keyboard.
+- The due chip's menu, and a date cell's menu in Table, have Remind me…. It offers At time, 15 minutes before, 1 hour before and 1 day before for a timed value, and On the day or 1 day before, both at 9:00, for a date-only one. Each writes `before`. "At a set time…" writes `at` on the start day. A set reminder shows in the menu, like "Reminder: 15 minutes before…", beside Remove reminder.
 - Hovering a block shows a drag handle and a + at its left, 16pt each, at the existing sidebar hover timing.
 - Paste of Markdown or HTML becomes blocks. Copy puts Markdown and rich text on the pasteboard.
 - `@` opens a page picker and inserts a page mention.
@@ -426,7 +427,7 @@ The page tree:
 - Dragging reorders and nests with the drop line from `SidebarDitherDrag`.
 - Expanded rows are remembered per device, not synced.
 
-Trash opens as a tab listing trashed pages, newest first, with Restore and Delete forever. Delete forever asks first, then removes the page and the pages inside it for good, though their old text stays in the history log. Their images and files leave this Mac's blob cache unless a block of another page uses the same blob.
+Trash opens as a tab listing trashed pages, newest first, with Restore and Delete forever. An untitled page with no text, values or pages inside stays out of the list, since it has nothing to restore. That covers the empty to-do a second Return removes when it ends a list. Delete forever asks first, then removes the page and the pages inside it for good, though their old text stays in the history log. Their images and files leave this Mac's blob cache unless a block of another page uses the same blob.
 
 ### Tabs and keys
 
