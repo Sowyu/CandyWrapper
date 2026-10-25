@@ -89,6 +89,8 @@ The Settled shelf asks only for its current visible demand, by project scope. Ea
 
 Validation belongs to the focused lazy-shell/reducer/cache/sidebar tests here. The parent owns integrated app compilation, on-screen validation, the full suite and performance runs; no live server or live user data was used by this task.
 
+Focused run: `scripts/test --filter 'LazyShellTests|ShellReducerPortTests|ShellCacheEncodingTests|SidebarTests|SidebarSearchTests'` passed 58 tests (32 store/cache tests and 26 sidebar tests). That initial build captured the first nine lazy-shell tests; the two supplemental-publication/unique-page tests and the two new sidebar count tests were added afterward and remain for the parent's integrated run. All edited Swift files passed syntax parsing and `git diff --check`. App type checking and on-screen checks were left to the parent as requested. Preflight briefly passed at 40 GB, then returned to 39 GB after compilation; no further build was started below the limit.
+
 ## Full commit registry
 
 | Prefix | Full upstream SHA |
