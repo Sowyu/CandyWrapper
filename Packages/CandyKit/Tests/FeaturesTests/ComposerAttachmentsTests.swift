@@ -50,6 +50,11 @@ struct ComposerAttachmentsTests {
         #expect(R.classify(name: "a.png", mimeType: "image/png") == .image)
         #expect(R.classify(name: "photo.jpg", mimeType: "") == .image)
         #expect(R.classify(name: "photo.JPG", mimeType: "application/octet-stream") == .image)
+        // DNG originals attach as plain files, uploaded as image/x-adobe-dng (14b828e58e).
+        #expect(R.classify(name: "raw.DNG", mimeType: "image/x-adobe-dng") == .file)
+        #expect(R.classify(name: "raw", mimeType: "image/dng; q=1") == .file)
+        #expect(R.mimeType(for: URL(fileURLWithPath: "/tmp/raw.dng")) == "image/x-adobe-dng")
+        #expect(R.shouldHandlePaste(files: [(name: "raw.dng", mimeType: "")], plainText: ""))
         #expect(R.classify(name: "IMG.HEIC", mimeType: "") == .image)
         #expect(R.classify(name: "x", mimeType: "image/heif") == .image)
         #expect(R.classify(name: "a.svg", mimeType: "image/svg+xml") == .unsupportedImage)

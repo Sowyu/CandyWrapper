@@ -39,9 +39,16 @@ public enum ComposerAttachmentRules {
             || name.range(of: #"\.(heic|heif)$"#, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
+    /// `isDngFile` (composerAttachmentFiles.ts:62-70): DNG originals attach as plain files (14b828e58e).
+    public static func isDng(name: String, mimeType: String) -> Bool {
+        let mime = mimeType.split(separator: ";", maxSplits: 1).first.map { $0.trimmingCharacters(in: .whitespaces).lowercased() } ?? ""
+        return name.lowercased().hasSuffix(".dng") || ["image/dng", "image/x-dng", "image/x-adobe-dng"].contains(mime)
+    }
+
     /// `classifyComposerAttachmentFile`. An empty or generic type falls back to the extension.
     public static func classify(name: String, mimeType: String) -> Kind {
         let mime = mimeType.lowercased()
+        if isDng(name: name, mimeType: mime) { return .file }
         if isHeic(name: name, mimeType: mime) { return .image }
         if (mime.isEmpty || mime == "application/octet-stream"), inferImageMimeType(name: name) != nil { return .image }
         guard mime.hasPrefix("image/") else { return .file }
@@ -50,6 +57,8 @@ public enum ComposerAttachmentRules {
 
     /// The MIME type a local file goes up with: its UTType's, else T3's extension guess, else octet-stream.
     public static func mimeType(for url: URL) -> String {
+        // `composerFileAttachmentMimeType`: a DNG goes up as `image/x-adobe-dng` (composerAttachmentFiles.ts:72-75).
+        if isDng(name: url.lastPathComponent, mimeType: "") { return "image/x-adobe-dng" }
         let ext = url.pathExtension
         if let mime = UTType(filenameExtension: ext)?.preferredMIMEType { return mime.lowercased() }
         return inferImageMimeType(name: url.lastPathComponent) ?? "application/octet-stream"
@@ -124,6 +133,8 @@ public enum ComposerAttachmentRules {
     public static func matchesReattachMarker(_ marker: ComposerAttachment, name: String, mimeType: String, sizeBytes: Int) -> Bool {
         guard marker.name == name, marker.sizeBytes == sizeBytes else { return false }
         if marker.mimeType == mimeType { return true }
+        // DNGs match by their normalized type (composerDraftStore.ts:784-793).
+        if isDng(name: marker.name, mimeType: marker.mimeType), isDng(name: name, mimeType: mimeType) { return true }
         let markerType = marker.mimeType.lowercased()
         func isVideo(_ name: String, _ type: String) -> Bool {
             type.lowercased().hasPrefix("video/")
@@ -155,7 +166,7 @@ public enum ComposerAttachmentRules {
 
     /// `shouldHandleComposerAttachmentPaste`: images always win; other files only when the paste has no text.
     public static func shouldHandlePaste(files: [(name: String, mimeType: String)], plainText: String) -> Bool {
-        if files.contains(where: { classify(name: $0.name, mimeType: $0.mimeType) != .file }) { return true }
+        if files.contains(where: { isDng(name: $0.name, mimeType: $0.mimeType) || classify(name: $0.name, mimeType: $0.mimeType) != .file }) { return true }
         if !plainText.isEmpty { return false }
         return !files.isEmpty
     }
