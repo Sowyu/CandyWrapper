@@ -1209,6 +1209,10 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         return (frame.minY + line.typographicBounds.minY - box.top, box)
     }
 
+    /// The quote rail is the text color at 35% since 3669, `color-mix(in srgb, currentcolor 35%, transparent)`
+    /// (index.css:1982-1990, 1df9c32943).
+    private static let quoteRailColor = OKLab.mix(Themed.color(\.foreground), 0.35, .clear)
+
     /// What Chromium paints outside a line's text: an ordered item's `::marker`, which ends where
     /// the item's text starts and may overhang the list's padding, and a quote's 2px left border
     /// down all of its lines.
@@ -1217,7 +1221,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         let origin = textContainerOrigin, pad = origin.y - lineTop - blockInfo.topShift
         let body = ComposerRichTextStyler.bodyBox
         let all = NSRange(location: 0, length: storage.length)
-        Themed.color(\.contrastBorder).setFill()
+        Self.quoteRailColor.setFill()
         storage.enumerateAttribute(.composerQuote, in: all) { value, range, _ in
             guard value != nil, let first = layoutLine(at: range.location, last: false),
                   let last = layoutLine(at: NSMaxRange(range) - 1, last: true) else { return }

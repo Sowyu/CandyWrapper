@@ -82,12 +82,14 @@ struct MarkdownTableTests {
         let rows = cells([["Name", "A very long header"], ["x", String(repeating: "word ", count: 20) + "unbreakable"]])
         // Narrow lanes keep max-content: the body column stops at 384, the header column doesn't.
         let narrow = MarkdownLayout.expandedTableWidths(rows, columns: 2, width: 300, fitsLane: false, natural: natural)
-        #expect(narrow.widths == [64, 384] && narrow.tableWidth == 448)
-        // A wide lane splits the room over each column's longest word (64 and 134) by how much more each wants.
+        // Each of the two columns pads only its inner side since 3669 (index.css:2146-2152).
+        #expect(narrow.widths == [52, 384] && narrow.tableWidth == 436)
+        // A wide lane splits the room over each column's longest word (52 and 122) by how much more each wants.
         let wide = MarkdownLayout.expandedTableWidths(rows, columns: 2, width: 300, fitsLane: true, natural: natural)
-        #expect(wide.tableWidth == 300 && abs(wide.widths[1] - (134 + 102 * 250 / 250)) < 0.01)
+        #expect(wide.tableWidth == 300 && abs(wide.widths[1] - (122 + 126 * 262 / 262)) < 0.01)
         // Below the longest words it overflows again.
-        #expect(MarkdownLayout.expandedTableWidths(rows, columns: 2, width: 100, fitsLane: true, natural: natural).tableWidth == 198)
+        #expect(MarkdownLayout.expandedTableWidths(rows, columns: 2, width: 100, fitsLane: true, natural: natural).tableWidth == 174)
+        #expect(MarkdownLayout.tableCellPadding(0, of: 1) == (0, 0) && MarkdownLayout.tableCellPadding(1, of: 3) == (12, 24))
         // A view outside the timeline never fits; one in a wide lane scrolls less.
         let view = MarkdownView(frame: NSRect(x: 0, y: 0, width: 600, height: 200))
         view.setMarkdown(Self.source)

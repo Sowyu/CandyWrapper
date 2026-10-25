@@ -566,12 +566,12 @@ private struct Builder {
         case .list(let list):
             return self.list(list, width: width, context: context)
         case .blockquote(let children):
-            var inner = context
-            inner.color = MarkdownStyle.muted
+            // 3669 keeps the quote in the surrounding text color and draws the bar in that color at 35%,
+            // `color-mix(in srgb, currentcolor 35%, transparent)` (index.css:1982-1990, 1df9c32943).
             let indent: CGFloat = 2 + 12.8
-            let content = flow(children, width: width - indent, context: inner)
+            let content = flow(children, width: width - indent, context: context)
             var box = Box(top: max(MarkdownStyle.blockMargin, content.top), bottom: max(MarkdownStyle.blockMargin, content.bottom), height: content.height)
-            box.items.append(.box(CGRect(x: 0, y: 0, width: 2, height: content.height), fill: Themed.color(\.contrastBorder), border: nil, radius: 0))
+            box.items.append(.box(CGRect(x: 0, y: 0, width: 2, height: content.height), fill: OKLab.mix(context.color, 0.35, .clear), border: nil, radius: 0))
             box.add(content, at: CGPoint(x: indent, y: 0))
             return box
         case .alert(let kind, let children):
@@ -998,7 +998,8 @@ private struct Builder {
     // MARK: Tables
 
     /// `MarkdownTable`: 12px cells with `0.45rem 0.75rem` padding (header `0.55rem` block padding, weight 600),
-    /// a 1px bottom rule at 60% border under every row, then the expand and copy buttons 2px below.
+    /// none before the first column or after the last since 3669 (index.css:2138-2152, 2d620f5dcc), a 1px
+    /// bottom rule at 60% border under every row, then the expand and copy buttons 2px below.
     @MainActor
     mutating func table(_ table: MarkdownTable, width: CGFloat, context: Context) -> Box {
         let index = tableIndex
@@ -1023,14 +1024,14 @@ private struct Builder {
             for (c, runs) in row.enumerated() where c < columns {
                 let n = natural(cellString(runs, header: row == table.header, column: c).string)
                 naturals.append((c, n))
-                widths[c] = max(widths[c], min(384, n + 24))
+                widths[c] = max(widths[c], min(384, n + MarkdownLayout.tableCellPadding(c, of: columns).total))
             }
         }
         let total = widths.reduce(0, +)
         if total < width, total > 0 { widths = widths.map { $0 + (width - total) * $0 / total } }
         // T3 shows the wrap toggle only when a header or body cell is clipped unwrapped (ChatMarkdown.tsx:540-560, :665).
         // Columns stop at 384pt, so a cell clips when its text outgrows its column. Expanding keeps the same widths.
-        let clipped = naturals.contains { $0.width + 24 > widths[$0.column] }
+        let clipped = naturals.contains { $0.width + MarkdownLayout.tableCellPadding($0.column, of: columns).total > widths[$0.column] }
         var tableWidth = max(width, total)
         let wraps = expanded && fitsExpandedTables
         if expanded {
@@ -1057,7 +1058,8 @@ private struct Builder {
                     paragraph.lineBreakMode = .byTruncatingTail
                     displayed.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: displayed.length))
                 }
-                let textBox = boxes.make(displayed, width: widths[c] - 24, lineHeight: line, strut: MarkdownStyle.font(size),
+                let padding = MarkdownLayout.tableCellPadding(c, of: columns)
+                let textBox = boxes.make(displayed, width: widths[c] - padding.total, lineHeight: line, strut: MarkdownStyle.font(size),
                                          chipRanges: chips, chipFont: DSFont.mono(MarkdownStyle.chipFontSize))
                 var cell = Box(height: textBox.height)
                 for chip in textBox.chips {
@@ -1068,7 +1070,7 @@ private struct Builder {
                 cell.items += Self.favicons(inline, in: textBox, size: size)
                 cell.items.append(.text(textBox, .zero))
                 rowHeight = max(rowHeight, textBox.height)
-                cells.append((cell, x + 12))
+                cells.append((cell, x + padding.lead))
                 x += widths[c]
             }
             for (cell, cx) in cells { box.add(cell, at: CGPoint(x: cx, y: y + padY)) }
@@ -1141,18 +1143,26 @@ extension MarkdownLayout {
     /// proportion, as Chromium's auto table layout does. The table only overflows when the longest words don't fit.
     private static let unbroken = try! NSRegularExpression(pattern: "\\S+")
 
+    /// A cell's `0.75rem` side padding, without the first column's leading or the last column's trailing
+    /// side (`:is(th, td):first-child` and `:last-child`, index.css:2146-2152).
+    static func tableCellPadding(_ column: Int, of columns: Int) -> (lead: CGFloat, total: CGFloat) {
+        let lead: CGFloat = column == 0 ? 0 : 12, trail: CGFloat = column == columns - 1 ? 0 : 12
+        return (lead, lead + trail)
+    }
+
     static func expandedTableWidths(_ rows: [[NSAttributedString]], columns: Int, width: CGFloat, fitsLane: Bool,
                                     natural: (NSAttributedString) -> CGFloat) -> (widths: [CGFloat], tableWidth: CGFloat) {
         var mins = [CGFloat](repeating: 0, count: columns), maxs = mins
         for (r, row) in rows.enumerated() {
             for (c, cell) in row.enumerated() where c < columns {
                 let cap: CGFloat = r == 0 ? .infinity : 384
-                maxs[c] = max(maxs[c], min(cap, natural(cell) + 24))
+                let padding = tableCellPadding(c, of: columns).total
+                maxs[c] = max(maxs[c], min(cap, natural(cell) + padding))
                 guard fitsLane else { continue }
                 // ponytail: breaks only at spaces, not after hyphens, add UAX 14 opportunities if a column comes out wide
                 let longest = Self.unbroken.matches(in: cell.string, range: NSRange(location: 0, length: cell.length))
                     .map { natural(cell.attributedSubstring(from: $0.range)) }.max() ?? 0
-                mins[c] = max(mins[c], min(cap, longest + 24))
+                mins[c] = max(mins[c], min(cap, longest + padding))
             }
         }
         let maxSum = maxs.reduce(0, +), minSum = mins.reduce(0, +)
