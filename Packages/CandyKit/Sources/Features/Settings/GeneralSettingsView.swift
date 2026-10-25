@@ -416,7 +416,38 @@ public final class GeneralSettingsView: SettingsPageBase {
                     control: picker)
         _ = bindServerRow(r, keys: ["textGenerationModelSelection"], reset: "text generation model")
         binder.add { [weak picker] in picker?.refresh() }
-        return section("text-generation", "Text generation", [r])
+        return section("text-generation", "Text generation", [r, threadTitleInstructionsRow()])
+    }
+
+    /// ThreadTitleInstructionsSettings.tsx (51273020db): a 4-row textarea that saves on blur when edited.
+    private func threadTitleInstructionsRow() -> SettingsRowView {
+        let key = "threadTitleInstructions"
+        let placeholder = "Keep titles to a few words. Lead with the main subject."
+        let field = TextareaView(placeholder: placeholder, size: .default)
+        field.setAccessibilityLabel("Thread title instructions")
+        let r = row(nil, title: "Thread title instructions", detail: "Appended to the prompt for new and regenerated thread titles.")
+        anchors["thread-title-instructions"] = r
+        r.footer = TextareaFooter(field)
+        _ = bindServerRow(r, keys: [key], reset: "thread title instructions",
+                          isDefault: { [weak self] in self.map { !$0.context.scope.isMixed([key]) && $0.server.string(key).isEmpty } ?? true },
+                          resetPatch: { [key: .string("")] })
+        var edited = false
+        field.onChange = { [weak self] _ in edited = true; self?.onHeightChange?() }
+        onBlur(field) { [weak self] text in
+            guard let self else { return }
+            let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if edited, self.context.scope.isMixed([key]) || value != self.server.string(key) {
+                self.context.patchServer([key: .string(value)])
+            }
+            edited = false
+        }
+        binder.add { [weak self, weak field] in
+            guard let self, let field, !field.state.focused else { return }
+            let mixed = self.context.scope.isMixed([key])
+            field.text = mixed ? "" : self.server.string(key)
+            field.placeholder = mixed ? "Mixed. Enter instructions to apply to all selected targets." : placeholder
+        }
+        return r
     }
 
     private func aboutSection() -> SettingsSectionView {

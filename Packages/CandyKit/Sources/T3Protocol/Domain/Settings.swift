@@ -199,6 +199,8 @@ public struct ServerSettingsValues: Equatable, Sendable {
         "branchNamingMode": SettingSpec(.literals(["static", "semantic", "custom"]), .string("static")),
         "branchNamePrefix": SettingSpec(.string(maxLength: 4096), .string("t3")),
         "branchNameInstructions": SettingSpec(.string(maxLength: 65_536), .string("")),
+        // Appended to the thread title prompt (settings.ts, 51273020db).
+        "threadTitleInstructions": SettingSpec(.string(maxLength: 65_536), .string("")),
         "sourceControlWritingStyle": SettingSpec(.any, .object([
             "mode": .string("repo_conventions"), "customInstructions": .string(""), "followChangeRequestTemplates": .bool(true),
         ])),

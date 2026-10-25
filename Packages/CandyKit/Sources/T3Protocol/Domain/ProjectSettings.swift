@@ -13,7 +13,7 @@ public enum ProjectSettings {
     public static let scopedKeys: [String] = [
         "worktreeCleanup", "defaultModelSelection", "defaultRuntimeMode", "defaultThreadEnvMode", "newWorktreesStartFromOrigin",
         "worktreeSubmodules", "defaultAutoPull", "defaultProjectScripts", "enableAgentBrowserAccess", "enableAgentDeviceAccess",
-        "textGenerationModelSelection", "sourceControlWriterModelSelection", "reviewGuideModelSelection", "reviewGuideInstructions",
+        "textGenerationModelSelection", "threadTitleInstructions", "sourceControlWriterModelSelection", "reviewGuideModelSelection", "reviewGuideInstructions",
         "sourceControlWritingStyle", "removeAgentCreditsOnMerge",
         "branchNamingMode", "branchNamePrefix", "branchNameInstructions", "pullRequestMergeMethod", "sidebarAutoSettleOnMerge",
         "sidebarAutoSettleAfterDays", "sidebarAutoSettleKeepPullRequests", "continueThreadsAfterServerUpdate", "responseStreamingMode",
