@@ -40,7 +40,7 @@ final class ThreadNotificationCoordinator: NSObject {
         var lastMode = mode
         ClientSettingsStore.shared.observe { [weak self] keys in
             guard let self, keys.contains("notificationMode") || keys.contains("inAppNotificationsEnabled") else { return }
-            if !self.isMounted { self.tracker.resetAll() }
+            if !self.isMounted { self.tracker.resetAll(); self.scheduleCompletions() }
             if self.mode != lastMode {
                 lastMode = self.mode
                 // The [mode] effect clears on every change.
@@ -134,6 +134,7 @@ final class ThreadNotificationCoordinator: NSObject {
     private func liveShell(_ environmentId: String, _ snapshot: ShellSnapshot?) {
         guard let snapshot else {
             tracker.reset(environmentId: environmentId)
+            scheduleCompletions()
             // Notifications from environments that left the client close (ThreadNotificationCoordinator.tsx:42-51).
             if !environments.isRegistered(environmentId) {
                 let gone = badgeCount.keep(environments: Set(environments.environmentIds).subtracting([environmentId]))
@@ -142,7 +143,29 @@ final class ThreadNotificationCoordinator: NSObject {
             return
         }
         guard isMounted else { return }
-        for event in tracker.scan(environmentId: environmentId, threads: snapshot.threads) { deliver(event) }
+        for event in tracker.scan(environmentId: environmentId, threads: snapshot.threads, nowMs: Self.nowMs) { deliver(event) }
+        scheduleCompletions()
+    }
+
+    private static var nowMs: Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
+
+    /// One wake for the next held completion (ThreadNotificationCoordinator.logic.ts:62-70); none while none is held.
+    private var completionTimer: DispatchWorkItem?
+
+    private func scheduleCompletions() {
+        completionTimer?.cancel()
+        completionTimer = nil
+        guard let due = tracker.nextDueMs else { return }
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.completionTimer = nil
+                for event in self.tracker.flush(nowMs: Self.nowMs) { self.deliver(event) }
+                self.scheduleCompletions()
+            }
+        }
+        completionTimer = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double(max(0, due - Self.nowMs)) / 1000, execute: work)
     }
 
     private var windowFocused: Bool {

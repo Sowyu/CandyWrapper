@@ -507,7 +507,8 @@ public enum SidebarModel {
     /// Working shelf on, inbox threads that are working fold into it and the inbox orders by return.
     public static func buildShelves(
         _ threads: [SidebarThread], scopedProjectIds: Set<ProjectId>? = nil, capabilities: Capabilities,
-        nowMs: Int64, workingShelf: Bool = false, returnedAt: (ThreadId) -> Int64? = { _ in nil }
+        nowMs: Int64, workingShelf: Bool = false, returnedAt: (ThreadId) -> Int64? = { _ in nil },
+        isWorking: (SidebarThread) -> Bool = SidebarModel.isThreadWorking
     ) -> Shelves {
         var shelves = Shelves()
         for thread in filterSidebarV2VisibleThreads(threads, scopedProjectIds: scopedProjectIds) {
@@ -518,7 +519,7 @@ public enum SidebarModel {
             switch section {
             case .pinned: shelves.pinned.append(thread)
             case .active, .working:
-                if workingShelf, isThreadWorking(thread) { shelves.working.append(thread) } else { shelves.active.append(thread) }
+                if workingShelf, isWorking(thread) { shelves.working.append(thread) } else { shelves.active.append(thread) }
             case .snoozed: shelves.snoozed.append(thread)
             case .settled: shelves.settled.append(thread)
             }
@@ -956,27 +957,54 @@ public enum SidebarModel {
     }
 }
 
-/// `createInboxReturnTracker` (client-runtime state/threadInbox.ts:110-148): when this client saw each
-/// thread leave the Working section. The first observation only takes a baseline, so turning the beta
-/// on never reshuffles the inbox.
+/// `createInboxReturnTracker` (client-runtime state/threadInbox.ts:117-240): when this client saw each
+/// thread leave the Working section. A thread that stops keeps its Working place for
+/// `workingExitGraceMs`, since an orchestrator run can end moments before its continuation starts,
+/// unless it needs the user or moved shelf. Only placement is held: status and attention stay live.
 public final class SidebarInboxReturnTracker: @unchecked Sendable {
-    private var lastWorking: Set<ThreadId>?
+    /// `WORKING_EXIT_GRACE_MS` (threadInbox.ts:115).
+    public static let workingExitGraceMs: Int64 = 2_000
+
+    private struct State { var working: Bool; var deadline: Int64?; var placement: [String?] }
+    private var states: [ThreadId: State] = [:]
     private var returns: [ThreadId: Int64] = [:]
 
     public init() {}
 
-    /// Every thread shell on each rebuild, or nil to reset while the beta is off.
+    /// Every thread shell on each rebuild, or nil to reset while the beta is off. The sidebar rebuilds
+    /// again at `nextDeadline`, which stands in for T3's timer.
     public func observe(_ threads: [SidebarThread]?, nowMs: Int64) {
-        guard let threads else { lastWorking = nil; returns = [:]; return }
-        var working = Set<ThreadId>(), present = Set<ThreadId>()
+        guard let threads else { states = [:]; returns = [:]; return }
+        var present = Set<ThreadId>()
         for t in threads {
             present.insert(t.id)
-            if SidebarModel.isThreadWorking(t) { working.insert(t.id) }
+            let shell = t.shell
+            let placement = [shell.archivedAt?.raw, shell.deletedAt?.raw, shell.pinnedAt?.raw, shell.settledOverride?.rawValue,
+                             shell.settledAt?.raw, shell.snoozedAt?.raw, shell.snoozedUntil?.raw, shell.activeOrderKey]
+            let previous = states[t.id]
+            // ponytail: T3 also counts pending guest messages, add them once guest share decodes `pendingGuestMessageCount`
+            let actionable = t.hasPendingApprovals || t.hasPendingUserInput || t.pendingSubagentRequest != nil
+                || (shell.interactionMode == .plan && shell.hasActionableProposedPlan)
+                || t.runtime?.lastError != nil || t.latestRun?.status == .failed
+            let moved = previous.map { $0.placement != placement } ?? false
+            let excluded = shell.archivedAt != nil || shell.deletedAt != nil || shell.pinnedAt != nil
+                || shell.settledOverride == .settled || SidebarModel.effectiveSnoozed(t, nowMs: nowMs)
+            let actual = SidebarModel.isThreadWorking(t)
+            let deadline = !actual && previous?.working == true && !actionable && !moved && !excluded
+                ? previous?.deadline ?? nowMs + Self.workingExitGraceMs : nil
+            let working = actual || (deadline.map { $0 > nowMs } ?? false)
+            if previous?.working == true, !working { returns[t.id] = nowMs }
+            states[t.id] = State(working: working, deadline: working ? deadline : nil, placement: placement)
         }
+        states = states.filter { present.contains($0.key) }
         returns = returns.filter { present.contains($0.key) }
-        for id in lastWorking ?? [] where present.contains(id) && !working.contains(id) { returns[id] = nowMs }
-        lastWorking = working
     }
 
+    /// Whether the thread reads as working at the last `observe`, grace included.
+    public func isWorking(_ thread: SidebarThread) -> Bool { states[thread.id]?.working ?? SidebarModel.isThreadWorking(thread) }
+
     public func returnedAt(_ id: ThreadId) -> Int64? { returns[id] }
+
+    /// The earliest moment a held thread leaves Working, or nil while none is held.
+    public var nextDeadline: Int64? { states.values.compactMap(\.deadline).min() }
 }

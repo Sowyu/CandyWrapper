@@ -825,7 +825,9 @@ public final class SidebarContentView: DSView {
             }
         }
         let wakeAt = earliestWake.map { $0 + 50 }
-        let rebuildAt = [SidebarListBuilder.nextLabelChange(rows, nowMs: ms, working: false), wakeAt].compactMap { $0 }.min()
+        // A thread held on the Working shelf after it stopped leaves it when its grace ends (threadInbox.ts:138-162).
+        let graceEnd = state.inboxReturns?.nextDeadline
+        let rebuildAt = [SidebarListBuilder.nextLabelChange(rows, nowMs: ms, working: false), wakeAt, graceEnd].compactMap { $0 }.min()
         let workingAt = SidebarListBuilder.nextLabelChange(rows, nowMs: ms, relative: false)
         guard let next = [rebuildAt, workingAt].compactMap({ $0 }).min() else { LabelClock.shared.cancel(self); return }
         LabelClock.shared.schedule(self, in: Double(next - ms) / 1000) { [weak self] in self?.labelTimerFired(rebuildAt: rebuildAt) }

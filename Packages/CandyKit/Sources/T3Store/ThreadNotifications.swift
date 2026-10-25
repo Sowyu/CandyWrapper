@@ -66,30 +66,79 @@ public struct ThreadNotificationEvent: Sendable, Equatable {
     public var tag: String { "\(environmentId):\(threadId.rawValue)" }
 }
 
-/// `EnvironmentNotifications`' diff over one environment's live shell (ThreadNotificationCoordinator.tsx:97-245).
-/// A thread seen for the first time never notifies, so connecting to a server with finished threads is quiet.
+/// `EnvironmentNotifications`' diff over one environment's live shell (ThreadNotificationCoordinator.tsx:97-280)
+/// and `createThreadNotificationGate` (ThreadNotificationCoordinator.logic.ts:19-82). A thread seen for the first
+/// time never notifies, so connecting to a server with finished threads is quiet. Attention notifies at once.
+/// Completion waits out the Working shelf's exit grace, because an orchestrator run can end moments before its
+/// continuation starts; `scan` holds it and `flush` delivers it once due, unless the thread stopped being settled.
 public struct ThreadNotificationTracker: Sendable {
     struct State: Sendable {
         var raw: ThreadShell
         var subagentRequest: PendingSubagentRequest?
         var attention: String?
-        var completion: Int64?
+        var settled: Bool
+        var completedAt: Int64?
+    }
+
+    struct Pending: Sendable {
+        var at: Int64
+        var dueMs: Int64
+        var event: ThreadNotificationEvent
+    }
+
+    struct Gate: Sendable {
+        var pending: [ThreadId: Pending] = [:]
+        /// The newest completion already notified, or deliberately skipped.
+        var handled: [ThreadId: Int64] = [:]
+        /// The newest completion seen settled, kept while the thread works or waits.
+        var lastSettled: [ThreadId: Int64] = [:]
+
+        mutating func skip(_ id: ThreadId, _ at: Int64?) {
+            if let at, at > (handled[id] ?? .min) { handled[id] = at }
+        }
     }
 
     private var previous: [String: [ThreadId: State]] = [:]
+    private var gates: [String: Gate] = [:]
 
     public init() {}
 
-    /// The environment's shell is not live (or left): forget it, like `previous.current.clear()`.
-    public mutating func reset(environmentId: String) { previous[environmentId] = nil }
+    /// The environment's shell is not live (or left): forget it, like `previous.current.clear()` and `gate.clear()`.
+    public mutating func reset(environmentId: String) {
+        previous[environmentId] = nil
+        gates[environmentId] = nil
+    }
 
-    public mutating func resetAll() { previous = [:] }
+    public mutating func resetAll() {
+        previous = [:]
+        gates = [:]
+    }
 
-    /// Diffs the environment's live threads against the last scan and returns the notifications due.
-    public mutating func scan(environmentId: String, threads: [ThreadShell]) -> [ThreadNotificationEvent] {
-        let before = previous[environmentId] ?? [:]
-        var next: [ThreadId: State] = [:]
+    /// When the next held completion is due, or nil while none is held.
+    public var nextDueMs: Int64? { gates.values.flatMap { $0.pending.values.map(\.dueMs) }.min() }
+
+    /// The held completions due by `nowMs`, which count as notified.
+    public mutating func flush(nowMs: Int64) -> [ThreadNotificationEvent] {
         var events: [ThreadNotificationEvent] = []
+        for env in gates.keys.sorted() {
+            guard var gate = gates[env] else { continue }
+            for (id, p) in gate.pending.sorted(by: { $0.value.dueMs < $1.value.dueMs }) where p.dueMs <= nowMs {
+                gate.pending[id] = nil
+                gate.handled[id] = p.at
+                events.append(p.event)
+            }
+            gates[env] = gate
+        }
+        return events
+    }
+
+    /// Diffs the environment's live threads against the last scan and returns the attention notifications due
+    /// now. Completions wait in `flush`.
+    public mutating func scan(environmentId: String, threads: [ThreadShell], nowMs: Int64) -> [ThreadNotificationEvent] {
+        let before = previous[environmentId] ?? [:]
+        var gate = gates[environmentId] ?? Gate()
+        var next: [ThreadId: State] = [:]
+        var changed: [(prior: State?, state: State, status: SidebarThreadStatus)] = []
         // Subagents are skipped below, so their requests notify through the thread above them (T3 f4df794777).
         let subagentRequests = PendingSubagentRequests.byThread(threads)
         for raw in threads {
@@ -106,26 +155,45 @@ public struct ThreadNotificationTracker: Sendable {
             if status == .ready, thread.latestRun?.status == .failed { status = .failed }
             let attention: String? = [.input, .approval, .failed, .limited].contains(status)
                 ? "\(thread.latestRun?.runId.rawValue ?? ""):\(status.rawValue)" : nil
-            // Commands left running (a dev server) read as ready; subagents and monitors wait.
-            let completedAt = thread.latestRun?.completedAt?.epochMs
-            let completion: Int64? = status == .ready && thread.latestRun?.status == .completed && completedAt != nil
-                ? completedAt : prior?.completion
-            next[raw.id] = State(raw: raw, subagentRequest: subagentRequest, attention: attention, completion: completion)
-            guard let prior, raw.archivedAt == nil else { continue }
-            let kind: ThreadNotificationEvent.Kind?
-            if let attention, attention != prior.attention {
-                kind = .input
-            } else if raw.latestRunStopRequested != true, let completion, prior.completion.map({ completion > $0 }) ?? true {
-                // A run the user stopped doesn't announce itself (ThreadNotificationCoordinator.tsx:154-160).
-                kind = .completion
-            } else {
-                kind = nil
-            }
-            guard let kind else { continue }
-            events.append(ThreadNotificationEvent(environmentId: environmentId, threadId: raw.id, threadTitle: raw.title,
-                                                  kind: kind, status: status))
+            // Commands left running (a dev server) read as ready; subagents and awaited work wait.
+            let settled = status == .ready && thread.latestRun?.status == .completed
+            let state = State(raw: raw, subagentRequest: subagentRequest, attention: attention, settled: settled,
+                              completedAt: settled ? thread.latestRun?.completedAt?.epochMs : nil)
+            next[raw.id] = state
+            changed.append((prior, state, status))
         }
         previous[environmentId] = next
+        // `retain`: forget threads that left the snapshot.
+        gate.pending = gate.pending.filter { next[$0.key] != nil }
+        gate.handled = gate.handled.filter { next[$0.key] != nil }
+        gate.lastSettled = gate.lastSettled.filter { next[$0.key] != nil }
+        var events: [ThreadNotificationEvent] = []
+        for (prior, state, status) in changed {
+            let id = state.raw.id
+            let archived = state.raw.archivedAt != nil
+            // A run the user stopped doesn't announce itself (ThreadNotificationCoordinator.tsx:271-274).
+            let quiet = state.raw.latestRunStopRequested == true
+            if state.settled, let at = state.completedAt { gate.lastSettled[id] = at }
+            if !state.settled || archived || quiet { gate.pending[id] = nil }
+            // The first sighting, archived threads, and stopped runs never notify completion.
+            if prior == nil || archived || quiet { gate.skip(id, state.completedAt) }
+            guard let prior, !archived else { continue }
+            let event = ThreadNotificationEvent(environmentId: environmentId, threadId: id, threadTitle: state.raw.title,
+                                                kind: .input, status: status)
+            if let attention = state.attention, attention != prior.attention {
+                // Attention replaces the completion before it, so that run must not notify later.
+                gate.skip(id, gate.lastSettled[id])
+                gate.pending[id] = nil
+                events.append(event)
+                continue
+            }
+            guard state.settled, let at = state.completedAt, at > (gate.handled[id] ?? .min) else { continue }
+            if gate.pending[id]?.at == at { continue }
+            gate.pending[id] = Pending(at: at, dueMs: nowMs + SidebarInboxReturnTracker.workingExitGraceMs,
+                                       event: ThreadNotificationEvent(environmentId: environmentId, threadId: id,
+                                                                      threadTitle: state.raw.title, kind: .completion, status: status))
+        }
+        gates[environmentId] = gate
         return events
     }
 }
