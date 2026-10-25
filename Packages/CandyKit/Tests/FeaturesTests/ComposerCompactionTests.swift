@@ -120,21 +120,64 @@ import T3Protocol
         #expect(!TimelineRunState.compactRequestActive(p, latestRun: TimelineLatestRun(runId: "run-c", status: .completed)))
     }
 
-    @Test func compactingRelabelsTheWorkingRowAndBlanksThinking() {
+    /// A bare `/compact` turn reads as one compaction row from the moment it starts (MessagesTimeline.logic.ts:1551-1655,
+    /// 1960-1985): no prompt bubble, no working row, no thinking row.
+    @Test func compactTurnIsOneCompactionRow() {
         let message = TimelineEntry.message("u", ChatMessage(id: "u", role: .user, text: "/compact", runId: "run-c", createdAt: "2026-10-12T10:00:00Z"))
         var input = TimelineRowsInput(entries: [message], latestRun: TimelineLatestRun(runId: "run-c", status: .running), runningRunId: "run-c",
                                       isWorking: true, activeTurnStartedAt: "2026-10-12T10:00:00Z")
         input.isCompacting = true
         let rows = TimelineRows.derive(input)
-        #expect(rows.contains { $0.kind == .working(compacting: true) })
-        #expect(rows.contains { if case .thinking(_, _, true) = $0.kind { true } else { false } })
-        // Once the running compaction row shows, the header goes back to "Working for".
+        #expect(rows.map(\.id) == ["compaction:run-c"])
+        #expect(rows.first?.kind == .contextCompaction(label: "Compacting context", active: true))
+        // Once the running compaction item shows, it takes the pending row's place.
         let active = TimelineEntry.work("c", WorkLogEntry(id: "c", createdAt: "2026-10-12T10:00:01Z", runId: "run-c", label: "Compacting context",
                                                          tone: .info, sourceActivityKind: "context-compaction", toolLifecycleStatus: .inProgress))
         input.entries.append(active)
         let later = TimelineRows.derive(input)
-        #expect(later.contains { $0.kind == .working(compacting: false) })
-        #expect(later.contains { $0.kind == .contextCompaction(label: "Compacting context", active: true) })
+        #expect(later.map(\.id) == ["c"])
+        #expect(later.first?.kind == .contextCompaction(label: "Compacting context", active: true))
+    }
+
+    /// Compacting on return holds the user's message back, so the working row says why (userMessage.ts:10-19).
+    @Test func compactingOnReturnLabelsTheWorkingRowThenTitlesTheDivider() throws {
+        var compact = ChatMessage(id: "u", role: .user, text: "/compact", runId: "run-c", createdAt: "2026-10-12T10:00:00Z")
+        compact.idleCompaction = "onReturn"
+        var input = TimelineRowsInput(entries: [.message("u", compact)], latestRun: TimelineLatestRun(runId: "run-c", status: .running),
+                                      runningRunId: "run-c", isWorking: true, activeTurnStartedAt: "2026-10-12T10:00:00Z")
+        input.isCompacting = true
+        let rows = TimelineRows.derive(input)
+        #expect(rows.contains { $0.kind == .working(compacting: "Compacting after being idle…") })
+        #expect(!rows.contains { if case .contextCompaction = $0.kind { true } else { false } })
+        let done = try TurnItem(json: .object(["id": .string("c"), "threadId": .string("t"), "type": .string("compaction"), "runId": .string("run-c"),
+                                               "ordinal": .number(1), "status": .string("completed"), "updatedAt": .string("2026-10-12T10:00:02.000Z")]))
+        input.entries.append(.work("c", WorkLogEntry(id: "c", createdAt: "2026-10-12T10:00:01Z", runId: "run-c", label: "Context compacted 12k → 5k tokens",
+                                                     tone: .info, sourceActivityKind: "context-compaction", toolLifecycleStatus: .completed,
+                                                     structuredPayload: done)))
+        let later = TimelineRows.derive(input)
+        // The compaction alone finished: no working row while the run settles.
+        #expect(later.map(\.id) == ["c"])
+        #expect(later.first?.kind == .contextCompaction(label: "Context compacted after being idle 12k → 5k tokens", active: false))
+    }
+
+    @Test func failedCompactionCarriesItsSummaryAndResumeAgeTitles() throws {
+        let failed = try TurnItem(json: .object(["id": .string("c"), "threadId": .string("t"), "type": .string("compaction"), "runId": .string("run-c"),
+                                                 "ordinal": .number(1), "status": .string("failed"), "summary": .string(" Too large "),
+                                                 "updatedAt": .string("2026-10-12T10:00:02.000Z")]))
+        let entry = TimelineEntry.work("c", WorkLogEntry(id: "c", createdAt: "2026-10-12T10:00:01Z", runId: "run-c", label: "Context compaction failed",
+                                                         tone: .info, sourceActivityKind: "context-compaction", toolLifecycleStatus: .failed,
+                                                         structuredPayload: failed))
+        let rows = TimelineRows.derive(TimelineRowsInput(entries: [entry]))
+        #expect(rows.first?.kind == .contextCompaction(label: "Context compaction failed", active: false, failed: true, failure: "Too large"))
+        let answer: JSONValue = .object(["answers": .object([
+            "This session is 1h 5m old and uses 412,000 tokens. Compact it before continuing?": .array([.string("Compact and continue")])])])
+        #expect(IdleCompaction.resumeAge(answer) == "1h 5m")
+        let declined: JSONValue = .object(["answers": .object([
+            "This session is 1h 5m old and uses 412,000 tokens. Compact it before continuing?": .string("Don't ask again")])])
+        #expect(IdleCompaction.resumeAge(declined) == nil)
+        // A server-sent `/compact` without the field is a before-cache-expiry one (orchestrationV2.ts:505-509).
+        let legacy = ChatMessage(id: "u", role: .user, text: " /Compact ", createdAt: "2026-10-12T10:00:00Z", createdBy: "agent", creationSource: "server")
+        #expect(IdleCompaction.reason(legacy) == "beforeCacheExpires")
     }
 
     @Test func compactionDividerLabelsAndTokenDetail() throws {

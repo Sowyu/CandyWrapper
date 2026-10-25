@@ -11,6 +11,7 @@ struct FileLinksTests {
         ("python/3.12", nil), ("Qwen/Qwen2.5-Coder", nil), ("meta-llama/Llama-3.1-8B", nil), ("share/man/ls.1", "share/man/ls.1"),
         ("usr/lib/libfoo.so.1", "usr/lib/libfoo.so.1"), ("vendor/jquery-3.6.0.min.js", "vendor/jquery-3.6.0.min.js"),
         ("./models/glm-5.3", "./models/glm-5.3"), ("/tmp/cw-approval-demo", "/tmp/cw-approval-demo"),
+        ("patches/", nil), ("src/utils.d/", nil),
     ] as [(String, String?)])
     func inlineCodeCandidates(_ source: String, _ expected: String?) {
         #expect(FileLinks.inlineCodeCandidate(source) == expected)
@@ -22,7 +23,7 @@ struct FileLinksTests {
         ("file://localhost/home/me/notes.md", "/home/me/notes.md"), ("apps/mobile/src/index.ts:10", "apps/mobile/src/index.ts"),
         ("docs/My%20Folder/checklist.xml", "docs/My Folder/checklist.xml"), ("./scripts/deploy", "./scripts/deploy"),
         ("~/notes/today.md", "~/notes/today.md"), ("AGENTS.md", "AGENTS.md"), ("script.ts:10", "script.ts"),
-        ("/tmp/clip%23one.mp4#t=2", "/tmp/clip#one.mp4"),
+        ("/tmp/clip%23one.mp4#t=2", "/tmp/clip#one.mp4"), ("patches/", "patches/"), ("docs/My%20Folder/", "docs/My Folder/"),
     ])
     func linkDestinations(_ href: String, _ path: String) {
         #expect(FileLinks.parseLink(href)?.path == path)
@@ -32,6 +33,13 @@ struct FileLinksTests {
                       "/chat/settings", "/chat/settings#L3", "/app#L1", "readme", "TODO:12"])
     func notLinks(_ href: String) {
         #expect(FileLinks.parseLink(href) == nil)
+    }
+
+    /// `/repo/../x` starts with the root but escapes it (path.ts:101-109, edce5f0e53).
+    @Test func escapingPathsAreNotWorkspaceRelative() {
+        #expect(FileLinks.workspaceRelative("/repo/../x.md", root: "/repo") == nil)
+        #expect(FileLinks.workspaceRelative("/repo/a/../b.md", root: "/repo") == "a/../b.md")
+        #expect(FileLinks.workspaceRelative("/repo/./a.md", root: "/repo") == "./a.md")
     }
 
     @Test func resolution() throws {

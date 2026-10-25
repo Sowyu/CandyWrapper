@@ -103,7 +103,7 @@ private func messageFlags(_ row: TimelineRow?) -> (meta: Bool, copy: Bool, strea
         }])
         #expect(rows.count == 1)
         #expect(rows.first?.id == "compaction-entry")
-        if case .contextCompaction(let label, let active)? = rows.first?.kind {
+        if case .contextCompaction(let label, let active, _, _)? = rows.first?.kind {
             #expect(label == "Compacted context 899K → 19K tokens" && !active)
         } else {
             Issue.record("no compaction row: \(rows.map(\.id))")

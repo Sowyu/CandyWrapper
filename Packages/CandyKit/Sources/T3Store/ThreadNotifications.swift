@@ -171,8 +171,9 @@ public struct ThreadNotificationTracker: Sendable {
         for (prior, state, status) in changed {
             let id = state.raw.id
             let archived = state.raw.archivedAt != nil
-            // A run the user stopped doesn't announce itself (ThreadNotificationCoordinator.tsx:271-274).
-            let quiet = state.raw.latestRunStopRequested == true
+            // A run the user stopped or a compaction T3 Code started doesn't announce itself
+            // (ThreadNotificationCoordinator.tsx:271-277). Failures still do, through `attention`.
+            let quiet = state.raw.latestRunStopRequested == true || state.raw.latestRunSilent == true
             if state.settled, let at = state.completedAt { gate.lastSettled[id] = at }
             if !state.settled || archived || quiet { gate.pending[id] = nil }
             // The first sighting, archived threads, and stopped runs never notify completion.

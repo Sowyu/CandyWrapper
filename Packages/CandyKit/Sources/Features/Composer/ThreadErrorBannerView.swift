@@ -21,8 +21,10 @@ public final class ThreadErrorBannerView: DSView {
             title.text = banner?.title ?? ""
             title.isHidden = banner?.title == nil
             setup.isHidden = banner?.setupLink != true
-            icon.isHidden = banner?.info == true
+            icon.isHidden = banner?.info == true || banner?.chatGptLimit != nil
             infoIcon.isHidden = banner?.info != true
+            openAIIcon.isHidden = banner?.chatGptLimit == nil
+            rebuildAction()
             close.setAccessibilityLabel(banner?.title.map { _ in "Dismiss provider status" } ?? "Dismiss error")
             // The provider status banner keeps its hover tooltip; thread errors expand instead.
             tooltip.text = banner?.title == nil ? "" : banner?.message ?? ""
@@ -35,12 +37,20 @@ public final class ThreadErrorBannerView: DSView {
         get { close.action }
         set { close.action = newValue }
     }
+    /// "Copy request for admin" on a ChatGPT Business workspace limit.
+    public var onCopyAdminRequest: (@MainActor () -> Void)?
+    /// "Manage usage" on a ChatGPT usage limit opens ChatGPT's usage page.
+    public var onOpenURL: (@MainActor (URL) -> Void)?
 
     private let blur = BackdropBlurView()
     private let surface = DSView()
     private let tint = CALayer()
     private let icon = IconView(name: .circleAlert)
     private let infoIcon = IconView(name: .info)
+    /// The OpenAI mark of the ChatGPT usage limit face (`size-4 text-foreground!`).
+    private let openAIIcon = IconView(name: .brandOpenAI, size: 16)
+    /// The ChatGPT face's default `sm` button before the X (ThreadErrorBanner.tsx:110-116).
+    private var action: ButtonView?
     private let title = LabelView("", font: DSFont.ui(14, weight: .medium))
     private let text = TextBlockView()
     /// "Open provider setup" (`InlineButton`).
@@ -66,12 +76,34 @@ public final class ThreadErrorBannerView: DSView {
 
     private var canExpand: Bool { banner?.title == nil && Self.canExpand(banner?.message ?? "") }
 
+    private func rebuildAction() {
+        action?.removeFromSuperview()
+        action = nil
+        switch banner?.chatGptLimit {
+        case .workspace?:
+            let b = ButtonView("Copy request for admin", variant: .default, size: .sm)
+            b.action = { [weak self] in self?.onCopyAdminRequest?() }
+            action = b
+        case .usage?:
+            action = ChatGptButtons.usage(variant: .default, size: .sm) { [weak self] url in self?.onOpenURL?(url) }
+        case nil:
+            break
+        }
+        if let action { addSubview(action) }
+    }
+
+    /// The action button and its gap, taken from the text column.
+    private var actionSpace: CGFloat { action.map { $0.intrinsicContentSize.width + 8 } ?? 0 }
+    private func columnWidth(_ total: CGFloat) -> CGFloat { max(0, Self.textWidth(total) - actionSpace) }
+    /// `space-y-1` between the ChatGPT face's two paragraphs; `gap-0.5` under an `AlertTitle`.
+    private var titleGap: CGFloat { banner?.chatGptLimit == nil ? 2 : 4 }
+
     private func applyText() {
         let message = banner?.message ?? ""
         let collapsible = canExpand
         text.text = expanded || banner?.title != nil ? message : Self.collapsedMessage(message)
         // The provider status banner keeps its 3-line clamp.
-        text.maxLines = banner?.title != nil || collapsible && !expanded ? 3 : 0
+        text.maxLines = banner?.chatGptLimit == nil && (banner?.title != nil || collapsible && !expanded) ? 3 : 0
         expand.isHidden = !collapsible
         expand.title = expanded ? "Show less" : "Show full error"
         expand.setAccessibilityExpanded(expanded)
@@ -97,6 +129,8 @@ public final class ThreadErrorBannerView: DSView {
         addSubview(icon)
         infoIcon.isHidden = true
         addSubview(infoIcon)
+        openAIIcon.isHidden = true
+        addSubview(openAIIcon)
         text.font = DSFont.ui(14)
         text.lineHeight = Self.line
         text.maxLines = 3
@@ -133,13 +167,13 @@ public final class ThreadErrorBannerView: DSView {
     public func fittingWidth(max maxWidth: CGFloat) -> CGFloat {
         let column = max(ceil(text.naturalWidth), title.isHidden ? 0 : ceil(title.textWidth), setup.isHidden ? 0 : setup.intrinsicContentSize.width,
                          expand.isHidden ? 0 : expand.intrinsicContentSize.width)
-        let natural = column + 2 * Self.padX + 16 + 8 + 8 + 24
+        let natural = column + 2 * Self.padX + 16 + 8 + 8 + 24 + actionSpace
         return min(maxWidth, natural)
     }
 
     /// First-line row with an action: `min-h-6 pt-0.5`.
     public func height(forWidth width: CGFloat) -> CGFloat {
-        let content = text.height(forWidth: Self.textWidth(width)) + extraHeight
+        let content = text.height(forWidth: columnWidth(width)) + extraHeight
         return 2 * Self.padY + max(24, 2 + content)
     }
 
@@ -150,14 +184,15 @@ public final class ThreadErrorBannerView: DSView {
         surface.frame = bounds
         tint.frame = surface.bounds
         CATransaction.commit()
-        let top = Self.padY + 2, w = Self.textWidth(bounds.width)
+        let top = Self.padY + 2, w = columnWidth(bounds.width)
         icon.frame = NSRect(x: Self.padX, y: top + (Self.line - 16) / 2, width: 16, height: 16)
         infoIcon.frame = icon.frame
+        openAIIcon.frame = icon.frame
         // `flex-col gap-0.5`: the title, then the description (`flex-col gap-2.5`: text, then the link).
         var y = top
         if !title.isHidden {
             title.frame = NSRect(x: Self.padX + 24, y: y, width: w, height: Self.line)
-            y += Self.line + 2
+            y += Self.line + titleGap
         }
         text.frame = NSRect(x: Self.padX + 24, y: y, width: w, height: text.height(forWidth: w))
         if !expand.isHidden {
@@ -168,11 +203,15 @@ public final class ThreadErrorBannerView: DSView {
             setup.frame = NSRect(x: Self.padX + 24, y: text.frame.maxY + 10, width: min(w, s.width), height: Self.line)
         }
         close.frame = NSRect(x: bounds.width - Self.padX - 24, y: top + (Self.line - 24) / 2, width: 24, height: 24)
+        if let action {
+            let s = action.intrinsicContentSize
+            action.frame = NSRect(x: close.frame.minX - 8 - s.width, y: top + (Self.line - s.height) / 2, width: s.width, height: s.height)
+        }
     }
 
     /// The title row and the link under the message.
     private var extraHeight: CGFloat {
-        (title.isHidden ? 0 : Self.line + 2) + (setup.isHidden ? 0 : 10 + Self.line) + (expand.isHidden ? 0 : 4 + Self.line)
+        (title.isHidden ? 0 : Self.line + titleGap) + (setup.isHidden ? 0 : 10 + Self.line) + (expand.isHidden ? 0 : 4 + Self.line)
     }
 
     public override func updateLayer() { restyle() }
@@ -189,7 +228,9 @@ public final class ThreadErrorBannerView: DSView {
         infoIcon.strokeColor = Themed.color(color)
         // `AlertDescription` in the variant: `text-{variant}-foreground/80`.
         text.color = Themed.color(warning ? \.warningForeground : \.errorForeground, 0.8)
-        title.color = Themed.color(warning ? \.warningForeground : \.errorForeground)
+        // The ChatGPT face's bold line sits in the description, so it keeps the description's color.
+        title.color = Themed.color(warning ? \.warningForeground : \.errorForeground, banner?.chatGptLimit == nil ? 1 : 0.8)
+        openAIIcon.strokeColor = Themed.color(\.foreground)
     }
 }
 

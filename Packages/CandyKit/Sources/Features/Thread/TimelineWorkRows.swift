@@ -817,8 +817,9 @@ final class ThinkingRowView: WorkRowBase {
 
 /// `WorkingTimelineRow` (:3705-3743): "Working for 4s" over a hairline. The seconds tick on the
 /// shared `LabelClock`, only while the row is on screen in a visible window. While a `/compact`
-/// waits for its compaction row it reads "Compacting…" after the minimize icon, with the shimmer
-/// (`CompactingLabel`, :3782-3789), and nothing ticks.
+/// waits for its compaction row, or a compaction T3 Code started holds the user's message back, it
+/// reads the compacting label after the minimize icon, with the shimmer (`CompactingLabel`,
+/// TimelineWorkGroupRows.tsx:286-300, 361-368), and nothing ticks.
 final class WorkingRowView: TimelineRowView {
     private let label = LabelView("", font: TL.tabular(14), color: TL.c(\.mutedForeground))
     private let compactingIcon = IconView(name: .minimize2, size: 12, strokeColor: TL.c(\.mutedForeground))
@@ -837,7 +838,6 @@ final class WorkingRowView: TimelineRowView {
         compactingLabel.lineHeight = TL.relaxed
         compactingLabel.base.color = TL.c(\.mutedForeground)
         compactingLabel.style = .focus
-        compactingLabel.text = "Compacting…"
         addSubview(compactingIcon)
         addSubview(compactingLabel)
         rule.fill = TL.c(\.border, 0.6)
@@ -847,7 +847,9 @@ final class WorkingRowView: TimelineRowView {
     override func configure(_ item: TimelineItem) {
         super.configure(item)
         startMs = item.row.createdAt?.epochMs
-        if case .working(let c) = item.row.kind { compacting = c } else { compacting = false }
+        let compactingText: String? = if case .working(let c) = item.row.kind { c } else { nil }
+        compacting = compactingText != nil
+        compactingLabel.text = compactingText ?? ""
         label.isHidden = compacting
         compactingIcon.isHidden = !compacting
         compactingLabel.isHidden = !compacting

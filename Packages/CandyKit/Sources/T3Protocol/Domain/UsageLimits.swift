@@ -212,6 +212,13 @@ public struct UsageLimitsReport: Equatable, Sendable {
 
 public enum UsageLimitsLogic {
     public static let chatGptUsageURL = "https://chatgpt.com/#settings/Usage"
+    /// `CHATGPT_USAGE_LIMIT_CODE` and `CHATGPT_WORKSPACE_USAGE_LIMIT_CODE` (packages/shared/src/usageLimits.ts:20-24): a
+    /// thread's `lastErrorCode` when ChatGPT plan use in other apps hit its limit, or a Business admin's cap on it.
+    public static let chatGptUsageLimitCode = "subscription_sharing_usage_limit_exceeded"
+    public static let chatGptWorkspaceUsageLimitCode = "subscription_sharing_workplace_individual_usage_limit_exceeded"
+    /// `CHATGPT_WORKSPACE_ADMIN_REQUEST` (usageLimits.ts:25-27): OpenAI's partner guidelines fix this wording.
+    public static let chatGptWorkspaceAdminRequest =
+        "I've reached the limit for using my ChatGPT plan in T3 Code. Could you increase our workspace's usage limits so I can continue?\n\nGo to admin.openai.com → Workspace → Usage limits. Thank you!"
 
     /// `CURSOR_USAGE_WINDOWS` (usageLimits.ts:32-48).
     public static let cursorWindows: [(id: String, label: String, description: String)] = [

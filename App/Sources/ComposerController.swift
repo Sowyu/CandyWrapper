@@ -331,6 +331,16 @@ final class ComposerController {
         // ponytail: Settings has no page per provider, so Manage lands on Providers; deep-link when it gets one
         pickers.onManageProvider = { [weak self] _ in self?.openProviderSetup?() }
         panel.errorBanner.onDismiss = { [weak self] in self?.dismissThreadError() }
+        // ThreadErrorBanner.tsx:17-27: the admin request goes to the clipboard with a toast either way.
+        panel.errorBanner.onCopyAdminRequest = { [weak self] in
+            let board = NSPasteboard.general
+            board.clearContents()
+            let toast = board.setString(UsageLimitsLogic.chatGptWorkspaceAdminRequest, forType: .string)
+                ? ToastView(title: "Request copied", message: "Send it to your workspace admin.", kind: .success)
+                : ToastView(title: "Could not copy the request", kind: .error)
+            self?.panel.toasts.show(toast)
+        }
+        panel.errorBanner.onOpenURL = { url in NSWorkspace.shared.open(url) }
         composer.historyMessages = { [weak self] in self?.historyMessages() ?? [] }
         pickers.onChange = { [weak self] _ in
             self?.composer.needsLayout = true
@@ -1444,6 +1454,7 @@ final class ComposerController {
         updateThreadBanners()
         updateRunOn()
         refreshWorkspaceSnapshot()
+        composer.threadTitle = shellThread?.title
         let banner = draftKey.flatMap { threadErrors.visible($0, shell: shellThread) }
         if banner != panel.errorBanner.banner {
             panel.errorBanner.banner = banner
@@ -1964,10 +1975,11 @@ final class ComposerController {
                             "threadId": .string(threadId.localId.rawValue), "interactionMode": .string(interactionChange.rawValue)]))
                     }
                     if compactFirst {
-                        // ChatView.tsx:9859-9873: `/compact` starts its own turn with the same model and modes.
+                        // `/compact` starts its own turn with the same model and modes, marked as compacting on return so
+                        // the timeline shows one working row for it (useComposerSend.ts:1197-1209).
                         _ = try await supervisor.request("orchestration.dispatchCommand", payload: Self.standaloneCommand(
                             threadId: threadId, messageId: MessageId(UUID().uuidString.lowercased()), text: "/compact",
-                            selection: selection, queue: false))
+                            selection: selection, queue: false, idleCompaction: "onReturn"))
                     }
                     _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object(command))
                     // The turn is under way: the chip's off state for this thread is spent (ChatView.tsx:9984-9986).
@@ -4716,8 +4728,10 @@ extension ComposerController {
     /// `startThreadTurn` with no dispatch mode for a standalone command (commands.ts:752-776): `auto`,
     /// which the server resolves (`start_immediately` plus `deliveryIntent: auto`); queued app messages
     /// go behind the active run.
-    static func standaloneCommand(threadId: ThreadId, messageId: MessageId, text: String, selection: ModelSelection, queue: Bool) -> JSONValue {
-        OrchestrationCommands.message(threadId: threadId.localId.rawValue, messageId: messageId.rawValue, text: text, selection: selection, queue: queue)
+    static func standaloneCommand(threadId: ThreadId, messageId: MessageId, text: String, selection: ModelSelection, queue: Bool,
+                                  idleCompaction: String? = nil) -> JSONValue {
+        OrchestrationCommands.message(threadId: threadId.localId.rawValue, messageId: messageId.rawValue, text: text, selection: selection,
+                                      queue: queue, idleCompaction: idleCompaction)
     }
 
 }

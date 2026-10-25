@@ -230,6 +230,12 @@ public final class ComposerView: DSView {
         set { editor.expandedCaret = newValue }
     }
 
+    /// The open thread's title: the field reads "Message {title}", so focus landing there after a thread
+    /// switch names the thread (ChatComposer.tsx:3742, 7f7daad985).
+    public var threadTitle: String? {
+        didSet { if threadTitle != oldValue { editor.setAccessibilityLabel(threadTitle.map { "Message \($0)" } ?? "Message") } }
+    }
+
     /// Content that stands in for the editor and footer inside the same surface (`ProviderSubagentBar` on a
     /// provider-native subagent thread, ChatView.tsx:11559-11577, where `ChatComposer` is not mounted).
     public var replacement: NSView? {

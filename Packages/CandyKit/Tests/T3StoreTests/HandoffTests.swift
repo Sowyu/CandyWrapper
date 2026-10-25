@@ -17,6 +17,17 @@ struct HandoffTests {
         return p
     }
 
+    /// A starting run with a committed handoff is the one the footer measures from (handoff.ts:26-31, 2c592a1086).
+    @Test func startingHandoffRunCountsAsTheLatest() {
+        let providers = [Self.provider("claudeAgent", "claudeAgent"), Self.provider("codex", "codex")]
+        var starting = Self.run("r2", 2, "codex", "gpt-6", started: false, status: "starting")
+        let runs = [Self.run("r1", 1, "claudeAgent", "claude-haiku-5-5"), starting]
+        let codex = ModelSelection(instanceId: "codex", model: "gpt-6")
+        #expect(HandoffEndpoints.pending(runs, selection: codex, providers: providers) != nil)
+        starting.contextHandoffId = "handoff-1"
+        #expect(HandoffEndpoints.pending([runs[0], starting], selection: codex, providers: providers) == nil)
+    }
+
     @Test func pendingHandoffFollowsTheComposerModel() {
         let providers = [Self.provider("claudeAgent", "claudeAgent", group: "claude:a"), Self.provider("codex", "codex"),
                          Self.provider("claude2", "claudeAgent", group: "claude:a"), Self.provider("pi", "pi", newThread: true)]

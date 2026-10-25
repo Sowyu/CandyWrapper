@@ -32,11 +32,12 @@ public struct HandoffEndpoints: Hashable, Sendable {
         return HandoffEndpoints(from: from, to: Endpoint(instanceId: toInstance, model: toModel))
     }
 
-    /// `resolvePendingHandoff` (handoff.ts:22-42): the handoff the next send would make, nil when it makes none.
-    /// `threadModel` stands in for a run cached before CandyWrapper kept run models.
+    /// `resolvePendingHandoff` (handoff.ts:18-42): the handoff the next send would make, nil when it makes none.
+    /// `threadModel` stands in for a run cached before CandyWrapper kept run models. A starting run with a
+    /// handoff counts too: its handoff row is already committed, so the footer must not repeat it (2c592a1086).
     // ponytail: the thread's model for cached runs without one; drop it once ThreadCache's version moves past these caches
     public static func pending(_ runs: [Run], selection: ModelSelection?, providers: [ServerProvider], threadModel: ModelSelection? = nil) -> HandoffEndpoints? {
-        guard let run = runs.last(where: { $0.startedAt != nil && $0.status != .rolledBack }),
+        guard let run = runs.last(where: { $0.status != .rolledBack && ($0.startedAt != nil || ($0.status == .starting && $0.contextHandoffId != nil)) }),
               let from = run.modelSelection ?? threadModel, let selection else { return nil }
         let source = providers.first { $0.instanceId == from.instanceId }
         let target = providers.first { $0.instanceId == selection.instanceId }

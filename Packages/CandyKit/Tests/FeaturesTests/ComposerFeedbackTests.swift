@@ -100,4 +100,17 @@ struct ComposerFeedbackTests {
         #expect(ThreadUsageLimitRecovery.snoozed(snoozed, now: before))
         #expect(!ThreadUsageLimitRecovery.snoozed(snoozed, now: after))
     }
+
+    /// A ChatGPT plan limit swaps the error for T3's ChatGPT face (ThreadErrorBanner.tsx:83-123, 6f75bcb374).
+    @Test func chatGptLimitCodesPickTheirFace() {
+        let state = ThreadErrorState()
+        let workspace = Self.shell(#""status":"idle","latestRunId":"r1","lastError":"Limit","lastErrorClass":"usage_limit","lastErrorCode":"subscription_sharing_workplace_individual_usage_limit_exceeded""#)
+        let banner = state.visible("k", shell: workspace)
+        #expect(banner?.chatGptLimit == .workspace && banner?.title == "ChatGPT usage limit reached" && banner?.variant == .warning)
+        let plan = Self.shell(#""status":"idle","latestRunId":"r1","lastError":"Limit","lastErrorCode":"subscription_sharing_usage_limit_exceeded""#)
+        #expect(state.visible("k", shell: plan)?.message == "Review your usage settings in ChatGPT.")
+        // A 3473 shell has no code and keeps the plain error.
+        let old = Self.shell(#""status":"idle","latestRunId":"r1","lastError":"Limit""#)
+        #expect(state.visible("k", shell: old)?.chatGptLimit == nil)
+    }
 }

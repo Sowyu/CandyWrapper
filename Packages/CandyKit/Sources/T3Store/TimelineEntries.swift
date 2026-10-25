@@ -18,6 +18,8 @@ public struct ChatMessage: Sendable, Hashable, Identifiable {
     public var scheduledTaskId: String?
     public var context: JSONValue?
     public var attachments: [JSONValue]
+    /// `"beforeCacheExpires"` or `"onReturn"` on a `/compact` T3 Code sent on its own (3669).
+    public var idleCompaction: String?
     /// The thread opens with this workflow script, so it shows as the workflow's opening block.
     public var workflowOpening = false
 
@@ -314,7 +316,7 @@ public enum TimelineEntries {
             return TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .work(entry), attempt: attempt)
         case .userMessage, .assistantMessage:
             let isUser = item.type == .userMessage
-            let message = ChatMessage(
+            var message = ChatMessage(
                 id: item.messageId ?? MessageId(item.id.rawValue), role: isUser ? .user : .assistant, text: item.text,
                 runId: item.runId, streaming: !isUser && item.streaming, createdAt: createdAt, updatedAt: item.updatedAt,
                 inputIntent: isUser ? item.inputIntent : nil,
@@ -324,6 +326,7 @@ public enum TimelineEntries {
                 scheduledTaskId: isUser ? item.string("scheduledTaskId") : nil,
                 context: isUser ? item["context"] : nil,
                 attachments: item["attachments"]?.arrayValue ?? [])
+            if isUser { message.idleCompaction = item.string("idleCompaction") }
             return TimelineEntry(id: message.id.rawValue, createdAt: createdAt, kind: .message(message, projectedItem: row), attempt: attempt)
         case .proposedPlan:
             let planId = PlanId(item.string("planId") ?? item.id.rawValue)

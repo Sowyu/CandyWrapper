@@ -121,7 +121,11 @@ public struct ThreadErrorState: Sendable {
         public var info = false
         /// "Open provider setup" after the message.
         public var setupLink = false
+        /// ThreadErrorBanner's ChatGPT usage limit face (ThreadErrorBanner.tsx:83-123, 6f75bcb374).
+        public var chatGptLimit: ChatGptLimit? = nil
     }
+    /// A plain ChatGPT limit offers "Manage usage"; a Business workspace cap offers "Copy request for admin".
+    public enum ChatGptLimit: Sendable, Equatable { case usage, workspace }
 
     private var local: [String: String] = [:]
     private var dismissed: Set<String> = []
@@ -143,8 +147,16 @@ public struct ThreadErrorState: Sendable {
         let fromShell = localError == nil && shell != nil
         // A usage limit on a failed run shows the usage-limit recovery banner instead.
         if fromShell, shell?.status == .failed, shell?.lastErrorClass == .usageLimit, shell?.latestRunId != nil { return nil }
-        // ThreadErrorBanner's ChatGPT usage-limit face (ThreadErrorBanner.tsx:55-66) is never turned on:
-        // ChatView passes no `chatGptUsageLimit` (ChatView.tsx:11362-11374). Port it when T3 does.
+        // Only the shell's own error carries its class and code (ChatView.tsx:3257-3262).
+        let code = fromShell ? shell?.lastErrorCode : nil
+        let limit: ChatGptLimit? = code == UsageLimitsLogic.chatGptWorkspaceUsageLimitCode ? .workspace
+            : code == UsageLimitsLogic.chatGptUsageLimitCode ? .usage : nil
+        if let limit {
+            let message = limit == .workspace
+                ? "You've reached your workspace's limit for using your ChatGPT plan in other apps. Copy a request to ask your workspace admin for increased usage limits."
+                : "Review your usage settings in ChatGPT."
+            return Banner(message: message, variant: .warning, title: "ChatGPT usage limit reached", chatGptLimit: limit)
+        }
         let variant: Variant = fromShell && shell?.lastErrorClass == .usageLimit ? .warning : .error
         return Banner(message: error, variant: variant)
     }

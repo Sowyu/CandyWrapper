@@ -63,7 +63,7 @@ public enum TurnItemDetail {
     /// list of blocks or an MCP result's `content`, at most 8. The order is the asset index.
     static func toolOutputImageCount(_ value: JSONValue) -> Int {
         let blocks: [JSONValue] = value.arrayValue ?? value["content"]?.arrayValue ?? [value]
-        return min(8, blocks.filter { readableImageMimeType($0) != nil }.count)
+        return min(maxToolOutputImages, blocks.filter { readableImageMimeType($0) != nil }.count)
     }
 
     /// `readToolOutputImage` (toolOutput.ts:236-247): an MCP `{data, mimeType}` or Anthropic
@@ -125,7 +125,8 @@ public enum TurnItemDetail {
     // ponytail: JSON keys come out sorted (JSONValue drops key order) and minified JSON text is not re-indented; port prettyJsonText if MCP output reads badly
     static func formatToolValue(_ value: JSONValue?) -> String? {
         guard let value, value != .null else { return nil }
-        if let text = textFromBlocks(value, depth: 0) {
+        var previews = maxToolOutputImages
+        if let text = textFromBlocks(value, depth: 0, level: .root, previews: &previews) {
             return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text
         }
         if value == .object([:]) || value == .array([]) { return nil }
@@ -134,32 +135,45 @@ public enum TurnItemDetail {
         return (try? encoder.encode(value)).flatMap { String(data: $0, encoding: .utf8) }
     }
 
-    /// `textFromBlocks` (itemDetail.ts:16-45). Readable images draw on their own as assets, so they leave
-    /// no text; the rest show as "[image]".
-    static func textFromBlocks(_ value: JSONValue, depth: Int) -> String? {
+    /// `MAX_TOOL_OUTPUT_IMAGES` (toolOutput.ts:237).
+    static let maxToolOutputImages = 8
+
+    /// Where a value sits against `outputBlocks` (toolOutput.ts:230-234): the value itself, one of its output
+    /// blocks, or deeper. Only output blocks can be previewed images.
+    enum BlockLevel { case root, block, nested }
+
+    /// `textFromBlocks` (itemDetail.ts:15-45). The first 8 readable images among the output blocks draw on their
+    /// own as assets, so they leave no text; the rest show as "[image]" (f05599504a).
+    static func textFromBlocks(_ value: JSONValue, depth: Int, level: BlockLevel = .nested, previews: inout Int) -> String? {
         guard depth <= 4 else { return nil }
         switch value {
         case .string(let s): return s
         case .array(let blocks):
             var parts: [String] = []
             for b in blocks {
-                guard let p = textFromBlocks(b, depth: depth + 1) else { return nil }
+                guard let p = textFromBlocks(b, depth: depth + 1, level: level == .root ? .block : .nested, previews: &previews) else { return nil }
                 if !p.isEmpty { parts.append(p) }
             }
             return parts.joined(separator: "\n")
         case .object(let o):
             let type = o["type"]?.stringValue
             if type == "text", let t = o["text"]?.stringValue { return t }
-            if type == "image" { return readableImageMimeType(value) == nil ? "[image]" : "" }
+            if type == "image" {
+                guard level != .nested, previews > 0, readableImageMimeType(value) != nil else { return "[image]" }
+                previews -= 1
+                return ""
+            }
             if type == "resource_link", let uri = o["uri"]?.stringValue { return uri }
             if type == "resource", case .object(let r)? = o["resource"] {
                 if let t = r["text"]?.stringValue { return t }
                 if let uri = r["uri"]?.stringValue { return uri }
             }
             let keys = Set(o.keys).subtracting(["isError", "is_error"])
-            if keys == ["content"], let c = o["content"] { return textFromBlocks(c, depth: depth + 1) }
+            // A root's `content` list holds its output blocks.
+            let contentLevel: BlockLevel = level == .root && o["content"]?.arrayValue != nil ? .root : .nested
+            if keys == ["content"], let c = o["content"] { return textFromBlocks(c, depth: depth + 1, level: contentLevel, previews: &previews) }
             if keys == ["content", "structuredContent"], let c = o["content"] {
-                let t = textFromBlocks(c, depth: depth + 1)
+                let t = textFromBlocks(c, depth: depth + 1, level: contentLevel, previews: &previews)
                 return t.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } == false ? t : nil
             }
             return nil
