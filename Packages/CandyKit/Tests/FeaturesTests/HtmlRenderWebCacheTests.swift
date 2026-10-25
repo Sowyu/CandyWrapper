@@ -130,11 +130,19 @@ extension WebFrameSuites {
             web.loadHTMLString("<html><body><iframe id='f' srcdoc='<p>Old page</p>'></iframe></body></html>", baseURL: URL(string: "about:blank"))
             #expect(await eventually { web.url?.absoluteString == "about:blank" && !web.isLoading })
             cache.recycle(web)
-            #expect(await eventually(seconds: 3) {
-                let removed = try? await web.callAsyncJavaScript("return document.getElementById('f') === null", arguments: [:],
-                                                               in: nil, in: .world(name: "t3-host"))
-                return removed as? Bool == true
-            })
+            var evaluation = "not evaluated"
+            let cleared = await eventually(seconds: 3) {
+                do {
+                    let removed = try await web.callAsyncJavaScript("return document.getElementById('f') === null", arguments: [:],
+                                                                   in: nil, contentWorld: .world(name: "t3-host"))
+                    evaluation = String(describing: removed)
+                    return removed as? Bool == true
+                } catch {
+                    evaluation = String(describing: error)
+                    return false
+                }
+            }
+            #expect(cleared, Comment(rawValue: evaluation))
             cache.setActive(false)
             cache.setActive(true)
             defer { cache.setActive(false) }
