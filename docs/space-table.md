@@ -28,7 +28,20 @@ Mockup look B's layout, with row dividers only, plus look A's type icons in the 
 
 Measured by `SpaceTableTests.bigTableBudgets` on the shared Mac mini M4 with other agents' builds running. Run it with `scripts/test -c release -Xswiftc -enable-testing --filter bigTableBudgets`. It's left out of the fast lane.
 
-RELEASE_TABLE
+Release, 2026-10-25, after rebasing onto the Board and Timetable views:
+
+| Measure | Budget | Result |
+|---|---|---|
+| Switch a 1,000-item page from Page to Table, first screen drawn | 50 ms | 54 ms |
+| The same with 5,000 items | | 220 ms |
+| Scroll frame at 5,000 rows, 97 pt a frame, rows that came into view drawn | no dropped frames | p50 3.9 ms, p95 4.9 ms, max 26 ms |
+| Redraw every visible row, as a theme change does | | 36 ms |
+| Model reload at 5,000 rows | | 23 ms |
+| One cell edit at 5,000 rows, every observer included | | 215 ms, of which 189 ms is other observers |
+
+Switching misses its budget by 4 ms. Most of it is drawing the first screen and the page header's own work; the model builds 1,000 rows in about 5 ms. Scrolling stays well inside a 60 Hz frame at p95; the one 26 ms frame in 300 was on a machine busy with other builds. Two changes got the model there. It reads a page's children straight from `pages` instead of `content(of:)`, and `FieldQuery.evaluate` sorts an index array over flat key arrays instead of moving page records, which took reload from 100 ms to 23 ms.
+
+The test gives each setup step its own autorelease pool. Without that, the Page view's editor stays alive until the test ends and keeps reloading 5,000 items on every edit, which doesn't happen in the app.
 
 ## Not done here
 
