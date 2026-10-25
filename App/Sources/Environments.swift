@@ -630,30 +630,36 @@ final class Environments {
         guard !sessions.isEmpty else { return nil }
         return await withTaskGroup(of: [ThreadSearchMatch]?.self) { group in
             for (id, session, label) in sessions {
-                group.addTask { @MainActor in
-                    let generation = await session.store.generation
-                    var payload: [String: JSONValue] = ["query": .string(query)]
-                    if session.omissions.omitOlderSettled, let cut = await session.store.snapshot?.olderSettled {
-                        payload["olderSettledBefore"] = .string(cut.before)
-                        payload["environmentLabel"] = .string(label)
-                        if let projectIds {
-                            payload["projectIds"] = .array(projectIds.filter { $0.environmentId == id }.map { .string($0.localId.rawValue) })
-                        }
-                    }
-                    guard let json = try? await session.supervisor.request("orchestration.searchThreads", payload: .object(payload)),
-                          !Task.isCancelled, self.shellSearchGeneration == revision, generation == (await session.store.generation),
-                          let result = try? json.decode(as: ThreadSearchResult.self) else { return nil }
-                    let matches = result.matches
-                    if let sequence = result.snapshotSequence, let rows = result.threads {
-                        await session.mountSearch(.init(snapshotSequence: sequence, threads: rows), generation: generation)
-                    }
-                    return matches.map { EnvironmentScope.scope($0, id) }
+                group.addTask {
+                    await self.searchThreadMatches(query, id: id, session: session, label: label,
+                                                   projectIds: projectIds, revision: revision)
                 }
             }
             var all: [ThreadSearchMatch]?
             for await part in group { if let part { all = (all ?? []) + part } }
             return all
         }
+    }
+
+    private func searchThreadMatches(_ query: String, id: String, session: ShellSession, label: String,
+                                     projectIds: Set<ProjectId>?, revision: Int) async -> [ThreadSearchMatch]? {
+        let generation = await session.store.generation
+        var payload: [String: JSONValue] = ["query": .string(query)]
+        if session.omissions.omitOlderSettled, let cut = await session.store.snapshot?.olderSettled {
+            payload["olderSettledBefore"] = .string(cut.before)
+            payload["environmentLabel"] = .string(label)
+            if let projectIds {
+                payload["projectIds"] = .array(projectIds.filter { $0.environmentId == id }.map { .string($0.localId.rawValue) })
+            }
+        }
+        guard let json = try? await session.supervisor.request("orchestration.searchThreads", payload: .object(payload)),
+              !Task.isCancelled, self.shellSearchGeneration == revision, generation == (await session.store.generation),
+              let result = try? json.decode(as: ThreadSearchResult.self) else { return nil }
+        let matches = result.matches
+        if let sequence = result.snapshotSequence, let rows = result.threads {
+            await session.mountSearch(.init(snapshotSequence: sequence, threads: rows), generation: generation)
+        }
+        return matches.map { EnvironmentScope.scope($0, id) }
     }
 
     func clearShellSearch() {
