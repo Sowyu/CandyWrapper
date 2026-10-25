@@ -1,3 +1,4 @@
+import Foundation
 import T3Protocol
 
 /// One coalesced update for a thread view.
@@ -22,6 +23,7 @@ public struct ThreadUpdate: Sendable {
 /// after the cached sequence; settled states go back to the cache.
 public actor ThreadStore {
     private var wireRestorer = ThreadWireRestorer()
+    private var wireSubscription: UUID?
     private var reducer: ThreadReducer
     private var pending: ThreadChangeSet?
     /// Gets whether the first change only grew a streaming text (`ThreadChangeSet.onlyStreamingText`).
@@ -75,9 +77,17 @@ public actor ThreadStore {
     public var status: ThreadSyncStatus { reducer.status }
     public var lastSequence: Int? { reducer.lastSequence }
 
-    /// The input for the next `orchestration.subscribeThread` call.
-    public func subscribeInput(requestCompletionMarker: Bool = true) -> SubscribeThreadInput {
+    /// The input for the next `orchestration.subscribeThread` call. A scoped caller claims
+    /// its UUID before HTTP bootstrap and keeps the same UUID across reconnects and retries.
+    public func subscribeInput(requestCompletionMarker: Bool = true, subscription: UUID? = nil) -> SubscribeThreadInput {
         restoreFromCache()
+        // Cancellation does not stop an already running payload closure. In particular, an
+        // old HTTP bootstrap can finish after its replacement has claimed this store.
+        if let subscription, subscription != wireSubscription, !Task.isCancelled {
+            wireSubscription = subscription
+            wireRestorer = ThreadWireRestorer()
+            if let projection = reducer.projection { wireRestorer.seed(projection) }
+        }
         var input = reducer.subscribeInput(requestCompletionMarker: requestCompletionMarker)
         input.acceptDedupedBodies = true
         input.acceptCompactIds = true
@@ -86,14 +96,17 @@ public actor ThreadStore {
 
     /// Restores a raw stream value before reducers or caches see it. Keep transport arrival
     /// order even for stale sequences: the server remembers the records it delivered.
-    public func applyWire(_ json: JSONValue) throws {
+    /// Values from a replaced subscription return before they can affect those records.
+    public func applyWire(_ json: JSONValue, subscription: UUID? = nil) throws {
+        if let subscription, subscription != wireSubscription { return }
         let item = try OpenTiming.measure("typed decode", "") { try wireRestorer.decode(json) }
         publish(reducer.apply([item]))
     }
 
     /// Forces the next subscription to request a snapshot after a restoration error.
     /// The retained projection stays visible while that snapshot loads.
-    public func resetForResynchronization() {
+    public func resetForResynchronization(subscription: UUID? = nil) {
+        if let subscription, subscription != wireSubscription { return }
         wireRestorer = ThreadWireRestorer()
         reducer.resetForResynchronization()
     }
@@ -107,7 +120,8 @@ public actor ThreadStore {
     }
 
     /// Seeds the thread from `GET .../bounded` before the socket opens.
-    public func applySnapshot(_ snapshot: ThreadDetailSnapshot) {
+    public func applySnapshot(_ snapshot: ThreadDetailSnapshot, subscription: UUID? = nil) {
+        if let subscription, subscription != wireSubscription { return }
         wireRestorer.seed(snapshot.projection)
         publish(reducer.applySnapshot(snapshot))
     }
