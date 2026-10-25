@@ -1,4 +1,5 @@
 import AppKit
+import UserNotifications
 import DesignSystem
 import Features
 import T3Client
@@ -207,6 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func cancelQuit() {
         returnFromCancelledQuit()
+        space?.refreshReminders()
         // CandyWrapper stays open, so the schedule goes back off.
         if orchestratorHandedOff { orchestratorHandedOff = false; orchestrator?.quitCancelled() }
     }
@@ -458,6 +460,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func installNotifications(window: NSWindow, environments: Environments, threads: ThreadController, commands: SidebarCommands,
                                       settings: SettingsController) {
         let coordinator = ThreadNotificationCoordinator(environments: environments, window: window)
+        coordinator.spaceResponse = { [weak self, weak settings] response in
+            if response.action == UNNotificationDefaultActionIdentifier { settings?.close() }
+            await self?.space?.reminderResponse(response)
+        }
+        coordinator.spaceDidFire = { [weak self] in self?.space?.refreshReminders() }
         coordinator.openThread = { [weak self, weak threads, weak settings, weak commands] in
             guard settings?.isOpen != true else { return nil }
             if let id = self?.orchestrator?.visibleThreadId, let env = id.environmentId { return (env, id.localId) }

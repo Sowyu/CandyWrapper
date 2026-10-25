@@ -10,6 +10,8 @@ import SpaceLocal
 @MainActor
 final class SpaceController {
     let store: SpaceDocumentStore
+    private let reminders: SpaceReminderController
+    private var remindersEnabled: Bool?
     /// Page images through the local copy's blob cache, once the copy is open.
     private var blobs: SpaceLocalBlobs?
     private var lifecycle: Task<Void, Never>?
@@ -29,12 +31,22 @@ final class SpaceController {
         self.sidebar = sidebar
         self.commands = commands
         self.store = store
+        reminders = SpaceReminderController(store: store)
         if let persistent = store as? PersistentSpacePageStore {
             persistent.onFailure = { [weak self] in self?.showStorageFailure() }
             persistent.onSavingChange = { [weak self, weak persistent] in
                 self?.sidebar?.space?.storageStatus = persistent?.failure != nil ? "Not saved" : persistent?.isSaving == true ? "Saving…" : "This Mac"
             }
         }
+        reminders.openPage = { [weak self] id in
+            guard let self else { return }
+            NSApp.activate()
+            self.window?.makeKeyAndOrderFront(nil)
+            self.enterMode()
+            self.open(.spacePage(id.rawValue))
+        }
+        reminders.flush = { [weak store] in try await (store as? PersistentSpacePageStore)?.flush() }
+        reminders.onFailure = { [weak self] _ in self?.showReminderFailure() }
         sidebar.actions.openSpace = { [weak self] in self?.enterMode() }
         commands.onSpaceHidden = { [weak self] in self?.paneHidden() }
         settings.observe { [weak self] in self?.sync() }
@@ -43,6 +55,13 @@ final class SpaceController {
 
     /// Follows the switch and the theme: Space's sidebar exists only while both allow it.
     func sync() {
+        let shouldRemind = settings.isActive && (store as? PersistentSpacePageStore)?.isOpen != false && lifecycle == nil
+        // Keep OS-owned reminders during an enabled launch while the encrypted copy opens.
+        // Only an actual switch/theme-off transition withdraws them before planning can resume.
+        if (!settings.isActive || shouldRemind), remindersEnabled != shouldRemind {
+            remindersEnabled = shouldRemind
+            reminders.setEnabled(shouldRemind)
+        }
         guard let sidebar else { return }
         if settings.isActive {
             if let persistent = store as? PersistentSpacePageStore, !persistent.isOpen || lifecycle != nil {
@@ -100,11 +119,39 @@ final class SpaceController {
                 showStorageFailure()
                 settings.enabled = false
             }
+            #if DEBUG
+            seedReminderFixtureIfRequested()
+            #endif
             lifecycle = nil
             sync()
             if settings.isActive, settings.sidebarMode { enterMode() }
         }
     }
+
+    #if DEBUG
+    /// An isolated UI check, never available in the user's bundle or a release build.
+    private func seedReminderFixtureIfRequested() {
+        guard Bundle.main.bundleIdentifier?.hasPrefix("dev.candywrapper.test.") == true,
+              ProcessInfo.processInfo.arguments.contains("--space-reminder-fixture"),
+              settings.isActive, store.pages.isEmpty else { return }
+        let parent = store.createPage(title: "Reminder check")
+        if var record = store.pages[parent], let order = try? OrderKey.between(nil, nil) {
+            record.fields[FieldID.done] = FieldDefinition(name: "Done", type: .checkbox, order: order)
+            store.put([parent: record])
+        }
+        let item = store.createPage(in: parent, title: "Check the Space reminder")
+        // UTC keeps this check two minutes ahead during a repeated DST hour too.
+        let zone = TimeZone(secondsFromGMT: 0)!
+        guard let point = try? DatePoint.from(Date().addingTimeInterval(120), in: zone),
+              let due = try? DateValue(start: point, tz: zone.identifier, remind: .before(0)),
+              var record = store.pages[item] else { return }
+        record.props[FieldID.due] = .date(due)
+        record.props[FieldID.done] = .checkbox(false)
+        store.put([item: record])
+        settings.lastPage = parent
+        settings.sidebarMode = true
+    }
+    #endif
 
     private func showRecovery(_ key: String) async -> Bool {
         guard let window else { return false }
@@ -134,6 +181,22 @@ final class SpaceController {
         return false
     }
 
+    private func showReminderFailure() {
+        guard let window, window.attachedSheet == nil else { return }
+        let alert = NSAlert()
+        alert.messageText = "Space could not update reminders"
+        alert.informativeText = "Your items are kept. Check notification permissions and reopen Space to try again."
+        alert.beginSheetModal(for: window)
+    }
+
+    func reminderResponse(_ response: SpaceReminderResponse) async {
+        // A notification can launch the app before the encrypted copy finishes opening.
+        while let lifecycle { await lifecycle.value }
+        await reminders.respond(to: response)
+    }
+
+    func refreshReminders() { reminders.refresh() }
+
     private func showStorageFailure() {
         guard let window, window.attachedSheet == nil else { return }
         let alert = NSAlert()
@@ -144,12 +207,16 @@ final class SpaceController {
 
     var hasPendingWrites: Bool {
         pageView?.commitTyping()
-        guard let persistent = store as? PersistentSpacePageStore else { return false }
-        return persistent.isSaving || persistent.failure != nil
+        guard let persistent = store as? PersistentSpacePageStore else { return reminders.hasPendingWork }
+        return persistent.isSaving || persistent.failure != nil || reminders.hasPendingWork
     }
     func flush() async -> Bool {
         pageView?.commitTyping()
-        do { try await (store as? PersistentSpacePageStore)?.flush(); return true }
+        do {
+            try await (store as? PersistentSpacePageStore)?.flush()
+            await reminders.prepareToQuit()
+            return true
+        }
         catch { showStorageFailure(); return false }
     }
 
