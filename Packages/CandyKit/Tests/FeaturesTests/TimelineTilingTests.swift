@@ -136,6 +136,46 @@ struct TimelineTilingTests {
         }
     }
 
+    @Test func upwardWheelPagesWithinOneFoldedRow() throws {
+        let all = try ThreadTimelineTests.manyItems(copies: 1)
+        let (_, message) = try Self.liveParts(all)
+        let t = TimelineView(frame: NSRect(x: 0, y: 0, width: 844, height: 728))
+        let window = NSWindow(contentRect: t.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = t
+        var answer = message
+        answer.text = "The completed answer."
+        t.setItems([
+            TimelineItem(row: TimelineRow(id: "folded-run", createdAt: nil,
+                kind: .turnFold(runId: "same-run", label: "Worked for 1s", expanded: false))),
+            TimelineItem(row: TimelineRow(id: "answer", createdAt: nil, kind: .message(answer,
+                projectedItem: nil, showAssistantMeta: false, showAssistantCopyButton: false,
+                assistantCopyStreaming: false, turnDiffSummary: nil))),
+        ])
+        t.layoutSubtreeIfNeeded()
+        #expect(!t.overflowsComposerViewport)
+        t.historyCursor = "page-1"
+        var requests = 0
+        t.onNearTop = { requests += 1 }
+        func wheel(_ delta: Int32) throws {
+            let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
+                wheelCount: 1, wheel1: delta, wheel2: 0, wheel3: 0))
+            t.scrollView.scrollWheel(with: try #require(NSEvent(cgEvent: cg)))
+        }
+        try wheel(-60)
+        #expect(requests == 0, "downward scrolling does not ask for older history")
+        try wheel(60)
+        #expect(requests == 1, "upward scrolling works even without a bounds change")
+        try wheel(60)
+        #expect(requests == 1, "one outstanding page per cursor")
+        t.historyCursor = "page-2"
+        try wheel(60)
+        #expect(requests == 2, "the same folded row can receive another page")
+        t.historyCursor = "page-2"
+        try wheel(60)
+        #expect(requests == 2, "unchanged updates do not rearm demand")
+    }
+
     /// The user's sharper repro: when a turn finishes, its live rows (working header, interim
     /// answers, the activity line, tool groups) give way to a fold and the final answer under new
     /// ids. None of the live views may stay on screen, at the end or scrolled away.

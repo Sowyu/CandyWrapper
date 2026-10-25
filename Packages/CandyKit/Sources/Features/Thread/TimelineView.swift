@@ -42,10 +42,7 @@ public final class TimelineView: DSView {
     let context = TimelineContext()
     let scrollView = ComposerTimelineScrollView()
     public var overflowsComposerViewport: Bool { (scrollView.documentView?.bounds.height ?? 0) > scrollView.contentView.bounds.height + 1 }
-    public var onComposerScrollGesture: ((CGFloat, Bool, Bool) -> Void)? {
-        get { scrollView.onGesture }
-        set { scrollView.onGesture = newValue }
-    }
+    public var onComposerScrollGesture: ((CGFloat, Bool, Bool) -> Void)?
     private let document = DSView()
     private let minimap = ThreadMinimapView()
     public let worktreeSetup = ThreadWorktreeSetupView()
@@ -63,6 +60,11 @@ public final class TimelineView: DSView {
     private var adjusting = false
     private var pillWork: DispatchWorkItem?
     private var lastNearTopId: String?
+    /// A bounded page can prepend tools within the same folded row. Rearm demand when
+    /// its cursor advances, even when the first rendered row keeps the same identity.
+    public var historyCursor: String? {
+        didSet { if historyCursor != oldValue { lastNearTopId = nil } }
+    }
     private var laidOutWidth: CGFloat = 0
     private var tiling = false
     private var retile = false
@@ -197,8 +199,8 @@ public final class TimelineView: DSView {
     /// the end staying pinned, so an expanded group opens downward (`suspendEndScrollMaintenanceForDisclosure`,
     /// MessagesTimeline.tsx:719-752).
     private var disclosureRowId: String?
-    /// The user scrolled within `nearTop` of the first row. Called once per first row, so the
-    /// app can load an older page and prepend it; the visible rows stay where they are.
+    /// The user scrolled within `nearTop` of the first row. Called once per first row or
+    /// history cursor; the visible rows keep their anchor while older items arrive.
     public var onNearTop: (@MainActor () -> Void)?
 
     /// Recycled rows and the hidden setup card wait here, outside the scroll document. A document
@@ -227,6 +229,11 @@ public final class TimelineView: DSView {
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.verticalScrollElasticity = .allowed
         scrollView.documentView = document
+        scrollView.onGesture = { [weak self] delta, canScroll, towardEnd in
+            self?.onComposerScrollGesture?(delta, canScroll, towardEnd)
+            // An upward wheel still asks for history when a small folded window fits.
+            if delta < 0 { self?.requestEarlierIfNearTop() }
+        }
         parked.isHidden = true
         addSubview(parked)
         parked.addSubview(worktreeSetup)
@@ -345,7 +352,7 @@ public final class TimelineView: DSView {
     /// Replaces the rows. Unchanged rows keep their views and heights. `change` says which rows
     /// differ from the current ones, so an update on a long thread touches only those.
     func setItems(_ new: [TimelineItem], change: TimelineChange = .all) {
-        if change == .thread { followsEnd = true }
+        if change == .thread { followsEnd = true; lastNearTopId = nil }
         let anchor = captureAnchor()
         let old = items
         items = new
@@ -642,6 +649,11 @@ public final class TimelineView: DSView {
         tile()
         updateMinimapPosition()
         minimap.revealForScroll()
+        requestEarlierIfNearTop()
+    }
+
+    private func requestEarlierIfNearTop() {
+        guard !adjusting else { return }
         if viewport.minY < Self.nearTop, let first = items.first?.id, first != lastNearTopId, onNearTop != nil {
             lastNearTopId = first
             onNearTop?()
