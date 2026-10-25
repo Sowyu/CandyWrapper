@@ -91,4 +91,13 @@ struct ComposerFeedbackTests {
         let idle = Self.shell(#""status":"idle","latestRunId":"r1","lastError":"Usage limit","lastErrorClass":"usage_limit""#)
         #expect(state.visible("k", shell: idle) == .init(message: "Usage limit", variant: .warning))
     }
+
+    /// A snooze counts only until its reset passes, since the server leaves `snoozedUntil` behind (f416175804).
+    @Test func usageLimitSnoozeEndsAtReset() {
+        let snoozed = Self.shell(#""status":"failed","latestRunId":"r1","lastErrorClass":"usage_limit","usageLimitResetAt":"2026-06-20T05:00:00.000Z","snoozedUntil":"2026-06-20T05:00:00.000Z","limitRecovery":{"runId":"r1","resetAt":"2026-06-20T05:00:00.000Z","autoResume":false,"snooze":true}"#)
+        let before = ISO8601DateFormatter().date(from: "2026-06-20T04:00:00Z")!
+        let after = ISO8601DateFormatter().date(from: "2026-06-20T06:00:00Z")!
+        #expect(ThreadUsageLimitRecovery.snoozed(snoozed, now: before))
+        #expect(!ThreadUsageLimitRecovery.snoozed(snoozed, now: after))
+    }
 }

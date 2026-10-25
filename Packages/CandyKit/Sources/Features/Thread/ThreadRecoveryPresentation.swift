@@ -38,9 +38,12 @@ public enum ThreadUsageLimitRecovery {
         let stopped = thread.latestRunCompletedAt.value?.date ?? thread.updatedAt.date
         return stopped.map { reset > $0 } ?? false
     }
-    public static func snoozed(_ thread: ThreadShell) -> Bool {
-        thread.limitRecovery?.runId == thread.latestRunId && thread.limitRecovery?.resetAt == thread.usageLimitResetAt
-            && thread.limitRecovery?.snooze == true && thread.snoozedUntil?.date == thread.usageLimitResetAt?.date
+    /// The server leaves `snoozedUntil` in place after the timer wakes the thread, so a snooze whose
+    /// reset has passed no longer counts (UsageLimitRecoveryBanner.tsx:48-58, f416175804).
+    public static func snoozed(_ thread: ThreadShell, now: Date = Date()) -> Bool {
+        guard let reset = thread.usageLimitResetAt?.date, reset > now else { return false }
+        return thread.limitRecovery?.runId == thread.latestRunId && thread.limitRecovery?.resetAt == thread.usageLimitResetAt
+            && thread.limitRecovery?.snooze == true && thread.snoozedUntil?.date == reset
     }
     public static func scheduled(_ thread: ThreadShell) -> Bool {
         thread.limitRecovery?.runId == thread.latestRunId && thread.limitRecovery?.resetAt == thread.usageLimitResetAt && thread.limitRecovery?.autoResume == true

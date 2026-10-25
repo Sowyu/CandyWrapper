@@ -4803,10 +4803,12 @@ extension ComposerController {
             var actions: [String] = []
             if ThreadUsageLimitRecovery.canSchedule(thread) {
                 actions = [pending ? "Saving..." : ThreadUsageLimitRecovery.scheduled(thread) ? "Cancel auto-resume" : "Resume at reset"]
-                if !ThreadUsageLimitRecovery.snoozed(thread) { actions.append(pending ? "Saving..." : "Snooze until reset") }
+                // The snooze button stays as "Wake now" while snoozed (UsageLimitRecoveryBanner.tsx:95-102).
+                actions.append(pending ? "Saving..." : ThreadUsageLimitRecovery.snoozed(thread) ? "Wake now" : "Snooze until reset")
             }
             panel.recoveryBanner.apply(.init(variant: .warning, icon: .gauge, title: "Usage limit reached", description: description, actions: actions))
-            panel.recoveryBanner.disabledActions = pending ? Set(actions.indices) : (reset ?? .distantPast) <= Date() ? [1] : []
+            let resetPassed = (reset ?? .distantPast) <= Date()
+            panel.recoveryBanner.disabledActions = pending ? Set(actions.indices) : resetPassed && !ThreadUsageLimitRecovery.snoozed(thread) ? [1] : []
         }
         let resetKey = limited ? thread.map { $0.id.rawValue + ":" + ($0.usageLimitResetAt?.raw ?? "") } : nil
         if resetKey != recoveryResetKey {
@@ -4820,10 +4822,11 @@ extension ComposerController {
     }
     private func updateThreadRecovery(_ index: Int?) {
         guard let index, let thread = shellThread, !recoveryPending.contains(thread.id), ThreadUsageLimitRecovery.canSchedule(thread), let supervisor = shell?.supervisor else { return }
-        if index == 1, (thread.usageLimitResetAt?.date ?? .distantPast) <= Date() {
+        let snoozed = ThreadUsageLimitRecovery.snoozed(thread)
+        if index == 1, !snoozed, (thread.usageLimitResetAt?.date ?? .distantPast) <= Date() {
             toast(.warning, "The reset time has passed. Retry the thread manually."); return
         }
-        guard let payload = ThreadUsageLimitRecovery.update(thread: thread, autoResume: index == 0 ? !ThreadUsageLimitRecovery.scheduled(thread) : nil, snooze: index == 1 ? true : nil) else { return }
+        guard let payload = ThreadUsageLimitRecovery.update(thread: thread, autoResume: index == 0 ? !ThreadUsageLimitRecovery.scheduled(thread) : nil, snooze: index == 1 ? !snoozed : nil) else { return }
         recoveryPending.insert(thread.id); recoveryErrors[thread.id] = nil; updateThreadBanners()
         Task { [weak self] in
             do { _ = try await supervisor.request("orchestration.dispatchCommand", payload: payload) }
