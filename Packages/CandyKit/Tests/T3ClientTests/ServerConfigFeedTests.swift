@@ -32,6 +32,24 @@ struct ServerConfigFeedTests {
         events.compactMap { if case .value(let value) = $0 { value } else { nil } }
     }
 
+    @Test func unavailableConfigStreamAllowsLegacyShellFallback() async throws {
+        let harness = Harness([.succeed])
+        let supervisor = ConnectionSupervisor(dependencies: harness.dependencies)
+        let feed = ServerConfigFeed(supervisor: supervisor)
+        defer { Task { await feed.stop(); await supervisor.disconnect() } }
+        await feed.start()
+        let waiting = Task { await feed.initialConfig(generation: 1) }
+        await supervisor.connect()
+        #expect(await eventually { harness.lastSocket?.sent.count == 1 })
+        let socket = try #require(harness.lastSocket)
+        let request = try #require(requests(socket).first)
+        socket.deliver(.exit(requestId: request.id, exit: .failure([
+            .fail(RPCTypedError(tag: "Unavailable", fields: [:]))
+        ])))
+        #expect(await waiting.value == nil)
+        #expect(await feed.initialConfig(generation: 1) == nil)
+    }
+
     @Test func sharesOneStreamWithEarlyAndLateObserversAndReturnsRawSnapshotConfig() async throws {
         let harness = Harness([.succeed])
         let supervisor = ConnectionSupervisor(dependencies: harness.dependencies)

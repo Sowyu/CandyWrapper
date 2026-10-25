@@ -15,11 +15,16 @@ final class ShellSession {
     var lifecycleObservers: [UUID: (JSONValue) -> Void] = [:]
     let environmentId: String
     let supervisor: ConnectionSupervisor
+    let configFeed: ServerConfigFeed
     let store: ShellStore
     /// The same server and token for HTTP routes, such as thread history pages.
     let http: EnvironmentHTTP
     let token: String
     private var subscription: Task<Void, Never>?
+    private var configurationWatch: Task<Void, Never>?
+    private var negotiatedServerVersion: String?
+    private var negotiatedConfig = false
+    private var latestConfiguration: (generation: Int, omissions: ShellOmissions, marker: Bool)?
     private var pulling = false
     private var pullAgain = false
     /// Sidebar changes reach the UI at most once per frame (30 a second when constrained).
@@ -82,6 +87,7 @@ final class ShellSession {
         self.http = http
         self.token = token
         self.supervisor = supervisor
+        configFeed = ServerConfigFeed(supervisor: supervisor)
         let relay = ChangeRelay()
         store = ShellStore(cached: cached, onChange: { relay.fire() })
         relay.set { [weak self] in Task { @MainActor in self?.pacer.request() } }
@@ -91,6 +97,20 @@ final class ShellSession {
     func start() {
         guard !started, !stopped else { return }
         started = true
+        let feed = configFeed
+        configurationWatch = Task { [weak self] in
+            await feed.start()
+            var generation = 0
+            for await event in await feed.events() {
+                if Task.isCancelled { return }
+                switch event {
+                case .subscribed(let next): generation = next
+                case .value(let json) where json["type"]?.stringValue == "snapshot":
+                    if let config = json["config"] { await self?.configurationChanged(config, generation: generation) }
+                default: break
+                }
+            }
+        }
         lifecycleSubscription = supervisor.subscribe("subscribeServerLifecycle", payload: { .object([:]) }) { [weak self] event in
             guard case .value(let json) = event else { return }
             await MainActor.run {
@@ -104,6 +124,10 @@ final class ShellSession {
             await supervisor.observePlatform()
             await supervisor.connect(unlessStopped: { @MainActor [weak self] in self?.stopped ?? true })
         }
+        subscribeShell()
+    }
+
+    private func subscribeShell() {
         subscription = supervisor.subscribe("orchestration.subscribeShell", payload: { [weak self] in
             await self?.subscribeInput() ?? .object([:])
         }, handler: { [weak self] event in
@@ -116,15 +140,45 @@ final class ShellSession {
         })
     }
 
+    private func configurationChanged(_ config: JSONValue, generation: Int) async {
+        let policy = ShellOmissions(config: config)
+        let marker = config["shellResumeCompletionMarker"]?.boolValue == true
+        latestConfiguration = (generation, policy, marker)
+        guard !stopped, preparedGeneration == generation,
+              await supervisor.state.generation == generation,
+              policy != omissions || marker != completionMarker else { return }
+        // Recheck even when a development server changes flags without changing its version.
+        subscription?.cancel()
+        preparedGeneration = 0
+        resumePrepared = false
+        subscribeShell()
+    }
+
+    private func configurationStillMatches(_ generation: Int) -> Bool {
+        guard let latestConfiguration, latestConfiguration.generation == generation else { return true }
+        return latestConfiguration.omissions == omissions && latestConfiguration.marker == completionMarker
+    }
+
     /// A disk shell is paint-only. Warm in-memory shells resume when omissions match, retaining
     /// CandyWrapper's delta reconnect; policy changes and cold caches get authoritative HTTP.
     private func prepareShell(_ generation: Int) async {
-        guard preparedGeneration != generation, !stopped else { return }
+        guard preparedGeneration != generation, !stopped, !Task.isCancelled else { return }
         preparingGeneration = generation
-        let config = try? await supervisor.request("server.getConfig")
-        guard !stopped, preparingGeneration == generation, await supervisor.state.generation == generation else { return }
+        let version = await supervisor.serverVersion
+        if negotiatedConfig, let version, version == negotiatedServerVersion,
+           await store.canResume(omissions: omissions), configurationStillMatches(generation), !stopped, !Task.isCancelled {
+            resumePrepared = true
+            resumingConnection = true
+            preparedGeneration = generation
+            if !completionMarker { await store.resumed(); resumingConnection = false }
+            return
+        }
+        let config = await configFeed.initialConfig(generation: generation)
+        guard !stopped, !Task.isCancelled, preparingGeneration == generation, await supervisor.state.generation == generation else { return }
         omissions = ShellOmissions(config: config ?? .null)
         completionMarker = config?["shellResumeCompletionMarker"]?.boolValue == true
+        negotiatedConfig = config != nil
+        negotiatedServerVersion = version
         if await store.canResume(omissions: omissions) {
             resumePrepared = true
             resumingConnection = true
@@ -340,10 +394,12 @@ final class ShellSession {
     func stop() {
         stopped = true
         subscription?.cancel()
+        configurationWatch?.cancel()
         lifecycleSubscription?.cancel()
         countRead?.cancel(); olderRead?.cancel()
         for task in familyReads.values { task.cancel() }
-        Task { await supervisor.disconnect() }
+        let feed = configFeed
+        Task { await feed.stop(); await supervisor.disconnect() }
     }
 
     /// A project's icon file: `assets.createUrl` with a `project-favicon` resource, then the signed URL

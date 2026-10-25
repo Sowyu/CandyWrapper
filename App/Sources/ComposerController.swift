@@ -456,14 +456,13 @@ final class ComposerController {
     /// `subscribeServerConfig`: a snapshot first, then provider and settings updates (protocol.md 1562).
     private func subscribeConfig(_ shell: ShellSession) -> Task<Void, Never> {
         let env = shell.environmentId
-        // `usageLimitSources` streams the hubs' quota; `usageLimitsCommand` says this client answers `/usage-limits`.
-        let stream = shell.supervisor.subscribe("subscribeServerConfig", payload: {
-            .object(["environmentThemes": .bool(true), "usageLimitSources": .bool(true), "usageLimitsCommand": .bool(true)])
-        }, handler: { [weak self] event in
-            guard case .value(let json) = event, let change = try? json.decode(as: ServerConfigEvent.self) else { return }
-            await MainActor.run { self?.configChanged(change, environmentId: env) }
-        })
-        return stream
+        return Task { [weak self] in
+            for await event in await shell.configFeed.events() {
+                if Task.isCancelled { return }
+                guard case .value(let json) = event, let change = try? json.decode(as: ServerConfigEvent.self) else { continue }
+                self?.configChanged(change, environmentId: env)
+            }
+        }
     }
 
     private var keybindingsNotice = KeybindingsUpdateNotice()
