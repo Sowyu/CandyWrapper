@@ -129,7 +129,7 @@ final class SpaceIconView: DSView {
             Themed.color(\.foreground, 0.06).setFill()
             NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
         }
-        let inset = onClick == nil ? 0 : bounds.width * 0.1
+        let inset: CGFloat = onClick == nil ? 0 : 2
         SpacePageIcon.draw(choice, in: bounds.insetBy(dx: inset, dy: inset))
     }
 }

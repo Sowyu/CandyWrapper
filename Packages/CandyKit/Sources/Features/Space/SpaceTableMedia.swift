@@ -57,7 +57,12 @@ extension SpaceTableDocument {
         var v: NSView? = superview
         while let cur = v, !(cur is SpaceTableView) { v = cur.superview }
         guard let table = v as? SpaceTableView else { return }
-        _ = table.toasts.show(ToastView(title: "Deleted \(name)", actionTitle: "Undo", action: { [weak self] in self?.undo(nil) }))
+        let toasts = table.toasts
+        var shown = 0
+        shown = toasts.show(ToastView(title: "Deleted \(name)", actionTitle: "Undo", action: { [weak self, weak toasts] in
+            self?.undo(nil)
+            toasts?.dismiss(shown)
+        }))
     }
 }
 

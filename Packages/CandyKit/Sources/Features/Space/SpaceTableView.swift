@@ -649,7 +649,10 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
         items.append(.separator)
         items.append(MenuItem("Hide in this view", icon: .eyeOff) { [weak self] in self?.model.setHidden(column.id, true) })
         if column.isTitle {
-            items.append(.note("Every row is a page, so its title can't be deleted."))
+            var delete = MenuItem("Delete field", icon: .trash2)
+            delete.isDisabled = true
+            items.append(delete)
+            items.append(.mutedNote("Every row needs a title, so this field can only be hidden."))
         } else {
             items.append(MenuItem("Delete field", icon: .trash2, destructive: true) { [weak self] in self?.deleteField(column.id) })
         }
