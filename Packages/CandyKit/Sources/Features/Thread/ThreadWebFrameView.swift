@@ -99,7 +99,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     override var isFlipped: Bool { true }
 
     var isLive: Bool { webView != nil }
-    var hasPreview: Bool { preview.image != nil && preview.superview != nil && !isHiddenOrHasHiddenAncestor }
+    var hasPreview: Bool { preview.hasPixels && preview.superview != nil && !isHiddenOrHasHiddenAncestor }
 
     /// Creates the web view and loads `page`, unless it already shows it.
     func activate(_ page: Page) {
@@ -177,7 +177,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         capturing = false
         capturedKey = nil
         displayedKey = nil
-        preview.image = nil
+        preview.clear()
         preview.removeFromSuperview()
         acceptsMessages = false
         hostNavigation = nil
@@ -221,13 +221,12 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         super.layout()
         guard let key = previewKey, htmlCache?.isActive == true, window != nil, !isHiddenOrHasHiddenAncestor else { return }
         if displayedKey != key {
-            preview.image = nil
+            preview.clear()
             preview.removeFromSuperview()
             displayedKey = nil
             if !paintReady, let image = htmlCache?.image(for: key) {
                 displayedKey = key
-                preview.image = image
-                preview.imageScaling = .scaleAxesIndependently
+                preview.show(image) { [weak cache = htmlCache] in cache?.image(for: key) }
                 preview.frame = bounds
                 preview.autoresizingMask = [.width, .height]
                 addSubview(preview, positioned: .above, relativeTo: webView)
@@ -242,7 +241,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     func refreshPreview() {
         capturedKey = nil
         displayedKey = nil
-        preview.image = nil
+        preview.clear()
         preview.removeFromSuperview()
         paintReady = false
         if loaded, let webView { preparePreview(webView) }
@@ -256,7 +255,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
               let web = webView, let cache = htmlCache, let key = previewKey else { return }
         if cache.contains(key) {
             capturedKey = key
-            preview.image = nil
+            preview.clear()
             preview.removeFromSuperview()
             return
         }
@@ -266,7 +265,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         config.afterScreenUpdates = true
         web.takeSnapshot(with: config) { [weak self, weak web, weak cache] image, _ in
             guard let self, let web, self.webView === web, self.captureGeneration == generation else { return }
-            self.preview.image = nil
+            self.preview.clear()
             self.preview.removeFromSuperview()
             self.capturing = false
             guard self.previewKey == key else { self.needsLayout = true; return }
@@ -455,7 +454,36 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
 }
 
 /// Cached pixels never intercept input meant for the live page underneath.
-private final class HtmlRenderPreviewImageView: NSImageView {
+private final class HtmlRenderPreviewImageView: NSView {
+    private var pending: NSImage?
+    private var reload: (() -> NSImage?)?
+    private(set) var hasPixels = false
+
+    override var wantsUpdateLayer: Bool { false }
+
+    func show(_ image: NSImage, reload: @escaping () -> NSImage?) {
+        pending = image
+        self.reload = reload
+        hasPixels = true
+        needsDisplay = true
+    }
+
+    func clear() {
+        pending = nil
+        reload = nil
+        hasPixels = false
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let image = pending ?? reload?() else { hasPixels = false; return }
+        image.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true,
+                   hints: [.interpolation: NSImageInterpolation.none.rawValue])
+        // The backing layer now owns the rendered result. Do not pin purgeable source pixels until the
+        // live iframe finishes; an uncommon redraw can reacquire them through the cache.
+        pending = nil
+    }
+
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
