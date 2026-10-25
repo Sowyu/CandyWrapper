@@ -11,6 +11,7 @@ public actor ServerConfigFeed {
     private var stopped = false
     private var generation: Int?
     private var snapshot: JSONValue?
+    private var initialFailed = false
     private var updates: [String: JSONValue] = [:]
     private var listeners: [UUID: AsyncStream<SubscriptionEvent>.Continuation] = [:]
     private var waiters: [UUID: (generation: Int, continuation: CheckedContinuation<JSONValue?, Never>)] = [:]
@@ -72,6 +73,7 @@ public actor ServerConfigFeed {
         if let generation {
             if requested < generation { return nil }
             if requested == generation, let config = snapshot?["config"] { return config }
+            if requested == generation, initialFailed { return nil }
         }
         let id = UUID()
         return await withTaskCancellationHandler {
@@ -109,6 +111,7 @@ public actor ServerConfigFeed {
             if generation != next {
                 generation = next
                 snapshot = nil
+                initialFailed = false
                 updates.removeAll(keepingCapacity: true)
                 for (id, waiter) in waiters where waiter.generation < next {
                     waiters[id] = nil
@@ -118,7 +121,13 @@ public actor ServerConfigFeed {
         case .value(let value):
             cache(value)
         case .interrupted:
-            break
+            if snapshot == nil {
+                initialFailed = true
+                for (id, waiter) in waiters where waiter.generation == generation {
+                    waiters[id] = nil
+                    waiter.continuation.resume(returning: nil)
+                }
+            }
         }
         for listener in listeners.values { listener.yield(event) }
     }
@@ -129,6 +138,7 @@ public actor ServerConfigFeed {
             // A snapshot carries config at the top level (server.ts:693-697), never under payload.
             guard case .object? = value["config"] else { return }
             snapshot = value
+            initialFailed = false
             // A later editor-discovery snapshot is authoritative for config fields. The two hubs
             // never ride in snapshots and must survive them (ws.ts:313-359, 3178-3180).
             for type in ["keybindingsUpdated", "providerStatuses", "settingsUpdated"] {
@@ -178,6 +188,7 @@ public actor ServerConfigFeed {
         stopped = true
         generation = nil
         snapshot = nil
+        initialFailed = false
         updates.removeAll()
         for waiter in waiters.values { waiter.continuation.resume(returning: nil) }
         waiters.removeAll()
