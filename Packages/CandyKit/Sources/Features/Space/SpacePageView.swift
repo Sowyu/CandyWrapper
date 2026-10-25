@@ -40,6 +40,7 @@ public final class SpacePageView: DSView {
         }
         header.viewSwitch.onSelect = { [weak self] view in self?.setView(view) }
         header.onHistory = { [weak self] in self?.showHistory() }
+        header.onIcon = { [weak self] anchor in self?.pickIcon(anchor) }
         token = store.observe { [weak self] in self?.storeChanged() }
         show(nil)
     }
@@ -97,6 +98,16 @@ public final class SpacePageView: DSView {
         }
     }
 
+    /// In Page view the change joins the editor's undo stack, like a restore.
+    private func pickIcon(_ anchor: NSRect) {
+        guard let page else { return }
+        SpacePageIcon.showPicker(from: header, anchor: anchor, current: store.pages[page]) { [weak self] choice in
+            guard let self, self.page == page else { return }
+            let change = SpacePageIcon.change(page, choice)
+            if let editor = self.editor { editor.commitDiscrete([change], name: "Icon") } else { self.store.edit([change]) }
+        }
+    }
+
     private func clearContent() {
         editor?.flushTyping()
         history?.removeFromSuperview()
@@ -130,6 +141,7 @@ public final class SpacePageView: DSView {
         newPage.isHidden = true
         let names = SpaceTree.ancestors(of: page, in: pages).map { pages[$0].map { $0.title.isEmpty ? "Untitled" : $0.title } ?? "Untitled" }
         header.update(crumb: ["Space"] + names, title: record.title, meta: meta(page, record), view: record.view)
+        header.icon = SpacePageIcon.choice(record)
         setAccessibilityLabel(record.title.isEmpty ? "Untitled" : record.title)
         if shownView != record.view { mount(record.view) }
         needsLayout = true
@@ -234,6 +246,13 @@ final class SpacePageHeaderView: DSView, NSTextFieldDelegate {
     private let meta = NSTextField(labelWithString: "")
     let viewSwitch = SpaceViewSwitch()
     let historyButton = ButtonView(icon: .history, variant: .ghost, size: .iconSm)
+    let iconView = SpaceIconView()
+    let addIconButton = ButtonView(icon: .smilePlus, variant: .ghost, size: .iconSm)
+    var icon: SpacePageIcon.Choice = .none {
+        didSet { if icon != oldValue { iconView.choice = icon; addIconButton.isHidden = icon != .none; needsLayout = true } }
+    }
+    /// Opens the icon picker under the given rect.
+    var onIcon: (NSRect) -> Void = { _ in }
     var onHistory: () -> Void = {}
     var onTitle: (String) -> Void = { _ in }
     var onTitleReturn: () -> Void = {}
@@ -256,7 +275,14 @@ final class SpacePageHeaderView: DSView, NSTextFieldDelegate {
         historyButton.toolTip = "Page history"
         historyButton.iconColor = Themed.color(\.mutedForeground)
         historyButton.action = { [weak self] in self?.onHistory() }
-        [crumb, title, meta, viewSwitch, historyButton].forEach(addSubview)
+        iconView.setAccessibilityLabel("Page icon")
+        iconView.toolTip = "Change icon"
+        iconView.onClick = { [weak self] in guard let self else { return }; self.onIcon(self.iconView.frame) }
+        addIconButton.setAccessibilityLabel("Add icon")
+        addIconButton.toolTip = "Add icon"
+        addIconButton.iconColor = Themed.color(\.mutedForeground)
+        addIconButton.action = { [weak self] in guard let self else { return }; self.onIcon(self.addIconButton.frame) }
+        [crumb, title, meta, viewSwitch, historyButton, iconView, addIconButton].forEach(addSubview)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -302,7 +328,12 @@ final class SpacePageHeaderView: DSView, NSTextFieldDelegate {
         viewSwitch.frame = NSRect(x: w - switchSize.width, y: 80 + (42 - switchSize.height) / 2, width: switchSize.width, height: switchSize.height)
         let hb = historyButton.intrinsicContentSize
         historyButton.frame = NSRect(x: viewSwitch.frame.minX - 8 - hb.width, y: 80 + (42 - hb.height) / 2, width: hb.width, height: hb.height)
-        title.frame = NSRect(x: -2, y: 80, width: max(0, historyButton.frame.minX - 12), height: 42)
+        addIconButton.frame = historyButton.frame.offsetBy(dx: -hb.width - 2, dy: 0)
+        // A set icon sits before the title at its cap height; the title moves over by its width.
+        iconView.frame = NSRect(x: -4, y: 81, width: 40, height: 40)
+        let tx: CGFloat = iconView.isHidden ? -2 : 44
+        let right = addIconButton.isHidden ? historyButton.frame.minX : addIconButton.frame.minX
+        title.frame = NSRect(x: tx, y: 80, width: max(0, right - 12 - tx), height: 42)
         meta.frame = NSRect(x: 0, y: 134, width: w, height: 16)
     }
 }

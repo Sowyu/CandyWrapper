@@ -214,7 +214,7 @@ final class SpaceBoardView: DSView, NSMenuItemValidation {
         menu.addItem(manual)
         menu.addItem(.separator())
         let current = settings.sort.first
-        for (id, name) in [(FieldID.title, "Title")] + sortedFields(record).map({ ($0.key, $0.value.name) }) {
+        for (id, name) in [(FieldID.title, record.titleName ?? SpaceTableModel.defaultTitleName)] + sortedFields(record).map({ ($0.key, $0.value.name) }) {
             let on = current?.field == id
             let item = SpaceMenuItem(on ? "\(name) \(current!.desc ? "↓" : "↑")" : name) { [weak self] in
                 self?.setSort([Sort(field: id, desc: on ? !current!.desc : false)])
@@ -346,7 +346,13 @@ final class SpaceBoardCanvas: DSView, NSTextFieldDelegate {
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
         setAccessibilityRole(.group)
         setAccessibilityLabel("Board columns")
+        mediaToken = NotificationCenter.default.addObserver(forName: SpaceMedia.didLoad, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.needsDisplay = true }
+        }
     }
+
+    private var mediaToken: NSObjectProtocol?
+    isolated deinit { if let mediaToken { NotificationCenter.default.removeObserver(mediaToken) } }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
@@ -363,8 +369,8 @@ final class SpaceBoardCanvas: DSView, NSTextFieldDelegate {
         let width = Self.laneWidth - 2 * Self.pad - 20
         var heights: [PageID: CGFloat] = [:]
         for (id, card) in cards {
-            let w = card.todo ? width - 24 : width
-            if let old = self.cards[id], old.title == card.title, old.todo == card.todo, let h = titleHeights[id] { heights[id] = h; continue }
+            let w = (card.todo ? width - 24 : width) - (card.icon == .none ? 0 : 22)
+            if let old = self.cards[id], old.title == card.title, old.todo == card.todo, (old.icon == .none) == (card.icon == .none), let h = titleHeights[id] { heights[id] = h; continue }
             let text = card.title.isEmpty ? "Untitled" : card.title
             heights[id] = ceil(NSAttributedString(string: text, attributes: [.font: Self.titleFont]).boundingRect(
                 with: NSSize(width: w, height: 1000), options: [.usesLineFragmentOrigin, .usesFontLeading]).height)
@@ -525,6 +531,7 @@ final class SpaceBoardCanvas: DSView, NSTextFieldDelegate {
             SpaceBlockFragment.drawCheckbox(CGRect(x: x, y: r.minY + 10.5, width: 16, height: 16), on: card.done)
             x += 24
         }
+        if SpacePageIcon.draw(card.icon, in: CGRect(x: x, y: r.minY + 10.5, width: 16, height: 16)) { x += 22 }
         let editingThis = editing?.target == .card(id)
         if !editingThis {
             let empty = card.title.isEmpty
@@ -691,7 +698,7 @@ final class SpaceBoardCanvas: DSView, NSTextFieldDelegate {
         switch target {
         case .card(let id):
             guard let r = lanes.lazy.compactMap({ $0.cards.first { $0.id == id }?.rect }).first else { return nil }
-            let x = r.minX + 10 + (cards[id]?.todo == true ? 24 : 0) - 2
+            let x = r.minX + 10 + (cards[id]?.todo == true ? 24 : 0) + (cards[id].map { $0.icon == .none } == false ? 22 : 0) - 2
             return CGRect(x: x, y: r.minY + 8, width: r.maxX - 8 - x, height: 19)
         case .option(let id):
             guard let lane = lanes.first(where: { optionID($0.column) == id }) else { return nil }

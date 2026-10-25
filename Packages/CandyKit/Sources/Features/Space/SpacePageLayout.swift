@@ -47,7 +47,7 @@ struct SpaceParagraph: Equatable {
     var todo = false
     var done = false
     var due: DateValue?
-    var icon: String?
+    var icon: SpacePageIcon.Choice = .none
     var view: ViewType = .page
 
     init(type: BlockType = .p, indent: Int = 0) { self.type = type; self.indent = indent }
@@ -59,7 +59,7 @@ struct SpaceParagraph: Equatable {
     init(item r: PageRecord) {
         if case .checkbox(let v)? = r.props[FieldID.done] { todo = true; done = v }
         if case .date(let v)? = r.props[FieldID.due] { due = v }
-        icon = r.icon
+        icon = SpacePageIcon.choice(r)
         view = r.view
     }
 
@@ -323,9 +323,7 @@ final class SpaceBlockFragment: NSTextLayoutFragment {
             if let due = t.due.map(moved) { editor.drawDue(p, rightEdge: due.maxX - 4, midY: due.midY) }
         } else if key.isItem {
             let icon = CGRect(x: left, y: midY - 8, width: 16, height: 16)
-            if let emoji = p.icon, !emoji.isEmpty {
-                NSAttributedString(string: emoji, attributes: [.font: NSFont.systemFont(ofSize: 13)]).draw(at: CGPoint(x: icon.minX, y: icon.minY - 1))
-            } else {
+            if !SpacePageIcon.draw(p.icon, in: icon) {
                 SpacePageIcons.draw(SpacePageIcons.viewIcon(p.view), in: icon, color: Themed.color(\.iconMuted))
             }
         }

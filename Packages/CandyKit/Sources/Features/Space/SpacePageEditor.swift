@@ -94,10 +94,17 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
         scrollView.autohidesScrollers = true
         scrollView.scrollerStyle = .overlay
         token = store.observe { [weak self] in self?.storeChanged() }
+        NotificationCenter.default.addObserver(self, selector: #selector(iconLoaded), name: SpaceMedia.didLoad, object: nil)
         load()
     }
 
+    /// A link row's image icon finished decoding.
+    @objc private func iconLoaded() {
+        for (key, p) in paragraphs { if case .image = p.icon { invalidateLayout(key) } }
+    }
+
     isolated deinit {
+        NotificationCenter.default.removeObserver(self)
         flushTimer?.invalidate()
         if let token { store.removeObserver(token) }
     }
@@ -1207,8 +1214,15 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
         let anchor = paragraph(at: sel.location)?.key
         Task { @MainActor [weak self] in
             var anchor = anchor
-            for (data, name, mime) in files {
+            for (original, name, originalMime) in files {
                 guard let self else { return }
+                var data = original, mime = originalMime
+                // SVGs are sanitized and stored as a PNG, never as SVG (SpaceImageImport).
+                if mime == "image/svg+xml" || SpaceImageImport.looksLikeSVG(data) {
+                    guard let png = try? await Task.detached(operation: { try SpaceImageImport.prepare(original, name: name) }).value else { NSSound.beep(); continue }
+                    data = png.data
+                    mime = png.mime
+                }
                 let isImage = mime.hasPrefix("image/")
                 let limit = isImage ? 20_000_000 : 50_000_000
                 guard data.count <= limit else { NSSound.beep(); continue }
@@ -1257,6 +1271,7 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
         case "gif": "image/gif"
         case "heic": "image/heic"
         case "webp": "image/webp"
+        case "svg": "image/svg+xml"
         case "pdf": "application/pdf"
         case "txt", "md": "text/plain"
         default: "application/octet-stream"

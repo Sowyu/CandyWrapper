@@ -19,7 +19,9 @@ Mockup look B's layout, with row dividers only, plus look A's type icons in the 
 - A click selects a cell. A second click, a double click or Return edits it or opens its menu. Checkbox cells tick in one click, and Space ticks a selected checkbox.
 - Sorting from a header replaces the sort with that field alone. The toolbar's Sort menu adds up to three.
 - Changing a text or URL field to select or multi first adds an option for each distinct value, so values convert by name instead of being lost.
-- Deleting a field removes its column, sorts and filters and leaves the values on the items, so undo restores everything.
+- Deleting a field removes its column, sorts and filters and leaves the values on the items, so undo restores everything. A toast offers Undo for it.
+- The title column's name lives on the page as `titleName`, read through `SpaceTableModel.titleName`, with "Title" as the default. Hiding it writes `titleHidden`; a hidden title keeps its width in `cols` for when it shows again.
+- Files & media cells draw from `SpaceMedia`, which decodes 160-pixel thumbnails from the encrypted blob cache in memory only and posts `didLoad` so visible rows redraw. `SpaceTableMedia.swift` holds the cell drawing, the files list popover, the row icon picker and drop handling.
 - A sort or filter that names a deleted field is ignored when reading, and dropped on the next settings write.
 - A new row goes after the page's last content. In a to-do list it starts with `done: false`.
 - Dates display as "Mon 27 Oct" in the device's zone, with the time for timed values and the year when it isn't this year. A `due` value is red when overdue and the item isn't done.

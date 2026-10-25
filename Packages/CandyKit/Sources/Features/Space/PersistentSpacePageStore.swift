@@ -78,8 +78,8 @@ public final class PersistentSpacePageStore: SpaceDocumentStore {
     }
 
     /// Delete forever: null every key of the page and the pages under it through apply, leaving unrenderable empty
-    /// records and their encrypted history. Their blocks' images and files then leave this Mac's blob cache, unless a
-    /// block of another page uses the same blob.
+    /// records and their encrypted history. Their images and files, in blocks, icons and Files & media values, then
+    /// leave this Mac's blob cache, unless another page still uses the same blob.
     public func remove(_ id: PageID) {
         let current = local.replica.current
         guard canEdit, let old = current.pages[id], !old.isEmpty else { return }
@@ -93,9 +93,26 @@ public final class PersistentSpacePageStore: SpaceDocumentStore {
             if case .string(let raw)? = block["page"], let page = try? PageID(raw), gone.contains(page) { dropped.insert(blobID) }
             else { kept.insert(blobID) }
         }
+        // Page icons and Files & media values hold blobs too.
+        for (page, record) in current.pages {
+            let ids = Self.blobIDs(inPage: record)
+            if gone.contains(page) { dropped.formUnion(ids) } else { kept.formUnion(ids) }
+        }
         local.edit(changes)
         let blobs = dropped.subtracting(kept).sorted()
         if !blobs.isEmpty { enqueue { try await $0.removeBlobs(blobs) } }
+    }
+
+    /// Blob ids in a page record's `iconImage` and in its props' file lists.
+    nonisolated static func blobIDs(inPage record: [String: SpaceModel.JSONValue]) -> Set<String> {
+        var out = Set<String>()
+        if case .object(let icon)? = record["iconImage"], case .string(let id)? = icon["id"] { out.insert(id) }
+        if case .object(let props)? = record["props"] {
+            for case .array(let items) in props.values {
+                for case .object(let ref) in items { if case .string(let id)? = ref["id"], ref["mime"] != nil { out.insert(id) } }
+            }
+        }
+        return out
     }
 
     public func history(of page: PageID) async throws -> [SpaceVersion] {

@@ -27,6 +27,7 @@ final class SpaceTableModel {
         case checkbox(Bool)
         case options([FieldOption])
         case date(String, overdue: Bool)
+        case files([BlobReference])
     }
 
     static let titleWidth: CGFloat = 280
@@ -78,6 +79,10 @@ final class SpaceTableModel {
     }
 
     var fields: [String: FieldDefinition] { record?.fields ?? [:] }
+    static let defaultTitleName = "Title"
+    /// The title column's name, `titleName` on this page, shared by every view of its items.
+    var titleName: String { record?.titleName.flatMap { $0.isEmpty ? nil : $0 } ?? Self.defaultTitleName }
+    var titleHidden: Bool { settings.titleHidden }
     var context: FieldContext { FieldContext(now: now(), timeZone: timeZone()) }
     /// Field ids by field order, the order new tables and the Fields menu use.
     var fieldOrder: [String] {
@@ -93,7 +98,7 @@ final class SpaceTableModel {
         let known: (String) -> Bool = { $0 == FieldID.title || fields[$0] != nil }
         sorts = Array(settings.sort.filter { known($0.field) }.prefix(3))
         filters = settings.filter.filter { known($0.field) && (fields[$0.field].map { FieldFilters.operators(for: $0.type) } ?? [.contains, .doesNotContain, .is, .isEmpty, .isNotEmpty]).contains($0.op) }
-        columns = [Column(id: FieldID.title, name: "Title", type: nil,
+        columns = settings.titleHidden ? [] : [Column(id: FieldID.title, name: titleName, type: nil,
                           width: settings.cols.first { $0.field == FieldID.title }.map { CGFloat($0.width) } ?? Self.titleWidth)]
         for col in visibleColumns() where col.field != FieldID.title {
             guard let f = fields[col.field] else { continue }
@@ -129,6 +134,7 @@ final class SpaceTableModel {
             return opts.isEmpty ? .empty : .options(opts.sorted { $0.order < $1.order })
         case (.date, .date(let d)):
             return .date(dateText(d), overdue: column.id == FieldID.due && !isDone(item) && isOverdue(d))
+        case (.files, .files(let refs)): return refs.isEmpty ? .empty : .files(refs)
         default: return .empty
         }
     }
@@ -331,7 +337,9 @@ final class SpaceTableModel {
     /// The settings with `cols` written out, so a first edit keeps the columns the table showed.
     private var materialized: TableViewSettings {
         var s = settings
-        s.cols = columns.filter { !$0.isTitle || $0.width != Self.titleWidth }.map { TableColumn(field: $0.id, width: Double($0.width)) }
+        // A hidden title keeps the width it had for when it shows again.
+        let hiddenTitle = settings.titleHidden ? settings.cols.filter { $0.field == FieldID.title } : []
+        s.cols = hiddenTitle + columns.filter { !$0.isTitle || $0.width != Self.titleWidth }.map { TableColumn(field: $0.id, width: Double($0.width)) }
         s.sort = sorts
         s.filter = filters
         return s
@@ -345,6 +353,7 @@ final class SpaceTableModel {
         case .multi: "Tags"
         case .date: "Date"
         case .url: "Link"
+        case .files: "Files & media"
         default: "Text"
         }
         let names = Set(fields.values.map(\.name))
@@ -365,6 +374,11 @@ final class SpaceTableModel {
 
     func renameField(_ id: String, _ name: String) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if id == FieldID.title {
+            guard !name.isEmpty, name != titleName else { return }
+            commit([pageChange(page, ["titleName": name == Self.defaultTitleName ? .null : .string(name)])], name: "Rename field")
+            return
+        }
         guard !name.isEmpty, var field = fields[id], field.name != name else { return }
         field.name = name
         commit([pageChange(page, ["fields.\(id)": json(field)])], name: "Rename field")
@@ -434,8 +448,16 @@ final class SpaceTableModel {
         commit([pageChange(page, ["fields.\(id)": .null]), settingsChange(s)], name: "Delete field")
     }
 
+    /// The title hides in this view only. It can't be deleted, since every row is a page with a title.
     func setHidden(_ id: String, _ hidden: Bool) {
-        guard id != FieldID.title, let type = fields[id]?.type else { return }
+        if id == FieldID.title {
+            guard hidden != settings.titleHidden else { return }
+            var s = materialized
+            s.titleHidden = hidden
+            commit([settingsChange(s)], name: hidden ? "Hide field" : "Show field")
+            return
+        }
+        guard let type = fields[id]?.type else { return }
         var s = materialized
         if hidden { s.cols.removeAll { $0.field == id } }
         else if !s.cols.contains(where: { $0.field == id }) { s.cols.append(TableColumn(field: id, width: Double(Self.defaultWidth(type)))) }
@@ -493,7 +515,32 @@ final class SpaceTableModel {
         commit([settingsChange(s)], name: "Remove filter")
     }
 
-    func name(of id: String) -> String { id == FieldID.title ? "Title" : fields[id]?.name ?? id }
+    func name(of id: String) -> String { id == FieldID.title ? titleName : fields[id]?.name ?? id }
+
+    // MARK: Files and icons
+
+    func files(_ row: Int, _ column: Column) -> [BlobReference] {
+        guard rows.indices.contains(row), case .files(let refs)? = rows[row].page.props[column.id] else { return [] }
+        return refs
+    }
+
+    func addFiles(_ row: Int, _ column: Column, _ refs: [BlobReference]) {
+        guard column.type == .files, !refs.isEmpty else { return }
+        let old = files(row, column)
+        setValue(row, column, .files(old + refs.filter { r in !old.contains { $0.id == r.id } }))
+    }
+
+    func removeFile(_ row: Int, _ column: Column, at index: Int) {
+        var refs = files(row, column)
+        guard refs.indices.contains(index) else { return }
+        refs.remove(at: index)
+        setValue(row, column, refs.isEmpty ? nil : .files(refs))
+    }
+
+    func setIcon(_ row: Int, _ choice: SpacePageIcon.Choice) {
+        guard rows.indices.contains(row) else { return }
+        commit([SpacePageIcon.change(rows[row].id, choice)], name: "Icon")
+    }
 
     /// "Course is MATH2221", "Due this week", "Weight ≥ 10".
     func describe(_ f: Filter) -> String {

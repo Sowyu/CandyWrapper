@@ -17,9 +17,10 @@ struct SpaceBoardCard: Equatable {
     var due: (text: String, late: Bool)?
     var todo: Bool
     var done: Bool
+    var icon: SpacePageIcon.Choice = .none
 
     static func == (a: Self, b: Self) -> Bool {
-        a.title == b.title && a.meta == b.meta && a.due?.text == b.due?.text && a.due?.late == b.due?.late && a.todo == b.todo && a.done == b.done
+        a.icon == b.icon && a.title == b.title && a.meta == b.meta && a.due?.text == b.due?.text && a.due?.late == b.due?.late && a.todo == b.todo && a.done == b.done
     }
 }
 
@@ -100,7 +101,8 @@ enum SpaceBoard {
         var p = SpaceParagraph()
         if case .checkbox(let v)? = record.props[FieldID.done] { p.todo = true; p.done = v }
         if case .date(let due)? = record.props[FieldID.due] { p.due = due }
-        return SpaceBoardCard(title: record.title, meta: meta, due: SpacePageEditor.dueText(p, now: now, zone: zone), todo: schema.isTodoList && p.todo, done: p.done)
+        return SpaceBoardCard(title: record.title, meta: meta, due: SpacePageEditor.dueText(p, now: now, zone: zone), todo: schema.isTodoList && p.todo, done: p.done,
+                             icon: SpacePageIcon.choice(record))
     }
 
     /// One prop as card text, or nil when it's empty.

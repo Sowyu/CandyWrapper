@@ -58,6 +58,7 @@ public struct SpaceTreeRow: Equatable {
     public var expanded: Bool
     /// False for an ancestor that shows only because a descendant matches the search.
     public var matches = true
+    var icon: SpacePageIcon.Choice = .none
 }
 
 /// The page tree's rules (docs/space.md "Space mode"), as pure functions over the store's records.
@@ -88,7 +89,8 @@ public enum SpaceTree {
                 let kids = children(of: id, in: pages)
                 let open = keep != nil || expanded.contains(id)
                 let matches = keep == nil || SpaceSearch.matches(pages[id]!.title, words)
-                out.append(SpaceTreeRow(id: id, title: pages[id]!.title, depth: depth, hasChildren: !kids.isEmpty, expanded: open && !kids.isEmpty, matches: matches))
+                out.append(SpaceTreeRow(id: id, title: pages[id]!.title, depth: depth, hasChildren: !kids.isEmpty, expanded: open && !kids.isEmpty, matches: matches,
+                                        icon: SpacePageIcon.choice(pages[id]!)))
                 if open && depth < 64 { walk(id, depth + 1) }
             }
         }

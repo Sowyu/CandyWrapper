@@ -3,6 +3,7 @@ import DesignSystem
 import SpaceEngine
 import SpaceFields
 import SpaceModel
+import UniformTypeIdentifiers
 
 /// Table view (docs/space.md "Table"): mockup look B's rows with dividers only, look A's type icons in the headers
 /// and A's select pills. Only the visible rows have views, recycled as the list scrolls.
@@ -10,6 +11,8 @@ final class SpaceTableView: DSView {
     let model: SpaceTableModel
     let scroll = NSScrollView()
     let doc: SpaceTableDocument
+    /// "Deleted <field>" with Undo.
+    let toasts = ToastViewport()
 
     init(store: SpaceDocumentStore, page: PageID) {
         model = SpaceTableModel(store: store, page: page)
@@ -23,6 +26,7 @@ final class SpaceTableView: DSView {
         scroll.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(scrolled), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
         addSubview(scroll)
+        addSubview(toasts)
         model.onChange = { [weak self] in self?.doc.reloadData() }
     }
 
@@ -47,6 +51,7 @@ final class SpaceTableView: DSView {
     override func layout() {
         super.layout()
         scroll.frame = bounds
+        toasts.frame = ToastViewport.frame(in: bounds, dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark))
         doc.layoutDocument()
     }
 }
@@ -89,6 +94,7 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
     private var dragging: (id: PageID, target: Int)?
     private var editing: (ref: CellRef?, header: String?)?
     private(set) var popupMenu: MenuPopupView?
+    weak var filesPopover: SpaceFilesPopover?
 
     init(model: SpaceTableModel) {
         self.model = model
@@ -106,8 +112,12 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
         setAccessibilityRole(.table)
         setAccessibilityLabel("Table")
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+        registerForDraggedTypes([.fileURL, .png, .tiff, NSPasteboard.PasteboardType(UTType.svg.identifier)])
+        NotificationCenter.default.addObserver(self, selector: #selector(mediaLoaded), name: SpaceMedia.didLoad, object: nil)
         reloadData()
     }
+
+    @objc private func mediaLoaded() { visible.values.forEach { $0.needsDisplay = true } }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
@@ -227,6 +237,7 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
         sortButton.badge = model.sorts.isEmpty ? nil : "\(model.sorts.count)"
         for v in visible.values { v.needsDisplay = true }
         headerRow.needsDisplay = true
+        filesPopover?.refresh()
         layoutDocument()
         window?.invalidateCursorRects(for: self)
     }
@@ -296,8 +307,42 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
         let ref = CellRef(row: model.rows[i].id, column: column.id)
         let wasSelected = selection == ref
         selection = ref
+        let cell = cellRect(row: i, column: c)
+        if column.isTitle, let slot = iconSlot(row: i, cell: cell), slot.contains(p) { showIconPicker(i, anchor: slot); return }
+        if column.type == .files, wasSelected || event.clickCount == 2 {
+            let refs = model.files(i, column)
+            if let k = SpaceTableCellDrawing.thumbIndex(refs, at: p.x - cell.minX, width: cell.width), refs[k].mime.hasPrefix("image/"), let window {
+                SpaceMedia.expand(refs, index: k, in: window)
+                return
+            }
+        }
         if column.type == .checkbox { model.toggle(i, column); return }
         if event.clickCount == 2 || wasSelected { activate() }
+    }
+
+    // MARK: Drop
+
+    /// A drop on a Files & media cell attaches; a drop on a title sets the row's icon.
+    private func dropTarget(_ sender: NSDraggingInfo) -> (row: Int, column: SpaceTableModel.Column)? {
+        let p = convert(sender.draggingLocation, from: nil)
+        let i = Int(((p.y - Metrics.rowsTop) / Metrics.row).rounded(.down))
+        guard p.y >= Metrics.rowsTop, i < model.rows.count, let c = columnIndex(atX: p.x) else { return nil }
+        let column = model.columns[c]
+        return column.isTitle || column.type == .files ? (i, column) : nil
+    }
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard SpaceMedia.canRead(sender.draggingPasteboard), let t = dropTarget(sender) else { return [] }
+        selection = CellRef(row: model.rows[t.row].id, column: t.column.id)
+        return .copy
+    }
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let t = dropTarget(sender) else { return false }
+        let files = SpaceMedia.files(from: sender.draggingPasteboard)
+        guard !files.isEmpty else { return false }
+        if t.column.isTitle { setIcon(from: files, row: model.rows[t.row].id) }
+        else { attach(files, row: model.rows[t.row].id, column: t.column.id) }
+        return true
     }
 
     override func rightMouseDown(with event: NSEvent) {
@@ -307,6 +352,11 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
         let id = model.rows[i].id
         let items = [
             MenuItem("Open", icon: .fileText) { [weak self] in self?.open(id) },
+            MenuItem("Icon…", icon: .smilePlus) { [weak self] in
+                guard let self, let i = self.rowIndex[id] else { return }
+                let anchor = self.model.columns.first?.isTitle == true ? self.cellRect(row: i, column: 0) : NSRect(x: p.x, y: p.y, width: 1, height: 1)
+                DispatchQueue.main.async { self.showIconPicker(i, anchor: anchor) }
+            },
             .separator,
             MenuItem("Delete row", icon: .trash2, destructive: true) { [weak self] in
                 guard let self, let i = self.rowIndex[id] else { return }
@@ -414,6 +464,14 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if window?.firstResponder === self, event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+           event.charactersIgnoringModifiers?.lowercased() == "v", let s = selection,
+           let column = model.columns.first(where: { $0.id == s.column }), column.type == .files {
+            let files = SpaceMedia.files(from: .general)
+            guard !files.isEmpty else { NSSound.beep(); return true }
+            attach(files, row: s.row, column: column.id)
+            return true
+        }
         guard window?.firstResponder === self, event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting(.shift) == .command,
               event.charactersIgnoringModifiers?.lowercased() == "z" else { return super.performKeyEquivalent(with: event) }
         if event.modifierFlags.contains(.shift) { redo(nil) } else { undo(nil) }
@@ -437,6 +495,7 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
         case .checkbox?: model.toggle(r, column)
         case .select?, .multi?: showOptionsMenu(r, column, anchor: cellRect(row: r, column: c))
         case .date?: showDateMenu(r, column, anchor: cellRect(row: r, column: c))
+        case .files?: showFilesPopover(r, column, anchor: cellRect(row: r, column: c))
         default: beginEditing(r, c, text: model.editText(r, column), replace: false)
         }
     }
@@ -445,7 +504,7 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
         guard let id = model.addRow() else { return }
         guard let i = rowIndex[id] else { return }
         select(i, 0)
-        beginEditing(i, 0, text: "", replace: true)
+        if model.columns.first?.isTitle == true { beginEditing(i, 0, text: "", replace: true) }
     }
 
     // MARK: Editing
@@ -529,6 +588,7 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
 
     static func typeName(_ t: FieldType) -> String {
         switch t {
+        case .files: "Files & media"
         case .number: "Number"
         case .checkbox: "Checkbox"
         case .select: "Select"
@@ -547,6 +607,7 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
         case .multi?: .tag
         case .date?: .calendar
         case .url?: .link
+        case .files?: .paperclip
         default: nil
         }
     }
@@ -566,8 +627,8 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
         let e = edges
         let anchor = NSRect(x: Metrics.margin + e[c], y: Metrics.headerY, width: e[c + 1] - e[c], height: Metrics.row)
         var items: [MenuItem] = []
+        items.append(MenuItem("Rename", icon: .pencil) { [weak self] in DispatchQueue.main.async { self?.beginRenaming(column.id) } })
         if !column.isTitle {
-            items.append(MenuItem("Rename", icon: .pencil) { [weak self] in DispatchQueue.main.async { self?.beginRenaming(column.id) } })
             let fixed = column.id == FieldID.done || column.id == FieldID.due
             var types = FieldType.allCases.map { t in
                 var item = MenuItem.radio(Self.typeName(t), checked: t == column.type) { [weak self] on in
@@ -585,10 +646,12 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
         items.append(MenuItem("Sort ascending", icon: .arrowUp) { [weak self] in self?.model.sort(by: column.id, desc: false) })
         items.append(MenuItem("Sort descending", icon: .arrowDown) { [weak self] in self?.model.sort(by: column.id, desc: true) })
         items.append(.submenu("Filter", icon: .listFilter, filterOps(column.id, anchor: anchor)))
-        if !column.isTitle {
-            items.append(.separator)
-            items.append(MenuItem("Hide", icon: .eyeOff) { [weak self] in self?.model.setHidden(column.id, true) })
-            items.append(MenuItem("Delete field", icon: .trash2, destructive: true) { [weak self] in self?.model.deleteField(column.id) })
+        items.append(.separator)
+        items.append(MenuItem("Hide in this view", icon: .eyeOff) { [weak self] in self?.model.setHidden(column.id, true) })
+        if column.isTitle {
+            items.append(.note("Every row is a page, so its title can't be deleted."))
+        } else {
+            items.append(MenuItem("Delete field", icon: .trash2, destructive: true) { [weak self] in self?.deleteField(column.id) })
         }
         openMenu(items, anchor: anchor, width: 200)
     }
@@ -713,7 +776,7 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
 
     private func showFieldsMenu() {
         let shown = Set(model.columns.map(\.id))
-        var items: [MenuItem] = model.fieldOrder.map { id in
+        var items: [MenuItem] = ([FieldID.title] + model.fieldOrder).map { id in
             .checkbox(model.name(of: id), checked: shown.contains(id)) { [weak self] on in self?.model.setHidden(id, !on) }
         }
         if !items.isEmpty { items.append(.separator) }
@@ -855,7 +918,17 @@ final class SpaceTableRowView: DSView {
         for (c, column) in model.columns.enumerated() {
             let rect = NSRect(x: edges[c], y: 0, width: edges[c + 1] - edges[c], height: bounds.height)
             guard rect.intersects(dirtyRect) else { continue }
-            SpaceTableCellDrawing.draw(model.cell(index, column), column: column, in: rect)
+            var content = rect
+            if column.isTitle {
+                if SpacePageIcon.draw(item.page, in: SpaceTableCellDrawing.iconRect(in: rect)) {
+                    content.origin.x += 22
+                    content.size.width -= 22
+                } else if doc.hoverRow == index, rect.width > 120 {
+                    SpaceTableCellDrawing.icon(.smilePlus, in: SpaceTableCellDrawing.addIconRect(in: rect).insetBy(dx: 2, dy: 2), color: Themed.color(\.iconMuted))
+                    content.size.width -= 28
+                }
+            }
+            SpaceTableCellDrawing.draw(model.cell(index, column), column: column, in: content)
             if doc.selection == .init(row: item.id, column: column.id) {
                 SpacePageMetrics.accent.setStroke()
                 let ring = NSBezierPath(roundedRect: rect.insetBy(dx: 1, dy: 2), xRadius: 4, yRadius: 4)
@@ -899,6 +972,7 @@ enum SpaceTableCellDrawing {
         case .link(let s): text(s, in: rect, color: SpacePageMetrics.accent)
         case .number(let s): text(s, in: rect, color: Themed.color(\.foreground), font: DSFont.ui(13).withMonospacedDigits(), align: .right)
         case .date(let s, let overdue): text(s, in: rect, color: overdue ? Themed.color(\.destructive) : Themed.color(\.foreground))
+        case .files(let refs): drawFiles(refs, in: rect)
         case .checkbox(let on):
             if on { SpaceBlockFragment.drawCheckbox(CGRect(x: rect.minX + pad, y: rect.midY - 8, width: 16, height: 16), on: true) }
             else { emptyBox(CGRect(x: rect.minX + pad, y: rect.midY - 8, width: 16, height: 16)) }

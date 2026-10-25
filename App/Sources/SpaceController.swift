@@ -14,7 +14,7 @@ final class SpaceController {
     private let reminders: SpaceReminderController
     private var remindersEnabled: Bool?
     /// Page images through the local copy's blob cache, once the copy is open.
-    private var blobs: SpaceLocalBlobs?
+    private var blobs: SpaceLocalBlobs? { didSet { SpaceMedia.shared.source = blobs } }
     private var lifecycle: Task<Void, Never>?
     private var recoverySheet: NSAlert?
     private let settings = SpaceSettings.shared

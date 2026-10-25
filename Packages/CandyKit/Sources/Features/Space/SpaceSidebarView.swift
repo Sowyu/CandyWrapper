@@ -491,6 +491,7 @@ final class SpaceTreeRowView: DSView {
     let id: PageID
     private let chevron = IconView(name: .chevronRight, size: 12)
     private let label = LabelView("", font: SB.font(13), color: SB.c(\.sidebarForeground))
+    private let icon = SpaceIconView()
     let plus = RowActionButton(icon: .plus, size: 14, accessibility: "Add a page inside")
     let more = RowActionButton(icon: .ellipsis, size: 14, accessibility: "More actions").menuTrigger()
     var row: SpaceTreeRow? { didSet { if row != oldValue { refresh() } } }
@@ -508,6 +509,7 @@ final class SpaceTreeRowView: DSView {
         label.lineHeight = 20
         for b in [plus, more] { b.padding = 3; b.isHidden = true; addSubview(b) }
         addSubview(chevron)
+        addSubview(icon)
         addSubview(label)
         layer?.cornerRadius = DitherChrome.controlRadius
         setAccessibilityElement(true)
@@ -529,6 +531,7 @@ final class SpaceTreeRowView: DSView {
     private func refresh() {
         guard let row else { return }
         label.text = row.title.isEmpty ? "Untitled" : row.title
+        icon.choice = row.icon
         let active = isHovered || menuOpen
         label.color = SB.c(row.matches ? \.sidebarForeground : \.sidebarMutedForeground, row.title.isEmpty || !row.matches ? 0.7 : isSelected ? 1 : 0.92)
         chevron.isHidden = !row.hasChildren
@@ -556,6 +559,8 @@ final class SpaceTreeRowView: DSView {
         let buttons: CGFloat = plus.isHidden ? 0 : 2 * 20 + 2 + 4
         more.frame = NSRect(x: bounds.width - 4 - 20, y: (bounds.height - 20) / 2, width: 20, height: 20)
         plus.frame = NSRect(x: more.frame.minX - 2 - 20, y: more.frame.minY, width: 20, height: 20)
-        label.frame = NSRect(x: titleX, y: (bounds.height - 20) / 2, width: max(0, bounds.width - titleX - 8 - buttons), height: 20)
+        icon.frame = NSRect(x: titleX, y: (bounds.height - 16) / 2, width: 16, height: 16)
+        let lx = titleX + (icon.isHidden ? 0 : 21)
+        label.frame = NSRect(x: lx, y: (bounds.height - 20) / 2, width: max(0, bounds.width - lx - 8 - buttons), height: 20)
     }
 }
