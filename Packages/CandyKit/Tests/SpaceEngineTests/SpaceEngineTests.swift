@@ -107,7 +107,7 @@ struct SpaceEngineTests {
         #expect(future["nested"] == .object(["keep": .array([.integer(1), .null])]))
         // The typed snapshot still reads every record.
         let typed = try SpaceJSON.decode(SnapshotPayload.self, from: SpaceJSON.encode(state))
-        #expect(typed.pages.count == 2 && typed.blocks.count == 11)
+        #expect(typed.pages.count == 3 && typed.blocks.count == 11)
 
         frame.seq += 5
         #expect(throws: ApplyError.gap(expected: state.seq + 1, got: frame.seq)) { try state.apply(frame, payload) }

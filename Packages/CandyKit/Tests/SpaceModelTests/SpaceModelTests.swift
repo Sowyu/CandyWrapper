@@ -36,8 +36,18 @@ struct SpaceModelTests {
     @Test func everyRecordFieldAndViewHasATypedRepresentation() throws {
         let snapshot = try fixture(SnapshotPayload.self, "snapshot")
         let parent = try #require(snapshot.pages.values.first { $0.parent == nil })
-        let child = try #require(snapshot.pages.values.first { $0.parent != nil })
+        let child = try #require(snapshot.pages.values.first { $0.title == "Bring milk 🥛" })
         #expect(Set(parent.fields.values.map(\.type)).isSuperset(of: Set(FieldType.allCases)))
+        #expect(parent.iconImage?.name == "photo.png")
+        #expect(parent.titleName == "Item")
+        #expect(parent.views.table?.titleHidden == true)
+        #expect(child.icon == "🖼️")
+        let attachments = snapshot.pages.values.compactMap { page -> [BlobReference]? in
+            guard case .files(let files) = page.props["files"] else { return nil }
+            return files
+        }.flatMap { $0 }
+        #expect(Set(attachments.map(\.name)) == ["photo.png", "logo.svg"])
+        #expect(attachments.allSatisfy { $0.mime == "image/png" && $0.w != nil && $0.h != nil })
         #expect(parent.isTodoList)
         #expect(!child.isTodoList)
         #expect(parent.fields[FieldID.done]?.name == "Done")
@@ -242,5 +252,58 @@ struct SpaceModelTests {
         #expect(try timed.reminderInstant(deviceTimeZone: zone("Europe/London")) == instant("2026-10-26T21:45:00Z"))
         let explicitTimed = try value("2026-10-27T09:00", "Australia/Melbourne", remind: .at(point("2026-10-27T08:00")))
         #expect(try explicitTimed.reminderInstant(deviceTimeZone: zone("Europe/London")) == instant("2026-10-26T21:00:00Z"))
+    }
+}
+
+extension SpaceModelTests {
+    @Test func filesUseUntaggedBlobArraysAndKeepUnknownShapes() throws {
+        let blob = BlobReference(id: "blob", preview: "preview", name: "photo.png", mime: "image/png", size: 2048, w: 640, h: 480,
+                                 extra: ["future": .bool(true)])
+        let files = PropertyValue.files([blob])
+        #expect(try SpaceJSON.decode(PropertyValue.self, from: SpaceJSON.encode(files)) == files)
+        #expect(try SpaceJSON.encode(PropertyValue.files([])) == Data("[]".utf8))
+        #expect(try SpaceJSON.decode(PropertyValue.self, from: Data("[]".utf8)) == .multi([]))
+        #expect(try SpaceJSON.decode(PropertyValue.self, from: Data(#"["option"]"#.utf8)) == .multi(["option"]))
+        for raw in [#"[{"name":"incomplete"}]"#, #"[{"id":"x"},"mixed"]"#] {
+            let decoded = try SpaceJSON.decode(PropertyValue.self, from: Data(raw.utf8))
+            #expect(decoded == .unknown(try SpaceJSON.decode(JSONValue.self, from: Data(raw.utf8))))
+            #expect(try SpaceJSON.encode(decoded) == Data(raw.utf8))
+        }
+    }
+
+    @Test func pageMediaAndTitleKeysPreserveMissingNullAndSet() throws {
+        let old = Data(#"{"created":0,"fields":{},"icon":"📝","order":"a0","parent":null,"props":{},"title":"Old","trashed":false,"trashedAt":null,"view":"page","views":{}}"#.utf8)
+        let oldPage = try SpaceJSON.decode(PageRecord.self, from: old)
+        #expect(oldPage.iconImage == nil && oldPage.titleName == nil)
+        #expect(try SpaceJSON.encode(oldPage) == old)
+        let blob = BlobReference(id: "image", name: "logo.svg", mime: "image/png", size: 123, w: 128, h: 128)
+        for present in [false, true] {
+            var object = try SpaceJSON.decode([String: JSONValue].self, from: old)
+            object["iconImage"] = present ? try SpaceJSON.decode(JSONValue.self, from: SpaceJSON.encode(blob)) : .null
+            object["titleName"] = present ? .string("Task") : .null
+            let bytes = try SpaceJSON.encode(object)
+            let page = try SpaceJSON.decode(PageRecord.self, from: bytes)
+            #expect(page.iconImage == (present ? blob : nil))
+            #expect(page.titleName == (present ? "Task" : nil))
+            #expect(page.icon == "📝") // Decoding preserves both; readers prefer the image.
+            #expect(try SpaceJSON.encode(page) == bytes)
+        }
+        let constructed = PageRecord(order: try OrderKey("a0"), iconImage: blob, titleName: "Task", created: 0)
+        let encoded = try SpaceJSON.encode(constructed)
+        let decoded = try SpaceJSON.decode(PageRecord.self, from: encoded)
+        #expect(decoded.iconImage == blob && decoded.titleName == "Task")
+        #expect(try SpaceJSON.encode(decoded) == encoded)
+    }
+
+    @Test func titleHiddenDefaultsToFalseAndOnlyTrueIsEncoded() throws {
+        let base = #"{"cols":[],"filter":[],"sort":[]}"#
+        for suffix in ["", #", "titleHidden":null"#, #", "titleHidden":false"#, #", "titleHidden":true"#] {
+            let raw = String(base.dropLast()) + suffix + "}"
+            let settings = try SpaceJSON.decode(TableViewSettings.self, from: Data(raw.utf8))
+            #expect(settings.titleHidden == suffix.contains("true"))
+            let expected = settings.titleHidden ? #"{"cols":[],"filter":[],"sort":[],"titleHidden":true}"# : base
+            #expect(try SpaceJSON.encode(settings) == Data(expected.utf8))
+        }
+        #expect(try SpaceJSON.decode(TableViewSettings.self, from: SpaceJSON.encode(TableViewSettings(titleHidden: true))).titleHidden)
     }
 }

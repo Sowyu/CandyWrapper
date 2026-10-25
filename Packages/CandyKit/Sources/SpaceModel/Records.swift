@@ -252,13 +252,15 @@ public struct TableViewSettings: Codable, Hashable, Sendable {
     public var cols: [TableColumn]
     public var sort: [Sort]
     public var filter: [Filter]
+    public var titleHidden: Bool
     public var extra: [String: JSONValue]
-    private static let known: Set<String> = ["cols", "sort", "filter"]
+    private static let known: Set<String> = ["cols", "sort", "filter", "titleHidden"]
 
-    public init(cols: [TableColumn] = [], sort: [Sort] = [], filter: [Filter] = [], extra: [String: JSONValue] = [:]) {
+    public init(cols: [TableColumn] = [], sort: [Sort] = [], filter: [Filter] = [], titleHidden: Bool = false, extra: [String: JSONValue] = [:]) {
         self.cols = cols
         self.sort = sort
         self.filter = filter
+        self.titleHidden = titleHidden
         self.extra = extra
     }
 
@@ -267,6 +269,7 @@ public struct TableViewSettings: Codable, Hashable, Sendable {
         cols = try c.required("cols")
         sort = try c.required("sort")
         filter = try c.required("filter")
+        titleHidden = try c.optional("titleHidden") ?? false
         extra = try c.unknown(Self.known)
         try validate()
     }
@@ -277,6 +280,7 @@ public struct TableViewSettings: Codable, Hashable, Sendable {
         try c.required(cols, "cols")
         try c.required(sort, "sort")
         try c.required(filter, "filter")
+        if titleHidden { try c.required(true, "titleHidden") }
     }
 }
 
@@ -400,6 +404,10 @@ public struct PageRecord: Codable, Hashable, Sendable {
     public var order: OrderKey
     public var title: String
     public var icon: String?
+    /// iconImage wins over icon when both are set. Setting one clears the other.
+    public var iconImage: BlobReference?
+    /// The title column name for this page's items. Nil means "Name".
+    public var titleName: String?
     public var props: [String: PropertyValue]
     public var fields: [String: FieldDefinition]
     public var views: ViewSettings
@@ -409,13 +417,15 @@ public struct PageRecord: Codable, Hashable, Sendable {
     public var created: Int64
     public var extra: [String: JSONValue]
     private var explicitNulls: Set<String>
-    private static let known: Set<String> = ["parent", "order", "title", "icon", "props", "fields", "views", "view", "trashed", "trashedAt", "created"]
+    private static let known: Set<String> = ["parent", "order", "title", "icon", "iconImage", "titleName", "props", "fields", "views", "view", "trashed", "trashedAt", "created"]
 
-    public init(parent: PageID? = nil, order: OrderKey, title: String = "", icon: String? = nil, props: [String: PropertyValue] = [:], fields: [String: FieldDefinition] = [:], views: ViewSettings = ViewSettings(), view: ViewType = .page, trashed: Bool = false, trashedAt: Int64? = nil, created: Int64, extra: [String: JSONValue] = [:]) {
+    public init(parent: PageID? = nil, order: OrderKey, title: String = "", icon: String? = nil, iconImage: BlobReference? = nil, titleName: String? = nil, props: [String: PropertyValue] = [:], fields: [String: FieldDefinition] = [:], views: ViewSettings = ViewSettings(), view: ViewType = .page, trashed: Bool = false, trashedAt: Int64? = nil, created: Int64, extra: [String: JSONValue] = [:]) {
         self.parent = parent
         self.order = order
         self.title = title
         self.icon = icon
+        self.iconImage = iconImage
+        self.titleName = titleName
         self.props = props
         self.fields = fields
         self.views = views
@@ -424,7 +434,7 @@ public struct PageRecord: Codable, Hashable, Sendable {
         self.trashedAt = trashedAt
         self.created = created
         self.extra = extra
-        self.explicitNulls = ["parent", "icon", "trashedAt"]
+        self.explicitNulls = ["parent", "icon", "iconImage", "titleName", "trashedAt"]
     }
 
     public init(from decoder: Decoder) throws {
@@ -433,6 +443,8 @@ public struct PageRecord: Codable, Hashable, Sendable {
         order = try c.required("order")
         title = try c.required("title")
         icon = try c.optional("icon")
+        iconImage = try c.optional("iconImage")
+        titleName = try c.optional("titleName")
         props = try c.required("props")
         fields = try c.required("fields")
         views = try c.required("views")
@@ -441,7 +453,7 @@ public struct PageRecord: Codable, Hashable, Sendable {
         trashedAt = try c.optional("trashedAt")
         created = try c.required("created")
         extra = try c.unknown(Self.known)
-        explicitNulls = try c.nulls(["parent", "icon", "trashedAt"])
+        explicitNulls = try c.nulls(["parent", "icon", "iconImage", "titleName", "trashedAt"])
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -450,6 +462,8 @@ public struct PageRecord: Codable, Hashable, Sendable {
         try c.required(order, "order")
         try c.required(title, "title")
         try c.optional(icon, "icon", nulls: explicitNulls)
+        try c.optional(iconImage, "iconImage", nulls: explicitNulls)
+        try c.optional(titleName, "titleName", nulls: explicitNulls)
         try c.required(props, "props")
         try c.required(fields, "fields")
         try c.required(views, "views")

@@ -49,7 +49,8 @@ public struct FieldType: SpaceString, CaseIterable {
     public static let multi = Self(rawValue: "multi")
     public static let date = Self(rawValue: "date")
     public static let url = Self(rawValue: "url")
-    public static let allCases: [Self] = [.text, .number, .checkbox, .select, .multi, .date, .url]
+    public static let files = Self(rawValue: "files")
+    public static let allCases: [Self] = [.text, .number, .checkbox, .select, .multi, .date, .url, .files]
 }
 
 public struct FieldColor: SpaceString, CaseIterable {

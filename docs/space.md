@@ -50,6 +50,8 @@ A page is a node in the tree. A page's content is the ordered mix of its blocks 
 | `order` | Order key among the parent's blocks and pages. See "Order keys". |
 | `title` | String. |
 | `icon` | One emoji, or null for the default page glyph. |
+| `iconImage` | Blob reference, or null. Wins over `icon` when both are set. Setting either icon clears the other. |
+| `titleName` | Display name of the title column for this page's items. Null or missing means "Name". |
 | `props` | Map from a field id of the parent's `fields` to a value of that field's type. |
 | `fields` | Map from field id to field definition. The schema for this page's items. |
 | `views` | Map from view type (`page`, `board`, `table`, `timetable`) to that view's settings. |
@@ -99,6 +101,7 @@ Each field definition is `{"name", "type", "order"}` plus type-specific keys. Ty
 | `multi` | Array of option ids, same `options`. |
 | `date` | A date value, below. |
 | `url` | String. |
+| `files` | Array of blob references from section 7. Empty arrays mean no files. |
 
 Two fields have fixed ids so every client recognizes them: `done` (checkbox, named "Done") and `due` (date, named "Due"). Typing `[] ` in a page adds `done` to it if missing. A page "is a to-do list" exactly when its `fields` has `done`. The title is not a field. It is the item page's own `title`.
 
@@ -137,10 +140,12 @@ The rule follows Google Calendar and RFC 5545 (`DTSTART;TZID`), and Notion behav
 |---|---|
 | `page` | `{}` |
 | `board` | `{"group": fieldId, "show": [fieldId], "hidden": [optionId], "sort": [Sort], "filter": [Filter]}` |
-| `table` | `{"cols": [{"field": fieldId, "width": points}], "sort": [Sort], "filter": [Filter]}` |
+| `table` | `{"cols": [{"field": fieldId, "width": points}], "sort": [Sort], "filter": [Filter], "titleHidden": bool}` |
 | `timetable` | `{"field": fieldId, "from": 7, "to": 22, "days": 7, "filter": [Filter]}` |
 
 A Sort is `{"field", "desc": bool}`, at most 3. A Filter is `{"field", "op", "value"}`, and all filters must hold. The ops per type are in section 4. The title's field id in sorts, filters and columns is the reserved id `title`.
+
+`titleHidden` defaults to false and is written only when true.
 
 There is one view of each type per page. Several named views of one type are out of v1.
 
@@ -351,6 +356,7 @@ The pure Swift engine and its detailed query and conversion conventions are desc
 Filter ops by type:
 
 - Text and URL: contains, does not contain, is, is empty, is not empty.
+- Files: is empty, is not empty. Sort by the first file name, with empty values last. Files cannot group.
 - Number: =, ≠, <, ≤, >, ≥, is empty.
 - Checkbox: is.
 - Select and multi: is, is not, is empty.

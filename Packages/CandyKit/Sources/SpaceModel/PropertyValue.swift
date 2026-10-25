@@ -3,7 +3,7 @@ import Foundation
 /// Props are untagged JSON. A string's field definition distinguishes text, URL and select.
 /// Unknown shapes stay intact for a newer client; no schema lookup is needed to decode a page.
 public enum PropertyValue: Codable, Hashable, Sendable {
-    case string(String), number(Decimal), checkbox(Bool), multi([String]), date(DateValue)
+    case string(String), number(Decimal), checkbox(Bool), multi([String]), date(DateValue), files([BlobReference])
     case unknown(JSONValue)
 
     public init(from decoder: Decoder) throws {
@@ -13,6 +13,7 @@ public enum PropertyValue: Codable, Hashable, Sendable {
         else if let v = try? c.decode(Decimal.self) { self = .number(v) }
         else if let v = try? c.decode(String.self) { self = .string(v) }
         else if let v = try? c.decode([String].self) { self = .multi(v) }
+        else if let v = try? c.decode([BlobReference].self), !v.isEmpty { self = .files(v) }
         else {
             let object = try c.decode(JSONValue.self)
             if case .object(let keys) = object, keys["start"] != nil { self = .date(try c.decode(DateValue.self)) }
@@ -27,6 +28,7 @@ public enum PropertyValue: Codable, Hashable, Sendable {
         case .checkbox(let v): try c.encode(v)
         case .multi(let v): try c.encode(v)
         case .date(let v): try c.encode(v)
+        case .files(let v): try c.encode(v)
         case .unknown(let v): try c.encode(v)
         }
     }
