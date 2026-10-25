@@ -86,4 +86,13 @@ import Testing
         #expect(text.split(separator: "\n").count == TurnItemDetail.keptLines)
         #expect(text.utf8.count <= TurnItemDetail.keptBytes)
     }
+
+    /// Images past the 8-image preview limit read "[image]" (itemDetail.ts:29, f05599504a).
+    @Test func imagesPastThePreviewLimitReadAsImage() {
+        let image: JSONValue = .object(["type": .string("image"), "data": .string("AA=="), "mimeType": .string("image/png")])
+        let content: JSONValue = .object(["content": .array(Array(repeating: image, count: 9) + [.object(["type": .string("text"), "text": .string("done")])])])
+        #expect(TurnItemDetail.formatToolValue(content) == "[image]\ndone")
+        // Nested images are not output blocks, so they never preview.
+        #expect(TurnItemDetail.formatToolValue(.array([.array([image])])) == "[image]")
+    }
 }
