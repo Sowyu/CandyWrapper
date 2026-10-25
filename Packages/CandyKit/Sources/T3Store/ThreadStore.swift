@@ -21,6 +21,7 @@ public struct ThreadUpdate: Sendable {
 /// threads.ts:186-232), so the view paints before the network and the subscription resumes
 /// after the cached sequence; settled states go back to the cache.
 public actor ThreadStore {
+    private var wireRestorer = ThreadWireRestorer()
     private var reducer: ThreadReducer
     private var pending: ThreadChangeSet?
     /// Gets whether the first change only grew a streaming text (`ThreadChangeSet.onlyStreamingText`).
@@ -54,6 +55,7 @@ public actor ThreadStore {
         guard reducer.projection == nil, let cache,
               let snapshot = OpenTiming.measure("disk cache", "", { cache.load(cacheKey) })
         else { return false }
+        wireRestorer.seed(snapshot.projection)
         let changes = reducer.applySnapshot(snapshot)
         cached = (snapshot.snapshotSequence, reducer.history)
         OpenTiming.mark("disk cache restored", "\(reducer.projection?.visibleTurnItems.count ?? 0) rows, sequence \(snapshot.snapshotSequence)")
@@ -76,16 +78,37 @@ public actor ThreadStore {
     /// The input for the next `orchestration.subscribeThread` call.
     public func subscribeInput(requestCompletionMarker: Bool = true) -> SubscribeThreadInput {
         restoreFromCache()
-        return reducer.subscribeInput(requestCompletionMarker: requestCompletionMarker)
+        var input = reducer.subscribeInput(requestCompletionMarker: requestCompletionMarker)
+        input.acceptDedupedBodies = true
+        input.acceptCompactIds = true
+        return input
+    }
+
+    /// Restores a raw stream value before reducers or caches see it. Keep transport arrival
+    /// order even for stale sequences: the server remembers the records it delivered.
+    public func applyWire(_ json: JSONValue) throws {
+        let item = try OpenTiming.measure("typed decode", "") { try wireRestorer.decode(json) }
+        publish(reducer.apply([item]))
+    }
+
+    /// Forces the next subscription to request a snapshot after a restoration error.
+    /// The retained projection stays visible while that snapshot loads.
+    public func resetForResynchronization() {
+        wireRestorer = ThreadWireRestorer()
+        reducer.resetForResynchronization()
     }
 
     /// Applies items that arrived together, for example one RPC Chunk.
     public func apply(_ items: [ThreadStreamItem]) {
+        for item in items {
+            if case .snapshot(let snapshot) = item { wireRestorer.seed(snapshot.projection) }
+        }
         publish(OpenTiming.measure("reducer", "\(items.count) items") { reducer.apply(items) })
     }
 
     /// Seeds the thread from `GET .../bounded` before the socket opens.
     public func applySnapshot(_ snapshot: ThreadDetailSnapshot) {
+        wireRestorer.seed(snapshot.projection)
         publish(reducer.applySnapshot(snapshot))
     }
 
