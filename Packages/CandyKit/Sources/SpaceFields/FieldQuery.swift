@@ -36,17 +36,19 @@ public enum FieldQuery {
             }
             return (item: item, keys: keys)
         }
-        return rows.sorted { lhs, rhs in
+        // Sort indices, so thousands of page records aren't moved on every swap.
+        let keys = rows.map(\.keys), orders = rows.map(\.item.page.order), ids = rows.map(\.item.id)
+        return rows.indices.sorted { l, r in
             for index in sorts.indices {
-                let a = lhs.keys[index], b = rhs.keys[index]
+                let a = keys[l][index], b = keys[r][index]
                 // Empty cells stay last in both directions.
                 if a == nil && b != nil { return false }
                 if a != nil && b == nil { return true }
                 if let a, let b, a != b { return sorts[index].desc ? b < a : a < b }
             }
-            if lhs.item.page.order != rhs.item.page.order { return lhs.item.page.order < rhs.item.page.order }
-            return lhs.item.id < rhs.item.id
-        }.map(\.item)
+            if orders[l] != orders[r] { return orders[l] < orders[r] }
+            return ids[l] < ids[r]
+        }.map { rows[$0].item }
     }
 
     /// Group already queried items so filters and each column share the same ordering.

@@ -95,6 +95,7 @@ public final class SpacePageView: DSView {
     /// Each view gets the store, the page and this tab, whose `header` lands on top of it after it's made.
     static let itemViews: [ViewType: @MainActor (SpaceDocumentStore, PageID, SpacePageView) -> NSView] = [
         .board: SpaceBoardView.make,
+        .table: SpaceTableView.make,
     ]
 
     private func mount(_ view: ViewType) {

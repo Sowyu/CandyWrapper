@@ -11,7 +11,7 @@ slow=(
   pagesMatchAFullPass streamedTurnsMatchAFullDeriveAtEveryStep offMainUpdatesMatchSynchronousOnes
   incrementalBuildsMatchFreshBuilds contentViewPatchesTheList oneThreadChangeBuildsOneRow
   everyThreadChangedInPlaceMatchesFreshBuild longLiveThreadKeepsTheContract failedProbeReconnectsWithoutWaiting
-  typingLatencyOnAThousandBlockPage shippedTileMatchesTheGenerator stopKillsAServerAndADescendantThatIgnoreSigterm stallingCommandTimesOutAndIsReaped
+  typingLatencyOnAThousandBlockPage bigTableBudgets shippedTileMatchesTheGenerator stopKillsAServerAndADescendantThatIgnoreSigterm stallingCommandTimesOutAndIsReaped
 )
 args=("$@")
 if [[ "$1" == "--fast" ]]; then
