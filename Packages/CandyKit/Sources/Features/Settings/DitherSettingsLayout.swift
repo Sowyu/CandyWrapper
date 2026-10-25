@@ -107,7 +107,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .keyboard: return [.init(.keybindings)]
         case .models: return [
             .init(.general, scope: true, [G("project-defaults", "New threads", rows: ["default-model", "default-permissions"]),
-                                          G("text-generation", nil, rows: ["text-generation-model"])]),
+                                          G("text-generation", nil, rows: ["text-generation-model", "thread-title-instructions"])]),
             .init(.providers),
         ]
         case .threads: return [

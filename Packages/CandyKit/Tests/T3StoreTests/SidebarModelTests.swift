@@ -230,6 +230,8 @@ private func pill(
             $0.latestRunCompletedAt = .value("2026-06-20T01:00:00.000Z")
             $0.lastVisitedAt = .value("2026-06-20T00:59:00.000Z")
             $0.pendingBackgroundTasks = [PendingBackgroundTask(taskId: "background-work", kind: kind)]
+            // A 3655 server, which marks awaited work and always sends the guest count.
+            $0.pendingGuestMessageCount = 0
         }
         let visited = row.shell.lastVisitedAt.value
         let status = S.resolveSidebarThreadStatus(row)
@@ -238,6 +240,19 @@ private func pill(
         #expect(S.resolveSidebarV2TopStatus(status: status, isUnread: unread, isWoke: false) == top)
         #expect(S.shouldRecedeSidebarThread(status: status, isUnread: unread, isWoke: false, isActive: false, isSelected: false) == receded)
         #expect(S.resolveThreadStatusPill(row, lastVisitedAt: visited)?.label == label)
+    }
+
+    /// A server before Nightly 3655 marks nothing awaited, so a monitor keeps the thread waiting, as on 3473.
+    @Test func monitorWaitsOnServersBefore3655() {
+        let row = sidebarThread {
+            $0.latestRunId = "run-background-completion"
+            $0.status = .completed
+            $0.latestRunCompletedAt = .value("2026-06-20T01:00:00.000Z")
+            $0.lastVisitedAt = .value("2026-06-20T00:59:00.000Z")
+            $0.pendingBackgroundTasks = [PendingBackgroundTask(taskId: "background-work", kind: .monitor)]
+        }
+        #expect(S.resolveSidebarThreadStatus(row) == .waiting)
+        #expect(S.resolveThreadStatusPill(row, lastVisitedAt: row.shell.lastVisitedAt.value)?.label == .waiting)
     }
 }
 
