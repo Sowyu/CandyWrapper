@@ -43,10 +43,37 @@ def token(name):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("server", choices=["3473", "main"])
-    parser.add_argument("--binary", required=True)
-    parser.add_argument("--label", required=True)
+    parser.add_argument("--binary")
+    parser.add_argument("--label", default="fast-load")
+    parser.add_argument("--token-file", help="Create the explicitly requested temporary UI grant inside this server's fast-load home")
     parser.add_argument("--timeout", type=int, default=400)
     args = parser.parse_args()
+    if args.token_file:
+        path = Path(args.token_file).expanduser().resolve()
+        if path != BASE / args.server / "session.token":
+            parser.error("UI grants are allowed only at the isolated server's session.token path")
+        credential = token(args.server)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as stream:
+            os.fchmod(stream.fileno(), 0o600)
+            stream.write(credential + "\n")
+        print("Created temporary isolated sandbox UI grant:", path)
+        raise SystemExit(0)
+    if not args.binary:
+        parser.error("--binary is required for a benchmark")
     config = {"port": {"3473": 47541, "main": 47542}[args.server], "token": token(args.server),
               "threadId": "fast-load-big-thread", "label": args.label}
-    subprocess.run([args.binary], input=json.dumps(config).encode(), check=True, timeout=args.timeout)
+    result = subprocess.run([args.binary], input=json.dumps(config).encode(), stdout=subprocess.PIPE,
+                            check=True, timeout=args.timeout)
+    print(result.stdout.decode(), end="", flush=True)
+    values = [json.loads(line) for line in result.stdout.decode().splitlines() if line.startswith("{")]
+    timed = [value for value in values if value["phase"] in ["cold", "retained-reconnect"]]
+    if len(timed) != 2 or any(not value["synchronized"] or value["failure"] for value in timed):
+        raise RuntimeError("Client did not synchronize both timed phases")
+    validation = next(value for value in values if value["phase"] == "history-validation")["content"]
+    expected = next(json.loads(line) for line in (BASE / "dataset.jsonl").read_text().splitlines()
+                    if json.loads(line)["server"] == args.server)
+    if validation["visible_message_items"] != expected["messages"] or validation["blank_visible_message_items"]:
+        raise RuntimeError("History contains missing or blank message bodies")
+    if validation["full_visible_message_sha256"] != expected["full_visible_message_sha256"]:
+        raise RuntimeError("Fully paged message bodies differ from the synthetic source")
