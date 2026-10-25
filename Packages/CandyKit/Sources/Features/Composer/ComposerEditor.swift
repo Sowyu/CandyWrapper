@@ -955,6 +955,9 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             case ("s", [.command, .shift]): .strike
             default: nil
             }
+            // Mod+B bolds selected text only; without a selection it toggles the sidebar
+            // (composer-rich-text-doc.ts:157-169, AppSidebarLayout.tsx:149-157).
+            if mark == .bold, selectedRange().length == 0 { return false }
             if let mark { toggleMark(mark); return true }
         }
         return false
