@@ -12,7 +12,6 @@ Usage:
   --baseline F   compare with this saved JSON instead of the newest other run in the out dir
   --stream       also measure one tiny claude-haiku-5-5 turn (costs a real turn on the user's plan)
   --repeat N     app launches per scenario (default 3); the report gives the median and the range
-  --space-only   build and measure Space's pure logic without AppKit or app launches
 
 Writes <out-dir>/<date>-<sha>.json and .md (default docs/perf) and prints the comparison table.
 Method, metrics and thresholds: docs/perf/README.md. Each run copies the pristine dataset (PRISTINE)
@@ -31,7 +30,6 @@ import socket
 import statistics
 import subprocess
 import sys
-import tempfile
 import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -238,50 +236,6 @@ def benchmarks(src, wait_quiet_fn, osize=False):
     if not results:
         log("no benchmark output; tail:\n" + "\n".join(out.splitlines()[-15:]))
     return results, overlaid
-
-
-def space_benchmarks(src, wait_quiet_fn):
-    """Compile the real pure targets and their tests without the unrelated AppKit package."""
-    subprocess.run([src + "/scripts/preflight"], check=True)
-    with tempfile.TemporaryDirectory(prefix="space-", dir=WORK) as package:
-        os.makedirs(package + "/Sources")
-        os.makedirs(package + "/Tests")
-        for module in ("SpaceModel", "SpacePlanning"):
-            os.symlink(src + "/Packages/CandyKit/Sources/" + module, package + "/Sources/" + module)
-        os.symlink(src + "/Packages/CandyKit/Tests/SpacePlanningTests", package + "/Tests/SpacePlanningTests")
-        with open(package + "/Package.swift", "w") as manifest:
-            manifest.write('''// swift-tools-version: 6.0
-import PackageDescription
-let size: [SwiftSetting] = [.unsafeFlags(["-Osize"], .when(configuration: .release))]
-let package = Package(name: "SpacePerformance", platforms: [.macOS(.v14)], targets: [
-    .target(name: "SpaceModel", swiftSettings: size),
-    .target(name: "SpacePlanning", dependencies: ["SpaceModel"], swiftSettings: size),
-    .testTarget(name: "SpacePlanningTests", dependencies: ["SpaceModel", "SpacePlanning"])
-])
-''')
-        flags = ["-c", "release", "-Xswiftc", "-enable-testing"]
-        log("Space: release build of SpaceModel, SpacePlanning and their tests only")
-        build = subprocess.run(["swift", "build", "--build-tests"] + flags, cwd=package,
-                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-        if build.returncode:
-            sys.exit("perf-review: Space build failed:\n" + "\n".join(build.stdout.splitlines()[-30:]))
-        wait_quiet_fn()
-        log("Space: measuring 22,000 pages and 100,000 blocks")
-        measured = subprocess.run([src + "/scripts/test", "--package-path", package, "--skip-build"]
-                                  + flags + ["--filter", "SpacePlanningPerfBenchmarks"],
-                                  env=dict(os.environ, CW_BENCH="1"), stdout=subprocess.PIPE,
-                                  stderr=subprocess.STDOUT, universal_newlines=True)
-        if measured.returncode:
-            sys.exit("perf-review: Space measurements failed:\n" + "\n".join(measured.stdout.splitlines()[-30:]))
-        results = {}
-        for line in measured.stdout.splitlines():
-            match = re.search(r"PERF (\{.*\})", line)
-            if match:
-                metric = json.loads(match.group(1))
-                results["bench." + metric["name"]] = metric
-        if len(results) != 5:
-            sys.exit("perf-review: expected five Space metrics, got %d" % len(results))
-        return results, False
 
 
 # MARK: app runs
@@ -691,7 +645,7 @@ def table(result, baseline):
     return "\n".join(rows), regressions
 
 
-def latest_saved(out_dir, exclude, space_only=False):
+def latest_saved(out_dir, exclude):
     runs = []
     for path in glob.glob(out_dir + "/*.json"):
         if os.path.abspath(path) == os.path.abspath(exclude):
@@ -701,7 +655,7 @@ def latest_saved(out_dir, exclude, space_only=False):
         except ValueError:
             continue
         # Runs on another workload (or the shared sandbox, before workloads) measured other threads.
-        if data.get("workload") == WORKLOAD and bool(data.get("space_only", False)) == space_only:
+        if data.get("workload") == WORKLOAD:
             runs.append((data.get("created", ""), path, data))
     if not runs:
         return (None, None)
@@ -730,7 +684,6 @@ def main():
     p.add_argument("--stream", action="store_true")
     p.add_argument("--no-bench", action="store_true")
     p.add_argument("--no-app", action="store_true")
-    p.add_argument("--space-only", action="store_true", help="measure pure Space logic without building the UI package")
     # A size experiment: the same commit built with -Osize. Its results go to WORK/osize unless --out-dir says
     # otherwise, so they never enter docs/perf's baselines; compare with --baseline <the -O run>.
     p.add_argument("--osize", action="store_true", help="build with SWIFT_OPTIMIZATION_LEVEL=-Osize")
@@ -739,24 +692,19 @@ def main():
     p.add_argument("--max-load", type=float, default=3.0, help="quiet means a 1-minute load average under this")
     p.add_argument("--make-workload", action="store_true")
     args = p.parse_args()
-    if args.space_only:
-        if args.no_bench or args.stream:
-            p.error("--space-only cannot be combined with --no-bench or --stream")
-        args.no_app = True
     if args.make_workload:
         make_workload()
         return
 
     os.makedirs(WORK, exist_ok=True)
     src, sha = prepare_source(args)
-    if not args.space_only:
-        build_helpers()
+    build_helpers()
     noise = []
     raw = {}
     quiet = {"max_load": args.max_load, "noisy": False, "waits": []}
     result = {"commit": sha, "source": src, "created": datetime.datetime.now().isoformat(timespec="seconds"),
               "machine": run(["sysctl", "-n", "hw.model"]).strip(), "repeat": args.repeat, "idle_seconds": args.idle_seconds,
-              "workload": WORKLOAD, "space_only": args.space_only}
+              "workload": WORKLOAD}
 
     if not args.no_app:
         app_path = build_app(src, sha, args.osize)
@@ -789,11 +737,7 @@ def main():
     for name, values in raw.items():
         metrics[name] = summarize(values) if isinstance(values, list) else values
     if not args.no_bench:
-        if args.space_only:
-            benches, overlaid = space_benchmarks(src, lambda: wait_quiet("space", quiet, args.max_load))
-            noise.append("Space-only review; the app does not link SpacePlanning. No app or UI benchmark metrics were measured.")
-        else:
-            benches, overlaid = benchmarks(src, lambda: wait_quiet("bench", quiet, args.max_load), args.osize)
+        benches, overlaid = benchmarks(src, lambda: wait_quiet("bench", quiet, args.max_load), args.osize)
         for name, b in benches.items():
             metrics[name] = {"median": b["median_ms"], "min": b["min_ms"], "max": b["max_ms"], "runs": b["runs"],
                              "detail": {k: v for k, v in b.items() if k not in ("median_ms", "min_ms", "max_ms", "runs", "name")}}
@@ -805,8 +749,6 @@ def main():
         noise.append("the machine was not quiet before every scenario within 10 minutes; see quiet.waits")
     result["notes"] = noise
 
-    if args.space_only:
-        sha += "-space"
     if args.osize:
         sha += "-osize"
         if args.out_dir == REPO + "/docs/perf":
@@ -819,18 +761,15 @@ def main():
             noise.append("baseline %s ran workload %s, this run workload %d: the threads differ"
                          % (os.path.basename(base_path), baseline.get("workload"), WORKLOAD))
     else:
-        base_path, baseline = latest_saved(args.out_dir, stem + ".json", space_only=args.space_only)
+        base_path, baseline = latest_saved(args.out_dir, stem + ".json")
     result["baseline"] = os.path.basename(base_path) if base_path else None
     text, regressions = table(result, baseline)
     result["regressions"] = regressions
     json.dump(result, open(stem + ".json", "w"), indent=1, sort_keys=True)
     with open(stem + ".md", "w") as f:
         f.write("# Perf review %s\n\n" % sha)
-        scope = ("Space logic only (--space-only)" if args.space_only else
-                 "micro-benchmarks only (--no-app)" if args.no_app else
-                 "%d launches per scenario, %d s idle window" % (args.repeat, args.idle_seconds))
-        f.write("Run %s on %s, workload %d, %s. Baseline: %s.%s\n\n"
-                % (result["created"], result["machine"], WORKLOAD, scope, result["baseline"] or "none",
+        f.write("Run %s on %s, workload %d, %d launches per scenario, %d s idle window. Baseline: %s.%s\n\n"
+                % (result["created"], result["machine"], WORKLOAD, args.repeat, args.idle_seconds, result["baseline"] or "none",
                    " NOISY: the machine did not get quiet." if quiet["noisy"] else ""))
         if quiet["waits"]:
             f.write("Quiet waits (s, 1-minute load when measuring started): %s\n\n"

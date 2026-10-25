@@ -885,12 +885,10 @@ final class SidebarCommands {
 
     // MARK: Pull Requests and Usage
 
-    enum UtilityPage { case pullRequests, usage, orchestrator, space }
+    enum UtilityPage { case pullRequests, usage, orchestrator }
 
     /// The Orchestrator's pane left the main area (Redesign).
     var onOrchestratorHidden: () -> Void = {}
-    /// A Space page or Trash left the main area.
-    var onSpaceHidden: () -> Void = {}
 
     /// T3 routes to `/pull-requests` and `/usage`: the page replaces the thread panel and the sidebar
     /// footer shows Back.
@@ -901,7 +899,6 @@ final class SidebarCommands {
         if utilityKind == .pullRequests && page != .pullRequests { pullRequestsPage.didHide() }
         if utilityKind == .usage && page != .usage { usage.didHide() }
         if utilityKind == .orchestrator && utilityPage != nil && page != .orchestrator { onOrchestratorHidden() }
-        if utilityKind == .space && utilityPage != nil && page != .space { onSpaceHidden() }
         utilityPage?.removeFromSuperview()
         threads.panel.removeFromSuperview()
         layout.mainContent = view
@@ -925,7 +922,6 @@ final class SidebarCommands {
         if utilityKind == .pullRequests { pullRequestsPage.didHide() }
         if utilityKind == .usage { usage.didHide() }
         let wasOrchestrator = utilityKind == .orchestrator
-        let wasSpace = utilityKind == .space
         page.removeFromSuperview()
         utilityPage = nil
         utilityKind = nil
@@ -935,7 +931,6 @@ final class SidebarCommands {
         threads.composer.syncSidebarDrafts()
         threads.focusComposerOnReturn()
         if wasOrchestrator { onOrchestratorHidden() }
-        if wasSpace { onSpaceHidden() }
         if record { onRouteChange?() }
     }
 

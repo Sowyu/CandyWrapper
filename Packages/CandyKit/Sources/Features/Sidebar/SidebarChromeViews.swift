@@ -304,7 +304,6 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
     /// "Clear thread search" (SidebarThreadHeader.tsx:110-123): `icon-micro ghost-muted`, a `size-3` x, while searching.
     let clearButton = ButtonView(nil, icon: .x, variant: .ghostMuted, size: .iconMicro)
     var onChange: (@MainActor (String) -> Void)?
-    var placeholder = "Search" { didSet { restyle() } }
     /// Field editor commands (moveDown:, moveUp:, insertNewline:, cancelOperation:). True when handled.
     var onCommand: (@MainActor (Selector) -> Bool)?
 
@@ -378,7 +377,7 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
         // Dither: the nav rows' 13pt, so search reads as the first of them.
         let size: CGFloat = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? 13 : 14
         if field.font?.pointSize != size { field.font = SB.font(size, .medium); fieldHeight = 0; needsLayout = true }
-        field.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [
+        field.placeholderAttributedString = NSAttributedString(string: "Search", attributes: [
             .font: SB.font(size, .medium), .foregroundColor: hovered ? SB.c(\.sidebarForeground) : SB.c(\.sidebarMutedForeground)])
     }
 
@@ -404,13 +403,8 @@ final class SidebarNavRowView: ControlView {
     private let icon: IconView
     private let label: LabelView
 
-    /// A muted label, for a quiet row like Space's + New page.
-    var muted = false { didSet { label.color = SB.c(muted ? \.sidebarMutedForeground : \.foreground) } }
-
-    convenience init(_ name: IconName, _ text: String) { self.init(icon: IconView(name: name, size: 16), text) }
-
-    init(icon: IconView, _ text: String) {
-        self.icon = icon
+    init(_ name: IconName, _ text: String) {
+        icon = IconView(name: name, size: 16)
         label = LabelView(text, font: SB.font(13, .medium), color: SB.c(\.foreground))
         super.init(frame: .zero)
         label.lineHeight = 20
@@ -438,7 +432,6 @@ final class SidebarNavRowView: ControlView {
         layer?.cornerRadius = DitherChrome.controlRadius
         layer?.backgroundColor = state.hoverOrPressed ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
         icon.strokeColor = SB.c(\.sidebarMutedForeground)
-        label.color = SB.c(muted && !state.hoverOrPressed ? \.sidebarMutedForeground : \.foreground)
     }
 }
 

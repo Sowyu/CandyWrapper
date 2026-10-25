@@ -76,8 +76,6 @@ Before this, every run measured against the shared sandbox server on 47391. Othe
 
 ## Verdicts
 
-Space's pure logic has a focused lane: `scripts/perf-review --space-only --source "$PWD"`. It builds SpaceModel, SpacePlanning and their tests from the selected checkout in a temporary package, with the same `-Osize` library setting, and waits for a quiet machine before measuring. The fixture holds 2,000 pages, 20,000 items and 100,000 blocks in memory. Search reports sparse, absent, common multiword and broad title queries over 21 samples, with p95 in each JSON metric's detail, plus build time, build-time heap growth and the retained heap released by clearing the index while the input models stay alive. This lane creates no app, server, plaintext data files or persistent build copies. It saves a `-space` report and compares with the selected baseline; new metrics have no prior comparison until a Space run is saved.
-
 Lower is better everywhere. A metric is `WORSE` or `better` only when the median moves past both thresholds and, with 3 or more samples on each side, the two ranges don't overlap. Otherwise it is `same`.
 
 | Metric | Relative | Absolute |

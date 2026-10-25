@@ -26,10 +26,6 @@ final class ThreadNotificationCoordinator: NSObject {
     /// Leaves Settings or a utility page and opens the thread (environment, local thread id).
     var navigate: (String, ThreadId) -> Void = { _, _ in }
 
-    /// Space shares this delegate even when thread desktop notifications are off.
-    var spaceResponse: @MainActor (SpaceReminderResponse) async -> Void = { _ in }
-    var spaceDidFire: @MainActor () -> Void = {}
-
     private var settings: ClientSettings { ClientSettingsStore.shared.current }
     private var mode: ThreadNotificationMode { ThreadNotificationMode(rawValue: settings.string("notificationMode")) ?? .off }
     private var inAppEnabled: Bool { settings.bool("inAppNotificationsEnabled") }
@@ -64,9 +60,19 @@ final class ThreadNotificationCoordinator: NSObject {
                 self.refreshPermission()
             }
         })
-        UNUserNotificationCenter.current().delegate = self
+        if mode.hasDesktopNotifications { UNUserNotificationCenter.current().delegate = self }
         refreshPermission()
         armGestureMonitor()
+        Task.detached { await Self.withdrawSpaceReminders() }
+    }
+
+    /// Withdraws the reminders Space scheduled before it was removed, pending and delivered (`SpaceReminderLeftovers`).
+    nonisolated static func withdrawSpaceReminders() async {
+        let center = UNUserNotificationCenter.current()
+        let pending = SpaceReminderLeftovers.ids(await center.pendingNotificationRequests().map(\.identifier))
+        if !pending.isEmpty { center.removePendingNotificationRequests(withIdentifiers: pending) }
+        let delivered = SpaceReminderLeftovers.ids(await center.deliveredNotifications().map(\.request.identifier))
+        if !delivered.isEmpty { center.removeDeliveredNotifications(withIdentifiers: delivered) }
     }
 
     private var gestureMonitor: Any?
@@ -211,14 +217,7 @@ final class ThreadNotificationCoordinator: NSObject {
 
 extension ThreadNotificationCoordinator: UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
-        let request = response.notification.request
-        if SpaceReminderNotification.owns(request.identifier) {
-            if let message = SpaceReminderResponse(request: request, action: response.actionIdentifier) {
-                await self.spaceResponse(message)
-            }
-            return
-        }
-        let info = request.content.userInfo
+        let info = response.notification.request.content.userInfo
         guard let env = info["environmentId"] as? String, let thread = info["threadId"] as? String else { return }
         await MainActor.run { self.open(environmentId: env, threadId: thread) }
     }
@@ -226,11 +225,7 @@ extension ThreadNotificationCoordinator: UNUserNotificationCenterDelegate {
     /// The window lost focus to another of the app's windows: still show the banner.
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async
         -> UNNotificationPresentationOptions {
-        if SpaceReminderNotification.owns(notification.request.identifier) {
-            await self.spaceDidFire()
-            return [.banner, .list, .sound]
-        }
-        return [.banner, .list]
+        [.banner, .list]
     }
 }
 

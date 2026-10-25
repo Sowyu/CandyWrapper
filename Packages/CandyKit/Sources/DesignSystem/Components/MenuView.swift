@@ -21,8 +21,6 @@ public struct MenuItem {
     /// macOS glyph form, for example `⇧⌘K` (keybindings.ts:191-224).
     public var shortcut: String?
     public var isDestructive = false
-    /// A note in the muted text color instead of warning, for an explanation that isn't a problem.
-    public var isMuted = false
     public var isDisabled = false
     /// `data-inset`: room for an icon column.
     public var inset = false
@@ -75,11 +73,6 @@ public struct MenuItem {
 
     public static var separator: MenuItem { MenuItem("", kind: .separator) }
     public static func note(_ text: String, destructive: Bool = false) -> MenuItem { MenuItem(text, kind: .note, destructive: destructive) }
-    public static func mutedNote(_ text: String) -> MenuItem {
-        var item = MenuItem(text, kind: .note)
-        item.isMuted = true
-        return item
-    }
     public static func label(_ title: String, inset: Bool = false) -> MenuItem { MenuItem(title, kind: .label, inset: inset) }
     public static func checkbox(_ title: String, checked: Bool, onToggle: (@MainActor (Bool) -> Void)? = nil) -> MenuItem {
         var item = MenuItem(title, kind: .checkbox(checked))
@@ -768,7 +761,7 @@ final class MenuRowView: DSView {
             glyphView?.alphaValue = alpha
         }
         if let check { check.strokeColor = text.cgColor(in: self) }
-        note?.color = item.isDestructive ? Themed.color(\.destructive) : item.isMuted ? Themed.color(\.mutedForeground) : Themed.color(\.warning)
+        note?.color = item.isDestructive ? Themed.color(\.destructive) : Themed.color(\.warning)
         subtitleLabel?.color = Themed.color(\.contrastMutedForeground)
         needsDisplay = true
     }

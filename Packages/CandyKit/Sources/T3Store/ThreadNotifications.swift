@@ -189,3 +189,9 @@ public struct ThreadNotificationRoute: Sendable, Equatable {
         return ThreadNotificationRoute(sound: mode.hasSound, toast: toast, system: system)
     }
 }
+
+/// Space, removed in 1.14.2, scheduled its reminders under ids that start with "space.". Launch withdraws them so
+/// none fires for a page the app can no longer open. Thread notifications use "environment:thread" tags.
+public enum SpaceReminderLeftovers {
+    public static func ids(_ identifiers: [String]) -> [String] { identifiers.filter { $0.hasPrefix("space.") } }
+}

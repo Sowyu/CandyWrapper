@@ -21,7 +21,6 @@ public final class ExperimentalSettingsView: SettingsPageBase {
     public static let toggles: [ExperimentalToggle] = [
         ExperimentalToggle(title: "Redesign", detail: "CandyWrapper's own look, with a picture behind the chat. Off goes back to the theme you had before.", isOn: { ThemeLibrary.shared.isRedesignOn }, set: { ThemeLibrary.shared.setRedesign($0) }, observe: { f in let id = ThemeLibrary.shared.observe(f); return { ThemeLibrary.shared.removeObserver(id) } }),
         ExperimentalToggle(title: "Orchestrator", detail: "One thread that manages every thread on its machine. It adds a pinned row to the sidebar, its own chat and an Orchestrator tab here in Settings.", needsRedesign: true, isOn: { OrchestratorStore.shared.config.enabled }, set: { on in OrchestratorStore.shared.update { $0.enabled = on } }, observe: { f in let id = OrchestratorStore.shared.observe(f); return { OrchestratorStore.shared.removeObserver(id) } }),
-        ExperimentalToggle(title: "Space", detail: "Private notes, to-dos and plans, kept on one of your machines.", needsRedesign: true, isOn: { SpaceSettings.shared.enabled }, set: { SpaceSettings.shared.enabled = $0 }, observe: { f in let id = SpaceSettings.shared.observe(f); return { SpaceSettings.shared.removeObserver(id) } }),
     ]
 
     private var unsubscribe: [() -> Void] = []

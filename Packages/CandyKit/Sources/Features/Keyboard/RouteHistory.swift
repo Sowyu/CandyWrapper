@@ -14,9 +14,6 @@ public final class RouteHistory {
         case usage
         /// Redesign's Orchestrator pane, CandyWrapper's own.
         case orchestrator
-        /// A Space page by its id, or "" for Space's "No pages yet" view (docs/space.md "Tabs and keys").
-        case spacePage(String)
-        case spaceTrash
     }
 
     public private(set) var entries: [Route] = []

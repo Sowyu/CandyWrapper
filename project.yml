@@ -51,14 +51,6 @@ targets:
         product: T3Store
       - package: CandyKit
         product: Features
-      - package: CandyKit
-        product: SpaceCrypto
-      - package: CandyKit
-        product: SpaceModel
-      - package: CandyKit
-        product: SpaceEngine
-      - package: CandyKit
-        product: SpaceLocal
       - package: Sparkle
     postBuildScripts:
       # Sparkle's Installer and Downloader XPC services are for sandboxed apps only (B8), and the headers
