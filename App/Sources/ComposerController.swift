@@ -1453,6 +1453,7 @@ final class ComposerController {
         updateThreadBanners()
         updateRunOn()
         refreshWorkspaceSnapshot()
+        composer.threadTitle = shellThread?.title
         let banner = draftKey.flatMap { threadErrors.visible($0, shell: shellThread) }
         if banner != panel.errorBanner.banner {
             panel.errorBanner.banner = banner
