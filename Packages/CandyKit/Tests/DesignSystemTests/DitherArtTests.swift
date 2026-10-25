@@ -125,19 +125,21 @@ struct DitherTabStripAccessibilityTests {
         let profile = DitherArt.waveProfile(cycles: 3, depth: 0.4)
         #expect(profile.first?.alpha == 0 && profile.last?.alpha == 0 && profile.last?.at == 1)
         #expect(abs((profile.map(\.alpha).max() ?? 0) - 0.4) < 1e-9)
-        // A crest takes the same share of a dot at 1x, 2x and 3x: the band's alpha times the grid's cover.
+        // A crest takes the same share of a dot at 1x, 2x and 3x, under a band that never goes past opaque: the grid
+        // covers 3/4 of a dot on each.
         for k in [2, 4, 6] {
-            let cover = Double(2 * k - 1) / Double(k * k)
-            #expect(abs(DitherArt.waveDepth(pixelsPerDot: k) * cover - DitherArt.waveStrength) < 1e-9)
+            #expect(abs(DitherArt.waveCover(pixelsPerDot: k) - 0.75) < 1e-9)
+            #expect(abs(DitherArt.waveDepth(pixelsPerDot: k) * 0.75 - DitherArt.waveStrength) < 1e-9)
+            #expect(DitherArt.waveDepth(pixelsPerDot: k) <= 1)
         }
         #expect(zip(profile, profile.dropFirst()).allSatisfy { $0.at < $1.at })
 
-        // The grid covers exactly each dot's right column and bottom row of device pixels.
+        // At 2x the grid covers exactly each dot's right two columns and bottom two rows of device pixels.
         let grid = try #require(DitherArt.waveGrid(columns: 3, rows: 2, pixelsPerDot: 4))
         #expect(grid.width == 12 && grid.height == 8)
         let alpha = [UInt8](grid.dataProvider!.data! as Data), row = grid.bytesPerRow
         for y in 0..<8 {
-            for x in 0..<12 { #expect((alpha[y * row + x] == 255) == (x % 4 == 3 || y % 4 == 3)) }
+            for x in 0..<12 { #expect((alpha[y * row + x] == 255) == (x % 4 >= 2 || y % 4 >= 2)) }
         }
     }
 }

@@ -87,8 +87,8 @@ public final class DitherArtView: NSView {
         }
     }
 
-    /// The wave between the art and the scrim: a band of the background color, seen only through a grid one device
-    /// pixel wide on each dot's edge, moving across the panel. Where it passes, each dot shrinks by a sliver and grows
+    /// The wave between the art and the scrim: a band of the background color, seen only through a grid half a dot
+    /// wide on each dot's edge, moving across the panel. Where it passes, each dot shrinks and grows
     /// back. Core Animation moves the band, so the app does no work per frame.
     private func makeWave() -> (root: CALayer, grid: CALayer, band: CAGradientLayer) {
         let root = CALayer(), grid = CALayer(), band = CAGradientLayer()
@@ -418,9 +418,11 @@ public enum DitherArt {
 
     /// The working wave: how much of a dot's brightness a crest takes, how far apart crests are in points, how long
     /// one takes to move that far, its angle off horizontal and how long it takes to ease in or out.
-    nonisolated static let waveStrength: Double = 0.24
-    nonisolated static let wavePeriod: CGFloat = 900
-    nonisolated static let waveDuration: CFTimeInterval = 4.5
+    /// The one knob for how strong the wave reads: 0.24 in 1.14.2, which the user found too subtle on Retina.
+    nonisolated static let waveStrength: Double = 0.6
+    nonisolated static let wavePeriod: CGFloat = 1200
+    /// One period per this long: 200pt a second, the 1.14.2 pace, over a wider band.
+    nonisolated static let waveDuration: CFTimeInterval = 6
     nonisolated static let waveAngle: CGFloat = -0.3
     nonisolated static let waveEase: CFTimeInterval = 1.5
     /// How often the band moves.
@@ -440,18 +442,27 @@ public enum DitherArt {
               let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w, space: CGColorSpaceCreateDeviceGray(),
                                   bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue),
               let data = ctx.data?.bindMemory(to: UInt8.self, capacity: w * h) else { return nil }
-        // Row 0 of the buffer is the top, so a dot's bottom edge is its last row.
+        // Row 0 of the buffer is the top, so a dot's bottom edge is its last rows.
+        let edge = k - waveLine(pixelsPerDot: k)
         for y in 0..<h {
-            if y % k == k - 1 { (data + y * w).update(repeating: 255, count: w); continue }
-            for x in stride(from: k - 1, to: w, by: k) { data[y * w + x] = 255 }
+            if y % k >= edge { (data + y * w).update(repeating: 255, count: w); continue }
+            for x in 0..<w where x % k >= edge { data[y * w + x] = 255 }
         }
         return ctx.makeImage()
     }
 
-    /// The band's alpha at a crest. The grid covers (2k - 1) / k² of a dot k device pixels wide, 3/4 at 1x and 7/16 at
-    /// 2x, so the band grows denser with the scale and a crest takes `waveStrength` of every dot on any screen.
+    /// The band's alpha at a crest, so a crest takes `waveStrength` of every dot whatever share the grid covers.
     nonisolated static func waveDepth(pixelsPerDot k: Int) -> Double {
-        min(1, waveStrength * Double(k * k) / Double(max(2 * k - 1, 1)))
+        min(1, waveStrength / waveCover(pixelsPerDot: k))
+    }
+
+    /// The grid's line, in device pixels: half a dot, so its cover is 3/4 of a dot at 1x, 2x and 3x alike.
+    nonisolated static func waveLine(pixelsPerDot k: Int) -> Int { max(1, k / 2) }
+
+    /// The share of a dot the grid covers: its right and bottom `waveLine` rows of device pixels.
+    nonisolated static func waveCover(pixelsPerDot k: Int) -> Double {
+        let open = Double(k - waveLine(pixelsPerDot: k)) / Double(k)
+        return 1 - open * open
     }
 
     /// The band's stops across `cycles` periods: a crest of `depth` in the middle of each, nothing between.
