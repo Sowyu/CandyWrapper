@@ -87,7 +87,7 @@ repositories = section("Repositories", "".join([
     server_row("Automatically pull", "Keeps the default branch current when the checkout has no local changes or commits. Projects can override it.",
                switch("default", "off", False)),
     server_row("Remove agent credits when merging",
-               "Remove recognized agent credit lines from GitHub merge and squash messages, keeping human co-authors. Includes auto-merge. Excludes merge queues, stack merges, and existing commits.",
+               "Remove recognized agent credit lines from merge and squash messages on hosts that support it, keeping human co-authors. Includes auto-merge. Excludes merge queues, stack merges, and existing commits.",
                switch("default", "off", False)),
     server_row("Default merge method", "Pull requests start with this method. Last selected reuses whatever you chose most recently on this device.",
                pop["select_trigger"]("default", "sm", "Last selected")),
