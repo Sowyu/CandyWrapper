@@ -443,7 +443,7 @@ Every device schedules its own reminders from its local copy with `UNUserNotific
 2. The planner schedules the soonest 50 within the next 30 days as `UNCalendarNotificationTrigger` requests, since Apple caps pending local notifications at 64 per app. Weekly items schedule each week as its own request.
 3. A timed reminder's date components carry the value's `tz`, so it fires at that moment wherever the device is. A date-only reminder's components carry no zone, so it fires at its wall-clock time in whatever zone the device is in.
 4. It plans again when a change touches a date, Done or trash, when a reminder fires, when the app starts and when the system time zone changes. Each request id is `space.<pageId>.<fieldId>.<start>`, so planning again replaces requests instead of doubling them.
-5. The notification's title is the item title, and its body is the parent page and the time, like "Groceries · 9:00", in the device's zone.
+5. The notification's title is the item title, and its body is only the time, like "9:00", in the device's zone. No other Space text goes in, not even the parent page's title. A digest of the item in `userInfo` lets a later pass replace or withdraw requests whose text no longer matches.
 6. Actions are "Mark done", which writes the change and syncs, and "Snooze 10 min", which stays on that device.
 7. Clicking opens the item in Space.
 8. `ThreadNotificationCoordinator` is the app's notification delegate, so it hands `space.` ids to the Space reminder controller.

@@ -17,7 +17,7 @@ struct ReminderPlannerTests {
         #expect(tokyo.itemTimeInDeviceZone.rawValue == "2026-10-27T07:00")
         #expect(tokyo.id == london.id)
         #expect(london.id == "space.\(id(2)).due.2026-10-27T09:00")
-        #expect(london.title == "Buy milk" && london.parentTitle == "Tasks")
+        #expect(london.title == "Buy milk")
     }
 
     @Test func dateOnlyStaysOnItsDateWithFloatingNineAM() throws {

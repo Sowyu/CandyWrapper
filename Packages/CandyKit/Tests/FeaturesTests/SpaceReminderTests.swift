@@ -81,7 +81,7 @@ struct SpaceReminderTests {
             #expect(!trigger.repeats)
             #expect(trigger.dateComponents.timeZone?.identifier == (timed ? "Australia/Melbourne" : nil))
             #expect(request.content.title == "Buy milk")
-            #expect(request.content.body == (timed ? "Groceries · 23:00" : "Groceries · 09:00"))
+            #expect(request.content.body == (timed ? "23:00" : "09:00"), "the parent's title never goes in")
             #expect(request.content.categoryIdentifier == SpaceReminderNotification.categoryID)
             #expect(request.content.userInfo["pageID"] as? String == item.rawValue)
             #expect(request.content.userInfo["stamp"] as? String == "digest")
@@ -109,6 +109,32 @@ struct SpaceReminderTests {
         sut.setEnabled(false); await sut.settle()
         #expect(center.requests.keys.sorted() == [thread.identifier])
         #expect(center.notices.keys.sorted() == [thread.identifier])
+    }
+
+    @Test func requestsScheduledWithTheParentTitleAreReplacedOrWithdrawn() async throws {
+        let center = ReminderCenter(), store = InMemorySpacePageStore(pages: try pages())
+        let sut = controller(store, center)
+        sut.setEnabled(true); await sut.settle()
+        let current = try #require(center.requests.values.first)
+        // What an earlier build scheduled: the parent's title in the body, under the old digest.
+        func old(_ id: String) -> UNNotificationRequest {
+            let content = current.content.mutableCopy() as! UNMutableNotificationContent
+            content.body = "Groceries · 23:00"
+            var info = content.userInfo
+            info["stamp"] = "old-digest"
+            content.userInfo = info
+            return UNNotificationRequest(identifier: id, content: content, trigger: current.trigger)
+        }
+        center.requests[current.identifier] = old(current.identifier)
+        center.requests[current.identifier + ".snooze"] = old(current.identifier + ".snooze")
+        center.notices[current.identifier] = old(current.identifier)
+        let next = controller(store, center)
+        next.setEnabled(true); await next.settle()
+        #expect(center.requests.keys.sorted() == [current.identifier])
+        #expect(center.requests[current.identifier]?.content.body == "23:00")
+        #expect(center.notices.isEmpty)
+        #expect(!center.requests.values.contains { $0.content.body.contains("Groceries") })
+        sut.setEnabled(false); next.setEnabled(false); await sut.settle(); await next.settle()
     }
 
     @Test func withdrawingAnOldDeliveredVersionKeepsTheCurrentPendingVersion() async throws {
@@ -162,6 +188,8 @@ struct SpaceReminderTests {
         next.setEnabled(true); await next.settle()
         #expect(center.notices[old.identifier] != nil)
         store.rename(parent, "Shopping"); await next.settle(); await first.settle()
+        #expect(center.notices[old.identifier] != nil, "the parent's title isn't in the notification")
+        store.rename(item, "Buy oat milk"); await next.settle(); await first.settle()
         #expect(center.notices.isEmpty)
         first.setEnabled(false); next.setEnabled(false); await first.settle(); await next.settle()
         // Off on cold launch clears even unknown Space ids, without reading a local copy.

@@ -10,8 +10,8 @@ public struct PlannedReminder: Equatable, Sendable {
     public let fireDate: Date
     /// Timed values carry their effective zone; date-only values carry no zone or calendar.
     public let components: DateComponents
+    /// The item's own title, the only Space text a notification carries (docs/space.md section 6).
     public let title: String
-    public let parentTitle: String?
     /// Format this with the user's locale in the notification adapter.
     public let itemTimeInDeviceZone: DatePoint
 }
@@ -75,7 +75,6 @@ public enum ReminderPlanner {
                         : start
                     let request = PlannedReminder(id: id, pageID: pageID, fieldID: fieldID, start: start,
                                                   fireDate: fire, components: components, title: page.title,
-                                                  parentTitle: page.parent.flatMap { pages[$0]?.title },
                                                   itemTimeInDeviceZone: displayTime)
                     let position = planned.firstIndex { fire < $0.fireDate || (fire == $0.fireDate && id < $0.id) }
                         ?? planned.endIndex

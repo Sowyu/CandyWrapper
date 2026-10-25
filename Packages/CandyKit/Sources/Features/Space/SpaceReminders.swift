@@ -61,7 +61,8 @@ public enum SpaceReminderNotification {
         formatter.dateStyle = .none
         formatter.timeStyle = .short
         let time = (try? point.resolved(in: formatter.timeZone, dateOnlyHour: 9)).map { formatter.string(from: $0) } ?? point.rawValue
-        content.body = [reminder.parentTitle, time].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        // The item's title and its time, nothing from the parent or the page's content.
+        content.body = time
         content.categoryIdentifier = categoryID
         content.sound = .default
         content.userInfo = ["pageID": reminder.pageID.rawValue, "stamp": stamp, "fieldID": reminder.fieldID]
@@ -69,10 +70,11 @@ public enum SpaceReminderNotification {
                                      trigger: UNCalendarNotificationTrigger(dateMatching: reminder.components, repeats: false))
     }
 
-    /// Only a digest goes in userInfo, never the rest of the encrypted page's contents.
-    static func stamp(_ page: PageRecord, parentTitle: String?) throws -> String {
-        var data = try SpaceJSON.encode(page)
-        data.append(try SpaceJSON.encode(parentTitle))
+    /// Only a digest goes in userInfo, never the rest of the encrypted page's contents. The "v2" prefix makes every
+    /// request from before parent titles left the body invalid, so the next pass replaces or withdraws it.
+    static func stamp(_ page: PageRecord) throws -> String {
+        var data = Data("v2".utf8)
+        data.append(try SpaceJSON.encode(page))
         return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 }
@@ -238,7 +240,7 @@ public final class SpaceReminderController {
         if allowed {
             desired = try plan.map { reminder in
                 let page = pages[reminder.pageID]!
-                return SpaceReminderNotification.request(reminder, stamp: try SpaceReminderNotification.stamp(page, parentTitle: reminder.parentTitle))
+                return SpaceReminderNotification.request(reminder, stamp: try SpaceReminderNotification.stamp(page))
             }
             // Snoozes live only in this device's center and survive relaunch. An item edit invalidates them.
             desired += pending.filter { $0.identifier.hasSuffix(".snooze") && valid($0) }
@@ -276,7 +278,7 @@ public final class SpaceReminderController {
               let page = store.pages[id], store.isLive(id), page.props[FieldID.done] != .checkbox(true),
               let field = request.content.userInfo["fieldID"] as? String,
               case .date(let value) = page.props[field], value.remind != nil,
-              let stamp = try? SpaceReminderNotification.stamp(page, parentTitle: page.parent.flatMap { store.pages[$0]?.title }) else { return false }
+              let stamp = try? SpaceReminderNotification.stamp(page) else { return false }
         return request.content.userInfo["stamp"] as? String == stamp
     }
 
