@@ -370,8 +370,22 @@ final class SpaceEditorMenus {
                 }
             },
         ]
-        if editor.paragraphs[key]?.due != nil {
+        if let due = editor.paragraphs[key]?.due {
             items.append(.separator)
+            let set = due.remind != nil
+            items.append(MenuItem(set ? "Reminder at \(SpacePageEditor.reminderTimeText(due))…" : "Remind me…", icon: .alarmClock) { [weak self, weak editor] in
+                DispatchQueue.main.async {
+                    guard let self, let editor else { return }
+                    self.openReminder(editor, key: key)
+                }
+            })
+            if set {
+                items.append(MenuItem("Remove reminder", icon: .alarmClockOff) { [weak editor] in
+                    var cleared = due
+                    cleared.remind = nil
+                    editor?.setDue(key, cleared)
+                })
+            }
             items.append(MenuItem("Remove date", icon: .x) { [weak editor] in editor?.setDue(key, nil) })
         }
         let menu = MenuPopupView(items: items, style: .menu)
@@ -379,6 +393,44 @@ final class SpaceEditorMenus {
         menu.hostPopup = PopupHost.host(for: window).open(menu, trigger: tv, anchorRect: anchor,
                                                           placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none),
                                                           swallowsOutsideClick: true, returnsFocus: false)
+    }
+
+    /// A dialog asking for the reminder's time on the due day. A date-only item counts it in the Mac's
+    /// zone, a timed one in the item's own zone (docs/space.md section 2, `remind`).
+    private func openReminder(_ editor: SpacePageEditor, key: SpaceParagraphKey) {
+        guard let window = editor.textView.window, let due = editor.paragraphs[key]?.due else { return }
+        let dialog = DialogView(title: "Reminder", message: "Notify me on \(SpacePageEditor.dueDayText(due)) at this time.")
+        dialog.maxWidth = 384
+        let time = InputView(placeholder: "HH:MM", text: SpacePageEditor.reminderTimeText(due))
+        time.setAccessibilityLabel("Time")
+        let error = TextBlockView()
+        error.font = DSFont.ui(14)
+        error.lineHeight = 20
+        error.color = Themed.color(\.destructiveForeground)
+        error.isHidden = true
+        dialog.panelContent = [time, error]
+        let cancel = ButtonView("Cancel", variant: .outline)
+        let save = ButtonView("Save")
+        dialog.footerButtons = [cancel, save]
+        let host = ModalHost.present(dialog, in: window)
+        let close: @MainActor () -> Void = { [weak host] in host?.close() }
+        dialog.onClose = close
+        cancel.action = close
+        let submit: @MainActor () -> Void = { [weak editor, weak dialog, weak time, weak error] in
+            guard let time, let editor, let current = editor.paragraphs[key]?.due else { return }
+            guard let next = SpacePageEditor.withReminder(current, time: time.text) else {
+                error?.text = "Enter a time like 09:30."
+                error?.isHidden = false
+                dialog?.needsLayout = true
+                return
+            }
+            close()
+            editor.setDue(key, next)
+        }
+        save.action = submit
+        time.onSubmit = submit
+        time.onChange = { [weak error] _ in error?.isHidden = true }
+        DispatchQueue.main.async { [weak time] in _ = time?.becomeFirstResponder() }
     }
 
     /// The Redesign calendar in a popover under the due label.

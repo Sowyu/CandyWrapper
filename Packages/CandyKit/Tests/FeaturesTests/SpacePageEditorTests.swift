@@ -243,6 +243,26 @@ struct SpacePageEditorTests {
         #expect(SpacePageEditor.dueText(p, now: now, zone: zone)!.late == false, "a date-only due date is late once its day ends")
     }
 
+    @Test func reminderTimeIsSavedOnTheDueDay() throws {
+        let (editor, store, _) = make()
+        type(editor, "[] Pay rent")
+        editor.flushTyping()
+        let key = editor.keys[0]
+        let day = try DateValue(start: DatePoint("2026-10-23"))
+        #expect(SpacePageEditor.reminderTimeText(day) == "09:00")
+        #expect(SpacePageEditor.reminderTimeText(try DateValue(start: DatePoint("2026-10-23T14:30"), tz: "Europe/Paris")) == "14:30")
+        for bad in ["", "9", "24:00", "12:60", "12:5", "ab:cd", "１２:３０", "12:30:00"] {
+            #expect(SpacePageEditor.withReminder(day, time: bad) == nil, "\(bad)")
+        }
+        let set = try #require(SpacePageEditor.withReminder(day, time: " 7:05 "))
+        #expect(set.remind == .at(try DatePoint("2026-10-23T07:05")))
+        #expect(SpacePageEditor.reminderTimeText(set) == "07:05")
+        editor.setDue(key, set)
+        guard case .date(let due)? = store.pages[key.id]!.props[FieldID.due] else { Issue.record("no due"); return }
+        #expect(due.start.rawValue == "2026-10-23")
+        #expect(due.remind == .at(try DatePoint("2026-10-23T07:05")))
+    }
+
     @Test func pasteMarkdownBecomesBlocksAndCopyWritesMarkdown() {
         let (editor, store, page) = make()
         editor.insertBlocks(SpaceMarkdown.parse("# This week\n- [ ] Pay rent\n- [x] Email tutor\n\nLab 4 needs **the cache** simulator.\n- one\n  - two\n1. first\n```swift\nlet x = 1\nprint(x)\n```"))

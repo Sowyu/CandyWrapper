@@ -1357,6 +1357,33 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
         return (late ? "Overdue · " + text : text, late)
     }
 
+    /// The reminder dialog's starting time: the one set, else the item's own time, else 09:00.
+    static func reminderTimeText(_ due: DateValue) -> String {
+        if case .at(let at)? = due.remind { return String(at.rawValue.suffix(5)) }
+        if due.start.isTimed { return String(due.start.rawValue.suffix(5)) }
+        return "09:00"
+    }
+
+    /// `due` reminding at `time` (H:MM or HH:MM) on its start day, or nil for anything else.
+    static func withReminder(_ due: DateValue, time: String) -> DateValue? {
+        let parts = time.trimmingCharacters(in: .whitespaces).split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2, (1...2).contains(parts[0].count), parts[1].count == 2,
+              parts.allSatisfy({ $0.allSatisfy(\.isASCII) }), let h = Int(parts[0]), let m = Int(parts[1]),
+              (0..<24).contains(h), (0..<60).contains(m),
+              let at = try? DatePoint(String(due.start.rawValue.prefix(10)) + String(format: "T%02d:%02d", h, m)) else { return nil }
+        var next = due
+        next.remind = .at(at)
+        return next
+    }
+
+    /// "Mon 26 Oct", the due day as the label writes it.
+    static func dueDayText(_ due: DateValue) -> String {
+        guard let day = try? DatePoint(String(due.start.rawValue.prefix(10))), let instant = try? day.resolved(in: .current) else { return due.start.rawValue }
+        let f = dayFormat
+        f.timeZone = .current
+        return f.string(from: instant)
+    }
+
     private func dueLabel(_ p: SpaceParagraph) -> NSAttributedString {
         if let (text, late) = Self.dueText(p) {
             return NSAttributedString(string: text, attributes: [.font: DSFont.ui(12), .foregroundColor: late ? Self.lateColor : Themed.color(\.mutedForeground)])
@@ -1373,7 +1400,7 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
         let size = label.size()
         label.draw(at: CGPoint(x: rightEdge - size.width, y: midY - size.height / 2))
         if let (_, late) = Self.dueText(p) {
-            SpacePageIcons.draw(.calendar, in: CGRect(x: rightEdge - size.width - 19, y: midY - 6.5, width: 13, height: 13),
+            SpacePageIcons.draw(p.due?.remind != nil ? .alarmClock : .calendar, in: CGRect(x: rightEdge - size.width - 19, y: midY - 6.5, width: 13, height: 13),
                             color: late ? Self.lateColor : Themed.color(\.iconMuted))
         }
     }
