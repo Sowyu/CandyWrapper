@@ -25,6 +25,8 @@ public struct ThreadSearchMatch: Decodable, Equatable, Sendable {
 /// `OrchestrationSearchThreadsResult` (threadSearch.ts:31-33).
 public struct ThreadSearchResult: Decodable, Sendable {
     public var matches: [ThreadSearchMatch]
+    public var snapshotSequence: Int?
+    public var threads: [ThreadShell]?
 }
 
 extension SidebarModel {

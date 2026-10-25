@@ -60,6 +60,7 @@ final class Environments {
     private(set) var removing: Set<String> = []
     /// Ids whose `connectSaved` is reading its route and token.
     private var connecting: Set<String> = []
+    private var shellSearchGeneration = 0
     /// Connects T3 Connect routes. Nil until the account loads; relay machines wait for it.
     var t3Connect: T3ConnectAuthorizer? {
         didSet {
@@ -93,6 +94,26 @@ final class Environments {
     /// Whether the environment's shell has arrived (from the disk cache or the server).
     func hasShell(_ environmentId: String) -> Bool { entries[environmentId]?.snapshot != nil }
     func snapshot(_ environmentId: String) -> ShellSnapshot? { entries[environmentId]?.snapshot }
+    func hasPartialShell(_ id: String) -> Bool {
+        entries[id]?.session?.isPartial == true || entries[id]?.snapshot?.omissions?.isPartial == true || entries[id]?.snapshot?.olderSettled != nil
+    }
+
+    /// A partial sidebar cannot establish whether a worktree is orphaned.
+    func worktreeThreadIds(_ environmentId: String, path: String) async throws -> Set<ThreadId>? {
+        guard hasPartialShell(environmentId) else { return nil }
+        guard let session = session(environmentId), session.omissions.omitIdleSubagents else { throw CommandError.notConnected }
+        let json = try await session.supervisor.request("orchestration.getWorktreeThreadIds", payload: .object(["worktreePath": .string(path)]))
+        guard case .array(let ids)? = json["threadIds"], ids.allSatisfy({ $0.stringValue != nil }) else { throw CommandError.notConnected }
+        return Set(ids.compactMap(\.stringValue).map { ThreadId($0).scoped(to: environmentId) })
+    }
+
+    func demandOlderSettled(minimum: Int, projectIds: Set<ProjectId>?) {
+        for id in order {
+            let local = projectIds.map { $0.filter { $0.environmentId == id }.map(\.localId) }
+            let count = local?.isEmpty == true ? 0 : minimum
+            entries[id]?.session?.demandOlderSettled(minimum: count, projectIds: local)
+        }
+    }
     func isRegistered(_ environmentId: String) -> Bool { entries[environmentId] != nil }
     func label(_ environmentId: String) -> String? { entries[environmentId]?.label ?? saved.first { $0.environmentId == environmentId }?.label }
     /// `resolveEnvironmentMachineKind`: the `environmentIcon` setting, else the detected machine.
@@ -515,10 +536,13 @@ final class Environments {
             session.onSnapshot = { [weak self, weak session] snapshot in
                 previous?(snapshot)
                 guard let self, let session, self.entries[id]?.session === session else { return }
-                self.shellChanged(id, snapshot)
                 self.onLiveShell?(id, snapshot)
                 if id == self.primaryId { LaunchTiming.mark("live sidebar") }
                 if id != self.primaryId { Task { await self.cache.noteChanged(snapshot, environmentId: id) } }
+            }
+            session.onDisplaySnapshot = { [weak self, weak session] snapshot in
+                guard let self, let session, self.entries[id]?.session === session else { return }
+                self.shellChanged(id, snapshot)
             }
             iconRoutes.set(id, IconRoutes.Route(supervisor: session.supervisor, http: session.http, token: session.token))
             ProjectIconStore.shared.forget(environmentId: id)
@@ -600,19 +624,43 @@ final class Environments {
 
     /// Searches every connected environment at once and scopes the matches (`orchestration.searchThreads`).
     func searchThreads(_ query: String) async -> [ThreadSearchMatch]? {
-        let sessions = order.compactMap { id in entries[id]?.session.map { (id, $0.supervisor) } }
+        let revision = shellSearchGeneration
+        let projectIds = sidebar?.resolvedProjectIds
+        let sessions = order.compactMap { id in entries[id]?.session.map { (id, $0, entries[id]?.label ?? "") } }
         guard !sessions.isEmpty else { return nil }
         return await withTaskGroup(of: [ThreadSearchMatch]?.self) { group in
-            for (id, supervisor) in sessions {
-                group.addTask {
-                    guard let json = try? await supervisor.request("orchestration.searchThreads", payload: .object(["query": .string(query)])),
-                          let matches = (try? json.decode(as: ThreadSearchResult.self))?.matches else { return nil }
+            for (id, session, label) in sessions {
+                group.addTask { @MainActor in
+                    let generation = await session.store.generation
+                    var payload: [String: JSONValue] = ["query": .string(query)]
+                    if session.omissions.omitOlderSettled, let cut = await session.store.snapshot?.olderSettled {
+                        payload["olderSettledBefore"] = .string(cut.before)
+                        payload["environmentLabel"] = .string(label)
+                        if let projectIds {
+                            payload["projectIds"] = .array(projectIds.filter { $0.environmentId == id }.map { .string($0.localId.rawValue) })
+                        }
+                    }
+                    guard let json = try? await session.supervisor.request("orchestration.searchThreads", payload: .object(payload)),
+                          !Task.isCancelled, self.shellSearchGeneration == revision, generation == (await session.store.generation),
+                          let result = try? json.decode(as: ThreadSearchResult.self) else { return nil }
+                    let matches = result.matches
+                    if let sequence = result.snapshotSequence, let rows = result.threads {
+                        await session.mountSearch(.init(snapshotSequence: sequence, threads: rows), generation: generation)
+                    }
                     return matches.map { EnvironmentScope.scope($0, id) }
                 }
             }
             var all: [ThreadSearchMatch]?
             for await part in group { if let part { all = (all ?? []) + part } }
             return all
+        }
+    }
+
+    func clearShellSearch() {
+        shellSearchGeneration += 1
+        for entry in entries.values {
+            guard let session = entry.session else { continue }
+            Task { await session.mountSearch(nil, generation: await session.store.generation) }
         }
     }
 

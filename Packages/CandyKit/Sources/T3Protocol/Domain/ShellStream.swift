@@ -8,20 +8,29 @@ public struct ShellSnapshot: Codable, Hashable, Sendable {
     public var threads: [ThreadShell]
     public var archivedThreads: [ThreadShell]
     public var projects: [ProjectShell]
+    public var olderSettled: OlderSettledThreads?
+    /// Client cache metadata. A new connection always replaces this cached shell before resuming.
+    public var omissions: ShellOmissions?
+    /// Per-environment cuts on a merged display shell. Never written to the environment cache.
+    public var olderSettledByEnvironment: [String: OlderSettledThreads] = [:]
+    public var partialEnvironmentIds: Set<String> = []
 
     public init(
         schemaVersion: Int, snapshotSequence: Int, threads: [ThreadShell] = [],
-        archivedThreads: [ThreadShell] = [], projects: [ProjectShell] = []
+        archivedThreads: [ThreadShell] = [], projects: [ProjectShell] = [],
+        olderSettled: OlderSettledThreads? = nil, omissions: ShellOmissions? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.snapshotSequence = snapshotSequence
         self.threads = threads
         self.archivedThreads = archivedThreads
         self.projects = projects
+        self.olderSettled = olderSettled
+        self.omissions = omissions
     }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, snapshotSequence, threads, archivedThreads, projects
+        case schemaVersion, snapshotSequence, threads, archivedThreads, projects, olderSettled, omissions
     }
 
     public init(from decoder: Decoder) throws {
@@ -31,6 +40,71 @@ public struct ShellSnapshot: Codable, Hashable, Sendable {
         threads = try c.decode([ThreadShell].self, forKey: .threads)
         archivedThreads = try c.decodeIfPresent([ThreadShell].self, forKey: .archivedThreads) ?? []
         projects = try c.decodeIfPresent([ProjectShell].self, forKey: .projects) ?? []
+        olderSettled = try c.decodeIfPresent(OlderSettledThreads.self, forKey: .olderSettled)
+        omissions = try c.decodeIfPresent(ShellOmissions.self, forKey: .omissions)
+    }
+}
+
+/// T3 e57c093cdd, orchestrationV2.ts:2027-2031,3464-3492.
+public struct OlderSettledThreads: Codable, Hashable, Sendable {
+    public struct Count: Codable, Hashable, Sendable {
+        public var projectId: ProjectId
+        public var count: Int
+        public init(projectId: ProjectId, count: Int) { self.projectId = projectId; self.count = count }
+    }
+    public var before: String
+    public var asOfSequence: Int
+    public var counts: [Count]
+    public init(before: String, asOfSequence: Int, counts: [Count]) {
+        self.before = before; self.asOfSequence = asOfSequence; self.counts = counts
+    }
+}
+
+public struct OlderSettledCursor: Codable, Hashable, Sendable {
+    public var settledAt: String
+    public var threadId: ThreadId?
+    public init(settledAt: String, threadId: ThreadId? = nil) { self.settledAt = settledAt; self.threadId = threadId }
+}
+
+public struct ShellThreadRead: Codable, Hashable, Sendable {
+    public var snapshotSequence: Int
+    public var threads: [ThreadShell]
+    public init(snapshotSequence: Int, threads: [ThreadShell]) { self.snapshotSequence = snapshotSequence; self.threads = threads }
+}
+
+public struct OlderSettledPage: Codable, Hashable, Sendable {
+    public var snapshotSequence: Int
+    public var threads: [ThreadShell]
+    public var counts: [OlderSettledThreads.Count]
+    public init(snapshotSequence: Int, threads: [ThreadShell], counts: [OlderSettledThreads.Count] = []) {
+        self.snapshotSequence = snapshotSequence; self.threads = threads; self.counts = counts
+    }
+}
+
+/// Config flags are top-level, not environment capabilities (T3 server.ts:596-611).
+public struct ShellOmissions: Codable, Hashable, Sendable {
+    public var omitIdleSubagents: Bool
+    public var omitOlderSettled: Bool
+    public init(omitIdleSubagents: Bool = false, omitOlderSettled: Bool = false) {
+        self.omitIdleSubagents = omitIdleSubagents
+        self.omitOlderSettled = omitOlderSettled && omitIdleSubagents
+    }
+    public init(config: JSONValue) {
+        self.init(omitIdleSubagents: config["shellThreadFamilies"]?.boolValue == true,
+                  omitOlderSettled: config["shellOlderSettled"]?.boolValue == true)
+    }
+    public var isPartial: Bool { omitIdleSubagents || omitOlderSettled }
+    public var payload: [String: JSONValue] {
+        var result: [String: JSONValue] = [:]
+        if omitIdleSubagents { result["omitIdleSubagents"] = .bool(true) }
+        if omitOlderSettled { result["omitOlderSettled"] = .bool(true) }
+        return result
+    }
+    public var snapshotPath: String {
+        var url = URLComponents()
+        url.path = "/api/orchestration/shell"
+        if !payload.isEmpty { url.queryItems = payload.keys.sorted().map { URLQueryItem(name: $0, value: "1") } }
+        return url.string ?? url.path
     }
 }
 
