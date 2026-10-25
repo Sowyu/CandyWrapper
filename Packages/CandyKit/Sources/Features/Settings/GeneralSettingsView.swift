@@ -170,7 +170,8 @@ public final class GeneralSettingsView: SettingsPageBase {
                                     read: { $0["sidebarAutoSettleAfterDays"] != .null },
                                     write: { on in ["sidebarAutoSettleAfterDays": on ? .number(3) : .null] })
         let keep = serverSwitch("auto-settle-keep-pull-requests", "Inactivity does not settle threads with a pull request. Merge and close still do.",
-                                key: "sidebarAutoSettleKeepPullRequests", reset: "keep threads with pull requests")
+                                key: "sidebarAutoSettleKeepPullRequests", reset: "keep threads with pull requests", label: "Keep threads with a PR")
+        // 3669 keeps this row out of settings search (SettingsPanels.tsx:1104-1105), so the title is set here.
         keep.title = "Keep threads with a PR"
         binder.add { [weak self, weak keep] in
             keep?.isHidden = self?.context.scope.allSupport("threadAutoSettlementScope") != true || self?.server["sidebarAutoSettleAfterDays"] == .null

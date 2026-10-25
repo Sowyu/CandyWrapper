@@ -227,8 +227,10 @@ public final class SourceControlSettingsView: ScopedSettingsPage {
             }
         }
         if let gitRow = vcsSection.group.rows.first(where: { ($0 as? SourceControlDiscoveryRow)?.item.kind == "git" }) { anchors["git-fetch-interval"] = gitRow }
-        if let ghRow = providersSection.group.rows.first(where: { ($0 as? SourceControlDiscoveryRow)?.item.kind == "github" }) { anchors["github-accounts"] = ghRow }
-        if let bbRow = providersSection.group.rows.first(where: { ($0 as? SourceControlDiscoveryRow)?.item.kind == "bitbucket" }) { anchors["bitbucket-credentials"] = bbRow }
+        // One search item per host with settings, `source-control-host-<kind>` (settingsSearch.ts:115-145 at 3669).
+        for row in providersSection.group.rows {
+            if let kind = (row as? SourceControlDiscoveryRow)?.item.kind { anchors[Self.hostSearchPrefix + kind] = row }
+        }
     }
 
     private func discoveryRow(_ item: SourceControlDiscoveryItem, details: (NSView & SettingsGroupRow)?) -> SourceControlDiscoveryRow {
@@ -249,12 +251,15 @@ public final class SourceControlSettingsView: ScopedSettingsPage {
 
     /// Opens a discovery row (a settings search jump to the git fetch interval or the GitHub token).
     public override func anchor(_ id: String) -> NSView? {
+        let host = id.hasPrefix(Self.hostSearchPrefix) ? String(id.dropFirst(Self.hostSearchPrefix.count)) : nil
         if id == "git-fetch-interval" { expanded.insert("git") }
-        if id == "github-accounts" { expanded.insert("github") }
-        if id == "bitbucket-credentials" { expanded.insert("bitbucket") }
-        if ["git-fetch-interval", "github-accounts", "bitbucket-credentials"].contains(id) { updateDiscovery(); onHeightChange?() }
+        if let host { expanded.insert(host) }
+        if id == "git-fetch-interval" || host != nil { updateDiscovery(); onHeightChange?() }
         return super.anchor(id)
     }
+
+    /// `sourceControlHostSettingsSearchId` (settingsSearch.ts:115).
+    static let hostSearchPrefix = "source-control-host-"
 
     /// `GitFetchIntervalSettings`: seconds, step 5, the shared policy note, and a reset to the profile's interval.
     private func fetchIntervalView() -> IntervalDetailView {
