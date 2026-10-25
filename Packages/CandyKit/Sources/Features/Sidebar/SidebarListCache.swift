@@ -20,6 +20,8 @@ public final class SidebarListCache {
         var environments: SidebarEnvironments
         var scratchRoots: [String: String]
         var dither: Bool
+        var olderCuts: [String: OlderSettledThreads]
+        var olderCut: OlderSettledThreads?
     }
 
     /// A thread's place: its shelf, the part of it that shelf sorts by (the id tiebreak never changes) and its
@@ -112,7 +114,8 @@ public final class SidebarListCache {
         let shared = Shared(projects: snapshot.projects, grouping: state.grouping, primaryId: state.environments.primaryId,
                             scopeKey: state.projectScopeKey, scopedProjectIds: state.scopedProjectIds,
                             settlement: state.capabilities.threadSettlement, snooze: state.capabilities.threadSnooze,
-                            environments: state.environments, scratchRoots: state.scratchRoots, dither: state.dither)
+                            environments: state.environments, scratchRoots: state.scratchRoots, dither: state.dither,
+                            olderCuts: snapshot.olderSettledByEnvironment, olderCut: snapshot.olderSettled)
         // ponytail: the Working beta shelf orders by this client's return times, which move on their own; it rebuilds the shelves every time, make it incremental if the beta ships on by default
         guard shared == self.shared, var ctx = context, !state.workingShelfEnabled else {
             structural = true

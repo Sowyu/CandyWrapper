@@ -20,6 +20,7 @@ final class ThreadSession {
     private var shell: ShellSession?
     private var subscription: Task<Void, Never>?
     private var historyLoad: Task<Void, Never>?
+    private var familyLease: UUID?
     /// False once another thread took the panel.
     private var active = true
     /// After each projection the panel shows (the composer reads runs and requests from it).
@@ -97,7 +98,9 @@ final class ThreadSession {
         subscription?.cancel()
         historyLoad?.cancel()
         historyLoad = nil
+        if let familyLease { self.shell?.releaseFamily(familyLease) }
         self.shell = shell
+        familyLease = shell.retainFamily(threadId.localId)
         if active {
             panel?.lazyDiffPanel.set(\.loader, Self.diffLoader(shell.supervisor))
             panel?.lazyDiffPanel.set(\.gitLoader, Self.gitDiffLoader(shell.supervisor))
@@ -135,6 +138,7 @@ final class ThreadSession {
 
     /// The shell went away without a successor yet. The panel keeps the last state.
     func detach() {
+        if let familyLease { shell?.releaseFamily(familyLease); self.familyLease = nil }
         subscription?.cancel()
         subscription = nil
         historyLoad?.cancel()
@@ -487,7 +491,9 @@ final class ThreadController {
         }
         // A second `orchestration.subscribeThread` for the parent, only while the lineage controller needs it.
         lineage.watchThread = { [weak environments] id, onProjection in
-            guard let env = id.environmentId, let supervisor = environments?.session(env)?.supervisor else { return {} }
+            guard let env = id.environmentId, let shell = environments?.session(env) else { return {} }
+            let supervisor = shell.supervisor
+            let familyLease = shell.retainFamily(id.localId)
             let store = ThreadStore(threadId: id.localId, environmentId: env, onChange: {})
             let task = supervisor.subscribe("orchestration.subscribeThread", payload: {
                 ThreadSession.encode(await store.subscribeInput())
@@ -497,7 +503,7 @@ final class ThreadController {
                 guard let projection = await store.takeUpdate()?.projection else { return }
                 await MainActor.run { onProjection(projection) }
             })
-            return { task.cancel() }
+            return { task.cancel(); shell.releaseFamily(familyLease) }
         }
         lineage.localVisit = { [weak sidebar] id in sidebar?.state.localVisits[id] }
         lineage.acknowledgeWake = { [weak self] id, time in self?.acknowledgeWake(id, at: time) }
@@ -832,6 +838,8 @@ final class ThreadController {
         }
         sidebar.actions.discardDraft = { [weak self] id in self?.composer.discardDraft(id) }
         sidebar.actions.searchThreads = { [weak environments] query in await environments?.searchThreads(query) }
+        sidebar.actions.clearShellSearch = { [weak environments] in environments?.clearShellSearch() }
+        sidebar.actions.demandOlderSettled = { [weak environments] count, scope in environments?.demandOlderSettled(minimum: count, projectIds: scope) }
         environments.onSessionChange = { [weak self] env in self?.sessionChanged(env) }
         environments.onShell = { [weak self] snapshot in self?.shellChanged(snapshot) }
         environments.onRemove = { [weak self] env in self?.environmentRemoved(env) }
@@ -1154,7 +1162,7 @@ final class ThreadController {
     /// shell snapshot lists its threads (live and archived).
     private func pruneKeptImages() {
         guard let env = openThreadId?.environmentId, !prunedImageEnvironments.contains(env), let cache = AgentImageCache.shared,
-              let snapshot = sidebar?.snapshot else { return }
+              let snapshot = sidebar?.snapshot, !environments.hasPartialShell(env) else { return }
         let threads = (snapshot.threads + snapshot.archivedThreads).filter { $0.id.environmentId == env }
         guard !threads.isEmpty else { return }
         prunedImageEnvironments.insert(env)
@@ -1483,6 +1491,7 @@ final class ThreadController {
     private func dropMissingThread(_ snapshot: ShellSnapshot) {
         guard let id = session?.threadId, let env = id.environmentId else { return }
         let listed = snapshot.threads.contains { $0.id == id } || snapshot.archivedThreads.contains { $0.id == id }
+        if !listed, environments.hasPartialShell(env), environments.session(env)?.confirmsMissing(id) != true { return }
         if listed { seenOpenThread = id }
         let outcome = MissingThreadRoute.resolve(shellLoaded: environments.hasShell(env), listed: listed, seenBefore: seenOpenThread == id,
                                                  environmentHasThreads: snapshot.threads.contains { $0.id.environmentId == env })
@@ -1552,7 +1561,7 @@ final class ThreadController {
         if let env = remembered?.environmentId, environments.isRegistered(env), !environments.hasShell(env) { return }
         restored = true
         guard session == nil, !panel.isDraft else { return }
-        if let remembered, snapshot.threads.contains(where: { $0.id == remembered }) {
+        if let remembered, snapshot.threads.contains(where: { $0.id == remembered }) || remembered.environmentId.map({ environments.hasPartialShell($0) }) == true {
             open(remembered)
         } else if let project = SidebarModel.sortProjectsForSidebar(snapshot.projects, threads: snapshot.threads, order: .updatedAt).first {
             _ = composer.newThread(in: project)

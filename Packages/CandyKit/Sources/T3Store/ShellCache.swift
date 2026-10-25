@@ -161,6 +161,14 @@ struct ShellCacheEncoder {
         let snapshot = entry.snapshot
         data.append(contentsOf: ",\"snapshot\":{\"schemaVersion\":\(snapshot.schemaVersion),\"snapshotSequence\":\(snapshot.snapshotSequence),\"projects\":".utf8)
         data.append(try encoder.encode(snapshot.projects))
+        if let cut = snapshot.olderSettled {
+            data.append(contentsOf: ",\"olderSettled\":".utf8)
+            data.append(try encoder.encode(cut))
+        }
+        if let omissions = snapshot.omissions {
+            data.append(contentsOf: ",\"omissions\":".utf8)
+            data.append(try encoder.encode(omissions))
+        }
         var retained: [ThreadId: (ThreadShell, Data)] = [:]
         func appendRows(_ values: [ThreadShell], key: String) throws {
             data.append(contentsOf: ",\"\(key)\":[".utf8)

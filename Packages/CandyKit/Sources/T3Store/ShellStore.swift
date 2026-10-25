@@ -7,6 +7,8 @@ public struct ShellUpdate: Sendable {
     public var changes: ShellChangeSet
     public var afterSequence: Int?
     public var isSynchronized: Bool
+    public var displaySnapshot: ShellSnapshot? = nil
+    public var authoritativeChanged = true
 }
 
 /// Owns the shell reducer off the main thread. It doesn't know about the transport: feed it
@@ -20,6 +22,7 @@ public struct ShellUpdate: Sendable {
 public actor ShellStore {
     private var reducer = ShellReducer()
     private var pending: ShellChangeSet?
+    private var pendingAuthoritative = false
     private let onChange: @Sendable () -> Void
 
     /// `cached` seeds the reducer from `ShellCache` so the UI and the resume cursor are ready
@@ -31,11 +34,34 @@ public actor ShellStore {
 
     public var afterSequence: Int? { reducer.afterSequence }
     public var snapshot: ShellSnapshot? { reducer.snapshot }
+    public var displaySnapshot: ShellSnapshot? { reducer.displaySnapshot }
+    public var generation: Int { reducer.generation }
+    public var countsInvalidatedAt: Int { reducer.countsInvalidatedAt }
+    public var needsCountRefresh: Bool { reducer.countsInvalidatedAt > (reducer.snapshot?.olderSettled?.asOfSequence ?? Int.max) }
+    public func canResume(omissions: ShellOmissions) -> Bool { reducer.canResume(omissions: omissions) }
+
+    public func mount(_ read: ShellThreadRead?, key: String, generation: Int) {
+        publish(reducer.mount(read, key: key, generation: generation))
+    }
+
+    public func updateCounts(_ page: OlderSettledPage, generation: Int) {
+        publish(reducer.updateCounts(page, generation: generation), authoritative: true)
+    }
+
+    public func unmount(prefix: String, generation: Int) {
+        publish(reducer.unmount(prefix: prefix, generation: generation))
+    }
+
+    public func resumed() { publish(reducer.resumed()) }
 
     /// Applies items that arrived together, for example one RPC Chunk.
     public func apply(_ items: [ShellStreamItem]) {
-        let changes = reducer.apply(items)
+        publish(reducer.apply(items), authoritative: true)
+    }
+
+    private func publish(_ changes: ShellChangeSet, authoritative: Bool = false) {
         guard !changes.isEmpty else { return }
+        pendingAuthoritative = pendingAuthoritative || authoritative
         if pending == nil {
             pending = changes
             onChange()
@@ -47,10 +73,13 @@ public actor ShellStore {
     /// Drains the coalesced changes. Nil when nothing changed since the last take.
     public func takeUpdate() -> ShellUpdate? {
         guard let changes = pending else { return nil }
+        let authoritative = pendingAuthoritative
+        pendingAuthoritative = false
         pending = nil
         return ShellUpdate(
             snapshot: reducer.snapshot, changes: changes,
-            afterSequence: reducer.afterSequence, isSynchronized: reducer.isSynchronized)
+            afterSequence: reducer.afterSequence, isSynchronized: reducer.isSynchronized,
+            displaySnapshot: reducer.displaySnapshot, authoritativeChanged: authoritative)
     }
 
     /// Reads items until the sequence ends or throws. Runs off the actor and hops in per item;

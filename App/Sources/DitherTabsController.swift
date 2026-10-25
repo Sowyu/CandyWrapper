@@ -18,6 +18,7 @@ final class DitherTabsController {
     /// Opens a new-thread draft and calls back once it shows, which can be after a server round trip.
     private let newThread: (@escaping @MainActor () -> Void) -> Void
     private var list = DitherTabList()
+    private var tabShells: [ThreadId: ThreadShell] = [:]
     /// Set only while + or Cmd-click navigates, so the route it shows lands in a new tab.
     private var opensNewTab = false
 
@@ -73,17 +74,22 @@ final class DitherTabsController {
         if let threads = sidebar.snapshot?.threads {
             list.prune { route in
                 guard case .thread(let id) = route else { return true }
+                if let env = id.environmentId, sidebar.snapshot?.partialEnvironmentIds.contains(env) == true,
+                   !threads.contains(where: { $0.id == id }) { return true }
                 return threads.contains { $0.id == id && $0.archivedAt == nil }
             }
         }
         let threads = sidebar.snapshot?.threads ?? []
+        let tabIds = Set(list.tabs.compactMap { if case .thread(let id) = $0 { id } else { nil } })
+        tabShells = tabShells.filter { tabIds.contains($0.key) }
+        for shell in threads where tabIds.contains(shell.id) { tabShells[shell.id] = shell }
         // The sidebar's status, so a tab's grid follows its row: subagents waiting on the user count for their parent.
         let requests = list.tabs.contains { if case .thread = $0 { true } else { false } } ? PendingSubagentRequests.byThread(threads) : [:]
         strip.tabs = list.tabs.map { route in
             let key = DitherTabList.key(route)
             switch route {
             case .thread(let id):
-                let shell = threads.first { $0.id == id }
+                let shell = threads.first { $0.id == id } ?? tabShells[id]
                 let title = shell?.title ?? ""
                 let status = shell.map { SidebarModel.resolveSidebarThreadStatus(SidebarThread($0, pendingSubagentRequest: requests[id])) }
                 let activity: DitherTabStripView.Tab.Activity? = status == .working ? .working : status == .waiting ? .waiting : nil
