@@ -146,11 +146,13 @@ actor HtmlRenderPreviewEncoder {
     struct Pixels: @unchecked Sendable { let image: CGImage }
 
     func png(_ pixels: Pixels) -> Data? {
-        guard !Task.isCancelled else { return nil }
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else { return nil }
-        CGImageDestinationAddImage(destination, pixels.image, nil)
-        guard CGImageDestinationFinalize(destination) else { return nil }
-        return data as Data
+        autoreleasepool {
+            guard !Task.isCancelled else { return nil }
+            let data = NSMutableData()
+            guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else { return nil }
+            CGImageDestinationAddImage(destination, pixels.image, nil)
+            guard CGImageDestinationFinalize(destination) else { return nil }
+            return data as Data
+        }
     }
 }

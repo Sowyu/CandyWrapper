@@ -69,6 +69,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     private(set) var webView: ThreadWebView?
     private var page: Page?
     private var hostLoaded = false
+    private var hostNavigation: WKNavigation?
     private var frameLoads = 0
     /// The last time the reader clicked or typed in the frame: links open only right after that.
     private(set) var lastUserActivity = Date.distantPast
@@ -115,7 +116,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         if page.kind == .agent {
             config.websiteDataStore = ThreadWebFrameBudget.dataStore
             let world = WKContentWorld.world(name: "t3-host")
-            controller.add(ThreadWebFrameMessageProxy(self), contentWorld: world, name: "t3host")
+            controller.add(ThreadWebFrameMessageProxy(self, token: loadToken), contentWorld: world, name: "t3host")
             controller.addUserScript(WKUserScript(source: Self.bridgeScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: world))
         } else {
             // A file tab gets no bridge at all, and nothing the page stores outlives the tab.
@@ -146,11 +147,11 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
                 // A cached host whose process was reclaimed starts from its HTML again.
                 self.hostLoaded = false
                 self.frameLoads = 0
-                web.loadHTMLString(Self.hostPage(page), baseURL: URL(string: "about:blank"))
+                self.hostNavigation = web.loadHTMLString(Self.hostPage(page), baseURL: URL(string: "about:blank"))
             }
         } else {
             web.htmlHostOrigin = page.kind == .agent ? origin : nil
-            web.loadHTMLString(Self.hostPage(page), baseURL: URL(string: "about:blank"))
+            hostNavigation = web.loadHTMLString(Self.hostPage(page), baseURL: URL(string: "about:blank"))
         }
         if page.kind == .agent { ThreadWebFrameBudget.add(self) }
         #if DEBUG
@@ -164,6 +165,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         captureGeneration &+= 1
         lastUserActivity = .distantPast
         loaded = false
+        hostNavigation = nil
         paintReady = false
         encoding?.cancel()
         encoding = nil
@@ -189,7 +191,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        guard webView === self.webView else { return }
+        guard webView === self.webView, let navigation, navigation === hostNavigation else { return }
         loaded = true
         finishPaint(webView)
     }
@@ -284,9 +286,9 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         webView.callAsyncJavaScript("window.__t3post(message)", arguments: ["message": text], in: nil, in: .world(name: "t3-host"), completionHandler: nil)
     }
 
-    fileprivate func received(_ body: Any, isMainFrame: Bool) {
+    func received(_ body: Any, isMainFrame: Bool, token: String) {
         // Only the host page's isolated bridge speaks here; a framed document never reaches this world.
-        guard isMainFrame else { return }
+        guard isMainFrame, webView != nil, token == loadToken else { return }
         // The bridge forwards page messages as strings. This structured signal comes only from our own
         // isolated-world iframe load listener, including a replacement frame in a reused host.
         if (body as? [String: Any])?["t3FrameLoaded"] as? String == loadToken {
@@ -438,11 +440,12 @@ final class ThreadWebView: WKWebView {
 /// Holds the frame weakly so the user content controller does not keep it alive.
 private final class ThreadWebFrameMessageProxy: NSObject, WKScriptMessageHandler {
     weak var frame: ThreadWebFrameView?
-    init(_ frame: ThreadWebFrameView) { self.frame = frame }
+    let token: String
+    init(_ frame: ThreadWebFrameView, token: String) { self.frame = frame; self.token = token }
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         let body = message.body
         let main = message.frameInfo.isMainFrame
-        MainActor.assumeIsolated { frame?.received(body, isMainFrame: main) }
+        MainActor.assumeIsolated { frame?.received(body, isMainFrame: main, token: token) }
     }
 }
 

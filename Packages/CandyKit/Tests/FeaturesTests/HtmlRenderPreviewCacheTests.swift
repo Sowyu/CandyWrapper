@@ -145,6 +145,25 @@ import T3Store
 
 extension WebFrameSuites {
     @MainActor struct HtmlRenderCacheLifecycleTests {
+        @Test func retiredMessagesAndNavigationCompletionsCannotReviveAFrame() throws {
+            let cache = HtmlRenderPreviewCache()
+            cache.setActive(true)
+            let frame = ThreadWebFrameView()
+            frame.previewCache = cache
+            defer { cache.setActive(false); frame.release() }
+            frame.activate(.init(src: URL(string: "http://page.invalid/page.html")!, title: "Current", dark: false))
+            let web = try #require(frame.webView)
+            var messages = 0
+            frame.onMessage = { _ in messages += 1 }
+            frame.received(#"{"jsonrpc":"2.0","method":"ui/notifications/size-changed","params":{"height":123}}"#,
+                           isMainFrame: true, token: "retired activation")
+            #expect(messages == 0)
+            let retired = try #require(web.loadHTMLString("<html></html>", baseURL: URL(string: "about:blank")))
+            frame.webView(web, didFinish: retired)
+            frame.release()
+            #expect(cache.takeWebView() == nil, "an unrelated completion cannot mark the current host ready for reuse")
+        }
+
         @Test func twoVisibleViewsDoNotKeepAnEmptyThirdHost() {
             let cache = HtmlRenderPreviewCache()
             cache.setActive(true)
@@ -215,8 +234,8 @@ extension WebFrameSuites {
             let src = URL(string: "http://page.invalid/page.html")!
             first.activate(.init(src: src, title: "First", dark: false))
             let web = try #require(first.webView)
-            first.webView(web, didFinish: nil)
             first.release()
+            cache.recycle(web)
             #expect(!first.isLive)
             #expect(web.configuration.userContentController.userScripts.isEmpty)
             second.activate(.init(src: src, title: "Second", dark: true))

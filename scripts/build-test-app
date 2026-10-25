@@ -3,14 +3,21 @@
 # settings, drafts or URL handling with the user's app or other agents' apps. Prints the app's path;
 # build output goes to stderr. Delete /tmp/cw-dd-<task> when the task is done.
 # Usage: CANDY_APP="$(scripts/build-test-app <task>)" scripts/run-app ...
+# Set CANDY_BUILD_JOBS=2 to limit compiler work on the shared Mac.
 set -eu
 task="${1-}"
 case "$task" in
   '' | *[!a-z0-9-]*) echo "usage: scripts/build-test-app <task>, a short name in lowercase letters, digits and dashes" >&2; exit 2 ;;
 esac
+build_jobs="${CANDY_BUILD_JOBS-}"
+case "$build_jobs" in
+  '') set -- ;;
+  0 | *[!0-9]*) echo "CANDY_BUILD_JOBS must be a positive integer" >&2; exit 2 ;;
+  *) set -- -jobs "$build_jobs" ;;
+esac
 cd "$(dirname "$0")/.."
 scripts/preflight >&2
 xcodebuild -project CandyWrapper.xcodeproj -scheme CandyWrapper -configuration Debug \
   -derivedDataPath "/tmp/cw-dd-$task" PRODUCT_BUNDLE_IDENTIFIER="dev.candywrapper.test.$task" \
-  CANDY_URL_SCHEME="candywrapper-$task" build -quiet >&2
+  CANDY_URL_SCHEME="candywrapper-$task" "$@" build -quiet >&2
 echo "/tmp/cw-dd-$task/Build/Products/Debug/CandyWrapper.app"

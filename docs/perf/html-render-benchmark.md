@@ -21,6 +21,7 @@ python3 scripts/html-benchmark/run.py --tag before
 python3 scripts/html-benchmark/capture-one.py --tag before-one-page
 scripts/ui/screen-lock give html-benchmark
 python3 scripts/html-benchmark/summarize.py ~/CandyWrapper-research/sandbox/html-benchmark/before
+python3 scripts/html-benchmark/scroll-summary.py ~/CandyWrapper-research/sandbox/html-benchmark/before
 ```
 
 `run.py` builds the small kernel measurement helper if it is missing, after preflight. It launches the app through `scripts/run-app`, resets only `dev.candywrapper.test.html-benchmark`, pins Redesign, disables thread disk caching and uses fake T3 Connect. Run it in the background with a log. The eight cases take about nine minutes. Give the screen back within fifteen minutes. Use `--case light|collage|chart`, `--mode thread|conductor` and `--appearance dark|light` to split a session. Choose a fresh `--tag` for another run; the runner refuses to overwrite event files. Sign again if the sandbox URLs expire. Do not prepare assets again in the middle of a comparison.
@@ -35,7 +36,11 @@ After all captures, quit only the app PID recorded in that run's `events.jsonl` 
 
 Each case repeats its identical document across ten distinct attachment ids. `manifest.json` records the content hashes, bootstrap hash, signed sandbox URLs and sizes. Keep this file local: its URLs carry sandbox capabilities. Generated HTML, PNGs, manifests, process logs and captures stay outside the repository.
 
-The only renderer hook is a DEBUG observer in `ThreadWebFrameView`: activate, release and messages after the normal message handler runs. The launch branch is DEBUG and restricted to test bundles. With no benchmark, the observer is nil; Release contains neither the driver nor the hook.
+The renderer hook is a DEBUG observer in `ThreadWebFrameView`: activate, release, preview layout and messages after the normal message handler runs. The launch branch is DEBUG and restricted to test bundles. With no benchmark, the observer is nil; Release contains neither the driver nor the hook.
+
+The final driver records an already painted, live page as ready at `resident-at-scroll`. It takes no diagnostic WebKit snapshots while scrolling. The first baseline below used extra readbacks; those copies affected GPU memory and scrolling, so the final comparison repeats both builds without them. Production captures needed for the preview cache remain enabled in the changed renderer.
+
+`scroll-summary.py` sums readiness waits across ten scroll visits, using the first native preview layout, live-page ready signal, or an already painted resident page for every visible frame. A pass with a missing page has no complete traversal time and reports the number of complete visits. The driver deliberately waits two seconds per visit, twenty seconds per direction in every build; that fixed pacing is not a speed measurement.
 
 `arrival` is the moment the driver delivers a projection or pane state to the real UI. `paint-opportunity` comes from the page after fonts and image decode, then two animation frames. `native-layout` follows on the next native main turn after layout. The first such completion per attachment is the arrival measurement. Later arrivals can recreate old pages; those completions count separately rather than inflating the first-ready median.
 
@@ -43,7 +48,7 @@ During back and return, the runner records new activations, completion times fro
 
 Memory samples use `proc_pid_rusage` physical footprint once a second, including the app plus new WebKit PIDs sharing the inherited responsibility PID, excluding pre-launch helpers. On this harness, the app and its helpers inherit the T3 ancestor's responsibility rather than the app's PID. Attribution is therefore an inference that requires no unrelated WebKit app to launch during a run. The logs preserve PID, process name, RSS, footprint, lifetime peak, CPU and wakeups. The combined peak is the largest simultaneous sampled sum, not a sum of independent lifetime peaks. More than three content processes can briefly exist while evicted processes exit; GPU and Networking helpers count too.
 
-## Baseline captured on 2026-10-25
+## Initial baseline captured on 2026-10-25
 
 Renderer base: `6e3adefca19dff5804f213824ea7cfe073086c6d`, before production changes. Debug executable SHA-256: `77225e9a107749ad1c29b12571da54af1533d33fde62fa7582a06e2d6f7a33d1`. Instrumentation was built and exercised on screen. The task's DerivedData and compiled helpers were removed after capture.
 
