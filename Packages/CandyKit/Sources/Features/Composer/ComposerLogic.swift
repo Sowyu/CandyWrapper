@@ -334,9 +334,13 @@ public enum ComposerLogic {
         public var isHeld = false
         public var canReorder = false
         public var canPromoteToSteer = false
-        public init(items: [Item] = [], activeRunId: RunId? = nil, isHeld: Bool = false, canReorder: Bool = false, canPromoteToSteer: Bool = false) {
+        /// No run is active on a live thread, so a queued message can start its own turn with
+        /// `queued-run.start` (threadWorkflows.ts:156-160, 96f09c6558).
+        public var canSendNow = false
+        public init(items: [Item] = [], activeRunId: RunId? = nil, isHeld: Bool = false, canReorder: Bool = false,
+                    canPromoteToSteer: Bool = false, canSendNow: Bool = false) {
             self.items = items; self.activeRunId = activeRunId; self.isHeld = isHeld
-            self.canReorder = canReorder; self.canPromoteToSteer = canPromoteToSteer
+            self.canReorder = canReorder; self.canPromoteToSteer = canPromoteToSteer; self.canSendNow = canSendNow
         }
 
         /// `optimistic`: sent messages the stream hasn't confirmed; the queued ones show as saving.
@@ -349,6 +353,7 @@ public enum ComposerLogic {
             let active: Set<ThreadStatus> = [.preparing, .starting, .running, .waiting]
             let activeRun = p.runs.last { active.contains($0.status) }
             activeRunId = activeRun?.id
+            canSendNow = activeRun == nil && p.thread.archivedAt == nil && p.thread.deletedAt == nil
             let automatic = Set(p.messages.filter { $0.delegatedCompletion != nil || $0.notification != nil }.map(\.id))
             let queued = p.runs.filter { $0.status == .queued && !($0.userMessageId.map(automatic.contains) ?? false) }
                 .sorted { ($0.queuePosition ?? $0.ordinal, $0.ordinal) < ($1.queuePosition ?? $1.ordinal, $1.ordinal) }

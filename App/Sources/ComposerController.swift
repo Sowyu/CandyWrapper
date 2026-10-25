@@ -342,7 +342,7 @@ final class ComposerController {
         queue.onReorder = { [weak self] runId, before in
             self?.queueCommand("queued-run.reorder", ["runId": .string(runId.rawValue), "beforeRunId": before.map { .string($0.rawValue) } ?? .null])
         }
-        queue.onSteer = { [weak self] runId in self?.promoteToSteer(runId) }
+        queue.onSteer = { [weak self] runId in self?.sendQueued(runId) }
         queue.onEdit = { [weak self] item in self?.beginEdit(item) }
         queue.onCancelEdit = { [weak self] in self?.endEdit() }
         panel.approvalPanel.onRespond = { [weak self] _, payload in
@@ -758,14 +758,14 @@ final class ComposerController {
             if !call.isRepeat { self.pickers.jumpModel(index) }
             return true
         }
-        // `thread.steerQueuedMessage`: steers the first queued message; swallowed even on repeat or
-        // with nothing to steer (QueuedRunsControl.tsx:208-214). A draft leaves the key alone.
+        // `thread.steerQueuedMessage`: sends the first queued message, as a steer or, on a stopped thread,
+        // as its own turn (`steerNext`, QueuedRunsControl.tsx:197-202). Repeats are swallowed; with nothing
+        // to send the key falls through. A draft leaves the key alone.
         shortcuts.on("thread.steerQueuedMessage") { [weak self] call in
             guard let self, self.isActive, case .thread = self.target else { return false }
             let queue = self.panel.queue.state
-            if !call.isRepeat, queue.canPromoteToSteer, !self.queueBusy, let first = queue.items.first?.runId {
-                self.promoteToSteer(first)
-            }
+            guard let first = queue.items.first?.runId, queue.canSendNow || queue.canPromoteToSteer else { return false }
+            if !call.isRepeat, !self.queueBusy { self.sendQueued(first) }
             return true
         }
         // `thread.editQueuedMessage` (alt+arrowup while the composer has focus, ChatView.tsx:8232-8241):
@@ -2385,6 +2385,16 @@ final class ComposerController {
                 // T3 only logs these (QueuedRunsControl.tsx:168-245 through useAtomCommand).
                 self?.report(.queueCommand, key: nil)
             }
+        }
+    }
+
+    /// `sendQueuedMessage` (QueuedRunsControl.tsx:175-192): a stopped thread starts the queued run as its
+    /// own turn with `queued-run.start`; a running one steers it in.
+    private func sendQueued(_ runId: RunId) {
+        if panel.queue.state.canSendNow {
+            queueCommand("queued-run.start", ["runId": .string(runId.rawValue)])
+        } else {
+            promoteToSteer(runId)
         }
     }
 
