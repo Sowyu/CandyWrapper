@@ -1,5 +1,7 @@
 # Progress
 
+- [ ] Adopt upstream fast-load protocol with old-server fallbacks and two-server throttled sandbox measurements (taken 2026-10-25, t3-fast-load).
+
 - [ ] Speed up HTML render pages in normal threads and Conductor with a ten-page sandbox benchmark, unchanged visuals and cache/height tests (taken 2026-10-25, html-render-speed).
 
 - [x] Published v1.14.3 (build 70), 2026-10-25, from `4b51606c` on main: the Connectors tab, the Conductor's row at the top of the thread list, its heavy scrim again with the scrim following the frontmost visible page, the stronger working wave, and "Keep Conductor out". The first full suite on `7165cd45` failed with 491 fidelity issues: `RedesignSwitchTests` (since 1.14.0) left the global theme on ocean with an ember dark half (#291E1A), which fidelity renders running between their pin and body picked up; it and `WP717Tests.publishedThemesAreTransient` now restore the theme (`4b51606c`), and the full suite passed on that commit. Verified: ZIP and DMG sign with Team ID 8Q677AYRU7 at 1.14.3 (70), the feed's top item is 1.14.3 (70) with the ZIP's 18,173,801 bytes, the three helper tarballs match SHA256SUMS and the app's manifest (base v1.14.3), and each helper binary carries `config get` and `print-config`.
