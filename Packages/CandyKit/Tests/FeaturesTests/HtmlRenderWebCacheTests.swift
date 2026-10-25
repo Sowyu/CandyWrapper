@@ -45,6 +45,19 @@ extension WebFrameSuites {
             #expect(cache.takeWebView() === spare, "one visible frame can share one empty host")
         }
 
+        @Test func aHostRetiresAfterOneHandoff() {
+            let cache = HtmlRenderWebCache()
+            cache.setActive(true)
+            defer { cache.setActive(false) }
+            let web = ThreadWebView(frame: .zero, configuration: WKWebViewConfiguration())
+            cache.activated(web)
+            cache.recycle(web)
+            #expect(cache.takeWebView() === web)
+            cache.activated(web)
+            cache.recycle(web)
+            #expect(cache.takeWebView() == nil, "removed image documents cannot accumulate in one host")
+        }
+
         @MainActor final class Pages: NSObject, WKURLSchemeHandler {
             func webView(_ webView: WKWebView, start task: any WKURLSchemeTask) {
                 let url = task.request.url!
@@ -114,10 +127,14 @@ extension WebFrameSuites {
             second.received(message, isMainFrame: true, token: second.loadToken)
             #expect(heights.isEmpty, "a retired iframe cannot reopen the new bridge")
             second.received(["t3FrameStarted": second.loadToken], isMainFrame: true, token: second.loadToken)
+            #expect(!web.isHidden, "the new iframe can paint as soon as the outgoing one is removed")
             second.received(message, isMainFrame: true, token: second.loadToken)
-            #expect(heights == [222])
-            #expect(web.isHidden, "the new iframe starts loading before it becomes visible")
+            #expect(heights.isEmpty, "intermediate heights wait for the image load")
+            #expect(second.shortcutsPosted, "height coalescing does not delay the shortcut handshake")
+            let final = #"{"jsonrpc":"2.0","method":"ui/notifications/size-changed","params":{"height":333}}"#
+            second.received(final, isMainFrame: true, token: second.loadToken)
             second.received(["t3FrameLoaded": second.loadToken], isMainFrame: true, token: second.loadToken)
+            #expect(heights == [333], "only the last loading height reaches the native timeline")
             #expect(!web.isHidden)
         }
 

@@ -106,6 +106,19 @@ extension WebFrameSuites {
             #expect(!t.context.htmlCache.isActive)
         }
 
+        @Test func aVisibleEvictedRowReloadsWhenLayoutFindsRoom() async throws {
+            let assets = Assets()
+            let (window, t, model, row, frame) = try Self.fixture(mcp: false, assets: assets)
+            defer { row.prepareForReuse(); t.context.releasePages(); _ = (window, model) }
+            await Self.until { frame.isLive }
+            frame.release()
+            #expect(!frame.isLive)
+            row.setContentVisible(true)
+            await Self.until { frame.isLive }
+            #expect(frame.isLive)
+            #expect(assets.calls == 2, "a retile resumes an evicted page even when visibility stays true")
+        }
+
         /// The page reports its height at one width; a row recycled and shown again has it before any page loads.
         @Test func aReportedHeightOutlivesTheRowsView() async throws {
             let assets = Assets()

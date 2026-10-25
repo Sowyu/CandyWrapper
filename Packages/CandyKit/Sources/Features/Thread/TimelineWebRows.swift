@@ -83,7 +83,8 @@ final class HtmlRenderRowView: TimelineRowView {
     }
 
     override func setContentVisible(_ visible: Bool) {
-        guard visible != contentVisible else { return }
+        let retry = visible && !frameView.isLive && ThreadWebFrameBudget.count < ThreadWebFrameBudget.limit
+        guard visible != contentVisible || retry else { return }
         contentVisible = visible
         syncContent()
     }

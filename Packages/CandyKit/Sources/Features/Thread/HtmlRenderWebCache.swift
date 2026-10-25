@@ -25,6 +25,7 @@ final class HtmlRenderWebCache {
     }
 
     func activated(_ web: ThreadWebView) {
+        web.htmlUses += 1
         active.removeAll { $0.web == nil || $0.web === web }
         active.append(Active(web: web))
         // Two visible frames already keep WebKit warm. Keeping an empty third host adds memory needlessly.
@@ -44,7 +45,9 @@ final class HtmlRenderWebCache {
     /// scripts and browsing context without adding whole documents to WebKit's back-forward cache.
     func recycle(_ web: ThreadWebView, reusable: Bool = true) {
         active.removeAll { $0.web == nil || $0.web === web }
-        guard isActive, reusable, active.count < 2, spare == nil, clearing == nil else { return }
+        // Long-lived hosts raised WebContent memory in the collage benchmark. One handoff
+        // amortizes startup, then discards the host before those removed documents accumulate.
+        guard isActive, reusable, web.htmlUses < 2, active.count < 2, spare == nil, clearing == nil else { return }
         spare = web
         cleanup = Task { [weak self, weak web] in
             await Task.yield()

@@ -81,6 +81,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     var htmlCache: HtmlRenderWebCache?
     var htmlAttachmentId: String?
     private var loaded = false
+    private var pendingHeight: JSONValue?
     private var acceptsMessages = false
     private(set) var loadToken = UUID().uuidString
 
@@ -156,6 +157,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         let wasLoaded = loaded
         lastUserActivity = .distantPast
         loaded = false
+        pendingHeight = nil
         acceptsMessages = false
         hostNavigation = nil
         guard let web = webView else { return }
@@ -178,6 +180,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         guard webView === self.webView, let navigation, navigation === hostNavigation else { return }
         loaded = true
         webView.isHidden = false
+        flushHeight()
     }
 
     /// Sees every message posted into a live page. Tests watch the transport with it.
@@ -197,14 +200,33 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         // isolated-world iframe load listener, including a replacement frame in a reused host.
         if (body as? [String: Any])?["t3FrameStarted"] as? String == loadToken {
             acceptsMessages = true
+            webView?.isHidden = false
             return
         }
         if (body as? [String: Any])?["t3FrameLoaded"] as? String == loadToken {
             loaded = true
             webView?.isHidden = false
+            flushHeight()
             return
         }
         guard acceptsMessages, let text = body as? String, let json = try? JSONValue(parsing: Data(text.utf8)) else { return }
+        // T3 reports at DOMContentLoaded, on resize and on load (htmlRender.ts:405). While images load,
+        // keep its last report without repeatedly resizing and retiling the native timeline.
+        if htmlCache != nil, !loaded, HtmlRenderTheme.contentHeight(json) != nil {
+            if !shortcutsPosted { shortcutsPosted = true; post(HtmlRenderShortcuts.message()) }
+            pendingHeight = json
+            return
+        }
+        deliver(json)
+    }
+
+    private func flushHeight() {
+        guard let height = pendingHeight else { return }
+        pendingHeight = nil
+        deliver(height)
+    }
+
+    private func deliver(_ json: JSONValue) {
         onMessage?(json)
         #if DEBUG
         if let page { Self.benchmarkObserver?("message", page, self, json) }
@@ -337,6 +359,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
 /// and clicks and keys mark the reader's activity for link opening.
 final class ThreadWebView: WKWebView {
     var htmlHostOrigin: String?
+    var htmlUses = 0
     var onUserActivity: (() -> Void)?
     /// A file preview scrolls its own page; a timeline frame hands the wheel to the timeline.
     var forwardsScroll = true
