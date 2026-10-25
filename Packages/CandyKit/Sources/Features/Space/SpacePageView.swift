@@ -105,6 +105,7 @@ public final class SpacePageView: DSView {
         } else {
             let stub = SpaceViewStub(view: view)
             stub.addSubview(header)
+            if view == .timetable { SpaceTimetableView.install(in: stub, header: header, store: store, page: page) { [weak self] in self?.onOpenPage($0) } }
             addSubview(stub)
             self.stub = stub
         }
