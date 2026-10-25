@@ -22,6 +22,8 @@ public struct RepositoryIdentity: Codable, Hashable, Sendable {
     public struct Origin: Codable, Hashable, Sendable {
         public var canonicalKey: String
         public var displayName: String?
+        /// The fork's own remote, from 3669 (environment.ts:157, T3 0f74ff8e3a).
+        public var remoteUrl: String?
     }
 
     public var canonicalKey: String

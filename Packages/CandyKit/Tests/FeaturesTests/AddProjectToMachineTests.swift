@@ -141,4 +141,18 @@ struct AddProjectToMachineTests {
         children[0].action?()
         #expect(opened == [nil, "b"])
     }
+
+    /// 0f74ff8e3a: a fork clones its own remote, not the upstream the identity groups under.
+    @Test func forkClonesItsOwnRemote() throws {
+        func project(_ identity: String) throws -> ProjectShell {
+            try JSONDecoder().decode(ProjectShell.self, from: Data("""
+                {"id":"p","title":"t","workspaceRoot":"/w","scripts":[],"createdAt":"2026-10-25T00:00:00.000Z",
+                 "updatedAt":"2026-10-25T00:00:00.000Z","repositoryIdentity":\(identity)}
+                """.utf8))
+        }
+        let upstream = #"{"canonicalKey":"github.com/up/r","locator":{"source":"git-remote","remoteName":"upstream","remoteUrl":"https://github.com/up/r.git"}"#
+        #expect(A.remoteUrl(try project(upstream + "}")) == "https://github.com/up/r.git")
+        let fork = upstream + #","origin":{"canonicalKey":"github.com/me/r","remoteUrl":"https://github.com/me/r.git"}}"#
+        #expect(A.remoteUrl(try project(fork)) == "https://github.com/me/r.git")
+    }
 }

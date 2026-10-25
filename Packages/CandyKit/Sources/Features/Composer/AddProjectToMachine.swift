@@ -41,9 +41,10 @@ public enum AddProjectToMachine {
             .sorted { $0.label.localizedCompare($1.label) == .orderedAscending }
     }
 
-    /// The repository's remote URL from a project's repository identity (`repositoryIdentity.locator.remoteUrl`).
+    /// The repository's remote URL from a project's repository identity: a fork's own remote first, so the copy
+    /// clones the fork and not its upstream (AddProjectToMachineDialog.tsx:87-90, T3 0f74ff8e3a).
     public static func remoteUrl(_ project: ProjectShell?) -> String? {
-        project?.repositoryIdentity?.locator["remoteUrl"]?.stringValue
+        project?.repositoryIdentity?.origin?.remoteUrl ?? project?.repositoryIdentity?.locator["remoteUrl"]?.stringValue
     }
 
     // MARK: Clone URLs (addProjectToMachine.ts:20-59)
