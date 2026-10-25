@@ -104,4 +104,53 @@ private func omittedMessage(ordinal: Int = 1) -> JSONValue {
         try await store.applyWire(bodyEvent("turn-item.updated", sequence: 13, payload: omittedMessage(ordinal: 51)))
         #expect(await store.projection?.visibleTurnItems.first?.item.text == "kept body")
     }
+
+    @Test func replacedSubscriptionsCannotChangeBodiesSnapshotsOrResetTheCursor() async throws {
+        let store = ThreadStore(threadId: "t", onChange: {})
+        let old = UUID(), current = UUID()
+        await store.applySnapshot(ThreadDetailSnapshot(snapshotSequence: 10, projection: try bodyProjection()))
+        _ = await store.subscribeInput(subscription: old)
+        try await store.applyWire(bodyEvent("message.updated", sequence: 11, payload: bodyRecord("old body")), subscription: old)
+        _ = await store.subscribeInput(subscription: current)
+        try await store.applyWire(bodyEvent("message.updated", sequence: 12, payload: bodyRecord("current body")), subscription: current)
+        // A stale source would poison the next omitted item even though reduction drops its sequence.
+        try await store.applyWire(bodyEvent("message.updated", sequence: 11, payload: bodyRecord("late old body")), subscription: old)
+        try await store.applyWire(bodyEvent("turn-item.updated", sequence: 13, payload: omittedMessage()), subscription: current)
+        #expect(await store.projection?.visibleTurnItems.first?.item.text == "current body")
+        // Stale malformed input must be ignored before restoration too, not trigger recovery.
+        try await store.applyWire(.object(["kind": .string("snapshot"), "ids": .array([])]), subscription: old)
+        let stale = ThreadDetailSnapshot(snapshotSequence: 1, projection: try bodyProjection())
+        var raw = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(stale)).objectValue!
+        raw["kind"] = .string("snapshot")
+        try await store.applyWire(.object(raw), subscription: old)
+        await store.applySnapshot(stale, subscription: old)
+        await store.resetForResynchronization(subscription: old)
+        #expect(await store.lastSequence == 13)
+        #expect(await store.projection?.visibleTurnItems.first?.item.text == "current body")
+        await store.resetForResynchronization(subscription: current)
+        #expect(await store.subscribeInput(subscription: current).afterSequence == nil)
+        do {
+            try await store.applyWire(bodyEvent("turn-item.updated", sequence: 14, payload: omittedMessage()), subscription: current)
+            Issue.record("A recovery retry reseeded invalidated body sources")
+        } catch is DecodingError {}
+    }
+
+    @Test func cancelledPayloadCannotReclaimTheStoreAfterAHandoff() async throws {
+        let store = ThreadStore(threadId: "t", onChange: {})
+        let old = UUID(), current = UUID()
+        await store.applySnapshot(ThreadDetailSnapshot(snapshotSequence: 10, projection: try bodyProjection()))
+        _ = await store.subscribeInput(subscription: old)
+        _ = await store.subscribeInput(subscription: current)
+        // Cancelled payload closures still execute after an awaited bootstrap returns.
+        let delayed = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return await store.subscribeInput(subscription: old)
+        }
+        _ = await delayed.value
+        try await store.applyWire(bodyEvent("message.updated", sequence: 11, payload: bodyRecord("owner body")), subscription: current)
+        try await store.applyWire(bodyEvent("turn-item.updated", sequence: 12, payload: omittedMessage()), subscription: current)
+        #expect(await store.projection?.visibleTurnItems.first?.item.text == "owner body")
+        #expect(await store.lastSequence == 12)
+    }
+
 }
