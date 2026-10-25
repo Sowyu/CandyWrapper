@@ -933,6 +933,7 @@ final class OrchestratorHtmlCard: DSView {
         if frameView.isLive {
             frameView.dark = effectiveAppearance.isDark
             frameView.post(HtmlRenderTheme(dark: frameView.dark).message)
+            frameView.refreshPreview()
         }
     }
 

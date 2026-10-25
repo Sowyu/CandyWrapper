@@ -73,15 +73,24 @@ public final class HtmlRenderBenchmark: DSView {
         try? log.write(contentsOf: data + Data([10]))
     }
     private func observe(_ event: String, page: ThreadWebFrameView.Page, frame: ThreadWebFrameView, data: JSONValue?) {
-        let title = page.title
+        let title = event == "preview" ? (pages.first { $0.attachmentId == frame.htmlAttachmentId }?.title ?? page.title) : page.title
         if event == "activate" { live[title] = WeakFrame(value: frame); seen.insert(title) }
         if event == "release" { live[title] = nil; painted.remove(title) }
         var values: [String: Any] = ["page":title,"width":frame.bounds.width,"height":frame.bounds.height,"live":live.count]
         if let data {
-            guard HtmlRenderTheme.contentHeight(data) != nil || data["benchmark"]?.stringValue != nil else { return }
+            guard event == "snapshot" || HtmlRenderTheme.contentHeight(data) != nil || data["benchmark"]?.stringValue != nil else { return }
             values["message"] = (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(data))) ?? [:]
         }
         record(event, values)
+        if event == "preview" {
+            let id = frame.htmlAttachmentId
+            DispatchQueue.main.async { [weak self, weak frame] in
+                guard let self, let frame, frame.htmlAttachmentId == id, frame.hasPreview else { return }
+                self.window?.contentView?.layoutSubtreeIfNeeded()
+                self.window?.displayIfNeeded()
+                self.record("preview-layout", ["page":title,"height":frame.bounds.height])
+            }
+        }
         if data?["benchmark"]?.stringValue == "paint-opportunity" {
             painted.insert(title)
             // The page reached two rAFs after image decode. This next native turn records the applied frame height.
@@ -138,7 +147,7 @@ public final class HtmlRenderBenchmark: DSView {
             if rect.intersects(scroll.contentView.bounds), !frame.isHiddenOrHasHiddenAncestor {
                 let title = live.first(where: { $0.value.value === frame })?.key
                     ?? pages.first(where: { $0.attachmentId == frame.htmlAttachmentId })?.title ?? "evicted"
-                visible.append(["page":title,"live":frame.isLive,"height":frame.bounds.height])
+                visible.append(["page":title,"live":frame.isLive,"preview":frame.hasPreview,"height":frame.bounds.height])
             }
         }
         record("viewport", ["label":label,"frames":visible,"budgetCount":ThreadWebFrameBudget.count])

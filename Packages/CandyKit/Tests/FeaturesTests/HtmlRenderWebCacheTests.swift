@@ -49,7 +49,9 @@ extension WebFrameSuites {
             let cache = HtmlRenderWebCache()
             cache.setActive(true)
             defer { cache.setActive(false) }
-            let web = ThreadWebView(frame: .zero, configuration: WKWebViewConfiguration())
+            let config = WKWebViewConfiguration()
+            config.websiteDataStore = .nonPersistent()
+            let web = ThreadWebView(frame: .zero, configuration: config)
             cache.activated(web)
             cache.recycle(web)
             #expect(cache.takeWebView() === web)
@@ -208,6 +210,82 @@ extension WebFrameSuites {
             cache = nil
             #expect(released == nil)
             #expect(ThreadWebFrameBudget.dataStore !== store)
+        }
+    }
+
+    @MainActor struct HtmlRenderPixelCacheTests {
+        static func image(side: Int = 8) -> CGImage {
+            let context = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
+                                    space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            context.setFillColor(CGColor(red: 0.25, green: 0.5, blue: 0.75, alpha: 0.6))
+            context.fill(CGRect(x: 0, y: 0, width: side, height: side))
+            return context.makeImage()!
+        }
+
+        static func key(_ id: String = "page", width: CGFloat = 728, height: CGFloat = 240,
+                        dark: Bool = false, scale: CGFloat = 2) -> HtmlRenderWebCache.Key {
+            .init(attachmentId: id, size: NSSize(width: width, height: height), dark: dark, scale: scale)
+        }
+
+        @Test func pixelsRoundTripWithoutEncodingAndUnusedContentCanBeDiscarded() throws {
+            let image = Self.image()
+            let cache = HtmlRenderWebCache()
+            cache.setActive(true)
+            defer { cache.setActive(false) }
+            cache.insert(image, for: Self.key(), generation: cache.generation)
+            #expect(cache.cost == image.bytesPerRow * image.height)
+            try autoreleasepool {
+                let held = try #require(cache.image(for: Self.key()))
+                cache.discardUnusedPixels()
+                let restored = try #require(held.cgImage(forProposedRect: nil, context: nil, hints: nil))
+                #expect(restored.bitsPerPixel == image.bitsPerPixel)
+                #expect(restored.bitmapInfo == image.bitmapInfo)
+                #expect(restored.colorSpace == image.colorSpace)
+                #expect((restored.dataProvider?.data as Data?) == (image.dataProvider?.data as Data?))
+            }
+            cache.discardUnusedPixels()
+            #expect(cache.image(for: Self.key()) == nil, "memory pressure is a safe cache miss")
+            #expect(cache.cost == 0)
+        }
+
+        @Test func lruUsesExactBitmapBytesAndRejectsOversizedEntries() {
+            let image = Self.image(), bytes = image.bytesPerRow * image.height
+            let cache = HtmlRenderWebCache(limit: bytes * 2)
+            cache.setActive(true)
+            defer { cache.setActive(false) }
+            cache.insert(image, for: Self.key("a"), generation: cache.generation)
+            cache.insert(image, for: Self.key("b"), generation: cache.generation)
+            #expect(cache.image(for: Self.key("a")) != nil)
+            cache.insert(image, for: Self.key("c"), generation: cache.generation)
+            #expect(cache.image(for: Self.key("b")) == nil)
+            #expect(cache.contains(Self.key("a")))
+            cache.insert(Self.image(side: 128), for: Self.key("huge"), generation: cache.generation)
+            #expect(!cache.contains(Self.key("huge")))
+            #expect(cache.cost == bytes * 2)
+        }
+
+        @Test func replacementGeometryThemeScaleAndGenerationStayIndependent() {
+            let image = Self.image(), larger = Self.image(side: 16)
+            let cache = HtmlRenderWebCache()
+            cache.setActive(true)
+            defer { cache.setActive(false) }
+            cache.insert(image, for: Self.key(), generation: cache.generation)
+            cache.insert(larger, for: Self.key(), generation: cache.generation)
+            #expect(cache.cost == larger.bytesPerRow * larger.height)
+            for key in [Self.key("other"), Self.key(width: 729), Self.key(height: 241), Self.key(dark: true), Self.key(scale: 1)] {
+                #expect(cache.image(for: key) == nil)
+            }
+            let old = cache.generation
+            cache.clear()
+            cache.insert(image, for: Self.key(), generation: old)
+            #expect(cache.cost == 0)
+            cache.insert(image, for: Self.key(), generation: cache.generation)
+            #expect(cache.contains(Self.key()))
+            cache.setActive(false)
+            #expect(cache.cost == 0)
+            cache.insert(image, for: Self.key(), generation: cache.generation)
+            #expect(cache.cost == 0, "a hidden pane never accepts pixels")
         }
     }
 }

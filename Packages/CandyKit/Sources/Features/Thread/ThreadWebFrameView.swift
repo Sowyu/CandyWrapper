@@ -79,15 +79,27 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     var dark = false
     /// Only HTML render rows opt in. MCP apps and file previews keep their own live state.
     var htmlCache: HtmlRenderWebCache?
-    var htmlAttachmentId: String?
+    var htmlAttachmentId: String? { didSet { if oldValue != htmlAttachmentId { needsLayout = true } } }
     private var loaded = false
     private var pendingHeight: JSONValue?
     private var acceptsMessages = false
     private(set) var loadToken = UUID().uuidString
+    private let preview = HtmlRenderPreviewImageView()
+    private var captureGeneration = 0
+    private var paintReady = false
+    private var capturing = false
+    private var capturedKey: HtmlRenderWebCache.Key?
+    private var displayedKey: HtmlRenderWebCache.Key?
+
+    private var previewKey: HtmlRenderWebCache.Key? {
+        guard let htmlAttachmentId, bounds.width > 0, bounds.height > 0 else { return nil }
+        return .init(attachmentId: htmlAttachmentId, size: bounds.size, dark: dark, scale: window?.backingScaleFactor ?? 1)
+    }
 
     override var isFlipped: Bool { true }
 
     var isLive: Bool { webView != nil }
+    var hasPreview: Bool { preview.image != nil && preview.superview != nil && !isHiddenOrHasHiddenAncestor }
 
     /// Creates the web view and loads `page`, unless it already shows it.
     func activate(_ page: Page) {
@@ -127,6 +139,8 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         addSubview(web)
         webView = web
         htmlCache?.activated(web)
+        needsLayout = true
+        if let key = previewKey, htmlCache?.contains(key) == true { layoutSubtreeIfNeeded() }
         hostLoaded = spare != nil
         frameLoads = 0
         shortcutsPosted = false
@@ -158,6 +172,13 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         lastUserActivity = .distantPast
         loaded = false
         pendingHeight = nil
+        captureGeneration &+= 1
+        paintReady = false
+        capturing = false
+        capturedKey = nil
+        displayedKey = nil
+        preview.image = nil
+        preview.removeFromSuperview()
         acceptsMessages = false
         hostNavigation = nil
         guard let web = webView else { return }
@@ -181,6 +202,83 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         loaded = true
         webView.isHidden = false
         flushHeight()
+        preparePreview(webView)
+    }
+
+    private func preparePreview(_ web: WKWebView) {
+        guard htmlCache != nil else { return }
+        let token = loadToken, appearance = dark
+        web.callAsyncJavaScript("await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame); return true;",
+                                arguments: [:], in: nil, in: .world(name: "t3-host")) { [weak self, weak web] result in
+            guard case .success = result, let self, let web, self.webView === web,
+                  self.loadToken == token, self.dark == appearance else { return }
+            self.paintReady = true
+            self.needsLayout = true
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        guard let key = previewKey, htmlCache?.isActive == true, window != nil, !isHiddenOrHasHiddenAncestor else { return }
+        if displayedKey != key {
+            preview.image = nil
+            preview.removeFromSuperview()
+            displayedKey = nil
+            if !paintReady, let image = htmlCache?.image(for: key) {
+                displayedKey = key
+                preview.image = image
+                preview.imageScaling = .scaleAxesIndependently
+                preview.frame = bounds
+                preview.autoresizingMask = [.width, .height]
+                addSubview(preview, positioned: .above, relativeTo: webView)
+                #if DEBUG
+                Self.benchmarkObserver?("preview", page ?? .init(src: URL(string: "about:blank")!, title: "Cached page", dark: dark), self, nil)
+                #endif
+            }
+        }
+        if capturedKey != key { capturePreview() }
+    }
+
+    func refreshPreview() {
+        capturedKey = nil
+        displayedKey = nil
+        preview.image = nil
+        preview.removeFromSuperview()
+        paintReady = false
+        if loaded, let webView { preparePreview(webView) }
+        needsLayout = true
+    }
+
+    override func viewDidChangeBackingProperties() { super.viewDidChangeBackingProperties(); refreshPreview() }
+
+    private func capturePreview() {
+        guard paintReady, !capturing, window != nil, !isHiddenOrHasHiddenAncestor,
+              let web = webView, let cache = htmlCache, let key = previewKey else { return }
+        if cache.contains(key) {
+            capturedKey = key
+            preview.image = nil
+            preview.removeFromSuperview()
+            return
+        }
+        capturing = true
+        let generation = captureGeneration, cacheGeneration = cache.generation
+        let config = WKSnapshotConfiguration()
+        config.afterScreenUpdates = true
+        web.takeSnapshot(with: config) { [weak self, weak web, weak cache] image, _ in
+            guard let self, let web, self.webView === web, self.captureGeneration == generation else { return }
+            self.preview.image = nil
+            self.preview.removeFromSuperview()
+            self.capturing = false
+            guard self.previewKey == key else { self.needsLayout = true; return }
+            self.capturedKey = key
+            guard let pixels = image?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+            cache?.insert(pixels, for: key, generation: cacheGeneration)
+            #if DEBUG
+            if let page = self.page {
+                Self.benchmarkObserver?("snapshot", page, self, .object(["previewBytes": .number(Double(cache?.cost ?? 0))]))
+            }
+            #endif
+        }
     }
 
     /// Sees every message posted into a live page. Tests watch the transport with it.
@@ -207,6 +305,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
             loaded = true
             webView?.isHidden = false
             flushHeight()
+            if let webView { preparePreview(webView) }
             return
         }
         guard acceptsMessages, let text = body as? String, let json = try? JSONValue(parsing: Data(text.utf8)) else { return }
@@ -353,6 +452,11 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     document.body.appendChild(f);
     return true;
     """
+}
+
+/// Cached pixels never intercept input meant for the live page underneath.
+private final class HtmlRenderPreviewImageView: NSImageView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 /// The web view: wheel events go to the timeline (a framed page fits its content and hides its scrollbar),
