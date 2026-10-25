@@ -40,6 +40,8 @@ public struct ThreadShell: Codable, Hashable, Sendable, Identifiable {
     public var status: ThreadStatus
     public var lastError: String?
     public var lastErrorClass: ProviderFailureClass?
+    /// The provider's own code for the current failure (orchestrationV2.ts:1841), such as ChatGPT's usage limit codes. Absent before 3669.
+    public var lastErrorCode: String?
     public var usageLimitResetAt: T3Timestamp?
     public var pendingRuntimeRequest: PendingRuntimeRequestSummary?
     /// Always `null` in this server build. Don't build previews on it.
