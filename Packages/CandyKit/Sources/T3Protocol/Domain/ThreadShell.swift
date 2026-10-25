@@ -236,15 +236,19 @@ public struct PendingBackgroundTask: Codable, Hashable, Sendable {
     public var description: String?
     public var kind: BackgroundTaskKind
     public var childThreadId: ThreadId?
+    /// The agent resumes when this work ends (orchestrationV2.ts:556-562). Servers before 3669
+    /// don't send it.
+    public var awaited: Bool
 
-    public init(taskId: String, description: String? = nil, kind: BackgroundTaskKind, childThreadId: ThreadId? = nil) {
+    public init(taskId: String, description: String? = nil, kind: BackgroundTaskKind, childThreadId: ThreadId? = nil, awaited: Bool = false) {
         self.taskId = taskId
         self.description = description
         self.kind = kind
         self.childThreadId = childThreadId
+        self.awaited = awaited
     }
 
-    private enum CodingKeys: String, CodingKey { case taskId, description, kind, childThreadId }
+    private enum CodingKeys: String, CodingKey { case taskId, description, kind, childThreadId, awaited }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -252,6 +256,16 @@ public struct PendingBackgroundTask: Codable, Hashable, Sendable {
         description = try c.decodeIfPresent(String.self, forKey: .description)
         kind = try c.decodeIfPresent(BackgroundTaskKind.self, forKey: .kind) ?? .backgroundTask
         childThreadId = try c.decodeIfPresent(ThreadId.self, forKey: .childThreadId)
+        awaited = try c.decodeIfPresent(Bool.self, forKey: .awaited) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(taskId, forKey: .taskId)
+        try c.encodeIfPresent(description, forKey: .description)
+        try c.encode(kind, forKey: .kind)
+        try c.encodeIfPresent(childThreadId, forKey: .childThreadId)
+        if awaited { try c.encode(true, forKey: .awaited) }
     }
 }
 

@@ -136,10 +136,11 @@ public enum SidebarModel {
     }
 
     /// Port of `backgroundWorkHoldsCompletion`
-    /// (packages/shared/src/orchestrationV2PendingBackgroundWork.ts:66-80). Commands don't hold
-    /// completion; subagents, monitors and unknown kinds do.
+    /// (packages/shared/src/orchestrationV2PendingBackgroundWork.ts:94-112). Commands and monitors
+    /// hold completion only when the agent marked them `awaited`; subagents and unknown kinds
+    /// always do.
     public static func backgroundWorkHoldsCompletion(_ tasks: [PendingBackgroundTask]) -> Bool {
-        tasks.contains { $0.kind != .command }
+        tasks.contains { $0.awaited || ($0.kind != .command && $0.kind != .monitor) }
     }
 
     /// Port of `shellRuntime` (packages/client-runtime/src/state/models.ts:175-199).

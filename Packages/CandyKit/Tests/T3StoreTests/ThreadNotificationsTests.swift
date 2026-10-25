@@ -96,12 +96,14 @@ struct ThreadNotificationsTests {
         #expect(events.first?.tone == .error && events.first?.icon == .circleAlert)
     }
 
-    @Test func monitorHoldsCompletionButADevServerDoesNot() {
+    @Test func awaitedMonitorHoldsCompletionButADevServerDoesNot() {
         var t = ThreadNotificationTracker()
         _ = t.scan(environmentId: "env-1", threads: [running()])
         var watching = completed()
-        watching.pendingBackgroundTasks = [PendingBackgroundTask(taskId: "watch", kind: .monitor)]
+        watching.pendingBackgroundTasks = [PendingBackgroundTask(taskId: "watch", kind: .monitor, awaited: true)]
         #expect(t.scan(environmentId: "env-1", threads: [watching]).isEmpty)
+        watching.pendingBackgroundTasks = [PendingBackgroundTask(taskId: "watchdog", kind: .monitor)]
+        #expect(!SidebarModel.backgroundWorkHoldsCompletion(watching.pendingBackgroundTasks))
         var dev = completed()
         dev.pendingBackgroundTasks = [PendingBackgroundTask(taskId: "dev", kind: .command)]
         #expect(t.scan(environmentId: "env-1", threads: [dev]).map(\.title) == ["Thread completed"])
