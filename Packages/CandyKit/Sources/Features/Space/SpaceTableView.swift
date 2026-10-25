@@ -89,8 +89,6 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
     private var dragging: (id: PageID, target: Int)?
     private var editing: (ref: CellRef?, header: String?)?
     private var popupMenu: MenuPopupView?
-    private var datePopover: NSPopover?
-    private var dateTarget: SpaceDateTarget?
 
     init(model: SpaceTableModel) {
         self.model = model
@@ -795,34 +793,26 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
         ]
     }
 
-    /// ponytail: AppKit's date picker as in the page editor; move both to DesignSystem's CalendarView together.
+    /// The Redesign calendar in a popover under the cell, as the page editor's Pick a date… opens it.
     private func openCalendar(anchor: NSRect, _ pick: @escaping @MainActor (DateValue) -> Void) {
-        let picker = NSDatePicker()
-        picker.datePickerStyle = .clockAndCalendar
-        picker.datePickerElements = .yearMonthDay
-        picker.isBezeled = false
-        picker.drawsBackground = false
-        picker.dateValue = model.now()
-        picker.sizeToFit()
-        let wrap = NSView(frame: NSRect(x: 0, y: 0, width: picker.frame.width + 16, height: picker.frame.height + 16))
-        picker.frame.origin = NSPoint(x: 8, y: 8)
-        wrap.addSubview(picker)
-        let controller = NSViewController()
-        controller.view = wrap
-        let popover = NSPopover()
-        popover.behavior = .transient
-        popover.contentViewController = controller
+        guard let window else { return }
         let zone = model.timeZone()
-        let target = SpaceDateTarget { [weak popover] date in
-            popover?.close()
-            guard let point = try? DatePoint.from(date, in: zone, timed: false), let d = try? DateValue(start: point) else { return }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let today = calendar.dateComponents([.year, .month, .day], from: model.now())
+        let view = CalendarView(month: today, selected: nil, today: today)
+        view.setAccessibilityLabel("Date")
+        let popover = PopoverView(content: view, padding: .compact)
+        let host = PopupHost.host(for: window)
+        let open = host.open(popover, trigger: self, anchorRect: anchor,
+                             placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none),
+                             motion: .popover, swallowsOutsideClick: true, returnsFocus: false)
+        view.onSelect = { [weak host] parts in
+            host?.close(open, returnFocus: false)
+            guard let date = calendar.date(from: parts), let point = try? DatePoint.from(date, in: zone, timed: false),
+                  let d = try? DateValue(start: point) else { return }
             pick(d)
         }
-        picker.target = target
-        picker.action = #selector(SpaceDateTarget.changed(_:))
-        dateTarget = target
-        datePopover = popover
-        popover.show(relativeTo: anchor, of: self, preferredEdge: .maxY)
     }
 }
 
