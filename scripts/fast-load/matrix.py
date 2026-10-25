@@ -14,8 +14,10 @@ from run import BASE
 
 def builders():
     rows = subprocess.check_output(["ps", "-axo", "pid=,stat=,comm="], text=True)
-    names = {"swift-frontend", "swift-build", "swift-test", "xcodebuild", "clang", "clang++"}
-    return [line.strip() for line in rows.splitlines()
+    names = {"swift-frontend", "swift-build", "swift-test", "swiftc", "xcodebuild",
+             "clang", "clang++", "ld", "xctest", "swiftpm-testing-helper", "CandyKitPackageTests"}
+    return ["%s %s %s" % (line.split()[0], line.split()[1], Path(line.split()[-1]).name)
+            for line in rows.splitlines()
             if len(line.split()) >= 3 and not line.split()[1].startswith("Z")
             and Path(line.split()[-1]).name in names]
 
@@ -42,8 +44,9 @@ if __name__ == "__main__":
     with open(args.output, "w", buffering=1) as output:
         for round_index in range(args.rounds):
             for client, server in orders[round_index % len(orders)]:
-                if builders():
-                    raise RuntimeError("A compiler/test started during the benchmark window")
+                active = builders()
+                if active:
+                    raise RuntimeError("A compiler/test started during the benchmark window: " + ", ".join(active))
                 scratch = Path("/tmp/cw-fast-load-baseline" if client == "old" else "/tmp/cw-fast-load-final")
                 label = "%s-%s-r%d" % (client, server, round_index + 1)
                 command = ["/usr/bin/python3", str(Path(__file__).with_name("run.py")), server,
@@ -55,14 +58,17 @@ if __name__ == "__main__":
                         stdout, _ = process.communicate(timeout=2)
                         break
                     except subprocess.TimeoutExpired:
-                        if builders() or time.monotonic() > cell_deadline:
+                        active = builders()
+                        if active or time.monotonic() > cell_deadline:
                             os.killpg(process.pid, signal.SIGTERM)
                             process.communicate()
-                            raise RuntimeError("Compiler overlap or cell timeout; discard this run")
+                            detail = "Compiler overlap: " + ", ".join(active) if active else "Cell timeout"
+                            raise RuntimeError(detail + "; discard this run")
                 if process.returncode:
                     raise subprocess.CalledProcessError(process.returncode, command, stdout)
-                if builders():
-                    raise RuntimeError("A compiler/test overlapped a benchmark cell; discard this run")
+                active = builders()
+                if active:
+                    raise RuntimeError("A compiler/test overlapped a benchmark cell; discard this run: " + ", ".join(active))
                 for line in stdout.decode().splitlines():
                     value = json.loads(line)
                     value.update(client=client, server=server, round=round_index + 1,
