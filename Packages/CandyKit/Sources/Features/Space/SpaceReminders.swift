@@ -58,10 +58,15 @@ public enum SpaceReminderNotification {
         let formatter = DateFormatter()
         formatter.locale = locale
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
+        // A date-only item has no time of its own, and its reminder can fire at any hour, so it names the day.
+        if point.isTimed {
+            formatter.dateStyle = .none
+            formatter.timeStyle = .short
+        } else {
+            formatter.setLocalizedDateFormatFromTemplate("EEEdMMM")
+        }
         let time = (try? point.resolved(in: formatter.timeZone, dateOnlyHour: 9)).map { formatter.string(from: $0) } ?? point.rawValue
-        // The item's title and its time, nothing from the parent or the page's content.
+        // The item's title and its time or day, nothing from the parent or the page's content.
         content.body = time
         content.categoryIdentifier = categoryID
         content.sound = .default

@@ -85,7 +85,7 @@ struct SpaceReminderTests {
             #expect(!trigger.repeats)
             #expect(trigger.dateComponents.timeZone?.identifier == (timed ? "Australia/Melbourne" : nil))
             #expect(request.content.title == "Buy milk")
-            #expect(request.content.body == (timed ? "23:00" : "09:00"), "the parent's title never goes in")
+            #expect(request.content.body == (timed ? "23:00" : "Mon 26 Oct"), "the parent's title never goes in, and a date-only item names its day")
             #expect(request.content.categoryIdentifier == SpaceReminderNotification.categoryID)
             #expect(request.content.userInfo["pageID"] as? String == item.rawValue)
             #expect(request.content.userInfo["stamp"] as? String == "digest")
