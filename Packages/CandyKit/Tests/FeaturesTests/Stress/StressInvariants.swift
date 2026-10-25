@@ -94,8 +94,12 @@ enum StressInvariants {
             default: false
             }
         }
+        // A bare `/compact` turn shows its compaction row instead of a working row
+        // (MessagesTimeline.logic.ts:1551-1655, 0345e852ed).
+        let unsettled = TimelineRows.unsettledRunId(input.latestRun, runningRunId: input.runningRunId)
+        let compactionTurn = unsettled != nil && input.entries.contains { $0.message.map { IdleCompaction.isCommand($0) && $0.runId == unsettled } ?? false }
         if input.isWorking {
-            if working != 1 { problems.append("\(working) working rows while working") }
+            if working != 1, !(compactionTurn && working == 0) { problems.append("\(working) working rows while working") }
         } else if !live.isEmpty {
             problems.append("live rows outlive the run: \(live.map(\.id))")
         }
@@ -158,6 +162,10 @@ enum StressInvariants {
         }
         for entry in input.entries {
             switch entry.kind {
+            case .message(let m, _) where IdleCompaction.isCommand(m) && m.runId != nil:
+                // Once it has a run, its compaction row stands in for a bare `/compact`, which no longer shows as a
+                // bubble; before that it is an ordinary message (MessagesTimeline.logic.ts:1963-1983).
+                if count[m.id.rawValue] != nil { problems.append("compaction command \(m.id.rawValue) shown as a message") }
             case .message(let m, _):
                 if count[m.id.rawValue] != 1 { problems.append("message \(m.id.rawValue) shown \(count[m.id.rawValue] ?? 0) times, all open") }
             case .event(let p) where p.item.type != .runInterruptRequest:
