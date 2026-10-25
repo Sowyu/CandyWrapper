@@ -130,7 +130,8 @@ public final class TimelineView: DSView {
     }
     private var header: NSView?
     private var headerHeight: CGFloat = 0
-    /// A view after the last row (the list footer: `ThreadStatusLine`, ChatView.tsx:7613-7646, 11410).
+    /// A view after the last row (the list footer: `ThreadStatusLine`, ChatView.tsx:7613-7646, 11410). A
+    /// `TimelineSizedFooter` is measured again when the lane's width changes.
     public func setFooter(_ view: NSView?, height: CGFloat) {
         if footerView !== view {
             footerView?.removeFromSuperview()
@@ -618,6 +619,7 @@ public final class TimelineView: DSView {
             document.setFrameSize(NSSize(width: width, height: document.frame.height))
             adjusting = false
             heights = items.map { height(of: $0) }
+            if let sized = footerView as? TimelineSizedFooter { footerHeight = sized.height(forWidth: laneFrame.width) }
             recomputeTops()
             restore(anchor)
         }
@@ -969,4 +971,9 @@ public final class TimelineView: DSView {
     var liveViewCount: Int { visible.count }
     var isPillVisible: Bool { !pill.isHidden }
     var documentHeight: CGFloat { contentHeight }
+}
+
+/// A timeline footer whose height follows the lane's width, such as one holding a guest's waiting messages.
+@MainActor protocol TimelineSizedFooter: NSView {
+    func height(forWidth width: CGFloat) -> CGFloat
 }

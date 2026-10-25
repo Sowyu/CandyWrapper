@@ -19,6 +19,8 @@ final class PaletteCommands {
     private var overlay: CommandPaletteOverlay?
     /// The add-project flows (environment, sources, browse, clone, New project).
     private lazy var addProjectFlow = PaletteAddProjectFlow(palette: self, environments: environments, threads: threads, commands: commands)
+    /// Share with guest's availability and dialog.
+    var guestShare: GuestShareController?
     /// The open palette's controller.
     var controller: CommandPaletteController? { overlay?.controller }
     /// Thread message search (`useThreadSearch`, state/queries.ts:75-101): 2+ characters, 200 ms debounce.
@@ -456,6 +458,14 @@ final class PaletteCommands {
                     actions.append(show)
                 }
             }
+        }
+        // "Share with guest" (CommandPalette.tsx:1373-1385 at 3669), where the thread's environment offers it.
+        if let id = threads.openThreadId, let guestShare, guestShare.canShare(id.environmentId) {
+            actions.append(PaletteEntry(value: "action:share-thread-with-guest", searchTerms: ["share", "guest", "invite", "link", "teammate"],
+                                        title: "Share with guest", icon: .userPlus,
+                                        action: .run({ [weak self, weak guestShare] in
+                                            DispatchQueue.main.async { if let window = self?.window { guestShare?.present(id, in: window) } }
+                                        }, keepOpen: false)))
         }
         // "Restart agent session" (CommandPalette.tsx:1993-2036).
         if let id = threads.openThreadId, let thread = sidebar?.snapshot?.threads.first(where: { $0.id == id }) {

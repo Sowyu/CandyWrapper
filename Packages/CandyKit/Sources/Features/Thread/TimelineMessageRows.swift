@@ -85,6 +85,8 @@ final class UserMessageAttributionView: ControlView {
     static let height: CGFloat = 16
     let label = LabelView("", font: TL.font(11), color: TL.c(\.mutedForeground, 0.7))
     private var automation = false
+    /// A guest's name in its place (`GuestMessageName`, guestMessageStyle.tsx at 3669): `text-guest-foreground`, no link.
+    private var guest = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -94,6 +96,17 @@ final class UserMessageAttributionView: ControlView {
     }
 
     func configure(_ p: UserMessagePresentation, senderThreadId: String?) {
+        if let name = p.guestName {
+            guest = true
+            label.text = name
+            isEnabled = false
+            // The bubble's heading names the guest for VoiceOver (TimelineUserMessageRow.tsx:433-438).
+            setAccessibilityElement(false)
+            restyle()
+            return
+        }
+        guest = false
+        setAccessibilityElement(true)
         automation = p.isAutomation
         label.text = p.isAutomation ? "Sent by automation" : "Sent by another agent"
         isEnabled = p.isAutomation ? p.scheduledTaskId != nil : senderThreadId != nil
@@ -108,7 +121,10 @@ final class UserMessageAttributionView: ControlView {
 
     private func restyle() {
         let hovered = isEnabled && state.hovered
-        if automation || !isEnabled {
+        if guest {
+            label.font = TL.font(11)
+            label.color = GuestColors.foreground
+        } else if automation || !isEnabled {
             label.font = TL.font(11)
             label.color = hovered ? TL.c(\.mutedForeground) : TL.c(\.mutedForeground, 0.7)
         } else {
@@ -190,7 +206,10 @@ final class UserMessageRowView: TimelineRowView {
         guard case .message(let m, _, _, _, _, _) = item.row.kind else { return }
         let presentation = UserMessagePresentation.resolve(m)
         text = presentation.text
-        attribution.isHidden = !presentation.isAutomation && m.createdBy != "agent"
+        attribution.isHidden = !presentation.isAutomation && m.createdBy != "agent" && presentation.guestName == nil
+        // A guest's message sits on `bg-guest-surface` (TimelineUserMessageRow.tsx:443-447 at 3669).
+        let fill = presentation.guestName == nil ? TL.c(\.messageSurface) : GuestColors.surface
+        if bubble.fill !== fill { bubble.fill = fill }
         if !attribution.isHidden { attribution.configure(presentation, senderThreadId: m.senderThreadId) }
         editButton.isHidden = m.inputIntent != .turnStart && m.inputIntent != .queuedTurn
         markdown.inlineSkills = context.model?.inlineSkills ?? []

@@ -40,6 +40,8 @@ final class SidebarCommands {
     var onRouteChange: (() -> Void)?
     /// Leaves Settings before a utility page shows (both replace the main area; T3 routes between them).
     var closeSettings: () -> Void = {}
+    /// Share with guest, for the thread menu.
+    var guestShare: GuestShareController?
     /// `useEscapeToGoBack` on Usage and Pull Requests: the previous route, false when there is none.
     var historyBack: () -> Bool = { false }
     var closePalette: () -> Void = {}
@@ -580,6 +582,7 @@ final class SidebarCommands {
         state.isRegeneratingTitle = thread.titleRegeneration != nil
         state.isRunning = !SidebarModel.runtimeCanArchive(presented.runtime)
         state.snoozePresets = presets
+        state.canShareWithGuest = guestShare?.canShare(thread.id.environmentId) ?? false
         var items = ThreadActionMenu.removing(Self.unbuiltMenuItems, from: ThreadActionMenu.items(state))
         if ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) { items += extraMenuItems(id) }
         let choose: @MainActor (String) -> Void = { [weak self, weak sidebar] choice in
@@ -643,6 +646,7 @@ final class SidebarCommands {
         case "copy-thread-id":
             copy(id.localId.rawValue, title: "Thread ID copied")
         case "archive": archive(id)
+        case "share-guest": if let window { guestShare?.present(id, in: window) }
         default: break
         }
     }

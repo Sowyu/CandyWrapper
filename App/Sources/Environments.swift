@@ -140,6 +140,11 @@ final class Environments {
         guard let environmentId, let session = authSessions[environmentId] else { return true }
         return session.grants(AuthScopes.orchestrationOperate)
     }
+    /// `guestShare.create`'s grant, `access:write` (clientRpcPermissions.ts:53-54 at 3669): a guest link hands thread
+    /// access to someone outside, like a pairing link. Unknown counts as allowed, as in `canOperate`.
+    func canCreateGuestShare(_ environmentId: String) -> Bool {
+        authSessions[environmentId]?.grants(AuthScopes.accessWrite) ?? true
+    }
     /// The route the session uses.
     func routeInUse(_ environmentId: String) -> URL? { entries[environmentId]?.session?.http.baseURL }
 

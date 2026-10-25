@@ -28,6 +28,23 @@ public final class ThreadHeaderView: TopbarDragView {
         }
     }
     public var onOpenParent: (@MainActor () -> Void)? { didSet { parentCrumb.action = onOpenParent } }
+    /// The thread's guest link, nil while nobody shares it: `GuestShareIndicator` after the breadcrumb
+    /// (ChatHeader.tsx:415 at 3669), and under Redesign a button in the pill.
+    public var guestShare: ThreadGuestShare? {
+        didSet {
+            guard guestShare != oldValue else { return }
+            guestIndicator.configure(guestShare)
+            pill.guestShare = guestShare
+            needsLayout = true
+        }
+    }
+    /// Stop sharing's click (`thread.guest-share.close`).
+    public var onStopSharing: (@MainActor () -> Void)? {
+        didSet { guestIndicator.stop.action = onStopSharing; pill.onStopSharing = onStopSharing }
+    }
+    /// A Stop sharing is in flight.
+    public var guestStopping = false { didSet { guestIndicator.stopping = guestStopping } }
+    private let guestIndicator = GuestShareIndicatorView()
     private var threadVisible = true
     private func updateParentVisibility() {
         let hidden = !threadVisible || parentThreadTitle == nil
@@ -190,6 +207,8 @@ public final class ThreadHeaderView: TopbarDragView {
         titleHit.accessibilityGroup = breadcrumb
         titleHit.onMenu = { [weak self] event, view in self?.onThreadMenu?(event, view) }
         titleHit.onRename = { [weak self] in self?.beginTitleRename() }
+        addSubview(guestIndicator)
+        guestIndicator.isHidden = true
         addSubview(titleEditor)
         titleEditor.isHidden = true
         titleEditor.onSubmit = { [weak self] in self?.finishTitleRename() }
@@ -237,7 +256,16 @@ public final class ThreadHeaderView: TopbarDragView {
         // toggle is left and it is `pr-10`, plus the title button's hidden 14px chevron and `gap-1`
         // (ChatHeader.tsx:256-345).
         let reserve: CGFloat = toggles[2].superview === self ? 96 : 40 + 4 + 14
-        let titleRight = bounds.width - 38 - reserve
+        var titleRight = bounds.width - 38 - reserve
+        // The indicator is `shrink-0` at the end of the row, before its `pr-24`/`pr-10`, `gap-3` after the
+        // breadcrumb, which then gives up the room, its title chevron included.
+        guestIndicator.isHidden = plain || !threadVisible || guestShare == nil
+        if !guestIndicator.isHidden {
+            let size = guestIndicator.intrinsicContentSize
+            let right = bounds.width - 38 - (toggles[2].superview === self ? 96 : 40)
+            guestIndicator.frame = NSRect(x: right - size.width, y: midY - size.height / 2, width: size.width, height: size.height)
+            titleRight = min(titleRight, guestIndicator.frame.minX - 12 - 18)
+        }
         if !parentCrumb.isHidden {
             // The parent shows in full unless the whole breadcrumb would then overflow; then it collapses
             // to "..." (ChatHeader.tsx:130-164 in 2994).

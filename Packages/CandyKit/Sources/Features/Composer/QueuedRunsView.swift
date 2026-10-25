@@ -252,6 +252,8 @@ private final class QueuedRowView: DSView {
     let grip = GripView()
     private let saving = IconView(name: .clock3, size: 12, strokeColor: Themed.color(\.mutedForeground, 0.6))
     private let text = bannerLabel(Themed.color(\.foreground, 0.8))
+    /// `shrink-0 text-guest-foreground`, before a guest's text.
+    private let guestName = bannerLabel(GuestColors.foreground)
     private let edit = bannerButton(nil, icon: .pencil, variant: .ghostMuted, size: .iconXs, tip: "Edit in the composer")
     private let steer = bannerButton("Steer", icon: .cornerUpRight, variant: .ghostMuted, size: .xs, tip: "Send as a steer instead")
     private let remove = bannerButton(nil, icon: .x, variant: .ghost, size: .iconXs, tip: "Remove from queue")
@@ -271,7 +273,7 @@ private final class QueuedRowView: DSView {
         saving.setAccessibilityElement(true)
         saving.setAccessibilityRole(.image)
         saving.setAccessibilityLabel("Saving queued message") // QueuedRunsControl.tsx:369-372
-        [grip, saving, text, edit, steer, remove, cancel].forEach(addSubview)
+        [grip, saving, guestName, text, edit, steer, remove, cancel].forEach(addSubview)
         TooltipController.attach(to: remove, text: "Remove from queue")
         grip.onDrag = { [weak self] event in guard let self else { return }; owner?.dragMoved(index, event: event) }
         grip.onDragEnd = { [weak self] in self?.owner?.dragEnded() }
@@ -296,10 +298,13 @@ private final class QueuedRowView: DSView {
         text.setAccessibilityLabel((editing ? "Editing queued message: " : "") + text.text)
         text.color = editing ? Themed.color(\.accentForeground) : Themed.color(\.foreground, 0.8)
         saving.isHidden = item.runId != nil
+        guestName.text = item.guestName ?? ""
+        guestName.isHidden = item.guestName == nil
         grip.isHidden = !canReorder
         grip.isEnabled = !busy
         for b in [edit, steer, remove] { b.isHidden = editing; b.isEnabled = !busy }
         steer.isEnabled = !busy && canSteer
+        edit.isEnabled = !busy && item.isEditable
         steerTip.text = canSteer ? steerText : "There is no active run to steer"
         cancel.isHidden = !editing
         needsDisplay = true
@@ -327,6 +332,11 @@ private final class QueuedRowView: DSView {
         if !saving.isHidden {
             saving.frame = NSRect(x: x, y: (h - 12) / 2, width: 12, height: 12)
             x += 12 + 4
+        }
+        if !guestName.isHidden {
+            let gw = min(ceil(guestName.textWidth) + 1, max(0, right - x))
+            guestName.frame = NSRect(x: x, y: (h - 16) / 2, width: gw, height: 16)
+            x += gw + 4
         }
         text.frame = NSRect(x: x, y: (h - 16) / 2, width: max(0, right - x), height: 16)
     }

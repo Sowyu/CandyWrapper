@@ -482,6 +482,7 @@ final class ThreadController {
             return try await environments.request(env, method, payload)
         }
         lineage.openThread = { [weak self] id in self?.open(id) }
+        lineage.guest.canOperate = { [weak environments] env in environments?.canOperate(env) ?? true }
         lineage.openThreadInTab = { [weak self] id in
             if let inTab = self?.sidebar?.onOpenInNewTab { inTab(id) } else { self?.open(id) }
         }

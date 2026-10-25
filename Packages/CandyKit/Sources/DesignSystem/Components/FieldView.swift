@@ -39,6 +39,12 @@ public class FieldView: DSView {
 
     public var placeholder: String = "" { didSet { placeholderLabel.text = placeholder } }
 
+    /// `readOnly`: the text stays selectable and copyable, but takes no edits.
+    public var isReadOnly = false { didSet { editor.isEditable = state.enabled && !isReadOnly } }
+
+    /// Selects the whole text, as `event.currentTarget.select()` does.
+    public func selectAll() { editor.selectAll(nil) }
+
     /// Called on every edit.
     public final var onChange: (@MainActor (String) -> Void)?
     /// Called after every state change (InputGroup mirrors its input this way).
@@ -128,7 +134,7 @@ public class FieldView: DSView {
     func stateDidChange(from old: State) {
         if old.enabled != state.enabled {
             alphaValue = state.enabled || !dimsWhenDisabled ? 1 : 0.64  // `has-disabled:opacity-64`
-            editor.isEditable = state.enabled
+            editor.isEditable = state.enabled && !isReadOnly
             editor.isSelectable = state.enabled
         }
         restyle()

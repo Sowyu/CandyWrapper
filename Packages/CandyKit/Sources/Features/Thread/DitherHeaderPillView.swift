@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import T3Protocol
 
 /// Redesign's header controls, after Capy's tab bar: one slim frosted pill at the right of the window's tab band, so the
 /// tabs keep the room. It holds the cost, the actions button (the header's details toggle, drawn as an ellipsis), the
@@ -16,6 +17,10 @@ public final class DitherHeaderPillView: DSView {
     /// A dot on the toggle while images arrived since the gallery last showed.
     public var galleryUnseen = false { didSet { if galleryUnseen != oldValue { galleryDot.isHidden = !galleryUnseen } } }
     private let galleryDot = CALayer()
+    /// The thread's guest link: a user button, first in the pill, whose menu says who is watching and stops sharing.
+    public let guest = ButtonView(nil, variant: .ghost, size: .xs)
+    var guestShare: ThreadGuestShare? { didSet { if (guestShare != nil) != (oldValue != nil) { resized() } } }
+    var onStopSharing: (@MainActor () -> Void)?
 
     /// Whether the totals show: a checkout that is a repository.
     public var showsVersionControl = false { didSet { if showsVersionControl != oldValue { resized() } } }
@@ -60,6 +65,11 @@ public final class DitherHeaderPillView: DSView {
         galleryDot.cornerRadius = 3
         gallery.layer?.addSublayer(galleryDot)
         addSubview(gallery)
+        guest.iconDefinition = GuestShareIndicatorView.userIcon
+        guest.setAccessibilityLabel("Guest link")
+        guest.toolTip = "Guest link"
+        guest.action = { [weak self] in self?.showGuestMenu() }
+        addSubview(guest)
         setAccessibilityRole(.group)
         setAccessibilityLabel("Thread controls")
     }
@@ -72,7 +82,7 @@ public final class DitherHeaderPillView: DSView {
 
     /// The views in order, each with its visibility now.
     private var arranged: [(NSView, Bool)] {
-        var views: [(NSView, Bool)] = []
+        var views: [(NSView, Bool)] = [(guest, guestShare != nil)]
         if let cost = cost as? ThreadCostPillView { views.append((cost, cost.breakdown != nil)) }
         if toggles.count == 3 {
             views += [(toggles[0], true), (gallery, galleryCount > 0), (toggles[1], true), (changes, showsVersionControl && isRepo), (toggles[2], true)]
@@ -106,6 +116,14 @@ public final class DitherHeaderPillView: DSView {
         frost.cornerRadius = DitherChrome.controlRadius
         frost.layer?.borderWidth = 1
         frost.layer?.borderColor = DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor
+    }
+
+    private func showGuestMenu() {
+        guard let share = guestShare, guest.window != nil else { return }
+        var stop = MenuItem("Stop sharing", icon: .x)
+        stop.action = { [weak self] in self?.onStopSharing?() }
+        MenuPopupView.show([.label(share.statusText(now: Date())), stop], from: guest,
+                           placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))
     }
 
     public override func viewDidChangeEffectiveAppearance() {

@@ -18,6 +18,8 @@ public final class ThreadLineageController {
     /// The pending handoff row over the status line (ChatView.tsx:11588-11603).
     private let pendingHandoff = HandoffDividerView()
     private let footer = FooterStack()
+    /// The guest share's header indicator and waiting messages.
+    public let guest: GuestShareThreadController
     /// Wake or Un-settle in flight, for the thread it was asked for.
     private var statusBusy: ThreadId?
 
@@ -65,6 +67,12 @@ public final class ThreadLineageController {
 
     public init(panel: ThreadPanelView) {
         self.panel = panel
+        guest = GuestShareThreadController(panel: panel)
+        guest.onChange = { [weak self] in self?.syncFooter() }
+        guest.dispatch = { [weak self] id, payload in
+            guard let dispatch = self?.dispatch else { throw CancellationError() }
+            return try await dispatch(id, payload)
+        }
         // The card is built the first time it opens; `sync` keeps its lineage in `lazyDetailsCard` until then.
         panel.lazyDetailsCard.configure { [weak self] card in
             let section = card.lineage
@@ -96,6 +104,7 @@ public final class ThreadLineageController {
         if threadId != self.threadId { panel.lazyDetailsCard.loaded?.lineage.reset() }
         self.threadId = threadId
         self.projection = projection
+        guest.update(threadId: threadId, projection: projection)
         sync()
     }
 
@@ -245,7 +254,8 @@ public final class ThreadLineageController {
     }
 
     /// The footer under the last row: a pending context handoff when the composer's model needs one
-    /// (`resolvePendingHandoff`, ChatView.tsx:7744-7757), then the snoozed or settled status line.
+    /// (`resolvePendingHandoff`, ChatView.tsx:7744-7757), the guest's waiting messages (ChatView.tsx:3350-3372 at
+    /// 3669), then the snoozed or settled status line.
     public func syncFooter() {
         guard let threadId, let env = threadId.environmentId, let projection else { return }
         let providers = providers?(env) ?? []
@@ -253,8 +263,10 @@ public final class ThreadLineageController {
                                                 threadModel: shell?.modelSelection)
         if let handoff { pendingHandoff.configure(handoff, providers: providers, pending: true) }
         let status = updateStatusLine(shell)
-        footer.set(handoff == nil ? nil : pendingHandoff, status ? statusLine : nil)
-        panel.timeline.setFooter(footer.height > 0 ? footer : nil, height: footer.height)
+        footer.set(handoff == nil ? nil : pendingHandoff, guest.footerView, status ? statusLine : nil)
+        let height = footer.height(forWidth: panel.timeline.laneFrame.width)
+        // Kept while it has rows even at height 0: before the first layout the lane has no width to measure at.
+        panel.timeline.setFooter(footer.isEmpty ? nil : footer, height: height)
     }
 
     /// The timeline footer for a snoozed or settled thread (ChatView.tsx:7613-7646).
@@ -509,12 +521,18 @@ public enum ThreadRelationshipCommands {
 
 /// The timeline footer's rows, stacked.
 @MainActor
-private final class FooterStack: DSView {
-    private var rows: [(NSView, CGFloat)] = []
-    var height: CGFloat { rows.reduce(0) { $0 + $1.1 } }
+private final class FooterStack: DSView, TimelineSizedFooter {
+    /// Each row with its height at a lane width; the guest's messages wrap, the others are fixed.
+    private var rows: [(NSView, (CGFloat) -> CGFloat)] = []
+    func height(forWidth width: CGFloat) -> CGFloat { rows.reduce(0) { $0 + $1.1(width) } }
+    var isEmpty: Bool { rows.isEmpty }
 
-    func set(_ handoff: HandoffDividerView?, _ status: ThreadStatusLineView?) {
-        let next = [handoff.map { ($0 as NSView, HandoffDividerView.height) }, status.map { ($0 as NSView, ThreadStatusLineView.height) }].compactMap { $0 }
+    func set(_ handoff: HandoffDividerView?, _ guest: GuestPendingMessagesView?, _ status: ThreadStatusLineView?) {
+        let next: [(NSView, (CGFloat) -> CGFloat)] = [
+            handoff.map { ($0 as NSView, { _ in HandoffDividerView.height }) },
+            guest.map { g in (g as NSView, { [weak g] w in g?.height(forWidth: w) ?? 0 }) },
+            status.map { ($0 as NSView, { _ in ThreadStatusLineView.height }) },
+        ].compactMap { $0 }
         for (v, _) in rows where !next.contains(where: { $0.0 === v }) { v.removeFromSuperview() }
         rows = next
         for (v, _) in rows where v.superview !== self { addSubview(v) }
@@ -524,6 +542,6 @@ private final class FooterStack: DSView {
     override func layout() {
         super.layout()
         var y: CGFloat = 0
-        for (v, h) in rows { v.frame = NSRect(x: 0, y: y, width: bounds.width, height: h); y += h }
+        for (v, h) in rows { let rh = h(bounds.width); v.frame = NSRect(x: 0, y: y, width: bounds.width, height: rh); y += rh }
     }
 }
