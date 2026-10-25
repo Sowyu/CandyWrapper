@@ -85,7 +85,9 @@ public final class SpaceReplicaStore: SpaceDocumentStore {
         var out: [SpaceContent] = []
         for id in blocksByPage[page] ?? [] { if let r = blockCache[id], !r.trashed { out.append(.block(id, r)) } }
         for id in childrenByParent[page] ?? [] { if let r = pages[id], !r.trashed { out.append(.page(id, r)) } }
-        return out.sorted { RecordPosition(order: $0.order, id: $0.id) < RecordPosition(order: $1.order, id: $1.id) }
+        // Sort positions, not the records: each compare copied two whole records.
+        let positions = out.map { RecordPosition(order: $0.order, id: $0.id) }
+        return positions.indices.sorted { positions[$0] < positions[$1] }.map { out[$0] }
     }
 
     // MARK: Writes

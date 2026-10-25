@@ -50,6 +50,11 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
     private var numbers: [SpaceParagraphKey: Int]?
     private(set) var activeKey: SpaceParagraphKey?
     private var images: [String: NSImage] = [:]
+    /// Base attributes and paragraph styles per look, made once instead of once per paragraph. Fonts are the
+    /// font runtime's, so both caches empty when its generation moves on.
+    private var baseCache: [BaseLook: [NSAttributedString.Key: Any]] = [:]
+    private var styleCache: [SpacePageMetrics.StyleKey: NSParagraphStyle] = [:]
+    private var cacheGeneration = FontRuntime.generation
     private var loadingImages: Set<String> = []
     private var token: Int?
     var menus = SpaceEditorMenus()
@@ -108,7 +113,9 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
         paragraphs = [:]; committed = [:]; keys = []; hints = [:]; dirty = []; numbers = nil
         let out = NSMutableAttributedString()
         let content = store.content(of: page)
-        for (i, item) in content.enumerated() {
+        var texts: [RichText] = []
+        texts.reserveCapacity(content.count)
+        for item in content {
             let key: SpaceParagraphKey, para: SpaceParagraph, text: RichText
             switch item {
             case .block(let id, let r): key = .block(id); para = SpaceParagraph(block: r); text = r.text
@@ -117,9 +124,7 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
             paragraphs[key] = para
             committed[key] = text
             keys.append(key)
-            hints[key] = out.length
-            out.append(attributed(text, key: key, para))
-            if i < content.count - 1 { out.append(NSAttributedString(string: "\n", attributes: baseAttributes(key, para))) }
+            texts.append(text)
         }
         tailKey = nil
         if content.isEmpty {
@@ -128,9 +133,23 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
             keys = [key]
             tailKey = key
         }
+        // Card corners and heading spacing read the index, so it's built before the styles.
         reindex()
-        // Styles go on before the text view sees the string, so TextKit lays it out once.
-        restyle(NSRange(location: 0, length: out.length), in: out)
+        // Styles go on with the text, before the text view sees the string, so TextKit lays it out once.
+        out.beginEditing()
+        for (i, text) in texts.enumerated() {
+            let key = keys[i]
+            let para = paragraphs[key]!
+            let start = out.length
+            hints[key] = start
+            out.append(attributed(text, key: key, para))
+            if i < texts.count - 1 { out.append(NSAttributedString(string: "\n", attributes: baseAttributes(key, para))) }
+            let range = NSRange(location: start, length: out.length - start)
+            guard range.length > 0 else { continue }
+            out.addAttribute(.paragraphStyle, value: paragraphStyle(key, para), range: range)
+            if key.isItem { out.addAttribute(.foregroundColor, value: SpacePageMetrics.color(.p, item: para.done && para.todo), range: range) }
+        }
+        out.endEditing()
         applying = true
         textView.textStorage?.setAttributedString(out)
         applying = false
@@ -160,15 +179,33 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
 
     // MARK: Attributes
 
+    private struct BaseLook: Hashable { var item: Bool; var type: BlockType; var done: Bool }
+
+    private func checkCacheGeneration() {
+        guard cacheGeneration != FontRuntime.generation else { return }
+        cacheGeneration = FontRuntime.generation
+        baseCache = [:]
+        styleCache = [:]
+    }
+
     func baseAttributes(_ key: SpaceParagraphKey, _ p: SpaceParagraph) -> [NSAttributedString.Key: Any] {
+        checkCacheGeneration()
         let type = key.isItem ? BlockType.p : p.type
-        return [.font: key.isItem ? DSFont.ui(14) : SpacePageMetrics.baseFont(type),
-                .foregroundColor: key.isItem ? SpacePageMetrics.color(.p, item: p.done && p.todo) : SpacePageMetrics.color(type),
-                .spaceBlock: key.raw]
+        let look = BaseLook(item: key.isItem, type: type, done: key.isItem && p.done && p.todo)
+        var attrs = baseCache[look] ?? {
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: key.isItem ? DSFont.ui(14) : SpacePageMetrics.baseFont(type),
+                .foregroundColor: key.isItem ? SpacePageMetrics.color(.p, item: p.done && p.todo) : SpacePageMetrics.color(type)]
+            baseCache[look] = attrs
+            return attrs
+        }()
+        attrs[.spaceBlock] = key.raw
+        return attrs
     }
 
     func attributed(_ text: RichText, key: SpaceParagraphKey, _ p: SpaceParagraph) -> NSAttributedString {
-        let string = key.isItem ? text.t.replacingOccurrences(of: "\n", with: " ") : text.t.replacingOccurrences(of: "\n", with: "\u{2028}")
+        let string = !text.t.contains("\n") ? text.t
+            : key.isItem ? text.t.replacingOccurrences(of: "\n", with: " ") : text.t.replacingOccurrences(of: "\n", with: "\u{2028}")
         let s = NSMutableAttributedString(string: string, attributes: baseAttributes(key, p))
         let length = s.length
         for mark in text.m where mark.start < mark.end && mark.end <= length {
@@ -184,7 +221,10 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
             default: break
             }
         }
-        fixFonts(s, NSRange(location: 0, length: length), key.isItem ? .p : p.type)
+        // Without bold, italic or code marks the base font is already the right one.
+        if text.m.contains(where: { $0.kind == .b || $0.kind == .i || $0.kind == .c }) {
+            fixFonts(s, NSRange(location: 0, length: length), key.isItem ? .p : p.type)
+        }
         return s
     }
 
@@ -220,8 +260,13 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
     }
 
     func paragraphStyle(_ key: SpaceParagraphKey, _ p: SpaceParagraph) -> NSParagraphStyle {
-        SpacePageMetrics.paragraphStyle(p, item: key.isItem, todo: p.todo, card: key.isItem ? cardPlace(key) : nil,
-                                        firstInPage: index[key] == 0, image: p.type == .image ? imageSize(p) : nil)
+        checkCacheGeneration()
+        let style = SpacePageMetrics.StyleKey(p, item: key.isItem, todo: p.todo, card: key.isItem ? cardPlace(key) : nil,
+                                              firstInPage: index[key] == 0, image: p.type == .image ? imageSize(p) : nil)
+        if let cached = styleCache[style] { return cached }
+        let made = SpacePageMetrics.paragraphStyle(style)
+        styleCache[style] = made
+        return made
     }
 
     func headIndent(_ key: SpaceParagraphKey, _ p: SpaceParagraph) -> CGFloat { paragraphStyle(key, p).firstLineHeadIndent }

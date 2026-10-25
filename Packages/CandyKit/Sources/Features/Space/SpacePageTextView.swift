@@ -381,50 +381,27 @@ final class SpaceEditorMenus {
                                                           swallowsOutsideClick: true, returnsFocus: false)
     }
 
-    private var datePopover: NSPopover?
-    private var dateTarget: SpaceDateTarget?
-
-    /// A graphical date picker in a native popover. ponytail: AppKit's look, not Redesign's; move it to the
-    /// DesignSystem CalendarView once a PopupHost popover takes clicks on it.
+    /// The Redesign calendar in a popover under the due label.
     private func openCalendar(_ editor: SpacePageEditor, key: SpaceParagraphKey, anchor: CGRect) {
         let tv = editor.textView
-        let picker = NSDatePicker()
-        picker.datePickerStyle = .clockAndCalendar
-        picker.datePickerElements = .yearMonthDay
-        picker.isBezeled = false
-        picker.drawsBackground = false
+        guard let window = tv.window else { return }
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .current
-        picker.dateValue = Date()
-        if let due = editor.paragraphs[key]?.due, let date = calendar.date(from: DateComponents(year: due.start.year, month: due.start.month, day: due.start.day)) {
-            picker.dateValue = date
-        }
-        picker.sizeToFit()
-        let wrap = NSView(frame: NSRect(x: 0, y: 0, width: picker.frame.width + 16, height: picker.frame.height + 16))
-        picker.frame.origin = NSPoint(x: 8, y: 8)
-        wrap.addSubview(picker)
-        let controller = NSViewController()
-        controller.view = wrap
-        let popover = NSPopover()
-        popover.behavior = .transient
-        popover.contentViewController = controller
-        let target = SpaceDateTarget { [weak editor, weak popover] date in
-            popover?.close()
-            guard let point = try? DatePoint.from(date, in: .current, timed: false) else { return }
+        let today = calendar.dateComponents([.year, .month, .day], from: Date())
+        let due = editor.paragraphs[key]?.due.map { DateComponents(year: $0.start.year, month: $0.start.month, day: $0.start.day) }
+        let view = CalendarView(month: due ?? today, selected: due, today: today)
+        view.setAccessibilityLabel("Due date")
+        let popover = PopoverView(content: view, padding: .compact)
+        let host = PopupHost.host(for: window)
+        let open = host.open(popover, trigger: tv, anchorRect: anchor,
+                             placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none),
+                             motion: .popover, swallowsOutsideClick: true, returnsFocus: false)
+        view.onSelect = { [weak editor, weak host] parts in
+            host?.close(open, returnFocus: false)
+            guard let date = calendar.date(from: parts), let point = try? DatePoint.from(date, in: .current, timed: false) else { return }
             editor?.setDue(key, try? DateValue(start: point))
         }
-        picker.target = target
-        picker.action = #selector(SpaceDateTarget.changed(_:))
-        dateTarget = target
-        datePopover = popover
-        popover.show(relativeTo: anchor, of: tv, preferredEdge: .maxY)
     }
-}
-
-final class SpaceDateTarget: NSObject {
-    let picked: (Date) -> Void
-    init(_ picked: @escaping (Date) -> Void) { self.picked = picked }
-    @objc func changed(_ sender: NSDatePicker) { picked(sender.dateValue) }
 }
 
 extension SpacePageEditor {

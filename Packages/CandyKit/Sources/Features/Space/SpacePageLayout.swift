@@ -130,18 +130,30 @@ enum SpacePageMetrics {
     }
 
     /// Where a row sits in its checklist card.
-    struct CardPlace: Equatable { var first: Bool; var last: Bool }
+    struct CardPlace: Hashable { var first: Bool; var last: Bool }
 
-    static func paragraphStyle(_ p: SpaceParagraph, item: Bool, todo: Bool, card: CardPlace?, firstInPage: Bool, image: CGSize?) -> NSParagraphStyle {
+    /// Everything a paragraph style depends on, so equal looks share one style object.
+    struct StyleKey: Hashable {
+        var type: BlockType, indent: Int, conflict: Bool, item: Bool, todo: Bool, card: CardPlace?, firstInPage: Bool
+        var imageWidth: CGFloat?, imageHeight: CGFloat?
+
+        init(_ p: SpaceParagraph, item: Bool, todo: Bool, card: CardPlace?, firstInPage: Bool, image: CGSize?) {
+            type = p.type; indent = p.indent; conflict = p.conflict != nil
+            self.item = item; self.todo = todo; self.card = card; self.firstInPage = firstInPage
+            imageWidth = image?.width; imageHeight = image?.height
+        }
+    }
+
+    static func paragraphStyle(_ k: StyleKey) -> NSParagraphStyle {
         let s = NSMutableParagraphStyle()
-        let line = lineHeight(p.type, item: item)
+        let line = lineHeight(k.type, item: k.item)
         s.minimumLineHeight = line
         s.maximumLineHeight = line
-        let indent = CGFloat(p.indent) * indentStep
+        let indent = CGFloat(k.indent) * indentStep
         var before: CGFloat = 0, after: CGFloat = 6, head = indent, tail: CGFloat = 0
-        if item {
-            if todo {
-                let place = card ?? CardPlace(first: true, last: true)
+        if k.item {
+            if k.todo {
+                let place = k.card ?? CardPlace(first: true, last: true)
                 before = cardRowPad + (place.first ? cardTop + 1 : 0)
                 after = cardRowPad + (place.last ? addRow + 1 + cardBottomMargin : 0)
                 head = cardInsetX + 16 + 12
@@ -150,23 +162,23 @@ enum SpacePageMetrics {
                 before = 3; after = 3; head = 26
             }
         } else {
-            switch p.type {
-            case .h1: before = firstInPage ? 8 : 36; after = 10
-            case .h2: before = firstInPage ? 8 : 28; after = 8
-            case .h3: before = firstInPage ? 8 : 20; after = 8
+            switch k.type {
+            case .h1: before = k.firstInPage ? 8 : 36; after = 10
+            case .h2: before = k.firstInPage ? 8 : 28; after = 8
+            case .h3: before = k.firstInPage ? 8 : 20; after = 8
             case .bullet, .number: head = indent + indentStep; after = 4
             case .quote: head = indent + 16
             case .code: before = 16; after = 18; head = 14; tail = -14
             case .divider: before = 4; after = 4
             case .image:
-                let size = image ?? CGSize(width: 320, height: 200)
+                let size = k.imageWidth.map { CGSize(width: $0, height: k.imageHeight ?? 0) } ?? CGSize(width: 320, height: 200)
                 before = imageTop + max(0, size.height - line)
                 head = size.width + 20
             case .file: before = 4; after = 4; head = 26
             default: break
             }
         }
-        if p.conflict != nil { before += conflictHeader }
+        if k.conflict { before += conflictHeader }
         s.paragraphSpacingBefore = before
         s.paragraphSpacing = after
         s.firstLineHeadIndent = head

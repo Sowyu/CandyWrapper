@@ -20,9 +20,11 @@ public struct FontRuntimeRecipe: Sendable {
 }
 
 public enum FontRuntime {
+    /// A struct key: string interpolation of the role went through reflection on every lookup.
+    private struct FontKey: Hashable { let role: FontRuntimeRole; let size: CGFloat; let weight: CGFloat }
     private struct State {
         var input = FontRuntimeInput()
-        var fonts: [String: NSFont] = [:]
+        var fonts: [FontKey: NSFont] = [:]
         var recipes: [NSFont: FontRuntimeRecipe] = [:]
     }
     private static let state = OSAllocatedUnfairLock(uncheckedState: State())
@@ -66,7 +68,7 @@ public enum FontRuntime {
 
     public static func font(_ role: FontRuntimeRole, size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
         state.withLockUnchecked { s in
-            let key = "\(role):\(size):\(weight.rawValue)"
+            let key = FontKey(role: role, size: size, weight: weight.rawValue)
             if let font = s.fonts[key] { return font }
             let p = s.input
             let family: String
