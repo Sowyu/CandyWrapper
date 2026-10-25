@@ -1,5 +1,7 @@
 # Progress
 
+- [ ] Dither working wave (taken 2026-10-25, dither-working-wave): while a thread works, the Redesign art's dots breathe in a slow wave; still otherwise and under Reduce Motion.
+
 - [x] Prevent the previous private identity from returning to Git (2026-10-25, identity-guard): commit and push guards reject it in metadata, added text, messages, taggers and old ancestors. The secret scan allows the approved public email while retaining its other checks. Global hooks cover new repositories on this Mac; CandyWrapper uses the same installed guard across worktrees. Nine disposable-repository tests and the secret-scan self-test pass. App signing and update scripts are unchanged.
 
 - [ ] Space release polish (taken 2026-10-25, space-polish): child-page links open their page, new pages leave no empty Untitled in Trash, the Edited line after relaunch, reminders from the Table with simple choices, history restore and child pages.
