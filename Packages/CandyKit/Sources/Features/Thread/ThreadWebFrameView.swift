@@ -8,8 +8,7 @@ import WebKit
 /// McpAppFrame.tsx): an `<iframe sandbox="allow-scripts allow-forms">` (never `allow-same-origin`) inside a blank
 /// host page whose own policy allows nothing but that frame. The bridge lives in an isolated script world the
 /// page cannot reach, forwards only messages from the frame's own window, and posts back into it. The document
-/// never navigates: each activation loads the frame once; anything after that is refused. A shown HTML chat can
-/// reuse an empty host for another attachment from that origin after discarding the old iframe.
+/// never navigates: each activation loads the host and its frame once; anything after that is refused.
 ///
 /// The web view exists only while `activate` holds it. `ThreadWebFrameBudget` keeps at most a few alive across
 /// the app; the timeline releases a row's view when the row scrolls away or the thread closes.
@@ -69,7 +68,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     private(set) var webView: ThreadWebView?
     private var page: Page?
     private var hostLoaded = false
-    private var hostNavigation: WKNavigation?
+    private(set) var hostNavigation: WKNavigation?
     private var frameLoads = 0
     /// The last time the reader clicked or typed in the frame: links open only right after that.
     private(set) var lastUserActivity = Date.distantPast
@@ -82,7 +81,6 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     var htmlAttachmentId: String? { didSet { if oldValue != htmlAttachmentId { needsLayout = true } } }
     private var loaded = false
     private var pendingHeight: JSONValue?
-    private var acceptsMessages = false
     private(set) var loadToken = UUID().uuidString
     private let preview = HtmlRenderPreviewImageView()
     private var captureGeneration = 0
@@ -99,7 +97,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     override var isFlipped: Bool { true }
 
     var isLive: Bool { webView != nil }
-    var hasPreview: Bool { preview.hasPixels && preview.superview != nil && !isHiddenOrHasHiddenAncestor }
+    var hasPreview: Bool { preview.image != nil && preview.superview != nil && !isHiddenOrHasHiddenAncestor }
 
     /// Creates the web view and loads `page`, unless it already shows it.
     func activate(_ page: Page) {
@@ -108,15 +106,9 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         self.page = page
         loadToken = UUID().uuidString
         dark = page.dark
-        let candidate = page.kind == .agent ? htmlCache?.takeWebView() : nil
-        let origin = Self.origin(page.src)
-        let spare = candidate?.htmlHostOrigin == origin ? candidate : nil
-        // The outgoing iframe can post a resize before WebKit replaces it. Wait for our isolated start
-        // signal before accepting page messages through the new controller.
-        acceptsMessages = spare == nil
-        let config = spare?.configuration ?? WKWebViewConfiguration()
+        let config = WKWebViewConfiguration()
         config.suppressesIncrementalRendering = false
-        let controller = spare?.configuration.userContentController ?? WKUserContentController()
+        let controller = WKUserContentController()
         if page.kind == .agent {
             config.websiteDataStore = ThreadWebFrameBudget.dataStore
             let world = WKContentWorld.world(name: "t3-host")
@@ -127,10 +119,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
             config.websiteDataStore = .nonPersistent()
         }
         config.userContentController = controller
-        let web = spare ?? ThreadWebView(frame: bounds, configuration: config)
-        web.frame = bounds
-        // The recycled host can still contain the outgoing frame until WebKit runs the replacement script.
-        web.isHidden = spare != nil
+        let web = ThreadWebView(frame: bounds, configuration: config)
         web.forwardsScroll = page.kind == .agent
         web.setValue(false, forKey: "drawsBackground")
         web.navigationDelegate = self
@@ -138,28 +127,12 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         web.onUserActivity = { [weak self] in self?.lastUserActivity = Date() }
         addSubview(web)
         webView = web
-        htmlCache?.activated(web)
         needsLayout = true
         if let key = previewKey, htmlCache?.contains(key) == true { layoutSubtreeIfNeeded() }
-        hostLoaded = spare != nil
+        hostLoaded = false
         frameLoads = 0
         shortcutsPosted = false
-        if spare != nil {
-            let token = loadToken
-            web.callAsyncJavaScript(Self.bridgeScript + Self.replaceFrameScript,
-                                    arguments: ["src": page.src.absoluteString, "title": page.title, "dark": page.dark, "token": token],
-                                    in: nil, in: .world(name: "t3-host")) { [weak self, weak web] result in
-                guard case .failure = result, let self, let web, self.webView === web, self.loadToken == token else { return }
-                // A cached host whose process was reclaimed starts from its HTML again.
-                self.hostLoaded = false
-                self.frameLoads = 0
-                self.acceptsMessages = true
-                self.hostNavigation = web.loadHTMLString(Self.hostPage(page), baseURL: URL(string: "about:blank"))
-            }
-        } else {
-            web.htmlHostOrigin = page.kind == .agent ? origin : nil
-            hostNavigation = web.loadHTMLString(Self.hostPage(page), baseURL: URL(string: "about:blank"))
-        }
+        hostNavigation = web.loadHTMLString(Self.hostPage(page), baseURL: URL(string: "about:blank"))
         if page.kind == .agent { ThreadWebFrameBudget.add(self) }
         #if DEBUG
         Self.benchmarkObserver?("activate", page, self, nil)
@@ -168,7 +141,6 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
 
     /// Tears the web view down; its content process goes when no other view uses it.
     func release() {
-        let wasLoaded = loaded
         lastUserActivity = .distantPast
         loaded = false
         pendingHeight = nil
@@ -177,9 +149,8 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         capturing = false
         capturedKey = nil
         displayedKey = nil
-        preview.clear()
+        preview.image = nil
         preview.removeFromSuperview()
-        acceptsMessages = false
         hostNavigation = nil
         guard let web = webView else { return }
         #if DEBUG
@@ -193,7 +164,6 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         web.removeFromSuperview()
         webView = nil
         ThreadWebFrameBudget.remove(self)
-        htmlCache?.recycle(web, reusable: wasLoaded)
         needsLayout = true
     }
 
@@ -221,12 +191,13 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         super.layout()
         guard let key = previewKey, htmlCache?.isActive == true, window != nil, !isHiddenOrHasHiddenAncestor else { return }
         if displayedKey != key {
-            preview.clear()
+            preview.image = nil
             preview.removeFromSuperview()
             displayedKey = nil
             if !paintReady, let image = htmlCache?.image(for: key) {
                 displayedKey = key
-                preview.show(image) { [weak cache = htmlCache] in cache?.image(for: key) }
+                preview.image = image
+                preview.imageScaling = .scaleAxesIndependently
                 preview.frame = bounds
                 preview.autoresizingMask = [.width, .height]
                 addSubview(preview, positioned: .above, relativeTo: webView)
@@ -241,7 +212,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     func refreshPreview() {
         capturedKey = nil
         displayedKey = nil
-        preview.clear()
+        preview.image = nil
         preview.removeFromSuperview()
         paintReady = false
         if loaded, let webView { preparePreview(webView) }
@@ -255,7 +226,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
               let web = webView, let cache = htmlCache, let key = previewKey else { return }
         if cache.contains(key) {
             capturedKey = key
-            preview.clear()
+            preview.image = nil
             preview.removeFromSuperview()
             return
         }
@@ -265,7 +236,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         config.afterScreenUpdates = true
         web.takeSnapshot(with: config) { [weak self, weak web, weak cache] image, _ in
             guard let self, let web, self.webView === web, self.captureGeneration == generation else { return }
-            self.preview.clear()
+            self.preview.image = nil
             self.preview.removeFromSuperview()
             self.capturing = false
             guard self.previewKey == key else { self.needsLayout = true; return }
@@ -293,21 +264,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     func received(_ body: Any, isMainFrame: Bool, token: String) {
         // Only the host page's isolated bridge speaks here; a framed document never reaches this world.
         guard isMainFrame, webView != nil, token == loadToken else { return }
-        // The bridge forwards page messages as strings. This structured signal comes only from our own
-        // isolated-world iframe load listener, including a replacement frame in a reused host.
-        if (body as? [String: Any])?["t3FrameStarted"] as? String == loadToken {
-            acceptsMessages = true
-            webView?.isHidden = false
-            return
-        }
-        if (body as? [String: Any])?["t3FrameLoaded"] as? String == loadToken {
-            loaded = true
-            webView?.isHidden = false
-            flushHeight()
-            if let webView { preparePreview(webView) }
-            return
-        }
-        guard acceptsMessages, let text = body as? String, let json = try? JSONValue(parsing: Data(text.utf8)) else { return }
+        guard let text = body as? String, let json = try? JSONValue(parsing: Data(text.utf8)) else { return }
         // T3 reports at DOMContentLoaded, on resize and on load (htmlRender.ts:405). While images load,
         // keep its last report without repeatedly resizing and retiling the native timeline.
         if htmlCache != nil, !loaded, HtmlRenderTheme.contentHeight(json) != nil {
@@ -436,62 +393,17 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     })();
     """
 
-    /// Replacing the iframe discards its complete browsing context. The host and its strict origin policy stay;
-    /// callers reuse this host only for another HTML attachment from that same origin.
-    private static let replaceFrameScript = """
-    document.getElementById("f")?.remove();
-    var f = document.createElement("iframe");
-    f.id = "f";
-    f.title = title;
-    f.setAttribute("sandbox", "allow-scripts allow-forms");
-    f.style.colorScheme = dark ? "dark" : "light";
-    f.src = src;
-    f.addEventListener("load", function(){ if (document.getElementById("f") === f) window.webkit.messageHandlers.t3host.postMessage({t3FrameLoaded:token}); }, {once:true});
-    window.webkit.messageHandlers.t3host.postMessage({t3FrameStarted:token});
-    document.body.appendChild(f);
-    return true;
-    """
+
 }
 
 /// Cached pixels never intercept input meant for the live page underneath.
-private final class HtmlRenderPreviewImageView: NSView {
-    private var pending: NSImage?
-    private var reload: (() -> NSImage?)?
-    private(set) var hasPixels = false
-
-    override var wantsUpdateLayer: Bool { false }
-
-    func show(_ image: NSImage, reload: @escaping () -> NSImage?) {
-        pending = image
-        self.reload = reload
-        hasPixels = true
-        needsDisplay = true
-    }
-
-    func clear() {
-        pending = nil
-        reload = nil
-        hasPixels = false
-        needsDisplay = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard let image = pending ?? reload?() else { hasPixels = false; return }
-        image.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true,
-                   hints: [.interpolation: NSImageInterpolation.none.rawValue])
-        // The backing layer now owns the rendered result. Do not pin purgeable source pixels until the
-        // live iframe finishes; an uncommon redraw can reacquire them through the cache.
-        pending = nil
-    }
-
+private final class HtmlRenderPreviewImageView: NSImageView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 /// The web view: wheel events go to the timeline (a framed page fits its content and hides its scrollbar),
 /// and clicks and keys mark the reader's activity for link opening.
 final class ThreadWebView: WKWebView {
-    var htmlHostOrigin: String?
-    var htmlUses = 0
     var onUserActivity: (() -> Void)?
     /// A file preview scrolls its own page; a timeline frame hands the wheel to the timeline.
     var forwardsScroll = true

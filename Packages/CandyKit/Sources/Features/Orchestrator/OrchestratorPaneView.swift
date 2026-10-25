@@ -850,7 +850,7 @@ private extension NSColor {
 
 /// A page the Orchestrator published with `html_render`, framed as the thread view frames it (`HtmlRenderRowView`): the
 /// same web frame, theme and messages, at the server's measured height until the page reports its own. The web view
-/// exists only while the card intersects the viewport. The chat shares cached responses and an empty host while it is shown.
+/// exists only while the card intersects the viewport. The chat shares cached responses and purgeable pixels while it is shown.
 // ponytail: no "Open full screen"; borrow HtmlRenderRowView's when the Conductor needs it
 final class OrchestratorHtmlCard: DSView {
     let page: HtmlRenderReference

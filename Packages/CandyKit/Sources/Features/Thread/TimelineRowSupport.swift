@@ -111,7 +111,7 @@ final class TimelineContext {
 
     let htmlCache = HtmlRenderWebCache()
 
-    /// The timeline hid or changed thread: the empty host and shared HTTP cache go too.
+    /// The timeline hid or changed thread: the pixels and shared HTTP cache go too.
     func releasePages() { htmlCache.setActive(false) }
 
     isolated deinit { releasePages() }

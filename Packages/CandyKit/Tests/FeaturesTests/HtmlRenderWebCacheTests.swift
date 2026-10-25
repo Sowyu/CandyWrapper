@@ -14,169 +14,44 @@ extension WebFrameSuites {
             defer { cache.setActive(false); frame.release() }
             frame.activate(.init(src: URL(string: "http://page.invalid/page.html")!, title: "Current", dark: false))
             let web = try #require(frame.webView)
-            frame.webViewWebContentProcessDidTerminate(ThreadWebView(frame: .zero, configuration: WKWebViewConfiguration()))
-            #expect(frame.webView === web, "a retired web view cannot terminate the current page")
-            var messages = 0
-            frame.onMessage = { _ in messages += 1 }
-            frame.received(#"{"jsonrpc":"2.0","method":"ui/notifications/size-changed","params":{"height":123}}"#,
-                           isMainFrame: true, token: "retired activation")
-            #expect(messages == 0)
-            let retired = try #require(web.loadHTMLString("<html></html>", baseURL: URL(string: "about:blank")))
-            frame.webView(web, didFinish: retired)
-            frame.release()
-            #expect(cache.takeWebView() == nil, "an unrelated completion cannot mark the current host ready for reuse")
-        }
-
-        @Test func twoVisibleViewsDoNotKeepAnEmptyThirdHost() {
-            let cache = HtmlRenderWebCache()
-            cache.setActive(true)
-            defer { cache.setActive(false) }
-            let config = WKWebViewConfiguration()
-            config.websiteDataStore = .nonPersistent()
-            let first = ThreadWebView(frame: .zero, configuration: config)
-            let second = ThreadWebView(frame: .zero, configuration: config)
-            let spare = ThreadWebView(frame: .zero, configuration: config)
-            cache.recycle(spare)
-            cache.activated(first)
-            cache.activated(second)
-            #expect(cache.takeWebView() == nil)
-            cache.recycle(first, reusable: false)
-            cache.recycle(spare)
-            #expect(cache.takeWebView() === spare, "one visible frame can share one empty host")
-        }
-
-        @Test func aHostRetiresAfterOneHandoff() {
-            let cache = HtmlRenderWebCache()
-            cache.setActive(true)
-            defer { cache.setActive(false) }
-            let config = WKWebViewConfiguration()
-            config.websiteDataStore = .nonPersistent()
-            let web = ThreadWebView(frame: .zero, configuration: config)
-            cache.activated(web)
-            cache.recycle(web)
-            #expect(cache.takeWebView() === web)
-            cache.activated(web)
-            cache.recycle(web)
-            #expect(cache.takeWebView() == nil, "removed image documents cannot accumulate in one host")
-        }
-
-        @MainActor final class Pages: NSObject, WKURLSchemeHandler {
-            func webView(_ webView: WKWebView, start task: any WKURLSchemeTask) {
-                let url = task.request.url!
-                let height = url.lastPathComponent == "second" ? 222 : 333
-                let html = """
-                <html><body><script>window.addEventListener('load',()=>setTimeout(()=>parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/size-changed',params:{height:\(height)}},'*'),0));</script></body></html>
-                """
-                let data = Data(html.utf8)
-                task.didReceive(URLResponse(url: url, mimeType: "text/html", expectedContentLength: data.count, textEncodingName: "utf-8"))
-                task.didReceive(data)
-                task.didFinish()
-            }
-            func webView(_ webView: WKWebView, stop task: any WKURLSchemeTask) {}
-        }
-
-        @Test func reusedHostsForwardTheNewIframesHeightWithOneBridge() async throws {
-            let cache = HtmlRenderWebCache()
-            cache.setActive(true)
-            let config = WKWebViewConfiguration()
-            config.websiteDataStore = ThreadWebFrameBudget.dataStore
-            config.setURLSchemeHandler(Pages(), forURLScheme: "cw-html-test")
-            let web = ThreadWebView(frame: NSRect(x: 0, y: 0, width: 300, height: 300), configuration: config)
-            web.htmlHostOrigin = "cw-html-test://sandbox"
-            let first = ThreadWebFrameView.Page(src: URL(string: "cw-html-test://sandbox/first")!, title: "First", dark: false)
-            web.loadHTMLString(ThreadWebFrameView.hostPage(first), baseURL: URL(string: "about:blank"))
-            #expect(await eventually { web.url != nil && !web.isLoading })
-            let frame = ThreadWebFrameView(frame: web.frame)
-            frame.htmlCache = cache
             var heights: [Double] = []
             frame.onMessage = { if let height = HtmlRenderTheme.contentHeight($0) { heights.append(height) } }
-            defer { cache.setActive(false); frame.release() }
-            cache.recycle(web)
-            frame.activate(.init(src: URL(string: "cw-html-test://sandbox/second")!, title: "Second", dark: true))
+            let old = #"{"jsonrpc":"2.0","method":"ui/notifications/size-changed","params":{"height":123}}"#
+            frame.received(old, isMainFrame: true, token: "retired activation")
+            #expect(heights.isEmpty)
+            frame.received(old, isMainFrame: true, token: frame.loadToken)
+            let latest = #"{"jsonrpc":"2.0","method":"ui/notifications/size-changed","params":{"height":333}}"#
+            frame.received(latest, isMainFrame: true, token: frame.loadToken)
+            #expect(heights.isEmpty, "loading heights are coalesced")
+            #expect(frame.shortcutsPosted, "height coalescing does not delay shortcuts")
+            let navigation = try #require(frame.hostNavigation)
+            let retired = try #require(web.loadHTMLString("<html></html>", baseURL: URL(string: "about:blank")))
+            frame.webView(web, didFinish: retired)
+            #expect(heights.isEmpty, "a retired completion cannot flush the current height")
+            frame.webViewWebContentProcessDidTerminate(ThreadWebView(frame: .zero, configuration: WKWebViewConfiguration()))
             #expect(frame.webView === web)
-            #expect(await eventually { heights == [222] })
-            frame.activate(.init(src: URL(string: "cw-html-test://sandbox/third")!, title: "Third", dark: false))
-            #expect(frame.webView === web)
-            #expect(await eventually { heights == [222, 333] })
-            #expect(web.backForwardList.backList.isEmpty, "iframe handoffs do not retain whole page history")
-            #expect(web.configuration.userContentController.userScripts.count == 1)
+            frame.webView(web, didFinish: navigation)
+            #expect(heights == [333], "only the last loading report reaches layout")
+            frame.release()
+            frame.received(latest, isMainFrame: true, token: frame.loadToken)
+            #expect(heights == [333])
         }
 
-        @Test func aSameTurnHandoffReusesOnlyOneViewAndReplacesItsBridge() throws {
-            let cache = HtmlRenderWebCache()
-            cache.setActive(true)
-            let first = ThreadWebFrameView(), second = ThreadWebFrameView()
-            first.htmlCache = cache
-            second.htmlCache = cache
-            defer { cache.setActive(false); first.release(); second.release() }
-            let src = URL(string: "http://page.invalid/page.html")!
-            first.activate(.init(src: src, title: "First", dark: false))
-            let web = try #require(first.webView)
-            first.release()
-            cache.recycle(web)
-            #expect(!first.isLive)
-            #expect(web.configuration.userContentController.userScripts.isEmpty)
-            second.activate(.init(src: src, title: "Second", dark: true))
-            #expect(second.webView === web, "the next row can use the process without retaining the old frame")
-            #expect(web.isHidden, "the outgoing iframe cannot flash before replacement")
-            #expect(web.configuration.userContentController.userScripts.count == 1, "old bridge scripts never accumulate")
-            var heights: [Double] = []
-            second.onMessage = { if let height = HtmlRenderTheme.contentHeight($0) { heights.append(height) } }
-            let message = #"{"jsonrpc":"2.0","method":"ui/notifications/size-changed","params":{"height":222}}"#
-            second.received(message, isMainFrame: true, token: second.loadToken)
-            #expect(heights.isEmpty, "the outgoing iframe can still post before the replacement script runs")
-            second.received(["t3FrameStarted": first.loadToken], isMainFrame: true, token: second.loadToken)
-            second.received(message, isMainFrame: true, token: second.loadToken)
-            #expect(heights.isEmpty, "a retired iframe cannot reopen the new bridge")
-            second.received(["t3FrameStarted": second.loadToken], isMainFrame: true, token: second.loadToken)
-            #expect(!web.isHidden, "the new iframe can paint as soon as the outgoing one is removed")
-            second.received(message, isMainFrame: true, token: second.loadToken)
-            #expect(heights.isEmpty, "intermediate heights wait for the image load")
-            #expect(second.shortcutsPosted, "height coalescing does not delay the shortcut handshake")
-            let final = #"{"jsonrpc":"2.0","method":"ui/notifications/size-changed","params":{"height":333}}"#
-            second.received(final, isMainFrame: true, token: second.loadToken)
-            second.received(["t3FrameLoaded": second.loadToken], isMainFrame: true, token: second.loadToken)
-            #expect(heights == [333], "only the last loading height reaches the native timeline")
-            #expect(!web.isHidden)
-        }
-
-        @Test func aSpareClearsItsPageAndCannotReturnAfterHide() async {
-            let cache = HtmlRenderWebCache()
-            cache.setActive(true)
-            let config = WKWebViewConfiguration()
-            config.websiteDataStore = .nonPersistent()
-            let web = ThreadWebView(frame: NSRect(x: 0, y: 0, width: 300, height: 300), configuration: config)
-            web.loadHTMLString("<html><body><iframe id='f' srcdoc='<p>Old page</p>'></iframe></body></html>", baseURL: URL(string: "about:blank"))
-            #expect(await eventually { web.url?.absoluteString == "about:blank" && !web.isLoading })
-            cache.recycle(web)
-            var evaluation = "not evaluated"
-            let cleared = await eventually(seconds: 3) {
-                do {
-                    let removed = try await web.callAsyncJavaScript("return document.getElementById('f') === null", arguments: [:],
-                                                                   in: nil, contentWorld: .world(name: "t3-host"))
-                    evaluation = String(describing: removed)
-                    return removed as? Bool == true
-                } catch {
-                    evaluation = String(describing: error)
-                    return false
-                }
-            }
-            #expect(cleared, Comment(rawValue: evaluation))
-            cache.setActive(false)
-            cache.setActive(true)
-            defer { cache.setActive(false) }
-            #expect(cache.takeWebView() == nil)
-        }
-
-        @Test func forceReloadDiscardsEveryShownDocumentsSpare() {
+        @Test func forceReloadClearsEveryShownDocumentsPixels() {
             let caches = [HtmlRenderWebCache(), HtmlRenderWebCache()]
+            let image = HtmlRenderPixelCacheTests.image(), key = HtmlRenderPixelCacheTests.key()
             for cache in caches {
                 cache.setActive(true)
-                cache.recycle(ThreadWebView(frame: .zero, configuration: WKWebViewConfiguration()))
+                cache.insert(image, for: key, generation: cache.generation)
             }
             defer { caches.forEach { $0.setActive(false) } }
+            let generations = caches.map(\.generation)
             ThreadWebFrameBudget.clearData()
-            for cache in caches { #expect(cache.takeWebView() == nil) }
+            for (cache, old) in zip(caches, generations) {
+                #expect(cache.cost == 0)
+                cache.insert(image, for: key, generation: old)
+                #expect(cache.cost == 0)
+            }
         }
 
         @Test func shownDocumentsKeepOneEphemeralStoreAcrossGapsBetweenPages() throws {
