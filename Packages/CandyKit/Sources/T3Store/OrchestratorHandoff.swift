@@ -97,6 +97,23 @@ public struct OrchestratorHandoff: Equatable, Sendable {
         messages.contains { $0.role == "user" && OrchestratorEventBatch.isEventMessage($0.text) && ($0.createdAt.epochMs ?? 0) >= since - 5_000 }
     }
 
+    /// Queued runs that repeat a scheduled task already running or queued ahead of them, to cancel. T3 sends a bound
+    /// task's prompt in queue mode every interval and counts it done once queued (ScheduledTaskService.ts:850-866), so a
+    /// busy Orchestrator collected one run per interval and ran them back to back later. The first queued run of each task
+    /// stays, unless that task's run is the one running.
+    public static func redundantScheduledRuns(runs: [Run], messages: [ConversationMessage]) -> [RunId] {
+        let taskOf = Dictionary(messages.compactMap { m in m.scheduledTaskId.map { (m.id, $0) } }, uniquingKeysWith: { a, _ in a })
+        func task(_ run: Run) -> String? { run.userMessageId.flatMap { taskOf[$0] } }
+        let active: Set<ThreadStatus> = [.preparing, .starting, .running, .waiting]
+        var seen = Set(runs.filter { active.contains($0.status) }.compactMap(task))
+        let queued = runs.filter { $0.status == .queued }
+            .sorted { ($0.queuePosition ?? .max, $0.requestedAt.epochMs ?? 0, $0.ordinal) < ($1.queuePosition ?? .max, $1.requestedAt.epochMs ?? 0, $1.ordinal) }
+        return queued.compactMap { run in
+            guard let id = task(run) else { return nil }
+            return seen.insert(id).inserted ? nil : run.id
+        }
+    }
+
     /// The two searches that find Orchestrator threads. T3 returns only each thread's newest user message with the phrase
     /// (ThreadSearch.ts:100-127), so a thread where the user later mentioned the brief hides its first brief; an updated
     /// brief, sent with the next message after a settings change, then often shows instead.

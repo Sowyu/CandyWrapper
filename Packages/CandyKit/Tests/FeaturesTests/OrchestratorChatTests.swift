@@ -124,6 +124,22 @@ import Testing
         #expect(bubbles(shown) == bubbles(hidden))
     }
 
+    /// A scheduled task bound to its thread sends prompts as user messages; they're the schedule's, not yours.
+    @Test func scheduledPromptsAreActivity() {
+        var check = message("m2", "user", "Space build check: list the CandyWrapper threads that aren't settled, read only what changed.", minutes: 30)
+        check.scheduledTaskId = "scheduled-task:space"
+        var again = message("m3", "user", check.text, minutes: 60)
+        again.scheduledTaskId = "scheduled-task:space"
+        let messages = [message("m1", "user", "Build Space", minutes: 0), check, again]
+        let hidden = OrchestratorChat.items(messages: messages, turnItems: [], running: false, now: start)
+        let bubbles = hidden.compactMap { if case .bubble(_, _, let text, _, _) = $0 { text } else { nil } }
+        #expect(bubbles == ["Build Space"])
+        let shown = OrchestratorChat.items(messages: messages, turnItems: [], running: false, activity: true, now: start)
+        let lines = shown.compactMap { if case .line(_, let text, _) = $0 { text } else { nil } }
+        #expect(lines == ["Scheduled: Space build check", "Scheduled: Space build check"])
+        #expect(OrchestratorChat.scheduledLine("Remind me to stretch every hour and also drink some water and check the build status") == "Scheduled: Remind me to stretch every hour and also drink some water an…")
+    }
+
     /// Images ride on the user-message turn item; a message of images only hides T3's stand-in text.
     @Test func sentImagesShowBeforeTheBubble() throws {
         let item = try JSONDecoder().decode(TurnItem.self, from: JSONSerialization.data(withJSONObject: [

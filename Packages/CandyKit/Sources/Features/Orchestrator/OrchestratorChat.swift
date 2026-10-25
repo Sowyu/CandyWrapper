@@ -83,6 +83,9 @@ public enum OrchestratorChat {
                     }
                 } else if text.hasPrefix(scheduledPrefix) {
                     line("scheduled-\(mid)", "Scheduled check while CandyWrapper was closed", nil)
+                } else if m.scheduledTaskId != nil {
+                    // Any scheduled task bound to its thread, like one it set up itself: the schedule's, not yours.
+                    line("scheduled-\(mid)", scheduledLine(text), nil)
                 } else if let lines = automaticLines(m, text: text) {
                     // T3's own deliveries, like a delegated task's result, come as user messages but aren't yours.
                     for (i, l) in lines.enumerated() { line("automatic-\(mid)-\(i)", l, nil) }
@@ -166,6 +169,14 @@ public enum OrchestratorChat {
             guard case .bubble(let id, let user, let text, _, _) = item else { return item }
             return .bubble(id: id, fromUser: user, text: text, first: sender(i - 1) != user, last: sender(i + 1) != user)
         }
+    }
+
+    /// "Scheduled: Space build check" from a scheduled run's prompt: its first sentence, cut at 60 characters.
+    static func scheduledLine(_ text: String) -> String {
+        let first = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
+        let label = first.components(separatedBy: ":").first.flatMap { $0.count <= 60 && $0.count < first.count ? $0 : nil }
+            ?? (first.count > 60 ? String(first.prefix(60)) + "…" : first)
+        return "Scheduled: " + label.trimmingCharacters(in: .whitespaces)
     }
 
     /// The activity lines for a message T3 delivered on its own into the thread, like a delegated task's result

@@ -129,6 +129,40 @@ import Testing
         #expect(!OrchestratorHandoff.eventArrived([old, chat], since: since))
     }
 
+    func run(_ id: String, _ status: String, message: String, position: Int? = nil, ordinal: Int = 1) -> Run {
+        let pos = position.map { ",\"queuePosition\":\($0)" } ?? ""
+        return try! JSONDecoder().decode(Run.self, from: Data("""
+            {"id":"\(id)","threadId":"orch","ordinal":\(ordinal),"status":"\(status)","requestedAt":"2026-10-25T07:\(String(format: "%02d", ordinal)):00Z","startedAt":null,"completedAt":null,"userMessageId":"\(message)"\(pos)}
+            """.utf8))
+    }
+
+    func scheduled(_ id: String, task: String?, minutes: Double) -> ConversationMessage {
+        var m = message(id, "user", "Space build check: list the CandyWrapper threads that aren't settled…", minutes: minutes, run: nil)
+        m.scheduledTaskId = task
+        return m
+    }
+
+    /// The user's thread on 2026-10-25: a scheduled task bound to the Orchestrator queued a run every 30 minutes while it
+    /// was busy, 11 in all. One of them runs; the rest are cancelled.
+    @Test func repeatedScheduledRunsCoalesceIntoOne() {
+        let messages = [message("u0", "user", "Ship the notes", minutes: 0, run: nil)] + (1...11).map { scheduled("s\($0)", task: "space-check", minutes: Double($0) * 30) }
+        let busy = [run("r0", "running", message: "u0", ordinal: 0)] + (1...11).map { run("r\($0)", "queued", message: "s\($0)", position: $0, ordinal: $0) }
+        let cancel = OrchestratorHandoff.redundantScheduledRuns(runs: busy, messages: messages)
+        #expect(cancel.map(\.rawValue) == (2...11).map { "r\($0)" })
+        // When that task's run is the one running, every queued repeat goes.
+        let running = [run("r1", "running", message: "s1", ordinal: 1)] + (2...11).map { run("r\($0)", "queued", message: "s\($0)", position: $0, ordinal: $0) }
+        #expect(OrchestratorHandoff.redundantScheduledRuns(runs: running, messages: messages).count == 10)
+        // Two tasks keep one run each, and your own queued messages always stay.
+        let mixed = messages + [scheduled("c1", task: "check", minutes: 400), scheduled("c2", task: "check", minutes: 410),
+                                message("u1", "user", "And then the review", minutes: 420, run: nil)]
+        let queue = [run("q1", "queued", message: "s1", position: 1, ordinal: 1), run("q2", "queued", message: "c1", position: 2, ordinal: 2),
+                     run("q3", "queued", message: "u1", position: 3, ordinal: 3), run("q4", "queued", message: "s2", position: 4, ordinal: 4),
+                     run("q5", "queued", message: "c2", position: 5, ordinal: 5)]
+        #expect(OrchestratorHandoff.redundantScheduledRuns(runs: queue, messages: mixed).map(\.rawValue) == ["q4", "q5"])
+        // Nothing scheduled, nothing to cancel.
+        #expect(OrchestratorHandoff.redundantScheduledRuns(runs: [run("q", "queued", message: "u0", position: 1)], messages: messages).isEmpty)
+    }
+
     /// The task's stamp survives decoding from the server's list.
     @Test func scheduledTasksKeepTheirStamp() throws {
         let json = try JSONValue(parsing: Data(#"{"tasks":[{"id":"check","title":"t","prompt":"p","enabled":false,"schedule":{"type":"interval","everyMs":60000},"projectId":"p","updatedAt":"2026-10-24T10:00:05.000Z"}]}"#.utf8))

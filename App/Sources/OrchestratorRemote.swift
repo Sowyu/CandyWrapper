@@ -62,12 +62,19 @@ final class OrchestratorRemote {
     private func runCalls(env: String, thread: ThreadId, since: Int64, activeAtStart: RunId?) async {
         // As the Android app does: wait, so a "Result:" from it can land, and run only calls nobody answered yet.
         try? await Task.sleep(for: OrchestratorHandoff.callDelay)
-        guard await mayRelay() else { return }
         let projection: ThreadProjection
         do {
             let json = try await environments.request(env, "orchestration.getThreadProjection", .object(["threadId": .string(thread.localId.rawValue)]))
             projection = try json.decode(as: ThreadProjection.self)
         } catch { return }
+        // Repeats of one scheduled task that piled up behind a busy turn: one runs. Whoever relays or not, since a
+        // second cancel of the same run only fails.
+        for run in OrchestratorHandoff.redundantScheduledRuns(runs: projection.runs, messages: projection.messages) {
+            _ = try? await environments.request(env, "orchestration.dispatchCommand", .object([
+                "type": .string("queued-run.cancel"), "commandId": .string(UUID().uuidString.lowercased()),
+                "threadId": .string(thread.localId.rawValue), "runId": .string(run.rawValue)]))
+        }
+        guard await mayRelay() else { return }
         // Marked before the calls run, so a second turn end meanwhile finds nothing left to run.
         let replies = OrchestratorHandoff.callsToRun(projection.messages, runs: projection.runs, since: since,
                                                      activeAtStart: activeAtStart, handled: handled)

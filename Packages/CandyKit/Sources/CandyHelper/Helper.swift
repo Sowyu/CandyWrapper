@@ -271,6 +271,14 @@ final class Helper {
         guard let orchestrator, let link = links[homeId],
               let json = try? await link.request("orchestration.getThreadProjection", .object(["threadId": .string(orchestrator)])),
               let projection = try? json.decode(as: ThreadProjection.self) else { return }
+        // Repeats of one scheduled task that piled up behind a busy turn: one runs.
+        let repeats = OrchestratorHandoff.redundantScheduledRuns(runs: projection.runs, messages: projection.messages)
+        for run in repeats {
+            _ = try? await link.request("orchestration.dispatchCommand", .object([
+                "type": .string("queued-run.cancel"), "commandId": .string(UUID().uuidString.lowercased()),
+                "threadId": .string(orchestrator), "runId": .string(run.rawValue)]))
+        }
+        if !repeats.isEmpty { log("cancelled \(repeats.count) repeated scheduled run\(repeats.count == 1 ? "" : "s")") }
         let replies = OrchestratorHandoff.callsToRun(projection.messages, runs: projection.runs, since: since,
                                                      activeAtStart: activeAtStart, handled: handled)
         handled.formUnion(replies.map(\.id.rawValue))
