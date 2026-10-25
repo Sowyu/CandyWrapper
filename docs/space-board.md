@@ -25,3 +25,9 @@ Piece 14 of the build plan in [Space](space.md): Board view of a page's items, i
 - Building filters from the Filter menu. It shows "No filters" or clears them. The Table view's filter editor should serve both.
 - Dragging columns to reorder options, and keyboard moves for cards.
 - Cards aren't separate accessibility elements yet, since the canvas draws them.
+
+## Checked on 2026-10-25
+
+On screen against the sandbox, in a test app with its own bundle: Board on a new page added Status and its three lanes. "+ New" added four cards, a drag moved Emma into In progress, a drag put Piranesi above Dune, and a click opened Dune as its page under "Space › Reading list". After quitting and relaunching, the cards came back in the same columns and order. Light mode drew white cards on faint lanes, and "+" added an "Abandoned" column in the next free color. The screenshots are `dark-board.png`, `dark-drag.png`, `dark-open-card.png`, `dark-after-relaunch.png`, `light-board.png` and `light-add-column.png` in `~/CandyWrapper-research/notes/space-14-board/`.
+
+A rebuilt test app can't read the Space key an earlier build saved, since the Keychain ACL trusts only the build that made it, and asks for the login password. Use a fresh task name for each rebuild you check on screen.
