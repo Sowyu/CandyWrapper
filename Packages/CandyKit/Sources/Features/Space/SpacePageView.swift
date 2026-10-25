@@ -12,7 +12,7 @@ public final class SpacePageView: DSView {
     public var onOpenPage: (PageID) -> Void = { _ in }
     public private(set) var page: PageID?
     private(set) var editor: SpacePageEditor?
-    private var stub: SpaceViewStub?
+    private var stub: NSView?
     private var shownView: ViewType?
     let header = SpacePageHeaderView()
     private let emptyTitle = LabelView("No pages yet", font: DSFont.ui(32, weight: .semibold), color: Themed.color(\.mutedForeground))
@@ -91,7 +91,12 @@ public final class SpacePageView: DSView {
         needsLayout = true
     }
 
-    /// Board, Table and Timetable are stubs until pieces 13 to 15; each new view replaces its case here.
+    /// Board, Table and Timetable register here, one line each. A view type without an entry shows the stub.
+    /// Each view gets the store, the page and this tab, whose `header` lands on top of it after it's made.
+    static let itemViews: [ViewType: @MainActor (SpaceDocumentStore, PageID, SpacePageView) -> NSView] = [
+        .board: SpaceBoardView.make,
+    ]
+
     private func mount(_ view: ViewType) {
         guard let page else { return }
         clearContent()
@@ -103,7 +108,7 @@ public final class SpacePageView: DSView {
             addSubview(editor.scrollView)
             self.editor = editor
         } else {
-            let stub = SpaceViewStub(view: view)
+            let stub = Self.itemViews[view]?(store, page, self) ?? SpaceViewStub(view: view)
             stub.addSubview(header)
             if view == .timetable { SpaceTimetableView.install(in: stub, header: header, store: store, page: page) { [weak self] in self?.onOpenPage($0) } }
             addSubview(stub)
@@ -168,8 +173,9 @@ public final class SpacePageView: DSView {
             }
             header.frame = NSRect(x: x, y: 0, width: column, height: h)
         } else if let stub {
+            // Board, Table and Timetable use the full width, so their header does too.
             stub.frame = bounds
-            header.frame = NSRect(x: x, y: 0, width: column, height: h)
+            header.frame = NSRect(x: 32, y: 0, width: max(0, bounds.width - 64), height: h)
         }
     }
 }
