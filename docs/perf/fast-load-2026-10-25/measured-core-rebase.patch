@@ -1,0 +1,40 @@
+diff --git a/Packages/CandyKit/Sources/Features/Usage/UsageChartView.swift b/Packages/CandyKit/Sources/Features/Usage/UsageChartView.swift
+index 7dbcbb900bb0337083cabe54e2cb79e8c40f3cdf..50911f03d024b72a66ad098155ed3fc291961d50 100644
+--- a/Packages/CandyKit/Sources/Features/Usage/UsageChartView.swift
++++ b/Packages/CandyKit/Sources/Features/Usage/UsageChartView.swift
+@@ -18 +17,0 @@ public enum UsageStyle {
+-        case .muse: NSColor(srgbRed: 0x08 / 255, green: 0x66 / 255, blue: 0xff / 255, alpha: 1)
+diff --git a/Packages/CandyKit/Sources/T3Protocol/Domain/PullRequests.swift b/Packages/CandyKit/Sources/T3Protocol/Domain/PullRequests.swift
+index 77044a17027df5ea7ec45d30b24f4f3ca9c671b7..cf8232572c64f9c1bf46c5c2b1f6a4b30ed712ea 100644
+--- a/Packages/CandyKit/Sources/T3Protocol/Domain/PullRequests.swift
++++ b/Packages/CandyKit/Sources/T3Protocol/Domain/PullRequests.swift
+@@ -679,2 +679 @@ public enum PullRequestErrors {
+-    /// `PROVIDER_REQUIREMENT` (3473's pullRequest.ts:1270), for servers older than 3669, which send the
+-    /// host's own `requirement` instead (pullRequest.ts:887-901, 233f6eac69).
++    /// `PROVIDER_REQUIREMENT` (pullRequest.ts:1270).
+@@ -699 +697,0 @@ public enum PullRequestErrors {
+-            let sent = fields["requirement"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
+@@ -702,2 +700,2 @@ public enum PullRequestErrors {
+-            case "cli-missing": return sent ?? requirement?.missing ?? "The tool this host is read through is not installed or set up."
+-            case "cli-unauthenticated": return sent ?? requirement?.unauthenticated ?? "This host has no working credentials."
++            case "cli-missing": return requirement?.missing ?? "The tool this host is read through is not installed or set up."
++            case "cli-unauthenticated": return requirement?.unauthenticated ?? "This host has no working credentials."
+diff --git a/Packages/CandyKit/Sources/T3Protocol/Domain/Settings.swift b/Packages/CandyKit/Sources/T3Protocol/Domain/Settings.swift
+index b9c3e7bebed8371c1d32a5f383288d2ccd81be1e..379010cbbda9c2b912dc3b19061f10d9f1ecf173 100644
+--- a/Packages/CandyKit/Sources/T3Protocol/Domain/Settings.swift
++++ b/Packages/CandyKit/Sources/T3Protocol/Domain/Settings.swift
+@@ -83 +83 @@ public struct ClientSettings: Equatable, Sendable {
+-        "followUpBehavior": SettingSpec(.literals(["queue", "steer"]), .string("steer")),
++        "followUpBehavior": SettingSpec(.literals(["queue", "steer"]), .string("queue")),
+diff --git a/Packages/CandyKit/Sources/T3Protocol/Domain/Usage.swift b/Packages/CandyKit/Sources/T3Protocol/Domain/Usage.swift
+index da70428d7fb66acc69bae0a5e5f41d0eed9448e2..19ebbfc9e29e75304bc0bd695ce1ab0f39f45095 100644
+--- a/Packages/CandyKit/Sources/T3Protocol/Domain/Usage.swift
++++ b/Packages/CandyKit/Sources/T3Protocol/Domain/Usage.swift
+@@ -16,3 +16,2 @@ public enum UsageProviderKind: String, CaseIterable, Sendable, Hashable {
+-    /// `pi` arrived in 2994 (9afde1c6d, usage.ts:41) and `muse` in 3669 (c893353618, usage.ts:22);
+-    /// older servers never send them.
+-    case codex, claude, grok, cursor, opencode, antigravity, pi, muse
++    /// `pi` arrived in 2994 (9afde1c6d, usage.ts:41); older servers never send it.
++    case codex, claude, grok, cursor, opencode, antigravity, pi
+@@ -29 +27,0 @@ public enum UsageProviderKind: String, CaseIterable, Sendable, Hashable {
+-        case .muse: "Muse Code"
