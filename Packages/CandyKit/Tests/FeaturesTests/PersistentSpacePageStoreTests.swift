@@ -74,6 +74,30 @@ struct PersistentSpacePageStoreTests {
         try await next.close()
     }
 
+    /// Saved edits leave the screen's pending list, so memory doesn't grow with every edit, and undo still works.
+    @Test func confirmedEditsLeaveTheScreenAndUndoStillWorks() async throws {
+        let root = root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let first = PersistentSpacePageStore()
+        _ = try await first.open(applicationSupport: root, keyStore: SpaceKeyStore.inMemory())
+        let page = first.createPage(title: "Plan")
+        let editor = SpacePageEditor(store: first, page: page)
+        for word in ["one", " two", " three"] {
+            for c in word { editor.textView.insertText(String(c), replacementRange: editor.textView.selectedRange()) }
+            editor.flushTyping()
+        }
+        let before = first.content(of: page)
+        try await first.flush()
+        #expect(first.local.replica.pending.isEmpty, "every saved op left the screen's queue")
+        #expect(first.local.replica.confirmed.seq == 4)
+        #expect(first.content(of: page) == before, "the screen didn't change")
+        editor.performUndo()
+        #expect(first.content(of: page) != before, "undo still writes its inverse change")
+        try await first.flush()
+        #expect(first.local.replica.pending.isEmpty)
+        try await first.close()
+    }
+
     @Test func recoveryReturnsUntilExplicitlyAcknowledged() async throws {
         let root = root()
         defer { try? FileManager.default.removeItem(at: root) }

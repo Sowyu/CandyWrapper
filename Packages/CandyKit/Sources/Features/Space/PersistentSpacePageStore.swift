@@ -17,9 +17,9 @@ public final class PersistentSpacePageStore: SpaceDocumentStore {
     public private(set) var isOpen = false
     public var onFailure: (@MainActor () -> Void)?
     public var onSavingChange: (@MainActor () -> Void)?
-    /// What the screen shows. ponytail: its pending list grows by one op per edit while Space is open; feed it the
-    /// writer's confirmed frames when sync (piece 7) lands.
-    private var local = SpaceReplicaStore()
+    /// What the screen shows. The writer's confirmed frames come back to it, so its pending list holds only edits
+    /// still on their way to disk. Undo entries live in the editors and stay valid.
+    private(set) var local = SpaceReplicaStore()
     private var writer: LocalPageWriter?
     private var closing = false
     private var writeRevision = 0
@@ -51,9 +51,13 @@ public final class PersistentSpacePageStore: SpaceDocumentStore {
 
     private func attach(_ store: SpaceReplicaStore) {
         local = store
-        store.onEdit = { [weak self] op in
-            let changes = op.payload.changes, at = op.payload.at
-            self?.enqueue { try await $0.save(changes, at: at) }
+        store.onEdit = { [weak self, weak store] op in
+            guard let self, let store else { return }
+            let changes = op.payload.changes, at = op.payload.at, id = op.op
+            self.enqueue { writer in
+                let frames = try await writer.save(changes, at: at, op: id)
+                await store.receive(frames)
+            }
         }
         _ = store.observe { [weak self] in self?.publish() }
         publish()
@@ -194,17 +198,21 @@ private actor LocalPageWriter {
         return replica.current
     }
 
-    func save(_ changes: [RecordChange], at: Int64) async throws {
-        try replica.edit(changes, at: at)
+    /// Keeps the screen's op id, so the frames it returns confirm the screen's own pending op.
+    func save(_ changes: [RecordChange], at: Int64, op: OpID) async throws -> [(frame: LogFrame, payload: OpPayload)] {
+        try replica.edit(changes, at: at, op: op)
         let pending = try replica.pending.map {
             SpacePendingOperation(op: $0.op, dev: setup.device, recs: $0.recs, payload: $0.payload,
                                   context: ["bases": try SpaceModel.JSONValue(encoding: $0.bases)])
         }
         try await setup.local.replacePending(pending)
-        for operation in replica.pending { try await confirm(operation) }
+        var frames: [(frame: LogFrame, payload: OpPayload)] = []
+        for operation in replica.pending { frames.append(try await confirm(operation)) }
+        return frames
     }
 
-    private func confirm(_ operation: PendingOp) async throws {
+    @discardableResult
+    private func confirm(_ operation: PendingOp) async throws -> (frame: LogFrame, payload: OpPayload) {
         let recs = operation.recs.map { SpaceRecordBase(id: $0.id.rawValue, rev: $0.base.map(Int.init)) }
         let ct = try setup.keys.sealFrame(SpaceJSON.encode(operation.payload), op: operation.op.rawValue,
                                           dev: setup.device.rawValue, recs: recs)
@@ -212,6 +220,7 @@ private actor LocalPageWriter {
                              op: operation.op, recs: operation.recs, ct: ct)
         try await setup.local.confirm(frame)
         try replica.receive([(frame, operation.payload)])
+        return (frame, operation.payload)
     }
 
     func removeBlobs(_ ids: [String]) async throws { try await setup.local.removeBlobs(ids) }

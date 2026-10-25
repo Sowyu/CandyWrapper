@@ -80,6 +80,20 @@ public struct SpaceReplica: Hashable, Sendable {
         rebase()
     }
 
+    /// Confirms this device's own oldest pending ops, in order, with nothing from another device between them.
+    /// `confirmed` takes the frames in place and those ops leave the queue; `current` already shows them, so it stays
+    /// as it is and no state is copied. Returns false, changing nothing, for any other frames; use `receive` then.
+    public mutating func confirmOwn(_ frames: [(frame: LogFrame, payload: OpPayload)]) throws -> Bool {
+        guard frames.count <= pending.count else { return false }
+        for (i, (frame, payload)) in frames.enumerated() {
+            guard frame.seq == confirmed.seq + Int64(i) + 1, frame.op == pending[i].op, payload == pending[i].payload else { return false }
+        }
+        // The seqs are checked above, so no apply can throw part way.
+        for (frame, payload) in frames { try confirmed.apply(frame, payload) }
+        pending.removeFirst(frames.count)
+        return true
+    }
+
     /// Replays pending ops on the confirmed state. A text change whose block moved past its base rev
     /// gets a three-way merge, and overlapping edits become a conflict copy after the block. Later
     /// pending text for that block follows into the copy.

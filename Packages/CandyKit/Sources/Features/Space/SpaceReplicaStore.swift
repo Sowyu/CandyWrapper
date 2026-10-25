@@ -117,6 +117,16 @@ public final class SpaceReplicaStore: SpaceDocumentStore {
         return redo
     }
 
+    /// Confirmed frames from the local writer. This device's own ops leave the pending list and the screen stays as it
+    /// is; anything else rebuilds the screen from the replica.
+    public func receive(_ frames: [(frame: LogFrame, payload: OpPayload)]) {
+        guard !frames.isEmpty, (try? replica.confirmOwn(frames)) != true else { return }
+        guard (try? replica.receive(frames)) != nil else { return }
+        reindex()
+        lastChanged = Set(frames.flatMap { $0.payload.changes.map(\.id) })
+        notify()
+    }
+
     public func put(_ records: [PageID: PageRecord]) {
         var changes: [RecordChange] = []
         for (id, record) in records.sorted(by: { $0.key < $1.key }) {

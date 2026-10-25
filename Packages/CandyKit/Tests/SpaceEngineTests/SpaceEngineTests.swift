@@ -113,6 +113,32 @@ struct SpaceEngineTests {
         #expect(throws: ApplyError.gap(expected: state.seq + 1, got: frame.seq)) { try state.apply(frame, payload) }
     }
 
+    @Test func ownConfirmationsDropPendingAndKeepTheScreen() throws {
+        var replica = SpaceReplica(device: DeviceID(), label: "Mac")
+        let page = PageID(), block = BlockID()
+        try replica.edit([try RecordChange.page(page, PageRecord(order: key("a0"), title: "Plan", created: 1))], at: 1)
+        try replica.edit([try RecordChange.block(block, BlockRecord(page: page, order: key("a1"), text: text("Hi")))], at: 2)
+        let undo = try replica.edit([RecordChange(kind: .block, id: block, set: ["text": json(text("Hi there"))])], at: 3)
+        let screen = replica.current
+        // The local writer confirms every op as it was made, so the frames carry the same ops and payloads.
+        let frames = replica.pending.enumerated().map { i, op in
+            (frame: LogFrame(seq: Int64(i + 1), t: 0, dev: replica.device, op: op.op, recs: op.recs, ct: ""), payload: op.payload)
+        }
+        // Only the first two came back so far.
+        #expect(try replica.confirmOwn(Array(frames.prefix(2))))
+        #expect(replica.pending.count == 1 && replica.confirmed.seq == 2 && replica.current == screen)
+        #expect(try replica.confirmOwn(Array(frames.dropFirst(2))))
+        #expect(replica.pending.isEmpty && replica.confirmed.pages == screen.pages && replica.confirmed.blocks == screen.blocks)
+        // Undo entries outlive the ops they came from.
+        try replica.undo(undo, at: 4)
+        #expect(replica.current.text(of: block).t == "Hi")
+        // Frames that aren't this replica's oldest pending ops change nothing.
+        let other = LogFrame(seq: 3, t: 0, dev: DeviceID(), op: OpID(), recs: [], ct: "")
+        let before = replica
+        #expect(try !replica.confirmOwn([(other, OpPayload(at: 0, changes: []))]))
+        #expect(replica == before)
+    }
+
     @Test func pathsApplyInByteOrderAndNullRemoves() {
         let id = PageID()
         var state = SpaceState()
