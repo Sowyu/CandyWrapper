@@ -223,9 +223,12 @@ public struct RuntimeRequest: Codable, Hashable, Sendable, Identifiable {
 public struct ResponseCapability: Codable, Hashable, Sendable {
     public var type: String
     public var reason: String?
-    public init(type: String, reason: String? = nil) {
+    /// `live` requests whose provider takes a decline with feedback (orchestrationV2.ts:1091, b7e802bdec).
+    public var supportsFeedback: Bool?
+    public init(type: String, reason: String? = nil, supportsFeedback: Bool? = nil) {
         self.type = type
         self.reason = reason
+        self.supportsFeedback = supportsFeedback
     }
 }
 

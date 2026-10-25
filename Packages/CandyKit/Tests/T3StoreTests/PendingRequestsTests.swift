@@ -120,11 +120,12 @@ private func question(_ id: String, multi: Bool = false, custom: Bool? = nil, in
             request("q1", .userInput, at: "2026-01-01T00:00:03Z", capability: "message"),
         ], turnItems: items)
         #expect(pending.approvals.map(\.requestId) == ["r1", "r2"])
-        #expect(pending.approvals[0].detailText == "Provider process is gone — interrupt or restart the run to respond.")
+        #expect(pending.approvals[0].detailText == "Provider process is gone. Interrupt or restart the run to respond.")
         #expect(pending.approvals[1].detail == "ls -la" && pending.approvals[1].label == "Command approval")
         #expect(pending.approvals[1].buttonOptions.map(\.label) == ["Yes"])
         #expect(pending.approvals[1].menuOptions == [ApprovalOption(.acceptAlways, "Always", warning: "Careful")])
         #expect(pending.userInputs.map(\.requestId) == ["q1"] && pending.userInputs[0].dismissible && pending.userInputs[0].canRespond)
+        #expect(pending.approvals[1].reason == nil && pending.approvals[1].fullAccessOverrideExplanation == nil && !pending.approvals[1].supportsFeedback)
         #expect(RuntimeRequestCommands.dismiss(threadId: "t", requestId: "q1", commandId: "c") == .object([
             "type": .string("thread.user-input.dismiss"), "commandId": .string("c"), "threadId": .string("t"), "requestId": .string("q1")]))
     }
@@ -202,5 +203,20 @@ private func question(_ id: String, multi: Bool = false, custom: Bool? = nil, in
         let without = RuntimeRequestCommands.respond(threadId: ThreadId("t"), requestId: "r", answers: ["a": .text("x")],
                                                      attachmentsByQuestionId: ["a": []], commandId: "c")
         #expect(without["attachmentsByQuestionId"] == nil)
+    }
+
+    /// e749245387 and b7e802bdec: the agent's reason, the full-access explanation and decline feedback.
+    @Test func fullAccessReasonAndFeedback() {
+        let request = decode(RuntimeRequest.self, """
+        {"id":"r1","kind":"command","status":"pending","createdAt":"2026-01-01T00:00:00Z","resolvedAt":null,
+         "responseCapability":{"type":"live","supportsFeedback":true}}
+        """)
+        let item = turnItem(#"{"id":"i1","type":"approval_request","requestId":"r1","requestKind":"command","prompt":"rm -rf x","reason":"Deletes a path it can't verify","fullAccessOverride":"provider_check"}"#)
+        let approval = PendingRequests.derive(requests: [request], turnItems: [item]).approvals[0]
+        #expect(approval.reason == "Deletes a path it can't verify" && approval.supportsFeedback)
+        #expect(approval.fullAccessOverrideExplanation?.hasPrefix("Full access skips approvals, but the agent still stops") == true)
+        #expect(RuntimeRequestCommands.respond(threadId: "t", requestId: "r1", decision: .decline, feedback: "use trash", commandId: "c") == .object([
+            "type": .string("runtime-request.respond"), "commandId": .string("c"), "threadId": .string("t"), "requestId": .string("r1"),
+            "decision": .string("decline"), "feedback": .string("use trash")]))
     }
 }

@@ -90,6 +90,8 @@ public enum ComposerLogic {
         public var noProvider = false
         /// T3's session phase `disconnected`: the thread has no runtime yet (a draft or an unstarted thread).
         public var disconnected = false
+        /// The shown approval takes the message as decline feedback (ChatComposer.tsx:3782-3785).
+        public var approvalFeedback = false
         public init(approvalPending: Bool = false, questionChoiceOnly: Bool? = nil, projectRequired: Bool = false,
                     noProvider: Bool = false, disconnected: Bool = false) {
             self.approvalPending = approvalPending; self.questionChoiceOnly = questionChoiceOnly
@@ -100,7 +102,9 @@ public enum ComposerLogic {
     /// `composerPlaceholder.ts:1-2` and the rule list in I-composer-flow 7.2. The plan follow-up row is skipped (no plan mode yet).
     public static func placeholder(_ s: PlaceholderInput) -> String {
         // A send declines the approvals and redirects the agent (ChatComposer.tsx:6175-6177, a93b03c8a5).
-        if s.approvalPending { return "Send a message to decline and redirect the agent" }
+        if s.approvalPending {
+            return s.approvalFeedback ? "Send feedback to decline this request" : "Send a message to decline and redirect the agent"
+        }
         if let choiceOnly = s.questionChoiceOnly {
             return choiceOnly ? "Choose an option above" : "Type your own answer, or leave this blank to use the selected option"
         }

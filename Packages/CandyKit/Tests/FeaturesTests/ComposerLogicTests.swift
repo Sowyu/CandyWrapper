@@ -115,6 +115,9 @@ struct ComposerLogicTests {
         #expect(L.lengthValidationMessage(String(repeating: "a", count: 121_500))?.hasPrefix("Prompt is 1,500 characters over") == true)
         #expect(L.placeholder(.init()) == "Ask anything, @tag files/folders, $use skills, or / for commands")
         #expect(L.placeholder(.init(approvalPending: true, disconnected: true)) == "Send a message to decline and redirect the agent")
+        var feedback = L.PlaceholderInput(approvalPending: true)
+        feedback.approvalFeedback = true
+        #expect(L.placeholder(feedback) == "Send feedback to decline this request")
     }
 
     /// The send after declining pending approvals and its four race toasts (ChatView.tsx:5222-5263, a93b03c8a5).

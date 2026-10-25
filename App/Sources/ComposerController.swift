@@ -1418,6 +1418,7 @@ final class ComposerController {
         // ponytail: ignores the PR-watch background work that also creates a runtime; add it with PR watches
         placeholder.disconnected = !ComposerLogic.QueueState.hasStartedSession(projection)
         placeholder.approvalPending = requests.activeApproval != nil
+        placeholder.approvalFeedback = requests.activeApproval?.supportsFeedback == true
         // A send declines the shown approvals, so it steers the waiting turn instead of queueing behind it
         // (`followUpBehavior`, ChatComposer.tsx:2286-2292).
         composer.steerByDefault = followUpSteers || !requests.approvals.isEmpty
@@ -1799,6 +1800,26 @@ final class ComposerController {
             }
             let changedBefore = changed()
             let answering = approvals.contains { responding.contains($0.requestId) }
+            // The shown approval takes the message as decline feedback when its provider supports it
+            // (useComposerSend.ts:481-484,991-1027, `sendApprovalFeedback` threadRequests.ts:21-30).
+            if let feedbackTarget = requests.activeApproval, feedbackTarget.supportsFeedback, feedbackTarget.canRespond {
+                if !attachments.isEmpty || !ComposerContext.referencedIds(trimmed).isEmpty {
+                    if let picksKey { threadErrors.set(picksKey, "Send approval feedback without attachments or added context.") }
+                    return
+                }
+                guard !changedBefore, !answering, !trimmed.isEmpty else { return }
+                let payload = RuntimeRequestCommands.respond(threadId: threadId.localId, requestId: feedbackTarget.requestId,
+                                                             decision: .decline, feedback: messageText.trimmingCharacters(in: .whitespacesAndNewlines))
+                declineInFlight = true
+                respond(payload, failure: ComposerFeedback.Failure.approval) { [weak self] sent in
+                    guard let self else { return }
+                    self.declineInFlight = false
+                    guard sent, !changed(), self.target == .thread(threadId) else { return }
+                    self.composer.text = ""
+                    self.remember("")
+                }
+                return
+            }
             let before = Set(requests.approvals.map(\.requestId))
             declineInFlight = true
             Task { [weak self] in
