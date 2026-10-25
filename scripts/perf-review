@@ -21,6 +21,8 @@ uses the shared sandbox server on 47391.
 import argparse
 import datetime
 import glob
+import hashlib
+import plistlib
 import json
 import os
 import re
@@ -679,6 +681,7 @@ def main():
     p.add_argument("--commit", default="HEAD")
     p.add_argument("--source")
     p.add_argument("--baseline")
+    p.add_argument("--prebuilt-app", help="reuse a matching Release perf bundle after deleting its build scratch")
     p.add_argument("--repeat", type=int, default=3)
     p.add_argument("--idle-seconds", type=float, default=30)
     p.add_argument("--stream", action="store_true")
@@ -692,6 +695,8 @@ def main():
     p.add_argument("--max-load", type=float, default=3.0, help="quiet means a 1-minute load average under this")
     p.add_argument("--make-workload", action="store_true")
     args = p.parse_args()
+    if args.prebuilt_app and args.no_app:
+        p.error("--prebuilt-app cannot be combined with --no-app")
     if args.make_workload:
         make_workload()
         return
@@ -707,7 +712,22 @@ def main():
               "workload": WORKLOAD}
 
     if not args.no_app:
-        app_path = build_app(src, sha, args.osize)
+        if args.prebuilt_app:
+            app_path = os.path.abspath(args.prebuilt_app)
+            try:
+                with open(app_path + "/Contents/Info.plist", "rb") as f:
+                    bundle = plistlib.load(f)
+                if bundle.get("CFBundleIdentifier") != PERF_BUNDLE_ID:
+                    sys.exit("perf-review: prebuilt app must use the isolated perf bundle id")
+                run(["codesign", "--verify", "--deep", "--strict", app_path])
+                with open(app_path + "/Contents/MacOS/CandyWrapper", "rb") as f:
+                    digest = hashlib.sha256(f.read()).hexdigest()
+            except (OSError, ValueError, subprocess.CalledProcessError) as error:
+                sys.exit("perf-review: invalid prebuilt app: " + str(error))
+            log("using prebuilt Release app for %s; caller must match source and build flags" % sha)
+            result["prebuilt_app"] = {"path": app_path, "binary_sha256": digest}
+        else:
+            app_path = build_app(src, sha, args.osize)
         raw.update(sizes(app_path))
         server = PerfServer()
         quiet_wait = lambda label: wait_quiet(label, quiet, args.max_load)

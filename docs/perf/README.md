@@ -39,6 +39,8 @@ scripts/perf-review --commit dd10f48 --baseline docs/perf/<file>.json
 scripts/perf-review --stream                 # adds one claude-haiku-5-5 turn (costs a real turn)
 ```
 
+When disk space is tight, copy the completed Release perf bundle out of its derived-data folder, verify its signature, then remove only that build's scratch. Run `scripts/perf-review --commit <same commit> --prebuilt-app <copied CandyWrapper.app>`. The caller must preserve the source commit and optimization flags from the build. The script requires the isolated perf bundle id, verifies the signature and records the executable hash. Measurements and thresholds are unchanged; it skips the redundant app build. The package microbenchmarks still compile their own Release test products.
+
 About 17 minutes per build when the machine is quiet: 3 to 5 for the Release build, 2 for the micro-benchmarks, 10 for the app runs, half of them the stall monitor's own launches. Waits for a quiet machine come on top, up to 10 minutes each. Output goes to stderr as it runs; the table prints at the end.
 
 ## Frozen workload and quiet machine (since 2026-10-10)
