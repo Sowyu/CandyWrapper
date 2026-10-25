@@ -1,0 +1,13 @@
+#!/bin/zsh -f
+set -eu
+here=${0:A:h}
+root=${here:h:h}
+"$root/scripts/preflight"
+# Native SwiftPM isolates this build from Xcode's shared package build service.
+# An absolute package path also makes baseline provenance explicit.
+export CANDY_BENCH_PACKAGE=${CANDY_BENCH_PACKAGE:-$root/Packages/CandyKit}
+scratch=${1:?usage: scripts/fast-load/build /tmp/cw-fast-load-name}
+swift build --build-system native --package-path "$here/Swift" --scratch-path "$scratch" \
+    --product candy-fast-load -c release -j 2
+git -C "$CANDY_BENCH_PACKAGE" rev-parse HEAD > "$scratch/client-commit.txt"
+print "$scratch/release/candy-fast-load"
