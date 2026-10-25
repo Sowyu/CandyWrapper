@@ -3,8 +3,37 @@ import T3Protocol
 import Testing
 @testable import T3Store
 
-/// Cases from apps/web/src/components/ThreadNotificationCoordinator.test.tsx and .badge.test.tsx.
+extension ThreadNotificationTracker {
+    /// A scan, then the completion grace running out.
+    mutating func settle(environmentId: String, threads: [ThreadShell]) -> [ThreadNotificationEvent] {
+        scan(environmentId: environmentId, threads: threads, nowMs: 0) + flush(nowMs: SidebarInboxReturnTracker.workingExitGraceMs)
+    }
+}
+
+/// Cases from apps/web/src/components/ThreadNotificationCoordinator.test.tsx, .logic.test.ts and .badge.test.tsx.
 struct ThreadNotificationsTests {
+    /// ThreadNotificationCoordinator.logic.ts:56-70: completion waits 2 s and a continuation inside it cancels it.
+    @Test func completionWaitsOutTheGrace() {
+        var t = ThreadNotificationTracker()
+        _ = t.scan(environmentId: "env-1", threads: [running()], nowMs: 0)
+        #expect(t.scan(environmentId: "env-1", threads: [completed()], nowMs: 1_000).isEmpty)
+        #expect(t.nextDueMs == 3_000)
+        #expect(t.flush(nowMs: 2_999).isEmpty)
+        #expect(t.flush(nowMs: 3_000).map(\.title) == ["Thread completed"])
+        #expect(t.nextDueMs == nil)
+        // The continuation starts within the grace: no completion for the run before it.
+        _ = t.scan(environmentId: "env-1", threads: [running()], nowMs: 4_000)
+        _ = t.scan(environmentId: "env-1", threads: [completed(run: "run-2", at: "2026-09-13T10:00:00.000Z")], nowMs: 5_000)
+        var next = running()
+        next.latestRunId = "run-3"
+        next.activeRunId = "run-3"
+        _ = t.scan(environmentId: "env-1", threads: [next], nowMs: 6_000)
+        #expect(t.nextDueMs == nil && t.flush(nowMs: 10_000).isEmpty)
+        // Attention notifies at once.
+        next.pendingRuntimeRequest = PendingRuntimeRequestSummary(id: "q", kind: .userInput, createdAt: "2026-09-13T11:00:00.000Z")
+        #expect(t.scan(environmentId: "env-1", threads: [next], nowMs: 11_000).map(\.title) == ["Input needed"])
+    }
+
     private func running(_ id: String = "thread-1") -> ThreadShell {
         thread(id) {
             $0.title = "Fix the login form"
@@ -35,32 +64,32 @@ struct ThreadNotificationsTests {
     @Test func completionNotifiesOnceAndNotOnFirstLoad() {
         var t = ThreadNotificationTracker()
         // First load: a finished thread is quiet.
-        #expect(t.scan(environmentId: "env-1", threads: [completed()]).isEmpty)
-        #expect(t.scan(environmentId: "env-1", threads: [running()]).isEmpty)
-        let events = t.scan(environmentId: "env-1", threads: [completed(run: "run-2", at: "2026-09-13T10:00:00.000Z")])
+        #expect(t.settle(environmentId: "env-1", threads: [completed()]).isEmpty)
+        #expect(t.settle(environmentId: "env-1", threads: [running()]).isEmpty)
+        let events = t.settle(environmentId: "env-1", threads: [completed(run: "run-2", at: "2026-09-13T10:00:00.000Z")])
         #expect(events.map(\.title) == ["Thread completed"])
         #expect(events.first?.threadTitle == "Fix the login form")
         #expect(events.first?.tag == "env-1:thread-1")
         #expect(events.first?.tone == .success && events.first?.icon == .circleCheck)
         // The same shell again: nothing new.
-        #expect(t.scan(environmentId: "env-1", threads: [completed(run: "run-2", at: "2026-09-13T10:00:00.000Z")]).isEmpty)
+        #expect(t.settle(environmentId: "env-1", threads: [completed(run: "run-2", at: "2026-09-13T10:00:00.000Z")]).isEmpty)
     }
 
     /// ThreadNotificationCoordinator.tsx:154-160: a run the user stopped completes quietly.
     @Test func stoppedRunDoesNotAnnounceCompletion() {
         var t = ThreadNotificationTracker()
-        _ = t.scan(environmentId: "env-1", threads: [running()])
+        _ = t.settle(environmentId: "env-1", threads: [running()])
         var stopped = completed(run: "run-2", at: "2026-09-13T10:00:00.000Z")
         stopped.latestRunStopRequested = true
-        #expect(t.scan(environmentId: "env-1", threads: [stopped]).isEmpty)
-        #expect(t.scan(environmentId: "env-1", threads: [completed(run: "run-3", at: "2026-09-13T11:00:00.000Z")]).map(\.title) == ["Thread completed"])
+        #expect(t.settle(environmentId: "env-1", threads: [stopped]).isEmpty)
+        #expect(t.settle(environmentId: "env-1", threads: [completed(run: "run-3", at: "2026-09-13T11:00:00.000Z")]).map(\.title) == ["Thread completed"])
     }
 
     @Test func reconnectDoesNotReplay() {
         var t = ThreadNotificationTracker()
-        _ = t.scan(environmentId: "env-1", threads: [running()])
+        _ = t.settle(environmentId: "env-1", threads: [running()])
         t.reset(environmentId: "env-1")
-        #expect(t.scan(environmentId: "env-1", threads: [completed()]).isEmpty)
+        #expect(t.settle(environmentId: "env-1", threads: [completed()]).isEmpty)
     }
 
     @Test func attentionTitles() {
@@ -72,58 +101,60 @@ struct ThreadNotificationsTests {
         ]
         for (title, edit) in cases {
             var t = ThreadNotificationTracker()
-            _ = t.scan(environmentId: "env-1", threads: [running()])
+            _ = t.settle(environmentId: "env-1", threads: [running()])
             var next = running()
             edit(&next)
-            let events = t.scan(environmentId: "env-1", threads: [next])
+            let events = t.settle(environmentId: "env-1", threads: [next])
             #expect(events.map(\.title) == [title])
             #expect(events.first?.kind == .input)
             // Still the same attention: no repeat.
             next.updatedAt = "2026-09-13T11:00:00.000Z"
-            #expect(t.scan(environmentId: "env-1", threads: [next]).isEmpty)
+            #expect(t.settle(environmentId: "env-1", threads: [next]).isEmpty)
         }
     }
 
     @Test func failedTurnOfAReadyThreadReadsAsFailed() {
         var t = ThreadNotificationTracker()
-        _ = t.scan(environmentId: "env-1", threads: [running()])
+        _ = t.settle(environmentId: "env-1", threads: [running()])
         // `shellRuntime` is nil without a run or provider thread, so the status is ready; the failed run decides.
         var failed = running()
         failed.status = .failed
         failed.activeRunId = nil
-        let events = t.scan(environmentId: "env-1", threads: [failed])
+        let events = t.settle(environmentId: "env-1", threads: [failed])
         #expect(events.map(\.title) == ["Thread failed"])
         #expect(events.first?.tone == .error && events.first?.icon == .circleAlert)
     }
 
-    @Test func monitorHoldsCompletionButADevServerDoesNot() {
+    @Test func awaitedMonitorHoldsCompletionButADevServerDoesNot() {
         var t = ThreadNotificationTracker()
-        _ = t.scan(environmentId: "env-1", threads: [running()])
+        _ = t.settle(environmentId: "env-1", threads: [running()])
         var watching = completed()
-        watching.pendingBackgroundTasks = [PendingBackgroundTask(taskId: "watch", kind: .monitor)]
-        #expect(t.scan(environmentId: "env-1", threads: [watching]).isEmpty)
+        watching.pendingBackgroundTasks = [PendingBackgroundTask(taskId: "watch", kind: .monitor, awaited: true)]
+        #expect(t.settle(environmentId: "env-1", threads: [watching]).isEmpty)
+        watching.pendingBackgroundTasks = [PendingBackgroundTask(taskId: "watchdog", kind: .monitor)]
+        #expect(!SidebarModel.backgroundWorkHoldsCompletion(watching.pendingBackgroundTasks))
         var dev = completed()
         dev.pendingBackgroundTasks = [PendingBackgroundTask(taskId: "dev", kind: .command)]
-        #expect(t.scan(environmentId: "env-1", threads: [dev]).map(\.title) == ["Thread completed"])
+        #expect(t.settle(environmentId: "env-1", threads: [dev]).map(\.title) == ["Thread completed"])
     }
 
     @Test func archivedAndSubagentThreadsStayQuiet() {
         var t = ThreadNotificationTracker()
         var sub = running("sub")
         sub.lineage.relationshipToParent = .subagent
-        _ = t.scan(environmentId: "env-1", threads: [running(), sub])
+        _ = t.settle(environmentId: "env-1", threads: [running(), sub])
         var archived = completed()
         archived.archivedAt = "2026-09-13T09:00:00.000Z"
         var subDone = completed("sub")
         subDone.lineage.relationshipToParent = .subagent
-        #expect(t.scan(environmentId: "env-1", threads: [archived, subDone]).isEmpty)
+        #expect(t.settle(environmentId: "env-1", threads: [archived, subDone]).isEmpty)
     }
 
     @Test func environmentsAreSeparate() {
         var t = ThreadNotificationTracker()
-        _ = t.scan(environmentId: "env-1", threads: [running()])
-        #expect(t.scan(environmentId: "env-2", threads: [completed()]).isEmpty)
-        #expect(t.scan(environmentId: "env-1", threads: [completed()]).map(\.environmentId) == ["env-1"])
+        _ = t.settle(environmentId: "env-1", threads: [running()])
+        #expect(t.settle(environmentId: "env-2", threads: [completed()]).isEmpty)
+        #expect(t.settle(environmentId: "env-1", threads: [completed()]).map(\.environmentId) == ["env-1"])
     }
 
     @Test func routing() {

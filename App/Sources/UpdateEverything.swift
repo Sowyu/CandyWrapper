@@ -106,7 +106,7 @@ final class UpdateEverything {
         let providerMachines = environments.environmentIds.compactMap { id -> (environmentId: String, label: String, candidates: [ServerProvider])? in
             guard environments.state(id)?.status == .connected else { return nil }
             let all = providers(id)
-            let candidates = ProviderUpdateToastModel.candidates(all).filter { ProviderUpdateToastModel.canOneClick($0, among: all) }
+            let candidates = ProviderUpdateCandidates.candidates(all).filter { ProviderUpdateCandidates.canOneClick($0, among: all) }
             return candidates.isEmpty ? nil : (id, environments.label(id) ?? id, candidates)
         }
         let local = action != .none ? DesktopUpdateLogic.downloadedVersion(updater.state) : nil

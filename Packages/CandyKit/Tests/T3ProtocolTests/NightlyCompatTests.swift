@@ -175,4 +175,12 @@ struct NightlyCompatTests {
         #expect(busy.notice(hostLabel: "Mac mini") == ("Mac mini froze for 4s", "T3 Code on Mac mini was too busy to answer."))
         #expect(try JSONDecoder().decode(ServerProviderConfig.self, from: Data(#"{"providers":[]}"#.utf8)).lastEventLoopStall == nil)
     }
+
+    /// 3669 adds `awaited` to background tasks (orchestrationV2.ts:556-562); 3473 sends none.
+    @Test func backgroundTaskAwaitedIsOptional() throws {
+        let old = try JSONDecoder().decode(PendingBackgroundTask.self, from: Data(#"{"taskId":"a","kind":"monitor"}"#.utf8))
+        let new = try JSONDecoder().decode(PendingBackgroundTask.self, from: Data(#"{"taskId":"a","kind":"command","awaited":true}"#.utf8))
+        #expect(!old.awaited && new.awaited)
+        #expect(try JSONDecoder().decode(PendingBackgroundTask.self, from: JSONEncoder().encode(new)) == new)
+    }
 }

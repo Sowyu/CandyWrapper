@@ -158,6 +158,23 @@ struct ComposerRichTextTests {
         editor.toggleMark(.bold)
         #expect(editor.expandedText == "hello world")
     }
+    /// 7d6b5bec87: Mod+B bolds a selection and otherwise falls through to `sidebar.toggle`.
+    @Test func commandBBoldsOnlyASelection() throws {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
+        let editor = ComposerEditor()
+        window.contentView = editor
+        window.makeFirstResponder(editor)
+        editor.richTextEnabled = true
+        editor.setText("hello world")
+        let key = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0, windowNumber: 0,
+            context: nil, characters: "b", charactersIgnoringModifiers: "b", isARepeat: false, keyCode: 11))
+        editor.setSelectedRange(NSRange(location: 11, length: 0))
+        #expect(!editor.handleFormattingKey(key))
+        editor.setSelectedRange(NSRange(location: 0, length: 5))
+        #expect(editor.handleFormattingKey(key))
+        #expect(editor.expandedText == "**hello** world")
+        window.contentView = nil
+    }
     @Test func pastedMarkdownAndCodeChips() {
         let editor = ComposerEditor()
         editor.richTextEnabled = true

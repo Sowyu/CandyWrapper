@@ -684,7 +684,7 @@ final class ComposerController {
             guard let self, self.isActive else { return false }
             // ChatView's keybindings listen in the capture phase (ChatView.tsx:8277), ahead of the editor, so
             // a bound key such as Mod+Shift+S (`thread.settle`) beats the editor's strikethrough. Only Mod+B
-            // stays with the editor (AppSidebarLayout.tsx:105-112).
+            // over selected text stays with the editor (AppSidebarLayout.tsx:149-157).
             if let shortcuts, let command = ActiveKeymap.resolve(event, context: shortcuts.context()), command != "sidebar.toggle" {
                 return false
             }

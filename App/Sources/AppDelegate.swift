@@ -26,7 +26,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var slowRPCObserver: NSObjectProtocol?
     private var slowRPCToast: Int?
     private weak var slowRPCViewport: ToastViewport?
-    private var providerUpdateToast: ProviderUpdateLaunchToast?
     private var welcomeOnboarding: WelcomeOnboardingController?
     private var snapShots: SnapShotController?
     private var openIn: OpenInController?
@@ -574,19 +573,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let palette, let env = palette.scratchEnvironmentId(environments?.primaryId) else { return }
             palette.startScratchThread(env)
         }
-        let updateToast = ProviderUpdateLaunchToast(viewport: threads.panel.toasts)
-        providerUpdateToast = updateToast
-        updateToast.openSettings = { [weak settings] in settings?.show(.providers) }
-        // ponytail: no `providers:manage` check before Update; the server refuses a connection without it and the rejected toast says so
-        updateToast.request = { [weak environments] method, payload in
-            guard let environments, let env = environments.primaryId else { throw Environments.CommandError.notConnected }
-            return try await environments.request(env, method, payload)
-        }
         // The provider update pill follows the primary environment's providers (`primaryServerProvidersAtom`).
-        threads.composer.configObservers.append { [weak sidebar, weak threads, weak environments, weak updateToast] env in
+        // 3669 has no launch toast for provider updates (b9aaff46e0).
+        threads.composer.configObservers.append { [weak sidebar, weak threads, weak environments] env in
             guard env == environments?.primaryId, let providers = threads?.composer.config(env)?.providers else { return }
             sidebar?.providerUpdatePill.update(providers)
-            updateToast?.update(providers)
         }
         sidebar.providerUpdatePill.onOpenSettings = { [weak settings, weak commands] in
             commands?.closeUtilityPage()

@@ -174,7 +174,7 @@ private func pill(
         #expect(pill(input: true)?.label == .awaitingInput)
         #expect(pill() == ThreadStatusPill(label: .working, pulse: true))
         let idle = ThreadRuntimeSummary(status: .idle)
-        #expect(pill(runtime: idle, tasks: [PendingBackgroundTask(taskId: "bg-1", description: "Watch build", kind: .monitor)])
+        #expect(pill(runtime: idle, tasks: [PendingBackgroundTask(taskId: "bg-1", description: "Watch build", kind: .monitor, awaited: true)])
             == ThreadStatusPill(label: .waiting, pulse: false))
         #expect(pill(tasks: [PendingBackgroundTask(taskId: "bg-1", kind: .command)])?.label == .working)
         #expect(pill(runtime: idle) == nil)
@@ -218,7 +218,8 @@ private func pill(
 
     @Test(arguments: [
         (BackgroundTaskKind.command, SidebarThreadStatus.ready, SidebarTopStatus.done, false, ThreadStatusPill.Label.completed),
-        (.monitor, .waiting, .waiting, true, .waiting),
+        (.monitor, .ready, .done, false, .completed),
+        (.subagent, .waiting, .waiting, true, .waiting),
     ])
     func unseenCompletionWithBackgroundWork(
         kind: BackgroundTaskKind, expected: SidebarThreadStatus, top: SidebarTopStatus, receded: Bool, label: ThreadStatusPill.Label

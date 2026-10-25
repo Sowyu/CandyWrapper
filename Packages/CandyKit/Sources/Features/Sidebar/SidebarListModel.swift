@@ -353,7 +353,8 @@ public enum SidebarListBuilder {
                 .map { SidebarThread($0, pendingSubagentRequest: requests[$0.id]) }
             let returns = state.inboxReturns
             shelves = SidebarModel.buildShelves(threads, scopedProjectIds: scopedIds, capabilities: state.capabilities, nowMs: nowMs,
-                                                workingShelf: state.workingShelfEnabled, returnedAt: { returns?.returnedAt($0) })
+                                                workingShelf: state.workingShelfEnabled, returnedAt: { returns?.returnedAt($0) },
+                                                isWorking: { returns?.isWorking($0) ?? SidebarModel.isThreadWorking($0) })
         }
     }
 

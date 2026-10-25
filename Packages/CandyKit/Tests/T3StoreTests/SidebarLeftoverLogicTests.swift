@@ -118,10 +118,26 @@ struct SidebarLeftoverLogicTests {
         let done = sidebarThread("t")
         tracker.observe([busy], nowMs: 100)
         #expect(tracker.returnedAt(ThreadId("t")) == nil)
+        // threadInbox.ts:138-162: it keeps its Working place for 2 s after it stops.
         tracker.observe([done], nowMs: 200)
-        #expect(tracker.returnedAt(ThreadId("t")) == 200)
+        #expect(tracker.isWorking(done) && tracker.returnedAt(ThreadId("t")) == nil && tracker.nextDeadline == 2_200)
+        tracker.observe([done], nowMs: 2_200)
+        #expect(!tracker.isWorking(done) && tracker.returnedAt(ThreadId("t")) == 2_200 && tracker.nextDeadline == nil)
         tracker.observe(nil, nowMs: 300)
         #expect(tracker.returnedAt(ThreadId("t")) == nil)
+    }
+
+    @Test func inboxTrackerReleasesAThreadThatNeedsTheUserAtOnce() {
+        let tracker = SidebarInboxReturnTracker()
+        let busy = sidebarThread("t") { $0.latestRunId = RunId("r"); $0.activeRunId = RunId("r"); $0.status = .running }
+        let failed = sidebarThread("t") { $0.latestRunId = RunId("r"); $0.status = .failed; $0.lastError = "boom" }
+        let pinned = sidebarThread("t") { $0.pinnedAt = "2026-10-10T10:00:00.000Z" }
+        tracker.observe([busy], nowMs: 100)
+        tracker.observe([failed], nowMs: 200)
+        #expect(!tracker.isWorking(failed) && tracker.returnedAt(ThreadId("t")) == 200)
+        tracker.observe([busy], nowMs: 300)
+        tracker.observe([pinned], nowMs: 400)
+        #expect(!tracker.isWorking(pinned) && tracker.nextDeadline == nil)
     }
 
     // MARK: Project grouping (projectGrouping.ts)
