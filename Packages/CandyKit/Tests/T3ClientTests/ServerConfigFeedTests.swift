@@ -32,6 +32,31 @@ struct ServerConfigFeedTests {
         events.compactMap { if case .value(let value) = $0 { value } else { nil } }
     }
 
+    @Test func cancelledStartCannotReviveAStoppedOwner() async {
+        let harness = Harness([.succeed])
+        let supervisor = ConnectionSupervisor(dependencies: harness.dependencies)
+        let feed = ServerConfigFeed(supervisor: supervisor)
+        let delayed = Task {
+            try? await Task.sleep(for: .seconds(30))
+            await feed.start()
+        }
+        delayed.cancel()
+        await delayed.value
+        await supervisor.connect()
+        await settle()
+        #expect(harness.lastSocket?.sent.isEmpty != false)
+        let returned = Cursor()
+        let read = Task {
+            let value = await feed.initialConfig(generation: 1)
+            await returned.set(1)
+            return value
+        }
+        #expect(await eventually(seconds: 3) { await returned.value == 1 })
+        await feed.stop()
+        #expect(await read.value == nil)
+        await supervisor.disconnect()
+    }
+
     @Test func unavailableConfigStreamAllowsLegacyShellFallback() async throws {
         let harness = Harness([.succeed])
         let supervisor = ConnectionSupervisor(dependencies: harness.dependencies)

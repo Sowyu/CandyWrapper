@@ -99,6 +99,7 @@ final class ShellSession {
         started = true
         let feed = configFeed
         configurationWatch = Task { [weak self] in
+            guard !Task.isCancelled else { return }
             await feed.start()
             var generation = 0
             for await event in await feed.events() {
@@ -128,6 +129,7 @@ final class ShellSession {
     }
 
     private func subscribeShell() {
+        guard !stopped else { return }
         subscription = supervisor.subscribe("orchestration.subscribeShell", payload: { [weak self] in
             await self?.subscribeInput() ?? .object([:])
         }, handler: { [weak self] event in

@@ -36,7 +36,7 @@ public actor ServerConfigFeed {
 
     /// Idempotent. Starts the only owned RPC stream; never calls `server.getConfig`.
     public func start() {
-        guard run == nil else { return }
+        guard run == nil, !Task.isCancelled else { return }
         let token = UUID()
         run = token
         stopped = false

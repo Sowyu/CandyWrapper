@@ -1213,6 +1213,8 @@ Pinned upstream: `5b35402623d7d1d88eaa472807272a6c2e78012a`. Runtime 3473 still 
 
 CandyWrapper uses `ThreadSnapshotLoader` for HTTP bootstrap and `ThreadStore.applyWire` for every thread stream. A restoration error clears the resume cursor and retries the subscription for a fresh snapshot. Cold disk shells and changed omission policies also require authoritative snapshots; matching in-memory shells retain delta reconnects.
 
+Shell negotiation and the composer share one `ServerConfigFeed` subscription. Do not add a separate config RPC to each reconnect. A matching fresh descriptor version permits immediate reuse of the in-memory omission policy; the config stream still checks flags and restarts shell synchronization if they changed. Routes without descriptor metadata negotiate from their fresh config snapshot. Cancelled startup work cannot revive a stopped feed.
+
 ### 7.8 Reducer rules
 
 For both streams (`packages/client-runtime/src/state/shellReducer.ts`, `threads.ts`, `orchestrationV2Projection.ts`).
