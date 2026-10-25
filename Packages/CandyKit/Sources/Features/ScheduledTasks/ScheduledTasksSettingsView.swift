@@ -286,7 +286,7 @@ final class ScheduledTaskEditor {
         self.task = task
         draft = task.map(ScheduledTaskLogic.draft) ?? ScheduledTaskDraft()
         dialog = DialogView(title: task == nil ? "New task" : "Edit task",
-                            message: "Run a prompt automatically — on an interval, at a fixed time, or when a webhook is called.")
+                            message: "Run a prompt automatically on an interval, at a fixed time, or when a webhook is called.")
         dialog.maxWidth = 576
         submit = ButtonView(task == nil ? "Create task" : "Save task", size: .sm)
         if task == nil { draft.projectId = projects.first?.projectId ?? "" }

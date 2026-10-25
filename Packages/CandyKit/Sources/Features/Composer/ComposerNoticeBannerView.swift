@@ -22,7 +22,7 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         public var compact: Bool
         /// The item's `priority` in the banner stack.
         public var priority: ComposerBannerStackItem.Priority?
-        /// Muted text before the title, in normal weight and never cut ("Branch changed — was").
+        /// Muted text before the title, in normal weight and never cut ("Branch changed from").
         public var titlePrefix: String?
         /// The title is a `<code>`: monospace, cut at its end.
         public var titleCode: Bool

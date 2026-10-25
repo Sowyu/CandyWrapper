@@ -1276,7 +1276,7 @@ final class GitController {
         panel.branchBanner.apply(.init(variant: .neutral, icon: .gitBranch, title: mismatch.threadBranch,
                                        actions: [restoringBranch ? "Restoring..." : "Restore branch"],
                                        dismissLabel: "Dismiss branch change notice",
-                                       titlePrefix: "Branch changed \u{2014} was", titleCode: true, titleTooltip: mismatch.tooltip))
+                                       titlePrefix: "Branch changed from", titleCode: true, titleTooltip: mismatch.tooltip))
         panel.branchBanner.disabledActions = restoringBranch ? [0] : []
         panel.branchBanner.onAction = { [weak self] index in
             guard let self else { return }
