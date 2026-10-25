@@ -140,6 +140,53 @@ import Testing
         #expect(OrchestratorChat.scheduledLine("Remind me to stretch every hour and also drink some water and check the build status") == "Scheduled: Remind me to stretch every hour and also drink some water an…")
     }
 
+    func messageItem(_ id: String, _ type: String, _ text: String, minutes: Double, run: String = "r-old") throws -> TurnItem {
+        try JSONDecoder().decode(TurnItem.self, from: JSONSerialization.data(withJSONObject: [
+            "id": "ti-\(id)", "threadId": "orch", "type": type, "ordinal": 1, "status": "completed", "messageId": id, "runId": run,
+            "text": text, "startedAt": T3Timestamp(start.addingTimeInterval(minutes * 60)).raw,
+            "updatedAt": T3Timestamp(start.addingTimeInterval(minutes * 60)).raw,
+        ] as [String: Any]))
+    }
+
+    func projection(messages: [ConversationMessage], turnItems: [TurnItem]) throws -> ThreadProjection {
+        var p = try JSONDecoder().decode(ThreadProjection.self, from: Data(#"""
+            {"thread":{"id":"orch","title":"Conductor"},"runs":[],"attempts":[],"nodes":[],"subagents":[],
+             "providerSessions":[],"providerThreads":[],"providerTurns":[],"runtimeRequests":[],"messages":[],"plans":[],
+             "turnItems":[],"checkpointScopes":[],"checkpoints":[],"contextHandoffs":[],"contextTransfers":[],
+             "visibleTurnItems":[],"updatedAt":"2026-10-25T10:30:00.000Z"}
+            """#.utf8))
+        p.messages = messages
+        p.turnItems = turnItems
+        return p
+    }
+
+    /// The Conductor thread on 2026-10-25: T3's snapshot holds only its newest rows' messages, so a fresh snapshot cleared
+    /// the chat. Messages shown before stay, older history pages add theirs, and the snapshot's own win.
+    @Test func historyNeverDropsWhatShowed() throws {
+        let older = (0..<30).map { message("old-\($0)", $0 % 2 == 0 ? "user" : "assistant", "Older \($0)", minutes: Double($0)) }
+        var kept = OrchestratorChat.conversation(try projection(messages: older, turnItems: []), kept: [:])
+        #expect(kept.count == 30)
+        // A fresh snapshot with only the last two messages, one of them updated since.
+        var edited = message("old-29", "assistant", "Older 29, finished", minutes: 29)
+        edited.streaming = false
+        let window = [edited, message("new-1", "user", "Anything new?", minutes: 40)]
+        kept = OrchestratorChat.conversation(try projection(messages: window, turnItems: []), kept: kept)
+        #expect(kept.count == 31)
+        #expect(kept["old-29"]?.text == "Older 29, finished")
+        // An older history page brings rows from before the session, with their text.
+        let page = [try messageItem("ancient-1", "user_message", "Plan the launch", minutes: -60),
+                    try messageItem("ancient-2", "assistant_message", "On it.", minutes: -59)]
+        kept = OrchestratorChat.conversation(try projection(messages: window, turnItems: page), kept: kept)
+        #expect(kept["ancient-1"]?.role == "user")
+        #expect(kept["ancient-1"]?.text == "Plan the launch")
+        #expect(kept["ancient-2"]?.role == "assistant")
+        let items = OrchestratorChat.items(messages: Array(kept.values), turnItems: [], running: false, now: start)
+        let bubbles = items.compactMap { if case .bubble(_, _, let text, _, _) = $0 { text } else { nil } }
+        #expect(bubbles.first == "Plan the launch")
+        #expect(bubbles.last == "Anything new?")
+        #expect(bubbles.count == 33)
+    }
+
     /// Images ride on the user-message turn item; a message of images only hides T3's stand-in text.
     @Test func sentImagesShowBeforeTheBubble() throws {
         let item = try JSONDecoder().decode(TurnItem.self, from: JSONSerialization.data(withJSONObject: [
@@ -230,6 +277,40 @@ import Testing
         #expect(rows.map(\.id) == ["s1"])
         #expect(rows.first?.snippet == "Plan the launch")
         #expect(rows.first?.attachments.isEmpty == true)
+    }
+
+    /// Older messages page in like a thread's: when what shows doesn't fill the view, and when you scroll near the top.
+    @Test func olderMessagesPageInOnScrollUp() async throws {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+        let p = OrchestratorPaneView(frame: NSRect(x: 0, y: 0, width: 900, height: 700))
+        window.contentView = p
+        var asked = 0
+        p.onLoadEarlier = { asked += 1 }
+        var s = OrchestratorPaneState()
+        s.started = true
+        s.connected = true
+        s.hasEarlier = true
+        s.items = [.bubble(id: "m1", fromUser: true, text: "Hi", first: true, last: true)]
+        p.set(s)
+        p.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(asked >= 1)
+        // A long chat, read at the bottom: nothing to load until you scroll up.
+        s.items = (0..<80).map { .bubble(id: "m\($0)", fromUser: $0 % 2 == 0, text: "Line \($0) of the long chat", first: true, last: true) }
+        p.set(s)
+        p.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(50))
+        asked = 0
+        p.scrollChat(toY: .greatestFiniteMagnitude)
+        #expect(asked == 0)
+        p.scrollChat(toY: 0)
+        #expect(asked == 1)
+        // With no older history left, nothing more is asked.
+        s.hasEarlier = false
+        p.set(s)
+        asked = 0
+        p.scrollChat(toY: 0)
+        #expect(asked == 0)
     }
 
     @Test func aDraftSurvivesLeavingAndComingBack() {

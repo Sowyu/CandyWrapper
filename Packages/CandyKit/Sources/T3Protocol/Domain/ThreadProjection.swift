@@ -151,6 +151,14 @@ public struct ConversationMessage: Codable, Hashable, Sendable, Identifiable {
     public var workflowScript: Bool?
 }
 
+extension ConversationMessage {
+    public init(id: MessageId, threadId: ThreadId, runId: RunId?, role: String, text: String, streaming: Bool, createdAt: T3Timestamp,
+                updatedAt: T3Timestamp, scheduledTaskId: String? = nil) {
+        self.id = id; self.threadId = threadId; self.runId = runId; nodeId = nil; self.role = role; self.text = text
+        self.streaming = streaming; self.createdAt = createdAt; self.updatedAt = updatedAt; self.scheduledTaskId = scheduledTaskId
+    }
+}
+
 /// `OrchestrationV2PlanArtifact` (orchestrationV2.ts:1170-1191), flat over its `kind`.
 public struct PlanArtifact: Codable, Hashable, Sendable, Identifiable {
     public var id: PlanId

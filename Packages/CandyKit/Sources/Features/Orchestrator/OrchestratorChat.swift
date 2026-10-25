@@ -135,6 +135,25 @@ public enum OrchestratorChat {
         return stacked(out)
     }
 
+    /// The Orchestrator thread's conversation by message id. T3's snapshot holds only the messages of its last 75 rows
+    /// (threadHistoryPaging.ts:13-17, 407-445), so on its own a fresh snapshot, after a reconnect or reopening the pane,
+    /// drops everything older. This merges, newest source first: the snapshot's messages, the message rows of older
+    /// history pages (their items carry the text, as the thread view reads them), and what this session showed before.
+    // ponytail: kept messages outlive a thread rollback that removed them; drop `kept` on a rollback if that ever matters
+    public static func conversation(_ projection: ThreadProjection, kept: [String: ConversationMessage]) -> [String: ConversationMessage] {
+        var out = kept
+        for item in projection.turnItems where item.type == .userMessage || item.type == .assistantMessage {
+            guard let id = item.messageId else { continue }
+            let at = item.startedAt ?? item.updatedAt
+            out[id.rawValue] = ConversationMessage(id: id, threadId: item.threadId, runId: item.runId,
+                                                   role: item.type == .userMessage ? "user" : "assistant", text: item.text,
+                                                   streaming: item.type == .assistantMessage && item.streaming, createdAt: at,
+                                                   updatedAt: item.updatedAt, scheduledTaskId: item.string("scheduledTaskId"))
+        }
+        for m in projection.messages { out[m.id.rawValue] = m }
+        return out
+    }
+
     /// Each turn's published pages, in order (`ThreadWebContent.htmlRender`, a completed `html_render` call).
     static func htmlPages(_ items: [TurnItem]) -> [String: [HtmlRenderReference]] {
         var out: [String: [HtmlRenderReference]] = [:]

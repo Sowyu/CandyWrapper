@@ -62,6 +62,8 @@ public struct OrchestratorPaneState: Equatable {
     public var showsActivity = false
     /// Its composer's stashed prompts, newest first.
     public var stash: [OrchestratorStashEntry] = []
+    /// Older history is there to page in, and no page is loading.
+    public var hasEarlier = false
     /// Replies whose saved notes can still be undone, and those already undone.
     public var undoable: Set<String> = []
     public var undone: Set<String> = []
@@ -126,6 +128,8 @@ public final class OrchestratorPaneView: DSView {
     public var onEscape: (() -> Void)?
     /// "Show activity" in the header: events, relay results and tool lines in the chat.
     public var onToggleActivity: (() -> Void)?
+    /// Scrolling up near the top, or a chat too short to fill the view, asks for the next older page.
+    public var onLoadEarlier: (() -> Void)?
     /// The composer's Stash, as the thread composer's: stash the draft, restore an entry into it, delete one.
     public var onStash: ((String) -> Void)?
     public var onRestoreStash: ((String) -> Void)?
@@ -184,6 +188,8 @@ public final class OrchestratorPaneView: DSView {
             s.scrollView.contentInsets = NSEdgeInsets()
         }
         overviewScroll.isHidden = true
+        NotificationCenter.default.addObserver(self, selector: #selector(chatScrolled), name: NSView.boundsDidChangeNotification,
+                                               object: chatScroll.scrollView.contentView)
         tabs.setAccessibilityLabel("Orchestrator view")
         tabs.onChange = { [weak self, weak tabs] i in
             guard let self else { return }
@@ -249,9 +255,15 @@ public final class OrchestratorPaneView: DSView {
         if old.bot != next.bot { chat.setAvatarIdentity(next.bot) }
         if old.items != next.items || old.undoable != next.undoable || old.undone != next.undone || old.needs != next.needs
             || old.environmentId != next.environmentId || old.name != next.name {
+            // An older page landed above what you're reading: keep your place, measured from the bottom.
+            if !pinnedToBottom, let first = old.items.first(where: { $0.id != "loading-earlier" }),
+               next.items.first(where: { $0.id != "loading-earlier" })?.id != first.id, next.items.contains(where: { $0.id == first.id }) {
+                keepFromBottom = chat.frame.height - chatScroll.scrollView.contentView.bounds.minY
+            }
             chat.set(items: next.items, needs: next.needs, undoable: next.undoable, undone: next.undone, environmentId: next.environmentId,
                      name: next.name)
         }
+        if next.hasEarlier, !old.hasEarlier || old.items != next.items { DispatchQueue.main.async { [weak self] in self?.loadEarlierIfNeeded() } }
         if old.crew != next.crew || old.needs != next.needs { overview.set(crew: next.crew, needs: next.needs) }
         needsLayout = true
     }
@@ -355,8 +367,34 @@ public final class OrchestratorPaneView: DSView {
         let w = chatScroll.contentWidth
         let h = max(chat.height(forWidth: w), chatScroll.bounds.height)
         let clip = chatScroll.scrollView.contentView.bounds
-        pinnedToBottom = clip.maxY >= chat.frame.height - 40 || chat.frame.height <= clip.height
+        pinnedToBottom = keepFromBottom == nil && (clip.maxY >= chat.frame.height - 40 || chat.frame.height <= clip.height)
         chat.frame = NSRect(x: 0, y: 0, width: w, height: h)
+        if let fromBottom = keepFromBottom {
+            keepFromBottom = nil
+            chatScroll.scroll(to: NSPoint(x: 0, y: max(0, h - fromBottom)))
+        }
+    }
+
+    /// Where you were, from the bottom, while an older page goes in above.
+    private var keepFromBottom: CGFloat?
+    /// How close to the top a scroll asks for the next older page.
+    static let earlierThreshold: CGFloat = 600
+
+    /// Asks for the next older page when you're near the top, or when what shows doesn't fill the view.
+    private func loadEarlierIfNeeded() {
+        guard state.hasEarlier, !chatScroll.isHidden, window != nil else { return }
+        let clip = chatScroll.scrollView.contentView.bounds
+        // The chat's frame is at least the view's height, so equal means what shows doesn't fill it.
+        guard clip.minY < Self.earlierThreshold || chat.frame.height <= clip.height + 1 else { return }
+        onLoadEarlier?()
+    }
+
+    @objc private func chatScrolled() { loadEarlierIfNeeded() }
+
+    /// For tests: scrolls the chat to a y offset from its top.
+    func scrollChat(toY y: CGFloat) {
+        let maxY = max(0, chat.frame.height - chatScroll.scrollView.contentView.bounds.height)
+        chatScroll.scroll(to: NSPoint(x: 0, y: min(max(0, y), maxY)))
     }
 
     public override func layout() {

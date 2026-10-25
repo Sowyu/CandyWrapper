@@ -27,6 +27,12 @@ final class OrchestratorController {
     private(set) var pane: OrchestratorPaneView?
     private var feed: OrchestratorThreadFeed?
     private var projection: ThreadProjection?
+    /// Its paging state, from the feed.
+    private var history = ThreadHistoryMeta()
+    /// Every message of its thread shown this session (`OrchestratorChat.conversation`), so a fresh snapshot, which
+    /// holds only the newest rows, drops nothing you saw.
+    private var conversation: [String: ConversationMessage] = [:]
+    private var conversationThread: ThreadId?
     /// Each machine's threads as last seen, the baseline for events; reset with each new session.
     private var baselines: [String: (session: ObjectIdentifier, threads: [ThreadId: ThreadShell])] = [:]
     /// Runs its `orchestrator-call` blocks on every machine.
@@ -157,6 +163,8 @@ final class OrchestratorController {
     /// The toggle went off or the theme changed: drop every view and every piece of relay state.
     private func tearDown() {
         helper.watch(active: false)
+        conversation = [:]
+        conversationThread = nil
         flushWork?.cancel()
         flushWork = nil
         batch.reset()
@@ -228,8 +236,10 @@ final class OrchestratorController {
         state.stash = config.stash
         if let projection {
             let running = projection.runs.contains { OrchestratorEvent.running.contains($0.status) }
-            state.items = OrchestratorChat.items(messages: projection.messages, turnItems: projection.turnItems, running: running,
+            state.items = OrchestratorChat.items(messages: Array(conversation.values), turnItems: projection.turnItems, running: running,
                                                  activity: config.showActivity)
+            state.hasEarlier = history.hasMoreHistory && !history.loading
+            if history.loading { state.items.insert(.time(id: "loading-earlier", label: "Loading earlier messages…"), at: 0) }
         }
         state.undoable = Set(memoryUndo.keys).subtracting(undone)
         state.undone = undone
@@ -246,6 +256,7 @@ final class OrchestratorController {
             let p = OrchestratorPaneView()
             p.onSend = { [weak self] text in self?.send(text) }
             p.onToggleActivity = { OrchestratorStore.shared.update { $0.showActivity.toggle() } }
+            p.onLoadEarlier = { [weak self] in self?.feed?.loadEarlier() }
             p.onStash = { [weak self] text in self?.stash(text) }
             p.onRestoreStash = { [weak self] id in self?.restoreStash(id) }
             p.onDeleteStash = { [weak self] entry in self?.confirmDeleteStash(entry) }
@@ -358,6 +369,7 @@ final class OrchestratorController {
         feed?.stop()
         feed = nil
         projection = nil
+        history = ThreadHistoryMeta()
         refreshViews()
     }
 
@@ -380,10 +392,14 @@ final class OrchestratorController {
         guard let id = threadId, let env = id.environmentId, let session = environments.session(env) else { return }
         if let feed, feed.threadId == id, feed.session === session { return }
         feed?.stop()
-        feed = OrchestratorThreadFeed(threadId: id, session: session, cache: environments.threadCache) { [weak self] projection in
-            self?.projection = projection
-            self?.saveMemories(projection)
-            self?.refreshViews()
+        if conversationThread != id { conversation = [:]; conversationThread = id }
+        feed = OrchestratorThreadFeed(threadId: id, session: session, cache: environments.threadCache) { [weak self] projection, history in
+            guard let self else { return }
+            self.projection = projection
+            self.history = history
+            if let projection { self.conversation = OrchestratorChat.conversation(projection, kept: self.conversation) }
+            self.saveMemories(projection)
+            self.refreshViews()
         }
     }
 
@@ -1116,9 +1132,10 @@ final class OrchestratorThreadFeed {
     private let relay = ShellSession.ChangeRelay()
     private var subscription: Task<Void, Never>?
     private lazy var pacer = FramePacer(maxRate: 20) { [weak self] in Task { @MainActor in await self?.pull() } }
-    private let onUpdate: (ThreadProjection?) -> Void
+    private let onUpdate: (ThreadProjection?, ThreadHistoryMeta) -> Void
+    private var historyLoad: Task<Void, Never>?
 
-    init(threadId: ThreadId, session: ShellSession, cache: ThreadCache?, onUpdate: @escaping (ThreadProjection?) -> Void) {
+    init(threadId: ThreadId, session: ShellSession, cache: ThreadCache?, onUpdate: @escaping (ThreadProjection?, ThreadHistoryMeta) -> Void) {
         self.threadId = threadId
         self.session = session
         self.onUpdate = onUpdate
@@ -1138,10 +1155,36 @@ final class OrchestratorThreadFeed {
 
     private func pull() async {
         guard subscription != nil, let update = await store.takeUpdate() else { return }
-        onUpdate(update.projection)
+        onUpdate(update.projection, update.history)
+    }
+
+    /// The next older page of the thread's history, as the thread view's Load earlier (ThreadSession.loadEarlier).
+    func loadEarlier() {
+        guard historyLoad == nil, subscription != nil else { return }
+        var http = session.http
+        // T3's history request timeout (RT/threadHistoryHttp.ts).
+        http.timeout = 6
+        let store = self.store, token = session.token
+        historyLoad = Task { [weak self] in
+            guard let request = await store.beginLoadEarlier() else { self?.historyLoad = nil; return }
+            await self?.pull()
+            do {
+                let page = try await http.get(request.path, token: token, as: ThreadHistoryPage.self)
+                try Task.checkCancellation()
+                self?.historyLoad = nil
+                await store.applyHistoryPage(page, requestCursor: request.cursor)
+            } catch {
+                if Task.isCancelled { await store.cancelHistoryLoad(requestCursor: request.cursor); return }
+                self?.historyLoad = nil
+                await store.failHistoryLoad(requestCursor: request.cursor, message: "Could not load earlier messages.")
+            }
+            await self?.pull()
+        }
     }
 
     func stop() {
+        historyLoad?.cancel()
+        historyLoad = nil
         subscription?.cancel()
         subscription = nil
         relay.set {}
