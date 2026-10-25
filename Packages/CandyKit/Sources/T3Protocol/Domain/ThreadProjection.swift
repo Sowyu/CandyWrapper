@@ -70,6 +70,8 @@ public struct Run: Codable, Hashable, Sendable, Identifiable {
     public var rootNodeId: NodeId?
     public var activeAttemptId: RunAttemptId?
     public var checkpointId: CheckpointId?
+    /// The context handoff this run starts from (orchestrationV2.ts:615); its row is committed before the provider starts.
+    public var contextHandoffId: String?
     public var userMessageId: MessageId?
     /// The provider thread the run executes on; picks the provider session (queue capabilities).
     public var providerThreadId: String?
