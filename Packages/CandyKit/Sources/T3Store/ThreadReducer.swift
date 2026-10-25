@@ -423,6 +423,14 @@ public struct ThreadReducer: Sendable {
         return changes
     }
 
+    /// A failed wire reference invalidates the resume cursor. Keep the last rendered data
+    /// until a fresh authoritative snapshot arrives, and clear the history loading state.
+    public mutating func resetForResynchronization() {
+        lastSequence = nil
+        if status != .deleted { status = projection == nil ? .empty : .synchronizing }
+        history.loading = false
+    }
+
     /// The `subscribeThread` input for this state (threads.ts:873-893). Resumes after the last
     /// sequence once data exists; otherwise asks for a bounded, compact snapshot.
     public func subscribeInput(requestCompletionMarker: Bool = true) -> SubscribeThreadInput {
