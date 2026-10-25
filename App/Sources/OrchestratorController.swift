@@ -1147,8 +1147,12 @@ final class OrchestratorThreadFeed {
         self.store = store
         relay.setStreaming { [weak self] _ in Task { @MainActor in self?.pacer.request() } }
         Task { await store.restoreFromCache() }
+        let loader = ThreadSnapshotLoader(http: session.http, token: session.token, threadId: threadId.localId)
         subscription = session.supervisor.subscribe("orchestration.subscribeThread", payload: {
-            ThreadSession.encode(await store.subscribeInput())
+            if await store.subscribeInput().afterSequence == nil, let snapshot = await loader.load(), !Task.isCancelled {
+                await store.applySnapshot(snapshot)
+            }
+            return ThreadSession.encode(await store.subscribeInput())
         }, handler: { event in
             guard case .value(let json) = event, let item = ThreadSession.decode(json) else { return }
             await store.apply([item])
