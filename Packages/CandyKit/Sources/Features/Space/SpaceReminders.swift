@@ -196,10 +196,13 @@ public final class SpaceReminderController {
     /// withdrawing them does this withdraw every `space.` request, without opening Space's key or files.
     public static func withdrawLeftovers(settings: SpaceSettings, center: @autoclosure () -> SpaceNotificationCenter = SystemSpaceNotificationCenter()) async {
         guard settings.remindersScheduled, !settings.isActive else { return }
-        let off = SpaceReminderController(store: InMemorySpacePageStore(), center: center(), automaticWakes: false)
-        off.setEnabled(false)
-        await off.settle()
-        if !settings.isActive { settings.remindersScheduled = false }
+        let center = center()
+        let found = await center.pending() + center.delivered()
+        // Space may have turned on while the reads were suspended. Its controller owns the requests then, and the
+        // flag stays set. Withdraw is synchronous, so nothing can schedule between this check and it.
+        guard !settings.isActive else { return }
+        center.withdraw(Array(Set(found.map(\.identifier).filter(SpaceReminderNotification.owns))))
+        settings.remindersScheduled = false
     }
 
     /// Waits for all queued center work, including changes made while an async call was suspended.

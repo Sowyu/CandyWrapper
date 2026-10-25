@@ -1,3 +1,5 @@
+import CryptoKit
+import DesignSystem
 import Foundation
 import SpaceCrypto
 import SpaceModel
@@ -29,7 +31,8 @@ private final class ReminderCenter: SpaceNotificationCenter {
     }
     func registerCategory(_ category: UNNotificationCategory) async { categories = [category] }
     var reads = 0
-    func pending() async -> [UNNotificationRequest] { reads += 1; return Array(requests.values) }
+    var whenReading: () -> Void = {}
+    func pending() async -> [UNNotificationRequest] { reads += 1; whenReading(); return Array(requests.values) }
     func delivered() async -> [UNNotificationRequest] { Array(notices.values) }
     func add(_ request: UNNotificationRequest) async throws {
         adds += 1
@@ -117,12 +120,16 @@ struct SpaceReminderTests {
         let sut = controller(store, center)
         sut.setEnabled(true); await sut.settle()
         let current = try #require(center.requests.values.first)
-        // What an earlier build scheduled: the parent's title in the body, under the old digest.
+        // What an earlier build scheduled: the parent's title in the body, under that build's digest of the
+        // unchanged item and its parent's title, which stays valid unless the digest itself changed.
+        var data = try SpaceJSON.encode(store.pages[item]!)
+        data.append(try SpaceJSON.encode("Groceries"))
+        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         func old(_ id: String) -> UNNotificationRequest {
             let content = current.content.mutableCopy() as! UNMutableNotificationContent
             content.body = "Groceries · 23:00"
             var info = content.userInfo
-            info["stamp"] = "old-digest"
+            info["stamp"] = digest
             content.userInfo = info
             return UNNotificationRequest(identifier: id, content: content, trigger: current.trigger)
         }
@@ -155,6 +162,25 @@ struct SpaceReminderTests {
         #expect(!settings.remindersScheduled)
         await SpaceReminderController.withdrawLeftovers(settings: settings, center: center)
         #expect(center.reads == 1)
+    }
+
+    @Test func offLaunchCleanupLeavesRemindersAloneWhenSpaceTurnsOnMeanwhile() async throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        var dither = previous
+        dither.ditherLight = true; dither.ditherDark = true
+        ThemeRuntime.apply(dither)
+        let defaults = try #require(UserDefaults(suiteName: "SpaceReminderTests.\(UUID().uuidString)"))
+        let settings = SpaceSettings(defaults: defaults)
+        settings.remindersScheduled = true
+        let center = ReminderCenter()
+        let fresh = UNNotificationRequest(identifier: "space.fresh", content: UNMutableNotificationContent(), trigger: nil)
+        center.requests[fresh.identifier] = fresh
+        // The switch goes on while the cleanup waits on the notification center.
+        center.whenReading = { settings.enabled = true }
+        await SpaceReminderController.withdrawLeftovers(settings: settings, center: center)
+        #expect(center.requests[fresh.identifier] != nil, "the new controller's reminder stays")
+        #expect(settings.remindersScheduled)
     }
 
     @Test func withdrawingAnOldDeliveredVersionKeepsTheCurrentPendingVersion() async throws {
