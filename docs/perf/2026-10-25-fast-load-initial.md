@@ -1,4 +1,6 @@
-# Fast-load client benchmark on 3473 and exact main
+# Initial fast-load diagnostic on 3473 and exact main
+
+This first pass exposed an extra config read. The subsequent fix shares the app's existing config stream. The final matrix also includes the same existing config and lifecycle streams in both clients. Keep these diagnostic measurements separate from the final results.
 
 Three rounds of the four-cell matrix finished on 2026-10-25 at 16:08:49 UTC. Every cell synchronized and recovered the complete synthetic history. There was no compiler/test overlap. This measures real CandyWrapper client/store data readiness and protocol synchronization, not UI first paint.
 
@@ -59,10 +61,10 @@ Source references at exact main: `apps/server/src/server.ts:320` enables per-mes
 
 ## Artifacts and handoff
 
-- [Raw 36 stage/validation records](fast-load-2026-10-25/matrix.jsonl).
-- [Summary with all ranges and byte directions](fast-load-2026-10-25/summary.json).
-- [Matching fixture hashes](fast-load-2026-10-25/dataset.jsonl).
-- [Observed encoding headers from the timed matrix](fast-load-2026-10-25/encoding-headers.jsonl).
+- [Raw 36 stage/validation records](fast-load-2026-10-25-initial/matrix.jsonl).
+- [Summary with all ranges and byte directions](fast-load-2026-10-25-initial/summary.json).
+- [Matching fixture hashes](fast-load-2026-10-25-initial/dataset.jsonl).
+- [Observed encoding headers from the timed matrix](fast-load-2026-10-25-initial/encoding-headers.jsonl).
 - [Harness and reproduction instructions](../../scripts/fast-load/README.md).
 
 The timed window ran from 16:05:27 to 16:08:49 UTC. Parent work was released immediately afterward. The benchmark leaves the requested sandbox servers/proxies available for the parent's UI check: 3473 server/proxy PIDs **21135/21136**, main **21321/21322**. Temporary `ui.token` and `session.token` files in each isolated fast-load home have mode 0600 and are not committed. Stop through `scripts/fast-load/manage.py stop` and remove those grants after UI validation. The benchmark's own Swift scratch builds and baseline checkout are removed after measurements.
