@@ -13,6 +13,16 @@ public final class ScrollAreaView: DSView {
     public var fadeSize: CGFloat = 24 { didSet { updateFades(force: true) } }
     /// `hideScrollbars`: no scrollbars at all.
     public var hideScrollbars = false { didSet { updateScrollers() } }
+    /// False for a column that must never scroll sideways: no horizontal bar or bounce, and the document keeps the
+    /// visible width, which always-shown scroll bars narrow.
+    public var scrollsHorizontally = true { didSet { updateScrollers(); needsLayout = true } }
+
+    /// The width a document has to fit: the frame less an always-shown vertical bar.
+    public var contentWidth: CGFloat {
+        let vertical = scrollView.hasVerticalScroller ? scrollView.verticalScroller.map { type(of: $0) } : nil
+        return NSScrollView.contentSize(forFrameSize: bounds.size, horizontalScrollerClass: nil, verticalScrollerClass: vertical,
+                                        borderType: scrollView.borderType, controlSize: .regular, scrollerStyle: scrollView.scrollerStyle).width
+    }
 
     /// `.overlay` for T3's ScrollArea; `.native` where T3 scrolls a plain `overflow: auto` element instead.
     public let scrollbars: ScrollAreaScroller.Style
@@ -46,6 +56,9 @@ public final class ScrollAreaView: DSView {
         // Documents that size themselves to the clip (the diff list, file trees) lay out only when asked, and
         // a new clip width doesn't ask them: a maximized panel left the diff at its old width.
         if scrollView.contentView.bounds.width != width { scrollView.documentView?.needsLayout = true }
+        if !scrollsHorizontally, let doc = scrollView.documentView, doc.frame.width != scrollView.contentView.bounds.width {
+            doc.setFrameSize(NSSize(width: scrollView.contentView.bounds.width, height: doc.frame.height))
+        }
         updateFades(force: true)
     }
 
@@ -69,7 +82,8 @@ public final class ScrollAreaView: DSView {
     }
 
     private func updateScrollers() {
-        let vertical = !hideScrollbars, horizontal = !hideScrollbars && scrollbars == .overlay
+        let vertical = !hideScrollbars, horizontal = !hideScrollbars && scrollbars == .overlay && scrollsHorizontally
+        scrollView.horizontalScrollElasticity = scrollsHorizontally ? .automatic : .none
         if scrollView.verticalScroller is ScrollAreaScroller {
             scrollView.hasVerticalScroller = vertical
             scrollView.hasHorizontalScroller = horizontal

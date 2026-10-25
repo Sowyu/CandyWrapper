@@ -178,6 +178,8 @@ public final class OrchestratorPaneView: DSView {
         divider.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull()]
         layer?.addSublayer(divider)
         for s in [chatScroll, overviewScroll] {
+            // The chat and the Overview are columns: they wrap, never scroll sideways.
+            s.scrollsHorizontally = false
             s.scrollView.automaticallyAdjustsContentInsets = false
             s.scrollView.contentInsets = NSEdgeInsets()
         }
@@ -350,7 +352,7 @@ public final class OrchestratorPaneView: DSView {
     }
 
     private func layoutChat() {
-        let w = chatScroll.bounds.width
+        let w = chatScroll.contentWidth
         let h = max(chat.height(forWidth: w), chatScroll.bounds.height)
         let clip = chatScroll.scrollView.contentView.bounds
         pinnedToBottom = clip.maxY >= chat.frame.height - 40 || chat.frame.height <= clip.height
@@ -412,7 +414,8 @@ public final class OrchestratorPaneView: DSView {
         start.frame = NSRect(x: (w - sw) / 2, y: h - 56, width: sw, height: 36)
         layoutChat()
         if pinnedToBottom { scrollToBottom() }
-        overview.frame = NSRect(x: 0, y: 0, width: w, height: max(overview.height(forWidth: w), overviewScroll.bounds.height))
+        let columnWidth = overviewScroll.contentWidth
+        overview.frame = NSRect(x: 0, y: 0, width: columnWidth, height: max(overview.height(forWidth: columnWidth), overviewScroll.bounds.height))
     }
 
     public override func cancelOperation(_ sender: Any?) { onEscape?() }
