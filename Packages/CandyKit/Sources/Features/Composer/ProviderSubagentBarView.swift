@@ -77,36 +77,52 @@ public final class ProviderSubagentBarView: DSView {
     public override func layout() {
         super.layout()
         let midY = bounds.height / 2
-        var right = bounds.width - 8
+        // Sized by the composer surface (`@container/composer-surface`), not the window: a docked panel narrows
+        // the chat column on a wide window (ProviderSubagentBar.tsx:45-86, 60b35a1ee0).
+        let width = bounds.width
+        var right = width - 8
         if !openParent.isHidden {
+            // Below 320 "Open parent" keeps only its glyph (`sr-only` label).
+            let title = width < 320 ? nil : "Open parent"
+            if openParent.title != title { openParent.title = title; openParent.setAccessibilityLabel("Open parent") }
             let s = openParent.intrinsicContentSize
             openParent.frame = NSRect(x: right - s.width, y: midY - s.height / 2, width: s.width, height: s.height)
             right -= s.width + 12
         }
-        // `max-sm:hidden`: below a 640 viewport.
-        runsOnItsOwn.isHidden = (window?.contentView?.bounds.width ?? 1000) < 640
+        // Below 640 "Runs on its own" is left to screen readers.
+        runsOnItsOwn.isHidden = width < 640
         if !runsOnItsOwn.isHidden {
             let w = ceil(runsOnItsOwn.textWidth)
             runsOnItsOwn.frame = NSRect(x: right - w, y: midY - 10, width: w, height: 20)
             right -= w + 12
         }
+        // Below 560 the status drops to its own `text-xs` line under the model (`flex-col gap-0.5`).
+        // ponytail: the bar stays 48pt, where T3's grows to 54 with the second line; size it from the width if that shows
+        let stacked = width < 560
+        statusLabel.font = SB.tabular(stacked ? 12 : 14)
+        statusLabel.lineHeight = stacked ? 16 : 20
+        let modelY = stacked ? midY - (20 + 2 + 16) / 2 : midY - 10
         var x: CGFloat = 20
         if let icon {
-            icon.frame = NSRect(x: x, y: midY - 8, width: 16, height: 16)
+            icon.frame = NSRect(x: x, y: modelY + 2, width: 16, height: 16)
             x += 16 + 8
         }
         // The model cluster shrinks first (`min-w-0 truncate`), then the status.
         let ew = effort.isHidden ? 0 : ceil(effort.textWidth)
         let sw = ceil(statusLabel.textWidth)
         let room = max(0, right - x)
-        let mw = min(ceil(model.textWidth), max(0, room - (ew > 0 ? 8 + ew : 0) - 12 - min(sw, 120)))
-        model.frame = NSRect(x: x, y: midY - 10, width: mw, height: 20)
+        let mw = min(ceil(model.textWidth), max(0, room - (ew > 0 ? 8 + ew : 0) - (stacked ? 0 : 12 + min(sw, 120))))
+        model.frame = NSRect(x: x, y: modelY, width: mw, height: 20)
         x += mw
         if ew > 0 {
-            effort.frame = NSRect(x: x + 8, y: midY - 10, width: ew, height: 20)
+            effort.frame = NSRect(x: x + 8, y: modelY, width: ew, height: 20)
             x += 8 + ew
         }
-        x += 12
-        statusLabel.frame = NSRect(x: x, y: midY - 10, width: max(0, min(sw, right - x)), height: 20)
+        if stacked {
+            statusLabel.frame = NSRect(x: 20, y: modelY + 20 + 2, width: max(0, min(sw, right - 20)), height: 16)
+        } else {
+            x += 12
+            statusLabel.frame = NSRect(x: x, y: midY - 10, width: max(0, min(sw, right - x)), height: 20)
+        }
     }
 }
