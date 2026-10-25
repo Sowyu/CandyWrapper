@@ -187,11 +187,13 @@ final class ThreadTaskStepView: DSView {
         setAccessibilityElement(true)
         setAccessibilityLabel("\(done ? "Completed" : running ? "Running" : "Pending"): \(step.text) \(duration.text)")
     }
-    func height(forWidth width: CGFloat) -> CGFloat { max(16, text.height(forWidth: max(1, width - 88))) + 8 }
+    /// `min-w-12 whitespace-nowrap`: a duration over an hour widens its column instead of wrapping (9b7e7dff45).
+    private var durationWidth: CGFloat { max(48, ceil(duration.textWidth)) }
+    func height(forWidth width: CGFloat) -> CGFloat { max(16, text.height(forWidth: max(1, width - 40 - durationWidth))) + 8 }
     override func layout() {
         super.layout()
         icon.frame = NSRect(x: 6, y: 6, width: 12, height: 12)
-        text.frame = NSRect(x: 28, y: 4, width: max(1, bounds.width - 88), height: bounds.height - 8)
-        duration.frame = NSRect(x: bounds.width - 52, y: 4, width: 48, height: 16)
+        text.frame = NSRect(x: 28, y: 4, width: max(1, bounds.width - 40 - durationWidth), height: bounds.height - 8)
+        duration.frame = NSRect(x: bounds.width - 4 - durationWidth, y: 4, width: durationWidth, height: 16)
     }
 }
