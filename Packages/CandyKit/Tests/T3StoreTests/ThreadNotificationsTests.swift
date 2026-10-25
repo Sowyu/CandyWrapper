@@ -141,7 +141,7 @@ struct ThreadNotificationsTests {
         watching.pendingBackgroundTasks = [PendingBackgroundTask(taskId: "watch", kind: .monitor, awaited: true)]
         #expect(t.settle(environmentId: "env-1", threads: [watching]).isEmpty)
         watching.pendingBackgroundTasks = [PendingBackgroundTask(taskId: "watchdog", kind: .monitor)]
-        #expect(!SidebarModel.backgroundWorkHoldsCompletion(watching.pendingBackgroundTasks))
+        #expect(!SidebarModel.backgroundWorkHoldsCompletion(watching.pendingBackgroundTasks ?? []))
         var dev = completed()
         dev.pendingBackgroundTasks = [PendingBackgroundTask(taskId: "dev", kind: .command)]
         #expect(t.settle(environmentId: "env-1", threads: [dev]).map(\.title) == ["Thread completed"])

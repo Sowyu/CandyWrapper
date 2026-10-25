@@ -536,7 +536,10 @@ public final class SidebarContentView: DSView {
             }
         }
         guard list.rowFrame(id) != nil else { return }
+        // The row shows, so this route never widens the scope again, even if the user narrows it.
         revealPendingId = nil
+        // Before the list is on screen with a size, every row reads as out of view; the launch reveal waits for one.
+        guard window != nil, list.visibleRect.height > 0 else { return }
         initialRevealOwed = false
         list.scrollItemToVisible("thread:\(id.rawValue)") // `scrollIntoView({ block: "nearest" })`
     }
@@ -892,6 +895,7 @@ public final class SidebarContentView: DSView {
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         scheduleLabelTimer()
+        DispatchQueue.main.async { [weak self] in self?.revealRouteRow() }
         applyStage()
         syncDither()
     }
