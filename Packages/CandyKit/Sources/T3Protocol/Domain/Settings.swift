@@ -80,7 +80,7 @@ public struct ClientSettings: Equatable, Sendable {
         "composerCollapseOnScroll": SettingSpec(.bool, .bool(true)),
         "composerRichTextEnabled": SettingSpec(.bool, .bool(true)),
         "sendShortcut": SettingSpec(.literals(["enter", "mod-enter-multiline", "mod-enter"]), .string("enter")),
-        "followUpBehavior": SettingSpec(.literals(["queue", "steer"]), .string("queue")),
+        "followUpBehavior": SettingSpec(.literals(["queue", "steer"]), .string("steer")),
         "proactivePanelsEnabled": SettingSpec(.bool, .bool(false)),
         "showSkillsInSlashMenu": SettingSpec(.bool, .bool(true)),
         "legacySidebarEnabled": SettingSpec(.bool, .bool(false)),

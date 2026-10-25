@@ -60,6 +60,34 @@ struct NightlyCompatTests {
         #expect(configSeen && shellThreads > 100 && threadSeen)
     }
 
+    /// Nightly 3669 (fixtures/transcripts/23-nightly-3669.jsonl): the same session and thread as 3473,
+    /// recorded from a copy of the 3473 sandbox home. Its config adds `shellThreadFamilies`,
+    /// `shellOlderSettled` and the `idleCompaction`, `threadTitleInstructions` and `guestSharingEnabled`
+    /// settings.
+    @Test func recorded3669ConfigShellAndThreadDecode() throws {
+        var configSeen = false, shellThreads = 0, threadSeen = false
+        for frame in try WireTests.load("23-nightly-3669") where frame.dir == "recv" && frame.kind == "ws" {
+            let value = try JSONDecoder().decode(JSONValue.self, from: frame.bodyData)
+            if value["requestId"]?.stringValue == "1", let config = value["exit"]?["value"] {
+                _ = try config.decode(as: ServerProviderConfig.self)
+                #expect(config["shellThreadFamilies"] == .bool(true))
+                #expect(config["settings"]?["idleCompaction"]?.stringValue == "onReturn")
+                configSeen = true
+            }
+            for item in value["values"]?.arrayValue ?? [] {
+                if value["requestId"]?.stringValue == "3", case .snapshot(let shell, _) = try item.decode(as: ShellStreamItem.self) {
+                    shellThreads = max(shellThreads, shell.threads.count)
+                }
+                if value["requestId"]?.stringValue == "4", let projection = item["projection"] {
+                    let decoded = try projection.decode(as: ThreadProjection.self)
+                    #expect(Set(decoded.visibleTurnItems.map(\.item.type.rawValue)).isSuperset(of: ["fork", "compaction", "subagent"]))
+                    threadSeen = true
+                }
+            }
+        }
+        #expect(configSeen && shellThreads > 100 && threadSeen)
+    }
+
     @Test func futureRecordedConfigAndFramesDecode() throws {
         var unknown = 0, configSeen = false
         for frame in try WireTests.load("21-future-server") where frame.dir == "recv" {
@@ -103,7 +131,9 @@ struct NightlyCompatTests {
         #expect(NotificationSource.kind(.object(["kind": .string("future_kind")])) == "background_task")
         #expect(UsageProviderKind(rawValue: "pi") == .pi)
         #expect(UsageProviderKind.pi.label == "Pi")
-        #expect(UsageProviderKind.allCases.last == .pi)
+        // 3669 added Muse Code after Pi (usageProviders.ts:38-47).
+        #expect(UsageProviderKind.allCases.suffix(2) == [.pi, .muse])
+        #expect(UsageProviderKind(rawValue: "muse")?.label == "Muse Code")
     }
 
     @Test func oneEmailInTwoWorkspacesIsTwoAccounts() {

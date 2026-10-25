@@ -676,7 +676,8 @@ public struct PullRequestListFilters: Hashable, Sendable {
 /// What a failed pull request read says (`PullRequestUnavailableError.message`,
 /// `PullRequestOperationError.message`, pullRequest.ts:1270-1427).
 public enum PullRequestErrors {
-    /// `PROVIDER_REQUIREMENT` (pullRequest.ts:1270).
+    /// `PROVIDER_REQUIREMENT` (3473's pullRequest.ts:1270), for servers older than 3669, which send the
+    /// host's own `requirement` instead (pullRequest.ts:887-901, 233f6eac69).
     static let requirements: [String: (missing: String, unauthenticated: String)] = [
         "github": ("No GitHub credential on the server. Set GH_TOKEN, or install the GitHub CLI (https://cli.github.com/) and run `gh auth login`.",
                    "GitHub has no working credential for this host. Run `gh auth login`, or check the account and hosts in Settings → Source Control."),
@@ -695,10 +696,11 @@ public enum PullRequestErrors {
         switch tag {
         case "PullRequestUnavailableError":
             let provider = fields["provider"]?.stringValue
+            let sent = fields["requirement"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
             let requirement = provider.flatMap { requirements[$0] }
             switch fields["reason"]?.stringValue {
-            case "cli-missing": return requirement?.missing ?? "The tool this host is read through is not installed or set up."
-            case "cli-unauthenticated": return requirement?.unauthenticated ?? "This host has no working credentials."
+            case "cli-missing": return sent ?? requirement?.missing ?? "The tool this host is read through is not installed or set up."
+            case "cli-unauthenticated": return sent ?? requirement?.unauthenticated ?? "This host has no working credentials."
             default: return "Change requests cannot be browsed for this project's host yet."
             }
         case "PullRequestOperationError":

@@ -103,6 +103,12 @@ struct PullRequestWireTests {
                 == "Change requests cannot be browsed for this project's host yet.")
         #expect(PullRequestErrors.message(tag: "PullRequestUnavailableError", fields: ["reason": .string("cli-missing"), "provider": .string("github")])?
             .hasPrefix("No GitHub credential on the server.") == true)
+        // 3669 sends the host's own words, which win over the table older servers needed.
+        #expect(PullRequestErrors.message(tag: "PullRequestUnavailableError", fields: ["reason": .string("cli-unauthenticated"),
+                                                                                    "provider": .string("github"), "requirement": .string("Run gh auth login.")])
+                == "Run gh auth login.")
+        #expect(PullRequestErrors.message(tag: "PullRequestUnavailableError", fields: ["reason": .string("cli-missing"), "provider": .string("gitcafe")])
+                == "The tool this host is read through is not installed or set up.")
         #expect(PullRequestErrors.message(tag: "PullRequestOperationError", fields: ["operation": .string("detail"), "detail": .string("boom")])
                 == "Pull request operation detail failed: boom")
         #expect(PullRequestErrors.isNotFound(tag: "PullRequestOperationError", fields: ["reason": .string("not-found")]))

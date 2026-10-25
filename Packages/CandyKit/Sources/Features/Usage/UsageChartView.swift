@@ -15,6 +15,7 @@ public enum UsageStyle {
         case .opencode: NSColor(srgbRed: 0x5b / 255, green: 0x9b / 255, blue: 0xbd / 255, alpha: 1)
         case .antigravity: NSColor(srgbRed: 0x8c / 255, green: 0x7b / 255, blue: 0xd1 / 255, alpha: 1)
         case .pi: NSColor(srgbRed: 0x4d / 255, green: 0x9f / 255, blue: 0x8a / 255, alpha: 1)
+        case .muse: NSColor(srgbRed: 0x08 / 255, green: 0x66 / 255, blue: 0xff / 255, alpha: 1)
         }
     }
 
