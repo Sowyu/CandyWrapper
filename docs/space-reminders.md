@@ -2,6 +2,10 @@
 
 Piece 17 of [the Space plan](space.md), section 6. `SpaceReminderController` in Features consumes `SpacePlanning.ReminderPlanner`; it does not calculate a second set of dates. The planner stays Foundation-only. `SpaceNotificationCenter` is the test seam; its system implementation uses `UNUserNotificationCenter`.
 
+## Setting one
+
+A to-do's date menu has Remind me… once it has a date. It asks for a time on the due day and writes `{"at": "YYYY-MM-DDTHH:MM"}`; Remove reminder clears it, and the date label shows an alarm clock while one is set. Added on 2026-10-25 in the release check, since nothing in the app wrote `remind` before. The table can't set reminders yet.
+
 ## Scheduling and withdrawal
 
 The app enables reminders after the encrypted local store opens, even while the Space pane is hidden. An enabled cold launch keeps existing OS requests and delivered reminders during loading; loading is not a switch-off transition. It reconciles the complete plan at startup, on store changes, foreground delivery, activation, wake, day changes and system time-zone changes. One one-shot timer at the next scheduled fire refills the plan while the app runs. No polling runs at idle. macOS owns the requests and delivers them while CandyWrapper is closed, within the planner's 50-request, 30-day window.
