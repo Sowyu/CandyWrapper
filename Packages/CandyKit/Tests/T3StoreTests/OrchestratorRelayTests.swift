@@ -202,10 +202,10 @@ private final class FakeMachines {
     @Test func handsOffIsNeverPromptedOrArchived() async {
         let fake = FakeMachines()
         fake.config.handsOff = [ThreadId("w1").scoped(to: "book").rawValue]
-        #expect(await fake.run(#"{"tool":"send","machine":"book","threadId":"w1","text":"x","confirmed":true}"#).contains("is Hands off"))
-        #expect(await fake.run(#"{"tool":"archive","machine":"book","threadId":"w1"}"#).contains("is Hands off"))
+        #expect(await fake.run(#"{"tool":"send","machine":"book","threadId":"w1","text":"x","confirmed":true}"#).contains("is kept out"))
+        #expect(await fake.run(#"{"tool":"archive","machine":"book","threadId":"w1"}"#).contains("is kept out"))
         #expect(fake.requests.isEmpty)
-        #expect(await fake.run(#"{"tool":"list"}"#).contains("Hands off: report only, never prompt it"))
+        #expect(await fake.run(#"{"tool":"list"}"#).contains("Kept out: report only, never prompt it"))
     }
 
     @Test func askFirstRefusesUntilConfirmed() async {

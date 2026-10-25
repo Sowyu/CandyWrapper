@@ -19,7 +19,7 @@ public enum DitherThreadMenu {
         "settle": .check, "unsettle": .undo2, "snooze": .clock, "unsnooze": .alarmClockOff, "open-new-tab": .arrowUpRight,
         "pin": .pin, "unpin": .pinOff, "rename": .squarePen, "regenerate-title": .rotateCw, "copy": .copy,
         "new-thread-on-branch": .gitBranchPlus, "filter-by-project": .listFilter, "auto-settle": .circleCheck,
-        "project-settings": .settings, "mark-unread": .mail, "archive": .archive, "delete": .trash2, "hands-off": .shield,
+        "project-settings": .settings, "mark-unread": .mail, "archive": .archive, "delete": .trash2,
     ]
     /// Capy's shorter labels; the rest keep T3's.
     static let titles: [String: String] = ["settle": "Settle", "unsettle": "Un-settle", "unsnooze": "Wake", "pin": "Pin",
@@ -55,7 +55,19 @@ public enum DitherThreadMenu {
             m.isDisabled = t.disabled
             return m
         }
-        return MenuItem(title, icon: icons[t.id], shortcut: keys[t.id], destructive: t.destructive, disabled: t.disabled) { choose(t.id) }
+        var m: MenuItem
+        if let checked = t.checked {
+            // A setting: the same label either way, with a check while it's on.
+            m = .checkbox(title, checked: checked) { _ in choose(t.id) }
+            m.closesOnClick = true
+            m.isDisabled = t.disabled
+        } else {
+            m = MenuItem(title, icon: icons[t.id], shortcut: keys[t.id], destructive: t.destructive, disabled: t.disabled) { choose(t.id) }
+        }
+        m.subtitle = t.detail
+        m.tooltip = t.detail
+        m.widensForSubtitle = t.detail != nil
+        return m
     }
 
     private static func child(_ parent: String, _ t: ThreadMenuItem, presets: [SnoozePreset],

@@ -487,11 +487,13 @@ public struct ThreadMenuItem: Sendable, Equatable {
     public var separatorBefore = false
     public var checked: Bool?
     public var children: [ThreadMenuItem] = []
+    /// One line under the label and as its tooltip, saying what the item does.
+    public var detail: String?
 
     public init(_ id: String, _ label: String, disabled: Bool = false, destructive: Bool = false, separatorBefore: Bool = false,
-                checked: Bool? = nil, children: [ThreadMenuItem] = []) {
+                checked: Bool? = nil, children: [ThreadMenuItem] = [], detail: String? = nil) {
         self.id = id; self.label = label; self.disabled = disabled; self.destructive = destructive
-        self.separatorBefore = separatorBefore; self.checked = checked; self.children = children
+        self.separatorBefore = separatorBefore; self.checked = checked; self.children = children; self.detail = detail
     }
 }
 

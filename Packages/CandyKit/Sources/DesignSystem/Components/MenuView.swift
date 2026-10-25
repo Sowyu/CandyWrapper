@@ -41,6 +41,8 @@ public struct MenuItem {
     public var extraBottom: CGFloat = 0
     /// A second, muted 12pt line under the title (`PreviousWorktreeItemContent`); the glyph aligns to the title.
     public var subtitle: String?
+    /// The menu widens to show the whole subtitle, instead of sizing to the title and cutting the subtitle short.
+    public var widensForSubtitle = false
     /// A tooltip on the row, shown even while it is disabled (disabled reasons, side left).
     public var tooltip: String?
     /// Controls at the row's end (the browser menu's zoom cluster), made when the row is built.
@@ -606,7 +608,8 @@ final class MenuRowView: DSView {
     /// max-content width of the row.
     var naturalWidth: CGFloat {
         if isSeparator || isNote { return 16 }
-        var w = paddingLeading + paddingTrailing + label.textWidth
+        let text = item.widensForSubtitle ? max(label.textWidth, subtitleLabel?.textWidth ?? 0) : label.textWidth
+        var w = paddingLeading + paddingTrailing + text
         if isCheckbox { w += 16 + 8 }
         if iconView != nil || imageView != nil { w += 12 + 8 }
         if leadingView != nil { w += item.leadingSize + 8 }

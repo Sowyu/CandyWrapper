@@ -26,7 +26,7 @@ public struct OrchestratorCrewCard: Equatable {
     /// The sidebar's top status, nil when idle.
     public var status: SidebarTopStatus?
     public var lastLine: String?
-    /// "Hands off", or "You wrote 3 min ago, it asks first".
+    /// "Kept out", or "You wrote 3 min ago, it asks first".
     public var note: String?
     public var group: Group
     public init(id: ThreadId, title: String, project: String, state: String, status: SidebarTopStatus?, lastLine: String?, note: String?,

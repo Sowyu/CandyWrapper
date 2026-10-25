@@ -57,7 +57,7 @@ The calls are:
 
 CandyWrapper checks the limits in code before it relays a call, on top of the brief:
 
-- A thread marked Hands off is never prompted. "Hands off" is in the thread menu on every machine.
+- A thread you keep it out of is never prompted. "Keep <name> out" is in the thread menu on every machine.
 - If you wrote in a thread inside the ask-first window, `send` refuses until the Orchestrator asked you and adds `"confirmed":true`.
 - `launch` refuses once the worker limit is reached. It counts the running threads the relay launched on other machines plus the running children of the Orchestrator thread.
 - A message CandyWrapper relays reaches the server as yours, because T3 marks every client command `createdBy: "user"` (`ws.ts:1830`). CandyWrapper remembers when it relayed to each thread, so its own message doesn't start the ask-first window.
@@ -88,7 +88,7 @@ Clients used to keep their own task id, and any failed write or failed read made
 - Threads stay normal T3 threads. You can still open any thread and type in it yourself.
 - The Orchestrator's prompts show in a thread as coming from Orchestrator, with a small label naming it. T3 already records which thread sent each message (`senderThreadId`, `orchestratorMcp.ts:438`).
 - You and the Orchestrator share threads politely. If you sent the last message in a thread less than 10 minutes ago, the Orchestrator asks you before it prompts that thread. If a turn is running, it queues its message instead of interrupting, unless the thread is clearly stuck.
-- A thread can be marked "Hands off" from its menu. The Orchestrator still reads and reports on it, but never prompts it.
+- A thread's menu has "Keep <name> out", with its actual name, like "Keep Conductor out". It shows a check while it's on, and one line under it and as its tooltip: "<name> can read this thread but won't send it messages." The Orchestrator still reads and reports on the thread, but never prompts it. Until 2026-10-25 this was "Hands off"; the stored setting keeps that name, `handsOff`, so marks made before survive.
 - Approvals stay with you. The Orchestrator can answer a thread's questions but can't approve its commands (`orchestratorMcp.ts:228`). Every approval from every thread shows in its "Needs you" list.
 
 ### How the Orchestrator hears about every thread
@@ -148,7 +148,7 @@ The tab holds:
 - The Models list, described below.
 - The notebook: rules, worker rules, plan and digest, each editable.
 
-The Mac and the Android app share these settings and the Look, as "Settings on every device" below describes. While the CandyWrapper Helper is connected on the Orchestrator's machine, "While closed" greys out with "Handled by the Helper while it's running." and keeps its value, since the helper relays all the time and holds the check off. It comes back when the helper stops. The worker limit, ask-first and Hands off stay live: the helper enforces them too.
+The Mac and the Android app share these settings and the Look, as "Settings on every device" below describes. While the CandyWrapper Helper is connected on the Orchestrator's machine, "While closed" greys out with "Handled by the Helper while it's running." and keeps its value, since the helper relays all the time and holds the check off. It comes back when the helper stops. The worker limit, ask-first and kept-out threads stay live: the helper enforces them too.
 
 ### The Models list
 
@@ -213,7 +213,7 @@ The values are the same JSON as `OrchestratorConfig` encodes:
 | `models` | Array of `{"id","label","instanceId","model","options":[{"id","value"}],"useWhen","notes","isDefault"}`. |
 | `closedCheckMinutes` | Integer, 1 or more, or null for no "while closed" check. |
 | `askFirstMinutes` | Integer, 0 or more. |
-| `handsOff` | Array of `"<environmentId>:<threadId>"` strings, sorted. |
+| `handsOff` | The threads kept out ("Keep <name> out"). Array of `"<environmentId>:<threadId>"` strings, sorted. |
 | `botShape`, `botColor` | Integer, the `BotShape` and `BotColor` raw values, or null for the default flower in violet. |
 | `notebook.rules`, `notebook.crew-rules`, `notebook.plan`, `notebook.digest` | String, empty when the note is empty. |
 | `stash.<id>` | One stashed prompt: `{"prompt": String, "createdAt": ISO 8601}`, or null once it was restored or deleted. `<id>` is a lowercase UUID. |
@@ -335,7 +335,7 @@ A result that passes all checks closes the step. Archive the thread when its wor
 - Never approve a command or a file change. Approvals belong to the user. Tell the user which thread is waiting and what it wants to run.
 - Never do anything destructive or outward-facing without the user's yes. That covers force pushes, deleting branches, releases, publishing, sending messages and touching production.
 - Follow each project's AGENTS.md or CLAUDE.md. Copy the rules that matter into the worker's prompt.
-- Every thread on this machine is yours to manage, including the ones the user started. If the user sent the last message in a thread less than 10 minutes ago, ask before you prompt it. Never prompt a thread marked Hands off. If a turn is running, queue your message instead of interrupting, unless the thread is clearly stuck.
+- Every thread on this machine is yours to manage, including the ones the user started. If the user sent the last message in a thread less than 10 minutes ago, ask before you prompt it. Never send messages to a thread the user keeps you out of (marked Kept out). If a turn is running, queue your message instead of interrupting, unless the thread is clearly stuck.
 - Don't re-read whole threads to stay current. Read the new part. Each read costs the user money.
 - Keep secrets out of prompts, plans and notes.
 

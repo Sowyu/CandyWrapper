@@ -42,7 +42,7 @@ private func event(_ id: String, _ kind: OrchestratorEvent.Kind = .finished) -> 
         let e = OrchestratorEvent(threadId: ThreadId("env:abc"), title: "Release notes", kind: .finished, permission: .askFirst(minutesAgo: 3))
         #expect(e.line == "Event: “Release notes” finished a turn (t3-thread://v1/abc). The user wrote there 3 min ago, so ask first.")
         let h = OrchestratorEvent(threadId: ThreadId("abc"), title: "X", kind: .needsYou, permission: .handsOff)
-        #expect(h.line.hasSuffix("Hands off: report only, never prompt it."))
+        #expect(h.line.hasSuffix("Kept out: report only, never prompt it."))
     }
 }
 

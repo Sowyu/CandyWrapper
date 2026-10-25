@@ -49,7 +49,7 @@ final class SidebarCommands {
     /// `/projects/$projectKey` for a group key, set by the app.
     var openProjectSettings: (String) -> Void = { _ in }
 
-    /// Redesign's own thread menu rows (the Orchestrator's Hands off) and what choosing one does; true when handled.
+    /// Redesign's own thread menu rows (the Orchestrator's Keep out) and what choosing one does; true when handled.
     var extraMenuItems: (ThreadId) -> [ThreadMenuItem] = { _ in [] }
     var performExtra: (String, ThreadId) -> Bool = { _, _ in false }
 

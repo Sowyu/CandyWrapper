@@ -865,7 +865,7 @@ final class OrchestratorController {
                 }
                 let permission = OrchestratorPermission.of(t, handsOff: config.isHandsOff(scoped), windowMinutes: config.askFirstMinutes, now: now)
                 let note: String? = switch permission {
-                case .handsOff: "Hands off"
+                case .handsOff: "Kept out"
                 case .askFirst(let m): "You wrote \(m == 0 ? "just now" : "\(m) min ago"), so it asks first"
                 case .free: nil
                 }
@@ -891,12 +891,14 @@ final class OrchestratorController {
         }
     }
 
-    // MARK: Hands off
+    // MARK: Keep it out of a thread
 
+    /// "Keep <name> out", checked while it is (the stored `handsOff` set). Every machine: the relay prompts threads anywhere.
     func menuItems(_ id: ThreadId) -> [ThreadMenuItem] {
-        // Every machine: the relay prompts threads anywhere, so Hands off works anywhere.
         guard active, id.environmentId != nil, !config.isOrchestrator(id) else { return [] }
-        return [ThreadMenuItem("hands-off", config.isHandsOff(id) ? "Let the Orchestrator prompt it" : "Hands off")]
+        let name = config.displayName
+        return [ThreadMenuItem("hands-off", "Keep \(name) out", checked: config.isHandsOff(id),
+                               detail: "\(name) can read this thread but won't send it messages.")]
     }
 
     func perform(_ choice: String, _ id: ThreadId) -> Bool {

@@ -283,7 +283,7 @@ public struct OrchestratorRelay {
         let permission = OrchestratorPermission.of(thread, handsOff: config.isHandsOff(scoped), windowMinutes: config.askFirstMinutes,
                                                    now: host.now(), relayedAtMs: config.relayedAt[scoped.rawValue])
         switch permission {
-        case .handsOff: return refusal("“\(thread.title)” on \(machine.label) is Hands off. Report on it, never prompt it.")
+        case .handsOff: return refusal("“\(thread.title)” on \(machine.label) is kept out. Report on it, never prompt it.")
         case .askFirst(let m) where !call.confirmed:
             return refusal("the user wrote in “\(thread.title)” on \(machine.label) \(m == 0 ? "just now" : "\(m) min ago"). Ask the user first, then send again with \"confirmed\":true.")
         default: break
@@ -343,7 +343,7 @@ public struct OrchestratorRelay {
 
     func archive(_ thread: ThreadShell, on machine: OrchestratorMachineRef) async -> String {
         let scoped = thread.id.scoped(to: machine.id)
-        if host.config().isHandsOff(scoped) { return refusal("“\(thread.title)” on \(machine.label) is Hands off, so it stays.") }
+        if host.config().isHandsOff(scoped) { return refusal("“\(thread.title)” on \(machine.label) is kept out, so it stays.") }
         if OrchestratorEvent.running.contains(thread.status) { return refusal("“\(thread.title)” on \(machine.label) is still running.") }
         let command: JSONValue = .object(["type": .string("thread.archive"), "commandId": .string(UUID().uuidString.lowercased()),
                                           "threadId": .string(thread.id.rawValue)])

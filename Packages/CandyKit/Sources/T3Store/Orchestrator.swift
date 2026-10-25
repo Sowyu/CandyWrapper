@@ -104,7 +104,8 @@ public struct OrchestratorConfig: Codable, Hashable, Sendable {
     public var closedCheckMinutes: Int? = 30
     /// How recently you must have written in a thread for it to ask before prompting there.
     public var askFirstMinutes = 10
-    /// Scoped thread ids marked Hands off.
+    /// Scoped thread ids the user keeps it out of ("Keep <name> out" in the thread menu). The key stays `handsOff`, its
+    /// old name, so marks made before the rename survive and the Android app reads the same setting.
     public var handsOff: Set<String> = []
     /// By environment id.
     public var machines: [String: OrchestratorMachine] = [:]
@@ -253,11 +254,11 @@ public enum OrchestratorBrief {
         # How the app talks to you
 
         - Lines that start with "Event:" come from the app, not the user. Each names a thread that finished a turn, failed or needs something.
-        - The app marks threads you must not prompt with "Hands off", and threads the user wrote in during the last \(i.askFirstMinutes) minutes with "ask first".
+        - The app marks threads the user keeps you out of with "Kept out": you may read them and report on them, but never send them messages. It marks threads the user wrote in during the last \(i.askFirstMinutes) minutes with "ask first".
         - To save a note, write a fenced block named orchestrator-memory whose first line is `note: <name>` (rules, crew-rules, plan or digest), then the note's full new text.
         - Write plans as a fenced orchestrator-plan block with one numbered step per line, each with its thread link once it has one. Mark a finished step with [x].
 
-        Threads marked Hands off right now:
+        Threads the user keeps you out of right now:
         \(handsOff)
 
         \(visualsSection)
@@ -296,7 +297,7 @@ public enum OrchestratorBrief {
         - {"tool":"launch","machine":"<machine>","projectId":"<id>","title":"<name>","text":"<first prompt>","model":"<Models row label>","worktree":"<base ref>"} starts a worker. Leave out model for the default row and worktree to run in the project's checkout.
         - {"tool":"archive","machine":"<machine>","threadId":"<id>"} archives a finished thread.
 
-        The same limits hold on every machine, and CandyWrapper enforces them: it refuses to prompt a Hands off thread, it refuses an ask-first thread until you asked the user and send again with "confirmed":true, and it refuses a launch once \(i.crewLimit) workers run across all machines. On \(i.machine) itself, keep using your t3 tools. Calls run only while CandyWrapper is open. Event lines name the machine of any thread that isn't on \(i.machine).
+        The same limits hold on every machine, and CandyWrapper enforces them: it refuses to prompt a thread the user keeps you out of, it refuses an ask-first thread until you asked the user and send again with "confirmed":true, and it refuses a launch once \(i.crewLimit) workers run across all machines. On \(i.machine) itself, keep using your t3 tools. Calls run only while CandyWrapper is open. Event lines name the machine of any thread that isn't on \(i.machine).
         """
     }
 
@@ -356,7 +357,7 @@ public enum OrchestratorBrief {
         return String(h, radix: 16)
     }
 
-    /// Whether the thread needs an updated brief: the prompt, models, limits, projects and Hands off decide it. The
+    /// Whether the thread needs an updated brief: the prompt, models, limits, projects and kept-out threads decide it. The
     /// notebook stays out, since the Orchestrator writes most of it itself.
     // ponytail: notebook edits in Settings wait for the next session's brief; fold them in if the user edits notes there often
     public static func fingerprint(_ prompt: String, _ i: Inputs) -> String {
@@ -387,7 +388,7 @@ public enum OrchestratorBrief {
 
     /// The prompt the "while closed" scheduled task sends.
     public static let scheduledCheckPrompt = """
-    Scheduled check: CandyWrapper is closed. List every thread on this machine with t3_thread_list (each project), read only what changed since your last look, update your plan, and take the next step where one is due. Follow the Hands off and ask-first rules from your brief.
+    Scheduled check: CandyWrapper is closed. List every thread on this machine with t3_thread_list (each project), read only what changed since your last look, update your plan, and take the next step where one is due. Follow the kept-out and ask-first rules from your brief.
     """
 
     /// The spec's default prompt (docs/orchestrator.md, "Default prompt").
@@ -467,7 +468,7 @@ public enum OrchestratorBrief {
     - Never approve a command or a file change. Approvals belong to the user. Tell the user which thread is waiting and what it wants to run.
     - Never do anything destructive or outward-facing without the user's yes. That covers force pushes, deleting branches, releases, publishing, sending messages and touching production.
     - Follow each project's AGENTS.md or CLAUDE.md. Copy the rules that matter into the worker's prompt.
-    - Every thread on this machine is yours to manage, including the ones the user started. If the user sent the last message in a thread less than 10 minutes ago, ask before you prompt it. Never prompt a thread marked Hands off. If a turn is running, queue your message instead of interrupting, unless the thread is clearly stuck.
+    - Every thread on this machine is yours to manage, including the ones the user started. If the user sent the last message in a thread less than 10 minutes ago, ask before you prompt it. Never send messages to a thread the user keeps you out of (marked Kept out). If a turn is running, queue your message instead of interrupting, unless the thread is clearly stuck.
     - Don't re-read whole threads to stay current. Read the new part. Each read costs the user money.
     - Keep secrets out of prompts, plans and notes.
 
@@ -490,7 +491,7 @@ public enum OrchestratorPermission: Equatable, Sendable {
     case askFirst(minutesAgo: Int)
     case handsOff
 
-    /// Hands off wins; then "ask first" while your own message is the thread's last prompt and is younger than the
+    /// Kept out wins; then "ask first" while your own message is the thread's last prompt and is younger than the
     /// window. A prompt from another thread after yours (`latestUserMessageAt` past `latestUserAuthoredMessageAt`,
     /// ProjectionStore.ts:1622-1624) means you already said go. So does a relayed prompt at or after yours
     /// (`relayedAtMs`): the server records those as yours too, since every client command is `createdBy: "user"`.
@@ -510,7 +511,7 @@ public enum OrchestratorPermission: Equatable, Sendable {
         switch self {
         case .free: nil
         case .askFirst(let m): m == 0 ? "the user wrote there just now, so ask first" : "the user wrote there \(m) min ago, so ask first"
-        case .handsOff: "Hands off: report only, never prompt it"
+        case .handsOff: "Kept out: report only, never prompt it"
         }
     }
 }

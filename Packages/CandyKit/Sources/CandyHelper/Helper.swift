@@ -206,7 +206,7 @@ final class Helper {
             let merged = OrchestratorSettingsSync.merge(config: OrchestratorConfig(), stamps: [:], documents: documents, machine: homeId).config
             if merged != settings {
                 settings = merged
-                log("read CandyWrapper's settings: \(merged.handsOff.count) Hands off, worker limit \(merged.crewLimit)")
+                log("read CandyWrapper's settings: \(merged.handsOff.count) kept out, worker limit \(merged.crewLimit)")
             }
         }
         guard let orchestrator else { return }
@@ -285,9 +285,9 @@ final class Helper {
         let calls = replies.sorted { ($0.createdAt.epochMs ?? 0) < ($1.createdAt.epochMs ?? 0) }.flatMap { OrchestratorReply.parse($0.text).calls }
         guard !calls.isEmpty else { return }
         log("running \(calls.count) call\(calls.count == 1 ? "" : "s"): \(calls.map { $0.tool?.rawValue ?? "?" }.joined(separator: ", "))")
-        // Without the Hands off list and the limits nothing may act; reading would be fine, but one clear answer is safer.
+        // Without the kept-out list and the limits nothing may act; reading would be fine, but one clear answer is safer.
         guard settings != nil else {
-            send(OrchestratorRelay.resultPrefix + "refused: the helper hasn't got CandyWrapper's settings (Hands off and limits) yet. Ask the user to open CandyWrapper once.")
+            send(OrchestratorRelay.resultPrefix + "refused: the helper hasn't got CandyWrapper's settings (kept-out threads and limits) yet. Ask the user to open CandyWrapper once.")
             return
         }
         if let text = await OrchestratorRelay(host: host()).run(calls) { send(text) }
