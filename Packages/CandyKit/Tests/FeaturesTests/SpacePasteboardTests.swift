@@ -1,5 +1,7 @@
+import AppKit
 import Foundation
 import Testing
+@testable import Features
 
 /// Any process of this macOS user can read the general pasteboard, so no Space code may write to it on its own.
 /// Copy in the page editor writes only to the pasteboard AppKit hands it, after the user presses ⌘C.
@@ -30,5 +32,13 @@ struct SpacePasteboardTests {
             let hits = write.numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text))
             #expect(hits == 0, "\(file.lastPathComponent) writes NSPasteboard.general")
         }
+    }
+
+    @MainActor @Test func recoveryKeyCannotBeSelectedOrCopied() throws {
+        let field = SpaceRecoveryKeyLabel.make("ABCD-EFGH")
+        #expect(field.stringValue == "ABCD-EFGH")
+        #expect(!field.isSelectable && !field.isEditable && field.refusesFirstResponder)
+        let controller = try String(contentsOf: Self.repo.appendingPathComponent("App/Sources/SpaceController.swift"), encoding: .utf8)
+        #expect(controller.contains("SpaceRecoveryKeyLabel.make(key)"), "the first-run sheet shows the key through the unselectable label")
     }
 }

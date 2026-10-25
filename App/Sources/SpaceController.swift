@@ -173,10 +173,7 @@ final class SpaceController {
         let alert = NSAlert()
         alert.messageText = "Write down your Space recovery key"
         alert.informativeText = "Space stays encrypted on this Mac, with no sync. Write this key on paper or save it in your password manager by typing it in. If you lose this Mac and this key, your pages cannot be recovered."
-        let field = NSTextField(wrappingLabelWithString: key)
-        field.font = .monospacedSystemFont(ofSize: 16, weight: .medium)
-        field.frame = NSRect(x: 0, y: 0, width: 440, height: 65)
-        alert.accessoryView = field
+        alert.accessoryView = SpaceRecoveryKeyLabel.make(key)
         alert.addButton(withTitle: "I saved it")
         alert.addButton(withTitle: "Turn Space off")
         recoverySheet = alert
