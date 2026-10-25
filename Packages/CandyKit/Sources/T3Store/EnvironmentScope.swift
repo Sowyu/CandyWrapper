@@ -28,6 +28,12 @@ public enum EnvironmentScope {
         out.projects = snapshot.projects.map { scope($0, env) }
         out.threads = snapshot.threads.map { scope($0, env) }
         out.archivedThreads = snapshot.archivedThreads.map { scope($0, env) }
+        if snapshot.omissions?.isPartial == true { out.partialEnvironmentIds.insert(env) }
+        if var cut = snapshot.olderSettled {
+            cut.counts = cut.counts.map { .init(projectId: ProjectId(key(env, $0.projectId.rawValue)), count: $0.count) }
+            out.olderSettled = cut
+            out.olderSettledByEnvironment = [env: cut]
+        }
         return out
     }
 
@@ -142,6 +148,8 @@ public struct MergedShell: Sendable {
             merged.projects += part.projects
             merged.threads += part.threads
             merged.archivedThreads += part.archivedThreads
+            merged.olderSettledByEnvironment.merge(part.olderSettledByEnvironment) { _, new in new }
+            merged.partialEnvironmentIds.formUnion(part.partialEnvironmentIds)
         }
         return merged
     }
