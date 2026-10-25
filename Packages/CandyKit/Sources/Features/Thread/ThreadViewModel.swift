@@ -8,8 +8,10 @@ import T3Store
 struct TimelineRowUI: Hashable {
     /// Work log entries (and thoughts) whose details are open, limited to this row's entries.
     var expandedEntries: Set<String> = []
-    /// A long user message shows in full.
+    /// A long user message shows in full, or a folded agent or automation message is open.
     var messageExpanded = false
+    /// A folded message's sender thread title, or its automation's task title (TimelineUserMessageRow.tsx:142-152, 298-302).
+    var foldTitle: String?
     /// A long plan shows in full.
     var planExpanded = false
     /// The changed files card's fold-all state and the folders toggled since.
@@ -129,6 +131,8 @@ public final class ThreadViewModel {
     public var linkedThread: (@MainActor (ThreadId) -> MarkdownContextChips.LinkedThread?)?
     /// "Sent by automation": Settings > Scheduled Tasks with that task's editor.
     public var onOpenScheduledTask: (@MainActor (String) -> Void)?
+    /// The open thread's environment's scheduled task titles by id (`scheduledTasksLive`): folded automation rows show them.
+    public var scheduledTaskTitles: [String: String] = [:] { didSet { if scheduledTaskTitles != oldValue { refreshItems() } } }
     public var mcpApp: McpAppActions?
     /// The environment's providers: handoff dividers name their models by them (V2LifecycleRow.tsx:592-640).
     public var providers: [ServerProvider] = [] {
@@ -458,6 +462,14 @@ public final class ThreadViewModel {
             ui.expandedEntries = [thought.id]
         case .message(let m, _, _, _, _, let summary):
             ui.messageExpanded = !expandedMessages.isEmpty && expandedMessages.contains(m.id.rawValue)
+            if m.role == .user, m.createdBy == "agent" || m.scheduledTaskId != nil || m.text.hasPrefix("[Triggered by schedule task: ") {
+                let p = UserMessagePresentation.resolve(m)
+                switch p.attribution {
+                case .automation: ui.foldTitle = p.scheduledTaskId.flatMap { scheduledTaskTitles[$0] }
+                case .agent: ui.foldTitle = m.senderThreadId.flatMap { linkedThread?(ThreadId($0))?.title }
+                default: break
+                }
+            }
             if m.workflowOpening, let parentSubagents, let thread = projection?.thread.id {
                 ui.workflowCoordinator = WorkflowOpening.Plan.coordinator(of: thread, in: parentSubagents)
             }

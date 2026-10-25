@@ -77,13 +77,12 @@ final class UserIntentMarkerView: DSView {
     }
 }
 
-/// The line over a message the user did not type (MessagesTimeline.tsx:2359-2395): `me-1 text-2xs
-/// text-muted-foreground/70`. "Sent by automation" links its scheduled task (`hover:text-muted-foreground
-/// hover:underline`); "Sent by another agent" is an `InlineButton tone="muted"` (medium, muted, foreground
-/// and underlined on hover) when the sending thread is known.
-final class UserMessageAttributionView: ControlView {
+/// The link at the start of a folded message's action row (TimelineUserMessageRow.tsx:197-205, 595-600), `text-xs`.
+/// "Open automation" is a muted link underlined on hover; "Open thread" is an `InlineButton tone="muted"`
+/// (medium, muted, foreground and underlined on hover).
+final class FoldedMessageLinkView: ControlView {
     static let height: CGFloat = 16
-    let label = LabelView("", font: TL.font(11), color: TL.c(\.mutedForeground, 0.7))
+    let label = LabelView("", font: TL.font(12), color: TL.c(\.mutedForeground))
     private var automation = false
 
     override init(frame frameRect: NSRect) {
@@ -93,11 +92,12 @@ final class UserMessageAttributionView: ControlView {
         addSubview(label)
     }
 
-    func configure(_ p: UserMessagePresentation, senderThreadId: String?) {
-        automation = p.isAutomation
-        label.text = p.isAutomation ? "Sent by automation" : "Sent by another agent"
-        isEnabled = p.isAutomation ? p.scheduledTaskId != nil : senderThreadId != nil
-        setAccessibilityLabel(p.isAutomation || !isEnabled ? label.text : "Open sending thread")
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    func configure(automation: Bool) {
+        self.automation = automation
+        label.text = automation ? "Open automation" : "Open thread"
+        setAccessibilityLabel(label.text)
         restyle()
     }
 
@@ -107,15 +107,60 @@ final class UserMessageAttributionView: ControlView {
     override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
 
     private func restyle() {
-        let hovered = isEnabled && state.hovered
-        if automation || !isEnabled {
-            label.font = TL.font(11)
-            label.color = hovered ? TL.c(\.mutedForeground) : TL.c(\.mutedForeground, 0.7)
-        } else {
-            label.font = TL.font(11, .medium)
-            label.color = hovered ? TL.c(\.foreground) : TL.c(\.mutedForeground)
-        }
+        let hovered = state.hovered
+        label.font = automation ? TL.font(12) : TL.font(12, .medium)
+        label.color = hovered && !automation ? TL.c(\.foreground) : TL.c(\.mutedForeground)
         label.isUnderlined = hovered
+    }
+}
+
+/// `FoldedMessageHeader` (TimelineUserMessageRow.tsx:227-262): the one-line button of a folded agent or
+/// automation message. `flex items-center gap-1.5 px-3 py-2 text-sm`: a 16px muted icon, the muted label
+/// (at most half the button), the summary taking the rest, and a 14px chevron that turns over when open.
+final class FoldedMessageHeaderView: ControlView {
+    static let height: CGFloat = 36
+    private let agentIcon = IconView(name: .messagesSquare, size: 16, strokeColor: TL.c(\.mutedForeground))
+    private let automationIcon = IconView(name: .calendarClock, size: 16, strokeColor: TL.c(\.mutedForeground))
+    private let label = LabelView("", font: TL.font(14), color: TL.c(\.mutedForeground))
+    private let summary = LabelView("", font: TL.font(14), color: TL.c(\.foreground))
+    private let chevron = IconView(name: .chevronDown, size: 14, strokeColor: TL.c(\.mutedForeground))
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        scalesWhenPressed = false
+        label.lineHeight = 20
+        summary.lineHeight = 20
+        for v in [agentIcon, automationIcon, label, summary, chevron] as [NSView] { addSubview(v) }
+        setAccessibilityRole(.button)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    func configure(automation: Bool, label: String, summary: String, expanded: Bool) {
+        agentIcon.isHidden = automation
+        automationIcon.isHidden = !automation
+        self.label.text = label
+        self.summary.text = summary
+        chevron.setRotation(expanded ? 180 : 0)
+        setAccessibilityLabel("\(label): \(summary)")
+        setAccessibilityExpanded(expanded)
+        needsLayout = true
+    }
+
+    /// The button's max-content width.
+    var naturalWidth: CGFloat { 12 + 16 + 6 + ceil(label.textWidth) + 6 + ceil(summary.textWidth) + 6 + 14 + 12 }
+
+    override func layout() {
+        super.layout()
+        let h = bounds.height
+        agentIcon.frame = NSRect(x: 12, y: (h - 16) / 2, width: 16, height: 16)
+        automationIcon.frame = agentIcon.frame
+        chevron.frame = NSRect(x: bounds.width - 12 - 14, y: (h - 14) / 2, width: 14, height: 14)
+        // `max-w-1/2 shrink-0` on the label, `min-w-0 flex-1` on the summary.
+        let labelWidth = min(ceil(label.textWidth), bounds.width / 2)
+        label.frame = NSRect(x: 12 + 16 + 6, y: (h - 20) / 2, width: labelWidth, height: 20)
+        let summaryX = label.frame.maxX + 6
+        summary.frame = NSRect(x: summaryX, y: label.frame.minY, width: max(0, chevron.frame.minX - 6 - summaryX), height: 20)
     }
 }
 
@@ -137,7 +182,12 @@ final class UserMessageRowView: TimelineRowView {
     private let editButton = ButtonView(icon: .pencil, variant: .ghostMuted, size: .xs)
     private let fadeMask = CAGradientLayer()
     private let marker = UserIntentMarkerView(frame: .zero)
-    private let attribution = UserMessageAttributionView()
+    /// "Sent by T3 Code" over a message T3 Code sent itself (TimelineUserMessageRow.tsx:429-436), `me-1 text-2xs text-muted-foreground/70`.
+    private let attribution = LabelView("Sent by T3 Code", font: TL.font(11), color: TL.c(\.mutedForeground, 0.7))
+    /// Messages from other agents and automations fold to one line (TimelineUserMessageRow.tsx:128-225, 298-302).
+    private let foldHeader = FoldedMessageHeaderView()
+    private let openLink = FoldedMessageLinkView()
+    private var fold: UserMessagePresentation.Attribution?
     private var text = ""
     private var collapsible = false
     /// The image grid and file rows above the text (MessagesTimeline.tsx:2402-2490).
@@ -148,6 +198,7 @@ final class UserMessageRowView: TimelineRowView {
         bubble.fill = TL.c(\.messageSurface)
         bubble.radius = 18
         bubble.pane = true
+        attribution.lineHeight = 16
         addSubview(attribution)
         addSubview(marker)
         addSubview(bubble)
@@ -157,6 +208,12 @@ final class UserMessageRowView: TimelineRowView {
         // Over the bubble, not in it: the bubble takes no clicks (`FillView`), the images do.
         addSubview(attachments)
         bubble.addSubview(toggle)
+        addSubview(foldHeader)
+        addSubview(openLink)
+        foldHeader.action = { [weak self] in
+            guard let self, case .message(let m, _, _, _, _, _)? = self.item?.row.kind else { return }
+            self.context.model?.toggleMessage(m.id.rawValue)
+        }
         time.lineHeight = 16
         addSubview(time)
         addSubview(copyButton)
@@ -176,7 +233,7 @@ final class UserMessageRowView: TimelineRowView {
             guard let self else { return }
             Features.copy(self.text, from: self.copyButton)
         }
-        attribution.action = { [weak self] in
+        openLink.action = { [weak self] in
             guard let self, case .message(let m, _, _, _, _, _)? = self.item?.row.kind else { return }
             let p = UserMessagePresentation.resolve(m)
             if p.isAutomation { if let task = p.scheduledTaskId { self.context.model?.onOpenScheduledTask?(task) } }
@@ -190,9 +247,25 @@ final class UserMessageRowView: TimelineRowView {
         guard case .message(let m, _, _, _, _, _) = item.row.kind else { return }
         let presentation = UserMessagePresentation.resolve(m)
         text = presentation.text
-        attribution.isHidden = !presentation.isAutomation && m.createdBy != "agent"
-        if !attribution.isHidden { attribution.configure(presentation, senderThreadId: m.senderThreadId) }
-        editButton.isHidden = m.inputIntent != .turnStart && m.inputIntent != .queuedTurn
+        attribution.isHidden = presentation.attribution != .t3code
+        fold = presentation.attribution == .agent || presentation.isAutomation ? presentation.attribution : nil
+        foldHeader.isHidden = fold == nil
+        if let fold {
+            let automation = fold == .automation
+            let label = automation ? "Automation" : item.ui.foldTitle.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 } ?? "Agent"
+            // Automation: the task's title, else the prompt's first line. Agent: the first non-blank line, context links as their labels.
+            let summary = automation
+                ? item.ui.foldTitle ?? Self.firstLine(text.trimmingCharacters(in: .whitespacesAndNewlines))
+                : Self.foldSummary(ComposerInlineTokens.contextLabels(text))
+            foldHeader.configure(automation: automation, label: label, summary: summary, expanded: item.ui.messageExpanded)
+            openLink.configure(automation: automation)
+        }
+        openLink.isHidden = fold == nil || !item.ui.messageExpanded || (fold == .automation ? presentation.scheduledTaskId == nil : m.senderThreadId == nil)
+        let open = fold == nil || item.ui.messageExpanded
+        markdown.isHidden = !open
+        attachments.isHidden = !open
+        for v in [time, copyButton] as [NSView] { v.isHidden = !open }
+        editButton.isHidden = (m.inputIntent != .turnStart && m.inputIntent != .queuedTurn) || (fold != nil && !item.ui.messageExpanded)
         markdown.inlineSkills = context.model?.inlineSkills ?? []
         markdown.cwd = context.markdownCwd
         markdown.onOpenFile = context.model?.openFile
@@ -209,7 +282,8 @@ final class UserMessageRowView: TimelineRowView {
         markdown.onContextChip = { [weak self] action, _ in self?.openContextChip(action, message: m) }
         markdown.document = document
         attachments.configure(m, model: context.model)
-        collapsible = shouldCollapseUserMessage(text)
+        // A folded message is never collapsible (`collapsible={!folded}`).
+        collapsible = fold == nil && shouldCollapseUserMessage(text)
         toggle.title = item.ui.messageExpanded ? "Show less" : "Show full message"
         toggle.isHidden = !collapsible
         time.text = TL.dayAwareTimestamp(m.createdAt, now: context.now())
@@ -222,6 +296,11 @@ final class UserMessageRowView: TimelineRowView {
 
     /// A match below a collapsed message's fold opens it (`data-thread-find-fold`, MessagesTimeline.tsx:4737-4740).
     override func activeFindRect() -> CGRect? {
+        // A match inside a folded message opens it, as T3's `beforematch` does (TimelineUserMessageRow.tsx:449-458).
+        if fold != nil, item?.ui.messageExpanded != true, case .message(let m, _, _, _, _, _)? = item?.row.kind {
+            context.model?.toggleMessage(m.id.rawValue)
+            return nil
+        }
         guard let rect = markdown.activeFindRect() else { return nil }
         if collapsible, item?.ui.messageExpanded != true, rect.maxY > Self.collapsedHeight - Self.fade,
            case .message(let m, _, _, _, _, _)? = item?.row.kind {
@@ -233,6 +312,16 @@ final class UserMessageRowView: TimelineRowView {
 
     override func setContentVisible(_ visible: Bool) { attachments.setMediaVisible(visible) }
     override func prepareForReuse() { attachments.setMediaVisible(false); super.prepareForReuse() }
+
+    /// `text.split(/\r?\n/, 1)[0]`.
+    static func firstLine(_ text: String) -> String {
+        text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).first.map(String.init) ?? ""
+    }
+
+    /// `foldSummary` (TimelineUserMessageRow.tsx:329-333): the first non-blank line, trimmed.
+    static func foldSummary(_ text: String) -> String {
+        text.split(whereSeparator: \.isNewline).lazy.map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? ""
+    }
 
     /// A context chip click (MessagesTimeline.tsx:4243-4709): a mention previews its file, a thread
     /// opens, an image opens the media viewer over the message's images, a file opens, a pull
@@ -267,11 +356,19 @@ final class UserMessageRowView: TimelineRowView {
     }
 
     /// The attribution and marker lines, each with the 4px gap under it (`flex-col gap-1`).
-    private var attributionSpace: CGFloat { attribution.isHidden ? 0 : UserMessageAttributionView.height + 4 }
+    private var attributionSpace: CGFloat { attribution.isHidden ? 0 : 16 + 4 }
     private var markerSpace: CGFloat { attributionSpace + (marker.isHidden ? 0 : UserIntentMarkerView.height + 4) }
 
     private func metrics(_ width: CGFloat) -> (bubble: CGFloat, attachments: CGFloat, body: CGFloat, full: CGFloat) {
         let maxBubble = width * 0.8
+        if fold != nil {
+            // Folded: the header's max-content width. Open: `w-full`, the body under the header in `px-3 pb-3`.
+            // ponytail: no `max-h-96 overflow-auto` on the open body, so a long folded prompt shows in full; add an inner scroll view if that bothers
+            guard item?.ui.messageExpanded == true else { return (min(maxBubble, foldHeader.naturalWidth), 0, 0, 0) }
+            let inner = maxBubble - Self.padding * 2
+            let full = markdown.height(forWidth: inner)
+            return (maxBubble, attachments.height(forWidth: inner), full, full)
+        }
         let inner = maxBubble - Self.padding * 2
         // `fit-content`: the max-content width (unwrapped) if it fits, else the full 80%.
         let natural = max(markdown.layout(forWidth: 100_000).contentWidth, attachments.naturalWidth)
@@ -294,6 +391,10 @@ final class UserMessageRowView: TimelineRowView {
 
     override func height(forWidth width: CGFloat) -> CGFloat {
         let m = metrics(width)
+        if fold != nil {
+            let header = markerSpace + FoldedMessageHeaderView.height
+            return item?.ui.messageExpanded == true ? header + m.attachments + m.body + Self.padding + 4 + 24 + 16 : header + 16
+        }
         let footer: CGFloat = collapsible ? 6 + 24 : 0
         return markerSpace + m.attachments + m.body + footer + Self.padding * 2 + 4 + 24 + 16
     }
@@ -303,16 +404,21 @@ final class UserMessageRowView: TimelineRowView {
         let width = bounds.width
         let m = metrics(width)
         let footer: CGFloat = collapsible ? 6 + 24 : 0
-        let bubbleHeight = m.attachments + m.body + footer + Self.padding * 2
+        // A folded message's body sits under its 36px header with `px-3 pb-3`.
+        let bodyTop = fold == nil ? Self.padding : FoldedMessageHeaderView.height
+        let open = fold == nil || item?.ui.messageExpanded == true
+        let bubbleHeight = fold == nil ? m.attachments + m.body + footer + Self.padding * 2
+            : bodyTop + (open ? m.attachments + m.body + Self.padding : 0)
         let top = markerSpace
-        let attributionWidth = attribution.fittingWidth
-        attribution.frame = NSRect(x: width - 4 - attributionWidth, y: 0, width: attributionWidth, height: UserMessageAttributionView.height)
+        let attributionWidth = ceil(attribution.textWidth) + 1
+        attribution.frame = NSRect(x: width - 4 - attributionWidth, y: 0, width: attributionWidth, height: 16)
         let markerWidth = marker.fittingWidth
         marker.frame = NSRect(x: width - 4 - markerWidth, y: attributionSpace, width: markerWidth, height: UserIntentMarkerView.height)
         bubble.frame = NSRect(x: width - m.bubble, y: top, width: m.bubble, height: bubbleHeight)
+        foldHeader.frame = NSRect(x: width - m.bubble, y: top, width: m.bubble, height: FoldedMessageHeaderView.height)
         let attachmentsHeight = m.attachments
-        attachments.frame = NSRect(x: width - m.bubble + Self.padding, y: top + Self.padding, width: m.bubble - Self.padding * 2, height: attachmentsHeight)
-        markdown.frame = NSRect(x: Self.padding, y: Self.padding + attachmentsHeight, width: m.bubble - Self.padding * 2, height: m.full)
+        attachments.frame = NSRect(x: width - m.bubble + Self.padding, y: top + bodyTop, width: m.bubble - Self.padding * 2, height: attachmentsHeight)
+        markdown.frame = NSRect(x: Self.padding, y: bodyTop + attachmentsHeight, width: m.bubble - Self.padding * 2, height: m.full)
         let clipped = collapsible && m.body < m.full
         CATransaction.begin(); CATransaction.setDisableActions(true)
         if clipped {
@@ -334,6 +440,8 @@ final class UserMessageRowView: TimelineRowView {
         editButton.frame = NSRect(x: copyButton.frame.minX - 28, y: rowTop, width: 24, height: 24)
         let timeWidth = ceil(time.textWidth)
         time.frame = NSRect(x: (editButton.isHidden ? copyButton.frame.minX : editButton.frame.minX) - 8 - timeWidth, y: rowTop + 4, width: timeWidth, height: 16)
+        let linkWidth = openLink.fittingWidth
+        openLink.frame = NSRect(x: time.frame.minX - 8 - linkWidth, y: rowTop + 4, width: linkWidth, height: FoldedMessageLinkView.height)
     }
 
     /// T3 puts `group` on the bubble column (MessagesTimeline.tsx:2359), not on the row, so the
@@ -341,7 +449,7 @@ final class UserMessageRowView: TimelineRowView {
     override var tracksPointerMoves: Bool { true }
     override func hoverChanged() {
         let inGroup = pointer.map { $0.y < bounds.height - 16 } ?? false
-        Self.reveal([time, copyButton, editButton], inGroup || focusWithin)
+        Self.reveal([time, copyButton, editButton, openLink], inGroup || focusWithin)
     }
 }
 

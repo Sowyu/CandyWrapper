@@ -41,6 +41,12 @@ final class ThreadAutomationsController {
     func sync() {
         let id = openThreadId?()
         ScheduledTasksStore.shared.watch("thread", id?.environmentId.map { [$0] } ?? [])
+        // Folded automation rows name their task (TimelineUserMessageRow.tsx:142-152).
+        if let env = id?.environmentId, case .loaded(let tasks)? = ScheduledTasksStore.shared.lists[env] {
+            panel.model.scheduledTaskTitles = Dictionary(tasks.map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a })
+        } else {
+            panel.model.scheduledTaskTitles = [:]
+        }
         // The card fills on its first build.
         guard let card = panel.lazyDetailsCard.loaded else { return }
         let view = card.automations
