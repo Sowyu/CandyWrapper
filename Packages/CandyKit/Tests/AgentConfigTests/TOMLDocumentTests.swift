@@ -101,7 +101,8 @@ struct TOMLDocumentTests {
         try doc.removeTable(["mcp_servers", "github"])
         let start = try #require(Self.fixture.range(of: "[mcp_servers.github]"))
         let end = try #require(Self.fixture.range(of: "[mcp_servers.\"my server\"]"))
-        let expected = String(Self.fixture[..<start.lowerBound]) + String(Self.fixture[end.lowerBound...])
+        // The comment above the next header belongs to it and stays.
+        let expected = String(Self.fixture[..<start.lowerBound]) + "\n# A quoted server name.\n" + String(Self.fixture[end.lowerBound...])
         #expect(doc.text == expected)
         #expect(doc.value(at: ["mcp_servers", "github"]) == nil)
         #expect(doc.hasHeader(["profiles", "fast"]))
@@ -145,7 +146,7 @@ struct TOMLDocumentTests {
         try doc.removeArrayEntry(["skills", "config"], index: 0)
         let first = try #require(Self.fixture.range(of: "[[skills.config]]"))
         let second = try #require(Self.fixture.range(of: "[[skills.config]]", range: first.upperBound..<Self.fixture.endIndex))
-        let expected = String(Self.fixture[..<first.lowerBound]) + String(Self.fixture[second.lowerBound...])
+        let expected = String(Self.fixture[..<first.lowerBound]) + "\n" + String(Self.fixture[second.lowerBound...])
             .replacingOccurrences(of: "enabled = true # second enabled", with: "enabled = false # second enabled")
         #expect(doc.text == expected)
         try doc.set("enabled", to: "true", inArrayOfTables: ["skills", "config"], index: 0)

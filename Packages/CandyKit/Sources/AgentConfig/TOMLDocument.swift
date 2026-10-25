@@ -217,8 +217,16 @@ extension TOMLDocument {
         return matches[index]
     }
 
+    /// A section's header and statements. Comment and blank lines after its last statement stay: they usually sit
+    /// above the next header and belong to it, and keeping a stray comment is better than losing one.
     private func sectionRange(_ section: Int) -> Range<Int> {
-        let end = section + 1 < parsed.headers.count ? parsed.headers[section + 1].lines.lowerBound : lines.count
+        var end = section + 1 < parsed.headers.count ? parsed.headers[section + 1].lines.lowerBound : lines.count
+        let floor = parsed.statements.filter { $0.section == section }.map(\.lines.upperBound).max() ?? parsed.headers[section].lines.upperBound
+        while end > floor {
+            let line = lines[end - 1].content.trimmingCharacters(in: .whitespaces)
+            guard line.isEmpty || line.hasPrefix("#") else { break }
+            end -= 1
+        }
         return parsed.headers[section].lines.lowerBound..<end
     }
 
