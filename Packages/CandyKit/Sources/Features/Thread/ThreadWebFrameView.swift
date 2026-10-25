@@ -82,11 +82,8 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     private var loaded = false
     private var pendingHeight: JSONValue?
     private(set) var loadToken = UUID().uuidString
-    private let preview = HtmlRenderPreviewImageView()
-    private var captureGeneration = 0
+    private var preview: HtmlRenderPreviewImageView?
     private var paintReady = false
-    private var capturing = false
-    private var capturedKey: HtmlRenderWebCache.Key?
     private var displayedKey: HtmlRenderWebCache.Key?
 
     private var previewKey: HtmlRenderWebCache.Key? {
@@ -97,7 +94,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     override var isFlipped: Bool { true }
 
     var isLive: Bool { webView != nil }
-    var hasPreview: Bool { preview.image != nil && preview.superview != nil && !isHiddenOrHasHiddenAncestor }
+    var hasPreview: Bool { preview?.image != nil && preview?.superview != nil && !isHiddenOrHasHiddenAncestor }
 
     /// Creates the web view and loads `page`, unless it already shows it.
     func activate(_ page: Page) {
@@ -141,16 +138,13 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
 
     /// Tears the web view down; its content process goes when no other view uses it.
     func release() {
+        captureDepartingPreview()
         lastUserActivity = .distantPast
         loaded = false
         pendingHeight = nil
-        captureGeneration &+= 1
         paintReady = false
-        capturing = false
-        capturedKey = nil
         displayedKey = nil
-        preview.image = nil
-        preview.removeFromSuperview()
+        clearPreview()
         hostNavigation = nil
         guard let web = webView else { return }
         #if DEBUG
@@ -191,11 +185,12 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         super.layout()
         guard let key = previewKey, htmlCache?.isActive == true, window != nil, !isHiddenOrHasHiddenAncestor else { return }
         if displayedKey != key {
-            preview.image = nil
-            preview.removeFromSuperview()
+            clearPreview()
             displayedKey = nil
             if !paintReady, let image = htmlCache?.image(for: key) {
                 displayedKey = key
+                let preview = HtmlRenderPreviewImageView()
+                self.preview = preview
                 preview.image = image
                 preview.imageScaling = .scaleAxesIndependently
                 preview.frame = bounds
@@ -206,14 +201,20 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
                 #endif
             }
         }
-        if capturedKey != key { capturePreview() }
+        if paintReady {
+            clearPreview()
+        }
+    }
+
+    private func clearPreview() {
+        preview?.image = nil
+        preview?.removeFromSuperview()
+        preview = nil
     }
 
     func refreshPreview() {
-        capturedKey = nil
         displayedKey = nil
-        preview.image = nil
-        preview.removeFromSuperview()
+        clearPreview()
         paintReady = false
         if loaded, let webView { preparePreview(webView) }
         needsLayout = true
@@ -221,33 +222,18 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
 
     override func viewDidChangeBackingProperties() { super.viewDidChangeBackingProperties(); refreshPreview() }
 
-    private func capturePreview() {
-        guard paintReady, !capturing, window != nil, !isHiddenOrHasHiddenAncestor,
-              let web = webView, let cache = htmlCache, let key = previewKey else { return }
-        if cache.contains(key) {
-            capturedKey = key
-            preview.image = nil
-            preview.removeFromSuperview()
-            return
-        }
-        capturing = true
-        let generation = captureGeneration, cacheGeneration = cache.generation
+    /// Capture a painted document as it leaves. The retired WebKit view lives only until this one
+    /// readback completes, so active pages do not retain WebKit's snapshot buffers while scrolling.
+    private func captureDepartingPreview() {
+        guard paintReady, let web = webView, let cache = htmlCache, cache.isActive,
+              let key = previewKey, !cache.contains(key) else { return }
+        let generation = cache.generation
         let config = WKSnapshotConfiguration()
         config.afterScreenUpdates = true
-        web.takeSnapshot(with: config) { [weak self, weak web, weak cache] image, _ in
-            guard let self, let web, self.webView === web, self.captureGeneration == generation else { return }
-            self.preview.image = nil
-            self.preview.removeFromSuperview()
-            self.capturing = false
-            guard self.previewKey == key else { self.needsLayout = true; return }
-            self.capturedKey = key
+        web.takeSnapshot(with: config) { [weak cache, web] image, _ in
+            _ = web // Keep the retired view alive until WebKit completes its readback.
             guard let pixels = image?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
-            cache?.insert(pixels, for: key, generation: cacheGeneration)
-            #if DEBUG
-            if let page = self.page {
-                Self.benchmarkObserver?("snapshot", page, self, .object(["previewBytes": .number(Double(cache?.cost ?? 0))]))
-            }
-            #endif
+            cache?.insert(pixels, for: key, generation: generation)
         }
     }
 

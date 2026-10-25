@@ -95,12 +95,12 @@ final class HtmlRenderRowView: TimelineRowView {
     /// Off the viewport the page and any pending load go. A page loaded later asks `webAssetURL` again, as a kept signed URL
     /// may have expired. The height comes from the model's `htmlHeights`, so none of this moves the rows around it.
     private func syncContent() {
-        frameView.isHidden = !contentVisible
         if !wantsContent {
             loading?.cancel()
             loading = nil
             frameView.release()
         } else { load() }
+        frameView.isHidden = !contentVisible
     }
 
     override func prepareForReuse() {
