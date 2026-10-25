@@ -76,9 +76,8 @@ extension WebFrameSuites {
             #expect(!t.scrollView.contentView.bounds.intersects(row.frame))
         }
 
-        /// An HTML render never reloads on scroll: in overscan it hides its page, and a recycled row parks it for
-        /// the row that shows it next. The height holds throughout. A hidden timeline drops every page.
-        @Test func scrollingKeepsAnHtmlRendersPage() async throws {
+        /// Offscreen pages release WebKit even inside overscan; returning reloads without losing the row's height.
+        @Test func scrollingReleasesAnHtmlRendersPageAndReturningReloadsIt() async throws {
             let assets = Assets()
             let (window, t, model, row, frame) = try Self.fixture(mcp: false, assets: assets)
             defer { (t.view(forRow: "web") ?? row).prepareForReuse(); t.context.releasePages(); _ = (window, model) }
@@ -86,22 +85,24 @@ extension WebFrameSuites {
             let web = try #require(frame.webView)
             let height = row.frame.height
             Self.scrollAway(t, row)
-            #expect(frame.webView === web && frame.isHidden, "in overscan the page stays, hidden")
-            TimelineTilingTests.userScroll(t, to: 0)
-            #expect(frame.webView === web && !frame.isHidden)
+            #expect(!frame.isLive, "overscan keeps only the native row")
             #expect(row.frame.height == height)
-            // Far enough that the row recycles.
+            TimelineTilingTests.userScroll(t, to: 0)
+            await Self.until { frame.isLive }
+            #expect(frame.webView !== web)
+            #expect(row.frame.height == height)
+            #expect(assets.calls == 2)
             TimelineTilingTests.userScroll(t, to: row.frame.maxY + 3000)
             #expect(t.view(forRow: "web") == nil)
-            #expect(t.context.parkedPages == 1)
+            #expect(!frame.isLive)
             TimelineTilingTests.userScroll(t, to: 0)
             let back = try #require(t.view(forRow: "web") as? HtmlRenderRowView)
-            #expect(back.frameView.webView === web, "the row that shows the render again gets the same page")
+            await Self.until { back.frameView.isLive }
             #expect(back.frame.height == height)
-            #expect(assets.calls == 1, "no reload, so no new URL")
+            #expect(assets.calls == 3, "each return remints the signed URL")
             t.isHidden = true
             #expect(!back.frameView.isLive, "a hidden timeline holds no page")
-            #expect(t.context.parkedPages == 0)
+            #expect(!t.context.htmlPreviews.isActive)
         }
 
         /// The page reports its height at one width; a row recycled and shown again has it before any page loads.
