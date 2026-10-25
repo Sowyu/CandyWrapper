@@ -85,6 +85,15 @@ struct ThreadNotificationsTests {
         #expect(t.settle(environmentId: "env-1", threads: [completed(run: "run-3", at: "2026-09-13T11:00:00.000Z")]).map(\.title) == ["Thread completed"])
     }
 
+    /// 0345e852ed: a compaction T3 Code started (`latestRunSilent`) completes quietly too.
+    @Test func silentRunDoesNotAnnounceCompletion() {
+        var t = ThreadNotificationTracker()
+        _ = t.settle(environmentId: "env-1", threads: [running()])
+        var compacted = completed(run: "run-2", at: "2026-09-13T10:00:00.000Z")
+        compacted.latestRunSilent = true
+        #expect(t.settle(environmentId: "env-1", threads: [compacted]).isEmpty)
+    }
+
     @Test func reconnectDoesNotReplay() {
         var t = ThreadNotificationTracker()
         _ = t.settle(environmentId: "env-1", threads: [running()])
