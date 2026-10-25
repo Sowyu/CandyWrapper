@@ -122,7 +122,8 @@ enum SpaceImageImport {
 
     static func prepare(_ data: Data, name: String) throws -> Prepared {
         let ext = (name as NSString).pathExtension.lowercased()
-        if ext == "svg" || looksLikeSVG(data) {
+        // Any file whose root element is <svg>, whatever its name, goes through the sanitizer.
+        if ext == "svg" || ext == "svgz" || looksLikeSVG(data) {
             guard let clean = sanitizeSVG(data), let png = rasterize(clean, longEdge: svgPixels) else { throw Failure.unreadableSVG }
             return Prepared(data: png.data, name: name, mime: "image/png", w: png.w, h: png.h)
         }
@@ -137,17 +138,35 @@ enum SpaceImageImport {
         return Prepared(data: data, name: name, mime: mime.hasPrefix("image/") ? "application/octet-stream" : mime)
     }
 
+    /// The root element, after any prolog, comments and doctype, is `svg`, in UTF-8 or UTF-16, with or without a
+    /// namespace prefix.
     static func looksLikeSVG(_ data: Data) -> Bool {
-        guard let head = String(data: data.prefix(512), encoding: .utf8)?.lowercased() else { return false }
-        return head.contains("<svg")
+        let head = data.prefix(1_000_000)
+        guard let text = String(data: head, encoding: .utf8) ?? String(data: head, encoding: .utf16) else { return false }
+        return svgRoot.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
     }
+    private static let svgRoot = try! NSRegularExpression(
+        pattern: #"\A\x{FEFF}?\s*(?:<\?.*?\?>\s*|<!--.*?-->\s*|<!doctype[^>]*>\s*)*<(?:[\w.-]+:)?svg[\s>/]"#,
+        options: [.caseInsensitive, .dotMatchesLineSeparators])
 
     private static let bannedElements: Set<String> = [
         "script", "foreignobject", "iframe", "object", "embed", "audio", "video", "handler", "listener",
         "set", "animate", "animatemotion", "animatetransform", "animatecolor",
     ]
-    /// `url(` that points anywhere but a fragment in the same file.
-    private static let externalURL = try! NSRegularExpression(pattern: #"url\(\s*['"]?\s*(?!#)"#, options: .caseInsensitive)
+    /// A value that could reach outside the file: a `url(` whose target isn't a fragment, `@import`, `image-set(`,
+    /// or any CSS escape, since escapes can spell those in ways a plain check misses.
+    static func isUnsafeCSS(_ value: String) -> Bool {
+        let lower = value.lowercased()
+        if lower.contains("\\") || lower.contains("@import") || lower.contains("image-set(") || lower.contains("src(") || lower.contains("javascript:") { return true }
+        var rest = lower[...]
+        while let r = rest.range(of: "url(") {
+            var target = rest[r.upperBound...].drop { $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" }
+            if let q = target.first, q == "'" || q == "\"" { target = target.dropFirst().drop { $0 == " " } }
+            if target.first != "#" { return true }
+            rest = rest[r.upperBound...]
+        }
+        return false
+    }
     private static let safeHref = ["#", "data:image/png", "data:image/jpeg", "data:image/gif", "data:image/webp"]
 
     /// Drops scripts, event handlers, animations, foreign content and anything that could load a resource. Documents
@@ -170,11 +189,9 @@ enum SpaceImageImport {
         for attr in element.attributes ?? [] {
             let name = (attr.localName ?? attr.name ?? "").lowercased()
             let value = (attr.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let range = NSRange(value.startIndex..., in: value)
             let drop = name.hasPrefix("on")
                 || (name == "href" && !safeHref.contains { value.lowercased().hasPrefix($0) })
-                || externalURL.firstMatch(in: value, range: range) != nil
-                || value.lowercased().contains("javascript:")
+                || isUnsafeCSS(value)
             if drop, let full = attr.name { element.removeAttribute(forName: full) }
         }
         for child in (element.children ?? []).reversed() {
@@ -182,9 +199,7 @@ enum SpaceImageImport {
             case .element:
                 guard let e = child as? XMLElement else { continue }
                 let name = (e.localName ?? "").lowercased()
-                let css = name == "style" ? (e.stringValue ?? "") : ""
-                let range = NSRange(css.startIndex..., in: css)
-                if bannedElements.contains(name) || css.lowercased().contains("@import") || externalURL.firstMatch(in: css, range: range) != nil {
+                if bannedElements.contains(name) || (name == "style" && isUnsafeCSS(e.stringValue ?? "")) {
                     element.removeChild(at: child.index)
                 } else {
                     clean(e)

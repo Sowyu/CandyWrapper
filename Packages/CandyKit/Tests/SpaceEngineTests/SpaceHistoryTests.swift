@@ -65,6 +65,21 @@ struct SpaceHistoryTests {
         #expect(SpaceHistory.restore(versions[1], in: current).isEmpty)
     }
 
+    /// An emoji-era version comes back over a later image icon, since `iconImage` wins when both are set.
+    @Test func restoreBringsBackTheIconOfEitherKind() throws {
+        let logo = BlobReference(id: String(repeating: "a", count: 64), name: "logo.svg", mime: "image/png", size: 9)
+        let ops = [
+            op(mac, 0, try RecordChange.page(page, PageRecord(order: try OrderKey("a0"), title: "Plan", icon: "🎬", created: 0))),
+            op(mac, 20 * minute, RecordChange(kind: .page, id: page, set: ["icon": .null, "iconImage": try JSONValue(encoding: logo)])),
+        ]
+        var current = SpaceState()
+        for o in ops { current.apply(o.payload.changes) }
+        let versions = SpaceHistory.versions(of: page, base: SpaceState(), ops: ops)
+        current.apply(SpaceHistory.restore(versions[1], in: current))
+        #expect(current.page(page)?.icon == "🎬")
+        #expect(current.page(page)?.iconImage == nil)
+    }
+
     /// docs/space.md section 9: child pages stay where they are, since history covers the page's own text. A child
     /// made after the version stays live, with its own blocks, and keeps its place.
     @Test func restoreKeepsChildPagesMadeSinceTheVersion() throws {

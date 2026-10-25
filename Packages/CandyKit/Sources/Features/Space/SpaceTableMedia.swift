@@ -18,15 +18,14 @@ extension SpaceTableDocument {
         guard model.rows.indices.contains(row) else { return }
         let id = model.rows[row].id
         SpacePageIcon.showPicker(from: self, anchor: anchor, current: model.rows[row].page) { [weak self] choice in
-            guard let self, let i = self.rowIndex[id] else { return }
-            self.model.setIcon(i, choice)
+            self?.model.setIcon(of: id, choice)
         }
     }
 
     func setIcon(from files: [(data: Data, name: String)], row id: PageID) {
         Task { @MainActor [weak self] in
-            guard let blob = await SpaceMedia.shared.add(Array(files.prefix(1))).first, let self, let i = self.rowIndex[id] else { return }
-            if blob.mime.hasPrefix("image/") { self.model.setIcon(i, .image(blob)) } else { NSSound.beep() }
+            guard let blob = await SpaceMedia.shared.add(Array(files.prefix(1))).first, let self else { return }
+            if blob.mime.hasPrefix("image/") { self.model.setIcon(of: id, .image(blob)) } else { NSSound.beep() }
         }
     }
 
@@ -34,8 +33,7 @@ extension SpaceTableDocument {
     func attach(_ files: [(data: Data, name: String)], row id: PageID, column columnID: String) {
         Task { @MainActor [weak self] in
             let refs = await SpaceMedia.shared.add(files)
-            guard let self, let i = self.rowIndex[id], let column = self.model.columns.first(where: { $0.id == columnID }) else { return }
-            self.model.addFiles(i, column, refs)
+            self?.model.addFiles(to: id, field: columnID, refs)
         }
     }
 
@@ -57,12 +55,8 @@ extension SpaceTableDocument {
         var v: NSView? = superview
         while let cur = v, !(cur is SpaceTableView) { v = cur.superview }
         guard let table = v as? SpaceTableView else { return }
-        let toasts = table.toasts
-        var shown = 0
-        shown = toasts.show(ToastView(title: "Deleted \(name)", actionTitle: "Undo", action: { [weak self, weak toasts] in
-            self?.undo(nil)
-            toasts?.dismiss(shown)
-        }))
+        // Any later change closes the toast (SpaceTableView), so its Undo only ever undoes this delete.
+        table.deleteToast = table.toasts.show(ToastView(title: "Deleted \(name)", actionTitle: "Undo", action: { [weak self] in self?.undo(nil) }))
     }
 }
 
@@ -137,6 +131,9 @@ final class SpaceFilesPopover: DSView {
     private let rowID: PageID
     private let columnID: String
     private var rowViews: [SpaceFileRow] = []
+    /// Past five and a half files the list scrolls; the footer stays put.
+    let scroll = NSScrollView()
+    private let list = DSView()
     private let add = ButtonView("Add files", icon: .plus, variant: .ghost, size: .sm)
     private let hint = LabelView("or paste or drop them here", font: DSFont.ui(12), color: Themed.color(\.placeholder))
     private let empty = LabelView("No files yet", font: DSFont.ui(13), color: Themed.color(\.mutedForeground))
@@ -150,7 +147,12 @@ final class SpaceFilesPopover: DSView {
         add.action = { [weak self] in self?.choose() }
         hint.lineHeight = 16
         empty.lineHeight = 20
-        [add, hint, empty].forEach(addSubview)
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.scrollerStyle = .overlay
+        scroll.documentView = list
+        [scroll, add, hint, empty].forEach(addSubview)
         registerForDraggedTypes([.fileURL, .png, .tiff, NSPasteboard.PasteboardType(UTType.svg.identifier)])
         setAccessibilityLabel("Files")
         mediaToken = NotificationCenter.default.addObserver(forName: SpaceMedia.didLoad, object: nil, queue: .main) { [weak self] _ in
@@ -175,7 +177,7 @@ final class SpaceFilesPopover: DSView {
             let v = SpaceFileRow()
             v.onOpen = { [weak self, weak v] in self?.open(v?.index ?? 0) }
             v.onRemove = { [weak self, weak v] in self?.remove(v?.index ?? 0) }
-            addSubview(v)
+            list.addSubview(v)
             rowViews.append(v)
         }
         for (i, v) in rowViews.enumerated() { v.index = i; v.ref = refs[i] }
@@ -188,15 +190,16 @@ final class SpaceFilesPopover: DSView {
     }
 
     private var listHeight: CGFloat { rowViews.isEmpty ? 44 : CGFloat(rowViews.count) * Self.rowHeight }
-    override var intrinsicContentSize: NSSize { NSSize(width: Self.width, height: 6 + min(listHeight, 5.5 * Self.rowHeight) + 1 + 44) }
+    private var visibleListHeight: CGFloat { min(listHeight, 5.5 * Self.rowHeight) }
+    override var intrinsicContentSize: NSSize { NSSize(width: Self.width, height: 6 + visibleListHeight + 1 + 44) }
     override var fittingSize: NSSize { intrinsicContentSize }
 
     override func layout() {
         super.layout()
-        var y: CGFloat = 6
-        for v in rowViews {
-            v.frame = NSRect(x: 6, y: y, width: bounds.width - 12, height: Self.rowHeight)
-            y += Self.rowHeight
+        scroll.frame = NSRect(x: 0, y: 6, width: bounds.width, height: visibleListHeight)
+        list.frame = NSRect(x: 0, y: 0, width: bounds.width, height: CGFloat(rowViews.count) * Self.rowHeight)
+        for (i, v) in rowViews.enumerated() {
+            v.frame = NSRect(x: 6, y: CGFloat(i) * Self.rowHeight, width: bounds.width - 12, height: Self.rowHeight)
         }
         empty.frame = NSRect(x: 16, y: 18, width: bounds.width - 32, height: 20)
         let footer = bounds.height - 40

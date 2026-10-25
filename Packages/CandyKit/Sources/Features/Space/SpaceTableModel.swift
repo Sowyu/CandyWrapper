@@ -525,9 +525,18 @@ final class SpaceTableModel {
     }
 
     func addFiles(_ row: Int, _ column: Column, _ refs: [BlobReference]) {
-        guard column.type == .files, !refs.isEmpty else { return }
-        let old = files(row, column)
-        setValue(row, column, .files(old + refs.filter { r in !old.contains { $0.id == r.id } }))
+        guard rows.indices.contains(row) else { return }
+        addFiles(to: rows[row].id, field: column.id, refs)
+    }
+
+    /// By page id, so an upload that finishes after its row was filtered out or sorted away still lands.
+    func addFiles(to id: PageID, field: String, _ refs: [BlobReference]) {
+        guard let item = store.pages[id], item.parent == page, fields[field]?.type == .files, !refs.isEmpty else { return }
+        var old: [BlobReference] = []
+        if case .files(let current)? = item.props[field] { old = current }
+        let added = refs.filter { r in !old.contains { $0.id == r.id } }
+        guard !added.isEmpty else { return }
+        commit([pageChange(id, ["props.\(field)": json(PropertyValue.files(old + added))])], name: "Edit \(name(of: field))")
     }
 
     func removeFile(_ row: Int, _ column: Column, at index: Int) {
@@ -539,7 +548,12 @@ final class SpaceTableModel {
 
     func setIcon(_ row: Int, _ choice: SpacePageIcon.Choice) {
         guard rows.indices.contains(row) else { return }
-        commit([SpacePageIcon.change(rows[row].id, choice)], name: "Icon")
+        setIcon(of: rows[row].id, choice)
+    }
+
+    func setIcon(of id: PageID, _ choice: SpacePageIcon.Choice) {
+        guard store.pages[id]?.parent == page else { return }
+        commit([SpacePageIcon.change(id, choice)], name: "Icon")
     }
 
     /// "Course is MATH2221", "Due this week", "Weight ≥ 10".

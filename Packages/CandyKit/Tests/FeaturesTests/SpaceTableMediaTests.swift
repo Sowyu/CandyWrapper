@@ -115,6 +115,40 @@ struct SpaceTableMediaTests {
         #expect(PersistentSpacePageStore.blobIDs(inPage: ["title": .string("x")]).isEmpty)
     }
 
+    @Test func uploadsLandOnARowThatWasFilteredAway() throws {
+        let (model, _, _) = try make()
+        let id = model.rows[1].id
+        model.addFilter(Filter(field: FieldID.title, op: .is, value: .string("Streamly")))
+        #expect(!model.rows.contains { $0.id == id })
+        model.addFiles(to: id, field: "media", [logo])
+        model.setIcon(of: id, .image(logo))
+        model.removeFilter(0)
+        let i = try #require(model.rows.firstIndex { $0.id == id })
+        #expect(model.files(i, column(model, "media")) == [logo])
+        #expect(model.rows[i].page.iconImage == logo)
+    }
+
+    @Test func filesListScrollsPastFiveFiles() throws {
+        let (model, _, _) = try make()
+        let refs = (0..<7).map { BlobReference(id: String(repeating: "\($0)", count: 64), name: "f\($0).png", mime: "image/png", size: 10) }
+        model.addFiles(0, column(model, "media"), refs)
+        let doc = SpaceTableDocument(model: model)
+        let popover = SpaceFilesPopover(doc: doc, row: model.rows[0].id, column: "media")
+        popover.setFrameSize(popover.intrinsicContentSize)
+        popover.layoutSubtreeIfNeeded()
+        #expect(popover.scroll.frame.height == 5.5 * SpaceFilesPopover.rowHeight)
+        #expect(popover.scroll.documentView?.frame.height == 7 * SpaceFilesPopover.rowHeight)
+    }
+
+    @Test func deleteToastClosesOnTheNextChange() throws {
+        let (model, _, page) = try make()
+        let table = SpaceTableView(store: model.store, page: page)
+        table.doc.deleteField("price")
+        #expect(table.deleteToast != nil)
+        table.model.setText(0, table.model.columns[0], "Renamed")
+        #expect(table.deleteToast == nil)
+    }
+
     @Test func emojiSearchMatchesWordPrefixes() {
         #expect(SpaceEmoji.all.count > 900)
         #expect(SpaceEmoji.all.first?.emoji == "😀")
@@ -143,6 +177,31 @@ struct SpaceImageImportTests {
         }
         #expect(text.contains("<rect"))
         #expect(text.contains("href=\"#r\""))
+    }
+
+    @Test func cssEscapesAndOddURLsAreDropped() throws {
+        let svg = #"""
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><defs><linearGradient id="g"/></defs>\
+        <style>rect{fill:\\75rl(http://example.com/a)}</style><rect width="10" height="10" style="fill:\\75rl(http://example.com/b)"/>\
+        <circle r="3" fill="url('#g')"/><circle r="2" fill="url( #g )"/><circle r="1" fill="URL(&quot;http://example.com/c&quot;)"/></svg>
+        """#
+        let clean = try #require(SpaceImageImport.sanitizeSVG(Data(svg.utf8)))
+        let text = String(decoding: clean, as: UTF8.self).lowercased()
+        #expect(!text.contains("example.com"))
+        #expect(!text.contains("<style"))
+        #expect(text.contains("url('#g')"))
+        #expect(text.contains("url( #g )"))
+    }
+
+    @Test func svgRootsAreFoundWhateverTheName() throws {
+        let comment = "<!-- " + String(repeating: "x", count: 900) + " -->"
+        let svg = #"<?xml version="1.0"?>"# + comment + #"<svg:svg xmlns:svg="http://www.w3.org/2000/svg" viewBox="0 0 2 1"><svg:rect width="2" height="1"/></svg:svg>"#
+        #expect(SpaceImageImport.looksLikeSVG(Data(svg.utf8)))
+        #expect(SpaceImageImport.looksLikeSVG(svg.data(using: .utf16)!))
+        let p = try SpaceImageImport.prepare(Data(svg.utf8), name: "notes.txt")
+        #expect(p.mime == "image/png")
+        #expect(!SpaceImageImport.looksLikeSVG(Data("<html><body><svg/></body></html>".utf8)))
+        #expect(try SpaceImageImport.prepare(Data("<html><svg/></html>".utf8), name: "page.html").mime == "text/html")
     }
 
     @Test func documentTypeDeclarationsAreRefused() {

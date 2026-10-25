@@ -390,9 +390,9 @@ Filter ops by type:
 - A click selects a cell. Return or typing edits it, Return commits, Escape cancels, and Tab moves on. Checkbox cells toggle in one click.
 - Header menus rename, change type, sort, filter, hide and delete a column. The last "+" header adds a field. Dragging a header edge resizes it.
 - The title column renames like any other, into the page's `titleName`, so Board's menus use the same name. It hides in this view with `titleHidden` but never deletes, since every row is a page with a title. Its header menu says so in one line, and the Fields menu shows it again.
-- Deleting a field happens at once and shows a "Deleted <name>" toast with Undo. Edit > Undo works too. The values stay on the rows, so undo restores the column with everything in it.
+- Deleting a field happens at once and shows a "Deleted <name>" toast with Undo. The next change closes the toast, so its Undo only ever undoes that delete. Edit > Undo works too. The values stay on the rows, so undo restores the column with everything in it.
 - A row's icon shows before its title. A click on it, or on the add-icon button a hovered row shows at the right of its title, opens the icon picker. The row menu has Icon… too, and dropping an image on a title sets it.
-- A Files & media cell shows a thumbnail per image and a paperclip tile per other file, then "+N". Return or a second click opens a list with each file's name and size, Open for images, Remove, and Add files. Pasting into a selected cell or into the list, or dropping files on either, adds them. A click on a thumbnail in a selected cell opens the image large.
+- A Files & media cell shows a thumbnail per image and a paperclip tile per other file, then "+N". Return or a second click opens a list with each file's name and size, Open for images, Remove, and Add files. Past five files the list scrolls. Pasting into a selected cell or into the list, or dropping files on either, adds them. A click on a thumbnail in a selected cell opens the image large.
 - "+ New" sits under the last row.
 - With a sort on, row drag is off and a hint says "Clear the sort to reorder".
 - Changing a field's type converts values where it can, like text to select by matching option names, and clears the rest after a confirmation that names how many values are lost.
@@ -469,8 +469,8 @@ macOS stores pending and delivered notification text in its own database, outsid
 
 - Images arrive by paste, drop or the `/` menu. Files arrive the same way as `file` blocks.
 - Files & media values and page icons use the same blob references and the same encrypted blob store as blocks.
-- An SVG is never stored as SVG. On import the app refuses any document with a DTD, removes scripts, event handlers, animations, foreign content, style sheets that import, and every reference outside the file, then draws it once into a PNG 1,024 pixels on its long edge. The PNG is the blob, with the SVG's name and `image/png`, so no client ever parses SVG from Space.
-- Page icons are an emoji in `icon` or an uploaded image or SVG in `iconImage`. They show before the title in the page header, Table rows, Board cards, page link rows and the sidebar tree. The picker searches emoji by their Unicode names and uploads by button, paste or drop.
+- An SVG is never stored as SVG. Any file whose root element is `svg`, whatever its name or encoding, counts as one. On import the app refuses any document with a DTD, removes scripts, event handlers, animations, foreign content, CSS with escapes or imports, and every reference outside the file, then draws it once into a PNG 1,024 pixels on its long edge. The PNG is the blob, with the SVG's name and `image/png`, so no client ever parses SVG from Space.
+- Page icons are an emoji in `icon` or an uploaded image or SVG in `iconImage`. Restoring a version from page history puts back whichever one it had. They show before the title in the page header, Table rows, Board cards, page link rows and the sidebar tree. The picker searches emoji by their Unicode names and uploads by button, paste or drop.
 - Delete forever removes a blob from this Mac only when no block, icon or Files & media value of a remaining page uses it.
 - Limits are 20 MB per image and 50 MB per file, checked before upload with a plain message.
 - The app keeps the original bytes and also makes a preview at 1,600pt on the long edge as HEIC, so phones and lists don't fetch originals.

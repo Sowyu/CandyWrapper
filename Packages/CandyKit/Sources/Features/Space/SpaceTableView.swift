@@ -13,6 +13,7 @@ final class SpaceTableView: DSView {
     let doc: SpaceTableDocument
     /// "Deleted <field>" with Undo.
     let toasts = ToastViewport()
+    var deleteToast: Int?
 
     init(store: SpaceDocumentStore, page: PageID) {
         model = SpaceTableModel(store: store, page: page)
@@ -27,7 +28,11 @@ final class SpaceTableView: DSView {
         NotificationCenter.default.addObserver(self, selector: #selector(scrolled), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
         addSubview(scroll)
         addSubview(toasts)
-        model.onChange = { [weak self] in self?.doc.reloadData() }
+        model.onChange = { [weak self] in
+            guard let self else { return }
+            self.doc.reloadData()
+            if let t = self.deleteToast { self.toasts.dismiss(t); self.deleteToast = nil }
+        }
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }

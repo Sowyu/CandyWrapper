@@ -79,7 +79,7 @@ public enum SpaceHistory {
     }
 
     /// The changes that put the page back to `version` in `current`, as one edit: every block the version had takes
-    /// its values back, trashed or not, blocks added since go to Trash, and the title and icon return. Child pages
+    /// its values back, trashed or not, blocks added since go to Trash, and the title and icon, emoji or image, return. Child pages
     /// keep their place, since history covers the page's own text. Empty when nothing differs.
     public static func restore(_ version: SpaceVersion, in current: SpaceState) -> [RecordChange] {
         let page = version.pageID
@@ -87,7 +87,7 @@ public enum SpaceHistory {
         var changes: [RecordChange] = []
         if let old = version.page {
             var set: [String: JSONValue] = [:]
-            for key in ["title", "icon"] where current.pages[page]?[key] != old[key] { set[key] = old[key] ?? .null }
+            for key in ["title", "icon", "iconImage"] where current.pages[page]?[key] != old[key] { set[key] = old[key] ?? .null }
             if !set.isEmpty { changes.append(RecordChange(kind: .page, id: page, set: set)) }
         }
         for (id, old) in version.blocks.sorted(by: { $0.key < $1.key }) {
