@@ -7,6 +7,7 @@ Audited 2026-10-25. Research used Git only, without servers or user data. The im
 - Comparison base: `8f026485df097cca71f80218a514f4d2e13bbf43`.
 - Fetched main: `5b35402623d7d1d88eaa472807272a6c2e78012a`.
 - Supported runtime `v0.1.2-nightly.20261021.3473`: `1688f965682d331da16a8c39f049592361f69c8d`.
+- Published version verified for these changes after integration: `v0.1.3-nightly.20261025.3669`, tag `5f64c5eb299a23d278ef043c416bd4dc801bc53c`. Every introducing commit in the registry below is an ancestor of that tag. It contains the required fast-load protocol changes; it is not the measured main commit and was not substituted in the matrix.
 - Read-only original checkout: `~/CandyWrapper-research/t3code`, still checked out at the runtime SHA. Only `git fetch origin main` changed its refs.
 - Pinned sparse research checkout: `~/CandyWrapper-research/t3code-fast-load-5b35402623`.
 - CandyWrapper inspected at `8c8e6d3026128894bd48b6d410320fdf0ab4c16b`, before this task's changes.
