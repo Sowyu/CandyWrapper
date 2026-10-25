@@ -351,6 +351,7 @@ final class SpaceBoardCanvas: DSView, NSTextFieldDelegate {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     override var acceptsFirstResponder: Bool { true }
+    override var wantsUpdateLayer: Bool { false }
 
     func update(columns: [SpaceBoardColumn], cards: [PageID: SpaceBoardCard], sorted: Bool, canAddOption: Bool) {
         let width = Self.laneWidth - 2 * Self.pad - 20

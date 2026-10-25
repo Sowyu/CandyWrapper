@@ -182,3 +182,24 @@ struct SpaceBoardTests {
         #expect(card.meta == "Frank Herbert")
     }
 }
+
+@MainActor
+struct SpaceBoardMountTests {
+    @Test func pageViewMountsTheBoardWithLanes() throws {
+        let store = SpaceReplicaStore(label: "Test Mac")
+        let page = store.createPage(title: "Reading list", now: 1)
+        let view = SpacePageView(store: store)
+        view.frame = NSRect(x: 0, y: 0, width: 1400, height: 900)
+        view.show(page)
+        var r = store.pages[page]!
+        r.view = .board
+        store.put([page: r])
+        view.layoutSubtreeIfNeeded()
+        let board = try #require(view.subviews.compactMap { $0 as? SpaceBoardView }.first)
+        board.layoutSubtreeIfNeeded()
+        #expect(board.canvas.lanes.map(\.column.title) == ["Not started", "In progress", "Done"])
+        #expect(board.canvas.frame.width > 800)
+        #expect(board.canvas.frame.height > 100)
+        #expect(board.canvas.superview?.frame.height ?? 0 > 100)
+    }
+}
