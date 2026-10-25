@@ -421,7 +421,7 @@ The page tree:
 
 - 28pt rows with a 16pt indent per level. A chevron shows on rows with child pages, then the icon, then the title truncated at the end.
 - Items of a board, table or timetable don't show in the tree. Only pages whose parent shows in Page view do, so a 300-card board doesn't flood it.
-- Hover shows + for a child page and ⋯ for Rename, Move to, Duplicate and Move to Trash. Duplicate copies the page, its child pages and their live blocks in one change, with fresh ids and the same blob references.
+- Hover shows + for a child page and ⋯ for Rename, Move to, Duplicate and Move to Trash. Duplicate copies the page, its child pages and their live blocks in one change, with fresh ids, fresh order keys in the same order and the same blob references.
 - The open page's row uses the selected row token.
 - Dragging reorders and nests with the drop line from `SidebarDitherDrag`.
 - Expanded rows are remembered per device, not synced.
