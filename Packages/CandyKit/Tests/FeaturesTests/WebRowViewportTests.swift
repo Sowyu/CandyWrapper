@@ -63,6 +63,7 @@ extension WebFrameSuites {
             t.layoutSubtreeIfNeeded()
             TimelineTilingTests.userScroll(t, to: 0)
             let row = try #require(t.view(forRow: "web"))
+            row.layoutSubtreeIfNeeded()
             let frame = try #require(row.subviews.compactMap { $0 as? ThreadWebFrameView }.first)
             // Parallel web tests share the process-wide budget, which would evict this frame at random.
             frame.budgeted = false
@@ -102,7 +103,7 @@ extension WebFrameSuites {
             #expect(assets.calls == 3, "each return remints the signed URL")
             t.isHidden = true
             #expect(!back.frameView.isLive, "a hidden timeline holds no page")
-            #expect(!t.context.htmlPreviews.isActive)
+            #expect(!t.context.htmlCache.isActive)
         }
 
         /// The page reports its height at one width; a row recycled and shown again has it before any page loads.

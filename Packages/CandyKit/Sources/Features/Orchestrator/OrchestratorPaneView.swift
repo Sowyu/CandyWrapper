@@ -491,13 +491,13 @@ final class OrchestratorChatView: DSView {
     /// Its name over the first bubble of each of its stacks, as a group chat names the sender.
     private var names: [String: LabelView] = [:]
     private var environmentId = ""
-    private let htmlPreviews = HtmlRenderPreviewCache()
+    private let htmlCache = HtmlRenderWebCache()
     static let maxBubble: CGFloat = 520
 
     func set(items: [OrchestratorChatItem], needs: [OrchestratorNeed], undoable: Set<String>, undone: Set<String>, environmentId: String,
              name: String) {
         let environmentChanged = self.environmentId != environmentId
-        if environmentChanged { htmlPreviews.clear() }
+        if environmentChanged { htmlCache.clear() }
         self.items = items
         self.environmentId = environmentId
         var next: [String: NSView] = [:]
@@ -543,7 +543,7 @@ final class OrchestratorChatView: DSView {
                 let card: OrchestratorHtmlCard
                 if let old, old.page == page { card = old }
                 else { card = OrchestratorHtmlCard(page) }
-                card.frameView.previewCache = htmlPreviews
+                card.frameView.htmlCache = htmlCache
                 card.assetURL = webAssetURL
                 card.onHeightChange = { [weak self] in self?.relayout() }
                 next[id] = card
@@ -698,7 +698,7 @@ final class OrchestratorChatView: DSView {
     func syncVisiblePages() {
         let shown = window != nil && !isHiddenOrHasHiddenAncestor
         let cards = views.values.compactMap { $0 as? OrchestratorHtmlCard }
-        htmlPreviews.setActive(shown && !cards.isEmpty)
+        htmlCache.setActive(shown && !cards.isEmpty)
         let viewport = visibleRect
         // Release departing pages before starting incoming ones, so the budget never evicts a visible page.
         for card in cards where !shown || !card.frame.intersects(viewport) { card.setContentVisible(false) }
@@ -850,7 +850,7 @@ private extension NSColor {
 
 /// A page the Orchestrator published with `html_render`, framed as the thread view frames it (`HtmlRenderRowView`): the
 /// same web frame, theme and messages, at the server's measured height until the page reports its own. The web view
-/// exists only while the card intersects the viewport. The chat owns cached pixels while it is shown.
+/// exists only while the card intersects the viewport. The chat shares cached responses and an empty host while it is shown.
 // ponytail: no "Open full screen"; borrow HtmlRenderRowView's when the Conductor needs it
 final class OrchestratorHtmlCard: DSView {
     let page: HtmlRenderReference
@@ -866,7 +866,7 @@ final class OrchestratorHtmlCard: DSView {
         self.page = page
         super.init(frame: .zero)
         addSubview(frameView)
-        frameView.previewAttachmentId = page.attachmentId
+        frameView.htmlAttachmentId = page.attachmentId
         frameView.isHidden = true
         failed.text = "Unable to load \(page.title)"
         failed.alignment = .center
@@ -903,6 +903,7 @@ final class OrchestratorHtmlCard: DSView {
         guard !frameView.isLive, loading == nil, let assetURL else { return }
         let page = self.page
         loading = Task { [weak self] in
+            guard !Task.isCancelled else { return }
             let url = await assetURL(page.attachmentId, page.fileName)
             guard let self, !Task.isCancelled else { return }
             self.loading = nil
@@ -931,7 +932,6 @@ final class OrchestratorHtmlCard: DSView {
         if frameView.isLive {
             frameView.dark = effectiveAppearance.isDark
             frameView.post(HtmlRenderTheme(dark: frameView.dark).message)
-            frameView.refreshPreview()
         }
     }
 

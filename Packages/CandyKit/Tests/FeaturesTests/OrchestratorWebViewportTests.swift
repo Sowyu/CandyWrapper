@@ -87,7 +87,7 @@ extension WebFrameSuites {
             #expect(Set(assets.calls.keys) == firstVisible.union(lastVisible))
             pane.isHidden = true
             #expect(Self.liveIDs(cards).isEmpty, "hiding the pane releases every page")
-            #expect(cards.allSatisfy { $0.frameView.previewCache?.isActive == false })
+            #expect(cards.allSatisfy { $0.frameView.htmlCache?.isActive == false })
         }
 
         @Test func unrelatedStateAndChatUpdatesKeepVisiblePages() async throws {

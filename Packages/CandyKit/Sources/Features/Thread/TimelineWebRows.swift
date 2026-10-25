@@ -7,8 +7,8 @@ import T3Store
 /// thread's own background, at the server's measured height for this width until the page reports its own.
 /// Loading and failure hold the same box. "Open full screen" shows on hover (T3 3105 aba3a6ddc). 8pt under it (`pb-2`).
 ///
-/// Off the viewport the row drops its web view. Returning rows draw cached pixels while the live page loads
-/// from WebKit's HTTP cache. The cache belongs to the shown timeline and keeps no offscreen page running.
+/// Off the viewport the row drops its web view. Returning rows load through WebKit's HTTP cache.
+/// The cache belongs to the shown timeline and keeps no offscreen page running.
 final class HtmlRenderRowView: TimelineRowView {
     let frameView = ThreadWebFrameView()
     private let failed = LabelView("", font: TL.font(12))
@@ -16,7 +16,7 @@ final class HtmlRenderRowView: TimelineRowView {
     private var reference: HtmlRenderReference?
     private(set) var loading: Task<Void, Never>?
     /// The timeline's viewport overlaps the row. Off it, even inside overscan, the web view is hidden and nothing loads.
-    private var contentVisible = true
+    private var contentVisible = false
     /// The row is in a shown timeline. Out of one, it holds no page.
     private var onScreen: Bool { window != nil && !isHiddenOrHasHiddenAncestor }
     private var wantsContent: Bool { contentVisible && onScreen }
@@ -46,8 +46,8 @@ final class HtmlRenderRowView: TimelineRowView {
             frameView.release()
             failed.isHidden = true
         }
-        frameView.previewCache = context.htmlPreviews
-        frameView.previewAttachmentId = ref.attachmentId
+        frameView.htmlCache = context.htmlCache
+        frameView.htmlAttachmentId = ref.attachmentId
         frameView.dark = effectiveAppearance.isDark
         reference = ref
         failed.text = "Unable to load \(ref.title)"
@@ -58,7 +58,7 @@ final class HtmlRenderRowView: TimelineRowView {
     /// Asks for the page's URL, which reuses a fresh one or mints one near expiry, then frames it with the theme in its fragment.
     private func load() {
         guard let ref = reference, !frameView.isLive, loading == nil, wantsContent else { return }
-        context.htmlPreviews.setActive(true)
+        context.htmlCache.setActive(true)
         let id = ref.attachmentId
         loading = Task { [weak self] in
             guard !Task.isCancelled else { return }
@@ -107,10 +107,10 @@ final class HtmlRenderRowView: TimelineRowView {
         loading?.cancel()
         loading = nil
         frameView.release()
-        frameView.previewCache = nil
-        frameView.previewAttachmentId = nil
+        frameView.htmlCache = nil
+        frameView.htmlAttachmentId = nil
         reference = nil
-        contentVisible = true
+        contentVisible = false
         frameView.isHidden = false
     }
 
@@ -120,7 +120,6 @@ final class HtmlRenderRowView: TimelineRowView {
         if frameView.isLive {
             frameView.dark = effectiveAppearance.isDark
             frameView.post(HtmlRenderTheme(dark: frameView.dark).message)
-            frameView.refreshPreview()
         }
     }
 

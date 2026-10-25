@@ -1,39 +1,10 @@
 import AppKit
 import WebKit
-import ImageIO
-import UniformTypeIdentifiers
 
-/// Pixels of immutable HTML attachments while their document is shown. A returning row can draw at once,
-/// then hand interaction back to its live page. WebKit owns the HTML byte cache, in the shared ephemeral store.
+/// A shown HTML chat shares WebKit's ephemeral HTTP cache and one empty host through scroll transitions.
+/// Offscreen documents release their browsing contexts. Hiding the chat discards the host and shared store.
 @MainActor
-final class HtmlRenderPreviewCache {
-    struct Key: Hashable {
-        var attachmentId: String
-        var width: CGFloat
-        var height: CGFloat
-        var dark: Bool
-        var scale: CGFloat
-
-        init(attachmentId: String, size: NSSize, dark: Bool, scale: CGFloat) {
-            self.attachmentId = attachmentId
-            width = size.width
-            height = size.height
-            self.dark = dark
-            self.scale = scale
-        }
-    }
-
-    private struct Entry {
-        var data: Data
-        var cost: Int
-        var used: UInt64
-    }
-
-    private let limit: Int
-    private var entries: [Key: Entry] = [:]
-    private var clock: UInt64 = 0
-    private(set) var cost = 0
-    private(set) var generation = 0
+final class HtmlRenderWebCache {
     private(set) var isActive = false
     private var spare: ThreadWebView?
     private var clearing: ThreadWebView?
@@ -41,39 +12,7 @@ final class HtmlRenderPreviewCache {
     private struct Active { weak var web: ThreadWebView? }
     private var active: [Active] = []
 
-    init(limit: Int = 8 * 1024 * 1024) { self.limit = limit }
-
-    func image(for key: Key) -> NSImage? {
-        guard var entry = entries[key] else { return nil }
-        clock &+= 1
-        entry.used = clock
-        entries[key] = entry
-        return NSImage(data: entry.data)
-    }
-
-    func contains(_ key: Key) -> Bool { entries[key] != nil }
-
-    /// A capture finishing after hide or Force Reload cannot refill the cache.
-    func insert(_ data: Data, for key: Key, generation: Int) {
-        guard isActive, generation == self.generation, !data.isEmpty else { return }
-        let bytes = data.count
-        if let old = entries.removeValue(forKey: key) { cost -= old.cost }
-        guard bytes <= limit else { return }
-        while cost + bytes > limit, let oldest = entries.min(by: { $0.value.used < $1.value.used }) {
-            cost -= oldest.value.cost
-            entries[oldest.key] = nil
-        }
-        clock &+= 1
-        entries[key] = Entry(data: data, cost: bytes, used: clock)
-        cost += bytes
-    }
-
-    func clear() {
-        generation &+= 1
-        entries.removeAll()
-        cost = 0
-        discardSpare()
-    }
+    func clear() { discardSpare() }
 
     private func discardSpare() {
         cleanup?.cancel()
@@ -140,19 +79,3 @@ final class HtmlRenderPreviewCache {
     }
 }
 
-/// Snapshots own immutable pixels. Encode serially away from AppKit and release their WebKit bitmap surfaces.
-actor HtmlRenderPreviewEncoder {
-    static let shared = HtmlRenderPreviewEncoder()
-    struct Pixels: @unchecked Sendable { let image: CGImage }
-
-    func png(_ pixels: Pixels) -> Data? {
-        autoreleasepool {
-            guard !Task.isCancelled else { return nil }
-            let data = NSMutableData()
-            guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else { return nil }
-            CGImageDestinationAddImage(destination, pixels.image, nil)
-            guard CGImageDestinationFinalize(destination) else { return nil }
-            return data as Data
-        }
-    }
-}

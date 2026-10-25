@@ -109,10 +109,10 @@ final class TimelineContext {
     var markdownChoices: [String: MarkdownView.LayoutChoices] = [:]
     var now: () -> Date = Date.init
 
-    let htmlPreviews = HtmlRenderPreviewCache()
+    let htmlCache = HtmlRenderWebCache()
 
-    /// The timeline hid or changed thread: cached page pixels and HTTP responses go too.
-    func releasePages() { htmlPreviews.setActive(false) }
+    /// The timeline hid or changed thread: the empty host and shared HTTP cache go too.
+    func releasePages() { htmlCache.setActive(false) }
 
     isolated deinit { releasePages() }
 
