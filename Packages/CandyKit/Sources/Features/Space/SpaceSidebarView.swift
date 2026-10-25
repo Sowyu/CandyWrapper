@@ -18,6 +18,8 @@ public struct SpaceSidebarActions {
     public var back: () -> Void = {}
     public var openPage: (PageID) -> Void = { _ in }
     public var openTrash: () -> Void = {}
+    /// The ⋯ menu's Page history: open the page with its history showing.
+    public var openHistory: (PageID) -> Void = { _ in }
     /// A page went to Trash, so the app can close its tab.
     public var trashed: (PageID) -> Void = { _ in }
     public init() {}
@@ -83,6 +85,7 @@ public final class SpaceSidebarView: DSView {
         tree.onOpen = { [weak self] id in self?.actions.openPage(id) }
         tree.onNewChild = { [weak self] parent in self?.newPage(in: parent) }
         tree.onTrash = { [weak self] id in self?.actions.trashed(id) }
+        tree.onHistory = { [weak self] id in self?.actions.openHistory(id) }
         tree.onRowsChange = { [weak self] in self?.syncEmpty() }
         token = store.observe { [weak self] in self?.tree.reload() }
         tree.reload()
@@ -194,6 +197,7 @@ final class SpaceTreeView: DSView {
     var onOpen: (PageID) -> Void = { _ in }
     var onNewChild: (PageID) -> Void = { _ in }
     var onTrash: (PageID) -> Void = { _ in }
+    var onHistory: (PageID) -> Void = { _ in }
     var onRowsChange: () -> Void = {}
     var query = "" { didSet { if query != oldValue { reload() } } }
     var selected: PageID? { didSet { if selected != oldValue { for v in views.values { v.isSelected = v.id == selected } } } }
@@ -410,6 +414,7 @@ final class SpaceTreeView: DSView {
             guard let self, let copy = store.duplicate(id) else { return }
             onOpen(copy)
         })
+        menu.addItem(SpaceMenuItem("Page history") { [weak self] in self?.onHistory(id) })
         menu.addItem(.separator())
         menu.addItem(SpaceMenuItem("Move to Trash") { [weak self] in
             self?.store.trash(id)

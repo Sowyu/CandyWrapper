@@ -51,7 +51,10 @@ public final class PersistentSpacePageStore: SpaceDocumentStore {
 
     private func attach(_ store: SpaceReplicaStore) {
         local = store
-        store.onEdit = { [weak self] op in self?.enqueue(op.payload.changes, at: op.payload.at) }
+        store.onEdit = { [weak self] op in
+            let changes = op.payload.changes, at = op.payload.at
+            self?.enqueue { try await $0.save(changes, at: at) }
+        }
         _ = store.observe { [weak self] in self?.publish() }
         publish()
     }
@@ -68,11 +71,35 @@ public final class PersistentSpacePageStore: SpaceDocumentStore {
         local.edit(changes)
     }
 
-    /// Null every key through apply, leaving an unrenderable empty record and its encrypted history.
+    /// Delete forever: null every key of the page and the pages under it through apply, leaving unrenderable empty
+    /// records and their encrypted history. Their blocks' images and files then leave this Mac's blob cache, unless a
+    /// block of another page uses the same blob.
     public func remove(_ id: PageID) {
-        guard canEdit, let old = local.replica.current.pages[id], !old.isEmpty else { return }
-        local.edit([RecordChange(kind: .page, id: id, set: old.mapValues { _ in .null })])
+        let current = local.replica.current
+        guard canEdit, let old = current.pages[id], !old.isEmpty else { return }
+        let gone = Set([id] + SpaceTree.descendants(of: id, in: local.allPageRecords))
+        let changes = gone.sorted().compactMap { p in
+            current.pages[p].flatMap { $0.isEmpty ? nil : RecordChange(kind: .page, id: p, set: $0.mapValues { _ in .null }) }
+        }
+        var dropped = Set<String>(), kept = Set<String>()
+        for block in current.blocks.values {
+            guard case .object(let blob)? = block["blob"], case .string(let blobID)? = blob["id"] else { continue }
+            if case .string(let raw)? = block["page"], let page = try? PageID(raw), gone.contains(page) { dropped.insert(blobID) }
+            else { kept.insert(blobID) }
+        }
+        local.edit(changes)
+        let blobs = dropped.subtracting(kept).sorted()
+        if !blobs.isEmpty { enqueue { try await $0.removeBlobs(blobs) } }
     }
+
+    public func history(of page: PageID) async throws -> [SpaceVersion] {
+        try await flush()
+        guard let writer else { return [] }
+        return try await writer.history(of: page, stretch: SpaceReplicaStore.historyStretch)
+    }
+
+    public func restoreChanges(_ version: SpaceVersion) -> [RecordChange] { local.restoreChanges(version) }
+    public func deviceLabel(_ device: DeviceID) -> String { local.deviceLabel(device) }
 
     public func block(_ id: BlockID) -> BlockRecord? { local.block(id) }
     public func content(of page: PageID) -> [SpaceContent] { local.content(of: page) }
@@ -91,8 +118,9 @@ public final class PersistentSpacePageStore: SpaceDocumentStore {
         return local.undo(entry, at: at)
     }
 
-    private func enqueue(_ changes: [RecordChange], at: Int64) {
-        guard !changes.isEmpty, let writer else { return }
+    /// Runs one write on the writer after every write queued before it.
+    private func enqueue(_ work: @escaping @Sendable (LocalPageWriter) async throws -> Void) {
+        guard let writer else { return }
         writeRevision += 1
         queuedWrites += 1
         isSaving = true
@@ -105,7 +133,7 @@ public final class PersistentSpacePageStore: SpaceDocumentStore {
                 onSavingChange?()
             }
             guard failure == nil else { return }
-            do { try await writer.save(changes, at: at) }
+            do { try await work(writer) }
             catch { fail(error) }
         }
         onSavingChange?()
@@ -184,6 +212,18 @@ private actor LocalPageWriter {
                              op: operation.op, recs: operation.recs, ct: ct)
         try await setup.local.confirm(frame)
         try replica.receive([(frame, operation.payload)])
+    }
+
+    func removeBlobs(_ ids: [String]) async throws { try await setup.local.removeBlobs(ids) }
+
+    /// Replays the local snapshot and log; `save` confirms every op at once, so the log holds all of them.
+    func history(of page: PageID, stretch: Int64) async throws -> [SpaceVersion] {
+        let stored = try await setup.local.load()
+        var ops: [(device: DeviceID, payload: OpPayload)] = []
+        ops.reserveCapacity(stored.frames.count + stored.pending.count)
+        for frame in stored.frames { ops.append((frame.dev, try await setup.local.payload(of: frame))) }
+        for operation in stored.pending { ops.append((operation.dev, operation.payload)) }
+        return SpaceHistory.versions(of: page, base: try SpaceState(snapshot: stored.snapshot), ops: ops, stretch: stretch)
     }
 
     func close() async { await setup.local.close() }

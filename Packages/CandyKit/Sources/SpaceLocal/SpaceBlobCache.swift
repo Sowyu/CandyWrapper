@@ -100,6 +100,23 @@ extension SpaceLocalStore {
         return plaintext
     }
 
+    /// Delete forever: the blobs leave the cache and the disk. Ids not in the cache are skipped.
+    public func removeBlobs(_ ids: [String]) throws {
+        try requireHealthy()
+        for id in ids { try Self.checkBlobID(id) }
+        let present = ids.filter { cache.entries[$0] != nil }
+        guard !present.isEmpty else { return }
+        do {
+            // The index drops them first. A crash between the two leaves orphan files, which the next open deletes.
+            for id in present { cache.entries.removeValue(forKey: id) }
+            try persistCache()
+            for id in present { try disk.remove("blobs/\(id).cws") }
+        } catch {
+            failed = true
+            throw error
+        }
+    }
+
     private func persistCache() throws {
         try disk.atomicWrite(disk.seal(SpaceJSON.encode(cache), purpose: "cache"), to: "cache.cws")
     }

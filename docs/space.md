@@ -426,7 +426,7 @@ The page tree:
 - Dragging reorders and nests with the drop line from `SidebarDitherDrag`.
 - Expanded rows are remembered per device, not synced.
 
-Trash opens as a tab listing trashed pages, newest first, with Restore and Delete forever. Delete forever trashes the record for good, though its old text stays in the history log.
+Trash opens as a tab listing trashed pages, newest first, with Restore and Delete forever. Delete forever asks first, then removes the page and the pages inside it for good, though their old text stays in the history log. Their images and files leave this Mac's blob cache unless a block of another page uses the same blob.
 
 ### Tabs and keys
 
@@ -490,9 +490,9 @@ Undo:
 
 History:
 
-- "Page history" in the page's ⋯ menu lists versions, one per device per 10-minute stretch of edits, like "Today 10:42 · MacBook".
+- "Page history" in the page's ⋯ menu, and the history button beside the view switch, lists versions, one per device per 10-minute stretch of edits counted from the stretch's first edit, like "Today 10:42 · MacBook".
 - Picking one shows the page as it was, read only, built by replaying the local log up to that point.
-- "Restore this version" writes one change that sets every block back, trashes blocks added since and restores blocks trashed since.
+- "Restore this version" writes one change that sets every block back, trashes blocks added since and restores blocks trashed since. It puts the title and icon back too. Child pages stay where they are, since history covers the page's own text. In Page view the change joins the editor's undo stack.
 - Trash holds trashed pages until the user deletes them. Trashed blocks live on in history only.
 
 ## 10. Performance budgets

@@ -23,6 +23,12 @@ public protocol SpaceDocumentStore: SpacePageStore {
     var edited: [PageID: Int64] { get }
     /// The records the last change touched, readable from an observer callback.
     var lastChanged: Set<RecordID> { get }
+    /// The page's versions from the change log, newest first (docs/space.md section 9).
+    func history(of page: PageID) async throws -> [SpaceVersion]
+    /// The changes that put the page back to `version`, for the editor to commit as one undoable edit.
+    func restoreChanges(_ version: SpaceVersion) -> [RecordChange]
+    /// "This Mac" for this device's edits in history.
+    func deviceLabel(_ device: DeviceID) -> String
 }
 
 public extension SpaceDocumentStore {
@@ -70,6 +76,9 @@ public final class SpaceReplicaStore: SpaceDocumentStore {
     // MARK: Reads
 
     public func block(_ id: BlockID) -> BlockRecord? { blockCache[id] }
+
+    /// Every readable page, deleted ones included, for walking a subtree.
+    var allPageRecords: [PageID: PageRecord] { allPages }
 
     /// A page's live blocks and child pages in content order: order key, then record id.
     public func content(of page: PageID) -> [SpaceContent] {
@@ -126,12 +135,31 @@ public final class SpaceReplicaStore: SpaceDocumentStore {
     }
 
     public func remove(_ id: PageID) {
-        guard pages[id] != nil else { return }
-        removed.insert(id)
-        pages[id] = nil
-        lastChanged = [id]
+        guard allPages[id] != nil else { return }
+        let gone = [id] + SpaceTree.descendants(of: id, in: allPages)
+        removed.formUnion(gone)
+        for p in gone { pages[p] = nil }
+        lastChanged = Set(gone)
         notify()
     }
+
+    // MARK: History
+
+    /// Edits of this run sit in the replica as pending ops, so history replays them on the confirmed state.
+    public func history(of page: PageID) async throws -> [SpaceVersion] {
+        SpaceHistory.versions(of: page, base: replica.confirmed, ops: replica.pending.map { (replica.device, $0.payload) },
+                              stretch: Self.historyStretch)
+    }
+
+    /// Shortens the 10-minute version stretch for on-screen checks: `-CWSpaceHistoryStretch 20` at launch, in seconds.
+    static var historyStretch: Int64 {
+        let seconds = UserDefaults.standard.integer(forKey: "CWSpaceHistoryStretch")
+        return seconds > 0 ? Int64(seconds) * 1000 : SpaceHistory.stretch
+    }
+
+    public func restoreChanges(_ version: SpaceVersion) -> [RecordChange] { SpaceHistory.restore(version, in: replica.current) }
+
+    public func deviceLabel(_ device: DeviceID) -> String { device == replica.device ? replica.label : "Another device" }
 
     public func observe(_ callback: @escaping @MainActor () -> Void) -> Int {
         nextToken += 1

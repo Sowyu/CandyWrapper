@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import SpaceEngine
 import SpaceModel
 
 /// A Space page's tab (docs/space.md section 4): the header with breadcrumb, title, edited line and the view switch,
@@ -13,6 +14,7 @@ public final class SpacePageView: DSView {
     public private(set) var page: PageID?
     private(set) var editor: SpacePageEditor?
     private var stub: NSView?
+    private(set) var history: SpacePageHistoryView?
     private var shownView: ViewType?
     let header = SpacePageHeaderView()
     private let emptyTitle = LabelView("No pages yet", font: DSFont.ui(32, weight: .semibold), color: Themed.color(\.mutedForeground))
@@ -37,6 +39,7 @@ public final class SpacePageView: DSView {
             tv.setSelectedRange(NSRange(location: 0, length: 0))
         }
         header.viewSwitch.onSelect = { [weak self] view in self?.setView(view) }
+        header.onHistory = { [weak self] in self?.showHistory() }
         token = store.observe { [weak self] in self?.storeChanged() }
         show(nil)
     }
@@ -56,7 +59,41 @@ public final class SpacePageView: DSView {
         if changed, let id, store.pages[id]?.title.isEmpty == true { header.focusTitle() }
     }
 
+    /// Page history over the tab, from the header's history button or the sidebar's ⋯ menu.
+    public func showHistory() {
+        guard let page, history == nil else { return }
+        editor?.flushTyping()
+        let view = SpacePageHistoryView(store: store, page: page, blobs: blobs)
+        view.onClose = { [weak self] in self?.closeHistory() }
+        view.onRestore = { [weak self] version in self?.restore(version) }
+        addSubview(view)
+        history = view
+        needsLayout = true
+        window?.makeFirstResponder(view)
+    }
+
+    func closeHistory() {
+        history?.removeFromSuperview()
+        history = nil
+        if let tv = editor?.textView { window?.makeFirstResponder(tv) }
+    }
+
+    /// One change through the apply path, so it syncs like any edit. In Page view it joins the editor's undo stack.
+    func restore(_ version: SpaceVersion) {
+        let changes = store.restoreChanges(version)
+        closeHistory()
+        guard !changes.isEmpty else { return }
+        if let editor {
+            editor.commitDiscrete(changes, name: "Restore Version")
+            editor.load(keepSelection: true)
+        } else {
+            store.edit(changes)
+        }
+    }
+
     private func clearContent() {
+        history?.removeFromSuperview()
+        history = nil
         editor?.scrollView.removeFromSuperview()
         editor = nil
         laidOutWidth = nil
@@ -162,6 +199,7 @@ public final class SpacePageView: DSView {
         emptyTitle.frame = NSRect(x: x, y: 96, width: column, height: 40)
         let s = newPage.intrinsicContentSize
         newPage.frame = NSRect(x: x, y: 156, width: s.width, height: s.height)
+        history?.frame = bounds
         let h = header.height
         if let editor {
             editor.scrollView.frame = bounds
@@ -188,6 +226,8 @@ final class SpacePageHeaderView: DSView, NSTextFieldDelegate {
     private let title = NSTextField()
     private let meta = NSTextField(labelWithString: "")
     let viewSwitch = SpaceViewSwitch()
+    let historyButton = ButtonView(icon: .history, variant: .ghost, size: .iconSm)
+    var onHistory: () -> Void = {}
     var onTitle: (String) -> Void = { _ in }
     var onTitleReturn: () -> Void = {}
 
@@ -205,7 +245,11 @@ final class SpacePageHeaderView: DSView, NSTextFieldDelegate {
         title.delegate = self
         title.setAccessibilityLabel("Page title")
         meta.font = DSFont.ui(12)
-        [crumb, title, meta, viewSwitch].forEach(addSubview)
+        historyButton.setAccessibilityLabel("Page history")
+        historyButton.toolTip = "Page history"
+        historyButton.iconColor = Themed.color(\.mutedForeground)
+        historyButton.action = { [weak self] in self?.onHistory() }
+        [crumb, title, meta, viewSwitch, historyButton].forEach(addSubview)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -249,7 +293,9 @@ final class SpacePageHeaderView: DSView, NSTextFieldDelegate {
         crumb.frame = NSRect(x: 0, y: 56, width: w, height: 16)
         let switchSize = viewSwitch.intrinsicContentSize
         viewSwitch.frame = NSRect(x: w - switchSize.width, y: 80 + (42 - switchSize.height) / 2, width: switchSize.width, height: switchSize.height)
-        title.frame = NSRect(x: -2, y: 80, width: max(0, viewSwitch.frame.minX - 16), height: 42)
+        let hb = historyButton.intrinsicContentSize
+        historyButton.frame = NSRect(x: viewSwitch.frame.minX - 8 - hb.width, y: 80 + (42 - hb.height) / 2, width: hb.width, height: hb.height)
+        title.frame = NSRect(x: -2, y: 80, width: max(0, historyButton.frame.minX - 12), height: 42)
         meta.frame = NSRect(x: 0, y: 134, width: w, height: 16)
     }
 }

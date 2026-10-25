@@ -75,6 +75,9 @@ final class SpaceController {
                 view.actions.back = { [weak self] in self?.leaveMode() }
                 view.actions.openPage = { [weak self] id in self?.open(.spacePage(id.rawValue)) }
                 view.actions.openTrash = { [weak self] in self?.open(.spaceTrash) }
+                view.actions.openHistory = { [weak self] id in
+                    if self?.open(.spacePage(id.rawValue)) == true { self?.pageView?.showHistory() }
+                }
                 view.actions.trashed = { [weak self] _ in self?.pageTrashed() }
                 sidebar.space = view
             }

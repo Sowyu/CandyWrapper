@@ -9,7 +9,7 @@ public protocol SpacePageStore: AnyObject {
     var pages: [PageID: PageRecord] { get }
     /// Writes several records as one change.
     func put(_ records: [PageID: PageRecord])
-    /// Delete forever: the record leaves the store. History keeps its old text once the log exists.
+    /// Delete forever: the page and every page under it leave the store. History keeps their old text.
     func remove(_ id: PageID)
     /// Calls back after every change. Returns a token for `removeObserver`.
     func observe(_ callback: @escaping @MainActor () -> Void) -> Int
@@ -32,7 +32,8 @@ public final class InMemorySpacePageStore: SpacePageStore {
     }
 
     public func remove(_ id: PageID) {
-        guard pages.removeValue(forKey: id) != nil else { return }
+        guard pages[id] != nil else { return }
+        for p in [id] + SpaceTree.descendants(of: id, in: pages) { pages[p] = nil }
         notify()
     }
 
@@ -102,6 +103,17 @@ public enum SpaceTree {
                 out.append(id)
                 queue.append(id)
             }
+        }
+        return out
+    }
+
+    /// Every page under `id` at any depth, trashed or not.
+    public static func descendants(of id: PageID, in pages: [PageID: PageRecord]) -> [PageID] {
+        var byParent: [PageID: [PageID]] = [:]
+        for (child, r) in pages { if let p = r.parent { byParent[p, default: []].append(child) } }
+        var out: [PageID] = [], queue = [id], seen: Set<PageID> = [id]
+        while let next = queue.popLast() {
+            for child in byParent[next] ?? [] where seen.insert(child).inserted { out.append(child); queue.append(child) }
         }
         return out
     }
