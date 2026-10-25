@@ -438,6 +438,10 @@ public final class GeneralSettingsView: SettingsPageBase {
             }
             edited = false
         }
+        binder.add { [weak self, weak r] in
+            // Servers before Nightly 3553 can't store title instructions (51273020db).
+            r?.isHidden = self?.context.scope.allStore(key) != true
+        }
         binder.add { [weak self, weak field] in
             guard let self, let field, !field.state.focused else { return }
             let mixed = self.context.scope.isMixed([key])

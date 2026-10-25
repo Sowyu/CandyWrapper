@@ -18,6 +18,8 @@ struct BackgroundWorkBannerTests {
         #expect(BackgroundWorkPresentation.present([task(.monitor, "CI", awaited: true)])?.title == "CI")
         // 3669: a monitor the agent doesn't wait on reads as running, like a dev server.
         #expect(BackgroundWorkPresentation.present([task(.monitor, "CI")])?.title == "Running: CI")
+        // A server before 3655 marks nothing awaited, so its monitors wait as on 3473.
+        #expect(BackgroundWorkPresentation.present([task(.monitor, "CI")], awaitedMarked: false)?.title == "CI")
         #expect(BackgroundWorkPresentation.present([task(BackgroundTaskKind(rawValue: "future"))])?.title == "Waiting on a background task")
         // Commands don't hold completion, so their dot stays still.
         #expect(BackgroundWorkPresentation.present([task(.command)])?.waiting == false)

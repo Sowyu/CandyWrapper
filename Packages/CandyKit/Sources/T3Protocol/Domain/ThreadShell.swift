@@ -72,8 +72,13 @@ public struct ThreadShell: Codable, Hashable, Sendable, Identifiable {
     public var lastVisitedAt: Tristate<T3Timestamp>
     public var titleRegeneration: TitleRegeneration?
     public var deletedAt: T3Timestamp?
-    /// Guest messages waiting for the owner to send or dismiss (orchestrationV2.ts:1930-1931). Absent before 3669.
+    /// Guest messages waiting for the owner to send or dismiss (orchestrationV2.ts:1930-1931). Absent before Nightly 3655.
     public var pendingGuestMessageCount: Int?
+    /// Whether this shell's server marks the background work the agent waits on (`awaited`), as servers do
+    /// from Nightly 3655 (91ea0e18eb). Those servers always send `pendingGuestMessageCount`, which arrived in
+    /// the same build (fb76594d7b), so its presence tells them apart from 3473.
+    // ponytail: a field standing in for a version check; use a capability if T3 adds one
+    public var marksAwaitedWork: Bool { pendingGuestMessageCount != nil }
 
     public var backgroundTasks: [PendingBackgroundTask] { pendingBackgroundTasks ?? [] }
 }

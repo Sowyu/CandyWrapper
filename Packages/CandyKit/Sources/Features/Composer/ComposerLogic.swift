@@ -348,7 +348,8 @@ public enum ComposerLogic {
         }
 
         /// `optimistic`: sent messages the stream hasn't confirmed; the queued ones show as saving.
-        public init(projection: ThreadProjection?, optimistic: [ChatMessage] = []) {
+        /// `canStartQueuedRun`: the server takes `queued-run.start`, which servers before Nightly 3486 reject.
+        public init(projection: ThreadProjection?, optimistic: [ChatMessage] = [], canStartQueuedRun: Bool = true) {
             let saving = optimistic.filter { $0.inputIntent == .queuedTurn }
             guard let p = projection else {
                 items = saving.map { Item(runId: nil, messageId: $0.id, text: $0.text) }
@@ -357,7 +358,7 @@ public enum ComposerLogic {
             let active: Set<ThreadStatus> = [.preparing, .starting, .running, .waiting]
             let activeRun = p.runs.last { active.contains($0.status) }
             activeRunId = activeRun?.id
-            canSendNow = activeRun == nil && p.thread.archivedAt == nil && p.thread.deletedAt == nil
+            canSendNow = canStartQueuedRun && activeRun == nil && p.thread.archivedAt == nil && p.thread.deletedAt == nil
             let automatic = Set(p.messages.filter { $0.delegatedCompletion != nil || $0.notification != nil }.map(\.id))
             let queued = p.runs.filter { $0.status == .queued && !($0.userMessageId.map(automatic.contains) ?? false) }
                 .sorted { ($0.queuePosition ?? $0.ordinal, $0.ordinal) < ($1.queuePosition ?? $1.ordinal, $1.ordinal) }

@@ -139,16 +139,17 @@ public enum SidebarModel {
     }
 
     /// Port of `backgroundWorkHoldsCompletion`
-    /// (packages/shared/src/orchestrationV2PendingBackgroundWork.ts:94-112). Commands and monitors
-    /// hold completion only when the agent marked them `awaited`; subagents and unknown kinds
-    /// always do.
-    public static func backgroundWorkHoldsCompletion(_ tasks: [PendingBackgroundTask]) -> Bool {
-        tasks.contains { $0.awaited || ($0.kind != .command && $0.kind != .monitor) }
+    /// (packages/shared/src/orchestrationV2PendingBackgroundWork.ts:94-112). Since Nightly 3655
+    /// (91ea0e18eb) commands and monitors hold completion only when the agent marked them `awaited`;
+    /// subagents and unknown kinds always do. With `awaitedMarked` false, a server from before 3655,
+    /// monitors hold as they did there, since such a server never marks anything awaited.
+    public static func backgroundWorkHoldsCompletion(_ tasks: [PendingBackgroundTask], awaitedMarked: Bool = true) -> Bool {
+        tasks.contains { $0.awaited || ($0.kind != .command && ($0.kind != .monitor || !awaitedMarked)) }
     }
 
     /// Port of `shellRuntime` (packages/client-runtime/src/state/models.ts:175-199).
     public static func shellRuntime(_ thread: ThreadShell) -> ThreadRuntimeSummary? {
-        let parkAtIdle = backgroundWorkHoldsCompletion(thread.backgroundTasks) && thread.status != .failed
+        let parkAtIdle = backgroundWorkHoldsCompletion(thread.backgroundTasks, awaitedMarked: thread.marksAwaitedWork) && thread.status != .failed
         if thread.latestRunId == nil, thread.activeProviderThreadId == nil, !parkAtIdle { return nil }
         return ThreadRuntimeSummary(
             status: parkAtIdle ? .idle : (thread.activityRunStatus ?? thread.status),
@@ -251,7 +252,7 @@ public enum SidebarModel {
         hasPendingApprovals: Bool, hasPendingUserInput: Bool, interactionMode: InteractionMode,
         hasActionableProposedPlan: Bool, latestRun: ThreadRunSummary?, runtime: ThreadRuntimeSummary?,
         lastVisitedAt: T3Timestamp?, pendingBackgroundTasks: [PendingBackgroundTask],
-        blockedOnThreadWait: Bool = false, pendingGuestMessageCount: Int = 0
+        blockedOnThreadWait: Bool = false, pendingGuestMessageCount: Int = 0, awaitedMarked: Bool = true
     ) -> ThreadStatusPill? {
         if hasPendingApprovals { return ThreadStatusPill(label: .pendingApproval, pulse: false) }
         if hasPendingUserInput { return ThreadStatusPill(label: .awaitingInput, pulse: false) }
@@ -263,7 +264,7 @@ public enum SidebarModel {
         if runtime?.status == .preparing || runtime?.status == .starting || runtime?.status == .queued {
             return ThreadStatusPill(label: .connecting, pulse: true)
         }
-        if blocked || backgroundWorkHoldsCompletion(pendingBackgroundTasks) {
+        if blocked || backgroundWorkHoldsCompletion(pendingBackgroundTasks, awaitedMarked: awaitedMarked) {
             return ThreadStatusPill(label: .waiting, pulse: false)
         }
         if hasUnseenFailure(latestRun: latestRun, lastVisitedAt: lastVisitedAt) {
@@ -287,7 +288,7 @@ public enum SidebarModel {
             runtime: thread.runtime, lastVisitedAt: lastVisitedAt,
             pendingBackgroundTasks: thread.shell.backgroundTasks,
             blockedOnThreadWait: thread.shell.blockedOnThreadWait == true,
-            pendingGuestMessageCount: thread.shell.pendingGuestMessageCount ?? 0)
+            pendingGuestMessageCount: thread.shell.pendingGuestMessageCount ?? 0, awaitedMarked: thread.shell.marksAwaitedWork)
     }
 
     /// Port of `resolveProjectStatusIndicator` (Sidebar.logic.ts:1244-1260). First of the highest
@@ -991,8 +992,8 @@ public final class SidebarInboxReturnTracker: @unchecked Sendable {
             let placement = [shell.archivedAt?.raw, shell.deletedAt?.raw, shell.pinnedAt?.raw, shell.settledOverride?.rawValue,
                              shell.settledAt?.raw, shell.snoozedAt?.raw, shell.snoozedUntil?.raw, shell.activeOrderKey]
             let previous = states[t.id]
-            // ponytail: T3 also counts pending guest messages, add them once guest share decodes `pendingGuestMessageCount`
             let actionable = t.hasPendingApprovals || t.hasPendingUserInput || t.pendingSubagentRequest != nil
+                || (shell.pendingGuestMessageCount ?? 0) > 0
                 || (shell.interactionMode == .plan && shell.hasActionableProposedPlan)
                 || t.runtime?.lastError != nil || t.latestRun?.status == .failed
             let moved = previous.map { $0.placement != placement } ?? false

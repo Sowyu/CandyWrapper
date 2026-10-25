@@ -23,6 +23,8 @@ public final class BetaSettingsView: SettingsPageBase {
         signIn.action = { [weak self] in self?.context.signInToConnect?() }
         binder.add { [weak self, weak guest] in
             guard let self, let guest else { return }
+            // Servers before Nightly 3655 have no guest links (settings.ts:1166).
+            guest.isHidden = !self.context.scope.allStore("guestSharingEnabled")
             let signedOut = self.context.connectSignedOut
             guest.detail = signedOut ? Self.guestSignedOutDetail : Self.guestDetail
             guest.detailLink = signedOut ? nil : connections

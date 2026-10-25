@@ -166,6 +166,8 @@ struct ComposerLogicTests {
         let started = try #require(reducer?.projection)
         // Settled, the thread can start a queued message as its own turn (threadWorkflows.ts:156-160).
         #expect(L.QueueState(projection: started).canSendNow)
+        // A server before Nightly 3486 rejects `queued-run.start`, so its stopped queue offers no Send now.
+        #expect(!L.QueueState(projection: started, canStartQueuedRun: false).canSendNow)
         #expect(L.QueueState.hasStartedSession(started))
         #expect(L.QueueState.supportsProviderHandoff(started))
     }

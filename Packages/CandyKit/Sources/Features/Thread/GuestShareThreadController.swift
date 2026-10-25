@@ -68,8 +68,10 @@ public final class GuestShareThreadController {
         panel.header.guestStopping = true
         Task { [weak self] in
             _ = try? await dispatch(threadId, ThreadCommands.closeGuestShare(threadId.localId))
-            self?.stopping = nil
-            self?.panel.header.guestStopping = false
+            // A thread opened meanwhile may have a Stop of its own in flight.
+            guard let self, self.stopping == threadId else { return }
+            self.stopping = nil
+            self.panel.header.guestStopping = false
         }
     }
 

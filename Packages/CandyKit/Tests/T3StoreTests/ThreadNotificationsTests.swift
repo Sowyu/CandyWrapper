@@ -147,6 +147,19 @@ struct ThreadNotificationsTests {
         #expect(t.settle(environmentId: "env-1", threads: [dev]).map(\.title) == ["Thread completed"])
     }
 
+    /// Servers before Nightly 3655 mark nothing awaited, so a monitor holds there as it did on 3473. A 3655
+    /// server always sends `pendingGuestMessageCount`, which tells the two apart.
+    @Test func monitorsHoldOnServersThatDontMarkAwaitedWork() {
+        let monitor = [PendingBackgroundTask(taskId: "watch", kind: .monitor)]
+        #expect(SidebarModel.backgroundWorkHoldsCompletion(monitor, awaitedMarked: false))
+        #expect(!SidebarModel.backgroundWorkHoldsCompletion(monitor, awaitedMarked: true))
+        #expect(!SidebarModel.backgroundWorkHoldsCompletion([PendingBackgroundTask(taskId: "dev", kind: .command)], awaitedMarked: false))
+        var shell = completed()
+        #expect(!shell.marksAwaitedWork)
+        shell.pendingGuestMessageCount = 0
+        #expect(shell.marksAwaitedWork)
+    }
+
     @Test func archivedAndSubagentThreadsStayQuiet() {
         var t = ThreadNotificationTracker()
         var sub = running("sub")

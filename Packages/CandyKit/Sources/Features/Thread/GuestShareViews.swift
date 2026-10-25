@@ -189,10 +189,18 @@ final class GuestPendingMessagesView: DSView {
             row.needsLayout = true
         }
         setAccessibilityLabel("\(messages.count) guest message\(messages.count == 1 ? "" : "s") waiting")
+        setMediaVisible(window != nil)
         needsLayout = true
     }
 
     func setMediaVisible(_ visible: Bool) { rows.forEach { $0.attachments.setMediaVisible(visible) } }
+
+    // ponytail: media counts as visible while the list is in a window, wherever the timeline is scrolled; feed it the
+    // footer's scroll visibility if a played guest video should stop once scrolled away
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        setMediaVisible(window != nil)
+    }
 
     func height(forWidth width: CGFloat) -> CGFloat {
         guard !rows.isEmpty, width > 0 else { return 0 }

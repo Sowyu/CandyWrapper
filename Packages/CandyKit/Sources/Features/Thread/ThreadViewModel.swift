@@ -129,6 +129,8 @@ public final class ThreadViewModel {
     /// A thread this machine knows by local id, archived ones included (`useThreadShell`), with its project:
     /// thread chips and `t3-thread://` links show its title and project icon (ThreadContextChip.tsx:17-19).
     public var linkedThread: (@MainActor (ThreadId) -> MarkdownContextChips.LinkedThread?)?
+    /// Folded agent rows' sender titles for one `apply` pass, since `linkedThread` searches every shell.
+    private var foldTitles: [String: String?] = [:]
     /// "Sent by automation": Settings > Scheduled Tasks with that task's editor.
     public var onOpenScheduledTask: (@MainActor (String) -> Void)?
     /// The open thread's environment's scheduled task titles by id (`scheduledTasksLive`): folded automation rows show them.
@@ -430,6 +432,7 @@ public final class ThreadViewModel {
 
     /// Hands rows to the view with their UI state; `change` says which differ from `items`.
     private func apply(rows: [TimelineRow], change: TimelineChange) {
+        foldTitles = [:]
         var change = change
         if threadRowsPending { threadRowsPending = false; change = .thread }
         switch change {
@@ -466,7 +469,13 @@ public final class ThreadViewModel {
                 let p = UserMessagePresentation.resolve(m)
                 switch p.attribution {
                 case .automation: ui.foldTitle = p.scheduledTaskId.flatMap { scheduledTaskTitles[$0] }
-                case .agent: ui.foldTitle = m.senderThreadId.flatMap { linkedThread?(ThreadId($0))?.title }
+                case .agent:
+                    ui.foldTitle = m.senderThreadId.flatMap { id in
+                        if let title = foldTitles[id] { return title }
+                        let title = linkedThread?(ThreadId(id))?.title
+                        foldTitles[id] = .some(title)
+                        return title
+                    }
                 default: break
                 }
             }

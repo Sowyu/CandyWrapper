@@ -200,6 +200,12 @@ public struct SettingsScopeState: Equatable, Sendable {
         !connected.isEmpty && connected.allSatisfy { $0.capabilities.contains(capability) }
     }
 
+    /// Every selected connected target's settings carry `key`, so its server stores it. A setting newer than
+    /// the server, like `guestSharingEnabled` on 3473, is absent there and its patch would be dropped.
+    public func allStore(_ key: String) -> Bool {
+        !connected.isEmpty && connected.allSatisfy { $0.settings?.raw[key] != nil }
+    }
+
     /// `canWriteSettings`: every selected connected target lets this connection write settings.
     public var canWrite: Bool { !connected.isEmpty && connected.allSatisfy(\.canWrite) }
 

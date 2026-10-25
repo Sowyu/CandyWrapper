@@ -86,9 +86,9 @@ public enum BackgroundWorkPresentation {
         return "Running " + (count == 1 ? "a \(n.singular)" : "\(count) \(n.plural)")
     }
 
-    public static func present(_ tasks: [PendingBackgroundTask]) -> Value? {
+    public static func present(_ tasks: [PendingBackgroundTask], awaitedMarked: Bool = true) -> Value? {
         guard !tasks.isEmpty else { return nil }
-        let waiting = SidebarModel.backgroundWorkHoldsCompletion(tasks)
+        let waiting = SidebarModel.backgroundWorkHoldsCompletion(tasks, awaitedMarked: awaitedMarked)
         let items = tasks.map { task -> Item in
             let description = task.description?.trimmingCharacters(in: .whitespacesAndNewlines)
             let label = task.kind == .subagent && description != nil

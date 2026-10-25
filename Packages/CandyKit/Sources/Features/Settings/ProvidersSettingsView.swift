@@ -834,7 +834,11 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             }))
         }
 
+        // A server from before idle compaction modes reads no per-instance override and would keep compacting
+        // after "Never" (settings.ts:1328-1375), so the row waits for one that does.
+        let readsModes = context.configs[env.id].map { ServerSettingsValues(.object($0.settings.raw)).readsIdleCompactionModes } ?? false
         let fields = managedCodex ? [] : ProvidersLogic.fields(row.driver, config: row.instance["config"])
+            .filter { $0.key != "idleCompaction" || readsModes }
         if managedCodex { sections.append(codexRuntime(row, provider: provider, env: env.id, readOnly: readOnly)) }
         if !fields.isEmpty {
             let rows: [any SettingsGroupRow] = fields.map { f in

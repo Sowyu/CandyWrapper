@@ -221,7 +221,7 @@ final class ComposerController {
     fileprivate var questionFiles: [String: [QuestionFile]] = [:]
     /// Each environment's `questionAttachments` capability and upload limit (`fileAttachmentStagingLimit`),
     /// read from `/.well-known/t3/environment` when its session changes.
-    fileprivate var capabilities: [String: (questionAttachments: Bool, uploadLimit: Int?, threadStop: Bool)] = [:]
+    fileprivate var capabilities: [String: (questionAttachments: Bool, uploadLimit: Int?, threadStop: Bool, queuedRunStart: Bool)] = [:]
     /// Redesign's "+" > Threads set it: the bare `@` it inserts lists threads, not files.
     fileprivate var browsingThreads = false
     fileprivate var supportsQuestionAttachments: Bool { targetEnvironmentId.flatMap { capabilities[$0]?.questionAttachments } ?? false }
@@ -1439,7 +1439,8 @@ final class ComposerController {
         composer.editingQueued = queuedEdit != nil
         panel.model.optimisticMessages = optimistic
         panel.queue.state = target == nil || panel.isDraft ? ComposerLogic.QueueState()
-            : ComposerLogic.QueueState(projection: projection, optimistic: optimistic)
+            : ComposerLogic.QueueState(projection: projection, optimistic: optimistic,
+                                       canStartQueuedRun: targetEnvironmentId.flatMap { capabilities[$0]?.queuedRunStart } ?? false)
         panel.queue.editingRunId = queuedEdit?.runId
         panel.queue.isBusy = queueBusy
         let plan = ThreadPlanFollowUp.activePlan(projection)
@@ -2570,7 +2571,9 @@ extension ComposerController {
             if descriptor.capability("attachmentUploads"), case .number(let max)? = descriptor.capabilities["fileAttachments"]?["maxUploadBytes"] {
                 limit = Int(max)
             }
-            capabilities[environmentId] = (descriptor.capability("questionAttachments"), limit, descriptor.capability("threadStop"))
+            // `queued-run.start` arrived in Nightly 3486 (96f09c6558) with no capability to read, so the version decides.
+            let queuedRunStart = !ServerVersionSkewLogic.serverIsBehind(descriptor.serverVersion, client: "0.1.2-nightly.20261021.3486")
+            capabilities[environmentId] = (descriptor.capability("questionAttachments"), limit, descriptor.capability("threadStop"), queuedRunStart)
             menuState.pullRequestsSupported[environmentId] = descriptor.capability("pullRequests")
             refresh()
         }
@@ -4742,7 +4745,7 @@ extension ComposerController {
     /// only while the thread isn't working. One subagent gets "Show", several get their titles as links; Stop
     /// sends what the composer's Stop sends and reads "Stopping..." until the server accepts it.
     private func updateBackgroundWorkBanner(_ thread: ThreadShell?) {
-        let presentation = composer.runState.canInterrupt ? nil : thread.flatMap { BackgroundWorkPresentation.present($0.backgroundTasks) }
+        let presentation = composer.runState.canInterrupt ? nil : thread.flatMap { BackgroundWorkPresentation.present($0.backgroundTasks, awaitedMarked: $0.marksAwaitedWork) }
         panel.showsBackgroundWork = presentation != nil
         guard let thread, let presentation else { return }
         let stopWork: @MainActor () -> Void = { [weak self] in
