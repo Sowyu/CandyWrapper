@@ -340,8 +340,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         commands.onOrchestratorHidden = { [weak orchestrator] in orchestrator?.paneClosed() }
         commands.extraMenuItems = { [weak orchestrator] id in orchestrator?.menuItems(id) ?? [] }
         commands.performExtra = { [weak orchestrator] choice, id in orchestrator?.perform(choice, id) ?? false }
-        let space = SpaceController(sidebar: sidebar, commands: commands, window: window)
-        self.space = space
+        // Space objects exist only once Space is on, and an off launch touches notifications only for leftovers.
+        SpaceSettings.shared.whenFirstActive { [weak self, weak sidebar, weak commands, weak window] in
+            guard let self, let sidebar, let commands, let window else { return }
+            let space = SpaceController(sidebar: sidebar, commands: commands, window: window)
+            self.space = space
+            _ = space.store.observe { [weak self] in self?.ditherTabs?.sync() }
+            self.ditherTabs?.sync()
+        }
+        if !SpaceSettings.shared.isActive { Task { await SpaceReminderController.withdrawLeftovers(settings: .shared) } }
         sidebar.actions.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open() }
         sidebar.accountRow.onOpenMachines = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open(.connections) }
         sidebar.actions.openAutomations = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.show(.scheduledTasks) }
@@ -603,14 +610,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // Route history for `navigation.back` and `navigation.forward` (AppSidebarLayout.tsx:168-213).
         let history = RouteHistory()
-        let currentRoute: () -> RouteHistory.Route? = { [weak settings, weak commands, weak threads, weak space] in
+        let currentRoute: () -> RouteHistory.Route? = { [weak self, weak settings, weak commands, weak threads] in
             if let settings, settings.isOpen { return .settings(settings.section) }
             if let page = commands?.openUtilityKind {
                 switch page {
                 case .pullRequests: return .pullRequests
                 case .usage: return .usage
                 case .orchestrator: return .orchestrator
-                case .space: if let route = space?.route { return route }
+                case .space: if let route = self?.space?.route { return route }
                 }
             }
             switch threads?.composer.target {
@@ -684,15 +691,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ditherTabs = DitherTabsController(layout: layout, sidebar: sidebar, history: history, current: currentRoute,
                                           newThread: { [weak palette] opened in palette?.newThreadFromSidebar(shift: true, then: opened) })
         commands.historyBack = { [weak history] in history?.back() ?? false }
-        if let tabs = ditherTabs, let space {
-            tabs.spaceTitle = { [weak space] route in space?.tabTitle(route) ?? "" }
-            tabs.spaceExists = { [weak space] route in space?.routeExists(route) ?? false }
-            _ = space.store.observe { [weak tabs] in tabs?.sync() }
+        if let tabs = ditherTabs {
+            tabs.spaceTitle = { [weak self] route in self?.space?.tabTitle(route) ?? "" }
+            tabs.spaceExists = { [weak self] route in self?.space?.routeExists(route) ?? false }
             SpaceSettings.shared.observe { [weak tabs] in tabs?.sync() }
         }
         // Space mode takes the new-thread and file picker keys, ⌘N and ⌘P by default, for a new page and page search.
-        shortcuts.onKey { [weak space, weak shortcuts] event in
-            guard let space, space.isModeShown, let command = shortcuts?.command(for: event) else { return false }
+        shortcuts.onKey { [weak self, weak shortcuts] event in
+            guard let space = self?.space, space.isModeShown, let command = shortcuts?.command(for: event) else { return false }
             switch command {
             case "chat.new": space.newPage()
             case "filePicker.toggle": space.focusSearch()

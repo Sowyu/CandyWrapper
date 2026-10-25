@@ -12,6 +12,7 @@ public final class SpaceSettings {
     static let modeKey = "space.sidebarMode"
     static let expandedKey = "space.expanded"
     static let lastPageKey = "space.lastPage"
+    static let remindersKey = "space.remindersScheduled"
 
     private let defaults: UserDefaults
     private var observers: [Int: @MainActor () -> Void] = [:]
@@ -51,6 +52,25 @@ public final class SpaceSettings {
     public var lastPage: PageID? {
         get { defaults.string(forKey: Self.lastPageKey).flatMap { try? PageID($0) } }
         set { defaults.set(newValue?.rawValue, forKey: Self.lastPageKey) }
+    }
+
+    /// True from when Space hands reminders to macOS until it has withdrawn them, so an off launch knows whether
+    /// a run that quit or crashed mid-withdrawal left any behind.
+    public var remindersScheduled: Bool {
+        get { defaults.bool(forKey: Self.remindersKey) }
+        set { defaults.set(newValue, forKey: Self.remindersKey) }
+    }
+
+    /// Runs `make` once, the first time Space is active: now, or when the switch or the theme turns it on.
+    public func whenFirstActive(_ make: @escaping @MainActor () -> Void) {
+        if isActive { return make() }
+        var token: Int?
+        token = observe { [weak self] in
+            guard let self, self.isActive, let id = token else { return }
+            token = nil
+            self.removeObserver(id)
+            make()
+        }
     }
 
     @discardableResult

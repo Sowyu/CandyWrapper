@@ -192,6 +192,16 @@ public final class SpaceReminderController {
         }
     }
 
+    /// An off launch makes no Space objects. Only when an earlier run handed reminders to macOS and never finished
+    /// withdrawing them does this withdraw every `space.` request, without opening Space's key or files.
+    public static func withdrawLeftovers(settings: SpaceSettings, center: @autoclosure () -> SpaceNotificationCenter = SystemSpaceNotificationCenter()) async {
+        guard settings.remindersScheduled, !settings.isActive else { return }
+        let off = SpaceReminderController(store: InMemorySpacePageStore(), center: center(), automaticWakes: false)
+        off.setEnabled(false)
+        await off.settle()
+        if !settings.isActive { settings.remindersScheduled = false }
+    }
+
     /// Waits for all queued center work, including changes made while an async call was suspended.
     public func settle() async { while let worker { await worker.value } }
 

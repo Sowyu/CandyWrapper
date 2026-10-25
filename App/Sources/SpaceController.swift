@@ -5,8 +5,9 @@ import SpaceCrypto
 import SpaceLocal
 
 /// Space in the window (docs/space.md "Sidebar and navigation"): the sidebar's Space row and mode, page and Trash
-/// tabs, and ⌘N and ⌘P while Space mode shows. With the switch off or outside Redesign none of it exists: no
-/// sidebar view, no pane, no store reads. Space data stays in this app; no agent, thread or Orchestrator path reads it.
+/// tabs, and ⌘N and ⌘P while Space mode shows. The app makes it the first time Space is on (`whenFirstActive`), so an
+/// off launch has no store, no reminder controller and no notification calls. Turned off later, it keeps no
+/// sidebar view, no pane and no open store. Space data stays in this app; no agent, thread or Orchestrator path reads it.
 @MainActor
 final class SpaceController {
     let store: SpaceDocumentStore
@@ -56,11 +57,18 @@ final class SpaceController {
     /// Follows the switch and the theme: Space's sidebar exists only while both allow it.
     func sync() {
         let shouldRemind = settings.isActive && (store as? PersistentSpacePageStore)?.isOpen != false && lifecycle == nil
+        // The app makes this controller only once Space is on, so `!isActive` here is a real off transition.
         // Keep OS-owned reminders during an enabled launch while the encrypted copy opens.
-        // Only an actual switch/theme-off transition withdraws them before planning can resume.
         if (!settings.isActive || shouldRemind), remindersEnabled != shouldRemind {
             remindersEnabled = shouldRemind
+            if shouldRemind { settings.remindersScheduled = true }
             reminders.setEnabled(shouldRemind)
+            if !shouldRemind {
+                Task { [weak self, reminders] in
+                    await reminders.settle()
+                    if let self, !self.settings.isActive { self.settings.remindersScheduled = false }
+                }
+            }
         }
         guard let sidebar else { return }
         if settings.isActive {

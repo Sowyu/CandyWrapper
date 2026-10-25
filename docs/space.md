@@ -25,7 +25,7 @@ Settings > Experimental, the tab another agent is building now, gets one switch:
 While the switch is off, nothing of Space exists on screen or at run time:
 
 - No Space row in the sidebar, no Space tabs, no menu items, no shortcuts.
-- No terminal pipe to the Space machine, no reminders scheduled, no Space code on the launch path beyond reading the bool.
+- No terminal pipe to the Space machine, no reminders scheduled, no Space code on the launch path beyond reading the bool. The app makes Space's objects the first time it is on. An off launch calls the notification center only if an earlier run scheduled reminders and never finished withdrawing them (`space.remindersScheduled`).
 - Turning it off closes open Space tabs, leaves Space mode in the sidebar, closes the pipe and withdraws every pending Space notification.
 - The encrypted local copy and the key stay, so turning it on again is instant. "Remove Space from this Mac" under the switch deletes both after a confirmation.
 

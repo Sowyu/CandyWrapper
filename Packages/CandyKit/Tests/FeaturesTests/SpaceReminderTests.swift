@@ -28,7 +28,8 @@ private final class ReminderCenter: SpaceNotificationCenter {
         return true
     }
     func registerCategory(_ category: UNNotificationCategory) async { categories = [category] }
-    func pending() async -> [UNNotificationRequest] { Array(requests.values) }
+    var reads = 0
+    func pending() async -> [UNNotificationRequest] { reads += 1; return Array(requests.values) }
     func delivered() async -> [UNNotificationRequest] { Array(notices.values) }
     func add(_ request: UNNotificationRequest) async throws {
         adds += 1
@@ -135,6 +136,25 @@ struct SpaceReminderTests {
         #expect(center.notices.isEmpty)
         #expect(!center.requests.values.contains { $0.content.body.contains("Groceries") })
         sut.setEnabled(false); next.setEnabled(false); await sut.settle(); await next.settle()
+    }
+
+    @Test func offLaunchTouchesNotificationsOnlyForLeftovers() async throws {
+        let defaults = try #require(UserDefaults(suiteName: "SpaceReminderTests.\(UUID().uuidString)"))
+        let settings = SpaceSettings(defaults: defaults)
+        let center = ReminderCenter()
+        let left = UNNotificationRequest(identifier: "space.left", content: UNMutableNotificationContent(), trigger: nil)
+        let thread = UNNotificationRequest(identifier: "thread.completed", content: UNMutableNotificationContent(), trigger: nil)
+        center.requests = [left.identifier: left, thread.identifier: thread]
+        // A normal off launch: nothing scheduled earlier, so no notification call at all.
+        await SpaceReminderController.withdrawLeftovers(settings: settings, center: center)
+        #expect(center.reads == 0 && center.requests.count == 2)
+        // A run that quit before its withdrawal finished left reminders behind: withdraw them once.
+        settings.remindersScheduled = true
+        await SpaceReminderController.withdrawLeftovers(settings: settings, center: center)
+        #expect(center.requests.keys.sorted() == [thread.identifier])
+        #expect(!settings.remindersScheduled)
+        await SpaceReminderController.withdrawLeftovers(settings: settings, center: center)
+        #expect(center.reads == 1)
     }
 
     @Test func withdrawingAnOldDeliveredVersionKeepsTheCurrentPendingVersion() async throws {

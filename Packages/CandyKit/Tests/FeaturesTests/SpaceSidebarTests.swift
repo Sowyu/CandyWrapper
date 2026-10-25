@@ -108,6 +108,27 @@ struct SpaceSidebarTests {
         #expect(store.pages[ids["journal"]!] == nil && store.trashed.isEmpty)
     }
 
+    @Test func spaceIsMadeOnlyOnceItTurnsOn() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        var dither = previous
+        dither.ditherLight = true; dither.ditherDark = true
+        ThemeRuntime.apply(dither)
+        let defaults = try #require(UserDefaults(suiteName: "SpaceSidebarTests.\(UUID().uuidString)"))
+        let settings = SpaceSettings(defaults: defaults)
+        var made = 0
+        settings.whenFirstActive { made += 1 }
+        #expect(made == 0, "an off launch makes nothing")
+        settings.enabled = true
+        #expect(made == 1)
+        settings.enabled = false
+        settings.enabled = true
+        #expect(made == 1, "made once, then kept across off and on")
+        let on = SpaceSettings(defaults: defaults)
+        on.whenFirstActive { made += 1 }
+        #expect(made == 2, "an on launch makes it at once")
+    }
+
     @Test func spaceModeShowsOnlyWithItsViewUnderRedesign() throws {
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous) }
