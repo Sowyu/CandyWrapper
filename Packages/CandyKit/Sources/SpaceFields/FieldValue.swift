@@ -42,7 +42,7 @@ public struct FieldItem: Equatable, Sendable {
 
 // A schema mismatch behaves like an empty cell in queries. Conversion still reports its loss.
 enum Cell: Equatable {
-    case text(String), number(Decimal), checkbox(Bool), options([String]), date(DateValue)
+    case text(String), number(Decimal), checkbox(Bool), options([String]), date(DateValue), files([String])
 
     static func read(_ value: PropertyValue?, field: FieldDefinition, optionOrder: [String]? = nil) -> Self? {
         switch (field.type, value) {
@@ -57,6 +57,10 @@ enum Cell: Equatable {
         case (.multi, .multi(let ids)):
             let selected = (optionOrder ?? orderedOptions(field)).filter { ids.contains($0) }
             return selected.isEmpty ? nil : .options(selected)
+        case (.files, .files(let files)):
+            return files.isEmpty ? nil : .files(files.map(\.name))
+        // Empty arrays decode as multi; the field definition supplies the files type.
+        case (.files, .multi([])): return nil
         case (.date, .date(let date)):
             guard (try? date.validate()) != nil else { return nil }
             return .date(date)

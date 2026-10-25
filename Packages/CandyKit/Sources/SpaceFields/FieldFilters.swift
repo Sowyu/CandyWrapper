@@ -8,6 +8,7 @@ public enum FieldFilters {
         case .number: return [.eq, .ne, .lt, .le, .gt, .ge, .isEmpty]
         case .checkbox: return [.is]
         case .select, .multi: return [.is, .isNot, .isEmpty]
+        case .files: return [.isEmpty, .isNotEmpty]
         case .date: return [.before, .after, .on, .thisWeek, .overdue, .isEmpty]
         default: return []
         }
@@ -86,6 +87,7 @@ struct CompiledFilter {
         case .options(let ids):
             guard case .string(let operand) = filter.value else { return false }
             return filter.op == .is ? ids.contains(operand) : !ids.contains(operand)
+        case .files: return false // Emptiness operators return above.
         case .date(let date):
             let instant = date.start.isTimed
                 ? try date.start.resolved(in: date.effectiveTimeZone(deviceTimeZone: context.timeZone)) : nil

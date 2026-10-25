@@ -21,11 +21,13 @@ struct SpaceFieldsConversionTests {
         case .number: original = .number(1)
         case .checkbox: original = .checkbox(true)
         case .select: original = .string("one")
+        case .files: original = .files([file("1")])
         case .multi: original = .multi(["one"])
         default: original = .date(try date("2026-10-27"))
         }
         let expected: PropertyValue?
         if sourceType == targetType { expected = original }
+        else if sourceType == .files && targetType != .text { expected = nil }
         else {
             switch targetType {
             case .text:
@@ -59,14 +61,14 @@ struct SpaceFieldsConversionTests {
         }
         let result = try FieldConversion.convert(original, from: source, to: target, context: context())
         #expect(result.value == expected, "\(sourceType.rawValue) -> \(targetType.rawValue)")
-        #expect(result.outcome == (sourceType == targetType ? .kept : expected == nil ? .cleared : .converted))
-        #expect(result.losesInformation == (expected == nil))
+        #expect(result.outcome == (sourceType == targetType ? .kept : expected == nil ? .cleared : sourceType == .files ? .partial : .converted))
+        #expect(result.losesInformation == (expected == nil || (sourceType == .files && targetType == .text)))
     }
 
     @Test(arguments: FieldType.allCases, FieldType.allCases)
     func emptyAndNoOpConversions(_ sourceType: FieldType, _ targetType: FieldType) throws {
         let source = try field(sourceType, options: options()), target = try field(targetType, options: options())
-        for value: PropertyValue? in [nil, .unknown(.null), .string(""), .multi([])] {
+        for value: PropertyValue? in [nil, .unknown(.null), .string(""), .multi([]), .files([])] {
             let result = try FieldConversion.convert(value, from: source, to: target, context: context())
             #expect(result.outcome == .empty)
             #expect(!result.losesInformation)
@@ -194,6 +196,23 @@ struct SpaceFieldsConversionTests {
         #expect(rows == before)
         #expect(throws: FieldEngineError.unsupportedType(FieldType(rawValue: "future"))) {
             try FieldConversion.preview([], fieldID: "f", source: source, target: field(FieldType(rawValue: "future")), context: context())
+        }
+    }
+}
+
+extension SpaceFieldsConversionTests {
+    @Test func filesToTextReportsBlobLossAndOtherDestinationsClear() throws {
+        let source = try field(.files)
+        let rows = try [item(1, .files([file("photo.png"), file("logo.svg")])), item(2, .multi([])), item(3, .files([]))]
+        let plan = try FieldConversion.preview(rows, fieldID: "f", source: source, target: field(.text), context: context())
+        #expect(plan.items.map(\.result.value) == [.string("photo.png, logo.svg"), nil, nil])
+        #expect(plan.items.map(\.result.outcome) == [.partial, .empty, .empty])
+        #expect(plan.lostValueCount == 1 && plan.clearedValueCount == 0)
+        for name in ["https://example.com", "1", "true", "Alpha", "2026-10-27"] {
+            for type in FieldType.allCases where type != .files && type != .text {
+                let result = try FieldConversion.convert(.files([file(name)]), from: source, to: field(type, options: options()), context: context())
+                #expect(result.value == nil && result.outcome == .cleared && result.losesInformation)
+            }
         }
     }
 }

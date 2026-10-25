@@ -52,10 +52,15 @@ public enum FieldConversion {
         guard !isEmpty(value) else { return PropertyConversion(value: nil, outcome: .empty) }
         guard let cell = Cell.read(value, field: source) else { return cleared }
 
+        if target.type == .files || (source.type == .files && target.type != .text) { return cleared }
+
         var loss = false
         let strings: [String]
         switch cell {
         case .text(let text): strings = [text]
+        case .files(let names):
+            strings = names
+            loss = true
         case .number(let number): strings = [NSDecimalNumber(decimal: number).stringValue]
         case .checkbox(let checked): strings = [checked ? "true" : "false"]
         case .options(let ids):
@@ -118,7 +123,7 @@ public enum FieldConversion {
 
     private static func isEmpty(_ value: PropertyValue?) -> Bool {
         switch value {
-        case nil, .unknown(.null), .string(""), .multi([]): return true
+        case nil, .unknown(.null), .string(""), .multi([]), .files([]): return true
         default: return false
         }
     }

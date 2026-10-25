@@ -38,6 +38,7 @@ struct SpaceFieldsQueryTests {
         case .number: low = .number(-2); high = .number(10)
         case .checkbox: low = .checkbox(false); high = .checkbox(true)
         case .select: low = .string("z"); high = .string("a")
+        case .files: low = .files([file("Alpha")]); high = .files([file("beta")])
         case .multi: low = .multi(["z"]); high = .multi(["a", "z"])
         default:
             low = .date(try date("2026-10-27T09:00", tz: "Australia/Melbourne"))
@@ -232,6 +233,38 @@ struct SpaceFieldsQueryTests {
         #expect(select[0].items.count == 1)
         #expect(throws: FieldEngineError.cannotGroup(.text)) {
             try FieldQuery.groups([], field: field(.text), fieldID: "f")
+        }
+    }
+}
+
+func file(_ name: String) -> BlobReference {
+    BlobReference(id: "blob", name: name, mime: "image/png", size: 42, w: 16, h: 16)
+}
+
+extension SpaceFieldsQueryTests {
+    @Test func filesOnlyFilterEmptinessAndCannotGroup() throws {
+        let schema = ["f": try field(.files)]
+        #expect(FieldFilters.operators(for: .files) == [.isEmpty, .isNotEmpty])
+        for value: PropertyValue? in [nil, .multi([]), .files([]), .files([file("photo.png")])] {
+            let row = try item(1, value)
+            let empty = value != .files([file("photo.png")])
+            #expect(try FieldFilters.matches(row, filter: Filter(field: "f", op: .isEmpty, value: .null), fields: schema, context: context()) == empty)
+            #expect(try FieldFilters.matches(row, filter: Filter(field: "f", op: .isNotEmpty, value: .null), fields: schema, context: context()) == !empty)
+        }
+        #expect(throws: FieldEngineError.unsupportedOperator(.files, .contains)) {
+            try FieldQuery.evaluate([], fields: schema, filters: [Filter(field: "f", op: .contains, value: .string("photo"))], context: context())
+        }
+        #expect(throws: FieldEngineError.cannotGroup(.files)) {
+            try FieldQuery.groups([], field: field(.files), fieldID: "f")
+        }
+    }
+
+    @Test func filesSortByFirstNameWithBothEmptyShapesLast() throws {
+        let rows = try [item(1, .files([file("beta"), file("Alpha")])),
+                        item(2, .files([file("Alpha"), file("z")])), item(3, .multi([])), item(4, .files([]))]
+        for desc in [false, true] {
+            let result = try FieldQuery.evaluate(rows, fields: ["f": field(.files)], sorts: [Sort(field: "f", desc: desc)], context: context())
+            #expect(result.map(\.id) == (desc ? [rows[0], rows[1], rows[2], rows[3]] : [rows[1], rows[0], rows[2], rows[3]]).map(\.id))
         }
     }
 }

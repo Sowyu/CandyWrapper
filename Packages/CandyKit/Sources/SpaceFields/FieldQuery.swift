@@ -83,6 +83,7 @@ private enum SortKey: Equatable, Comparable {
     static func make(_ cell: Cell?, optionRanks: [String: Int], context: FieldContext) throws -> Self? {
         switch cell {
         case .text(let text): return .text(folded(text))
+        case .files(let names): return names.first.map { .text(folded($0)) }
         case .number(let number): return .number(number)
         case .checkbox(let value): return .checkbox(value)
         case .options(let ids):
