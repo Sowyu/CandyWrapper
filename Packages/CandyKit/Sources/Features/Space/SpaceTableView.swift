@@ -88,7 +88,7 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
     private var liveWidth: [String: CGFloat] = [:]
     private var dragging: (id: PageID, target: Int)?
     private var editing: (ref: CellRef?, header: String?)?
-    private var popupMenu: MenuPopupView?
+    private(set) var popupMenu: MenuPopupView?
 
     init(model: SpaceTableModel) {
         self.model = model
@@ -761,14 +761,28 @@ final class SpaceTableDocument: DSView, NSTextFieldDelegate, HoverSyncPointerCli
 
     private func withRow(_ id: PageID, _ body: (Int) -> Void) { if let i = rowIndex[id] { body(i) } }
 
-    private func showDateMenu(_ row: Int, _ column: SpaceTableModel.Column, anchor: NSRect) {
+    func showDateMenu(_ row: Int, _ column: SpaceTableModel.Column, anchor: NSRect) {
         let id = model.rows[row].id
         var items = dateChoices(anchor: anchor) { [weak self] d in self?.withRow(id) { self?.model.setValue($0, column, .date(d)) } }
         if model.rows[row].page.props[column.id] != nil {
             items.append(.separator)
+            if let due = date(id, column) {
+                items += SpaceReminderDialog.menuItems(due, open: { [weak self] in
+                    guard let self, let window = self.window, let due = self.date(id, column) else { return }
+                    SpaceReminderDialog.present(in: window, due: due, current: { [weak self] in self?.date(id, column) }) { [weak self] d in
+                        self?.withRow(id) { self?.model.setValue($0, column, .date(d)) }
+                    }
+                }, set: { [weak self] d in self?.withRow(id) { self?.model.setValue($0, column, .date(d)) } })
+            }
             items.append(MenuItem("Remove date", icon: .x) { [weak self] in self?.withRow(id) { self?.model.setValue($0, column, nil) } })
         }
         openMenu(items, anchor: anchor, width: 180)
+    }
+
+    /// The row's value in a date column, if it holds one.
+    private func date(_ id: PageID, _ column: SpaceTableModel.Column) -> DateValue? {
+        guard let i = rowIndex[id], case .date(let d)? = model.rows[i].page.props[column.id] else { return nil }
+        return d
     }
 
     /// Today, Tomorrow, Next week and a calendar, as date-only values in the device's zone.
