@@ -253,6 +253,8 @@ import Testing
         #expect(SecretRequests.display(status: "pending", visibility: "local") == .pending)
         #expect(SecretRequests.display(status: "pending", visibility: "inherited") == .pendingElsewhere(label: "Waiting for an answer in the original thread"))
         #expect(SecretRequests.display(status: "saved", visibility: "local") == .answered(outcome: .saved, label: "Saved securely and kept private"))
+        #expect(SecretRequests.privacyNote(delivery: "file") == "Kept out of chat, in a private file this agent's commands can read for 24 hours")
+        #expect(SecretRequests.privacyNote(delivery: nil) == "Stored securely, never shown to the agent")
         #expect(SecretRequests.display(status: "cancelled", visibility: "local") == .answered(outcome: .ended, label: "Request ended"))
     }
 
