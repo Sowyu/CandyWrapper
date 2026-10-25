@@ -122,17 +122,16 @@ final class ThreadSession {
             }
         }
         let store = self.store
+        let wireSubscription = UUID()
         let loader = ThreadSnapshotLoader(http: shell.http, token: shell.token, threadId: threadId.localId)
         subscription = shell.supervisor.subscribe("orchestration.subscribeThread", payload: {
-            if await store.subscribeInput().afterSequence == nil, let snapshot = await loader.load(), !Task.isCancelled {
-                await store.applySnapshot(snapshot)
+            if await store.subscribeInput(subscription: wireSubscription).afterSequence == nil, let snapshot = await loader.load(), !Task.isCancelled {
+                await store.applySnapshot(snapshot, subscription: wireSubscription)
             }
-            return ThreadSession.encode(await store.subscribeInput())
+            return ThreadSession.encode(await store.subscribeInput(subscription: wireSubscription))
         }, handler: { event in
-            guard case .value(let json) = event,
-                  let item = OpenTiming.measure("typed decode", ThreadSession.label(json), { ThreadSession.decode(json) })
-            else { return }
-            await store.apply([item])
+            guard case .value(let json) = event else { return }
+            try await ThreadSession.applyWire(json, to: store, subscription: wireSubscription)
         })
     }
 
@@ -235,16 +234,15 @@ final class ThreadSession {
         }
     }
 
-    /// The stream item's kind and size for the timing lines.
-    nonisolated static func label(_ json: JSONValue) -> String {
-        let kind = json["kind"]?.stringValue ?? "?"
-        guard kind == "snapshot", let p = json["projection"] else { return kind }
-        let count = { (key: String) -> Int in if case .array(let a)? = p[key] { a.count } else { 0 } }
-        return "snapshot: \(count("visibleTurnItems")) rows, \(count("turnItems")) turn items, \(count("runs")) runs, \(count("nodes")) nodes, \(count("messages")) messages"
-    }
-
-    nonisolated static func decode(_ json: JSONValue) -> ThreadStreamItem? {
-        try? json.decode(as: ThreadStreamItem.self)
+    /// Restore compact wire records before reduction. An invalid reference must request a
+    /// new snapshot instead of advancing past an answer whose body could not be restored.
+    nonisolated static func applyWire(_ json: JSONValue, to store: ThreadStore, subscription: UUID) async throws {
+        do {
+            try await store.applyWire(json, subscription: subscription)
+        } catch {
+            await store.resetForResynchronization(subscription: subscription)
+            throw error
+        }
     }
 
     /// `getTurnDiff` and `getFullThreadDiff` as unary calls on the shell's socket (DiffPanel's
@@ -495,11 +493,12 @@ final class ThreadController {
             let supervisor = shell.supervisor
             let familyLease = shell.retainFamily(id.localId)
             let store = ThreadStore(threadId: id.localId, environmentId: env, onChange: {})
+            let wireSubscription = UUID()
             let task = supervisor.subscribe("orchestration.subscribeThread", payload: {
-                ThreadSession.encode(await store.subscribeInput())
+                ThreadSession.encode(await store.subscribeInput(subscription: wireSubscription))
             }, handler: { event in
-                guard case .value(let json) = event, let item = ThreadSession.decode(json) else { return }
-                await store.apply([item])
+                guard case .value(let json) = event else { return }
+                try await ThreadSession.applyWire(json, to: store, subscription: wireSubscription)
                 guard let projection = await store.takeUpdate()?.projection else { return }
                 await MainActor.run { onProjection(projection) }
             })
