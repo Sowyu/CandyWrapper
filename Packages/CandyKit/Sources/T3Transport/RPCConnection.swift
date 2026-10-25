@@ -39,7 +39,7 @@ public enum RPCClientError: Error, Sendable, Equatable, CustomStringConvertible 
 /// Writes go through one ordered outbox so an `Ack` never blocks the consumer that caused it.
 public actor RPCConnection {
     /// The descriptor checked while opening this socket, when the connector supplies it.
-    public let serverVersion: String?
+    public nonisolated let serverVersion: String?
     private let socket: any RPCSocket
     private var nextID = 1
     private var unary: [RPCRequestID: CheckedContinuation<JSONValue, Error>] = [:]

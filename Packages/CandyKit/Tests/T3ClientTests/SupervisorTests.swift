@@ -68,6 +68,20 @@ final class Harness: @unchecked Sendable {
 struct SupervisorTests {
     let transient = ConnectionFailure.transient("refused")
 
+    @Test func currentServerVersionBelongsToTheOpenedSocket() async {
+        let socket = FakeSocket()
+        let connection = RPCConnection(socket: socket, serverVersion: "sandbox-build")
+        let supervisor = ConnectionSupervisor(dependencies: .init(connect: {
+            await connection.start()
+            return connection
+        }))
+        #expect(await supervisor.serverVersion == nil)
+        await supervisor.connect()
+        #expect(await eventually { await supervisor.serverVersion == "sandbox-build" })
+        await supervisor.disconnect()
+        #expect(await supervisor.serverVersion == nil)
+    }
+
     /// `ShellSession.stop` right after `start`: its disconnect lands first, so the late connect must not open.
     @Test func connectAfterAStopLandsDoesNothing() async {
         let h = Harness([.succeed])

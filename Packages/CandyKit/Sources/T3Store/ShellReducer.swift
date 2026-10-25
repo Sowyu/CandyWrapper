@@ -164,6 +164,7 @@ public struct ShellReducer: Sendable {
     public var displaySnapshot: ShellSnapshot? {
         guard var result = snapshot else { return nil }
         guard !supplemental.isEmpty else { return result }
+        guard !supplemental.isEmpty else { return result }
         let base = Set(result.threads.map(\.id))
         var additions: [ThreadId: (Int, ThreadShell)] = [:]
         for read in supplemental.values {
@@ -178,6 +179,7 @@ public struct ShellReducer: Sendable {
     @discardableResult
     public mutating func mount(_ read: ShellThreadRead?, key: String, generation: Int) -> ShellChangeSet {
         guard generation == self.generation, generation > 0 else { return ShellChangeSet() }
+        guard supplemental[key] != read else { return ShellChangeSet() }
         let before = displaySnapshot?.threads ?? []
         let metadataChanged = supplemental[key] != read
         supplemental[key] = read
@@ -191,6 +193,7 @@ public struct ShellReducer: Sendable {
 
     public mutating func unmount(prefix: String, generation: Int) -> ShellChangeSet {
         guard generation == self.generation else { return ShellChangeSet() }
+        guard supplemental.keys.contains(where: { $0.hasPrefix(prefix) }) else { return ShellChangeSet() }
         let before = displaySnapshot?.threads ?? []
         supplemental = supplemental.filter { !$0.key.hasPrefix(prefix) }
         let after = displaySnapshot?.threads ?? []
