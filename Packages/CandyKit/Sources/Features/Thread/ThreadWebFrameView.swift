@@ -17,6 +17,11 @@ import WebKit
 /// file flags, `allow-scripts allow-forms allow-popups allow-downloads`, no bridge, its own data store and no budget.
 @MainActor
 final class ThreadWebFrameView: NSView, WKNavigationDelegate {
+    #if DEBUG
+    /// Only the opt-in sandbox benchmark installs this observer.
+    static var benchmarkObserver: ((String, Page, ThreadWebFrameView, JSONValue?) -> Void)?
+    #endif
+
     enum Kind: Equatable {
         /// An agent's HTML render or an MCP app: bridge on, one frame load.
         case agent
@@ -107,11 +112,17 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         shortcutsPosted = false
         web.loadHTMLString(Self.hostPage(page), baseURL: URL(string: "about:blank"))
         if page.kind == .agent { ThreadWebFrameBudget.add(self) }
+        #if DEBUG
+        Self.benchmarkObserver?("activate", page, self, nil)
+        #endif
     }
 
     /// Tears the web view down; its content process goes when no other view uses it.
     func release() {
         guard let web = webView else { return }
+        #if DEBUG
+        if let page { Self.benchmarkObserver?("release", page, self, nil) }
+        #endif
         web.stopLoading()
         web.navigationDelegate = nil
         web.configuration.userContentController.removeAllScriptMessageHandlers()
@@ -134,6 +145,9 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         // Only the host page's isolated bridge speaks here; a framed document never reaches this world.
         guard isMainFrame, let text = body as? String, let json = try? JSONValue(parsing: Data(text.utf8)) else { return }
         onMessage?(json)
+        #if DEBUG
+        if let page { Self.benchmarkObserver?("message", page, self, json) }
+        #endif
     }
 
     /// Whether the reader is using this frame now: it holds focus and they just clicked or typed in it.
