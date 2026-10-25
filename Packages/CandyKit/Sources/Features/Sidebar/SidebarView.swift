@@ -500,6 +500,45 @@ public final class SidebarContentView: DSView {
         list.setAccessibilityLabel(isSearching ? "Thread search results" : nil)
         updateScopeTrigger()
         scheduleLabelTimer()
+        revealRouteRow()
+    }
+
+    // MARK: Route reveal (Sidebar.tsx:1118-1153, sidebar/routeReveal.ts)
+
+    private var revealObservedId: ThreadId?
+    private var revealPendingId: ThreadId?
+    private var initialRevealOwed = true
+
+    /// History, the command palette and links can open a thread the project scope hides or the list has scrolled
+    /// away. Each new active thread scrolls its row into view once, widening the scope first when only the scope
+    /// hides it. The first active row after launch scrolls into view too, without widening.
+    private func revealRouteRow() {
+        let routeId = state.activeThreadId
+        if let routeId, routeId != revealObservedId {
+            revealObservedId = routeId
+            revealPendingId = routeId
+        }
+        let pending = routeId == nil ? nil : revealPendingId
+        // Search results replace the thread list; reveal once the list returns.
+        guard !isSearching, let id = pending ?? (initialRevealOwed ? routeId : nil) else { return }
+        guard let thread = snapshot?.threads.first(where: { $0.id == id }) else { return }
+        if pending != nil, state.projectScopeKey != nil, let scoped = scopedGroup.map({ Set($0.memberProjectIds) }) {
+            let row = [SidebarThread(thread)]
+            if SidebarModel.filterSidebarV2VisibleThreads(row, scopedProjectIds: scoped).isEmpty,
+               SidebarModel.filterSidebarV2VisibleThreads(row).count == 1 {
+                // The row shows under the widened scope; that rebuild scrolls to it. Async, so the scope
+                // change doesn't rebuild inside this rebuild.
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.revealPendingId == id, self.state.projectScopeKey != nil else { return }
+                    self.setProjectScope(nil)
+                }
+                return
+            }
+        }
+        guard list.rowFrame(id) != nil else { return }
+        revealPendingId = nil
+        initialRevealOwed = false
+        list.scrollItemToVisible("thread:\(id.rawValue)") // `scrollIntoView({ block: "nearest" })`
     }
 
     private func searchItems(nowMs: Int64) -> [SidebarItem] {

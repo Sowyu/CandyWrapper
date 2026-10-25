@@ -126,6 +126,23 @@ struct SidebarSearchTests {
         #expect(empty.list.items == [.emptyText("No threads in lonely yet", search: false)])
     }
 
+    /// 044f07257c: a thread opened from history, the palette or a link widens a scope that hides it, once.
+    @Test func newActiveThreadWidensTheScopeThatHidesIt() async throws {
+        let c = content()
+        let t3 = try #require(SidebarListBuilder.projectScopeGroups(snapshot: c.snapshot).first { $0.label == "t3code" })
+        c.setProjectScope(t3.key)
+        c.state.activeThreadId = ThreadId("r2")
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(c.state.projectScopeKey == t3.key)
+        c.state.activeThreadId = ThreadId("r3")
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(c.state.projectScopeKey == nil && keys(c).contains("thread:r3"))
+        // Scoping again keeps the scope: only a route change widens it.
+        c.setProjectScope(t3.key)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(c.state.projectScopeKey == t3.key)
+    }
+
     @Test func scopePersists() {
         let suite = "candywrapper.tests.scope.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
