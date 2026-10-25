@@ -115,8 +115,9 @@ public struct ThreadNotificationTracker: Sendable {
             let kind: ThreadNotificationEvent.Kind?
             if let attention, attention != prior.attention {
                 kind = .input
-            } else if raw.latestRunStopRequested != true, let completion, prior.completion.map({ completion > $0 }) ?? true {
-                // A run the user stopped doesn't announce itself (ThreadNotificationCoordinator.tsx:154-160).
+            } else if raw.latestRunStopRequested != true, raw.latestRunSilent != true, let completion, prior.completion.map({ completion > $0 }) ?? true {
+                // A run the user stopped or a compaction T3 Code started doesn't announce itself
+                // (ThreadNotificationCoordinator.tsx:277). Failures still do, through `attention`.
                 kind = .completion
             } else {
                 kind = nil

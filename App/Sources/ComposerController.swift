@@ -1943,10 +1943,11 @@ final class ComposerController {
                             "threadId": .string(threadId.localId.rawValue), "interactionMode": .string(interactionChange.rawValue)]))
                     }
                     if compactFirst {
-                        // ChatView.tsx:9859-9873: `/compact` starts its own turn with the same model and modes.
+                        // `/compact` starts its own turn with the same model and modes, marked as compacting on return so
+                        // the timeline shows one working row for it (useComposerSend.ts:1197-1209).
                         _ = try await supervisor.request("orchestration.dispatchCommand", payload: Self.standaloneCommand(
                             threadId: threadId, messageId: MessageId(UUID().uuidString.lowercased()), text: "/compact",
-                            selection: selection, queue: false))
+                            selection: selection, queue: false, idleCompaction: "onReturn"))
                     }
                     _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object(command))
                     // The turn is under way: the chip's off state for this thread is spent (ChatView.tsx:9984-9986).
@@ -4685,8 +4686,10 @@ extension ComposerController {
     /// `startThreadTurn` with no dispatch mode for a standalone command (commands.ts:752-776): `auto`,
     /// which the server resolves (`start_immediately` plus `deliveryIntent: auto`); queued app messages
     /// go behind the active run.
-    static func standaloneCommand(threadId: ThreadId, messageId: MessageId, text: String, selection: ModelSelection, queue: Bool) -> JSONValue {
-        OrchestrationCommands.message(threadId: threadId.localId.rawValue, messageId: messageId.rawValue, text: text, selection: selection, queue: queue)
+    static func standaloneCommand(threadId: ThreadId, messageId: MessageId, text: String, selection: ModelSelection, queue: Bool,
+                                  idleCompaction: String? = nil) -> JSONValue {
+        OrchestrationCommands.message(threadId: threadId.localId.rawValue, messageId: messageId.rawValue, text: text, selection: selection,
+                                      queue: queue, idleCompaction: idleCompaction)
     }
 
 }

@@ -115,14 +115,17 @@ final class AttemptFoldRowView: TimelineRowView {
     }
 }
 
-/// `ContextCompactionTimelineRow` (MessagesTimeline.tsx:1298-1334): a rule, the minimize icon and label, a rule.
-/// Token counts draw "Context compacted 12k", an arrow icon, "5k tokens" (abfc5727bf), all `gap-1.5`.
+/// `ContextCompactionTimelineRow` (MessagesTimeline.tsx:1327-1377): a rule, the minimize icon and label, a rule.
+/// Token counts draw "Context compacted 12k", an arrow icon, "5k tokens" (abfc5727bf), all `gap-1.5`. A failed
+/// compaction draws `text-destructive` with a circle-alert icon, `bg-destructive/30` rules and "· {summary}" at 80%.
 final class CompactionRowView: TimelineRowView {
     private let left = FillView(), right = FillView()
     private let icon = IconView(name: .minimize2, size: 12, strokeColor: TL.c(\.mutedForeground))
+    private let failedIcon = IconView(name: .circleAlert, size: 12, strokeColor: TL.c(\.destructive))
     private let label = ShineLabelView()
     private let arrow = IconView(name: .arrowRight, size: 12, strokeColor: TL.c(\.mutedForeground))
     private let after = LabelView("", font: TL.font(12), color: TL.c(\.mutedForeground))
+    private let failure = LabelView("", font: TL.font(12), color: TL.c(\.destructive, 0.8))
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -132,10 +135,13 @@ final class CompactionRowView: TimelineRowView {
         label.base.color = TL.c(\.mutedForeground)
         label.style = .focus
         after.lineHeight = 16
+        failure.lineHeight = 16
         addSubview(icon)
+        addSubview(failedIcon)
         addSubview(label)
         addSubview(arrow)
         addSubview(after)
+        addSubview(failure)
     }
 
     /// The label around its arrow: `WorkLog.contextCompactionLabel` writes it only for token counts.
@@ -146,13 +152,19 @@ final class CompactionRowView: TimelineRowView {
 
     override func configure(_ item: TimelineItem) {
         super.configure(item)
-        guard case .contextCompaction(let text, let active) = item.row.kind else { return }
+        guard case .contextCompaction(let text, let active, let failed, let failureText) = item.row.kind else { return }
         let parts = Self.split(text)
         label.text = parts.before
         after.text = parts.after ?? ""
         arrow.isHidden = parts.after == nil
         after.isHidden = parts.after == nil
-        setAccessibilityLabel(text)
+        icon.isHidden = failed
+        failedIcon.isHidden = !failed
+        failure.text = failureText.map { "· \($0)" } ?? ""
+        failure.isHidden = failureText == nil
+        label.base.color = failed ? TL.c(\.destructive) : TL.c(\.mutedForeground)
+        for r in [left, right] { r.fill = failed ? TL.c(\.destructive, 0.3) : TL.c(\.border, 0.7) }
+        setAccessibilityLabel(failureText.map { "\(text): \($0)" } ?? text)
         label.fastMode = context.fastGlimmer
         label.shining = active
         needsLayout = true
@@ -164,14 +176,19 @@ final class CompactionRowView: TimelineRowView {
         super.layout()
         let lw = ceil(label.textWidth)
         let aw = after.isHidden ? 0 : ceil(after.textWidth)
-        let cluster = 12 + 6 + lw + (after.isHidden ? 0 : 6 + 12 + 6 + aw)
+        // `min-w-0 truncate` on the failure: it gives way before the rules shrink below nothing.
+        let fixed = 12 + 6 + lw + (after.isHidden ? 0 : 6 + 12 + 6 + aw)
+        let fw = failure.isHidden ? 0 : min(ceil(failure.textWidth), max(0, bounds.width - 24 - fixed - 6))
+        let cluster = fixed + (failure.isHidden ? 0 : 6 + fw)
         let x = (bounds.width - cluster) / 2
         left.frame = NSRect(x: 0, y: 12, width: max(0, x - 12), height: 1)
         right.frame = NSRect(x: x + cluster + 12, y: 12, width: max(0, bounds.width - x - cluster - 12), height: 1)
         icon.frame = NSRect(x: x, y: 6, width: 12, height: 12)
+        failedIcon.frame = icon.frame
         label.frame = NSRect(x: x + 18, y: 4, width: lw, height: 16)
         arrow.frame = NSRect(x: label.frame.maxX + 6, y: 6, width: 12, height: 12)
         after.frame = NSRect(x: arrow.frame.maxX + 6, y: 4, width: aw, height: 16)
+        failure.frame = NSRect(x: (after.isHidden ? label.frame.maxX : after.frame.maxX) + 6, y: 4, width: fw, height: 16)
     }
 }
 

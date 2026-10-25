@@ -43,9 +43,10 @@ public struct TimelineRow: Sendable, Hashable, Identifiable {
         case work(groupedEntries: [WorkLogEntry], isExpandedToolGroup: Bool, displayLabel: String?)
         /// The live activity line of a running turn.
         case workLive(entry: WorkLogEntry, groupedEntries: [WorkLogEntry], groupId: String, expanded: Bool, active: Bool, thought: WorkLogEntry?)
-        /// "Working for 12s" header; `createdAt` is the turn start. `compacting` reads "Compacting…"
-        /// while a `/compact` waits for its compaction row (MessagesTimeline.tsx:3705-3716).
-        case working(compacting: Bool)
+        /// "Working for 12s" header; `createdAt` is the turn start. `compacting` replaces it: "Compacting…"
+        /// while a `/compact` waits for its compaction row, or why a compaction T3 Code started holds the
+        /// user's message back (TimelineWorkGroupRows.tsx:286-300, MessagesTimeline.logic.ts:1611-1631).
+        case working(compacting: String?)
         /// Placeholder while running with no visible activity. `compacting` blanks it (:3793-3795).
         case thinking(groupId: String?, expanded: Bool?, compacting: Bool)
         /// Header of a settled group of tool calls.
@@ -53,7 +54,8 @@ public struct TimelineRow: Sendable, Hashable, Identifiable {
         /// "Worked for 22s" header of a settled turn.
         case turnFold(runId: RunId, label: String, expanded: Bool)
         case attemptFold(runId: RunId, attemptId: RunAttemptId, label: String, expanded: Bool)
-        case contextCompaction(label: String, active: Bool)
+        /// `failed` draws red with `failure`, the item's summary, after the label (MessagesTimeline.tsx:1327-1377).
+        case contextCompaction(label: String, active: Bool, failed: Bool = false, failure: String? = nil)
         /// fork, handoff, interrupt result, secret request, subagent (grouped), created-thread summary.
         case event(ProjectedTurnItem, subagents: [ProjectedTurnItem]?, resourceSummary: Bool)
         case proposedPlan(ProposedPlan)
@@ -673,14 +675,54 @@ public enum TimelineRows {
         }
         let activeWorkEntryIds = activeWorkRow != nil || latestToolFailed ? Set(activeToolEntries.map(\.id)) : []
 
+        // A bare `/compact` turn is the compaction itself: one compaction row stands in for its prompt and working
+        // indicator from the moment the turn starts, and an answered "compact before continuing?" question folds
+        // into the compaction it asked for (MessagesTimeline.logic.ts:1551-1655, 0345e852ed).
+        var compactionRuns: [RunId: String?] = [:]
+        var compactedRunIds = Set<RunId>()
+        var pendingResumeAge: [RunId: String] = [:]
+        var resumeAgeByEntryId: [String: String] = [:]
+        for entry in entries {
+            if let m = entry.message, let run = m.runId, IdleCompaction.isCommand(m) {
+                compactionRuns[run] = .some(IdleCompaction.reason(m))
+            } else if let w = entry.work, let run = w.runId {
+                if w.sourceActivityKind == "context-compaction" {
+                    compactedRunIds.insert(run)
+                    if let age = pendingResumeAge.removeValue(forKey: run) { resumeAgeByEntryId[entry.id] = age }
+                }
+                if let age = w.questionAnswer.flatMap(IdleCompaction.resumeAge) { pendingResumeAge[run] = age }
+            }
+        }
+        func compactionTitle(_ run: RunId?, _ entryId: String) -> String? {
+            guard let run else { return nil }
+            if let reason = compactionRuns[run] ?? nil { return IdleCompaction.titles[reason] }
+            return resumeAgeByEntryId[entryId].map { "Context compacted after \($0) idle" }
+        }
+        let activeCompactionEntry = entries.first { $0.work.map { $0.sourceActivityKind == "context-compaction" && isInActiveRun($0) } ?? false }
+        let activeRunIsCompaction = input.isWorking && unsettled.map { compactionRuns[$0] != nil } == true
+        // The item can finish before its run settles; only other work should keep activity visible.
+        let compactionRunFinished = activeRunIsCompaction && unsettled.map { compactedRunIds.contains($0) } == true && activeCompactionEntry == nil
+        let compactionOnlyRunFinished = compactionRunFinished && !entries.contains { e in
+            runId(e) == unsettled && e.work?.sourceActivityKind != "context-compaction" && !(e.message.map(IdleCompaction.isCommand) ?? false)
+        }
+        let runningCompactionRunId = activeRunIsCompaction && !compactionRunFinished ? unsettled : nil
+        // Compacting on return holds back the message the user just sent, so the working row says why it is
+        // waiting. Any other compaction shows only its live divider, never both.
+        let activeCompactionRunId: RunId? = runningCompactionRunId.flatMap { (compactionRuns[$0] ?? nil) == "onReturn" ? $0 : nil }
+            ?? activeCompactionEntry.flatMap { resumeAgeByEntryId[$0.id] != nil ? $0.work?.runId : nil }
+        let compactingLabel: String? = activeCompactionRunId == nil ? nil
+            : activeCompactionEntry.flatMap { resumeAgeByEntryId[$0.id] }.map { "Compacting after \($0) idle…" } ?? IdleCompaction.compactingLabels["onReturn"]
+        let hasActiveCompaction = activeCompactionEntry != nil || (activeRunIsCompaction && !compactionRunFinished)
+
         var rows: [TimelineRow] = []
         var hasActivityRow = false
-        var hasActiveCompaction = false
         func expandedBody(_ groupId: String, _ createdAt: T3Timestamp, _ grouped: [WorkLogEntry]) -> TimelineRow {
             TimelineRow(id: "\(groupId):details", createdAt: createdAt, kind: .work(groupedEntries: grouped, isExpandedToolGroup: true, displayLabel: nil))
         }
         func appendWorkingRow() {
-            rows.append(TimelineRow(id: workingRowId, createdAt: input.activeTurnStartedAt, kind: .working(compacting: false)))
+            if compactionOnlyRunFinished { return }
+            if runningCompactionRunId != nil, activeCompactionRunId == nil { return }
+            rows.append(TimelineRow(id: workingRowId, createdAt: input.activeTurnStartedAt, kind: .working(compacting: compactingLabel)))
         }
 
         var index = 0
@@ -714,8 +756,21 @@ public enum TimelineRows {
             switch entry.kind {
             case .work(let work) where work.sourceActivityKind == "context-compaction":
                 let active = isInActiveRun(work)
-                hasActiveCompaction = hasActiveCompaction || active
-                rows.append(TimelineRow(id: entry.id, createdAt: entry.createdAt, kind: .contextCompaction(label: work.label, active: active)))
+                if active, let run = activeCompactionRunId, work.runId == run { continue }
+                let reason = work.runId.flatMap { compactionRuns[$0] ?? nil }
+                let failed = work.structuredPayload?.status == .failed
+                let failure = failed ? work.structuredPayload?.string("summary")?.jsTrimmed.nonEmpty : nil
+                var label = active ? reason.flatMap { IdleCompaction.compactingLabels[$0] } ?? work.label : work.label
+                // The title leads the token counts in place of "Context compacted".
+                if let title = compactionTitle(work.runId, entry.id), label.hasPrefix("Context compacted") {
+                    label = title + label.dropFirst("Context compacted".count)
+                }
+                rows.append(TimelineRow(id: entry.id, createdAt: entry.createdAt,
+                                        kind: .contextCompaction(label: label, active: active, failed: failed, failure: failure)))
+
+            case .work(let work) where work.runId.map({ compactedRunIds.contains($0) }) == true
+                && work.questionAnswer.flatMap(IdleCompaction.resumeAge) != nil:
+                continue
 
             case .work(let work):
                 if (work.runId.map { failed.contains($0) } ?? false) || (work.itemType == .error && work.toolLifecycleStatus == .failed)
@@ -795,6 +850,13 @@ public enum TimelineRows {
                 }
                 rows.append(TimelineRow(id: entry.id, createdAt: entry.createdAt, kind: .event(row, subagents: nil, resourceSummary: false)))
 
+            case .message(let message, _) where message.runId != nil && IdleCompaction.isCommand(message):
+                let run = message.runId!
+                guard !compactedRunIds.contains(run), run != activeCompactionRunId else { continue }
+                let pending = run == runningCompactionRunId
+                let label = pending ? (compactionRuns[run] ?? nil).flatMap { IdleCompaction.compactingLabels[$0] } ?? "Compacting context" : "Context compaction"
+                rows.append(TimelineRow(id: "compaction:\(run.rawValue)", createdAt: entry.createdAt, kind: .contextCompaction(label: label, active: pending)))
+
             case .message(let message, let projected):
                 let stillInProgress = message.role == .assistant && runIsActiveResponse(message.runId)
                 // While the turn runs, the latest answer is only provisionally terminal.
@@ -809,13 +871,19 @@ public enum TimelineRows {
         if input.isWorking, !head, !rows.contains(where: { $0.id == workingRowId }), activeTurnHeaderIndex == entries.count {
             appendWorkingRow()
         }
-        // `compactionAwaitingRow` (MessagesTimeline.tsx:1378-1379): a `/compact` runs and its compaction
-        // row has not shown up yet. The header reads "Compacting…" and Thinking keeps its height, blank.
-        let compacting = input.isCompacting && !hasActiveCompaction
-        if compacting, let i = rows.firstIndex(where: { $0.id == workingRowId }) {
-            rows[i].kind = .working(compacting: true)
+        // `compactionAwaitingRow` (MessagesTimeline.tsx:946-952): a `/compact` runs and neither a live compaction
+        // row nor a compacting working row shows yet. The header reads "Compacting…" and Thinking keeps its height, blank.
+        let compacting = input.isCompacting && !rows.contains { row in
+            switch row.kind {
+            case .contextCompaction(_, true, _, _), .working(_?): true
+            default: false
+            }
         }
-        if input.isWorking, input.latestRun?.turnEnded != true, !head, !hasActiveCompaction, !hasActivityRow || latestToolFailed {
+        if compacting, let i = rows.firstIndex(where: { $0.id == workingRowId }) {
+            rows[i].kind = .working(compacting: "Compacting…")
+        }
+        if input.isWorking, input.latestRun?.turnEnded != true, !head, !hasActiveCompaction, !compactionOnlyRunFinished,
+           !hasActivityRow || latestToolFailed {
             // A failed latest tool hands the row back to thinking; its group stays reachable.
             if latestToolFailed, let anchor = activeAnchor {
                 let groupId = workGroupId(anchor.id)
