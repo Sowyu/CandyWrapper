@@ -126,7 +126,8 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
             keys.append(key)
             texts.append(text)
         }
-        tailKey = nil
+        // An empty last paragraph has no character to carry its key, so the tail names it.
+        tailKey = texts.last?.t.isEmpty == true ? keys.last : nil
         if content.isEmpty {
             let key = SpaceParagraphKey.block(BlockID())
             paragraphs[key] = SpaceParagraph()

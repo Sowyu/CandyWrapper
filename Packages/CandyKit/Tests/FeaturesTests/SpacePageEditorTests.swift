@@ -259,6 +259,37 @@ struct SpacePageEditorTests {
         #expect(content(store, page) == ["p:first", "<page> Lab 4 notes", "p:last"])
     }
 
+    final class MemoryBlobs: SpaceBlobSource {
+        var stored: [String: Data] = [:]
+        func store(_ data: Data, name: String, mime: String) async throws -> BlobReference {
+            let ref = BlobReference(id: String(repeating: "a", count: 64), name: name, mime: mime, size: Int64(data.count))
+            stored[ref.id] = data
+            return ref
+        }
+        func data(for blob: BlobReference) async -> Data? { stored[blob.id] }
+    }
+
+    @Test func imageCommandOnANewLineMakesAnImageBlock() async throws {
+        let blobs = MemoryBlobs()
+        let (editor, store, page) = make()
+        editor.blobs = blobs
+        type(editor, "first")
+        command(editor, #selector(NSResponder.insertNewline(_:)))
+        type(editor, "/image")
+        // The 400 ms typing timer has saved "/image" as a block by the time the menu runs.
+        editor.flushTyping()
+        editor.runBlockCommand(.image, replacing: editor.textView.selectedRange().location - 6)
+        // While the file panel is up, the typing timer saves the emptied line and the store's confirmation reloads the page.
+        editor.flushTyping()
+        editor.load(keepSelection: true)
+        let png = try #require(NSImage(size: NSSize(width: 4, height: 4), flipped: false) { r in NSColor.red.setFill(); r.fill(); return true }
+            .tiffRepresentation.flatMap { NSBitmapImageRep(data: $0)?.representation(using: .png, properties: [:]) })
+        editor.insertBlobs([(png, "red.png", "image/png")])
+        for _ in 0..<50 where !content(store, page).contains(where: { $0.hasPrefix("image:") }) { try await Task.sleep(nanoseconds: 20_000_000) }
+        editor.flushTyping()
+        #expect(content(store, page) == ["p:first", "image:"])
+    }
+
     @Test func reminderTimeIsSavedOnTheDueDay() throws {
         let (editor, store, _) = make()
         type(editor, "[] Pay rent")
