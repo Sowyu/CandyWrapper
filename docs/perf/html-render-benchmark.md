@@ -1,96 +1,97 @@
-# HTML render benchmark
+HTML pages return without blank gaps in normal threads and Conductor.
+The complete sandbox matrix uses less peak memory overall and reaches every scroll position ready.
 
-This workload exercises `ThreadPanelView` and `OrchestratorPaneView` in an isolated Debug app. It replays ten completed `html_render` references, two seconds apart, then scrolls back through the ten pages and returns. It never sends a provider turn or writes an orchestration command. The app stays in `--thread-preview`, so it never joins the live T3 home.
+## STATUS
 
-The assets are actual signed `text/html` attachments served by the sandbox T3 server on 47391. The generator writes only its thirty deterministic attachment files under `~/CandyWrapper-research/sandbox/t3home/userdata/attachments`. It derives the theme/size bootstrap from the pinned T3 source, then inserts the local PNG bytes as data URLs, matching T3's publish step. Sources: `packages/shared/src/htmlRender.ts:375-419,449-468`, `apps/server/src/htmlRender/HtmlRender.ts:407-445`, `apps/server/src/assets/AssetAccess.ts:597-635`.
+Implementation measured at `01df2bdc`, based on main `fb8981ce`. Final focused, full and fast tests passed. The full Release performance review recorded all 70 metrics and no regression flags. No release.
 
-## Run it
+## CHANGED
 
-Run these commands from the checkout being measured. Keep the same display, window size, assets and Debug configuration for before and after. The default test window is 1100 by 780 points; the baseline used the 1920 by 1080 display at 1x.
+- Share WebKit's ephemeral HTTP cache across the shown chat, including gaps with no live page. Hiding the chat drops its pixels and store ownership.
+- Keep a 32 MiB LRU of lossless snapshot pixels in purgeable memory, keyed by attachment id, width, height, appearance and backing scale. Capture a painted page when it leaves; destroy the temporary native image view when the live page replaces it. Offscreen pages retain no browsing context after the readback finishes.
+- Fetch and activate only viewport pages. Cancel departing requests, restore evicted visible frames and retain unchanged Conductor cards through state/history updates.
+- Keep width-aware heights, normalize reports before deduplication and coalesce loading reports until the actual navigation finishes. Reject retired navigation/message callbacks.
+- Preserve the existing sandbox, theme messages, scripts, links, image actions and shortcuts. A snapshot never intercepts input.
 
-```sh
-scripts/preflight
-scripts/sandbox-server
-python3 scripts/html-benchmark/prepare.py
-swiftc scripts/html-benchmark/sign.swift -o ~/CandyWrapper-research/sandbox/html-benchmark/sign
-~/CandyWrapper-research/sandbox/html-benchmark/sign
-scripts/build-test-app html-benchmark
-scripts/ui/build
-scripts/ui/screen-lock take html-benchmark
-python3 scripts/html-benchmark/run.py --tag before
-python3 scripts/html-benchmark/capture-one.py --tag before-one-page
-scripts/ui/screen-lock give html-benchmark
-python3 scripts/html-benchmark/summarize.py ~/CandyWrapper-research/sandbox/html-benchmark/before
-python3 scripts/html-benchmark/scroll-summary.py ~/CandyWrapper-research/sandbox/html-benchmark/before
-```
+T3 source checked: `apps/web/src/components/chat/HtmlRenderFrame.tsx:25-108`, `apps/web/src/components/files/BrowserDocumentFrame.tsx:118-131`, `packages/shared/src/htmlRender.ts:97-132,405` and `apps/server/src/http.ts:107-128`. The server sends private one-hour HTTP caching; its bootstrap reports height from DOMContentLoaded, ResizeObserver and load. WKProcessPool is deprecated and supplies no useful process-sharing control here. The app-wide three-frame limit remains unchanged.
 
-`run.py` builds the small kernel measurement helper if it is missing, after preflight. It launches the app through `scripts/run-app`, resets only `dev.candywrapper.test.html-benchmark`, pins Redesign, disables thread disk caching and uses fake T3 Connect. Run it in the background with a log. The eight cases take about nine minutes. Give the screen back within fifteen minutes. Use `--case light|collage|chart`, `--mode thread|conductor` and `--appearance dark|light` to split a session. Choose a fresh `--tag` for another run; the runner refuses to overwrite event files. Sign again if the sandbox URLs expire. Do not prepare assets again in the middle of a comparison.
+PNG preview encoding, unbounded WebKit host reuse, a custom image drawing view and captures on load were rejected after memory measurements. The final implementation uses fresh document views and captures only departing pages. The raw rejected runs remain local.
 
-After all captures, quit only the app PID recorded in that run's `events.jsonl` if it did not exit, then delete `/tmp/cw-dd-html-benchmark`. Keep the sandbox artifacts. No app bundle or DerivedData is part of a baseline artifact.
+## VERIFIED
 
-## What it measures
+### Same-workload sandbox comparison
 
-- Light: a small report, cards and a table, 6,816 prepared HTML bytes.
-- Collage: six deterministic local 240 by 240 PNGs, 1,038,948 image bytes, inlined into 1,392,065 HTML bytes. The noise tiles avoid network dependencies and compress to a predictable size.
-- Chart: 1,200 deterministic samples drawn once on a canvas by the page's script, 6,555 HTML bytes.
+Before: original renderer `6e3adef` with benchmark `ba2fdef` and diagnostic-only `02104618`, which removes four extra snapshot callback lines. After: `01df2bdc`. Both use the actual ThreadPanelView and OrchestratorPaneView, a stable 1100 × 780 window, Redesign, fake T3 Connect and the same thirty attachment ids/content hashes. Only expired signed URL fields were refreshed. No live T3 writes or model turns.
 
-Each case repeats its identical document across ten distinct attachment ids. `manifest.json` records the content hashes, bootstrap hash, signed sandbox URLs and sizes. Keep this file local: its URLs carry sandbox capabilities. Generated HTML, PNGs, manifests, process logs and captures stay outside the repository.
+Each workload repeats across ten references: light report (6,816 HTML bytes), collage (1,038,948 local PNG bytes in 1,392,065 HTML bytes), and script chart (6,555 HTML bytes, 1,200 samples). Both corrected batches completed 80/80 arrivals and recorded zero competing-build samples. The after batch completed 160/160 scroll visits with zero blanks; before completed 73/160, with 87/160 blank viewport checks. Neither batch uses diagnostic resident WebKit readbacks.
 
-The renderer hook is a DEBUG observer in `ThreadWebFrameView`: activate, release and messages after the normal message handler runs. The launch branch is DEBUG and restricted to test bundles. With no benchmark, the observer is nil; Release contains neither the driver nor the hook.
+Pooled first-ready median across eighty arrivals: **148.585 → 141.580 ms**. Conductor arrival medians improve by 20–27%. Normal-thread cold arrivals are nearly flat; the light case increases by 1.680 ms. Completed normal back passes improve by 57–62%. Before has no complete normal return or Conductor pass, so those times remain unavailable.
 
-The final driver records an already painted, live page as ready at `resident-at-scroll`. It takes no diagnostic WebKit snapshots while scrolling. The first baseline below used extra readbacks; those copies affected GPU memory and scrolling, so the final comparison repeats both builds without them. The PNG preview candidate was rejected after its measured memory cost. The current renderer takes no production snapshots either.
+All times below are milliseconds. Each scroll value sums first-ready waits across ten paced visits, with completion counts in parentheses. The unchanged two-second wait at each position is not a speed result.
 
-`scroll-summary.py` sums readiness waits across ten scroll visits, using the first live-page ready signal or an already painted resident page for every visible frame. A pass with a missing page has no complete traversal time and reports the number of complete visits. The driver deliberately waits two seconds per visit, twenty seconds per direction in every build; that fixed pacing is not a speed measurement.
+| Workload / mode / theme | Arrival median, before → after | Back ready wait, before → after | Return ready wait, before → after | Blank viewports / 20, before → after |
+|---|---:|---:|---:|---:|
+| light / thread / dark | 144.082 → 145.762 | 1010.690 (10/10) → 385.186 (10/10) | unavailable (8/10) → 403.006 (10/10) | 2 → 0 |
+| light / conductor / dark | 188.142 → 137.950 | unavailable (0/10) → 352.748 (10/10) | unavailable (0/10) → 330.934 (10/10) | 20 → 0 |
+| collage / thread / dark | 144.312 → 136.728 | 954.436 (10/10) → 414.882 (10/10) | unavailable (9/10) → 377.311 (10/10) | 1 → 0 |
+| collage / conductor / dark | 198.142 → 147.820 | unavailable (0/10) → 377.998 (10/10) | unavailable (0/10) → 352.907 (10/10) | 20 → 0 |
+| chart / thread / dark | 139.712 → 139.444 | unavailable (9/10) → 400.549 (10/10) | unavailable (8/10) → 361.191 (10/10) | 3 → 0 |
+| chart / conductor / dark | 187.453 → 140.111 | unavailable (0/10) → 340.050 (10/10) | unavailable (0/10) → 355.434 (10/10) | 20 → 0 |
+| collage / thread / light | 143.557 → 137.660 | 963.408 (10/10) → 412.452 (10/10) | unavailable (9/10) → 396.218 (10/10) | 1 → 0 |
+| collage / conductor / light | 184.637 → 147.770 | unavailable (0/10) → 259.091 (10/10) | unavailable (0/10) → 317.036 (10/10) | 20 → 0 |
 
-`arrival` is the moment the driver delivers a projection or pane state to the real UI. `paint-opportunity` comes from the page after fonts and image decode, then two animation frames. `native-layout` follows on the next native main turn after layout. The first such completion per attachment is the arrival measurement. Later arrivals can recreate old pages; those completions count separately rather than inflating the first-ready median.
+Worst simultaneous sampled combined peak: **222.172 → 203.527 MB**, down 8.4%. The dark normal collage increases **0.425 MB**; every other case decreases. App launch peaks remain about 84–87 MB. WebKit stays at five sampled processes: one GPU, one networking and three content processes. These changes reduce memory overall; they do not reduce process count.
 
-During back and return, the runner records new activations, completion times from the latest scroll, and live/evicted frames intersecting each sampled viewport. The original diagnostic build also requested snapshots of kept frames; the corrected comparison removes those requests from both builds. It never activates an evicted frame by hand. A viewport with any evicted frame is a failure even if a neighbor still paints. The scrolling sequence uses ten evenly spaced positions over the current document height with two seconds at each position, so layout changes can shift which partial neighboring page is included.
+Memory uses decimal MB. Combined peaks are simultaneous sums, not sums of separate process peaks.
 
-Memory samples use `proc_pid_rusage` physical footprint once a second, including the app plus new WebKit PIDs sharing the inherited responsibility PID, excluding pre-launch helpers. On this harness, the app and its helpers inherit the T3 ancestor's responsibility rather than the app's PID. Attribution is therefore an inference that requires no unrelated WebKit app to launch during a run. The logs preserve PID, process name, RSS, footprint, lifetime peak, CPU and wakeups. The combined peak is the largest simultaneous sampled sum, not a sum of independent lifetime peaks. More than three content processes can briefly exist while evicted processes exit; GPU and Networking helpers count too.
+| Workload / mode / theme | App sampled peak MB, before → after | App + WebKit peak MB, before → after | WebKit sampled peak, before → after |
+|---|---:|---:|---:|
+| light / thread / dark | 87.131 → 87.295 | 173.036 → 170.579 | 5 → 5 |
+| light / conductor / dark | 83.772 → 72.926 | 180.688 → 166.761 | 5 → 5 |
+| collage / thread / dark | 47.073 → 87.311 | 198.727 → 199.152 | 5 → 5 |
+| collage / conductor / dark | 83.346 → 83.658 | 219.616 → 193.123 | 5 → 5 |
+| chart / thread / dark | 47.007 → 87.180 | 184.390 → 178.607 | 5 → 5 |
+| chart / conductor / dark | 78.710 → 83.658 | 183.768 → 173.003 | 5 → 5 |
+| collage / thread / light | 47.285 → 87.229 | 205.640 → 203.527 | 5 → 5 |
+| collage / conductor / light | 44.009 → 83.936 | 222.172 → 191.304 | 5 → 5 |
 
-## Corrected quiet baseline
+[Public per-case and per-visit values](html-render-2026-10-25/comparison.json). Private raw roots: `~/CandyWrapper-research/sandbox/html-benchmark/baseline-no-readback/` and `after-departure/`, each with the manifest used, metadata, derived results, events, memory samples and app logs. The after metadata hashes both the Debug launcher and `CandyWrapper.debug.dylib`. The expired baseline attempt remains explicitly invalid in its own directory. The earlier noisy/readback batches are not used for ratios.
 
-The original renderer is `6e3adef`, with benchmark instrumentation from `ba2fdef` and diagnostic-only `02104618` (four snapshot callback lines removed). Its executable SHA-256 is `806a5237ec4c1e7036166044e5646652c5cd3131ab2a1db9aa3a2137203ab969`.
+### Repeating the benchmark
 
-Canonical raw artifacts are under `~/CandyWrapper-research/sandbox/html-benchmark/baseline-no-readback/`: `results.json`, `derived.json`, `scroll-derived.json`, metadata, the private manifest used, and each case's events, process samples and app log. Eight cases completed, 80/80 first-ready pages, zero diagnostic readbacks and zero competing-build samples. Only expired URL fields were refreshed for the same thirty ids and byte-identical attachment files. The expired attempt is preserved separately as invalid.
+Start the sandbox with `scripts/sandbox-server`. For a new experiment only, run `python3 scripts/html-benchmark/prepare.py` once to generate its deterministic attachments. Never regenerate between its before and after batches. After a passing preflight, build with `CANDY_BUILD_JOBS=2 scripts/build-test-app html-benchmark` and sign with `swift scripts/html-benchmark/sign.swift`. Signing only requests sandbox asset URLs, with no turns or orchestration writes.
 
-| Workload | Mode | Theme | Arrival median ms | Back ready wait ms, complete visits | Return ready wait ms, complete visits | Blank viewports | App / combined sampled peak MB | WebKit peak count |
-|---|---|---|---:|---:|---:|---:|---:|---:|
-| Light | Thread | Dark | 144.082 | 1010.690, 10/10 | unavailable, 8/10 | 2/20 | 87.131 / 173.036 | 5 |
-| Light | Conductor | Dark | 188.142 | unavailable, 0/10 | unavailable, 0/10 | 20/20 | 83.772 / 180.688 | 5 |
-| Collage | Thread | Dark | 144.312 | 954.436, 10/10 | unavailable, 9/10 | 1/20 | 47.073 / 198.727 | 5 |
-| Collage | Conductor | Dark | 198.142 | unavailable, 0/10 | unavailable, 0/10 | 20/20 | 83.346 / 219.616 | 5 |
-| Chart | Thread | Dark | 139.712 | unavailable, 9/10 | unavailable, 8/10 | 3/20 | 47.007 / 184.390 | 5 |
-| Chart | Conductor | Dark | 187.453 | unavailable, 0/10 | unavailable, 0/10 | 20/20 | 78.710 / 183.768 | 5 |
-| Collage | Thread | Light | 143.557 | 963.408, 10/10 | unavailable, 9/10 | 1/20 | 47.285 / 205.640 | 5 |
-| Collage | Conductor | Light | 184.637 | unavailable, 0/10 | unavailable, 0/10 | 20/20 | 44.009 / 222.172 | 5 |
+Before a quiet capture, verify all signed URLs still return HTTP 200 and their prepared content hashes. Preserve a private `manifest-used.json` under each new tag; copy it before launching. Take `scripts/ui/screen-lock take html-benchmark`, then run `python3 scripts/html-benchmark/run.py --tag <new-tag>` in the background. The eight cases take about nine minutes. `capture-one.py --tag <new-visual-tag> --label after` captures all four first pages. Quit only owned apps and give the screen back within fifteen minutes. The runner refuses to overwrite existing event files.
 
-All before cases retained three frames. Conductor activated 31 times during ten arrivals and never reloaded during either scroll pass. A missing traversal time is a failed pass, never zero. One-second samples can miss the app's launch peak: kernel lifetime app peaks were 83.56 to 87.36 MB, recorded separately.
+Run `summarize.py <raw-root>` and `scroll-summary.py <raw-root>`, then `compare.py <before-root> <after-root>`. The comparison rejects non-URL fixture changes and keeps incomplete pass times unavailable. Hash both the executable and Debug dylib, record the source commit/diff, and inspect the competing-build samples. Delete only the task's DerivedData after capture. Signed URLs, private manifests and process logs stay in the sandbox.
 
-The earlier `baseline-v1` contains competing builds and diagnostic GPU readbacks. Its raw files remain preserved, but none of its timings establishes a speed ratio against the corrected after run.
+### Visual checks
 
-## Rejected PNG preview candidate
+Authoritative before/after captures show page one before page two arrives. All six local tiles render in both themes and modes. The four page regions each differ by only one channel level in one pixel (370,125 pixels for normal threads, 392,675 for Conductor). [Pixel comparison](html-render-2026-10-25/visual-comparison.json).
 
-The clean candidate at `6fba7ccf`, in `after-no-readback/`, completed all eighty arrivals and all 160 scroll visits, with zero sampled blanks and no competing builds. Dark arrival medians improved to 95.699/101.610 ms for light thread/Conductor, 100.102/94.744 ms for collage and 103.591/78.043 ms for chart. The complete scroll readiness sums were 349 to 751 ms per ten visits. WebKit still peaked at five processes.
+| Mode / theme | Before | After |
+|---|---|---|
+| thread / dark | ![Before](html-render-2026-10-25/collage-thread-dark-before.png) | ![After](html-render-2026-10-25/collage-thread-dark-after.png) |
+| thread / light | ![Before](html-render-2026-10-25/collage-thread-light-before.png) | ![After](html-render-2026-10-25/collage-thread-light-after.png) |
+| conductor / dark | ![Before](html-render-2026-10-25/collage-conductor-dark-before.png) | ![After](html-render-2026-10-25/collage-conductor-dark-after.png) |
+| conductor / light | ![Before](html-render-2026-10-25/collage-conductor-light-before.png) | ![After](html-render-2026-10-25/collage-conductor-light-after.png) |
 
-It failed the memory target. Combined collage peaks rose from 198.727 to 248.567 MB in normal dark and from 219.616 to 240.473 MB in Conductor dark; light rose from 205.640 to 250.200 MB and from 222.172 to 229.200 MB. The bounded lossless PNG cache and its readbacks were therefore removed rather than shipped. Raw results and its four first-page images remain intact.
+Separate diagnostic captures pause only the owned app after a cached first-page layout, before live-page readiness, then capture the live page at the same scroll position. All four cached pages were visibly populated. These captures are excluded from timings and remain under `after-cached-visual/`. WebKit snapshot readback resamples the high-frequency noise tiles differently from the live GPU surface; temporary cache pixels are not a pixel-identical GPU readback. The final live page matches the before capture.
 
-The event trace also exposed an iframe handoff race: the outgoing iframe could report a resized height through the new native message handler before the replacement script ran. This caused repeated height changes and activations. The next candidate rejects those messages until the isolated bridge confirms the new iframe has started, and hides the reused host until its replacement loads.
+### Tests and review
 
-## Visual evidence
+Final Debug checks passed on `01df2bdc`: 32 focused checks, 2,088 Swift Testing tests plus 18 XCTest tests in the full suite, and 1,897 plus 18 in the fast lane. Cache tests cover byte cost/LRU, exact raw-pixel round trips, pressure/pinning, key separation and invalidation generations. Lifecycle tests cover shared-store ownership, Force Reload, retired callbacks, viewport release/reload, unchanged Conductor cards and width-aware/deduplicated heights.
 
-Authoritative before images are `baseline-one-page/collage-{thread,conductor}-{dark,light}/before.png` under the same sandbox artifact root. All four show all six local images; `capture.json` proves that page two had not arrived. The PNG candidate's matching captures are in `after-one-page-final/`. Each collage region differs at only one pixel by one color-channel level out of 370,125 normal-thread or 392,675 Conductor pixels; layout, theme and image content match on screen. These images document the rejected candidate; final-candidate captures follow its measurement.
+The final code review checked cache and provider ownership, stale asynchronous work, sandbox/message/navigation guards, theme/scale keys, viewport cancellation and the main branch's paging changes. It found no additional blocker. [Exact source and binary hashes](html-render-2026-10-25/provenance.json).
 
-Ten-page batch screenshot markers can race the next scroll. Use the first-page images for a precise visual comparison.
+The [full Release review](2026-10-26-01df2bd-w1.md), [raw metrics](2026-10-26-01df2bd-w1.json), ran all three repetitions against `2026-10-25-14567ec-w1.json`: 70 metrics, no regression flags. It used a verified isolated Release bundle of `01df2bdc`, the frozen sandbox workload and no billed turn. The app scenarios passed the quiet guard. The stock package runner performed an additional test-product compilation after its first quiet gate before executing the microbenchmarks; this limits how strictly those timings can be called quiet. The review's worktree, package products, copied app and DerivedData were removed afterward. Final preflight passed at 40 GB free.
 
-## Current implementation and validation
+## OPEN
 
-The candidate keeps a shown chat's shared non-persistent WebKit HTTP store and one empty reusable host, releases offscreen iframe contexts, reloads returning Conductor cards, avoids URL work for cancelled rows, and normalizes width-aware height reports before deduplicating them. It leaves the iframe URL, sandbox, CSP, theme variables, scripts, shortcut and link bridge unchanged. MCP apps and workspace previews do not enter the HTML host cache. T3's frame behavior is defined in `apps/web/src/components/chat/HtmlRenderFrame.tsx:25-108` and `apps/web/src/components/files/BrowserDocumentFrame.tsx:118-131`; asset cache policy is in `apps/server/src/http.ts:107-128`.
+This is one quiet batch, not a statistical distribution. Each case starts a fresh app; its ten sequential arrivals share caches. First display of an attachment is not ten independent cold app launches. Arrival starts at UI projection delivery with prepared signed URLs, excluding socket delivery and signing. Page completion follows image/font decode, two animation frames and native layout; it is a paint opportunity, not a display fence. Cached readiness follows native image layout. Real scrolling can be faster than the fixed two-second benchmark pace.
 
-Focused tests, fast lane, full suite, final screenshots and final after measurements are pending. The first focused run found a missing cancellation check before an offscreen Conductor URL request; that check and a handoff-race regression are ready for the next run. Test fixtures now lay out the frame before injecting a height report and avoid calling a mutating struct method directly inside the Swift Testing macro.
+Process ownership is inferred from newly spawned WebKit PIDs with the same inherited responsibility ancestor, excluding pre-launch helpers. Sampling once a second can miss short process/memory spikes; app lifetime peaks are retained separately in raw data. Cache entries can be purged or evicted, and a page then follows the normal loading path. The 32 MiB cap retains fewer large pages on a Retina display than on this 1× virtual screen. Temporary snapshots preserve layout and content but can resample images; final pages are unchanged.
 
-## Limits
+The light normal-thread cold median (+1.680 ms), dark normal collage memory (+0.425 MB) and unchanged process count remain visible above. No per-case or process-count improvement is claimed for them.
 
-These are UI projection arrival timings with pre-signed sandbox URLs, not wire arrival, signing, provider latency or server history/subscription timings. The real session/controller plumbing is bypassed. The page's two-rAF signal plus native layout is a paint opportunity, not a display fence.
-
-Each case has ten sequential arrivals in one quiet batch; later arrivals share caches. This is not ten independent cold process launches. Scroll readiness sums exclude the driver's fixed twenty-second pacing and report cached pixels separately in the rejected candidate. Process ownership is inferred from newly created WebKit PIDs with a shared ancestor responsibility, and one-second samples are not a continuous peak trace. The unchanged driver takes four OS screenshots per case. No performance ratio uses the earlier noisy/readback baseline.
+Nightly failed at its provider weekly limit; the T3 pin remains 3473.

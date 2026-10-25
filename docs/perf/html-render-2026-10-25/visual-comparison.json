@@ -1,0 +1,46 @@
+{
+  "collage-thread-dark": {
+    "changedPixels": 1,
+    "maxChannelDelta": 1,
+    "pixels": 370125,
+    "region": [
+      330,
+      45,
+      1035,
+      570
+    ]
+  },
+  "collage-thread-light": {
+    "changedPixels": 1,
+    "maxChannelDelta": 1,
+    "pixels": 370125,
+    "region": [
+      330,
+      45,
+      1035,
+      570
+    ]
+  },
+  "collage-conductor-dark": {
+    "changedPixels": 1,
+    "maxChannelDelta": 1,
+    "pixels": 392675,
+    "region": [
+      350,
+      90,
+      1045,
+      655
+    ]
+  },
+  "collage-conductor-light": {
+    "changedPixels": 1,
+    "maxChannelDelta": 1,
+    "pixels": 392675,
+    "region": [
+      350,
+      90,
+      1045,
+      655
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "beforeSourceBase": "6e3adefca19dff5804f213824ea7cfe073086c6d",
+  "beforeInstrumentation": "ba2fdef6878b347857a3bf5327bd6f84a744ad3a",
+  "beforeDiagnosticRemoval": "0210461817a5c69ab4ca34a91ca9f407c0acec5d",
+  "beforeExecutableSHA256": "806a5237ec4c1e7036166044e5646652c5cd3131ab2a1db9aa3a2137203ab969",
+  "afterSourceCommit": "01df2bdcdfa5eab88f6ca4542847b02f3bde3fd3",
+  "afterBinarySHA256": {
+    "CandyWrapper": "8768ab2412be27786c0b4ce5ca6da8816457594bb5e42f12efc4fbd0355f85ce",
+    "__preview.dylib": "b53415442fd81369f997d26b5fe88982434743bf742d5a982ccb84c85b5a3953",
+    "CandyWrapper.debug.dylib": "a491a7429b88fac47eeee75b84d24c87e3bf889cbefa31659905500ab65e3c79"
+  },
+  "afterManifestSHA256": "10862083edaac90ef8b9d9288b416672254f828a2d1c8c9c42734e540c88b3da",
+  "competingBuildSamples": 0
+}
