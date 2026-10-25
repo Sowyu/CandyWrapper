@@ -317,6 +317,29 @@ struct SpacePageEditorTests {
         #expect(due.remind == .at(try DatePoint("2026-10-23T07:05")))
     }
 
+    /// A page link opens on a click even when the caret is already in it, as it is right after /page.
+    @Test func clickOnAPageLinkOpensItWithTheCaretInside() throws {
+        var child: PageID?
+        let (editor, _, _) = make { store, page in child = store.createPage(in: page, title: "Lab notes", now: 2) }
+        let window = NSWindow(contentRect: editor.textView.frame, styleMask: [.titled], backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        window.contentView?.addSubview(editor.textView)
+        defer { window.close() }
+        #expect(window.makeFirstResponder(editor.textView))
+        editor.textView.setSelectedRange(NSRange(location: 3, length: 0))
+        #expect(editor.activeKey == .item(try #require(child)))
+        let tlm = try #require(editor.textView.textLayoutManager)
+        tlm.ensureLayout(for: tlm.documentRange)
+        var frame = CGRect.zero
+        tlm.enumerateTextLayoutFragments(from: tlm.documentRange.location, options: []) { frame = $0.layoutFragmentFrame; return false }
+        let inset = editor.textView.textContainerOrigin
+        var opened: [PageID] = []
+        editor.onOpenPage = { opened.append($0) }
+        // On the title, well right of the icon.
+        #expect(editor.handleClick(at: CGPoint(x: inset.x + 60, y: inset.y + frame.midY)))
+        #expect(opened == [child])
+    }
+
     @Test func pasteMarkdownBecomesBlocksAndCopyWritesMarkdown() {
         let (editor, store, page) = make()
         editor.insertBlocks(SpaceMarkdown.parse("# This week\n- [ ] Pay rent\n- [x] Email tutor\n\nLab 4 needs **the cache** simulator.\n- one\n  - two\n1. first\n```swift\nlet x = 1\nprint(x)\n```"))

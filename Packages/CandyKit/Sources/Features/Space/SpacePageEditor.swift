@@ -741,8 +741,9 @@ public final class SpacePageEditor: NSObject, NSTextViewDelegate {
         if let add = t.addRow, add.contains(p) { addItem(after: key); return true }
         if let keep = t.keep, keep.contains(p) { resolveConflict(key, keep: true); return true }
         if let discard = t.discard, discard.contains(p) { resolveConflict(key, keep: false); return true }
-        // A link row opens its page, unless the caret is already in it and the click lands on the title.
-        if case .item(let id) = key, !isTodoRow(key), let row = t.row, row.contains(p), p.x < 24 || key != activeKey || textView.window?.firstResponder !== textView {
+        // A link row opens its page on any click, even with the caret in it, as Notion's page links do. The title
+        // stays editable from the keyboard and in the page itself.
+        if case .item(let id) = key, !isTodoRow(key), let row = t.row, row.contains(p) {
             _ = para
             flushTyping()
             onOpenPage(id)
