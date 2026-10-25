@@ -85,13 +85,14 @@ final class SpaceController {
             sidebar.space?.selectedPage = selectedPage
         } else {
             if let sheet = recoverySheet, let window = sheet.window.sheetParent { window.endSheet(sheet.window, returnCode: .alertThirdButtonReturn) }
+            // Typing still waiting for its flush goes in while the pane and the store are both still there.
+            pageView?.commitTyping()
             if sidebar.space != nil {
                 // Off closes Space tabs and leaves Space mode; the stored mode stays for when it comes back.
                 if route != nil { commands?.closeUtilityPage() }
                 sidebar.space = nil
             }
             if let persistent = store as? PersistentSpacePageStore, persistent.isOpen, lifecycle == nil {
-                pageView?.commitTyping()
                 pageView = nil
                 blobs = nil
                 lifecycle = Task { [weak self] in
@@ -265,6 +266,7 @@ final class SpaceController {
             view = page
             if let id { settings.lastPage = id }
         case .spaceTrash:
+            pageView?.commitTyping()
             pageView = nil
             let trash = trashView ?? SpaceTrashView(store: store)
             trashView = trash
@@ -307,6 +309,7 @@ final class SpaceController {
 
     private func paneHidden() {
         route = nil
+        pageView?.commitTyping()
         pageView = nil
         trashView = nil
         sidebar?.space?.selectedPage = nil

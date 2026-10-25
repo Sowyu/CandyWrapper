@@ -51,6 +51,12 @@ public final class SpacePageView: DSView {
     /// Sends typing that's still waiting for its 400 ms flush, before Space closes or the app quits.
     public func commitTyping() { editor?.flushTyping() }
 
+    /// Leaving the window, for another tab, Trash or Space turning off, sends waiting typing before the editor can go.
+    public override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil { commitTyping() }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
     public func show(_ id: PageID?) {
         let changed = id != page
         page = id
@@ -92,6 +98,7 @@ public final class SpacePageView: DSView {
     }
 
     private func clearContent() {
+        editor?.flushTyping()
         history?.removeFromSuperview()
         history = nil
         editor?.scrollView.removeFromSuperview()
