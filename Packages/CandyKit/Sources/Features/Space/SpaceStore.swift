@@ -262,9 +262,16 @@ public extension SpacePageStore {
         put([id: record])
     }
 
-    /// Trashed pages, newest first.
+    /// Trashed pages, newest first. An untitled page with no text, values or pages inside has nothing to restore, so
+    /// it stays out: Return on an empty to-do ends the list and trashes the to-do the first Return made.
     var trashed: [PageID] {
-        pages.filter(\.value.trashed).sorted { ($0.value.trashedAt ?? 0, $0.key.rawValue) > ($1.value.trashedAt ?? 0, $1.key.rawValue) }.map(\.key)
+        let parents = Set(pages.values.compactMap(\.parent))
+        let document = self as? SpaceDocumentStore
+        func empty(_ id: PageID, _ r: PageRecord) -> Bool {
+            r.title.isEmpty && r.icon == nil && r.props.keys.allSatisfy { $0 == FieldID.done } && !parents.contains(id)
+                && document?.content(of: id).isEmpty != false
+        }
+        return pages.filter { $0.value.trashed && !empty($0.key, $0.value) }.sorted { ($0.value.trashedAt ?? 0, $0.key.rawValue) > ($1.value.trashedAt ?? 0, $1.key.rawValue) }.map(\.key)
     }
 
     /// Whether the page shows anywhere: in the tree, or as an item of a page in another view.

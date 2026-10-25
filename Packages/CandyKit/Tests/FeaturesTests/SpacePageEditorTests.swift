@@ -93,6 +93,11 @@ struct SpacePageEditorTests {
         type(editor, "Notes")
         editor.flushTyping()
         #expect(content(store, page) == ["[ ] Buy milk", "[ ] Eggs", "p:Notes"])
+        // The empty to-do the first Return made is trashed, but Trash doesn't list it.
+        #expect(store.pages.values.contains { $0.trashed && $0.title.isEmpty })
+        #expect(store.trashed.isEmpty)
+        if case .item(let eggs) = editor.keys[1] { store.trash(eggs) }
+        #expect(store.trashed.map { store.pages[$0]!.title } == ["Eggs"])
         let milk = editor.keys[0]
         editor.toggleDone(milk)
         #expect(content(store, page).first == "[x] Buy milk")
