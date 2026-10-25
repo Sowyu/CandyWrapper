@@ -148,7 +148,7 @@ The tab holds:
 - The Models list, described below.
 - The notebook: rules, worker rules, plan and digest, each editable.
 
-The Mac and the Android app share these settings and the Look, as "Settings on every device" below describes.
+The Mac and the Android app share these settings and the Look, as "Settings on every device" below describes. While the CandyWrapper Helper is connected on the Orchestrator's machine, "While closed" greys out with "Handled by the Helper while it's running." and keeps its value, since the helper relays all the time and holds the check off. It comes back when the helper stops. The worker limit, ask-first and Hands off stay live: the helper enforces them too.
 
 ### The Models list
 
@@ -382,6 +382,7 @@ The Orchestrator pane reads like a group chat in iMessage, with Orchestrator and
 - Tool calls, events, relay results and T3's own deliveries, like "Delegated task … [completed]" when a task it delegated ends, collapse into small centred lines like "Scout finished, read 14 files". T3 sends those deliveries as user messages, but they never draw as yours. Neither do prompts from a scheduled task bound to its thread, like a check it set up itself: a message with `scheduledTaskId` draws as "Scheduled: <its first words>". They stay hidden until you click "Show activity" in the header, a setting kept on each device. Clicking a line opens that crew thread.
 - Replies that only say nothing is new stay hidden too. The brief asks for exactly "—" then, and the app also hides short ones like "Nothing new." or "Still running.", since the Orchestrator's harness makes it write something every turn.
 - Opening its thread from anywhere, like a notification, a link or Cmd-K, shows this pane. Only "Open as thread" shows the plain thread view.
+- The chat and the Overview are columns that wrap and never scroll sideways, even with always-shown scroll bars, which take part of their width.
 - The composer is a rounded field with a round send button.
 - The composer has the thread composer's Stash. Mod+S, or the Stash pill over its right edge, saves the draft with a count on the pill. The pill opens the list, where a click or Return puts an entry back into the composer to send, and the stash syncs across devices as "Settings on every device" describes.
 

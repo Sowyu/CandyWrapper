@@ -45,8 +45,10 @@ public final class OrchestratorStore {
         public var primary: String
         public var canRun: Bool
         public var installed: Bool
-        public init(status: String, primary: String, canRun: Bool, installed: Bool) {
-            self.status = status; self.primary = primary; self.canRun = canRun; self.installed = installed
+        /// Connected on the Orchestrator's machine, so it relays and the settings it replaces rest.
+        public var connected: Bool
+        public init(status: String, primary: String, canRun: Bool, installed: Bool, connected: Bool = false) {
+            self.status = status; self.primary = primary; self.canRun = canRun; self.installed = installed; self.connected = connected
         }
     }
     public var actions = Actions()

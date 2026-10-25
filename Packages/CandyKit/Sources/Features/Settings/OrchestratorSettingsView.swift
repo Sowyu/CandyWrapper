@@ -98,6 +98,13 @@ public final class OrchestratorSettingsView: SettingsPageBase {
         let closed = choiceRow("While closed", "A scheduled task on its machine wakes it to check every thread. It's off while CandyWrapper is open.",
                                labels: ["Off", "Every 15 minutes", "Every 30 minutes", "Every hour", "Every 2 hours"],
                                read: { c in closedChoices.firstIndex { $0 == c.closedCheckMinutes } }, write: { c, i in c.closedCheckMinutes = closedChoices[i] })
+        // The helper relays all the time and keeps the check off, so the setting rests while it's connected. It keeps
+        // its value and comes back when the helper stops.
+        binder.add { [weak self, weak closed] in
+            let handled = self?.helperHandles == true
+            closed?.inertReason = handled ? Self.helperHandled : nil
+            closed?.status = handled ? Self.helperHandled : nil
+        }
         let picker = OrchestratorBotPicker()
         picker.onPick = { [weak self] identity in
             self?.store.update { $0.botShape = identity.shape.rawValue; $0.botColor = identity.color.rawValue }
@@ -132,6 +139,10 @@ public final class OrchestratorSettingsView: SettingsPageBase {
         }
         return r
     }
+
+    static let helperHandled = "Handled by the Helper while it's running."
+    /// The helper is connected on the Orchestrator's machine, so it relays instead of this Mac and its schedule.
+    var helperHandles: Bool { store.actions.helper?()?.connected == true }
 
     private func choiceRow(_ title: String, _ detail: String, labels: [String], read: @escaping (OrchestratorConfig) -> Int?,
                            write: @escaping (inout OrchestratorConfig, Int) -> Void) -> SettingsRowView {

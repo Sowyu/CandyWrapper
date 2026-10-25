@@ -75,7 +75,7 @@ final class OrchestratorController {
         store.actions.status = { [weak self] in self?.statusText ?? "Not started" }
         store.actions.helper = { [weak self] in
             guard let h = self?.helper else { return nil }
-            return .init(status: h.status, primary: h.primaryTitle, canRun: h.canRun, installed: h.installed)
+            return .init(status: h.status, primary: h.primaryTitle, canRun: h.canRun, installed: h.installed, connected: h.connected)
         }
         store.actions.installHelper = { [weak self] in Task { await self?.helper.install() } }
         store.actions.removeHelper = { [weak self] in Task { await self?.helper.uninstall() } }
