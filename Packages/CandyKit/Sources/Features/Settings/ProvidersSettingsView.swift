@@ -190,6 +190,10 @@ public enum ProvidersLogic {
                                           detail: "Custom Claude home and config directory. Keeps .claude.json and .claude separate.", placeholder: "~/.claude"),
                                     Field(key: "autoCompactWindow", title: "Auto-compact after",
                                           detail: "Compact after 100,000 to 1,000,000 tokens. Leave empty to use Claude's default.", placeholder: "e.g. 300000"),
+                                    // contracts settings.ts:710-725.
+                                    Field(key: "idleCompaction", title: "Compact idle threads",
+                                          detail: "When to compact an idle thread over 200,000 tokens: after you return, just before its prompt cache expires, or never. Overrides the default in General settings.",
+                                          placeholder: "", options: ServerSettingsValues.instanceIdleCompactionModes.map { ($0.value, $0.label) }, defaultValue: "default"),
                                     Field(key: "launchArgs", title: "Launch arguments", detail: "Additional CLI arguments passed on session start.",
                                           placeholder: "e.g. --chrome")]
         case "grok": return [binary("grok", "Path to the Grok CLI binary.")]

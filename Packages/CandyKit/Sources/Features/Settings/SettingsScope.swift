@@ -308,6 +308,11 @@ public struct SettingsScopeState: Equatable, Sendable {
         }
         let writes = connected.map { e -> Write in
             var p = patch
+            // `forDestination` (scopedSettings.ts:221-225): the idle compaction mode in the form this server reads.
+            if let mode = p.removeValue(forKey: "idleCompaction")?.stringValue {
+                p.removeValue(forKey: "compactIdleThreads")
+                p.merge((e.settings ?? ServerSettingsValues(nil)).idleCompactionPatch(mode)) { _, new in new }
+            }
             // A worktree rule edit where the environment already has its own `worktreeCleanup` goes there too.
             if let s = e.settings, s["worktreeCleanup"] != .null, let storage = patch["storageCleanup"]?.objectValue,
                storage.keys.contains(where: { $0.hasPrefix("worktree") }) {

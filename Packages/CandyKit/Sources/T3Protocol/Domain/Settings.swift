@@ -175,7 +175,8 @@ public struct ServerSettingsValues: Equatable, Sendable {
         "autoResumeLimitedThreads": SettingSpec(.bool, .bool(false)),
         "sidebarAutoSettleKeepPullRequests": SettingSpec(.bool, .bool(false)),
         "sidebarAutoSettleOnMerge": SettingSpec(.bool, .bool(true)),
-        "compactIdleThreads": SettingSpec(.bool, .bool(false)),
+        // A boolean, or the mode string a server from d13fc84670 kept there (settings.ts:1163-1166).
+        "compactIdleThreads": SettingSpec(.any, .bool(false)),
         "backgroundActivity": SettingSpec(.any, BackgroundActivity.defaultSettings),
         "backgroundActivityProfile": SettingSpec(.literals(["balanced", "performance", "battery-saver"]), .string("balanced")),
         "automaticGitFetchInterval": SettingSpec(.any, .number(30_000)),
@@ -231,6 +232,45 @@ public struct ServerSettingsValues: Equatable, Sendable {
     public func string(_ key: String) -> String { self[key].stringValue ?? "" }
     /// Differs from `DEFAULT_SERVER_SETTINGS` (the row's reset arrow and "Set on the environment").
     public func isDefault(_ key: String) -> Bool { self[key] == (Self.fields[key]?.defaultValue ?? .null) }
+}
+
+/// Idle compaction (contracts settings.ts:638-660,1328-1372). Servers store the mode in `idleCompaction`,
+/// in `compactIdleThreads` as a string, or only as the old boolean switch.
+extension ServerSettingsValues {
+    /// `IDLE_COMPACTION_MODES`.
+    public static let idleCompactionModes: [(value: String, label: String)] = [
+        ("onReturn", "When you return"), ("beforeCacheExpires", "Before the cache expires (beta)"), ("off", "Never"),
+    ]
+    /// `INSTANCE_IDLE_COMPACTION_MODES`.
+    public static let instanceIdleCompactionModes: [(value: String, label: String)] = [("default", "Use default")] + idleCompactionModes
+
+    private static func idleMode(_ value: JSONValue?) -> String? {
+        value?.stringValue.flatMap { s in idleCompactionModes.contains { $0.value == s } ? s : nil }
+    }
+
+    /// `globalIdleCompaction`.
+    public var globalIdleCompaction: String {
+        if let mode = Self.idleMode(raw["idleCompaction"]) { return mode }
+        if let mode = Self.idleMode(raw["compactIdleThreads"]) { return mode }
+        return raw["compactIdleThreads"]?.boolValue == true ? "beforeCacheExpires" : "onReturn"
+    }
+
+    /// `readsIdleCompactionModes`: false for a server from before modes, which cannot store "Never".
+    public var readsIdleCompactionModes: Bool {
+        Self.idleMode(raw["idleCompaction"]) != nil || Self.idleMode(raw["compactIdleThreads"]) != nil
+    }
+
+    /// `idleCompactionPatch`: the mode in the form this server reads.
+    public func idleCompactionPatch(_ mode: String) -> [String: JSONValue] {
+        if Self.idleMode(raw["idleCompaction"]) != nil { return ["idleCompaction": .string(mode)] }
+        if readsIdleCompactionModes { return ["compactIdleThreads": .string(mode)] }
+        return ["compactIdleThreads": .bool(mode == "beforeCacheExpires")]
+    }
+
+    /// `resolveIdleCompaction`: the Claude instance's override unless it is `default`, else the global mode.
+    public func resolveIdleCompaction(instanceId: String) -> String {
+        Self.idleMode(raw["providerInstances"]?[instanceId]?["config"]?["idleCompaction"]) ?? globalIdleCompaction
+    }
 }
 
 extension ServerThreadDefaults {

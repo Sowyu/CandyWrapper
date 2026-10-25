@@ -4938,6 +4938,11 @@ extension ComposerController {
         }
         let now = Date()
         let held = projection?.runs.contains { $0.status == .queued && $0.queueHeld == true } ?? false
+        // The offer stays off while the resolved idle compaction mode is `off` (ChatView.tsx:2516-2522).
+        if let environmentId = targetEnvironmentId,
+           ServerSettingsValues(serverConfigs[environmentId]?.settings.raw).resolveIdleCompaction(instanceId: pickers.current.instanceId?.rawValue ?? "claudeAgent") == "off" {
+            dismissed = true
+        }
         let tokens = ComposerCompaction.resumeTokens(usage: contextWindow, driver: provider?.driver, dismissed: dismissed,
                                                      compactDisabled: gate.disabled, hasHeldQueuedRuns: held,
                                                      multipleModels: pickers.currentMultiple != nil, now: now)
