@@ -36,7 +36,10 @@ import T3Protocol
     @Test func compactBeforeSendSkipsTheChipOffStateAndABareCompact() {
         #expect(ComposerCompaction.compactsBeforeSend(resumeTokens: 120_000, keepFullHistory: false, text: "Next step"))
         #expect(!ComposerCompaction.compactsBeforeSend(resumeTokens: 120_000, keepFullHistory: true, text: "Next step"))
-        #expect(!ComposerCompaction.compactsBeforeSend(resumeTokens: 120_000, keepFullHistory: false, text: " /COMPACT "))
+        #expect(!ComposerCompaction.compactsBeforeSend(resumeTokens: 120_000, keepFullHistory: false, text: "/COMPACT"))
+        // An instructed compact is the compaction too (16aaf5ba7d); a longer word is not.
+        #expect(!ComposerCompaction.compactsBeforeSend(resumeTokens: 120_000, keepFullHistory: false, text: "/compact keep the API notes"))
+        #expect(ComposerCompaction.compactsBeforeSend(resumeTokens: 120_000, keepFullHistory: false, text: "/compaction"))
         #expect(!ComposerCompaction.compactsBeforeSend(resumeTokens: nil, keepFullHistory: false, text: "Next step"))
     }
 
