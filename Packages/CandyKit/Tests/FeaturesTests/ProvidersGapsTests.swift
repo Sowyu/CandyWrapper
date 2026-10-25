@@ -21,21 +21,14 @@ struct ProvidersGapsTests {
 
     @Test func oneClickNeedsOneSharedCommand() {
         let a = outdated("codex"), b = outdated("codex_work")
-        #expect(ProviderUpdateToastModel.canOneClick(a, among: [a, b]))
-        #expect(ProviderUpdateToastModel.initial([a, b])?.message == "Install the update now or review provider settings.")
+        #expect(ProviderUpdateCandidates.canOneClick(a, among: [a, b]))
         let other = outdated("codex_work", command: "brew upgrade codex")
-        #expect(!ProviderUpdateToastModel.canOneClick(a, among: [a, other]))
+        #expect(!ProviderUpdateCandidates.canOneClick(a, among: [a, other]))
         let manual = outdated("codex", canUpdate: false)
-        #expect(!ProviderUpdateToastModel.canOneClick(manual, among: [manual]))
-        // Installs the server can't update get their own sentence (#18110, logic.ts:237-262).
-        #expect(ProviderUpdateToastModel.initial([manual])?.message == "Update Codex with the app or tool that installed it.")
-        let claude = outdated("claudeAgent", driver: "claudeAgent", canUpdate: false)
-        #expect(ProviderUpdateToastModel.initial([outdated("codex", command: nil), claude])?.message
-            == "Codex can be updated from provider settings. Update Claude with the app or tool that installed it.")
+        #expect(!ProviderUpdateCandidates.canOneClick(manual, among: [manual]))
         var running = a
         running.updateState = .init(status: "running", finishedAt: nil, message: nil)
-        #expect(!ProviderUpdateToastModel.canOneClick(running, among: [running]))
-        #expect(ProviderUpdateToastModel.rejected(count: 2, message: "denied").title == "Provider updates failed")
+        #expect(!ProviderUpdateCandidates.canOneClick(running, among: [running]))
     }
 
     /// Antigravity's health check can't see the Google sign-in: a neutral status without a dot (#18623, providerStatus.ts:27-79).
@@ -48,15 +41,6 @@ struct ProvidersGapsTests {
         p.auth = .object(["status": .string("unknown"), "type": .string("api-key")])
         #expect(ProvidersLogic.summary(p).headline == "Needs attention")
         #expect(ProvidersLogic.statusKey(p) == "warning")
-    }
-
-    @Test func dismissalsPersistKeys() {
-        let defaults = UserDefaults(suiteName: "providers-gaps-\(UUID().uuidString)")!
-        #expect(!ProviderUpdateToastModel.isDismissed("codex:1.2", in: defaults))
-        ProviderUpdateToastModel.dismiss("codex:1.2", in: defaults)
-        ProviderUpdateToastModel.dismiss("codex:1.2", in: defaults)
-        #expect(ProviderUpdateToastModel.isDismissed("codex:1.2", in: defaults))
-        #expect(defaults.string(forKey: ProviderUpdateToastModel.dismissalsKey) == #"{"keys":["codex:1.2"]}"#)
     }
 
     @Test func viewportMathFollowsT3() {

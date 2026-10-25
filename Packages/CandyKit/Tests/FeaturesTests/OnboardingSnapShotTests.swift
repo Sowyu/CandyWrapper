@@ -104,8 +104,8 @@ struct OnboardingSnapShotTests {
     @Test func providerUpdatesDeduplicateAndRejectUnsupportedVersions() {
         var p = ServerProvider(instanceId: .init("codex"), driver: "codex")
         p.latestVersion = "1.2"; p.versionAdvisory = .object(["status": .string("behind_latest")])
-        #expect(ProviderUpdateToastModel.initial([p, p])?.title == "Update Available: Codex v1.2")
+        #expect(ProviderUpdateCandidates.candidates([p, p]).count == 1)
         p.compatibilityAdvisory = .object(["latestVersionStatus": .string("broken")])
-        #expect(ProviderUpdateToastModel.initial([p]) == nil)
+        #expect(ProviderUpdateCandidates.candidates([p]).isEmpty)
     }
 }
