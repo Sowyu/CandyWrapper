@@ -28,26 +28,39 @@ struct SpaceHistoryTrashTests {
     @Test func duplicateCopiesBlocksWithFreshIdsInOneEdit() throws {
         let store = SpaceReplicaStore()
         let page = newPage(store, "Trip", at: 0)
-        let child = newPage(store, "Packing", parent: page, at: 0)
+        let ids = (0..<4).map { _ in BlockID() }.sorted()
+        let text = ids[0], conflict = ids[1], child = ids[2], picture = ids[3], inner = BlockID(), gone = BlockID()
+        store.edit([try RecordChange.page(child, PageRecord(parent: page, order: OrderKey("a1"), title: "Packing", created: 0))], at: 0)
         let image = BlobReference(id: String(repeating: "a", count: 64), name: "map.png", mime: "image/png", size: 10)
-        let text = BlockID(), picture = BlockID(), inner = BlockID(), gone = BlockID()
+        let conflictInfo = BlockConflict(device: "Other Mac", at: 1)
         store.edit([block(text, "Fly Tuesday", on: page), block(picture, "Map", on: page, blob: image),
+                    try RecordChange.block(conflict, BlockRecord(page: page, order: OrderKey("a1"),
+                                                               text: RichText(t: "Fly Wednesday"), conflict: conflictInfo)),
                     block(inner, "Socks", on: child), block(gone, "Old", on: page)], at: 1)
         store.edit([RecordChange(kind: .block, id: gone, set: ["trashed": .bool(true)])], at: 2)
+        let source = store.content(of: page)
+        func labels(_ content: [SpaceContent]) -> [String] {
+            content.map { switch $0 { case .block(_, let r): r.text.t; case .page(_, let r): r.title } }
+        }
+        #expect(labels(source) == ["Fly Tuesday", "Fly Wednesday", "Packing", "Map"])
         let ops = store.replica.pending.count
         let copy = try #require(store.duplicate(page, now: 3))
         #expect(store.replica.pending.count == ops + 1, "pages and blocks go in as one edit")
         #expect(store.pages[copy]?.title == "Trip copy")
-        let blocks = store.content(of: copy).compactMap { c -> (BlockID, BlockRecord)? in if case .block(let id, let r) = c { (id, r) } else { nil } }
-        #expect(blocks.map(\.1.text.t).sorted() == ["Fly Tuesday", "Map"], "trashed blocks stay behind")
-        #expect(Set(blocks.map(\.0)).isDisjoint(with: [text, picture, inner, gone]))
+        let content = store.content(of: copy)
+        #expect(labels(content) == labels(source), "blocks and child pages keep their content order")
+        #expect(zip(content, content.dropFirst()).allSatisfy { $0.order < $1.order }, "copied order never depends on ids")
+        let blocks = content.compactMap { c -> (BlockID, BlockRecord)? in if case .block(let id, let r) = c { (id, r) } else { nil } }
+        #expect(blocks.map(\.1.text.t) == ["Fly Tuesday", "Fly Wednesday", "Map"], "trashed blocks stay behind")
+        #expect(blocks.dropFirst().first?.1.conflict == conflictInfo, "the conflict stays after its original")
+        #expect(Set(blocks.map(\.0)).isDisjoint(with: [text, conflict, picture, inner, gone]))
         #expect(blocks.allSatisfy { $0.1.page == copy })
         #expect(blocks.first { $0.1.text.t == "Map" }?.1.blob == image, "the copy points at the same blob")
         let childCopy = try #require(store.content(of: copy).compactMap { c -> PageID? in if case .page(let id, _) = c { id } else { nil } }.first)
         #expect(childCopy != child)
         let innerCopy = store.content(of: childCopy).compactMap { c -> BlockRecord? in if case .block(_, let r) = c { r } else { nil } }
         #expect(innerCopy.map(\.text.t) == ["Socks"] && innerCopy.first?.page == childCopy)
-        #expect(store.content(of: page).count == 3 && store.block(text)?.page == page, "the original is untouched")
+        #expect(store.content(of: page) == source && store.block(text)?.page == page, "the original is untouched")
     }
 
     @Test func historyListsVersionsAndRestoreIsOneUndoableEdit() async throws {

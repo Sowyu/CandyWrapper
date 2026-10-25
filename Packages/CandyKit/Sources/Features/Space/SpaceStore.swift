@@ -198,6 +198,7 @@ public extension SpacePageStore {
 
     /// A copy right after the page, with its child pages copied too. With blocks, each copied page's live blocks get
     /// fresh ids under the copy, blob references kept, all in the same single edit.
+    /// Fresh order keys preserve each copied page's content order.
     @discardableResult
     func duplicate(_ id: PageID, now: Int64 = SpaceClock.now()) -> PageID? {
         guard let source = pages[id] else { return nil }
@@ -212,12 +213,24 @@ public extension SpacePageStore {
             r.order = order
             r.created = now
             out[new] = r
-            for case .block(_, var block) in document?.content(of: from) ?? [] {
-                block.page = new
-                blocks[BlockID()] = block
-            }
-            for child in pages.filter({ $0.value.parent == from && !$0.value.trashed }).map(\.key) {
-                _ = copy(child, parent: new, order: pages[child]!.order)
+            if let document {
+                var previous: OrderKey?
+                for content in document.content(of: from) {
+                    let order = try! OrderKey.between(previous, nil)
+                    previous = order
+                    switch content {
+                    case .block(_, var block):
+                        block.page = new
+                        block.order = order
+                        blocks[BlockID()] = block
+                    case .page(let child, _):
+                        _ = copy(child, parent: new, order: order)
+                    }
+                }
+            } else {
+                for child in pages.filter({ $0.value.parent == from && !$0.value.trashed }).map(\.key) {
+                    _ = copy(child, parent: new, order: pages[child]!.order)
+                }
             }
             return new
         }
