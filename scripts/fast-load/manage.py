@@ -76,3 +76,7 @@ if __name__ == "__main__":
         else:
             stop(name, "proxy")
             stop(name, "server")
+    if args.action == "start":
+        from seed import activate
+        for name in ["3473", "main"]:
+            activate(name)

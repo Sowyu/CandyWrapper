@@ -15,6 +15,7 @@ actor Progress {
     var shell = false
     var thread = false
     var firstProjection: Double?
+    var firstShell: Double?
     var failure: String?
     let start = ContinuousClock.now
     func event(_ event: SubscriptionEvent, shell isShell: Bool) {
@@ -30,6 +31,7 @@ actor Progress {
     func projectionReady() {
         if firstProjection == nil { firstProjection = elapsed() }
     }
+    func shellReady() { if firstShell == nil { firstShell = elapsed() } }
     func failed(_ error: any Error) { failure = String(describing: error) }
     func elapsed() -> Double {
         let duration = start.duration(to: .now).components
@@ -37,6 +39,64 @@ actor Progress {
     }
     var complete: Bool { shell && thread }
 }
+
+#if CANDY_SHELL_FIRST
+/// Mirrors ShellSession.prepareShell/subscribeInput/receive (a67b58ba).
+/// The AppKit session cannot be linked by this Foundation-only executable.
+actor ShellBootstrap {
+    let store: ShellStore
+    let supervisor: ConnectionSupervisor
+    let http: EnvironmentHTTP
+    let token: String
+    var omissions = ShellOmissions()
+    var completionMarker = false
+    var resumePrepared = false
+    var resuming = false
+
+    init(store: ShellStore, supervisor: ConnectionSupervisor, http: EnvironmentHTTP, token: String) {
+        self.store = store; self.supervisor = supervisor; self.http = http; self.token = token
+    }
+
+    func prepare() async {
+        let config = try? await supervisor.request("server.getConfig")
+        omissions = ShellOmissions(config: config ?? .null)
+        completionMarker = config?["shellResumeCompletionMarker"]?.boolValue == true
+        if await store.canResume(omissions: omissions) {
+            resumePrepared = true
+            resuming = true
+            if !completionMarker { await store.resumed(); resuming = false }
+            return
+        }
+        resuming = false
+        var client = http
+        client.timeout = 20
+        if var snapshot = try? await client.get(omissions.snapshotPath, token: token, as: ShellSnapshot.self) {
+            snapshot.omissions = omissions
+            await store.apply([.snapshot(snapshot, resolvedRepositoryIdentityRoots: nil)])
+            resumePrepared = true
+        } else { resumePrepared = false }
+    }
+
+    func payload() async -> JSONValue {
+        var value = omissions.payload
+        if completionMarker { value["requestCompletionMarker"] = .bool(true) }
+        if resumePrepared, let sequence = await store.afterSequence { value["afterSequence"] = .number(Double(sequence)) }
+        return .object(value)
+    }
+
+    func receive(_ value: JSONValue) async throws {
+        var item = try value.decode(as: ShellStreamItem.self)
+        if case .snapshot(var snapshot, let roots) = item, roots == nil {
+            snapshot.omissions = omissions
+            item = .snapshot(snapshot, resolvedRepositoryIdentityRoots: nil)
+            resuming = false
+            resumePrepared = true
+        }
+        await store.apply([item])
+        if case .synchronized = item, resuming { resuming = false; await store.resumed() }
+    }
+}
+#endif
 
 func counters(port: Int, mark: String) async throws -> [String: Int] {
     let url = URL(string: "http://127.0.0.1:\(port + 1000)/\(mark)")!
@@ -70,7 +130,12 @@ func content(_ projection: ThreadProjection?) throws -> [String: Any] {
     let visibleMessages = visible.map { $0["item"] ?? $0 }.filter {
         ["user_message", "assistant_message"].contains($0["type"]?.stringValue ?? "")
     }
+    var messageHash = SHA256()
+    for item in visibleMessages.sorted(by: { ($0["messageId"]?.stringValue ?? "") < ($1["messageId"]?.stringValue ?? "") }) {
+        messageHash.update(data: Data(((item["messageId"]?.stringValue ?? "") + "\0" + (item["text"]?.stringValue ?? "") + "\0").utf8))
+    }
     return ["sha256": SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined(),
+            "full_visible_message_sha256": messageHash.finalize().map { String(format: "%02x", $0) }.joined(),
             "messages": projection.messages.count, "visible_items": projection.visibleTurnItems.count,
             "blank_messages": messages.filter { ($0["text"]?.stringValue ?? "").isEmpty }.count,
             "visible_message_items": visibleMessages.count,
@@ -88,6 +153,12 @@ func run(_ input: Input) async throws {
         http: http, environmentId: nil, identity: ClientIdentity(appVersion: "fast-load-benchmark"), token: { input.token })))
     let shell = ShellStore(onChange: {})
     let thread = ThreadStore(threadId: ThreadId(rawValue: input.threadId), onChange: {})
+    #if CANDY_FAST_WIRE
+    let wireSubscription = UUID()
+    #endif
+    #if CANDY_SHELL_FIRST
+    let shellBootstrap = ShellBootstrap(store: shell, supervisor: supervisor, http: http, token: input.token)
+    #endif
     #if CANDY_HTTP_FIRST
     let loader = ThreadSnapshotLoader(http: http, token: input.token, threadId: ThreadId(rawValue: input.threadId))
     #endif
@@ -96,32 +167,63 @@ func run(_ input: Input) async throws {
         let before = try await counters(port: input.port, mark: "\(input.label)-\(phase)-start")
         let progress = Progress()
         if await thread.currentUpdate()?.projection != nil { await progress.projectionReady() }
+        if await shell.snapshot != nil { await progress.shellReady() }
         let shellSubscription = supervisor.subscribe("orchestration.subscribeShell", payload: {
+            #if CANDY_SHELL_FIRST
+            return await shellBootstrap.payload()
+            #else
             var payload: [String: JSONValue] = ["requestCompletionMarker": .bool(true)]
             if let after = await shell.afterSequence { payload["afterSequence"] = .number(Double(after)) }
             return .object(payload)
+            #endif
         }, handler: { event in
+            #if CANDY_SHELL_FIRST
+            if case .subscribed = event {
+                await shellBootstrap.prepare()
+                if await shell.snapshot != nil { await progress.shellReady() }
+            }
+            #endif
             if case .value(let value) = event {
                 do {
+                    #if CANDY_SHELL_FIRST
+                    try await shellBootstrap.receive(value)
+                    #else
                     await shell.apply([try value.decode(as: ShellStreamItem.self)])
+                    #endif
+                    if await shell.snapshot != nil { await progress.shellReady() }
                 } catch { await progress.failed(error) }
             }
             await progress.event(event, shell: true)
         })
         let threadSubscription = supervisor.subscribe("orchestration.subscribeThread", payload: {
+            #if CANDY_FAST_WIRE
+            let initial = await thread.subscribeInput(subscription: wireSubscription)
+            #else
+            let initial = await thread.subscribeInput()
+            #endif
             #if CANDY_HTTP_FIRST
-            if await thread.subscribeInput().afterSequence == nil, let snapshot = await loader.load() {
+            if initial.afterSequence == nil, let snapshot = await loader.load(), !Task.isCancelled {
+                #if CANDY_FAST_WIRE
+                await thread.applySnapshot(snapshot, subscription: wireSubscription)
+                #else
                 await thread.applySnapshot(snapshot)
+                #endif
                 await progress.projectionReady()
             }
             #endif
-            do { return try encoded(await thread.subscribeInput()) }
+            do {
+                #if CANDY_FAST_WIRE
+                return try encoded(await thread.subscribeInput(subscription: wireSubscription))
+                #else
+                return try encoded(await thread.subscribeInput())
+                #endif
+            }
             catch { await progress.failed(error); return .object([:]) }
         }, handler: { event in
             if case .value(let value) = event {
                 do {
                     #if CANDY_FAST_WIRE
-                    try await thread.applyWire(value)
+                    try await thread.applyWire(value, subscription: wireSubscription)
                     #else
                     await thread.apply([try value.decode(as: ThreadStreamItem.self)])
                     #endif
@@ -143,12 +245,14 @@ func run(_ input: Input) async throws {
             "synchronized": await progress.complete,
             "seconds": seconds,
             "first_projection_seconds": await progress.firstProjection as Any? ?? NSNull(),
+            "shell_projection_seconds": await progress.firstShell as Any? ?? NSNull(),
             "messages": update?.projection?.messages.count ?? 0,
             "turn_items": update?.projection?.turnItems.count ?? 0,
             "sequence": update?.lastSequence as Any? ?? NSNull(),
             "failure": await progress.failure as Any? ?? NSNull(),
             "wire_bytes": wireBytes,
             "content": try content(update?.projection),
+            "shell_threads": await shell.snapshot?.threads.count ?? 0,
             "http_first": {
                 #if CANDY_HTTP_FIRST
                 true
