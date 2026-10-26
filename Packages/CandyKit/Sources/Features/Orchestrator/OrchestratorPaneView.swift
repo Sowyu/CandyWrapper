@@ -513,6 +513,8 @@ final class OrchestratorChatView: DSView {
                 next[id] = (views[id] as? OrchestratorCenteredLine) ?? OrchestratorCenteredLine(label, threadId: nil, weight: .medium)
             case .line(_, let text, let thread):
                 let l = (views[id] as? OrchestratorCenteredLine) ?? OrchestratorCenteredLine(text, threadId: thread, weight: .regular)
+                // A failure line keeps its id as its count grows.
+                l.set(text)
                 l.onOpen = { [weak self] t in self?.onOpenThread?(t) }
                 next[id] = l
             case .brief(_, let text, let updated):
@@ -1008,6 +1010,12 @@ final class OrchestratorCenteredLine: ControlView {
         label.color = Themed.color(\.mutedForeground)
         addSubview(label)
         action = { [weak self] in if let id = self?.threadId { self?.onOpen?(id) } }
+        setAccessibilityLabel(text)
+    }
+
+    func set(_ text: String) {
+        guard label.text != text else { return }
+        label.text = text
         setAccessibilityLabel(text)
     }
 

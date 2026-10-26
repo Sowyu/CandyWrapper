@@ -237,7 +237,8 @@ final class OrchestratorController {
         if let projection {
             let running = projection.runs.contains { OrchestratorEvent.running.contains($0.status) }
             state.items = OrchestratorChat.items(messages: Array(conversation.values), turnItems: projection.turnItems, running: running,
-                                                 activity: config.showActivity)
+                                                 activity: config.showActivity, waiting: batch.holding() ? batch.pending.count : 0,
+                                                 provider: orchestratorShell.map { SidebarProviderUpdatePillModel.displayName($0.modelSelection.instanceId.rawValue) })
             state.hasEarlier = history.hasMoreHistory && !history.loading
             if history.loading { state.items.insert(.time(id: "loading-earlier", label: "Loading earlier messages…"), at: 0) }
         }
@@ -686,6 +687,8 @@ final class OrchestratorController {
     /// one timer is armed per batch window and none while nothing happens.
     private func relay() {
         guard let home = machineId, let orchestrator = threadId, machine != nil else { return }
+        // While its provider is limited, events wait for the reset instead of starting runs that fail at once.
+        if let deadline = batch.follow(orchestratorShell, now: Date()) { arm(deadline) }
         let config = self.config
         var events: [OrchestratorEvent] = []
         // Every machine's threads: the relay reaches them all (docs/orchestrator.md, "Every machine").
@@ -709,6 +712,12 @@ final class OrchestratorController {
         // While the helper is connected the Mac gathers anyway, and sends only what the helper didn't (flush).
         if handoff.ownStamp == nil, machine?.scheduledTaskId != nil, !helper.connected { return }
         guard let deadline = batch.add(events, now: Date()) else { return }
+        arm(deadline)
+    }
+
+    /// One timer per batch: a moved deadline replaces it.
+    private func arm(_ deadline: Date) {
+        flushWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.flush() }
         flushWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + max(0, deadline.timeIntervalSinceNow), execute: work)
@@ -716,6 +725,7 @@ final class OrchestratorController {
 
     private func flush() {
         flushWork = nil
+        if let deadline = batch.deadline, deadline > Date() { return arm(deadline) }
         let live = Set(environments.environmentIds.flatMap { env in
             (shell(env)?.threads ?? []).filter { $0.archivedAt == nil && $0.deletedAt == nil }.map { $0.id.scoped(to: env) }
         })
