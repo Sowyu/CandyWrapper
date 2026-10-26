@@ -336,10 +336,28 @@ public enum SidebarListBuilder {
         /// The projects and threads Dither's section order reads.
         var projects: [ProjectShell]
         var threadShells: [ThreadShell]
+        var olderCuts: [String: OlderSettledThreads] = [:]
+        var unscopedOlderCut: OlderSettledThreads?
+        var hiddenSettledCount: Int {
+            let cuts = olderCuts.isEmpty ? unscopedOlderCut.map { ["": $0] } ?? [:] : olderCuts
+            return cuts.reduce(0) { total, entry in
+                let (env, cut) = entry
+                let remote = cut.counts.filter { scopedIds?.contains($0.projectId) ?? true }.reduce(0) { $0 + $1.count }
+                let before = T3Timestamp(cut.before).epochMs ?? 0
+                let loaded = threadShells.filter {
+                    (env.isEmpty || $0.id.environmentId == env) && (scopedIds?.contains($0.projectId) ?? true)
+                        && $0.settledOverride?.rawValue == "settled" && $0.lineage.relationshipToParent != .subagent
+                        && ($0.settledAt?.epochMs ?? Int64.max) < before
+                }.count
+                return total + max(0, remote - loaded)
+            }
+        }
 
         init(snapshot: ShellSnapshot, state: SidebarListState, nowMs: Int64) {
             projects = snapshot.projects
             threadShells = snapshot.threads
+            olderCuts = snapshot.olderSettledByEnvironment
+            unscopedOlderCut = snapshot.olderSettled
             let groups = SidebarModel.buildProjectGroups(snapshot.projects, grouping: state.grouping, preferredEnvironmentId: state.environments.primaryId)
             self.groups = groups
             spansEnvironments = SidebarEnvironments.span(groups)
@@ -479,9 +497,9 @@ public enum SidebarListBuilder {
             // A collapsed shelf still renders the open thread (Sidebar.tsx:3027-3032).
             items += shelves.snoozed.filter { expanded || $0.id == state.activeThreadId }.map { row($0, .snoozed) }
         }
-        if !items.isEmpty || !shelves.settled.isEmpty {
+        if !items.isEmpty || !shelves.settled.isEmpty || ctx.hiddenSettledCount > 0 {
             let expanded = state.settledExpanded
-            items.append(.shelfHeader(.settled, label: expanded ? "Settled" : "Settled (\(shelves.settled.count))", expanded: expanded))
+            items.append(.shelfHeader(.settled, label: expanded ? "Settled" : "Settled (\(shelves.settled.count + ctx.hiddenSettledCount))", expanded: expanded))
             if expanded {
                 var shown = Array(shelves.settled.prefix(state.settledVisibleCount))
                 if let active = state.activeThreadId, !shown.contains(where: { $0.id == active }),
@@ -489,7 +507,7 @@ public enum SidebarListBuilder {
                     shown.append(hidden) // the open route thread is always appended (Sidebar.tsx:2968-2984)
                 }
                 items += shown.map { row($0, .settled) }
-                let hiddenCount = shelves.settled.count - shown.count
+                let hiddenCount = shelves.settled.count + ctx.hiddenSettledCount - shown.count
                 if hiddenCount > 0 { items.append(.showMore(count: min(hiddenCount, settledPageCount))) }
             } else {
                 items += shelves.settled.filter { $0.id == state.activeThreadId }.map { row($0, .settled) }

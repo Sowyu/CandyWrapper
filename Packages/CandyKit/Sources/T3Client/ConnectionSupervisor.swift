@@ -239,7 +239,7 @@ public actor ConnectionSupervisor {
             }
             let ticket = try await http.webSocketTicket(token: try await token())
             let socket = try await URLSessionRPCSocket.open(url: http.webSocketURL(ticket: ticket.ticket, identity: identity))
-            let connection = RPCConnection(socket: socket)
+            let connection = RPCConnection(socket: socket, serverVersion: descriptor.serverVersion)
             await connection.start()
             return connection
         }
@@ -382,6 +382,9 @@ public actor ConnectionSupervisor {
             Task { await self.cancelWaiter(id) }
         }
     }
+
+    /// Fresh descriptor metadata from this socket's connector. Unknown routes negotiate anew.
+    public var serverVersion: String? { connection?.serverVersion }
 
     // MARK: State machine
 
@@ -609,12 +612,13 @@ extension ConnectionSupervisor {
     /// recoverable failures. `payload` runs before each subscribe so the caller can supply the
     /// current resume cursor (`afterSequence`). `handler` is awaited before the next value is
     /// pulled, so a slow handler holds back the server through acks.
+    /// A handler may clear its cursor and throw to retry with a fresh snapshot after a bad value.
     /// Cancel the returned task to unsubscribe; that sends `Interrupt`.
     /// Ends on a normal stream completion or an `EnvironmentAuthorizationError`.
     public nonisolated func subscribe(
         _ tag: String,
         payload: @escaping @Sendable () async -> JSONValue,
-        handler: @escaping @Sendable (SubscriptionEvent) async -> Void
+        handler: @escaping @Sendable (SubscriptionEvent) async throws -> Void
     ) -> Task<Void, Never> {
         Task {
             var generation = 0
@@ -627,11 +631,11 @@ extension ConnectionSupervisor {
                     generation = next.1
                 }
                 guard let (connection, gen) = session else { return }
-                await handler(.subscribed(generation: gen))
                 do {
+                    try await handler(.subscribed(generation: gen))
                     for try await value in await connection.stream(tag, payload: await payload()) {
+                        try await handler(.value(value))
                         retryDelay = .milliseconds(250)
-                        await handler(.value(value))
                     }
                     if Task.isCancelled { return }
                     // A clean end of a durable stream: the server finished it on purpose.
@@ -639,7 +643,7 @@ extension ConnectionSupervisor {
                     return
                 } catch let error as RPCClientError {
                     if Task.isCancelled { return }
-                    await handler(.interrupted(error))
+                    try? await handler(.interrupted(error))
                     let closed = await connection.isClosed
                     if error.isTransport || closed {
                         session = nil
@@ -649,7 +653,11 @@ extension ConnectionSupervisor {
                     do { try await Task.sleep(for: retryDelay) } catch { return }
                     retryDelay = min(retryDelay * 2, .seconds(30))
                 } catch {
-                    return
+                    if Task.isCancelled { return }
+                    // The consumer rejected a wire value. Rebuild its payload and subscribe
+                    // again, so a cleared resume cursor requests an authoritative snapshot.
+                    do { try await Task.sleep(for: retryDelay) } catch { return }
+                    retryDelay = min(retryDelay * 2, .seconds(30))
                 }
             }
         }

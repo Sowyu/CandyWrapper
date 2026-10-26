@@ -466,14 +466,13 @@ final class ComposerController {
     /// `subscribeServerConfig`: a snapshot first, then provider and settings updates (protocol.md 1562).
     private func subscribeConfig(_ shell: ShellSession) -> Task<Void, Never> {
         let env = shell.environmentId
-        // `usageLimitSources` streams the hubs' quota; `usageLimitsCommand` says this client answers `/usage-limits`.
-        let stream = shell.supervisor.subscribe("subscribeServerConfig", payload: {
-            .object(["environmentThemes": .bool(true), "usageLimitSources": .bool(true), "usageLimitsCommand": .bool(true)])
-        }, handler: { [weak self] event in
-            guard case .value(let json) = event, let change = try? json.decode(as: ServerConfigEvent.self) else { return }
-            await MainActor.run { self?.configChanged(change, environmentId: env) }
-        })
-        return stream
+        return Task { [weak self] in
+            for await event in await shell.configFeed.events() {
+                if Task.isCancelled { return }
+                guard case .value(let json) = event, let change = try? json.decode(as: ServerConfigEvent.self) else { continue }
+                self?.configChanged(change, environmentId: env)
+            }
+        }
     }
 
     private var keybindingsNotice = KeybindingsUpdateNotice()
@@ -2773,6 +2772,8 @@ extension ComposerController {
         var records: [String: JSONValue] = [:]
         var paths: (key: String, entries: [(path: String, isDirectory: Bool)])?
         var pathTask: Task<Void, Never>?
+        var threadMatches: (environment: String, key: String, threads: [ThreadShell])?
+        var threadSearchTask: Task<Void, Never>?
         var pullRequests: (key: String, entries: [ComposerMenus.PullRequestEntry], failed: Bool)?
         var pullRequestTask: Task<Void, Never>?
         /// `#<number>` outside the listed rows: `pullRequests.detail` for it (ChatComposer.tsx:2615-2647), by key and number.
@@ -2838,11 +2839,18 @@ extension ComposerController {
     /// The environment's threads for `@` (the agent can only read threads on its own server).
     private var menuThreads: [ComposerMenus.ThreadCandidate] {
         guard let env = targetEnvironmentId else { return [] }
-        return (sidebar?.snapshot?.threads ?? []).compactMap { t in
+        var candidates = (sidebar?.snapshot?.threads ?? []).compactMap { t -> ComposerMenus.ThreadCandidate? in
             guard EnvironmentScope.environmentId(of: t.id.rawValue) == env else { return nil }
             return ComposerMenus.ThreadCandidate(id: EnvironmentScope.localId(of: t.id.rawValue), title: t.title,
                                                  updatedAt: t.updatedAt.raw, archived: t.archivedAt != nil)
         }
+        let known = Set(candidates.map(\.id))
+        if let matches = menuState.threadMatches, matches.environment == env {
+            candidates += matches.threads.filter { !known.contains($0.id.rawValue) }.map {
+                .init(id: $0.id.rawValue, title: $0.title, updatedAt: $0.updatedAt.raw, archived: $0.archivedAt != nil)
+            }
+        }
+        return candidates
     }
 
     private var currentThreadLocalId: String? {
@@ -2924,8 +2932,13 @@ extension ComposerController {
     // MARK: Searches
 
     private func startSearches(_ trigger: ComposerTrigger?) {
+        if trigger?.kind != .path {
+            menuState.threadSearchTask?.cancel()
+            menuState.threadMatches = nil
+        }
         guard let trigger, let shell else {
             menuState.pathTask?.cancel()
+            menuState.threadSearchTask?.cancel()
             menuState.pullRequestTask?.cancel()
             return
         }
@@ -2934,6 +2947,7 @@ extension ComposerController {
         case .path:
             menuState.pathTask?.cancel()
             let query = trigger.query.trimmingCharacters(in: .whitespacesAndNewlines)
+            searchMenuThreads(query, shell: shell)
             guard !query.isEmpty, let cwd = menuCwd, let key = pathKey(query), menuState.paths?.key != key else { return }
             menuState.pathTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(ComposerMenus.pathSearchDebounce))
@@ -2974,6 +2988,30 @@ extension ComposerController {
             }
         case .slashCommand, .skill:
             break
+        }
+    }
+
+    /// Omitted settled threads remain available to `@`, without filling the shell on connect.
+    /// T3 5b35402623, contracts/orchestrationV2.ts:3440-3462 (`titlesOnly`).
+    private func searchMenuThreads(_ query: String, shell: ShellSession) {
+        menuState.threadSearchTask?.cancel()
+        guard !query.isEmpty, shell.omissions.omitOlderSettled, let env = targetEnvironmentId else {
+            menuState.threadMatches = nil
+            return
+        }
+        guard menuState.threadMatches?.key != "\(env)|\(query)" else { return }
+        menuState.threadSearchTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(ComposerMenus.pathSearchDebounce)) } catch { return }
+            let generation = await shell.store.generation
+            guard let cut = await shell.store.snapshot?.olderSettled else { return }
+            let payload: JSONValue = .object(["query": .string(query), "titlesOnly": .bool(true),
+                                              "olderSettledBefore": .string(cut.before)])
+            guard let json = try? await shell.supervisor.request("orchestration.searchThreads", payload: payload),
+                  !Task.isCancelled, let self, targetEnvironmentId == env, self.shell === shell,
+                  generation == (await shell.store.generation),
+                  let result = try? json.decode(as: ThreadSearchResult.self) else { return }
+            menuState.threadMatches = (env, "\(env)|\(query)", result.threads ?? [])
+            panel.menus.reload()
         }
     }
 
@@ -4867,11 +4905,12 @@ private final class ThreadPromptRewindObserver {
         self.messageId = messageId
         store = ThreadStore(threadId: threadId, onChange: {})
         let store = self.store
+        let wireSubscription = UUID()
         subscription = supervisor.subscribe("orchestration.subscribeThread", payload: {
-            ThreadSession.encode(await store.subscribeInput())
+            ThreadSession.encode(await store.subscribeInput(subscription: wireSubscription))
         }) { [weak self] event in
-            guard case .value(let json) = event, let item = ThreadSession.decode(json) else { return }
-            await store.apply([item])
+            guard case .value(let json) = event else { return }
+            try await ThreadSession.applyWire(json, to: store, subscription: wireSubscription)
             guard let update = await store.takeUpdate(), let projection = update.projection else { return }
             let contains = projection.messages.contains { $0.id == messageId }
             await self?.received(contains)

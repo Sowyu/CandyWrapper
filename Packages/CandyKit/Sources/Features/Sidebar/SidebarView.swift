@@ -39,6 +39,8 @@ public struct SidebarActions {
     /// `orchestration.searchThreads {query}`; nil when the request failed or there is no connection, which
     /// leaves title search on its own (threadSearch.ts:58-62).
     public var searchThreads: (String) async -> [ThreadSearchMatch]? = { _ in nil }
+    public var clearShellSearch: () -> Void = {}
+    public var demandOlderSettled: (Int, Set<ProjectId>?) -> Void = { _, _ in }
     /// Opens a new-thread draft (`/draft/$draftId`, Sidebar.tsx:3188-3201).
     public var openDraft: (String) -> Void = { _ in }
     /// `discardComposerDraft` from a draft row's x.
@@ -442,6 +444,13 @@ public final class SidebarContentView: DSView {
         }
     }
 
+    public var resolvedProjectIds: Set<ProjectId>? {
+        guard let key = state.projectScopeKey, let snapshot = listSnapshot else { return state.scopedProjectIds }
+        let groups = SidebarModel.buildProjectGroups(snapshot.projects, grouping: state.grouping,
+                                                     preferredEnvironmentId: state.environments.primaryId)
+        return groups.first { $0.key == key }.map { Set($0.memberProjectIds) } ?? state.scopedProjectIds
+    }
+
     /// Keeps the list's threads, shelves and row models between rebuilds.
     public let listCache: SidebarListCache? = SidebarContentView.timing == "nocache" ? nil : SidebarListCache()
 
@@ -456,7 +465,10 @@ public final class SidebarContentView: DSView {
     public var onListChange: (() -> Void)?
 
     func rebuild(animated: Bool) {
-        defer { onListChange?() }
+        defer {
+            onListChange?()
+            actions.demandOlderSettled(state.settledExpanded && !isSearching ? state.settledVisibleCount : 0, resolvedProjectIds)
+        }
         guard Self.timing != nil else { return rebuildNow(animated: animated) }
         let start = DispatchTime.now().uptimeNanoseconds, built = listCache?.rowModelBuilds ?? 0
         rebuildNow(animated: animated)
@@ -558,6 +570,7 @@ public final class SidebarContentView: DSView {
     }
 
     func setSearchQuery(_ query: String) {
+        actions.clearShellSearch()
         searchQuery = query
         searchHighlight = 0
         searchTask?.cancel()

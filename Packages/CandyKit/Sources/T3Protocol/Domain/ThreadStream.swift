@@ -8,16 +8,21 @@ public struct SubscribeThreadInput: Codable, Hashable, Sendable {
     public var requestCompletionMarker: Bool?
     public var acceptBoundedSnapshot: Bool?
     public var acceptCompactTurnItems: Bool?
+    public var acceptDedupedBodies: Bool?
+    public var acceptCompactIds: Bool?
 
     public init(
         threadId: ThreadId, afterSequence: Int? = nil, requestCompletionMarker: Bool? = nil,
-        acceptBoundedSnapshot: Bool? = nil, acceptCompactTurnItems: Bool? = nil
+        acceptBoundedSnapshot: Bool? = nil, acceptCompactTurnItems: Bool? = nil,
+        acceptDedupedBodies: Bool? = nil, acceptCompactIds: Bool? = nil
     ) {
         self.threadId = threadId
         self.afterSequence = afterSequence
         self.requestCompletionMarker = requestCompletionMarker
         self.acceptBoundedSnapshot = acceptBoundedSnapshot
         self.acceptCompactTurnItems = acceptCompactTurnItems
+        self.acceptDedupedBodies = acceptDedupedBodies
+        self.acceptCompactIds = acceptCompactIds
     }
 }
 
@@ -47,6 +52,29 @@ public struct ThreadDetailSnapshot: Codable, Hashable, Sendable {
         self.latestLocalTurnOrdinal = latestLocalTurnOrdinal
         self.payloadBudgetExceeded = payloadBudgetExceeded
         self.turnItemsOmitLocalVisible = turnItemsOmitLocalVisible
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case snapshotSequence, projection, historyCursor, hasMoreHistory, latestLocalTurnOrdinal
+        case payloadBudgetExceeded, turnItemsOmitLocalVisible
+    }
+
+    public init(from decoder: Decoder) throws {
+        try self.init(restored: ThreadPayloadRestoration.snapshot(JSONValue(from: decoder)))
+    }
+
+    /// Shares the decoded representation with the stateful stream restorer, avoiding another
+    /// walk over the snapshot's records after their ID and body markers have been consumed.
+    init(restored raw: JSONValue) throws {
+        let c = try TreeDecoder(raw, parent: nil, key: nil).container(keyedBy: CodingKeys.self)
+        snapshotSequence = try c.decode(Int.self, forKey: .snapshotSequence)
+        guard let value = raw["projection"] else { throw ThreadPayloadRestoration.invalid("Missing projection") }
+        projection = try value.decode(as: ThreadProjection.self)
+        historyCursor = try c.decode(Tristate<String>.self, forKey: .historyCursor)
+        hasMoreHistory = try c.decodeIfPresent(Bool.self, forKey: .hasMoreHistory)
+        latestLocalTurnOrdinal = try c.decode(Tristate<Int>.self, forKey: .latestLocalTurnOrdinal)
+        payloadBudgetExceeded = try c.decodeIfPresent(Bool.self, forKey: .payloadBudgetExceeded)
+        turnItemsOmitLocalVisible = try c.decodeIfPresent(Bool.self, forKey: .turnItemsOmitLocalVisible)
     }
 
     /// Whether the snapshot carries progressive history metadata (threads.ts:590-593).
@@ -89,7 +117,10 @@ public struct ThreadHistoryPage: Codable, Hashable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         snapshotSequence = try c.decode(Int.self, forKey: .snapshotSequence)
-        items = try c.decode(CompatibleTurnItems<ProjectedTurnItem>.self, forKey: .items).values
+        let raw = try ThreadPayloadRestoration.expandIds(JSONValue(from: decoder), container: nil)
+        guard let rows = raw["items"] else { throw ThreadPayloadRestoration.invalid("Missing history items") }
+        items = try rows.decode(as: CompatibleTurnItems<ProjectedTurnItem>.self).values
+        for row in items { try ThreadPayloadRestoration.rejectOmittedBodies(row.item.raw) }
         nextCursor = try c.decodeIfPresent(String.self, forKey: .nextCursor)
         hasMoreHistory = try c.decode(Bool.self, forKey: .hasMoreHistory)
     }
@@ -114,7 +145,7 @@ public struct ThreadHistoryRequest: Hashable, Sendable {
     public var path: String {
         var components = URLComponents()
         components.path = "/api/orchestration/threads/\(threadId.rawValue)/history"
-        components.queryItems = [URLQueryItem(name: "cursor", value: cursor)]
+        components.queryItems = [URLQueryItem(name: "cursor", value: cursor), URLQueryItem(name: "compactIds", value: "1")]
             + (throughEntryId.map { [URLQueryItem(name: "throughEntryId", value: $0)] } ?? [])
             + (view.map { [URLQueryItem(name: "view", value: $0.rawValue)] } ?? [])
         // URLComponents leaves `+` alone, and the server's query parser reads it as a space; the
@@ -127,7 +158,11 @@ public struct ThreadHistoryRequest: Hashable, Sendable {
     public static func boundedSnapshotPath(_ threadId: ThreadId) -> String {
         var components = URLComponents()
         components.path = "/api/orchestration/threads/\(threadId.rawValue)/bounded"
-        components.queryItems = [URLQueryItem(name: "compactTurnItems", value: "1")]
+        components.queryItems = [
+            URLQueryItem(name: "compactTurnItems", value: "1"),
+            URLQueryItem(name: "dedupeBodies", value: "1"),
+            URLQueryItem(name: "compactIds", value: "1"),
+        ]
         return components.string ?? components.path
     }
 }
@@ -257,14 +292,7 @@ public enum ThreadStreamItem: Decodable, Hashable, Sendable {
         case "synchronized":
             self = .synchronized
         case "snapshot":
-            self = .snapshot(ThreadDetailSnapshot(
-                snapshotSequence: try c.decode(Int.self, forKey: .snapshotSequence),
-                projection: try c.decode(ThreadProjection.self, forKey: .projection),
-                historyCursor: try c.decode(Tristate<String>.self, forKey: .historyCursor),
-                hasMoreHistory: try c.decodeIfPresent(Bool.self, forKey: .hasMoreHistory),
-                latestLocalTurnOrdinal: try c.decode(Tristate<Int>.self, forKey: .latestLocalTurnOrdinal),
-                payloadBudgetExceeded: try c.decodeIfPresent(Bool.self, forKey: .payloadBudgetExceeded),
-                turnItemsOmitLocalVisible: try c.decodeIfPresent(Bool.self, forKey: .turnItemsOmitLocalVisible)))
+            self = .snapshot(try ThreadDetailSnapshot(from: decoder))
         case "event":
             let sequence = try c.decode(Int.self, forKey: .sequence)
             let e = try c.nestedContainer(keyedBy: EventKeys.self, forKey: .event)
@@ -280,6 +308,10 @@ public enum ThreadStreamItem: Decodable, Hashable, Sendable {
                     self = .unknownEvent(sequence: sequence, eventType: type.rawValue)
                     return
                 }
+            }
+            // Raw callers must use ThreadStore.applyWire for omitted event bodies.
+            if type == .turnItemUpdated || type == .subagentUpdated {
+                try ThreadPayloadRestoration.rejectOmittedBodies(e.decode(JSONValue.self, forKey: .payload))
             }
             let payload: ThreadEventPayload
             switch type {

@@ -1,0 +1,549 @@
+{
+  "cells": [
+    {
+      "client": "old",
+      "client_commit": "8c8e6d3026128894bd48b6d410320fdf0ab4c16b",
+      "history": {
+        "blank_messages": 0,
+        "pages": [
+          12
+        ],
+        "visible_items": 1322,
+        "visible_messages": 482
+      },
+      "server": "3473",
+      "stages": {
+        "cold": {
+          "both_projections_seconds": {
+            "max": 10.241117709,
+            "median": 10.233931792,
+            "min": 10.162874958
+          },
+          "initial_visible_items": [
+            632
+          ],
+          "protocol_seconds": {
+            "max": 10.614434459,
+            "median": 10.583785459,
+            "min": 10.570623208
+          },
+          "shell_projection_seconds": {
+            "max": 10.241117709,
+            "median": 10.233931792,
+            "min": 10.162874958
+          },
+          "shell_threads": [
+            1301
+          ],
+          "thread_projection_seconds": {
+            "max": 9.586443459,
+            "median": 9.565827959,
+            "min": 9.504904625
+          },
+          "wire_bytes": {
+            "down": {
+              "max": 406154,
+              "median": 406092,
+              "min": 406092
+            },
+            "http_down": {
+              "max": 1379,
+              "median": 1379,
+              "min": 1379
+            },
+            "http_up": {
+              "max": 1309,
+              "median": 1309,
+              "min": 1309
+            },
+            "socket_down": {
+              "max": 404775,
+              "median": 404713,
+              "min": 404713
+            },
+            "socket_up": {
+              "max": 972,
+              "median": 972,
+              "min": 972
+            },
+            "up": {
+              "max": 2281,
+              "median": 2281,
+              "min": 2281
+            }
+          }
+        },
+        "retained-reconnect": {
+          "both_projections_seconds": {
+            "max": 1.6875e-05,
+            "median": 1.6416e-05,
+            "min": 1.3708e-05
+          },
+          "initial_visible_items": [
+            632
+          ],
+          "protocol_seconds": {
+            "max": 2.16618375,
+            "median": 2.154275208,
+            "min": 2.153937541
+          },
+          "shell_projection_seconds": {
+            "max": 1.6875e-05,
+            "median": 1.6416e-05,
+            "min": 1.3708e-05
+          },
+          "shell_threads": [
+            1301
+          ],
+          "thread_projection_seconds": {
+            "max": 1.3208e-05,
+            "median": 1.1916e-05,
+            "min": 1.0666e-05
+          },
+          "wire_bytes": {
+            "down": {
+              "max": 2026,
+              "median": 2026,
+              "min": 1948
+            },
+            "http_down": {
+              "max": 1379,
+              "median": 1379,
+              "min": 1379
+            },
+            "http_up": {
+              "max": 1309,
+              "median": 1309,
+              "min": 1309
+            },
+            "socket_down": {
+              "max": 647,
+              "median": 647,
+              "min": 569
+            },
+            "socket_up": {
+              "max": 991,
+              "median": 991,
+              "min": 991
+            },
+            "up": {
+              "max": 2300,
+              "median": 2300,
+              "min": 2300
+            }
+          }
+        }
+      }
+    },
+    {
+      "client": "new",
+      "client_commit": "d7b31a40de11895fce12c7375a9094a50f19e2a0",
+      "history": {
+        "blank_messages": 0,
+        "pages": [
+          12
+        ],
+        "visible_items": 1322,
+        "visible_messages": 482
+      },
+      "server": "3473",
+      "stages": {
+        "cold": {
+          "both_projections_seconds": {
+            "max": 11.050106958,
+            "median": 11.00212525,
+            "min": 10.996469417
+          },
+          "initial_visible_items": [
+            632
+          ],
+          "protocol_seconds": {
+            "max": 11.474112792,
+            "median": 11.424661709,
+            "min": 11.419114208
+          },
+          "shell_projection_seconds": {
+            "max": 4.9109532080000005,
+            "median": 4.778334417,
+            "min": 4.763837333
+          },
+          "shell_threads": [
+            1301
+          ],
+          "thread_projection_seconds": {
+            "max": 11.050106958,
+            "median": 11.00212525,
+            "min": 10.996469417
+          },
+          "wire_bytes": {
+            "down": {
+              "max": 425029,
+              "median": 425029,
+              "min": 425029
+            },
+            "http_down": {
+              "max": 406350,
+              "median": 406350,
+              "min": 406350
+            },
+            "http_up": {
+              "max": 3361,
+              "median": 3361,
+              "min": 3361
+            },
+            "socket_down": {
+              "max": 18679,
+              "median": 18679,
+              "min": 18679
+            },
+            "socket_up": {
+              "max": 1019,
+              "median": 1019,
+              "min": 1019
+            },
+            "up": {
+              "max": 4380,
+              "median": 4380,
+              "min": 4380
+            }
+          }
+        },
+        "retained-reconnect": {
+          "both_projections_seconds": {
+            "max": 1.6291e-05,
+            "median": 1.4875e-05,
+            "min": 1.4792e-05
+          },
+          "initial_visible_items": [
+            632
+          ],
+          "protocol_seconds": {
+            "max": 2.980932,
+            "median": 2.9585522920000003,
+            "min": 2.958472125
+          },
+          "shell_projection_seconds": {
+            "max": 1.6291e-05,
+            "median": 1.4875e-05,
+            "min": 1.4792e-05
+          },
+          "shell_threads": [
+            1301
+          ],
+          "thread_projection_seconds": {
+            "max": 1.1666e-05,
+            "median": 1.0792e-05,
+            "min": 1.0625e-05
+          },
+          "wire_bytes": {
+            "down": {
+              "max": 20092,
+              "median": 20092,
+              "min": 20092
+            },
+            "http_down": {
+              "max": 1379,
+              "median": 1379,
+              "min": 1379
+            },
+            "http_up": {
+              "max": 1309,
+              "median": 1309,
+              "min": 1309
+            },
+            "socket_down": {
+              "max": 18713,
+              "median": 18713,
+              "min": 18713
+            },
+            "socket_up": {
+              "max": 1043,
+              "median": 1042,
+              "min": 1030
+            },
+            "up": {
+              "max": 2352,
+              "median": 2351,
+              "min": 2339
+            }
+          }
+        }
+      }
+    },
+    {
+      "client": "old",
+      "client_commit": "8c8e6d3026128894bd48b6d410320fdf0ab4c16b",
+      "history": {
+        "blank_messages": 0,
+        "pages": [
+          14
+        ],
+        "visible_items": 1322,
+        "visible_messages": 482
+      },
+      "server": "main",
+      "stages": {
+        "cold": {
+          "both_projections_seconds": {
+            "max": 3.488042625,
+            "median": 3.453063791,
+            "min": 3.436743875
+          },
+          "initial_visible_items": [
+            75
+          ],
+          "protocol_seconds": {
+            "max": 3.858996875,
+            "median": 3.854460417,
+            "min": 3.8146704160000002
+          },
+          "shell_projection_seconds": {
+            "max": 3.488042625,
+            "median": 3.453063791,
+            "min": 3.436743875
+          },
+          "shell_threads": [
+            1301
+          ],
+          "thread_projection_seconds": {
+            "max": 2.804467958,
+            "median": 2.768944666,
+            "min": 2.7463265420000003
+          },
+          "wire_bytes": {
+            "down": {
+              "max": 71494,
+              "median": 71424,
+              "min": 71424
+            },
+            "http_down": {
+              "max": 1361,
+              "median": 1361,
+              "min": 1361
+            },
+            "http_up": {
+              "max": 1309,
+              "median": 1309,
+              "min": 1309
+            },
+            "socket_down": {
+              "max": 70133,
+              "median": 70063,
+              "min": 70063
+            },
+            "socket_up": {
+              "max": 957,
+              "median": 957,
+              "min": 957
+            },
+            "up": {
+              "max": 2266,
+              "median": 2266,
+              "min": 2266
+            }
+          }
+        },
+        "retained-reconnect": {
+          "both_projections_seconds": {
+            "max": 1.4041e-05,
+            "median": 1.3833e-05,
+            "min": 1.1333e-05
+          },
+          "initial_visible_items": [
+            75
+          ],
+          "protocol_seconds": {
+            "max": 2.17182025,
+            "median": 2.167069458,
+            "min": 2.164773208
+          },
+          "shell_projection_seconds": {
+            "max": 1.4041e-05,
+            "median": 1.3833e-05,
+            "min": 1.1333e-05
+          },
+          "shell_threads": [
+            1301
+          ],
+          "thread_projection_seconds": {
+            "max": 1.0875e-05,
+            "median": 9e-06,
+            "min": 8.958e-06
+          },
+          "wire_bytes": {
+            "down": {
+              "max": 1930,
+              "median": 1930,
+              "min": 1930
+            },
+            "http_down": {
+              "max": 1361,
+              "median": 1361,
+              "min": 1361
+            },
+            "http_up": {
+              "max": 1309,
+              "median": 1309,
+              "min": 1309
+            },
+            "socket_down": {
+              "max": 569,
+              "median": 569,
+              "min": 569
+            },
+            "socket_up": {
+              "max": 1001,
+              "median": 1001,
+              "min": 1001
+            },
+            "up": {
+              "max": 2310,
+              "median": 2310,
+              "min": 2310
+            }
+          }
+        }
+      }
+    },
+    {
+      "client": "new",
+      "client_commit": "d7b31a40de11895fce12c7375a9094a50f19e2a0",
+      "history": {
+        "blank_messages": 0,
+        "pages": [
+          14
+        ],
+        "visible_items": 1322,
+        "visible_messages": 482
+      },
+      "server": "main",
+      "stages": {
+        "cold": {
+          "both_projections_seconds": {
+            "max": 3.265771708,
+            "median": 3.259799792,
+            "min": 3.23071775
+          },
+          "initial_visible_items": [
+            75
+          ],
+          "protocol_seconds": {
+            "max": 4.1077825,
+            "median": 4.100154875,
+            "min": 4.05893275
+          },
+          "shell_projection_seconds": {
+            "max": 3.265771708,
+            "median": 3.259799792,
+            "min": 3.23071775
+          },
+          "shell_threads": [
+            126
+          ],
+          "thread_projection_seconds": {
+            "max": 3.200966542,
+            "median": 3.197286583,
+            "min": 3.166539542
+          },
+          "wire_bytes": {
+            "down": {
+              "max": 63967,
+              "median": 63967,
+              "min": 63967
+            },
+            "http_down": {
+              "max": 45215,
+              "median": 45215,
+              "min": 45215
+            },
+            "http_up": {
+              "max": 3400,
+              "median": 3400,
+              "min": 3400
+            },
+            "socket_down": {
+              "max": 18752,
+              "median": 18752,
+              "min": 18752
+            },
+            "socket_up": {
+              "max": 1046,
+              "median": 1046,
+              "min": 1046
+            },
+            "up": {
+              "max": 4446,
+              "median": 4446,
+              "min": 4446
+            }
+          }
+        },
+        "retained-reconnect": {
+          "both_projections_seconds": {
+            "max": 1.7084e-05,
+            "median": 1.5916e-05,
+            "min": 1.4208e-05
+          },
+          "initial_visible_items": [
+            75
+          ],
+          "protocol_seconds": {
+            "max": 2.964283125,
+            "median": 2.958809458,
+            "min": 2.955217625
+          },
+          "shell_projection_seconds": {
+            "max": 1.7084e-05,
+            "median": 1.5916e-05,
+            "min": 1.4208e-05
+          },
+          "shell_threads": [
+            126
+          ],
+          "thread_projection_seconds": {
+            "max": 1.4e-05,
+            "median": 1.1333e-05,
+            "min": 1.0833e-05
+          },
+          "wire_bytes": {
+            "down": {
+              "max": 20113,
+              "median": 20113,
+              "min": 20113
+            },
+            "http_down": {
+              "max": 1361,
+              "median": 1361,
+              "min": 1361
+            },
+            "http_up": {
+              "max": 1309,
+              "median": 1309,
+              "min": 1309
+            },
+            "socket_down": {
+              "max": 18752,
+              "median": 18752,
+              "min": 18752
+            },
+            "socket_up": {
+              "max": 1085,
+              "median": 1085,
+              "min": 1085
+            },
+            "up": {
+              "max": 2394,
+              "median": 2394,
+              "min": 2394
+            }
+          }
+        }
+      }
+    }
+  ],
+  "downstream_kbps": 400,
+  "main_sha": "5b35402623d7d1d88eaa472807272a6c2e78012a",
+  "rounds": 3,
+  "rtt_ms": 400,
+  "upstream_kbps": 400
+}

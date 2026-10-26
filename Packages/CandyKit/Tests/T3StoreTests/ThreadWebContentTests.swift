@@ -59,6 +59,66 @@ import Testing
         #expect(h.height(width: 1000) == 500, "an unreported width takes the last report")
     }
 
+    @Test func reportedHeightsDeduplicateRenderedPixelsAndCaps() {
+        var heights = HtmlRenderHeights()
+        let changed1 = heights.set(150.1, width: 720)
+        #expect(changed1)
+        let changed2 = heights.set(150.4, width: 722)
+        #expect(!changed2, "subpixel reports rendering at 150 do not relayout")
+        #expect(heights.height(width: 720) == 150)
+        let changed3 = heights.set(150.6, width: 720)
+        #expect(changed3)
+        #expect(heights.height(width: 720) == 151)
+        let changed4 = heights.set(1, width: 720)
+        #expect(changed4)
+        #expect(heights.height(width: 720) == 80)
+        let changed5 = heights.set(79.4, width: 720)
+        #expect(!changed5)
+        let changed6 = heights.set(2000.6, width: 720)
+        #expect(changed6)
+        #expect(heights.height(width: 720) == 2000)
+        let changed7 = heights.set(1e300, width: 720)
+        #expect(!changed7, "reports past the cap render at the same height")
+    }
+
+    @Test func invalidReportsLeaveEveryWidthAndTheFallbackUnchanged() {
+        var heights = HtmlRenderHeights()
+        let changed8 = heights.set(300, width: 720)
+        #expect(changed8)
+        let saved = heights
+        for height in [0, -1, Double.nan, .infinity, -.infinity] {
+            let changed9 = heights.set(height, width: 400)
+            #expect(!changed9)
+            #expect(heights == saved)
+        }
+        for width in [0, -1, Double.nan, .infinity, -.infinity, 10_001, 1e300] {
+            let changed10 = heights.set(500, width: width)
+            #expect(!changed10)
+            #expect(heights == saved)
+            #expect(heights.height(width: width) == 300)
+        }
+        #expect(heights.height(width: 400) == 300)
+    }
+
+    @Test func neighboringWidthBucketsRetainTheirOwnHeights() {
+        var heights = HtmlRenderHeights()
+        let changed11 = heights.set(300, width: 720)
+        #expect(changed11)
+        let changed12 = heights.set(300, width: 723)
+        #expect(!changed12)
+        let changed13 = heights.set(500, width: 724)
+        #expect(changed13)
+        #expect(heights.height(width: 723) == 300)
+        #expect(heights.height(width: 724) == 500)
+        #expect(heights.height(width: 1000) == 500)
+        let changed14 = heights.set(300, width: 720)
+        #expect(changed14, "an unchanged bucket can still change the unmeasured-width fallback")
+        #expect(heights.height(width: 724) == 500)
+        #expect(heights.height(width: 1000) == 300)
+        let changed15 = heights.set(300, width: 722)
+        #expect(!changed15)
+    }
+
     @Test func frameHeightFollowsTheMeasuredTable() {
         var m = reference.objectValue!
         m["height"] = .number(1500)

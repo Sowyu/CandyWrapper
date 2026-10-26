@@ -1,0 +1,3918 @@
+[
+  {
+    "case": "chart-conductor-dark",
+    "before": {
+      "coldMedianMs": 187.453,
+      "coldPages": 10,
+      "viewportChecks": 20,
+      "sampledAppPeakMB": 78.71,
+      "sampledCombinedPeakMB": 183.768,
+      "sampledWebKitPeakCount": 5,
+      "competingBuildSamples": 0,
+      "scroll": {
+        "case": "chart-conductor-dark",
+        "back": {
+          "visits": [
+            {
+              "label": "back-10",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "chart page 10"
+              ]
+            },
+            {
+              "label": "back-9",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 8",
+                "evicted",
+                "chart page 10"
+              ]
+            },
+            {
+              "label": "back-8",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "chart page 8",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-7",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 6",
+                "evicted",
+                "chart page 8"
+              ]
+            },
+            {
+              "label": "back-6",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "chart page 6",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-5",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "chart page 6"
+              ]
+            },
+            {
+              "label": "back-4",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-3",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-2",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-1",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted"
+              ]
+            }
+          ],
+          "completeVisits": 0,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": null,
+          "fixedPacingMs": 20000
+        },
+        "return": {
+          "visits": [
+            {
+              "label": "return-1",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-2",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-3",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-4",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-5",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "chart page 6"
+              ]
+            },
+            {
+              "label": "return-6",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "chart page 6",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-7",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 6",
+                "evicted",
+                "chart page 8"
+              ]
+            },
+            {
+              "label": "return-8",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "chart page 8",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-9",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 8",
+                "evicted",
+                "chart page 10"
+              ]
+            },
+            {
+              "label": "return-10",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "chart page 10"
+              ]
+            }
+          ],
+          "completeVisits": 0,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": null,
+          "fixedPacingMs": 20000
+        }
+      },
+      "blankViewports": 20
+    },
+    "after": {
+      "coldMedianMs": 140.111,
+      "coldPages": 10,
+      "viewportChecks": 20,
+      "sampledAppPeakMB": 83.658,
+      "sampledCombinedPeakMB": 173.003,
+      "sampledWebKitPeakCount": 5,
+      "competingBuildSamples": 0,
+      "scroll": {
+        "case": "chart-conductor-dark",
+        "back": {
+          "visits": [
+            {
+              "label": "back-10",
+              "complete": true,
+              "waitMs": 0.844,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 9",
+                "chart page 10"
+              ]
+            },
+            {
+              "label": "back-9",
+              "complete": true,
+              "waitMs": 42.165,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 8",
+                "chart page 9",
+                "chart page 10"
+              ]
+            },
+            {
+              "label": "back-8",
+              "complete": true,
+              "waitMs": 36.636,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 7",
+                "chart page 8",
+                "chart page 9"
+              ]
+            },
+            {
+              "label": "back-7",
+              "complete": true,
+              "waitMs": 49.261,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 6",
+                "chart page 7",
+                "chart page 8"
+              ]
+            },
+            {
+              "label": "back-6",
+              "complete": true,
+              "waitMs": 38.762,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 5",
+                "chart page 6",
+                "chart page 7"
+              ]
+            },
+            {
+              "label": "back-5",
+              "complete": true,
+              "waitMs": 38.327,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 4",
+                "chart page 5",
+                "chart page 6"
+              ]
+            },
+            {
+              "label": "back-4",
+              "complete": true,
+              "waitMs": 50.596,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 3",
+                "chart page 4",
+                "chart page 5"
+              ]
+            },
+            {
+              "label": "back-3",
+              "complete": true,
+              "waitMs": 43.477,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 2",
+                "chart page 3",
+                "chart page 4"
+              ]
+            },
+            {
+              "label": "back-2",
+              "complete": true,
+              "waitMs": 37.566,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 1",
+                "chart page 2",
+                "chart page 3"
+              ]
+            },
+            {
+              "label": "back-1",
+              "complete": true,
+              "waitMs": 2.416,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 1",
+                "chart page 2"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 340.05,
+          "fixedPacingMs": 20000
+        },
+        "return": {
+          "visits": [
+            {
+              "label": "return-1",
+              "complete": true,
+              "waitMs": 0.593,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 1",
+                "chart page 2"
+              ]
+            },
+            {
+              "label": "return-2",
+              "complete": true,
+              "waitMs": 44.349,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 1",
+                "chart page 2",
+                "chart page 3"
+              ]
+            },
+            {
+              "label": "return-3",
+              "complete": true,
+              "waitMs": 49.678,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 2",
+                "chart page 3",
+                "chart page 4"
+              ]
+            },
+            {
+              "label": "return-4",
+              "complete": true,
+              "waitMs": 45.092,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 3",
+                "chart page 4",
+                "chart page 5"
+              ]
+            },
+            {
+              "label": "return-5",
+              "complete": true,
+              "waitMs": 46.632,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 4",
+                "chart page 5",
+                "chart page 6"
+              ]
+            },
+            {
+              "label": "return-6",
+              "complete": true,
+              "waitMs": 36.984,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 5",
+                "chart page 6",
+                "chart page 7"
+              ]
+            },
+            {
+              "label": "return-7",
+              "complete": true,
+              "waitMs": 46.169,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 6",
+                "chart page 7",
+                "chart page 8"
+              ]
+            },
+            {
+              "label": "return-8",
+              "complete": true,
+              "waitMs": 48.619,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 7",
+                "chart page 8",
+                "chart page 9"
+              ]
+            },
+            {
+              "label": "return-9",
+              "complete": true,
+              "waitMs": 34.947,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 8",
+                "chart page 9",
+                "chart page 10"
+              ]
+            },
+            {
+              "label": "return-10",
+              "complete": true,
+              "waitMs": 2.371,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 9",
+                "chart page 10"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 355.434,
+          "fixedPacingMs": 20000
+        }
+      },
+      "blankViewports": 0
+    }
+  },
+  {
+    "case": "chart-thread-dark",
+    "before": {
+      "coldMedianMs": 139.712,
+      "coldPages": 10,
+      "viewportChecks": 20,
+      "sampledAppPeakMB": 47.007,
+      "sampledCombinedPeakMB": 184.39,
+      "sampledWebKitPeakCount": 5,
+      "competingBuildSamples": 0,
+      "scroll": {
+        "case": "chart-thread-dark",
+        "back": {
+          "visits": [
+            {
+              "label": "back-10",
+              "complete": true,
+              "waitMs": 1.097,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 10",
+                "chart page 9"
+              ]
+            },
+            {
+              "label": "back-9",
+              "complete": true,
+              "waitMs": 2.143,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 10",
+                "chart page 8",
+                "chart page 9"
+              ]
+            },
+            {
+              "label": "back-8",
+              "complete": true,
+              "waitMs": 148.921,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 8",
+                "chart page 9",
+                "chart page 7"
+              ]
+            },
+            {
+              "label": "back-7",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "chart page 7",
+                "chart page 6"
+              ]
+            },
+            {
+              "label": "back-6",
+              "complete": true,
+              "waitMs": 144.76,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 7",
+                "chart page 6",
+                "chart page 5"
+              ]
+            },
+            {
+              "label": "back-5",
+              "complete": true,
+              "waitMs": 127.912,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 6",
+                "chart page 5",
+                "chart page 4"
+              ]
+            },
+            {
+              "label": "back-4",
+              "complete": true,
+              "waitMs": 131.555,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 5",
+                "chart page 4",
+                "chart page 3"
+              ]
+            },
+            {
+              "label": "back-3",
+              "complete": true,
+              "waitMs": 155.178,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 4",
+                "chart page 3",
+                "chart page 2"
+              ]
+            },
+            {
+              "label": "back-2",
+              "complete": true,
+              "waitMs": 144.437,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 3",
+                "chart page 2",
+                "chart page 1"
+              ]
+            },
+            {
+              "label": "back-1",
+              "complete": true,
+              "waitMs": 1.45,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 2",
+                "chart page 1"
+              ]
+            }
+          ],
+          "completeVisits": 9,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": null,
+          "fixedPacingMs": 20000
+        },
+        "return": {
+          "visits": [
+            {
+              "label": "return-1",
+              "complete": true,
+              "waitMs": 0.847,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 2",
+                "chart page 1"
+              ]
+            },
+            {
+              "label": "return-2",
+              "complete": true,
+              "waitMs": 2.138,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 3",
+                "chart page 2",
+                "chart page 1"
+              ]
+            },
+            {
+              "label": "return-3",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "chart page 2",
+                "chart page 4"
+              ]
+            },
+            {
+              "label": "return-4",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "chart page 4",
+                "chart page 5"
+              ]
+            },
+            {
+              "label": "return-5",
+              "complete": true,
+              "waitMs": 142.355,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 4",
+                "chart page 5",
+                "chart page 6"
+              ]
+            },
+            {
+              "label": "return-6",
+              "complete": true,
+              "waitMs": 143.536,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 5",
+                "chart page 6",
+                "chart page 7"
+              ]
+            },
+            {
+              "label": "return-7",
+              "complete": true,
+              "waitMs": 141.783,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 6",
+                "chart page 7",
+                "chart page 8"
+              ]
+            },
+            {
+              "label": "return-8",
+              "complete": true,
+              "waitMs": 124.916,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 7",
+                "chart page 8",
+                "chart page 9"
+              ]
+            },
+            {
+              "label": "return-9",
+              "complete": true,
+              "waitMs": 117.899,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 8",
+                "chart page 9",
+                "chart page 10"
+              ]
+            },
+            {
+              "label": "return-10",
+              "complete": true,
+              "waitMs": 1.184,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 9",
+                "chart page 10"
+              ]
+            }
+          ],
+          "completeVisits": 8,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": null,
+          "fixedPacingMs": 20000
+        }
+      },
+      "blankViewports": 3
+    },
+    "after": {
+      "coldMedianMs": 139.444,
+      "coldPages": 10,
+      "viewportChecks": 20,
+      "sampledAppPeakMB": 87.18,
+      "sampledCombinedPeakMB": 178.607,
+      "sampledWebKitPeakCount": 5,
+      "competingBuildSamples": 0,
+      "scroll": {
+        "case": "chart-thread-dark",
+        "back": {
+          "visits": [
+            {
+              "label": "back-10",
+              "complete": true,
+              "waitMs": 1.328,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 10",
+                "chart page 9"
+              ]
+            },
+            {
+              "label": "back-9",
+              "complete": true,
+              "waitMs": 47.016,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 10",
+                "chart page 8",
+                "chart page 9"
+              ]
+            },
+            {
+              "label": "back-8",
+              "complete": true,
+              "waitMs": 39.46,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 8",
+                "chart page 9",
+                "chart page 7"
+              ]
+            },
+            {
+              "label": "back-7",
+              "complete": true,
+              "waitMs": 50.385,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 8",
+                "chart page 7",
+                "chart page 6"
+              ]
+            },
+            {
+              "label": "back-6",
+              "complete": true,
+              "waitMs": 41.672,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 7",
+                "chart page 6",
+                "chart page 5"
+              ]
+            },
+            {
+              "label": "back-5",
+              "complete": true,
+              "waitMs": 51.003,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 6",
+                "chart page 5",
+                "chart page 4"
+              ]
+            },
+            {
+              "label": "back-4",
+              "complete": true,
+              "waitMs": 58.883,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 5",
+                "chart page 4",
+                "chart page 3"
+              ]
+            },
+            {
+              "label": "back-3",
+              "complete": true,
+              "waitMs": 46.668,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 4",
+                "chart page 3",
+                "chart page 2"
+              ]
+            },
+            {
+              "label": "back-2",
+              "complete": true,
+              "waitMs": 61.347,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 3",
+                "chart page 2",
+                "chart page 1"
+              ]
+            },
+            {
+              "label": "back-1",
+              "complete": true,
+              "waitMs": 2.787,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 2",
+                "chart page 1"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 400.549,
+          "fixedPacingMs": 20000
+        },
+        "return": {
+          "visits": [
+            {
+              "label": "return-1",
+              "complete": true,
+              "waitMs": 1.03,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 2",
+                "chart page 1"
+              ]
+            },
+            {
+              "label": "return-2",
+              "complete": true,
+              "waitMs": 45.537,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 3",
+                "chart page 2",
+                "chart page 1"
+              ]
+            },
+            {
+              "label": "return-3",
+              "complete": true,
+              "waitMs": 45.438,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 3",
+                "chart page 2",
+                "chart page 4"
+              ]
+            },
+            {
+              "label": "return-4",
+              "complete": true,
+              "waitMs": 58.695,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 3",
+                "chart page 4",
+                "chart page 5"
+              ]
+            },
+            {
+              "label": "return-5",
+              "complete": true,
+              "waitMs": 31.04,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 4",
+                "chart page 5",
+                "chart page 6"
+              ]
+            },
+            {
+              "label": "return-6",
+              "complete": true,
+              "waitMs": 54.435,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 5",
+                "chart page 6",
+                "chart page 7"
+              ]
+            },
+            {
+              "label": "return-7",
+              "complete": true,
+              "waitMs": 49.748,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 6",
+                "chart page 7",
+                "chart page 8"
+              ]
+            },
+            {
+              "label": "return-8",
+              "complete": true,
+              "waitMs": 41.489,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 7",
+                "chart page 8",
+                "chart page 9"
+              ]
+            },
+            {
+              "label": "return-9",
+              "complete": true,
+              "waitMs": 30.821,
+              "cachedPreviews": 1,
+              "pages": [
+                "chart page 8",
+                "chart page 9",
+                "chart page 10"
+              ]
+            },
+            {
+              "label": "return-10",
+              "complete": true,
+              "waitMs": 2.958,
+              "cachedPreviews": 0,
+              "pages": [
+                "chart page 9",
+                "chart page 10"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 361.191,
+          "fixedPacingMs": 20000
+        }
+      },
+      "blankViewports": 0
+    }
+  },
+  {
+    "case": "collage-conductor-dark",
+    "before": {
+      "coldMedianMs": 198.142,
+      "coldPages": 10,
+      "viewportChecks": 20,
+      "sampledAppPeakMB": 83.346,
+      "sampledCombinedPeakMB": 219.616,
+      "sampledWebKitPeakCount": 5,
+      "competingBuildSamples": 0,
+      "scroll": {
+        "case": "collage-conductor-dark",
+        "back": {
+          "visits": [
+            {
+              "label": "back-10",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "back-9",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 8",
+                "evicted",
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "back-8",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "collage page 8",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-7",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 6",
+                "evicted",
+                "collage page 8"
+              ]
+            },
+            {
+              "label": "back-6",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "collage page 6",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-5",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "collage page 6"
+              ]
+            },
+            {
+              "label": "back-4",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-3",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-2",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-1",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted"
+              ]
+            }
+          ],
+          "completeVisits": 0,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": null,
+          "fixedPacingMs": 20000
+        },
+        "return": {
+          "visits": [
+            {
+              "label": "return-1",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-2",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-3",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-4",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-5",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "collage page 6"
+              ]
+            },
+            {
+              "label": "return-6",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "collage page 6",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-7",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 6",
+                "evicted",
+                "collage page 8"
+              ]
+            },
+            {
+              "label": "return-8",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "collage page 8",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-9",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 8",
+                "evicted",
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "return-10",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "collage page 10"
+              ]
+            }
+          ],
+          "completeVisits": 0,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": null,
+          "fixedPacingMs": 20000
+        }
+      },
+      "blankViewports": 20
+    },
+    "after": {
+      "coldMedianMs": 147.82,
+      "coldPages": 10,
+      "viewportChecks": 20,
+      "sampledAppPeakMB": 83.658,
+      "sampledCombinedPeakMB": 193.123,
+      "sampledWebKitPeakCount": 5,
+      "competingBuildSamples": 0,
+      "scroll": {
+        "case": "collage-conductor-dark",
+        "back": {
+          "visits": [
+            {
+              "label": "back-10",
+              "complete": true,
+              "waitMs": 0.813,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 9",
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "back-9",
+              "complete": true,
+              "waitMs": 46.347,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 8",
+                "collage page 9",
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "back-8",
+              "complete": true,
+              "waitMs": 36.688,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 7",
+                "collage page 8",
+                "collage page 9"
+              ]
+            },
+            {
+              "label": "back-7",
+              "complete": true,
+              "waitMs": 46.351,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 6",
+                "collage page 7",
+                "collage page 8"
+              ]
+            },
+            {
+              "label": "back-6",
+              "complete": true,
+              "waitMs": 60.779,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 5",
+                "collage page 6",
+                "collage page 7"
+              ]
+            },
+            {
+              "label": "back-5",
+              "complete": true,
+              "waitMs": 49.438,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 4",
+                "collage page 5",
+                "collage page 6"
+              ]
+            },
+            {
+              "label": "back-4",
+              "complete": true,
+              "waitMs": 39.036,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 3",
+                "collage page 4",
+                "collage page 5"
+              ]
+            },
+            {
+              "label": "back-3",
+              "complete": true,
+              "waitMs": 46.294,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 2",
+                "collage page 3",
+                "collage page 4"
+              ]
+            },
+            {
+              "label": "back-2",
+              "complete": true,
+              "waitMs": 49.871,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 1",
+                "collage page 2",
+                "collage page 3"
+              ]
+            },
+            {
+              "label": "back-1",
+              "complete": true,
+              "waitMs": 2.381,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 1",
+                "collage page 2"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 377.998,
+          "fixedPacingMs": 20000
+        },
+        "return": {
+          "visits": [
+            {
+              "label": "return-1",
+              "complete": true,
+              "waitMs": 0.376,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 1",
+                "collage page 2"
+              ]
+            },
+            {
+              "label": "return-2",
+              "complete": true,
+              "waitMs": 46.609,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 1",
+                "collage page 2",
+                "collage page 3"
+              ]
+            },
+            {
+              "label": "return-3",
+              "complete": true,
+              "waitMs": 38.349,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 2",
+                "collage page 3",
+                "collage page 4"
+              ]
+            },
+            {
+              "label": "return-4",
+              "complete": true,
+              "waitMs": 55.688,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 3",
+                "collage page 4",
+                "collage page 5"
+              ]
+            },
+            {
+              "label": "return-5",
+              "complete": true,
+              "waitMs": 49.662,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 4",
+                "collage page 5",
+                "collage page 6"
+              ]
+            },
+            {
+              "label": "return-6",
+              "complete": true,
+              "waitMs": 34.092,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 5",
+                "collage page 6",
+                "collage page 7"
+              ]
+            },
+            {
+              "label": "return-7",
+              "complete": true,
+              "waitMs": 37.115,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 6",
+                "collage page 7",
+                "collage page 8"
+              ]
+            },
+            {
+              "label": "return-8",
+              "complete": true,
+              "waitMs": 49.037,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 7",
+                "collage page 8",
+                "collage page 9"
+              ]
+            },
+            {
+              "label": "return-9",
+              "complete": true,
+              "waitMs": 39.846,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 8",
+                "collage page 9",
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "return-10",
+              "complete": true,
+              "waitMs": 2.133,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 9",
+                "collage page 10"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 352.907,
+          "fixedPacingMs": 20000
+        }
+      },
+      "blankViewports": 0
+    }
+  },
+  {
+    "case": "collage-conductor-light",
+    "before": {
+      "coldMedianMs": 184.637,
+      "coldPages": 10,
+      "viewportChecks": 20,
+      "sampledAppPeakMB": 44.009,
+      "sampledCombinedPeakMB": 222.172,
+      "sampledWebKitPeakCount": 5,
+      "competingBuildSamples": 0,
+      "scroll": {
+        "case": "collage-conductor-light",
+        "back": {
+          "visits": [
+            {
+              "label": "back-10",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "back-9",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 8",
+                "evicted",
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "back-8",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "collage page 8",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-7",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 6",
+                "evicted",
+                "collage page 8"
+              ]
+            },
+            {
+              "label": "back-6",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "collage page 6",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-5",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "collage page 6"
+              ]
+            },
+            {
+              "label": "back-4",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-3",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-2",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-1",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted"
+              ]
+            }
+          ],
+          "completeVisits": 0,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": null,
+          "fixedPacingMs": 20000
+        },
+        "return": {
+          "visits": [
+            {
+              "label": "return-1",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-2",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-3",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-4",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-5",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "collage page 6"
+              ]
+            },
+            {
+              "label": "return-6",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "collage page 6",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-7",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 6",
+                "evicted",
+                "collage page 8"
+              ]
+            },
+            {
+              "label": "return-8",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "collage page 8",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-9",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 8",
+                "evicted",
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "return-10",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "collage page 10"
+              ]
+            }
+          ],
+          "completeVisits": 0,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": null,
+          "fixedPacingMs": 20000
+        }
+      },
+      "blankViewports": 20
+    },
+    "after": {
+      "coldMedianMs": 147.77,
+      "coldPages": 10,
+      "viewportChecks": 20,
+      "sampledAppPeakMB": 83.936,
+      "sampledCombinedPeakMB": 191.304,
+      "sampledWebKitPeakCount": 5,
+      "competingBuildSamples": 0,
+      "scroll": {
+        "case": "collage-conductor-light",
+        "back": {
+          "visits": [
+            {
+              "label": "back-10",
+              "complete": true,
+              "waitMs": 0.289,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 9",
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "back-9",
+              "complete": true,
+              "waitMs": 23.594,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 8",
+                "collage page 9",
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "back-8",
+              "complete": true,
+              "waitMs": 25.133,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 7",
+                "collage page 8",
+                "collage page 9"
+              ]
+            },
+            {
+              "label": "back-7",
+              "complete": true,
+              "waitMs": 24.875,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 6",
+                "collage page 7",
+                "collage page 8"
+              ]
+            },
+            {
+              "label": "back-6",
+              "complete": true,
+              "waitMs": 29.283,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 5",
+                "collage page 6",
+                "collage page 7"
+              ]
+            },
+            {
+              "label": "back-5",
+              "complete": true,
+              "waitMs": 53.09,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 4",
+                "collage page 5",
+                "collage page 6"
+              ]
+            },
+            {
+              "label": "back-4",
+              "complete": true,
+              "waitMs": 49.763,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 3",
+                "collage page 4",
+                "collage page 5"
+              ]
+            },
+            {
+              "label": "back-3",
+              "complete": true,
+              "waitMs": 26.625,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 2",
+                "collage page 3",
+                "collage page 4"
+              ]
+            },
+            {
+              "label": "back-2",
+              "complete": true,
+              "waitMs": 23.913,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 1",
+                "collage page 2",
+                "collage page 3"
+              ]
+            },
+            {
+              "label": "back-1",
+              "complete": true,
+              "waitMs": 2.526,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 1",
+                "collage page 2"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 259.091,
+          "fixedPacingMs": 20000
+        },
+        "return": {
+          "visits": [
+            {
+              "label": "return-1",
+              "complete": true,
+              "waitMs": 0.836,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 1",
+                "collage page 2"
+              ]
+            },
+            {
+              "label": "return-2",
+              "complete": true,
+              "waitMs": 42.727,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 1",
+                "collage page 2",
+                "collage page 3"
+              ]
+            },
+            {
+              "label": "return-3",
+              "complete": true,
+              "waitMs": 46.605,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 2",
+                "collage page 3",
+                "collage page 4"
+              ]
+            },
+            {
+              "label": "return-4",
+              "complete": true,
+              "waitMs": 50.798,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 3",
+                "collage page 4",
+                "collage page 5"
+              ]
+            },
+            {
+              "label": "return-5",
+              "complete": true,
+              "waitMs": 38.703,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 4",
+                "collage page 5",
+                "collage page 6"
+              ]
+            },
+            {
+              "label": "return-6",
+              "complete": true,
+              "waitMs": 37.661,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 5",
+                "collage page 6",
+                "collage page 7"
+              ]
+            },
+            {
+              "label": "return-7",
+              "complete": true,
+              "waitMs": 44.315,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 6",
+                "collage page 7",
+                "collage page 8"
+              ]
+            },
+            {
+              "label": "return-8",
+              "complete": true,
+              "waitMs": 24.202,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 7",
+                "collage page 8",
+                "collage page 9"
+              ]
+            },
+            {
+              "label": "return-9",
+              "complete": true,
+              "waitMs": 30.39,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 8",
+                "collage page 9",
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "return-10",
+              "complete": true,
+              "waitMs": 0.799,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 9",
+                "collage page 10"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 317.036,
+          "fixedPacingMs": 20000
+        }
+      },
+      "blankViewports": 0
+    }
+  },
+  {
+    "case": "collage-thread-dark",
+    "before": {
+      "coldMedianMs": 144.312,
+      "coldPages": 10,
+      "viewportChecks": 20,
+      "sampledAppPeakMB": 47.073,
+      "sampledCombinedPeakMB": 198.727,
+      "sampledWebKitPeakCount": 5,
+      "competingBuildSamples": 0,
+      "scroll": {
+        "case": "collage-thread-dark",
+        "back": {
+          "visits": [
+            {
+              "label": "back-10",
+              "complete": true,
+              "waitMs": 1.272,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "back-9",
+              "complete": true,
+              "waitMs": 3.636,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 10",
+                "collage page 9"
+              ]
+            },
+            {
+              "label": "back-8",
+              "complete": true,
+              "waitMs": 4.132,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 9",
+                "collage page 8"
+              ]
+            },
+            {
+              "label": "back-7",
+              "complete": true,
+              "waitMs": 256.069,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 8",
+                "collage page 7"
+              ]
+            },
+            {
+              "label": "back-6",
+              "complete": true,
+              "waitMs": 174.876,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 7",
+                "collage page 6",
+                "collage page 5"
+              ]
+            },
+            {
+              "label": "back-5",
+              "complete": true,
+              "waitMs": 155.255,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 6",
+                "collage page 5",
+                "collage page 4"
+              ]
+            },
+            {
+              "label": "back-4",
+              "complete": true,
+              "waitMs": 2.484,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 5",
+                "collage page 4"
+              ]
+            },
+            {
+              "label": "back-3",
+              "complete": true,
+              "waitMs": 161.839,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 4",
+                "collage page 3"
+              ]
+            },
+            {
+              "label": "back-2",
+              "complete": true,
+              "waitMs": 192.106,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 3",
+                "collage page 2",
+                "collage page 1"
+              ]
+            },
+            {
+              "label": "back-1",
+              "complete": true,
+              "waitMs": 2.767,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 2",
+                "collage page 1"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 954.436,
+          "fixedPacingMs": 20000
+        },
+        "return": {
+          "visits": [
+            {
+              "label": "return-1",
+              "complete": true,
+              "waitMs": 1.059,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 2",
+                "collage page 1"
+              ]
+            },
+            {
+              "label": "return-2",
+              "complete": true,
+              "waitMs": 2.714,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 2",
+                "collage page 1",
+                "collage page 3"
+              ]
+            },
+            {
+              "label": "return-3",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "collage page 3",
+                "collage page 4"
+              ]
+            },
+            {
+              "label": "return-4",
+              "complete": true,
+              "waitMs": 143.056,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 3",
+                "collage page 4",
+                "collage page 5"
+              ]
+            },
+            {
+              "label": "return-5",
+              "complete": true,
+              "waitMs": 152.726,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 4",
+                "collage page 5",
+                "collage page 6"
+              ]
+            },
+            {
+              "label": "return-6",
+              "complete": true,
+              "waitMs": 159.038,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 5",
+                "collage page 6",
+                "collage page 7"
+              ]
+            },
+            {
+              "label": "return-7",
+              "complete": true,
+              "waitMs": 144.648,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 6",
+                "collage page 7",
+                "collage page 8"
+              ]
+            },
+            {
+              "label": "return-8",
+              "complete": true,
+              "waitMs": 127.619,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 8",
+                "collage page 9"
+              ]
+            },
+            {
+              "label": "return-9",
+              "complete": true,
+              "waitMs": 130.453,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 9",
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "return-10",
+              "complete": true,
+              "waitMs": 2.279,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 10"
+              ]
+            }
+          ],
+          "completeVisits": 9,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": null,
+          "fixedPacingMs": 20000
+        }
+      },
+      "blankViewports": 1
+    },
+    "after": {
+      "coldMedianMs": 136.728,
+      "coldPages": 10,
+      "viewportChecks": 20,
+      "sampledAppPeakMB": 87.311,
+      "sampledCombinedPeakMB": 199.152,
+      "sampledWebKitPeakCount": 5,
+      "competingBuildSamples": 0,
+      "scroll": {
+        "case": "collage-thread-dark",
+        "back": {
+          "visits": [
+            {
+              "label": "back-10",
+              "complete": true,
+              "waitMs": 1.309,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "back-9",
+              "complete": true,
+              "waitMs": 51.139,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 10",
+                "collage page 9"
+              ]
+            },
+            {
+              "label": "back-8",
+              "complete": true,
+              "waitMs": 71.742,
+              "cachedPreviews": 2,
+              "pages": [
+                "collage page 9",
+                "collage page 8"
+              ]
+            },
+            {
+              "label": "back-7",
+              "complete": true,
+              "waitMs": 40.499,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 8",
+                "collage page 7",
+                "collage page 6"
+              ]
+            },
+            {
+              "label": "back-6",
+              "complete": true,
+              "waitMs": 39.996,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 7",
+                "collage page 6",
+                "collage page 5"
+              ]
+            },
+            {
+              "label": "back-5",
+              "complete": true,
+              "waitMs": 60.276,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 6",
+                "collage page 5",
+                "collage page 4"
+              ]
+            },
+            {
+              "label": "back-4",
+              "complete": true,
+              "waitMs": 38.273,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 5",
+                "collage page 4",
+                "collage page 3"
+              ]
+            },
+            {
+              "label": "back-3",
+              "complete": true,
+              "waitMs": 47.069,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 4",
+                "collage page 3",
+                "collage page 2"
+              ]
+            },
+            {
+              "label": "back-2",
+              "complete": true,
+              "waitMs": 63.499,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 3",
+                "collage page 2",
+                "collage page 1"
+              ]
+            },
+            {
+              "label": "back-1",
+              "complete": true,
+              "waitMs": 1.08,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 2",
+                "collage page 1"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 414.882,
+          "fixedPacingMs": 20000
+        },
+        "return": {
+          "visits": [
+            {
+              "label": "return-1",
+              "complete": true,
+              "waitMs": 0.499,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 2",
+                "collage page 1"
+              ]
+            },
+            {
+              "label": "return-2",
+              "complete": true,
+              "waitMs": 45.415,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 2",
+                "collage page 1",
+                "collage page 3"
+              ]
+            },
+            {
+              "label": "return-3",
+              "complete": true,
+              "waitMs": 39.005,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 2",
+                "collage page 3",
+                "collage page 4"
+              ]
+            },
+            {
+              "label": "return-4",
+              "complete": true,
+              "waitMs": 40.15,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 3",
+                "collage page 4",
+                "collage page 5"
+              ]
+            },
+            {
+              "label": "return-5",
+              "complete": true,
+              "waitMs": 52.895,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 4",
+                "collage page 5",
+                "collage page 6"
+              ]
+            },
+            {
+              "label": "return-6",
+              "complete": true,
+              "waitMs": 41.269,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 5",
+                "collage page 6",
+                "collage page 7"
+              ]
+            },
+            {
+              "label": "return-7",
+              "complete": true,
+              "waitMs": 40.002,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 6",
+                "collage page 7",
+                "collage page 8"
+              ]
+            },
+            {
+              "label": "return-8",
+              "complete": true,
+              "waitMs": 57.541,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 8",
+                "collage page 9"
+              ]
+            },
+            {
+              "label": "return-9",
+              "complete": true,
+              "waitMs": 57.963,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 9",
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "return-10",
+              "complete": true,
+              "waitMs": 2.572,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 10"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 377.311,
+          "fixedPacingMs": 20000
+        }
+      },
+      "blankViewports": 0
+    }
+  },
+  {
+    "case": "collage-thread-light",
+    "before": {
+      "coldMedianMs": 143.557,
+      "coldPages": 10,
+      "viewportChecks": 20,
+      "sampledAppPeakMB": 47.285,
+      "sampledCombinedPeakMB": 205.64,
+      "sampledWebKitPeakCount": 5,
+      "competingBuildSamples": 0,
+      "scroll": {
+        "case": "collage-thread-light",
+        "back": {
+          "visits": [
+            {
+              "label": "back-10",
+              "complete": true,
+              "waitMs": 1.112,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "back-9",
+              "complete": true,
+              "waitMs": 74.797,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 10",
+                "collage page 9"
+              ]
+            },
+            {
+              "label": "back-8",
+              "complete": true,
+              "waitMs": 55.411,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 9",
+                "collage page 8"
+              ]
+            },
+            {
+              "label": "back-7",
+              "complete": true,
+              "waitMs": 174.858,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 8",
+                "collage page 7",
+                "collage page 6"
+              ]
+            },
+            {
+              "label": "back-6",
+              "complete": true,
+              "waitMs": 2.684,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 7",
+                "collage page 6"
+              ]
+            },
+            {
+              "label": "back-5",
+              "complete": true,
+              "waitMs": 209.585,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 6",
+                "collage page 5",
+                "collage page 4"
+              ]
+            },
+            {
+              "label": "back-4",
+              "complete": true,
+              "waitMs": 159.289,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 5",
+                "collage page 4",
+                "collage page 3"
+              ]
+            },
+            {
+              "label": "back-3",
+              "complete": true,
+              "waitMs": 151.424,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 4",
+                "collage page 3",
+                "collage page 2"
+              ]
+            },
+            {
+              "label": "back-2",
+              "complete": true,
+              "waitMs": 131.455,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 3",
+                "collage page 2",
+                "collage page 1"
+              ]
+            },
+            {
+              "label": "back-1",
+              "complete": true,
+              "waitMs": 2.793,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 2",
+                "collage page 1"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 963.408,
+          "fixedPacingMs": 20000
+        },
+        "return": {
+          "visits": [
+            {
+              "label": "return-1",
+              "complete": true,
+              "waitMs": 0.971,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 2",
+                "collage page 1"
+              ]
+            },
+            {
+              "label": "return-2",
+              "complete": true,
+              "waitMs": 3.164,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 2",
+                "collage page 1",
+                "collage page 3"
+              ]
+            },
+            {
+              "label": "return-3",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "collage page 3",
+                "collage page 4"
+              ]
+            },
+            {
+              "label": "return-4",
+              "complete": true,
+              "waitMs": 140.424,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 3",
+                "collage page 4",
+                "collage page 5"
+              ]
+            },
+            {
+              "label": "return-5",
+              "complete": true,
+              "waitMs": 142.785,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 4",
+                "collage page 5",
+                "collage page 6"
+              ]
+            },
+            {
+              "label": "return-6",
+              "complete": true,
+              "waitMs": 156.262,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 5",
+                "collage page 6",
+                "collage page 7"
+              ]
+            },
+            {
+              "label": "return-7",
+              "complete": true,
+              "waitMs": 135.232,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 6",
+                "collage page 7",
+                "collage page 8"
+              ]
+            },
+            {
+              "label": "return-8",
+              "complete": true,
+              "waitMs": 115.101,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 8",
+                "collage page 9"
+              ]
+            },
+            {
+              "label": "return-9",
+              "complete": true,
+              "waitMs": 155.184,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 9",
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "return-10",
+              "complete": true,
+              "waitMs": 2.461,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 10"
+              ]
+            }
+          ],
+          "completeVisits": 9,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": null,
+          "fixedPacingMs": 20000
+        }
+      },
+      "blankViewports": 1
+    },
+    "after": {
+      "coldMedianMs": 137.66,
+      "coldPages": 10,
+      "viewportChecks": 20,
+      "sampledAppPeakMB": 87.229,
+      "sampledCombinedPeakMB": 203.527,
+      "sampledWebKitPeakCount": 5,
+      "competingBuildSamples": 0,
+      "scroll": {
+        "case": "collage-thread-light",
+        "back": {
+          "visits": [
+            {
+              "label": "back-10",
+              "complete": true,
+              "waitMs": 1.303,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "back-9",
+              "complete": true,
+              "waitMs": 53.378,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 10",
+                "collage page 9"
+              ]
+            },
+            {
+              "label": "back-8",
+              "complete": true,
+              "waitMs": 74.676,
+              "cachedPreviews": 2,
+              "pages": [
+                "collage page 9",
+                "collage page 8"
+              ]
+            },
+            {
+              "label": "back-7",
+              "complete": true,
+              "waitMs": 42.078,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 8",
+                "collage page 7",
+                "collage page 6"
+              ]
+            },
+            {
+              "label": "back-6",
+              "complete": true,
+              "waitMs": 46.899,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 7",
+                "collage page 6",
+                "collage page 5"
+              ]
+            },
+            {
+              "label": "back-5",
+              "complete": true,
+              "waitMs": 41.797,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 6",
+                "collage page 5",
+                "collage page 4"
+              ]
+            },
+            {
+              "label": "back-4",
+              "complete": true,
+              "waitMs": 41.56,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 5",
+                "collage page 4",
+                "collage page 3"
+              ]
+            },
+            {
+              "label": "back-3",
+              "complete": true,
+              "waitMs": 45.159,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 4",
+                "collage page 3",
+                "collage page 2"
+              ]
+            },
+            {
+              "label": "back-2",
+              "complete": true,
+              "waitMs": 62.37,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 3",
+                "collage page 2",
+                "collage page 1"
+              ]
+            },
+            {
+              "label": "back-1",
+              "complete": true,
+              "waitMs": 3.232,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 2",
+                "collage page 1"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 412.452,
+          "fixedPacingMs": 20000
+        },
+        "return": {
+          "visits": [
+            {
+              "label": "return-1",
+              "complete": true,
+              "waitMs": 0.988,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 2",
+                "collage page 1"
+              ]
+            },
+            {
+              "label": "return-2",
+              "complete": true,
+              "waitMs": 44.249,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 2",
+                "collage page 1",
+                "collage page 3"
+              ]
+            },
+            {
+              "label": "return-3",
+              "complete": true,
+              "waitMs": 49.962,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 2",
+                "collage page 3",
+                "collage page 4"
+              ]
+            },
+            {
+              "label": "return-4",
+              "complete": true,
+              "waitMs": 46.528,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 3",
+                "collage page 4",
+                "collage page 5"
+              ]
+            },
+            {
+              "label": "return-5",
+              "complete": true,
+              "waitMs": 48.522,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 4",
+                "collage page 5",
+                "collage page 6"
+              ]
+            },
+            {
+              "label": "return-6",
+              "complete": true,
+              "waitMs": 40.442,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 5",
+                "collage page 6",
+                "collage page 7"
+              ]
+            },
+            {
+              "label": "return-7",
+              "complete": true,
+              "waitMs": 56.086,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 6",
+                "collage page 7",
+                "collage page 8"
+              ]
+            },
+            {
+              "label": "return-8",
+              "complete": true,
+              "waitMs": 47.784,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 8",
+                "collage page 9"
+              ]
+            },
+            {
+              "label": "return-9",
+              "complete": true,
+              "waitMs": 58.379,
+              "cachedPreviews": 1,
+              "pages": [
+                "collage page 9",
+                "collage page 10"
+              ]
+            },
+            {
+              "label": "return-10",
+              "complete": true,
+              "waitMs": 3.278,
+              "cachedPreviews": 0,
+              "pages": [
+                "collage page 10"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 396.218,
+          "fixedPacingMs": 20000
+        }
+      },
+      "blankViewports": 0
+    }
+  },
+  {
+    "case": "light-conductor-dark",
+    "before": {
+      "coldMedianMs": 188.142,
+      "coldPages": 10,
+      "viewportChecks": 20,
+      "sampledAppPeakMB": 83.772,
+      "sampledCombinedPeakMB": 180.688,
+      "sampledWebKitPeakCount": 5,
+      "competingBuildSamples": 0,
+      "scroll": {
+        "case": "light-conductor-dark",
+        "back": {
+          "visits": [
+            {
+              "label": "back-10",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "light page 10"
+              ]
+            },
+            {
+              "label": "back-9",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 8",
+                "evicted",
+                "light page 10"
+              ]
+            },
+            {
+              "label": "back-8",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "light page 8",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-7",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 6",
+                "evicted",
+                "light page 8"
+              ]
+            },
+            {
+              "label": "back-6",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "light page 6",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-5",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "light page 6"
+              ]
+            },
+            {
+              "label": "back-4",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-3",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-2",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "back-1",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted"
+              ]
+            }
+          ],
+          "completeVisits": 0,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": null,
+          "fixedPacingMs": 20000
+        },
+        "return": {
+          "visits": [
+            {
+              "label": "return-1",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-2",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-3",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-4",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-5",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "evicted",
+                "light page 6"
+              ]
+            },
+            {
+              "label": "return-6",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "light page 6",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-7",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 6",
+                "evicted",
+                "light page 8"
+              ]
+            },
+            {
+              "label": "return-8",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "light page 8",
+                "evicted"
+              ]
+            },
+            {
+              "label": "return-9",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 8",
+                "evicted",
+                "light page 10"
+              ]
+            },
+            {
+              "label": "return-10",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "light page 10"
+              ]
+            }
+          ],
+          "completeVisits": 0,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": null,
+          "fixedPacingMs": 20000
+        }
+      },
+      "blankViewports": 20
+    },
+    "after": {
+      "coldMedianMs": 137.95,
+      "coldPages": 10,
+      "viewportChecks": 20,
+      "sampledAppPeakMB": 72.926,
+      "sampledCombinedPeakMB": 166.761,
+      "sampledWebKitPeakCount": 5,
+      "competingBuildSamples": 0,
+      "scroll": {
+        "case": "light-conductor-dark",
+        "back": {
+          "visits": [
+            {
+              "label": "back-10",
+              "complete": true,
+              "waitMs": 0.783,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 9",
+                "light page 10"
+              ]
+            },
+            {
+              "label": "back-9",
+              "complete": true,
+              "waitMs": 37.849,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 8",
+                "light page 9",
+                "light page 10"
+              ]
+            },
+            {
+              "label": "back-8",
+              "complete": true,
+              "waitMs": 37.571,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 7",
+                "light page 8",
+                "light page 9"
+              ]
+            },
+            {
+              "label": "back-7",
+              "complete": true,
+              "waitMs": 46.047,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 6",
+                "light page 7",
+                "light page 8"
+              ]
+            },
+            {
+              "label": "back-6",
+              "complete": true,
+              "waitMs": 50.925,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 5",
+                "light page 6",
+                "light page 7"
+              ]
+            },
+            {
+              "label": "back-5",
+              "complete": true,
+              "waitMs": 38.585,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 4",
+                "light page 5",
+                "light page 6"
+              ]
+            },
+            {
+              "label": "back-4",
+              "complete": true,
+              "waitMs": 50.169,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 3",
+                "light page 4",
+                "light page 5"
+              ]
+            },
+            {
+              "label": "back-3",
+              "complete": true,
+              "waitMs": 37.701,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 2",
+                "light page 3",
+                "light page 4"
+              ]
+            },
+            {
+              "label": "back-2",
+              "complete": true,
+              "waitMs": 50.695,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 1",
+                "light page 2",
+                "light page 3"
+              ]
+            },
+            {
+              "label": "back-1",
+              "complete": true,
+              "waitMs": 2.423,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 1",
+                "light page 2"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 352.748,
+          "fixedPacingMs": 20000
+        },
+        "return": {
+          "visits": [
+            {
+              "label": "return-1",
+              "complete": true,
+              "waitMs": 0.801,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 1",
+                "light page 2"
+              ]
+            },
+            {
+              "label": "return-2",
+              "complete": true,
+              "waitMs": 44.372,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 1",
+                "light page 2",
+                "light page 3"
+              ]
+            },
+            {
+              "label": "return-3",
+              "complete": true,
+              "waitMs": 36.042,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 2",
+                "light page 3",
+                "light page 4"
+              ]
+            },
+            {
+              "label": "return-4",
+              "complete": true,
+              "waitMs": 33.755,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 3",
+                "light page 4",
+                "light page 5"
+              ]
+            },
+            {
+              "label": "return-5",
+              "complete": true,
+              "waitMs": 38.728,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 4",
+                "light page 5",
+                "light page 6"
+              ]
+            },
+            {
+              "label": "return-6",
+              "complete": true,
+              "waitMs": 36.268,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 5",
+                "light page 6",
+                "light page 7"
+              ]
+            },
+            {
+              "label": "return-7",
+              "complete": true,
+              "waitMs": 54.396,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 6",
+                "light page 7",
+                "light page 8"
+              ]
+            },
+            {
+              "label": "return-8",
+              "complete": true,
+              "waitMs": 37.253,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 7",
+                "light page 8",
+                "light page 9"
+              ]
+            },
+            {
+              "label": "return-9",
+              "complete": true,
+              "waitMs": 47.106,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 8",
+                "light page 9",
+                "light page 10"
+              ]
+            },
+            {
+              "label": "return-10",
+              "complete": true,
+              "waitMs": 2.213,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 9",
+                "light page 10"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 330.934,
+          "fixedPacingMs": 20000
+        }
+      },
+      "blankViewports": 0
+    }
+  },
+  {
+    "case": "light-thread-dark",
+    "before": {
+      "coldMedianMs": 144.082,
+      "coldPages": 10,
+      "viewportChecks": 20,
+      "sampledAppPeakMB": 87.131,
+      "sampledCombinedPeakMB": 173.036,
+      "sampledWebKitPeakCount": 5,
+      "competingBuildSamples": 0,
+      "scroll": {
+        "case": "light-thread-dark",
+        "back": {
+          "visits": [
+            {
+              "label": "back-10",
+              "complete": true,
+              "waitMs": 1.309,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 10",
+                "light page 9"
+              ]
+            },
+            {
+              "label": "back-9",
+              "complete": true,
+              "waitMs": 3.756,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 10",
+                "light page 9",
+                "light page 8"
+              ]
+            },
+            {
+              "label": "back-8",
+              "complete": true,
+              "waitMs": 152.758,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 9",
+                "light page 8",
+                "light page 7"
+              ]
+            },
+            {
+              "label": "back-7",
+              "complete": true,
+              "waitMs": 137.666,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 8",
+                "light page 7",
+                "light page 6"
+              ]
+            },
+            {
+              "label": "back-6",
+              "complete": true,
+              "waitMs": 128.63,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 7",
+                "light page 6",
+                "light page 5"
+              ]
+            },
+            {
+              "label": "back-5",
+              "complete": true,
+              "waitMs": 141.591,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 6",
+                "light page 5",
+                "light page 4"
+              ]
+            },
+            {
+              "label": "back-4",
+              "complete": true,
+              "waitMs": 141.548,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 5",
+                "light page 4",
+                "light page 3"
+              ]
+            },
+            {
+              "label": "back-3",
+              "complete": true,
+              "waitMs": 144.057,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 4",
+                "light page 3",
+                "light page 2"
+              ]
+            },
+            {
+              "label": "back-2",
+              "complete": true,
+              "waitMs": 157.026,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 3",
+                "light page 2",
+                "light page 1"
+              ]
+            },
+            {
+              "label": "back-1",
+              "complete": true,
+              "waitMs": 2.349,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 2",
+                "light page 1"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 1010.69,
+          "fixedPacingMs": 20000
+        },
+        "return": {
+          "visits": [
+            {
+              "label": "return-1",
+              "complete": true,
+              "waitMs": 1.171,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 2",
+                "light page 1"
+              ]
+            },
+            {
+              "label": "return-2",
+              "complete": true,
+              "waitMs": 2.155,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 3",
+                "light page 2",
+                "light page 1"
+              ]
+            },
+            {
+              "label": "return-3",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "light page 2",
+                "light page 4"
+              ]
+            },
+            {
+              "label": "return-4",
+              "complete": false,
+              "waitMs": null,
+              "cachedPreviews": 0,
+              "pages": [
+                "evicted",
+                "light page 4",
+                "light page 5"
+              ]
+            },
+            {
+              "label": "return-5",
+              "complete": true,
+              "waitMs": 128.344,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 4",
+                "light page 5",
+                "light page 6"
+              ]
+            },
+            {
+              "label": "return-6",
+              "complete": true,
+              "waitMs": 142.531,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 5",
+                "light page 6",
+                "light page 7"
+              ]
+            },
+            {
+              "label": "return-7",
+              "complete": true,
+              "waitMs": 151.309,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 6",
+                "light page 7",
+                "light page 8"
+              ]
+            },
+            {
+              "label": "return-8",
+              "complete": true,
+              "waitMs": 147.752,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 7",
+                "light page 8",
+                "light page 9"
+              ]
+            },
+            {
+              "label": "return-9",
+              "complete": true,
+              "waitMs": 133.739,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 8",
+                "light page 9",
+                "light page 10"
+              ]
+            },
+            {
+              "label": "return-10",
+              "complete": true,
+              "waitMs": 2.553,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 9",
+                "light page 10"
+              ]
+            }
+          ],
+          "completeVisits": 8,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": null,
+          "fixedPacingMs": 20000
+        }
+      },
+      "blankViewports": 2
+    },
+    "after": {
+      "coldMedianMs": 145.762,
+      "coldPages": 10,
+      "viewportChecks": 20,
+      "sampledAppPeakMB": 87.295,
+      "sampledCombinedPeakMB": 170.579,
+      "sampledWebKitPeakCount": 5,
+      "competingBuildSamples": 0,
+      "scroll": {
+        "case": "light-thread-dark",
+        "back": {
+          "visits": [
+            {
+              "label": "back-10",
+              "complete": true,
+              "waitMs": 1.431,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 10",
+                "light page 9"
+              ]
+            },
+            {
+              "label": "back-9",
+              "complete": true,
+              "waitMs": 61.401,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 10",
+                "light page 9",
+                "light page 8"
+              ]
+            },
+            {
+              "label": "back-8",
+              "complete": true,
+              "waitMs": 65.278,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 9",
+                "light page 8",
+                "light page 7"
+              ]
+            },
+            {
+              "label": "back-7",
+              "complete": true,
+              "waitMs": 44.115,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 8",
+                "light page 7",
+                "light page 6"
+              ]
+            },
+            {
+              "label": "back-6",
+              "complete": true,
+              "waitMs": 39.16,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 7",
+                "light page 6",
+                "light page 5"
+              ]
+            },
+            {
+              "label": "back-5",
+              "complete": true,
+              "waitMs": 39.221,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 6",
+                "light page 5",
+                "light page 4"
+              ]
+            },
+            {
+              "label": "back-4",
+              "complete": true,
+              "waitMs": 49.873,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 5",
+                "light page 4",
+                "light page 3"
+              ]
+            },
+            {
+              "label": "back-3",
+              "complete": true,
+              "waitMs": 42.43,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 4",
+                "light page 3",
+                "light page 2"
+              ]
+            },
+            {
+              "label": "back-2",
+              "complete": true,
+              "waitMs": 39.234,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 3",
+                "light page 2",
+                "light page 1"
+              ]
+            },
+            {
+              "label": "back-1",
+              "complete": true,
+              "waitMs": 3.043,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 2",
+                "light page 1"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 385.186,
+          "fixedPacingMs": 20000
+        },
+        "return": {
+          "visits": [
+            {
+              "label": "return-1",
+              "complete": true,
+              "waitMs": 0.999,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 2",
+                "light page 1"
+              ]
+            },
+            {
+              "label": "return-2",
+              "complete": true,
+              "waitMs": 51.283,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 3",
+                "light page 2",
+                "light page 1"
+              ]
+            },
+            {
+              "label": "return-3",
+              "complete": true,
+              "waitMs": 43.146,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 3",
+                "light page 2",
+                "light page 4"
+              ]
+            },
+            {
+              "label": "return-4",
+              "complete": true,
+              "waitMs": 48.535,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 3",
+                "light page 4",
+                "light page 5"
+              ]
+            },
+            {
+              "label": "return-5",
+              "complete": true,
+              "waitMs": 28.616,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 4",
+                "light page 5",
+                "light page 6"
+              ]
+            },
+            {
+              "label": "return-6",
+              "complete": true,
+              "waitMs": 59.367,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 5",
+                "light page 6",
+                "light page 7"
+              ]
+            },
+            {
+              "label": "return-7",
+              "complete": true,
+              "waitMs": 56.512,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 6",
+                "light page 7",
+                "light page 8"
+              ]
+            },
+            {
+              "label": "return-8",
+              "complete": true,
+              "waitMs": 58.341,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 7",
+                "light page 8",
+                "light page 9"
+              ]
+            },
+            {
+              "label": "return-9",
+              "complete": true,
+              "waitMs": 53.401,
+              "cachedPreviews": 1,
+              "pages": [
+                "light page 8",
+                "light page 9",
+                "light page 10"
+              ]
+            },
+            {
+              "label": "return-10",
+              "complete": true,
+              "waitMs": 2.806,
+              "cachedPreviews": 0,
+              "pages": [
+                "light page 9",
+                "light page 10"
+              ]
+            }
+          ],
+          "completeVisits": 10,
+          "totalVisits": 10,
+          "cumulativeReadyWaitMs": 403.006,
+          "fixedPacingMs": 20000
+        }
+      },
+      "blankViewports": 0
+    }
+  }
+]

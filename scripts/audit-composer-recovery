@@ -1,0 +1,133 @@
+#!/usr/bin/python3
+"""Opt-in, bounded extraction harness. Run only in the parent's execution lane.
+
+Uses current ComposerController method bodies, with in-memory collaborators.
+Exit 1 means a desired ownership invariant failed. No RPC, app, or account runs.
+"""
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+
+if os.environ.get("CW_COMPOSER_AUDIT_REPRO") != "1":
+    raise SystemExit("Opt in with CW_COMPOSER_AUDIT_REPRO=1; see composer audit report.")
+
+root = Path(__file__).resolve().parent.parent
+source = (root / "App/Sources/ComposerController.swift").read_text()
+
+
+def method(name):
+    # These methods contain no brace-bearing string literals. Fail closed on edits.
+    start = source.index("    private func " + name + "(")
+    opening = source.index("{", start)
+    depth = 1
+    end = opening + 1
+    while depth:
+        if source[end] == "{":
+            depth += 1
+        elif source[end] == "}":
+            depth -= 1
+        end += 1
+    return source[start:end].replace("private func ", "func ", 1)
+
+
+swift = r'''
+import Foundation
+typealias MessageId = String
+struct DraftSession: Equatable { var projectId: String }
+enum Target: Equatable { case draft(DraftSession), thread(String) }
+struct Project { struct ID { var rawValue: String }; var id: ID; var title: String }
+struct Snapshot { var projects: [Project] = [] }
+struct Sidebar { var snapshot: Snapshot? }
+final class Panel { func setDraft(projectTitle: String?, isScratch: Bool) {} }
+final class Editor { var text = "" }
+struct RPCClientError: Error { var isTransport: Bool }
+enum ComposerFeedback {
+    enum Failure { case command(String?, fallback: String), send(String?) }
+}
+enum ComposerLogic { enum SendMode { case queue } }
+struct Attachment {
+    enum Status { case uploading(Double), ready, failed }
+    var status: Status
+}
+enum ComposerAttachmentRules {
+    static func retryableFailures(_ list: [Attachment]) -> [Attachment] {
+        list.filter { if case .failed = $0.status { return true }; return false }
+    }
+}
+final class Errors { func set(_ key: String, _ message: String) {} }
+final class Harness {
+    var optimistic: [(id: MessageId)] = []
+    var pendingMessageId: MessageId?
+    var target: Target? = .thread("B")
+    var sidebar: Sidebar?
+    var panel = Panel()
+    var composer = Editor()
+    var draftKey: String? = "B"
+    var prompts: [String: String] = [:]
+    var draftAttachments: [String: [Attachment]] = [:]
+    var sendAfterRetry: [String: (text: String, mode: ComposerLogic.SendMode, background: Bool)] = [:]
+    var threadErrors = Errors()
+    var sent: [String] = []
+    static func message(_ error: Error) -> String? { "rejected" }
+    func isScratch(_ project: Project) -> Bool { false }
+    func refresh() {}
+    func report(_ failure: ComposerFeedback.Failure, key: String?) {}
+    // Persistence collaborator follows remember's key selection, controller:1248-1253.
+    func remember(_ text: String) {
+        if let key = draftKey { prompts[key] = text.isEmpty ? nil : text }
+    }
+    // Dispatch collaborator captures the submitted text and the actual send's clear,
+    // controller:1847-1854. It deliberately performs no networking.
+    func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool) {
+        sent.append(text)
+        composer.text = ""
+        remember("")
+    }
+'''
+# Swift does not have one-element labeled tuples.
+swift = swift.replace('var optimistic: [(id: MessageId)] = []',
+                      'struct Echo { var id: MessageId }; var optimistic: [Echo] = []')
+swift += method("sendFailed") + "\n" + method("resumeSendAfterRetry") + "\n}\n"
+swift += r'''
+var failures = 0
+func check(_ safe: Bool, _ label: String) {
+    print("\(safe ? "PASS" : "FAIL") \(label)")
+    if !safe { failures += 1 }
+}
+let emptyB = Harness()
+emptyB.sendFailed(RPCClientError(isTransport: false), messageId: "m-A", text: "A-only prompt", draft: nil, key: "A")
+check(emptyB.composer.text.isEmpty && emptyB.prompts["B"] == nil,
+      "A failure must not write A's prompt into B")
+check(emptyB.prompts["A"] == "A-only prompt", "A failure must recover A's original prompt")
+
+let typedB = Harness()
+typedB.composer.text = "B's newer draft"
+typedB.prompts["B"] = typedB.composer.text
+typedB.sendFailed(RPCClientError(isTransport: false), messageId: "m-A", text: "A-only prompt", draft: nil, key: "A")
+check(typedB.prompts["A"] == "A-only prompt", "A's prompt must survive while B contains text")
+
+let retry = Harness()
+retry.composer.text = "newer typing after Send"
+retry.prompts["B"] = retry.composer.text
+retry.draftAttachments["B"] = [Attachment(status: .ready)]
+retry.sendAfterRetry["B"] = ("original snapshot", .queue, false)
+retry.resumeSendAfterRetry("B")
+check(retry.composer.text == "newer typing after Send" || retry.sent.contains("newer typing after Send"),
+      "retry completion must preserve newer typing or send it by an explicit policy")
+print("ownership invariant failures: \(failures)")
+exit(failures == 0 ? 0 : 1)
+'''
+
+sandbox = Path.home() / "CandyWrapper-research/sandbox"
+if not sandbox.is_dir():
+    raise SystemExit("Sandbox directory is missing; do not run against a live home.")
+with tempfile.TemporaryDirectory(prefix="composer-audit-", dir=sandbox) as directory:
+    directory = Path(directory)
+    path = directory / "main.swift"
+    binary = directory / "repro"
+    path.write_text(swift)
+    subprocess.run(["xcrun", "swiftc", str(path), "-o", str(binary)],
+                   check=True, timeout=120)
+    result = subprocess.run([str(binary)], timeout=15)
+    raise SystemExit(result.returncode)

@@ -38,6 +38,8 @@ public enum RPCClientError: Error, Sendable, Equatable, CustomStringConvertible 
 /// Frames are decoded on a detached task, so neither the main thread nor this actor parses JSON.
 /// Writes go through one ordered outbox so an `Ack` never blocks the consumer that caused it.
 public actor RPCConnection {
+    /// The descriptor checked while opening this socket, when the connector supplies it.
+    public nonisolated let serverVersion: String?
     private let socket: any RPCSocket
     private var nextID = 1
     private var unary: [RPCRequestID: CheckedContinuation<JSONValue, Error>] = [:]
@@ -70,13 +72,14 @@ public actor RPCConnection {
     private var watchGeneration = 0
     private let traceNumber = RPCTrace.connectionNumber()
 
-    public init(socket: any RPCSocket, livenessInterval: Duration = .seconds(5)) {
-        self.init(socket: socket, livenessInterval: livenessInterval, clock: .continuous)
+    public init(socket: any RPCSocket, livenessInterval: Duration = .seconds(5), serverVersion: String? = nil) {
+        self.init(socket: socket, livenessInterval: livenessInterval, clock: .continuous, serverVersion: serverVersion)
     }
 
     /// `clock` drives the watchdog; tests step it by hand.
-    init(socket: any RPCSocket, livenessInterval: Duration, clock: SleepClock) {
+    init(socket: any RPCSocket, livenessInterval: Duration, clock: SleepClock, serverVersion: String? = nil) {
         self.socket = socket
+        self.serverVersion = serverVersion
         self.livenessInterval = livenessInterval
         self.clock = clock
         lastInbound = clock.now()

@@ -708,7 +708,12 @@ final class SidebarCommands {
         let surviving = all.filter { $0.id == id || !deleting.contains($0.id) }
         let project = snapshot?.projects.first { $0.id == thread.projectId }
         let config = threads.composer.config(env)
-        let orphan = SidebarModel.orphanedWorktreePath(surviving, threadId: id)
+        var orphan = SidebarModel.orphanedWorktreePath(surviving, threadId: id)
+        if let path = orphan, environments.hasPartialShell(env) {
+            // T3 67c3afbd58, orchestrationV2.ts:3494-3498: omitted children still own worktrees.
+            let owners = try? await environments.worktreeThreadIds(env, path: path)
+            if owners?.subtracting(deleting.union([id])).isEmpty != true { orphan = nil }
+        }
         let scratchRoot = config?.scratchWorkspaceRoot.map(SidebarModel.normalizeProjectPath)
         let isScratch = project.map { scratchRoot == SidebarModel.normalizeProjectPath($0.workspaceRoot) } ?? false
         var removeWorktree = false
@@ -734,6 +739,10 @@ final class SidebarCommands {
             if let fallback { threads.open(fallback) } else { threads.newThread(in: project) }
         }
         guard removeWorktree, let orphan, let project else { return .deleted }
+        if environments.hasPartialShell(env) {
+            guard let owners = try? await environments.worktreeThreadIds(env, path: orphan),
+                  owners.isEmpty else { return .deleted }
+        }
         do {
             _ = try await environments.request(env, "vcs.removeWorktree",
                                                .object(["cwd": .string(project.workspaceRoot), "path": .string(orphan), "force": .bool(true)]))

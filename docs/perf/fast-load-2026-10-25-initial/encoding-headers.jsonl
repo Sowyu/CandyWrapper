@@ -1,0 +1,20 @@
+{"accept-encoding": "gzip, deflate", "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "3473"}
+{"content-encoding": "gzip", "content-length": "646", "direction": "down", "event": "headers", "server": "3473", "status": "200"}
+{"accept-encoding": "gzip, deflate", "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "3473"}
+{"content-length": "244", "direction": "down", "event": "headers", "server": "3473", "status": "200"}
+{"accept-encoding": "gzip, deflate", "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "upgrade": "websocket"}
+{"direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "3473", "status": "101", "upgrade": "websocket"}
+{"accept-encoding": "gzip, deflate", "direction": "up", "event": "headers", "method": "GET", "path": "/api/orchestration/threads/fast-load-big-thread/bounded", "server": "3473"}
+{"content-encoding": "gzip", "content-length": "374270", "direction": "down", "event": "headers", "server": "3473", "status": "200"}
+{"accept-encoding": "gzip, deflate", "direction": "up", "event": "headers", "method": "GET", "path": "/api/orchestration/shell", "server": "3473"}
+{"content-encoding": "gzip", "content-length": "30226", "direction": "down", "event": "headers", "server": "3473", "status": "200"}
+{"accept-encoding": "gzip, deflate", "direction": "up", "event": "headers", "method": "GET", "path": "/.well-known/t3/environment", "server": "main"}
+{"content-encoding": "gzip", "content-length": "628", "direction": "down", "event": "headers", "server": "main", "status": "200"}
+{"accept-encoding": "gzip, deflate", "content-length": "0", "direction": "up", "event": "headers", "method": "POST", "path": "/api/auth/websocket-ticket", "server": "main"}
+{"content-length": "244", "direction": "down", "event": "headers", "server": "main", "status": "200"}
+{"accept-encoding": "gzip, deflate", "direction": "up", "event": "headers", "method": "GET", "path": "/ws", "sec-websocket-extensions": "permessage-deflate", "server": "main", "upgrade": "websocket"}
+{"direction": "down", "event": "headers", "sec-websocket-extensions": "permessage-deflate", "server": "main", "status": "101", "upgrade": "websocket"}
+{"accept-encoding": "gzip, deflate", "direction": "up", "event": "headers", "method": "GET", "path": "/api/orchestration/threads/fast-load-big-thread/bounded", "server": "main"}
+{"content-encoding": "gzip", "content-length": "39578", "direction": "down", "event": "headers", "server": "main", "status": "200"}
+{"accept-encoding": "gzip, deflate", "direction": "up", "event": "headers", "method": "GET", "path": "/api/orchestration/shell", "server": "main"}
+{"content-encoding": "gzip", "content-length": "3803", "direction": "down", "event": "headers", "server": "main", "status": "200"}

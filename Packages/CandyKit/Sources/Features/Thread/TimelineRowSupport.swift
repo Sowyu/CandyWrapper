@@ -109,29 +109,10 @@ final class TimelineContext {
     var markdownChoices: [String: MarkdownView.LayoutChoices] = [:]
     var now: () -> Date = Date.init
 
-    /// Loaded HTML render pages whose rows were recycled, by attachment id, for the next row that shows the render.
-    // ponytail: bounded by ThreadWebFrameBudget.limit live pages app-wide (LRU); raise it if threads with many renders still reload on scroll
-    private var pages: [String: ThreadWebFrameView] = [:]
+    let htmlCache = HtmlRenderWebCache()
 
-    func park(_ page: ThreadWebFrameView, for id: String) {
-        if let old = pages[id], old !== page { old.release() }
-        pages[id] = page
-        page.onMessage = nil
-        page.onEvicted = { [weak self, weak page] in if let self, self.pages[id] === page { self.pages[id] = nil } }
-    }
-
-    func takePage(_ id: String) -> ThreadWebFrameView? {
-        guard let page = pages.removeValue(forKey: id), page.isLive else { return nil }
-        return page
-    }
-
-    /// The timeline hid or changed thread: parked pages go.
-    func releasePages() {
-        for page in pages.values { page.release() }
-        pages = [:]
-    }
-
-    var parkedPages: Int { pages.count }
+    /// The timeline hid or changed thread: the pixels and shared HTTP cache go too.
+    func releasePages() { htmlCache.setActive(false) }
 
     isolated deinit { releasePages() }
 

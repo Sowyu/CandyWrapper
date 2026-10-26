@@ -527,6 +527,9 @@ extension ArraySlice {
             case .all, .thread: touched = rows.count
             }
             widest = max(widest, touched)
+            if touched > 12, ProcessInfo.processInfo.environment["CW_STRESS_VERBOSE"] != nil {
+                print("stress wide step \(steps): \(batch.map(ThreadStressRun.describe)); tail \(rows.suffix(touched).map { StressInvariants.kind($0) + ":" + $0.id })")
+            }
             #expect(touched <= 12, "step \(steps): \(touched) of \(rows.count) rows changed (\(String(describing: result?.change)))")
             if changes.projectionChanged, changes.onlyStreamingText {
                 textSteps += 1

@@ -12,12 +12,13 @@ public struct ShellChangeSet: Sendable, Equatable {
     public var threadsRemoved: Set<ThreadId> = []
     /// The batch held a `synchronized` marker: the initial snapshot and replay are complete.
     public var synchronized = false
+    public var metadataChanged = false
 
     public init() {}
 
     public var isEmpty: Bool {
         projectsInserted.isEmpty && projectsUpdated.isEmpty && projectsRemoved.isEmpty
-            && threadsInserted.isEmpty && threadsUpdated.isEmpty && threadsRemoved.isEmpty && !synchronized
+            && threadsInserted.isEmpty && threadsUpdated.isEmpty && threadsRemoved.isEmpty && !synchronized && !metadataChanged
     }
 
     /// Folds a later change set into this one, as if both batches were one.
@@ -27,6 +28,7 @@ public struct ShellChangeSet: Sendable, Equatable {
         Self.fold(&threadsInserted, &threadsUpdated, &threadsRemoved,
                   later.threadsInserted, later.threadsUpdated, later.threadsRemoved)
         synchronized = synchronized || later.synchronized
+        metadataChanged = metadataChanged || later.metadataChanged
     }
 
     private static func fold<ID>(
@@ -135,6 +137,83 @@ public enum ShellReduction {
 public struct ShellReducer: Sendable {
     public private(set) var snapshot: ShellSnapshot?
     public private(set) var isSynchronized = false
+    public private(set) var generation = 0
+    private var supplemental: [String: ShellThreadRead] = [:]
+    private var changedAt: [ThreadId: Int] = [:]
+    public private(set) var countsInvalidatedAt = 0
+
+    /// A verified warm resume retains authoritative rows/cursor, but demand reads belong to a new
+    /// connection generation (T3 connection-runtime.md:86-89).
+    @discardableResult
+    public mutating func resumed() -> ShellChangeSet {
+        let before = displaySnapshot?.threads ?? []
+        generation += 1
+        supplemental = [:]
+        changedAt = [:]
+        countsInvalidatedAt = snapshot?.snapshotSequence ?? 0
+        var changes = ShellChangeSet()
+        let after = displaySnapshot?.threads ?? []
+        Self.diff(Set(before.map(\.id) + after.map(\.id)), before, after,
+                  &changes.threadsInserted, &changes.threadsUpdated, &changes.threadsRemoved)
+        changes.metadataChanged = true
+        return changes
+    }
+
+    /// Demand reads never change the replay cursor or the cached authoritative shell.
+    /// T3 5b35402623, client-runtime/state/threadFamilies.ts:69-89.
+    public var displaySnapshot: ShellSnapshot? {
+        guard var result = snapshot else { return nil }
+        guard !supplemental.isEmpty else { return result }
+        guard !supplemental.isEmpty else { return result }
+        let base = Set(result.threads.map(\.id))
+        var additions: [ThreadId: (Int, ThreadShell)] = [:]
+        for read in supplemental.values {
+            for thread in read.threads where !base.contains(thread.id) && (changedAt[thread.id] ?? -1) <= read.snapshotSequence {
+                if (additions[thread.id]?.0 ?? -1) <= read.snapshotSequence { additions[thread.id] = (read.snapshotSequence, thread) }
+            }
+        }
+        if !additions.isEmpty { result.threads += additions.values.map(\.1).sorted { $0.id.rawValue < $1.id.rawValue } }
+        return result
+    }
+
+    @discardableResult
+    public mutating func mount(_ read: ShellThreadRead?, key: String, generation: Int) -> ShellChangeSet {
+        guard generation == self.generation, generation > 0 else { return ShellChangeSet() }
+        guard supplemental[key] != read else { return ShellChangeSet() }
+        let before = displaySnapshot?.threads ?? []
+        let metadataChanged = supplemental[key] != read
+        supplemental[key] = read
+        let after = displaySnapshot?.threads ?? []
+        var changes = ShellChangeSet()
+        changes.metadataChanged = metadataChanged
+        Self.diff(Set(before.map(\.id) + after.map(\.id)), before, after,
+                  &changes.threadsInserted, &changes.threadsUpdated, &changes.threadsRemoved)
+        return changes
+    }
+
+    public mutating func unmount(prefix: String, generation: Int) -> ShellChangeSet {
+        guard generation == self.generation else { return ShellChangeSet() }
+        guard supplemental.keys.contains(where: { $0.hasPrefix(prefix) }) else { return ShellChangeSet() }
+        let before = displaySnapshot?.threads ?? []
+        supplemental = supplemental.filter { !$0.key.hasPrefix(prefix) }
+        let after = displaySnapshot?.threads ?? []
+        var changes = ShellChangeSet()
+        Self.diff(Set(before.map(\.id) + after.map(\.id)), before, after,
+                  &changes.threadsInserted, &changes.threadsUpdated, &changes.threadsRemoved)
+        return changes
+    }
+
+    @discardableResult
+    public mutating func updateCounts(_ page: OlderSettledPage, generation: Int) -> ShellChangeSet {
+        var changes = ShellChangeSet()
+        guard generation == self.generation, page.snapshotSequence >= countsInvalidatedAt,
+              var cut = snapshot?.olderSettled, page.snapshotSequence >= cut.asOfSequence else { return changes }
+        cut.counts = page.counts
+        cut.asOfSequence = page.snapshotSequence
+        changes.metadataChanged = snapshot?.olderSettled != cut
+        snapshot?.olderSettled = cut
+        return changes
+    }
 
     public init(snapshot: ShellSnapshot? = nil) {
         self.snapshot = snapshot
@@ -142,6 +221,9 @@ public struct ShellReducer: Sendable {
 
     /// The resume cursor for `orchestration.subscribeShell`. Nil until the first snapshot.
     public var afterSequence: Int? { snapshot?.snapshotSequence }
+    public func canResume(omissions: ShellOmissions) -> Bool {
+        generation > 0 && snapshot?.omissions == omissions
+    }
 
     /// Applies a batch in order and returns what changed.
     ///
@@ -150,6 +232,7 @@ public struct ShellReducer: Sendable {
     @discardableResult
     public mutating func apply<S: Sequence>(_ items: S) -> ShellChangeSet where S.Element == ShellStreamItem {
         let before = snapshot
+        let beforeDisplay = displaySnapshot
         var touchedProjects = Set<ProjectId>()
         var touchedThreads = Set<ThreadId>()
         var changes = ShellChangeSet()
@@ -158,6 +241,15 @@ public struct ShellReducer: Sendable {
             switch item {
             case .snapshot(let incoming, let roots):
                 let previous = snapshot
+                if roots == nil {
+                    touchedThreads.formUnion(beforeDisplay?.threads.map(\.id) ?? [])
+                    generation += 1
+                    supplemental = [:]
+                    changedAt = [:]
+                    countsInvalidatedAt = incoming.snapshotSequence
+                    isSynchronized = false
+                    changes.metadataChanged = true
+                }
                 snapshot = ShellReduction.mergeShellSnapshotProjects(
                     previous: previous, next: incoming, resolvedRepositoryIdentityRoots: roots)
                 touchedProjects.formUnion((previous?.projects ?? []).map(\.id))
@@ -182,9 +274,23 @@ public struct ShellReducer: Sendable {
                 touchedProjects.insert(projectId)
                 if let current = snapshot { snapshot = ShellReduction.applyShellStreamEvent(current, item) }
             case .threadUpdated(_, _, let thread):
+                if let sequence = item.sequence, sequence > (snapshot?.snapshotSequence ?? -1) {
+                    changedAt[thread.id] = sequence
+                    if let cut = snapshot?.olderSettled {
+                        let previous = snapshot?.threads.first { $0.id == thread.id }
+                        if Self.isOlderSettled(thread, before: cut.before) || previous.map({ Self.isOlderSettled($0, before: cut.before) }) == true
+                            || (previous == nil && thread.lineage.relationshipToParent != .subagent) {
+                            countsInvalidatedAt = sequence
+                        }
+                    }
+                }
                 touchedThreads.insert(thread.id)
                 if let current = snapshot { snapshot = ShellReduction.applyShellStreamEvent(current, item) }
             case .threadRemoved(_, _, let threadId):
+                if let sequence = item.sequence, sequence > (snapshot?.snapshotSequence ?? -1) {
+                    changedAt[threadId] = sequence
+                    countsInvalidatedAt = sequence
+                }
                 touchedThreads.insert(threadId)
                 if let current = snapshot { snapshot = ShellReduction.applyShellStreamEvent(current, item) }
             }
@@ -192,8 +298,9 @@ public struct ShellReducer: Sendable {
 
         Self.diff(touchedProjects, before?.projects ?? [], snapshot?.projects ?? [],
                   &changes.projectsInserted, &changes.projectsUpdated, &changes.projectsRemoved)
-        Self.diff(touchedThreads, before?.threads ?? [], snapshot?.threads ?? [],
+        Self.diff(touchedThreads, beforeDisplay?.threads ?? [], displaySnapshot?.threads ?? [],
                   &changes.threadsInserted, &changes.threadsUpdated, &changes.threadsRemoved)
+        if before?.olderSettled != snapshot?.olderSettled { changes.metadataChanged = true }
         return changes
     }
 
@@ -212,5 +319,10 @@ public struct ShellReducer: Sendable {
             default: break
             }
         }
+    }
+
+    private static func isOlderSettled(_ thread: ThreadShell, before: String) -> Bool {
+        thread.lineage.relationshipToParent != .subagent && thread.settledOverride == .settled
+            && (thread.settledAt?.epochMs ?? Int64.max) < (T3Timestamp(before).epochMs ?? 0)
     }
 }

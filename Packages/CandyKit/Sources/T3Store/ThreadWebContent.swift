@@ -84,6 +84,8 @@ public struct HtmlRenderHeights: Sendable, Hashable {
 
     /// Records a report; false when it changes nothing.
     public mutating func set(_ height: Double, width: Double) -> Bool {
+        guard height.isFinite, height > 0, width.isFinite, width > 0, width <= 10_000 else { return false }
+        let height = HtmlRenderReference.clamp(height)
         let k = Self.key(width)
         guard byWidth[k] != height || latest != height else { return false }
         byWidth[k] = height
@@ -92,7 +94,10 @@ public struct HtmlRenderHeights: Sendable, Hashable {
     }
 
     /// The height reported at this width, else the last one reported.
-    public func height(width: Double) -> Double? { byWidth[Self.key(width)] ?? latest }
+    public func height(width: Double) -> Double? {
+        guard width.isFinite, width > 0, width <= 10_000 else { return latest }
+        return byWidth[Self.key(width)] ?? latest
+    }
 }
 
 /// `McpAppReference` (mcpApp.ts:47-56).

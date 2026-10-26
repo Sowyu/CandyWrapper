@@ -68,6 +68,20 @@ final class Harness: @unchecked Sendable {
 struct SupervisorTests {
     let transient = ConnectionFailure.transient("refused")
 
+    @Test func currentServerVersionBelongsToTheOpenedSocket() async {
+        let socket = FakeSocket()
+        let connection = RPCConnection(socket: socket, serverVersion: "sandbox-build")
+        let supervisor = ConnectionSupervisor(dependencies: .init(connect: {
+            await connection.start()
+            return connection
+        }))
+        #expect(await supervisor.serverVersion == nil)
+        await supervisor.connect()
+        #expect(await eventually { await supervisor.serverVersion == "sandbox-build" })
+        await supervisor.disconnect()
+        #expect(await supervisor.serverVersion == nil)
+    }
+
     /// `ShellSession.stop` right after `start`: its disconnect lands first, so the late connect must not open.
     @Test func connectAfterAStopLandsDoesNothing() async {
         let h = Harness([.succeed])
@@ -213,6 +227,33 @@ struct SupervisorTests {
         sub.cancel()
         let second = h.lastSocket!
         #expect(await eventually { second.sent.last == .interrupt(r2.id) })
+        await s.disconnect()
+    }
+
+    @Test func rejectedWireValueResubscribesWithoutAdvancingTheCursor() async throws {
+        let h = Harness([.succeed])
+        let s = ConnectionSupervisor(dependencies: h.dependencies)
+        let cursor = Cursor()
+        await cursor.set(7)
+        let sub = s.subscribe("orchestration.subscribeThread", payload: {
+            let after = await cursor.value
+            return after == 0 ? .object([:]) : .object(["afterSequence": .number(Double(after))])
+        }, handler: { event in
+            guard case .value = event else { return }
+            await cursor.set(0)
+            throw RPCTransportError.invalidFrame("missing body source")
+        })
+        await s.connect()
+        #expect(await eventually { h.lastSocket?.sent.count == 1 })
+        let socket = try #require(h.lastSocket)
+        guard case .request(let first) = socket.sent[0] else { Issue.record("request"); return }
+        socket.deliver(.chunk(requestId: first.id, values: [.object(["sequence": .number(8)])]))
+        #expect(await eventually { socket.sent.filter { if case .request = $0 { true } else { false } }.count == 2 })
+        let requests = socket.sent.compactMap { if case .request(let request) = $0 { request } else { nil } }
+        #expect(requests.last?.payload == .object([:]))
+        #expect(h.attemptCount == 1)
+        #expect(!socket.isClosed)
+        sub.cancel()
         await s.disconnect()
     }
 }

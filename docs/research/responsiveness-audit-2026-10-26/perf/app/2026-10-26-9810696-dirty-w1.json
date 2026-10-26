@@ -1,0 +1,415 @@
+{
+ "baseline": "2026-10-25-14567ec-w1.json",
+ "commit": "9810696-dirty",
+ "created": "2026-10-26T13:22:57",
+ "idle_seconds": 1.0,
+ "load_average": [
+  1.2900390625,
+  2.34521484375,
+  2.85595703125
+ ],
+ "machine": "Mac16,10",
+ "metrics": {
+  "big_thread.after_scroll_footprint_mb": {
+   "max": 52.1729736328125,
+   "median": 51.5792236328125,
+   "min": 51.376121520996094,
+   "values": [
+    52.1729736328125,
+    51.5792236328125,
+    51.376121520996094
+   ]
+  },
+  "big_thread.after_scroll_peak_mb": {
+   "max": 106.7510986328125,
+   "median": 106.0635986328125,
+   "min": 105.93864440917969,
+   "values": [
+    106.7510986328125,
+    106.0635986328125,
+    105.93864440917969
+   ]
+  },
+  "big_thread.dropped_frames": {
+   "max": 5,
+   "median": 2,
+   "min": 2,
+   "values": [
+    2,
+    2,
+    5
+   ]
+  },
+  "big_thread.footprint_mb": {
+   "max": 44.03230285644531,
+   "median": 43.516700744628906,
+   "min": 43.21980285644531,
+   "values": [
+    44.03230285644531,
+    43.21980285644531,
+    43.516700744628906
+   ]
+  },
+  "big_thread.peak_footprint_mb": {
+   "max": 91.09480285644531,
+   "median": 90.6260757446289,
+   "min": 90.43855285644531,
+   "values": [
+    91.09480285644531,
+    90.43855285644531,
+    90.6260757446289
+   ]
+  },
+  "big_thread.scroll_cpu_ms": {
+   "max": 350.418292,
+   "median": 339.251875,
+   "min": 338.045833,
+   "values": [
+    339.251875,
+    338.045833,
+    350.418292
+   ]
+  },
+  "big_thread.stall_count_50ms": {
+   "max": 1,
+   "median": 1,
+   "min": 0,
+   "values": [
+    0,
+    1,
+    1
+   ]
+  },
+  "big_thread.stall_max_ms": {
+   "max": 58.3,
+   "median": 56.9,
+   "min": 0.0,
+   "values": [
+    0.0,
+    56.9,
+    58.3
+   ]
+  },
+  "idle.cpu_pct": {
+   "max": 0.3233215923561072,
+   "median": 0.3189960821046467,
+   "min": 0.2000366114490479,
+   "values": [
+    0.2000366114490479,
+    0.3233215923561072,
+    0.3189960821046467
+   ]
+  },
+  "idle.footprint_mb": {
+   "max": 42.18855285644531,
+   "median": 42.12605285644531,
+   "min": 41.96980285644531,
+   "values": [
+    42.12605285644531,
+    41.96980285644531,
+    42.18855285644531
+   ]
+  },
+  "idle.interrupt_wakeups_per_s": {
+   "max": 1.9442332334772228,
+   "median": 0.9725054475500461,
+   "min": 0.9704824134635995,
+   "values": [
+    0.9704824134635995,
+    0.9725054475500461,
+    1.9442332334772228
+   ]
+  },
+  "idle.package_idle_wakeups_per_s": {
+   "max": 0.9725054475500461,
+   "median": 0.9721166167386114,
+   "min": 0.0,
+   "values": [
+    0.0,
+    0.9725054475500461,
+    0.9721166167386114
+   ]
+  },
+  "idle.peak_footprint_mb": {
+   "max": 89.40730285644531,
+   "median": 89.18855285644531,
+   "min": 89.0167007446289,
+   "values": [
+    89.0167007446289,
+    89.18855285644531,
+    89.40730285644531
+   ]
+  },
+  "launch.cached_sidebar_ms": {
+   "max": 833.0,
+   "median": 250.0,
+   "min": 236.0,
+   "values": [
+    833.0,
+    250.0,
+    236.0
+   ]
+  },
+  "launch.live_sidebar_ms": {
+   "max": 938.0,
+   "median": 299.0,
+   "min": 288.0,
+   "values": [
+    938.0,
+    299.0,
+    288.0
+   ]
+  },
+  "launch.stall_count_50ms": {
+   "max": 1,
+   "median": 0,
+   "min": 0,
+   "values": [
+    1,
+    0,
+    0
+   ]
+  },
+  "launch.stall_max_ms": {
+   "max": 53.9,
+   "median": 0.0,
+   "min": 0.0,
+   "values": [
+    53.9,
+    0.0,
+    0.0
+   ]
+  },
+  "launch.window_ms": {
+   "max": 808,
+   "median": 242,
+   "min": 224,
+   "values": [
+    808,
+    242,
+    224
+   ]
+  },
+  "open.big_cache_first_frame_ms": {
+   "max": 65.4,
+   "median": 64.1,
+   "min": 48.9,
+   "values": [
+    64.1,
+    48.9,
+    65.4
+   ]
+  },
+  "open.big_first_frame_ms": {
+   "max": 62.4,
+   "median": 61.6,
+   "min": 61.3,
+   "values": [
+    61.6,
+    61.3,
+    62.4
+   ]
+  },
+  "open.big_reopen_first_frame_ms": {
+   "max": 62.7,
+   "median": 48.2,
+   "min": 32.4,
+   "values": [
+    32.4,
+    62.7,
+    48.2
+   ]
+  },
+  "open.stall_count_50ms": {
+   "max": 0,
+   "median": 0,
+   "min": 0,
+   "values": [
+    0,
+    0,
+    0
+   ]
+  },
+  "open.stall_max_ms": {
+   "max": 0.0,
+   "median": 0.0,
+   "min": 0.0,
+   "values": [
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "size.binary_mb": {
+   "max": 51.24470520019531,
+   "median": 51.24470520019531,
+   "min": 51.24470520019531,
+   "values": [
+    51.24470520019531
+   ]
+  },
+  "size.bundle_mb": {
+   "max": 60.88525867462158,
+   "median": 60.88525867462158,
+   "min": 60.88525867462158,
+   "values": [
+    60.88525867462158
+   ]
+  },
+  "size.shipped_bundle_mb": {
+   "max": 35.174763679504395,
+   "median": 35.174763679504395,
+   "min": 35.174763679504395,
+   "values": [
+    35.174763679504395
+   ]
+  },
+  "size.stripped_binary_mb": {
+   "max": 26.502960205078125,
+   "median": 26.502960205078125,
+   "min": 26.502960205078125,
+   "values": [
+    26.502960205078125
+   ]
+  }
+ },
+ "notes": [],
+ "quiet": {
+  "max_load": 3.0,
+  "noisy": false,
+  "waits": [
+   {
+    "before": "idle-0",
+    "load": 2.87,
+    "load_before": 6.27,
+    "quiet": true,
+    "waited_s": 71
+   },
+   {
+    "before": "idle-0-stalls",
+    "load": 2.85,
+    "load_before": 3.39,
+    "quiet": true,
+    "waited_s": 20
+   },
+   {
+    "before": "idle-1",
+    "load": 2.7,
+    "load_before": 2.7,
+    "quiet": true,
+    "waited_s": 0
+   },
+   {
+    "before": "idle-1-stalls",
+    "load": 2.57,
+    "load_before": 2.57,
+    "quiet": true,
+    "waited_s": 0
+   },
+   {
+    "before": "idle-2",
+    "load": 2.33,
+    "load_before": 2.33,
+    "quiet": true,
+    "waited_s": 0
+   },
+   {
+    "before": "idle-2-stalls",
+    "load": 2.22,
+    "load_before": 2.22,
+    "quiet": true,
+    "waited_s": 0
+   },
+   {
+    "before": "big-0",
+    "load": 2.28,
+    "load_before": 2.28,
+    "quiet": true,
+    "waited_s": 0
+   },
+   {
+    "before": "big-0-stalls",
+    "load": 1.98,
+    "load_before": 1.98,
+    "quiet": true,
+    "waited_s": 0
+   },
+   {
+    "before": "big-1",
+    "load": 1.74,
+    "load_before": 1.74,
+    "quiet": true,
+    "waited_s": 0
+   },
+   {
+    "before": "big-1-stalls",
+    "load": 1.53,
+    "load_before": 1.53,
+    "quiet": true,
+    "waited_s": 0
+   },
+   {
+    "before": "big-2",
+    "load": 1.54,
+    "load_before": 1.54,
+    "quiet": true,
+    "waited_s": 0
+   },
+   {
+    "before": "big-2-stalls",
+    "load": 1.45,
+    "load_before": 1.45,
+    "quiet": true,
+    "waited_s": 0
+   },
+   {
+    "before": "open-0",
+    "load": 1.69,
+    "load_before": 1.69,
+    "quiet": true,
+    "waited_s": 0
+   },
+   {
+    "before": "open-0-stalls",
+    "load": 1.61,
+    "load_before": 1.61,
+    "quiet": true,
+    "waited_s": 0
+   },
+   {
+    "before": "open-1",
+    "load": 1.92,
+    "load_before": 1.92,
+    "quiet": true,
+    "waited_s": 0
+   },
+   {
+    "before": "open-1-stalls",
+    "load": 1.66,
+    "load_before": 1.66,
+    "quiet": true,
+    "waited_s": 0
+   },
+   {
+    "before": "open-2",
+    "load": 1.57,
+    "load_before": 1.57,
+    "quiet": true,
+    "waited_s": 0
+   },
+   {
+    "before": "open-2-stalls",
+    "load": 1.41,
+    "load_before": 1.41,
+    "quiet": true,
+    "waited_s": 0
+   }
+  ]
+ },
+ "regressions": [
+  "idle.cpu_pct"
+ ],
+ "repeat": 3,
+ "source": "/Users/mrm/CandyWrapper",
+ "workload": 1
+}
