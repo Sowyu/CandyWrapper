@@ -1,0 +1,137 @@
+#!/usr/bin/python3
+"""Opt-in production-method harness. Run in the parent's execution lane only.
+
+Extracts BrowserController.saveDownload unchanged and replaces its collaborators
+with local fakes. No app, screen, RPC, account, or network access. Exit 1 records
+an unsafe download save. Compilation and execution each have a time limit.
+"""
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+
+if os.environ.get("CW_SESSION_ACTIONS_AUDIT_REPRO") != "1":
+    raise SystemExit("Opt in with CW_SESSION_ACTIONS_AUDIT_REPRO=1; see session-actions audit.")
+
+root = Path(__file__).resolve().parent.parent
+source = (root / "App/Sources/BrowserController.swift").read_text()
+start = source.index("    private func saveDownload(")
+opening = source.index("{", start)
+depth, end = 1, opening + 1
+while depth:
+    depth += (source[end] == "{") - (source[end] == "}")
+    end += 1
+method = source[start:end].replace("private func ", "func ", 1)
+
+swift = r'''
+import Foundation
+struct LocalId { var rawValue: String }
+struct ThreadId { var environmentId: String?; var localId: LocalId }
+@MainActor final class Shell {
+    let http = HTTP()
+    let token = "sandbox-only"
+}
+@MainActor final class HTTP {
+    struct Ticket { let ticket = "fake" }
+    let baseURL = URL(string: "http://sandbox.invalid")!
+    func webSocketTicket(token: String) async throws -> Ticket { Ticket() }
+}
+@MainActor final class Environments {
+    let shell = Shell()
+    func session(_ id: String) -> Shell? { shell }
+}
+enum PreviewStream {
+    static func httpURL(base: URL, route: String, query: [(String, String)], ticket: String) -> URL? {
+        var parts = URLComponents(url: base.appendingPathComponent(route), resolvingAgainstBaseURL: false)!
+        parts.queryItems = query.map { URLQueryItem(name: $0.0, value: $0.1) }
+        return parts.url
+    }
+}
+enum Kind { case error }
+struct ToastView {
+    init(title: String, message: String, kind: Kind) {}
+}
+@MainActor final class Toasts {
+    var count = 0
+    func show(_ toast: ToastView) { count += 1 }
+}
+@MainActor final class Panel {
+    let window: Int? = 1
+    let toasts = Toasts()
+}
+enum Response { case OK }
+@MainActor final class NSSavePanel {
+    static var target: URL!
+    var nameFieldStringValue = ""
+    var url: URL? { Self.target }
+    func beginSheetModal(for window: Int, completionHandler: (Response) -> Void) {
+        completionHandler(.OK)
+    }
+}
+// URLSession.download returns a file for an HTTP error response too. The fake
+// makes that ordinary transport behavior deterministic without a local server.
+@MainActor final class URLSession {
+    static let shared = URLSession()
+    var status = 200
+    var body = "downloaded bytes"
+    var directory: URL!
+    var finished = false
+    func download(from url: URL) async throws -> (URL, HTTPURLResponse) {
+        let file = directory.appendingPathComponent(UUID().uuidString)
+        try Data(body.utf8).write(to: file)
+        finished = true
+        return (file, HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!)
+    }
+}
+@MainActor final class Harness {
+    struct Tab { var tabId: String? }
+    var panelTab: Tab? = Tab(tabId: "tab-A")
+    var panelStream: Tab?
+    var threadId: ThreadId? = ThreadId(environmentId: "sandbox", localId: LocalId(rawValue: "A"))
+    let environments = Environments()
+    let panel = Panel()
+'''
+swift += method + "\n}\n"
+swift += r'''
+@main struct Main {
+    @MainActor static func main() async throws {
+        let directory = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
+        URLSession.shared.directory = directory
+        var failures = 0
+        for status in [200, 404, 403] {
+            let target = directory.appendingPathComponent("target-\(status)")
+            try Data("original file".utf8).write(to: target)
+            NSSavePanel.target = target
+            URLSession.shared.status = status
+            URLSession.shared.body = status == 200 ? "downloaded bytes" : "HTTP error body"
+            URLSession.shared.finished = false
+            let harness = Harness()
+            harness.saveDownload(id: "download-A", fileName: "fixture.txt")
+            // The fake returns without suspending. Its caller finishes the file
+            // mutation before the main actor can resume this bounded waiter.
+            for _ in 0..<100 where !URLSession.shared.finished {
+                try await Task.sleep(nanoseconds: 10_000_000)
+            }
+            let saved = try String(contentsOf: target, encoding: .utf8)
+            let safe = URLSession.shared.finished && (status == 200
+                ? saved == "downloaded bytes"
+                : saved == "original file" && harness.panel.toasts.count > 0)
+            print("\(safe ? "PASS" : "FAIL") HTTP \(status): \(saved)")
+            if !safe { failures += 1 }
+        }
+        exit(failures == 0 ? 0 : 1)
+    }
+}
+'''
+
+sandbox = Path.home() / "CandyWrapper-research/sandbox"
+if not sandbox.is_dir():
+    raise SystemExit("Sandbox directory is missing.")
+with tempfile.TemporaryDirectory(prefix="session-actions-audit-", dir=sandbox) as directory:
+    directory = Path(directory)
+    path, binary = directory / "main.swift", directory / "repro"
+    path.write_text(swift)
+    subprocess.run(["xcrun", "swiftc", "-parse-as-library", str(path), "-o", str(binary)],
+                   check=True, timeout=120)
+    result = subprocess.run([str(binary), str(directory)], timeout=15)
+    raise SystemExit(result.returncode)
