@@ -1,5 +1,7 @@
 # Settings and updates audit
 
+Final execution results and evidence levels are in the [audit overview](README.md). The review-stage statements below describe what ran in that isolated review, not the later centralized tests.
+
 Reviewed 2026-10-26 on `05b0aa91`, branch `t3/audit-settings-updates`. Audit only: no product changes, builds, tests, app launches, accounts, settings writes, runtime installs or screen access. All findings below are source-traced, not executed reproductions. The local upstream checkout matches `T3_VERSION`, `v0.1.2-nightly.20261021.3473`.
 
 ## Findings

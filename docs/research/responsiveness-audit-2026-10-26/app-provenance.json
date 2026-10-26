@@ -1,0 +1,7 @@
+{
+  "source": "9810696b with audit-only uncommitted files",
+  "product_baseline": "0ced803c",
+  "configuration": "Release",
+  "bundle_id": "dev.candywrapper.perf",
+  "sha256": "0c97fd4e0db358876a9fcfb02660c4e43095f6172e33e50e1dc0c13e6c6e95a2"
+}

@@ -1,5 +1,7 @@
 # Session actions audit
 
+Final execution results and evidence levels are in the [audit overview](README.md). The review-stage statements below describe what ran in that isolated review, not the later centralized tests.
+
 Reviewed 2026-10-26 at `d8f8cc11e385c4703586ae4b38c770ef43fee316` on
 `t3/audit-session-actions`. This is an audit, with no product or visual changes.
 No builds, tests, app launches, network requests, shared screen use, live server

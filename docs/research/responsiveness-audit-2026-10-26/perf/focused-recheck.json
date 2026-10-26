@@ -1,0 +1,75 @@
+[
+  {
+    "max_ms": 1.888627,
+    "median_ms": 1.6889170000000002,
+    "min_ms": 1.616625,
+    "name": "huge_update_stream",
+    "runs": 10,
+    "timeline_rows": 2701
+  },
+  {
+    "max_ms": 1.5552089999999998,
+    "median_ms": 1.502833,
+    "min_ms": 1.463916,
+    "name": "huge_update_tool",
+    "runs": 10,
+    "timeline_rows": 2701
+  },
+  {
+    "max_ms": 2.608291,
+    "median_ms": 2.569334,
+    "min_ms": 2.55525,
+    "name": "huge_update_append",
+    "runs": 10,
+    "timeline_rows": 2702
+  },
+  {
+    "max_ms": 2.169709,
+    "median_ms": 2.138667,
+    "min_ms": 2.127417,
+    "name": "huge_update_stream_entries",
+    "runs": 9
+  },
+  {
+    "max_ms": 0.034041,
+    "median_ms": 0.033792,
+    "min_ms": 0.030541,
+    "name": "huge_update_stream_rows_patch",
+    "runs": 9
+  },
+  {
+    "max_ms": 2.157625,
+    "median_ms": 2.143959,
+    "min_ms": 2.135292,
+    "name": "huge_update_tool_entries",
+    "runs": 9
+  },
+  {
+    "max_ms": 21.293125,
+    "median_ms": 21.236333,
+    "min_ms": 21.142084,
+    "name": "huge_update_tool_rows_offmain",
+    "runs": 5
+  },
+  {
+    "max_ms": 0.4845,
+    "median_ms": 0.4715,
+    "min_ms": 0.445875,
+    "name": "sidebar_rename_1580_classic",
+    "runs": 15
+  },
+  {
+    "max_ms": 0.386417,
+    "median_ms": 0.308083,
+    "min_ms": 0.288375,
+    "name": "sidebar_tick_1580_classic",
+    "runs": 15
+  },
+  {
+    "max_ms": 1.905458,
+    "median_ms": 1.743583,
+    "min_ms": 0.942667,
+    "name": "sidebar_shelf_1580_classic",
+    "runs": 9
+  }
+]

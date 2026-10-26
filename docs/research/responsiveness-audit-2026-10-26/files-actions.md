@@ -1,5 +1,7 @@
 # Files and actions audit
 
+Final execution results and evidence levels are in the [audit overview](README.md). The review-stage statements below describe what ran in that isolated review, not the later centralized tests.
+
 Reviewed 2026-10-26 at CandyWrapper `08e124456fd5853f25c1dcba4da5adf9dfad7d89` on `t3/audit-files-actions`. This is an audit only. No production edits, builds, tests, app launches, screen use, server calls or account operations occurred. All findings below are source-traced, not executed reproductions. The opt-in harness has also not been compiled or run; the parent owns execution.
 
 Scope: `App/Sources/FilesController.swift`, `GitController.swift`, `PullRequestsController.swift`, `PullRequestsPage.swift`, and selected Files/Git/PR views and logic. P1 means a wrong destructive action or lost unsent text; P2 means incorrect displayed state or stale listings. No timing or performance claim follows from this source review.

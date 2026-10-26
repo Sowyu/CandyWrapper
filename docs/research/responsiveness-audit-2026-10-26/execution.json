@@ -1,0 +1,296 @@
+{
+  "runs": [
+    {
+      "name": "release-benchmarks",
+      "exit": 0,
+      "seconds": 901.3,
+      "command": [
+        "scripts/perf-review",
+        "--source",
+        ".",
+        "--no-app",
+        "--baseline",
+        "docs/perf/2026-10-25-caadcab-w1.json",
+        "--out-dir",
+        "docs/research/responsiveness-audit-2026-10-26/perf"
+      ],
+      "env": {}
+    },
+    {
+      "name": "stress-models",
+      "exit": 1,
+      "seconds": 117.5,
+      "command": [
+        "scripts/test",
+        "-c",
+        "release",
+        "-Xswiftc",
+        "-enable-testing",
+        "--skip-build",
+        "--no-parallel",
+        "--filter",
+        "ThreadStressTests|ShellStressTests"
+      ],
+      "env": {
+        "CW_STRESS_ITERATIONS": "250",
+        "CW_STRESS_SEED": "1001"
+      }
+    },
+    {
+      "name": "image-benchmark",
+      "exit": 0,
+      "seconds": 5.9,
+      "command": [
+        "scripts/test",
+        "-c",
+        "release",
+        "-Xswiftc",
+        "-enable-testing",
+        "--skip-build",
+        "--no-parallel",
+        "--filter",
+        "ImageRenderingBenchmarks"
+      ],
+      "env": {
+        "CW_IMAGE_BENCH": "1"
+      }
+    },
+    {
+      "name": "integration",
+      "exit": 0,
+      "seconds": 11.7,
+      "command": [
+        "scripts/test-integration",
+        "--skip-build"
+      ],
+      "env": {}
+    }
+  ],
+  "repro-runs": [
+    {
+      "name": "reproductions",
+      "exit": 1,
+      "seconds": 5.3,
+      "command": [
+        "scripts/test",
+        "-c",
+        "release",
+        "-Xswiftc",
+        "-enable-testing",
+        "--skip-build",
+        "--no-parallel",
+        "--filter",
+        "ThreadResponsivenessAuditRegressions|TransportResponsivenessAuditTests|ImageLoadingAuditTests|OrchestratorHelperAuditTests"
+      ],
+      "env": {
+        "CW_THREAD_AUDIT_REGRESSIONS": "1",
+        "CANDY_TRANSPORT_AUDIT_FAILURES": "1",
+        "CW_IMAGE_AUDIT_REGRESSIONS": "1",
+        "CW_ORCHESTRATOR_AUDIT_REGRESSIONS": "1"
+      }
+    },
+    {
+      "name": "pr-reproduction",
+      "exit": 0,
+      "seconds": 0.7,
+      "command": [
+        "/usr/bin/python3",
+        "docs/research/responsiveness-audit-2026-10-26/files-actions-harness.py",
+        "--run"
+      ],
+      "env": {}
+    },
+    {
+      "name": "composer-reproduction",
+      "exit": 1,
+      "seconds": 1.5,
+      "command": [
+        "/usr/bin/python3",
+        "scripts/audit-composer-recovery"
+      ],
+      "env": {
+        "CW_COMPOSER_AUDIT_REPRO": "1"
+      }
+    },
+    {
+      "name": "session-reproduction",
+      "exit": 1,
+      "seconds": 0.7,
+      "command": [
+        "/usr/bin/python3",
+        "scripts/audit-session-actions"
+      ],
+      "env": {
+        "CW_SESSION_ACTIONS_AUDIT_REPRO": "1"
+      }
+    },
+    {
+      "name": "helper-reproduction",
+      "exit": 1,
+      "seconds": 0.5,
+      "command": [
+        "/usr/bin/python3",
+        "docs/research/responsiveness-audit-2026-10-26/reproduce-hidden-terminal.py"
+      ],
+      "env": {
+        "CW_ORCHESTRATOR_AUDIT_REGRESSIONS": "1"
+      }
+    },
+    {
+      "name": "sandbox-load",
+      "exit": 1,
+      "seconds": 47.6,
+      "command": [
+        "scripts/test",
+        "-c",
+        "release",
+        "-Xswiftc",
+        "-enable-testing",
+        "--skip-build",
+        "--no-parallel",
+        "--filter",
+        "SandboxResponsivenessAuditTests"
+      ],
+      "env": {
+        "CW_INTEGRATION": "1",
+        "CW_SANDBOX_AUDIT": "1"
+      }
+    },
+    {
+      "name": "markdown-stress",
+      "exit": 0,
+      "seconds": 175.9,
+      "command": [
+        "scripts/test",
+        "-c",
+        "release",
+        "-Xswiftc",
+        "-enable-testing",
+        "--skip-build",
+        "--no-parallel",
+        "--filter",
+        "ThreadResponsivenessAuditStress"
+      ],
+      "env": {
+        "CW_THREAD_AUDIT_STRESS": "1"
+      }
+    }
+  ],
+  "final-test-runs": [
+    {
+      "name": "fast-final",
+      "exit": 1,
+      "seconds": 148.2,
+      "command": [
+        "scripts/test",
+        "--fast",
+        "--no-parallel"
+      ],
+      "env": {}
+    },
+    {
+      "name": "stress-wide-step",
+      "exit": 1,
+      "seconds": 25.3,
+      "command": [
+        "scripts/test",
+        "--skip-build",
+        "--no-parallel",
+        "--filter",
+        "largeThreadStepsTouchOnlyChangedRows"
+      ],
+      "env": {
+        "CW_STRESS_ITERATIONS": "250",
+        "CW_STRESS_VERBOSE": "1"
+      }
+    },
+    {
+      "name": "connector-reproduction",
+      "exit": 1,
+      "seconds": 1.8,
+      "command": [
+        "scripts/test",
+        "--skip-build",
+        "--no-parallel",
+        "--filter",
+        "OrchestratorHelperAuditTests"
+      ],
+      "env": {
+        "CW_ORCHESTRATOR_AUDIT_REGRESSIONS": "1"
+      }
+    },
+    {
+      "name": "sandbox-load-retry",
+      "exit": 0,
+      "seconds": 8.0,
+      "command": [
+        "scripts/test",
+        "--skip-build",
+        "--no-parallel",
+        "--filter",
+        "SandboxResponsivenessAuditTests"
+      ],
+      "env": {
+        "CW_INTEGRATION": "1",
+        "CW_SANDBOX_AUDIT": "1"
+      }
+    }
+  ],
+  "baseline_full_suite": {
+    "command": [
+      "scripts/test",
+      "--no-parallel"
+    ],
+    "exit": 0,
+    "swift_testing_tests": 2088,
+    "xctest_tests": 18,
+    "source": "0ced803c"
+  },
+  "frame_recheck": {
+    "command": [
+      "scripts/test",
+      "--skip-build",
+      "--no-parallel",
+      "--filter",
+      "FrameDecoderTests"
+    ],
+    "exit": 0,
+    "tests": 2,
+    "test_seconds": 0.079
+  },
+  "app_review": {
+    "command": [
+      "scripts/perf-review",
+      "--source",
+      ".",
+      "--no-bench",
+      "--baseline",
+      "docs/perf/2026-10-25-14567ec-w1.json",
+      "--repeat",
+      "3",
+      "--idle-seconds",
+      "1"
+    ],
+    "exit": 0,
+    "artifact": "perf/app/2026-10-26-9810696-dirty-w1.json"
+  },
+  "focused_benchmark_recheck": {
+    "command": [
+      "scripts/test",
+      "-c",
+      "release",
+      "-Xswiftc",
+      "-enable-testing",
+      "--skip-build",
+      "--no-parallel",
+      "--filter",
+      "hugeThreadUpdate|sidebarUpdates"
+    ],
+    "env": {
+      "CW_BENCH": "1"
+    },
+    "exit": 0,
+    "tests": 2,
+    "test_seconds": 3.461
+  }
+}

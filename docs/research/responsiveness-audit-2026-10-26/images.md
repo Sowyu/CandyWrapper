@@ -1,5 +1,7 @@
 # Image and media loading audit
 
+Final execution results and evidence levels are in the [audit overview](README.md). The review-stage statements below describe what ran in that isolated review, not the later centralized tests.
+
 Date: 2026-10-26. Baseline: `0ced803c`. Area: images. Source inspection only; no builds, tests, app launches, network fixtures, live accounts or shared-screen work ran in this worktree. Product code and design are unchanged. The two new regression tests are opt-in and unexecuted. Severity P2 means a reachable user-facing correctness bug with a workaround, rather than a measured application-wide stall.
 
 ## Findings
@@ -21,24 +23,11 @@ Reproduction added: `ImageLoadingAuditTests.cancelledImageCannotReplaceTheNextFi
 
 This is distinct from the old 2026-10-18 audit's preview identity finding: the current controller now keys by environment/workspace/path and guards that read, but the child view has this separate completion path.
 
-### IMG-2: Sent attachments can display and save a later revision of the original file (P2)
+### IMG-2: Rejected after independent review
 
-Evidence:
+Changing the original file after a successful upload does not establish the proposed sent-image bug. `App/Sources/ComposerController.swift:3290-3308` copies ordinary images into the app-owned draft directory and replaces `fileURL`; the ready transition persists this copy before Send can select it. The original review missed that intervening ownership change. A failed copy would require a separate reproduction. This candidate is excluded from the final count; see [adjudication](adjudication.md).
 
-- `Packages/CandyKit/Sources/Features/Composer/ComposerAttachments.swift:303-309` returns the original file URL for a supported image already within byte/dimension limits.
-- `App/Sources/ComposerController.swift:3672-3675` stores that URL as the draft attachment's `fileURL`.
-- On send, `ComposerController.swift:1850` keeps this URL in `sentFiles[attachmentId]`.
-- `ComposerController.swift:3957-3961` prefers that existing local file over the server's attachment copy, with no version/content check.
-- Both the sent image loader at `:3221-3223` and Save at `:3879-3882` use `attachmentSource`.
-- `Packages/CandyKit/Sources/Features/Thread/TimelineMessageRows.swift:979-986,1011-1016` caches thumbnail and viewer decodes as immutable attachment IDs, with separate cover/fit entries.
-
-Trigger: attach and send a small PNG or JPEG from disk, let its thumbnail render, then overwrite the same source path with a different picture. Open the sent image for the first time, requiring its fit decode, or save the sent attachment. The loader reads the changed local path instead of the bytes that were uploaded. It can initially show the old clicked thumbnail and then replace it with the new local image as the sharper decode completes. Eviction/thread remount can also replace the thumbnail.
-
-User effect: the conversation depicts or exports an image different from the image the agent received. If the original is deleted rather than changed, fallback to the server works, so deletion alone does not reproduce this defect. Re-encoded attachments use app-owned copies and do not share this exact trigger.
-
-T3 comparison, checked locally at `v0.1.2-nightly.20261021.3473`: `apps/web/src/components/chat/ExpandedImagePreview.tsx:180-205` opens each attachment's preview URL; attachment staging constructs its URL from the prepared File object at `apps/web/src/components/chat/ChatComposer.tsx:4894-4903`. CandyWrapper's persistent mapping to a mutable disk pathname is the relevant difference. Source-traced; no upload or save executed.
-
-### IMG-3: HTTP 200 with malformed image bytes leaves the file viewer blank (P2)
+### IMG-3: HTTP 200 with malformed image bytes leaves the file viewer blank (P3)
 
 Evidence: `Packages/CandyKit/Sources/Features/Files/FileSurfaceView.swift:305-309` checks that a Data value exists, then assigns `NSImage(data:)` without checking the optional result. The fetch closure at `App/Sources/FilesController.swift:96-99` accepts any 2xx body. Invalid PNG/JPEG content therefore leaves an empty NSImageView, with neither an error nor loading feedback.
 
@@ -63,7 +52,7 @@ User effect: a request such as “describe this picture” reaches the agent wit
 
 T3 documents and guards this precise stranding problem in `apps/web/src/components/chat/ChatComposer.tsx:3457-3467` of the pinned local source. Orchestrator is CandyWrapper's feature, but should retain the same attachment-snapshot invariant. Source-traced; no timing measurement or end-to-end reproduction executed.
 
-### IMG-5: Video/audio Save silently ignores signing and HTTP failures (P2)
+### IMG-5: Video/audio Save silently ignores signing and HTTP failures (P3)
 
 Evidence: `Packages/CandyKit/Sources/Features/Thread/ThreadMediaAttachmentView.swift:74-86` returns silently when the signed-URL loader returns nil (`:80`) or the download returns a non-2xx response (`:83`). Only thrown errors update the button to “Retry save.” The app loader at `App/Sources/ComposerController.swift:4893-4899` converts signing failures to nil.
 

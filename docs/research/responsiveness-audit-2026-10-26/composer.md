@@ -1,5 +1,7 @@
 # Composer responsiveness and correctness audit
 
+Final execution results and evidence levels are in the [audit overview](README.md). The review-stage statements below describe what ran in that isolated review, not the later centralized tests.
+
 2026-10-26. Product source at `64bbb242`, branch `t3/composer-send-audit`. No product edits, builds, tests, app launches, screen use, server requests or account access. All findings below are source-traced, not executed reproductions. The opt-in extraction harness is supplied for the parent's execution lane and has not been compiled or run here.
 
 Scope: `App/Sources/ComposerController.swift`, composer send gates and editor ownership, draft launch/restore, queue edits, approvals and answers, attachment upload/staging, machine selection and retry. Image decoding, thumbnails, cosmetic fidelity and energy are outside this review.
@@ -36,7 +38,7 @@ Local upstream: `~/CandyWrapper-research/t3code`, checked out at `v0.1.2-nightly
 
 **Parent scenario:** two sandbox environments for one logical project; ready file and image separately; switch A to B then send. Inspect upload destination and dispatch attachment IDs. Also delay image preparation before switching, and delay auto-balance completion while adding an attachment. The latter is a useful stress scenario rather than a separately confirmed finding.
 
-### C3. P2: upload retry sends an old snapshot and clears newer typing
+### C3. P1: upload retry sends an old snapshot and clears newer typing
 
 **Reachable entry:** Send with a retryable failed upload. Failed status intentionally does not block Send (`Packages/CandyKit/Sources/Features/Composer/ComposerAttachments.swift:135-143`). The controller saves `(text, mode, background)` in `sendAfterRetry` and starts retrying (`App/Sources/ComposerController.swift:1715-1721`).
 

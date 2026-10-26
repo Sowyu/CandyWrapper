@@ -1,5 +1,7 @@
 # Transport responsiveness audit
 
+Final execution results and evidence levels are in the [audit overview](README.md). The review-stage statements below describe what ran in that isolated review, not the later centralized tests.
+
 Reviewed 2026-10-26 at `0ced803c3ec141b3a58ab31e5bc401d6f61a06e3`. Product code and visual design are unchanged. Two source-traced findings need centralized reproduction. Neither is an executed app reproduction or a measured regression.
 
 No builds, tests, servers, app launches, account access, credentials, or shared-screen actions ran in this worktree. The test additions below have not been compiled or executed. The only validation performed here is source review and `git diff --check`.

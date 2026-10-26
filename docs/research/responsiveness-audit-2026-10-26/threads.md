@@ -1,5 +1,7 @@
 # Thread responsiveness and correctness audit
 
+Final execution results and evidence levels are in the [audit overview](README.md). The review-stage statements below describe what ran in that isolated review, not the later centralized tests.
+
 Reviewed 2026-10-26 at `0ced803c3ec141b3a58ab31e5bc401d6f61a06e3`. Scope: thread selection and loading, `ThreadSession`, thread store/reduction/cache, incremental timeline derivation, virtualization, and Markdown loading. Product code and visual design are unchanged. No compiler, tests, app, server, shared screen, live data, or account was used. Findings below are source-traced, with unexecuted opt-in reproductions for the parent to validate.
 
 Local upstream source is `~/CandyWrapper-research/t3code`, at `v0.1.2-nightly.20261021.3473`, matching `T3_VERSION`. Upstream citations below are relative to that checkout. Some older native comments cite a different upstream revision; I checked current upstream code rather than treating those comments as proof.

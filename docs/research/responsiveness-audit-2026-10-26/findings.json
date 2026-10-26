@@ -1,0 +1,212 @@
+[
+  {
+    "id": "IMG-1",
+    "severity": "P2",
+    "evidence": "executed",
+    "summary": "Cancelled image/PDF load replaces the newly opened file with an error",
+    "report": "images.md"
+  },
+  {
+    "id": "IMG-3",
+    "severity": "P3",
+    "evidence": "executed",
+    "summary": "Malformed image bytes leave the file preview blank",
+    "report": "images.md"
+  },
+  {
+    "id": "IMG-4",
+    "severity": "P2",
+    "evidence": "source",
+    "summary": "Orchestrator sends before selected images finish preparation",
+    "report": "images.md"
+  },
+  {
+    "id": "IMG-5",
+    "severity": "P3",
+    "evidence": "source",
+    "summary": "Media Save silently drops signing and HTTP failures",
+    "report": "images.md"
+  },
+  {
+    "id": "TH-1",
+    "severity": "P2",
+    "evidence": "executed",
+    "summary": "One failed history request prevents further automatic paging",
+    "report": "threads.md"
+  },
+  {
+    "id": "TH-2",
+    "severity": "P2",
+    "evidence": "executed",
+    "summary": "Old thread rows become interactive while replacement rows are pending",
+    "report": "threads.md"
+  },
+  {
+    "id": "TR-1",
+    "severity": "P1",
+    "evidence": "source",
+    "summary": "Changed relay endpoint leaves HTTP history and assets on an obsolete origin",
+    "report": "transport.md"
+  },
+  {
+    "id": "TR-2",
+    "severity": "P2",
+    "evidence": "executed",
+    "summary": "Early Pong removes recovery while initial configuration is still missing",
+    "report": "transport.md"
+  },
+  {
+    "id": "F1",
+    "severity": "P1",
+    "evidence": "executed",
+    "summary": "Comment-and-close/reopen can act on a different pull request",
+    "report": "files-actions.md"
+  },
+  {
+    "id": "F2",
+    "severity": "P1",
+    "evidence": "executed",
+    "summary": "A late comment success erases another pull request draft",
+    "report": "files-actions.md"
+  },
+  {
+    "id": "F3",
+    "severity": "P2",
+    "evidence": "source",
+    "summary": "Viewed-file replies overwrite another pull request marks",
+    "report": "files-actions.md"
+  },
+  {
+    "id": "F4",
+    "severity": "P2",
+    "evidence": "source",
+    "summary": "Overlapping directory refreshes restore an older listing",
+    "report": "files-actions.md"
+  },
+  {
+    "id": "C1",
+    "severity": "P1",
+    "evidence": "executed",
+    "summary": "Failed send recovery restores text into another thread",
+    "report": "composer.md"
+  },
+  {
+    "id": "C2",
+    "severity": "P2",
+    "evidence": "source",
+    "summary": "Changing machine keeps attachment upload IDs from the previous machine",
+    "report": "composer.md"
+  },
+  {
+    "id": "C3",
+    "severity": "P1",
+    "evidence": "executed",
+    "summary": "Upload retry sends old text and clears newer typing",
+    "report": "composer.md"
+  },
+  {
+    "id": "C4",
+    "severity": "P2",
+    "evidence": "source",
+    "summary": "Delayed thread launch success steals current navigation",
+    "report": "composer.md"
+  },
+  {
+    "id": "C5",
+    "severity": "P2",
+    "evidence": "source",
+    "summary": "Restored upload verification never resumes its pending send",
+    "report": "composer.md"
+  },
+  {
+    "id": "OH-1",
+    "severity": "P2",
+    "evidence": "executed",
+    "summary": "Large helper config output loses its marker and reports a false timeout",
+    "report": "orchestrator-helper.md"
+  },
+  {
+    "id": "OH-2",
+    "severity": "P2",
+    "evidence": "source",
+    "summary": "An unanswered helper RPC blocks queued connector actions",
+    "report": "orchestrator-helper.md"
+  },
+  {
+    "id": "OH-3",
+    "severity": "P2",
+    "evidence": "source",
+    "summary": "Relay calls can continue after Orchestrator is disabled",
+    "report": "orchestrator-helper.md"
+  },
+  {
+    "id": "OH-4",
+    "severity": "P2",
+    "evidence": "source",
+    "summary": "Failed Orchestrator settings writes lose their retry state",
+    "report": "orchestrator-helper.md"
+  },
+  {
+    "id": "OH-5",
+    "severity": "P3",
+    "evidence": "executed",
+    "summary": "An earlier read clears the busy state of a queued connector mutation",
+    "report": "orchestrator-helper.md"
+  },
+  {
+    "id": "SA1",
+    "severity": "P1",
+    "evidence": "executed",
+    "summary": "Browser download error bodies replace existing destination files",
+    "report": "session-actions.md"
+  },
+  {
+    "id": "SA2",
+    "severity": "P2",
+    "evidence": "source",
+    "summary": "Browser download Save resolves the current browser instead of its origin",
+    "report": "session-actions.md"
+  },
+  {
+    "id": "SA3",
+    "severity": "P2",
+    "evidence": "source",
+    "summary": "Delayed script previews open in the newly selected thread or environment",
+    "report": "session-actions.md"
+  },
+  {
+    "id": "SA4",
+    "severity": "P2",
+    "evidence": "source",
+    "summary": "Browser discovery stays subscribed to a replaced session",
+    "report": "session-actions.md"
+  },
+  {
+    "id": "SU1",
+    "severity": "P1",
+    "evidence": "source",
+    "summary": "Overlapping project-setting writes erase earlier changes",
+    "report": "settings-updates.md"
+  },
+  {
+    "id": "SU2",
+    "severity": "P2",
+    "evidence": "source",
+    "summary": "Failed project script reads suppress same-workspace retries",
+    "report": "settings-updates.md"
+  },
+  {
+    "id": "SU3",
+    "severity": "P2",
+    "evidence": "source",
+    "summary": "Add-to-machine silently abandons navigation after three seconds",
+    "report": "settings-updates.md"
+  },
+  {
+    "id": "SU4",
+    "severity": "P2",
+    "evidence": "source",
+    "summary": "Connections access retains a replaced primary session subscription",
+    "report": "settings-updates.md"
+  }
+]

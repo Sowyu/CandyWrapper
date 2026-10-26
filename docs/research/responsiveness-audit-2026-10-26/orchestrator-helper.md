@@ -1,5 +1,7 @@
 # Orchestrator, helper and Connectors audit
 
+Final execution results and evidence levels are in the [audit overview](README.md). The review-stage statements below describe what ran in that isolated review, not the later centralized tests.
+
 Reviewed 2026-10-26 at `43d75a5b`. Source inspection only. No builds, tests, harness runs, app launches, server calls, real config reads or mutations, accounts, live T3 files or shared-screen operations ran here. Product code and visual design are unchanged. P2 below means a reachable correctness or completion failure, with its specific trigger stated; no application-wide latency measurement is claimed.
 
 ## Findings
@@ -46,7 +48,7 @@ Trigger: edit the Orchestrator prompt/notebook/other synchronized setting, let i
 
 Central deterministic scenario: fake a successful list containing an old document, fail the first upsert, deliver the identical list again, and assert a subsequent retry occurs without another local edit. Also test two documents where one contains a newer remote stamp and ensure a failed canonical upsert cannot delete the only durable copy of that newer setting.
 
-### OH-5: An older read clears the busy state of a queued mutation (P2)
+### OH-5: An older read clears the busy state of a queued mutation (P3)
 
 `ConnectorsStore.apply` sets a machine busy (`Packages/CandyKit/Sources/Features/Connectors/ConnectorsStore.swift:58-63`). Every earlier completion calls `set`, which unconditionally removes busy (`:37-40`). ConnectorsController starts the queued mutation after awaiting that earlier action (`App/Sources/ConnectorsController.swift:35-40`), but run does not set busy again (`:43-51`).
 

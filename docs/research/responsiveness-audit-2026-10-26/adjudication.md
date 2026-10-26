@@ -1,5 +1,7 @@
 # Independent adjudication
 
+Final execution results and evidence levels are in the [audit overview](README.md). The review-stage statements below describe what ran in that isolated review, not the later centralized tests.
+
 Reviewed 2026-10-26 at `c8ef1a697c099ed4da7f3c580e36edf33018ee0d`. Reviewed all seven area reports, their reproduction artifacts, and the relevant current production paths. Product source is unchanged. No builds, tests, harnesses, network, app, screen, accounts, live data or other agents were used. Every disposition below is **static**, including findings marked accept. Parent execution results were unavailable to this reviewer.
 
 Severity here uses P1 for wrong-target mutations, lost user text or replacement of an existing file with invalid contents; P2 for a broken primary action or materially wrong state with recovery; P3 for incomplete failure feedback or incorrect busy feedback without established loss. A conditional P1 needs its conditions stated. Area-local identifiers are prefixed below because transport and threads both use T1/T2.
