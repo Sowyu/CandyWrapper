@@ -242,6 +242,59 @@ import Testing
         let bubbles = items.compactMap { item -> String? in if case .bubble(_, _, let text, _, _) = item { text } else { nil } }
         #expect(bubbles == ["Looking."])
     }
+
+    func failure(_ run: String, _ message: String, reset: Date?, minutes: Double) -> TurnItem {
+        var f: [String: Any] = ["class": "usage_limit", "message": message, "code": NSNull(), "retryable": NSNull()]
+        if let reset { f["resetAt"] = T3Timestamp(reset).raw }
+        return try! JSONDecoder().decode(TurnItem.self, from: JSONSerialization.data(withJSONObject: [
+            "id": "err-\(run)", "threadId": "orch", "type": "error", "ordinal": 1, "status": "failed", "runId": run,
+            "updatedAt": T3Timestamp(start.addingTimeInterval(minutes * 60)).raw, "failure": f,
+        ] as [String: Any]))
+    }
+
+    /// Twelve wake-ups that each failed on the weekly limit show as one quiet line with the count, not twelve error
+    /// replies. Your own message still shows, a real reply ends the group, and the line keeps its id as it grows.
+    @Test func limitFailuresCollapseIntoOneLine() {
+        let limit = "You've hit your weekly limit · resets 8pm (Europe/Paris)"
+        let reset = start.addingTimeInterval(10 * 3600)
+        var messages: [ConversationMessage] = []
+        var items: [TurnItem] = []
+        for i in 0..<12 {
+            let m = Double(i * 30)
+            messages.append(message("e\(i)", "user", "Event: “Scribe” finished a turn (t3-thread://v1/w\(i)).", minutes: m, run: "r\(i)"))
+            messages.append(message("a\(i)", "assistant", limit, minutes: m + 0.1, run: "r\(i)"))
+            items.append(failure("r\(i)", limit, reset: reset, minutes: m + 0.1))
+        }
+        func lines(_ list: [OrchestratorChatItem]) -> [(id: String, text: String)] {
+            list.compactMap { if case .line(let id, let text, _) = $0 { (id, text) } else { nil } }
+        }
+        let resets = OrchestratorLimit.shortTime(reset, now: start)
+        for activity in [false, true] {
+            let chat = OrchestratorChat.items(messages: messages, turnItems: items, running: false, activity: activity, provider: "Claude", now: start)
+            #expect(lines(chat).map(\.text) == ["Claude limit reached · resets \(resets) · 12 updates waiting"])
+            #expect(lines(chat).first?.id == "failure-r0")
+            #expect(!chat.contains { if case .bubble = $0 { true } else { false } })
+        }
+        // Events the app holds count too, and the line keeps its id.
+        let held = OrchestratorChat.items(messages: messages, turnItems: items, running: false, waiting: 3, provider: "Claude", now: start)
+        #expect(lines(held).map(\.text) == ["Claude limit reached · resets \(resets) · 15 updates waiting"])
+        #expect(lines(held).first?.id == "failure-r0")
+
+        // You ask, it still fails: your bubble shows and the line moves under it. Then a real reply ends the group.
+        messages.append(message("u1", "user", "Are you there?", minutes: 400, run: "r12"))
+        messages.append(message("a12", "assistant", limit, minutes: 400.1, run: "r12"))
+        items.append(failure("r12", limit, reset: reset, minutes: 400.1))
+        messages.append(message("a13", "assistant", "Back. Catching up now.", minutes: 700, run: "r13"))
+        messages.append(message("e14", "user", "Event: “Scribe” failed (t3-thread://v1/w1).", minutes: 800, run: "r14"))
+        messages.append(message("a14", "assistant", limit, minutes: 800.1, run: "r14"))
+        items.append(failure("r14", limit, reset: reset, minutes: 800.1))
+        let chat = OrchestratorChat.items(messages: messages, turnItems: items, running: false, provider: "Claude", now: start)
+        #expect(lines(chat).map(\.id) == ["failure-r0", "failure-r14"])
+        let bubbles = chat.compactMap { if case .bubble(_, let user, let text, _, _) = $0 { "\(user) \(text)" } else { nil } }
+        #expect(bubbles == ["true Are you there?", "false Back. Catching up now."])
+        let order = chat.map(\.id).filter { ["u1", "failure-r0", "a13"].contains($0) }
+        #expect(order == ["u1", "failure-r0", "a13"])
+    }
 }
 
 /// The Orchestrator's draft lives in the thread composer's store (`ComposerController.setDraftText`, saved to

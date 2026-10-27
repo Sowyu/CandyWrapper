@@ -360,21 +360,35 @@ final class Helper {
         let old = baselines[machine]
         baselines[machine] = (generation, Dictionary(current.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }))
         // The first state of a connection is the baseline; nothing in it is news.
-        guard let orchestrator, let old, old.generation == generation else { return }
+        guard let orchestrator else { return }
+        // While its provider is limited, events wait for the reset instead of starting runs that fail at once.
+        if machine == homeId, let deadline = batch.follow(snapshot.threads.first { $0.id.rawValue == orchestrator }, now: Date()) {
+            log("the Orchestrator's usage limit moved the event batch to \(deadline)")
+            arm(deadline)
+        }
+        guard let old, old.generation == generation else { return }
         let config = config()
         let events = OrchestratorEvent.diff(old: old.threads, new: current, orchestrator: ThreadId(orchestrator).scoped(to: homeId),
                                             handsOff: { config.isHandsOff($0) }, windowMinutes: config.askFirstMinutes, now: Date(),
                                             relayedAt: { config.relayedAt[$0.rawValue] },
                                             machine: machine == homeId ? nil : label(machine))
         guard let deadline = batch.add(events, now: Date()) else { return }
+        arm(deadline)
+    }
+
+    /// One timer per batch: a moved deadline replaces it.
+    private func arm(_ deadline: Date) {
+        flushTask?.cancel()
         flushTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow)))
+            guard !Task.isCancelled else { return }
             self?.flush()
         }
     }
 
     private func flush() {
         flushTask = nil
+        if let deadline = batch.deadline, deadline > Date() { return arm(deadline) }
         let live = Set(snapshots.flatMap { machine, snapshot in
             snapshot.threads.filter { $0.archivedAt == nil && $0.deletedAt == nil }.map { $0.id.scoped(to: machine) }
         })

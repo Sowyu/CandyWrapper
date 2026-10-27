@@ -582,8 +582,47 @@ public struct OrchestratorEventBatch: Sendable {
     public let window: TimeInterval
     public private(set) var pending: [OrchestratorEvent] = []
     public private(set) var deadline: Date?
+    /// While the Orchestrator's provider is limited, events gather until then and go out as one message.
+    public private(set) var heldUntil: Date?
+    /// The limited run the hold follows, and how many limit failures without a reset time came in a row.
+    private var heldRun: String?
+    private var retries = 0
 
     public init(window: TimeInterval = 120) { self.window = window }
+
+    /// Whether events wait on a usage limit now.
+    public func holding(now: Date = Date()) -> Bool { heldUntil.map { $0 > now } ?? false }
+
+    /// Follows the Orchestrator thread (docs/orchestrator.md, "When its provider is limited"). While its last run failed
+    /// on a usage limit, the batch comes due at the reset time T3 or the error text gives, else after 15 min, 30 min,
+    /// then hourly from the failure. A run that ends any other way lifts the hold, and what waited goes out now.
+    /// Returns the deadline to arm when it moved; the caller replaces its timer.
+    public mutating func follow(_ thread: ThreadShell?, now: Date) -> Date? {
+        guard let thread, !OrchestratorEvent.running.contains(thread.status) else { return nil }
+        guard let limit = OrchestratorLimit.of(thread), let run = thread.latestRunId?.rawValue else {
+            heldRun = nil
+            retries = 0
+            guard holding(now: now) else { heldUntil = nil; return nil }
+            heldUntil = nil
+            guard deadline != nil else { return nil }
+            deadline = now
+            return now
+        }
+        guard run != heldRun else { return nil }
+        heldRun = run
+        let until: Date
+        if let reset = limit.reset, reset > now {
+            until = reset
+        } else {
+            until = (limit.failedAt ?? now).addingTimeInterval(OrchestratorLimit.backoff[min(retries, OrchestratorLimit.backoff.count - 1)])
+            retries += 1
+        }
+        guard until > now else { heldUntil = nil; return nil }
+        heldUntil = until
+        guard let deadline, deadline < until else { return nil }
+        self.deadline = until
+        return until
+    }
 
     /// Adds events and returns the deadline to arm when this opened the window, else nil (a timer is already armed).
     public mutating func add(_ events: [OrchestratorEvent], now: Date) -> Date? {
@@ -593,7 +632,7 @@ public struct OrchestratorEventBatch: Sendable {
             if let i = pending.firstIndex(of: e) { pending[i] = e } else { pending.append(e) }
         }
         guard deadline == nil else { return nil }
-        deadline = now.addingTimeInterval(window)
+        deadline = max(now.addingTimeInterval(window), heldUntil ?? now)
         return deadline
     }
 
@@ -607,7 +646,7 @@ public struct OrchestratorEventBatch: Sendable {
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
-    /// Drops everything, as when the Orchestrator turns off.
+    /// Drops the events, as when the Orchestrator turns off. The hold follows the thread, so it stays.
     public mutating func reset() { pending = []; deadline = nil }
 
     /// Whether a message is an event message the app sent.

@@ -99,6 +99,15 @@ T3 wakes a thread only when its own child task finishes (`orchestratorMcp.ts:222
 2. While CandyWrapper is open, it watches the server events it already gets for every thread. When a thread finishes a turn, fails or asks for something, CandyWrapper sends the Orchestrator one short line, like "Event: 'Release notes' finished a turn". Events that land within 2 minutes of the first go out as one message, so a busy couple of minutes costs one turn. Threads you wrote in during the ask-first window are your own conversations, so their events don't wake it unless it started or prompted that thread.
 3. While CandyWrapper is closed, a T3 scheduled task (`ScheduledTask`, `orchestratorMcp.ts`) wakes the Orchestrator every 30 minutes to check every thread with `t3_thread_list`. CandyWrapper turns that schedule off again when it opens. You can change the interval or turn the schedule off in the settings tab.
 
+### When its provider is limited
+
+On 2026-10-25 Claude hit its weekly limit for about a day. Every event batch started an Orchestrator run that failed at once, and each failure showed as one more "You've hit your weekly limit" reply.
+
+- The chat shows runs that failed in a row on the same provider error as one quiet line, like "Claude limit reached · resets 8pm · 12 updates waiting". It reads the failure from the run's root `error` item (`latestRootProviderFailure`, orchestrationV2ThreadError.ts:8-32), takes the reset time from its `resetAt` or from the text, and hides the event lines and error replies of those runs. Your own messages still show. The line keeps its id as it grows, and a real reply or a different error ends it.
+- While the Orchestrator thread's last run failed on a usage limit (`lastErrorClass` `usage_limit`, or limit wording in `lastError`), the app and the helper hold events (`OrchestratorEventBatch.follow`). The batch comes due once, at `usageLimitResetAt` or the "resets 8pm (Europe/Paris)" time in the text. Without one it tries again 15 minutes, 30 minutes, then every hour after each failure. A run that ends any other way, as after you switch models, lifts the hold and sends what waited right away.
+- Your own messages go through at once, so you can see the limit or switch models.
+- The hold doesn't stop what the server sends on its own: a scheduled task bound to the thread and T3's own deliveries, like a child task's result, still start runs. Those failures join the quiet line.
+
 ## Bots
 
 Orchestrator runs all your threads. Next to it you can keep bots, each with one standing job, like Grok Bot's bots. A bot isn't a manager. It does its one job well, again and again, and remembers what it learned.
