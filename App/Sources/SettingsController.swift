@@ -278,10 +278,12 @@ final class SettingsController {
             let state = environments.state(r.environmentId)
             let status = EnvironmentRowStatus(enabled: r.enabled, state: state)
             let inUse = state?.status == .connected ? environments.routeInUse(r.environmentId) : nil
+            // A relay session's origin follows the tunnel, so its saved relay route is the one in use.
+            let relayInUse = state?.status == .connected && environments.session(r.environmentId)?.isRelay == true
             let routes = r.routes.map { url in
                 // `connectionRouteAddress` is null for T3 Connect.
                 ConnectionsPageModel.Route(url: url, label: r.routeLabel(url), address: r.isRelayRoute(url) ? "" : EnvironmentRowStatus.displayURL(url),
-                                           inUse: inUse.map { EnvironmentRoute.origin($0) == EnvironmentRoute.origin(url) } ?? false)
+                                           inUse: relayInUse ? r.isRelayRoute(url) : inUse.map { EnvironmentRoute.origin($0) == EnvironmentRoute.origin(url) } ?? false)
             }
             // `environmentMcpUrl`: the route in use, else the first, at `/mcp`.
             let mcpBase = inUse ?? r.httpBaseURL
@@ -408,8 +410,9 @@ final class SettingsController {
     }
 
     func toast(_ title: String, _ message: String?, _ kind: ToastQueue.Kind) {
-        guard isOpen else { return }
-        page.toasts.show(ToastView(title: title, message: message, kind: kind))
+        // A queued save can fail after Settings closed; its error still shows, over the thread.
+        let toasts = isOpen ? page.toasts : (threadPanel as? ThreadPanelView)?.toasts
+        toasts?.show(ToastView(title: title, message: message, kind: kind))
     }
 
     func presentAdd(routeTarget: String?) {

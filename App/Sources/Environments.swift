@@ -474,7 +474,7 @@ final class Environments {
     /// A sign-out whose catalog write failed: the relay token is gone, so close every session that uses
     /// a T3 Connect route. Registrations stay as saved.
     func detachRelaySessions() {
-        for r in saved where routeInUse(r.environmentId).map(r.isRelayRoute) ?? false { drop(r.environmentId) }
+        for r in saved where entries[r.environmentId]?.session?.isRelay == true { drop(r.environmentId) }
     }
 
     /// Removes a saved or development environment: closes its socket, forgets its registration, token,

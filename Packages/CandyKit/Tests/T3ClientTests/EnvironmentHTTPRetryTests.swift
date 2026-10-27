@@ -122,10 +122,61 @@ final class RecordHostProtocol: URLProtocol, @unchecked Sendable {
         #expect(copy.baseURL.host == "tunnel-b.example", "copies made before the move build asset links on the new origin")
     }
 
+    @Test func refreshMovesTheBaseWithoutACall() async {
+        var relay = http()
+        relay.currentBaseURL = { URL(string: "https://tunnel-b.example")! }
+        await relay.refreshBaseURL()
+        #expect(relay.baseURL.host == "tunnel-b.example")
+    }
+
     /// A direct route, or a call without a token, keeps its own origin.
     @Test func withoutAResolverTheSavedOriginStays() async throws {
         RecordHostProtocol.hosts = []
         _ = try await http().get("api/orchestration/threads/t/history", token: "bearer", as: [String: String].self)
         #expect(RecordHostProtocol.hosts == ["tunnel-a.example"])
+    }
+}
+
+/// Answers 401 to the first request and 200 `{}` after, recording "host authorization" per request.
+final class RefuseOnceRelayProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var seen: [String] = []
+    static let lock = NSLock()
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let count = Self.lock.withLock { () -> Int in
+            Self.seen.append("\(request.url?.host ?? "") \(request.value(forHTTPHeaderField: "Authorization") ?? "")")
+            return Self.seen.count
+        }
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: count == 1 ? 401 : 200, httpVersion: nil, headerFields: nil)!,
+                            cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data("{}".utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+struct EnvironmentHTTPRelayRetryTests {
+    actor Relay {
+        var renewed = false
+        func renew() { renewed = true }
+    }
+
+    /// The token renewed after a 401 belongs to tunnel B, so the retry goes to B with a proof for B.
+    @Test func a401RetryGoesToTheRenewedTokensTunnel() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RefuseOnceRelayProtocol.self]
+        var http = EnvironmentHTTP(baseURL: URL(string: "https://tunnel-a.example")!, session: URLSession(configuration: config))
+        let relay = Relay()
+        http.currentBaseURL = { URL(string: await relay.renewed ? "https://tunnel-b.example" : "https://tunnel-a.example")! }
+        http.authorize = { _, url, rejected in
+            if rejected != nil { await relay.renew() }
+            return ["Authorization": "DPoP \(await relay.renewed ? "new" : "old") \(url.host ?? "")"]
+        }
+        _ = try await http.get("api/orchestration/threads/t/history", token: "dpop", as: [String: String].self)
+        #expect(RefuseOnceRelayProtocol.lock.withLock { RefuseOnceRelayProtocol.seen }
+                == ["tunnel-a.example DPoP old tunnel-a.example", "tunnel-b.example DPoP new tunnel-b.example"])
+        #expect(http.baseURL.host == "tunnel-b.example")
     }
 }

@@ -82,7 +82,11 @@ final class ShellSession {
         self.init(environmentId: environmentId, http: http, token: "", cached: cached,
                   supervisor: ConnectionSupervisor(dependencies: .init(connect: authorizer.connector(environmentId: environmentId)),
                                                    keepalive: .ping(interval: .seconds(80))))
+        isRelay = true
     }
+
+    /// A T3 Connect session. Its `http.baseURL` follows the tunnel, so it can't tell the route kind.
+    private(set) var isRelay = false
 
     private init(environmentId: String, http: EnvironmentHTTP, token: String, cached: ShellSnapshot?, supervisor: ConnectionSupervisor) {
         self.environmentId = environmentId
@@ -168,6 +172,8 @@ final class ShellSession {
     private func prepareShell(_ generation: Int) async {
         guard preparedGeneration != generation, !stopped, !Task.isCancelled else { return }
         preparingGeneration = generation
+        // A resumed session may make no HTTP call, yet asset links build on `http.baseURL`: follow the tunnel now (audit TR-1).
+        if isRelay { await http.refreshBaseURL() }
         let version = await supervisor.serverVersion
         if negotiatedConfig, let version, version == negotiatedServerVersion,
            await store.canResume(omissions: omissions), configurationStillMatches(generation), !stopped, !Task.isCancelled {

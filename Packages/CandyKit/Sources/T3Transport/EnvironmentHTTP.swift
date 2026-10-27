@@ -84,6 +84,12 @@ public struct EnvironmentHTTP: Sendable {
         }
     }
 
+    /// Moves `baseURL` to the current relay endpoint, for links built without a call, like signed asset URLs.
+    /// Call it when a session connects. Does nothing without `currentBaseURL` or when the endpoint can't be read.
+    public func refreshBaseURL() async {
+        if let url = try? await currentBaseURL?() { base.value = url }
+    }
+
     /// The base for a call with `token`: the current relay endpoint when there is one.
     private func resolvedBase(token: String?) async throws -> URL {
         guard token != nil, let currentBaseURL else { return baseURL }
@@ -231,29 +237,38 @@ public struct EnvironmentHTTP: Sendable {
 
     private func send<T: Decodable>(_ method: String, _ path: String, token: String?, body: Data? = nil,
                                     contentType: String? = nil, as: T.Type) async throws -> T {
-        // `appending(path:)` would escape a query's `?`, so a path like `ThreadHistoryRequest.path` keeps its query apart.
-        let parts = path.split(separator: "?", maxSplits: 1)
-        var url = try await resolvedBase(token: token).appending(path: String(parts.first ?? ""))
-        if parts.count == 2, var c = URLComponents(url: url, resolvingAgainstBaseURL: false) {
-            c.percentEncodedQuery = String(parts[1])
-            url = c.url ?? url
+        func request(_ base: URL) -> URLRequest {
+            // `appending(path:)` would escape a query's `?`, so a path like `ThreadHistoryRequest.path` keeps its query apart.
+            let parts = path.split(separator: "?", maxSplits: 1)
+            var url = base.appending(path: String(parts.first ?? ""))
+            if parts.count == 2, var c = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+                c.percentEncodedQuery = String(parts[1])
+                url = c.url ?? url
+            }
+            var request = URLRequest(url: url, timeoutInterval: timeout)
+            request.httpMethod = method
+            request.httpShouldHandleCookies = false
+            // Required on /api/orchestration/*, ignored elsewhere (protocol.md 1.2).
+            request.setValue(String(T3Protocol.orchestrationProtocolVersion), forHTTPHeaderField: "x-t3-orchestration-protocol")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            if let contentType { request.setValue(contentType, forHTTPHeaderField: "Content-Type") }
+            request.httpBody = body
+            return request
         }
-        var request = URLRequest(url: url, timeoutInterval: timeout)
-        request.httpMethod = method
-        request.httpShouldHandleCookies = false
-        // Required on /api/orchestration/*, ignored elsewhere (protocol.md 1.2).
-        request.setValue(String(T3Protocol.orchestrationProtocolVersion), forHTTPHeaderField: "x-t3-orchestration-protocol")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let token { try await setAuthorization(&request, token: token) }
-        if let contentType { request.setValue(contentType, forHTTPHeaderField: "Content-Type") }
-        request.httpBody = body
+        var first = request(try await resolvedBase(token: token))
+        if let token { try await setAuthorization(&first, token: token) }
         do {
-            return try await perform(request, as: T.self)
+            return try await perform(first, as: T.self)
         } catch EnvironmentHTTPError.status(401, _) where authorize != nil && token != nil {
-            // The DPoP token was refused: once more with a fresh one (environmentHttpAuth.ts:148-207).
-            let sent = request.value(forHTTPHeaderField: "Authorization")?.split(separator: " ").last.map(String.init)
-            try await setAuthorization(&request, token: token!, rejected: sent)
-            return try await perform(request, as: T.self)
+            // The DPoP token was refused: once more with a fresh one (environmentHttpAuth.ts:148-207). The fresh token
+            // can belong to another tunnel, so the retry is rebuilt on its origin before it is signed.
+            let sent = first.value(forHTTPHeaderField: "Authorization")?.split(separator: " ").last.map(String.init)
+            var renewed = first
+            try await setAuthorization(&renewed, token: token!, rejected: sent)
+            guard currentBaseURL != nil else { return try await perform(renewed, as: T.self) }
+            var retry = request(try await resolvedBase(token: token))
+            try await setAuthorization(&retry, token: token!)
+            return try await perform(retry, as: T.self)
         }
     }
 
