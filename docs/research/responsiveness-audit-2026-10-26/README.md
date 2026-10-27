@@ -15,8 +15,8 @@ Product baseline: `0ced803c3ec141b3a58ab31e5bc401d6f61a06e3`, following the init
 | [C1](composer.md), fixed | Failed-send recovery restores A's prompt into B, or fails to recover A while B has text. | Extracted recovery body reproduced both cases. |
 | [C3](composer.md), fixed | Upload retry sends the saved prompt and clears newer typing. | Extracted resume body reproduced lost typing. |
 | [SA1](session-actions.md), fixed | A browser download's 403/404 error body replaces an existing destination file. | Production save method and real temporary files reproduced replacement; HTTP 200 control passed. |
-| [SU1](settings-updates.md) | Overlapping project-setting writes replace whole entries and erase earlier changes. | Source trace, including the server's replacement contract. |
-| [TR-1](transport.md) | A changed relay endpoint leaves history/assets using the obsolete origin while its socket connects elsewhere. | Source trace. Requires endpoint rotation and an unavailable old origin. |
+| [SU1](settings-updates.md), fixed | Overlapping project-setting writes replace whole entries and erase earlier changes. | Source trace, including the server's replacement contract. |
+| [TR-1](transport.md), fixed | A changed relay endpoint leaves history/assets using the obsolete origin while its socket connects elsewhere. | Source trace. Requires endpoint rotation and an unavailable old origin. |
 
 Keep operation targets, drafts, file identities and revisions fixed across each await.
 
