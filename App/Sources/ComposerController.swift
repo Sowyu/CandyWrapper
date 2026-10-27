@@ -481,6 +481,19 @@ final class ComposerController {
     /// Host freezes already toasted, as environment and detection time (HostFreezeToastCoordinator.tsx:13-31).
     private var shownStalls: Set<String> = []
 
+    func applyProviderUpdateReply(_ providers: [ServerProvider], environmentId: String) {
+        let current = serverConfigs[environmentId]?.providers ?? []
+        let reconciled = providers.map { provider in
+            // A later attempt may already have arrived on the push stream before this reply.
+            if let newer = current.first(where: { $0.instanceId == provider.instanceId }),
+               let started = newer.updateState?.startedAt, let returnedStart = provider.updateState?.startedAt, started > returnedStart {
+                return newer
+            }
+            return provider
+        }
+        configChanged(.providerStatuses(reconciled), environmentId: environmentId)
+    }
+
     private func configChanged(_ event: ServerConfigEvent, environmentId: String) {
         var config = serverConfigs[environmentId] ?? ServerProviderConfig(providers: [])
         var refreshComposer = true
@@ -528,6 +541,8 @@ final class ComposerController {
         if refreshComposer && environmentId == targetEnvironmentId { refresh() }
         onConfigChange?(environmentId)
         configObservers.forEach { $0(environmentId) }
+        let snapshot: Bool = if case .snapshot = event { true } else { false }
+        configEventObservers.forEach { $0(environmentId, snapshot) }
     }
 
     /// An environment's live shell: a thread draft whose model pick the thread now runs drops it, so the
@@ -563,6 +578,8 @@ final class ComposerController {
     var onConfigChange: ((String) -> Void)?
     /// More listeners for config changes (the Usage page's limits).
     var configObservers: [(String) -> Void] = []
+    /// Config listeners that also need to distinguish a fresh snapshot from a push or RPC reply.
+    var configEventObservers: [(String, Bool) -> Void] = []
     /// A question is about to take the editor: an open citation comment saves into the prompt first
     /// (T3 3105 9fb4ddb2d, ComposerPromptEditorTiptap.tsx `saveCitationDraft`).
     var onEditorTaken: (() -> Void)?

@@ -263,10 +263,11 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     public struct UpdateState: Hashable, Sendable {
         /// `queued`, `running`, `succeeded`, `failed` or `unchanged`.
         public var status: String
+        public var startedAt: String?
         public var finishedAt: String?
         public var message: String?
-        public init(status: String, finishedAt: String? = nil, message: String? = nil) {
-            self.status = status; self.finishedAt = finishedAt; self.message = message
+        public init(status: String, finishedAt: String? = nil, message: String? = nil, startedAt: String? = nil) {
+            self.status = status; self.startedAt = startedAt; self.finishedAt = finishedAt; self.message = message
         }
     }
 
@@ -316,7 +317,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
         checkedAt = try? c.decodeIfPresent(String.self, forKey: .checkedAt)
         usageLimits = ProviderUsageLimits(json: (try? c.decodeIfPresent(JSONValue.self, forKey: .usageLimits)) ?? nil)
         if let update = (try? c.decodeIfPresent(JSONValue.self, forKey: .updateState)) ?? nil, let status = update["status"]?.stringValue {
-            updateState = UpdateState(status: status, finishedAt: update["finishedAt"]?.stringValue, message: update["message"]?.stringValue)
+            updateState = UpdateState(status: status, finishedAt: update["finishedAt"]?.stringValue, message: update["message"]?.stringValue, startedAt: update["startedAt"]?.stringValue)
         }
         versionAdvisory = (try? c.decodeIfPresent(JSONValue.self, forKey: .versionAdvisory)) ?? nil
         latestVersion = versionAdvisory?["latestVersion"]?.stringValue

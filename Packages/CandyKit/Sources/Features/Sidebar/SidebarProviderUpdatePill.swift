@@ -57,7 +57,7 @@ public struct SidebarProviderUpdatePillModel: Equatable, Sendable {
         return order.compactMap { byDriver[$0] }
     }
 
-    public static func resolve(_ providers: [ServerProvider], visibleAfter: String?, dismissed: Set<String>) -> SidebarProviderUpdatePillModel? {
+    public static func resolve(_ providers: [ServerProvider], visibleAfter: String?, dismissed: Set<String>, stalledInstances: Set<String> = []) -> SidebarProviderUpdatePillModel? {
         // Update state lives per instance, so pick the instances with an update before collapsing to one per driver
         // (logic.ts:505-535, T3 f15aa815f3). Deduping first hid an update on a non-default instance.
         let active = dedupe(providers.filter { $0.updateState?.status == "queued" || $0.updateState?.status == "running" })
@@ -69,7 +69,7 @@ public struct SidebarProviderUpdatePillModel: Equatable, Sendable {
         }
         let recent = latestFinishedByDriver(providers.filter { p in
             guard let status = p.updateState?.status, ["failed", "unchanged", "succeeded"].contains(status) else { return false }
-            guard let visibleAfter else { return true }
+            guard let visibleAfter, !stalledInstances.contains(p.instanceId.rawValue) else { return true }
             return (p.updateState?.finishedAt).map { $0 >= visibleAfter } ?? false
         })
         func key(_ prefix: String, _ ps: [ServerProvider]) -> String {
@@ -79,7 +79,8 @@ public struct SidebarProviderUpdatePillModel: Equatable, Sendable {
         var candidates: [(SidebarProviderUpdatePillModel, String)] = []
         let failed = recent.filter { $0.updateState?.status == "failed" }
         if let first = failed.first {
-            let title = failed.count == 1
+            let stalled = failed.allSatisfy { stalledInstances.contains($0.instanceId.rawValue) }
+            let title = stalled ? (failed.count == 1 ? "\(name(first.driver)) update didn't finish" : "\(failed.count) provider updates didn't finish") : failed.count == 1
                 ? (first.latestVersion.map { "\(name(first.driver)) \(version($0)) update failed" } ?? "\(name(first.driver)) update failed")
                 : "\(failed.count) provider updates failed"
             let description = failed.count == 1 && first.updateState?.message != nil ? first.updateState!.message!
@@ -107,7 +108,7 @@ public struct SidebarProviderUpdatePillModel: Equatable, Sendable {
 
 /// `SidebarProviderUpdatePill` (sidebar/SidebarProviderUpdatePill.tsx): a `min-h-7 rounded-lg text-2xs
 /// font-medium` pill in the sidebar footer. It opens Settings > Providers; failures and stale versions
-/// can be dismissed until the status changes; a success shows a 3 s draining bar and leaves.
+/// and stalled updates can be dismissed until the status changes; a success shows a 3 s draining bar and leaves.
 public final class SidebarProviderUpdatePillView: DSView {
     public var onOpenSettings: (@MainActor () -> Void)?
     /// The pill appeared or went away (the footer relays out).
@@ -117,9 +118,19 @@ public final class SidebarProviderUpdatePillView: DSView {
     /// `visibleAfterIso`: only updates that finish after the first providers seen count.
     private var visibleAfter: String?
     private var dismissWork: DispatchWorkItem?
+    private var progressWork: DispatchWorkItem?
+    private(set) var scheduledProgressDeadline: TimeInterval?
+    private var progressState = ProviderUpdateProgress()
+    private var providers: [ServerProvider] = []
+    private var connected = true
+    private var awaitingSnapshot = false
+    private var environmentId: String?
+    var now: () -> TimeInterval = { Date().timeIntervalSince1970 }
     private let main = PillMain()
     private let close = PillClose()
     private let progress = CALayer()
+
+    isolated deinit { dismissWork?.cancel(); progressWork?.cancel() }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -141,12 +152,69 @@ public final class SidebarProviderUpdatePillView: DSView {
         isHidden = true
     }
 
-    /// The primary environment's providers changed.
-    public func update(_ providers: [ServerProvider]) {
+    /// A fresh config snapshot replaces cached progress after a reconnect.
+    public func update(_ providers: [ServerProvider], environmentId: String? = nil, snapshot: Bool = false) {
+        selectEnvironment(environmentId)
+        guard !awaitingSnapshot || snapshot else { return }
+        if snapshot { awaitingSnapshot = false }
+        self.providers = providers
         if visibleAfter == nil { visibleAfter = providers.compactMap(\.checkedAt).max() }
-        let next = SidebarProviderUpdatePillModel.resolve(providers, visibleAfter: visibleAfter, dismissed: dismissed)
-        guard next != shown else { return }
-        show(next)
+        renderProgress()
+    }
+
+    /// A disconnected server cannot confirm that its cached update is still running.
+    public func connectionChanged(connected: Bool, environmentId: String?) {
+        selectEnvironment(environmentId)
+        guard self.connected != connected else { return }
+        self.connected = connected
+        if !connected { awaitingSnapshot = true }
+        renderProgress()
+    }
+
+    private func selectEnvironment(_ id: String?) {
+        guard let id, id != environmentId else { return }
+        environmentId = id
+        progressState = ProviderUpdateProgress()
+        providers = []
+        visibleAfter = nil
+        dismissed = []
+        scheduleProgressDeadline(nil)
+        if shown != nil { show(nil) }
+    }
+
+    private func renderProgress() {
+        guard connected, !awaitingSnapshot else {
+            scheduleProgressDeadline(nil)
+            if shown != nil { show(nil) }
+            return
+        }
+        let reconciled = progressState.reconcile(providers, now: now())
+        let next = SidebarProviderUpdatePillModel.resolve(reconciled, visibleAfter: visibleAfter, dismissed: dismissed, stalledInstances: progressState.stalledInstances)
+        scheduleProgressDeadline(progressState.nextDeadline)
+        if next != shown { show(next) }
+    }
+
+    /// One deadline while progress is pending, with no polling or timer while idle or disconnected.
+    private func scheduleProgressDeadline(_ deadline: TimeInterval?) {
+        guard deadline != scheduledProgressDeadline else { return }
+        progressWork?.cancel()
+        progressWork = nil
+        scheduledProgressDeadline = deadline
+        guard let deadline else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.scheduledProgressDeadline == deadline else { return }
+            self.progressDeadlineReached()
+        }
+        progressWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, deadline - now()), execute: work)
+    }
+
+    func progressDeadlineReached() {
+        guard scheduledProgressDeadline != nil else { return }
+        progressWork?.cancel()
+        progressWork = nil
+        scheduledProgressDeadline = nil
+        renderProgress()
     }
 
     func show(_ model: SidebarProviderUpdatePillModel?) {

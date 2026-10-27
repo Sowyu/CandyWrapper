@@ -584,16 +584,29 @@ final class Environments {
         var errorDescription: String? { "This environment is not connected." }
     }
 
+    /// Provider maintenance replies also carry authoritative statuses if the push was missed.
+    var onProviderUpdateReply: ((String, [ServerProvider]) -> Void)?
+
+    private func acceptProviderUpdateReply(_ reply: JSONValue, method: String, environmentId: String, session: ShellSession) {
+        guard method == "server.updateProvider", self.session(environmentId) === session,
+              let providers = try? reply["providers"]?.decode(as: [ServerProvider].self) else { return }
+        onProviderUpdateReply?(environmentId, providers)
+    }
+
     /// One unary call on the environment's own socket.
     func request(_ environmentId: String, _ method: String, _ payload: JSONValue) async throws -> JSONValue {
         guard let session = session(environmentId) else { throw CommandError.notConnected }
-        return try await session.supervisor.request(method, payload: payload)
+        let reply = try await session.supervisor.request(method, payload: payload)
+        acceptProviderUpdateReply(reply, method: method, environmentId: environmentId, session: session)
+        return reply
     }
 
     /// One unary call that gives up after `timeout`, for calls queued behind each other.
     func request(_ environmentId: String, _ method: String, _ payload: JSONValue, timeout: Duration) async throws -> JSONValue {
         guard let session = session(environmentId) else { throw CommandError.notConnected }
-        return try await session.supervisor.request(method, payload: payload, timeout: timeout)
+        let reply = try await session.supervisor.request(method, payload: payload, timeout: timeout)
+        acceptProviderUpdateReply(reply, method: method, environmentId: environmentId, session: session)
+        return reply
     }
 
     /// `orchestration.dispatchCommand` on the environment of `threadId` (a scoped id). With `update`, the

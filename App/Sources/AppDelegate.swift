@@ -569,10 +569,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // The provider update pill follows the primary environment's providers (`primaryServerProvidersAtom`).
         // 3669 has no launch toast for provider updates (b9aaff46e0).
-        threads.composer.configObservers.append { [weak sidebar, weak threads, weak environments] env in
+        threads.composer.configEventObservers.append { [weak sidebar, weak threads, weak environments] env, snapshot in
             guard env == environments?.primaryId, let providers = threads?.composer.config(env)?.providers else { return }
-            sidebar?.providerUpdatePill.update(providers)
+            sidebar?.providerUpdatePill.update(providers, environmentId: env, snapshot: snapshot)
         }
+        environments.onProviderUpdateReply = { [weak threads] env, providers in
+            threads?.composer.applyProviderUpdateReply(providers, environmentId: env)
+        }
+        let providerConnectionChanged = { [weak sidebar, weak environments] in
+            guard let environments else { return }
+            let id = environments.primaryId
+            let connected = id.flatMap { environments.state($0)?.status } == .connected
+            sidebar?.providerUpdatePill.connectionChanged(connected: connected, environmentId: id)
+        }
+        environments.observe(providerConnectionChanged)
+        providerConnectionChanged()
         sidebar.providerUpdatePill.onOpenSettings = { [weak settings, weak commands] in
             commands?.closeUtilityPage()
             settings?.open()
