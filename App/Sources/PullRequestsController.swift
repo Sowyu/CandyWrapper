@@ -57,6 +57,8 @@ final class PullRequestDetailBinding {
     private(set) var target: PullRequestSurfaceTarget?
     private(set) var detail: PullRequestDetail?
     private var generation = 0
+    /// Counts each pull request the surface shows, for `stillShows`.
+    private var showing = 0
     private var commit: String?
     private var patchKey: String?
     private var viewedStates: [String: String]?
@@ -138,6 +140,7 @@ final class PullRequestDetailBinding {
     /// Shows a pull request; the same one again keeps what is loaded.
     func show(environmentId: String, target: PullRequestSurfaceTarget) {
         if self.environmentId == environmentId, self.target?.surfaceId == target.surfaceId { return }
+        showing += 1
         self.environmentId = environmentId
         self.target = target
         detail = nil
@@ -147,6 +150,13 @@ final class PullRequestDetailBinding {
         overlay = [:]
         slices = []; sliceCursor = nil; sliceError = nil; sliceLoading = false
         stackFresh = false
+        // A write still running belongs to the previous pull request; its reply leaves this one alone.
+        view.pendingAction = nil
+        view.actionPending = false
+        view.stackPending = false
+        view.titleSaving = false
+        view.bodySaving = false
+        view.commentSaving = false
         view.tab = .summary
         view.currentMergeMethod = nil
         // `usePullRequestDefaultMergeMethodResolver`: the project's override over the environment's setting.
@@ -163,7 +173,14 @@ final class PullRequestDetailBinding {
         reload(invalidate: false)
     }
 
+    /// Whether the surface still shows the pull request a write went to, counted per showing, so leaving and
+    /// coming back makes a new one. A reply that lands after the user moved on finishes there and leaves the
+    /// shown composer, editors and pending state alone, as T3's `performCommentAction` keeps its render's
+    /// `reference` (PullRequestDetailPanel.tsx:616-685).
+    private func stillShows(_ shown: Int) -> Bool { showing == shown }
+
     func clear() {
+        showing += 1
         generation += 1
         environmentId = nil
         target = nil
@@ -327,37 +344,47 @@ final class PullRequestDetailBinding {
     /// `pullRequests.runAction`, then a fresh read.
     func perform(_ action: String, mergeMethod: String?) {
         guard let shell, let ref = reference else { return }
-        let provider = view.detail?.provider
-        view.pendingAction = action
-        view.actionPending = true
+        run(action, mergeMethod: mergeMethod, shell: shell, ref: ref, shown: showing, provider: view.detail?.provider)
+    }
+
+    /// `finishAction`: the action goes to the pull request it was chosen on, even once another one shows.
+    private func run(_ action: String, mergeMethod: String?, shell: ShellSession, ref: PullRequestRef, shown: Int, provider: String?) {
+        if stillShows(shown) {
+            view.pendingAction = action
+            view.actionPending = true
+        }
         Task { [weak self] in
             do {
                 _ = try await shell.supervisor.request("pullRequests.runAction", payload: PullRequestPayloads.action(ref, action: action, mergeMethod: mergeMethod))
                 guard let self else { return }
-                self.view.actionPending = false
                 // 2994 shows the new state in the panel and toasts only a revert, which opens another
                 // pull request (PullRequestDetailPanel.tsx:1027-1030).
                 if action == "revert" || action == "delete-branch" { self.toast(PullRequestDetailLogic.actionSuccess(action, provider: provider), nil, .success) }
+                guard self.stillShows(shown) else { return }
+                self.view.actionPending = false
                 self.onActed?(action)
                 self.reload(invalidate: action == "update-branch" || action == "approve-workflows")
             } catch {
                 guard let self else { return }
-                self.view.actionPending = false
+                if self.stillShows(shown) { self.view.actionPending = false }
                 self.toast(PullRequestDetailLogic.actionFailure(action, provider: provider, inPanel: true), Self.failure(error, number: ref.number, provider: provider).1, .error)
             }
         }
     }
 
+    /// The composer that sent a comment or review hears the reply; another pull request's composer keeps its draft.
     private func comment(_ body: String) {
         guard let shell, let ref = reference, let payload = PullRequestPayloads.comment(ref, body: body) else { return }
+        let shown = showing, composer = view.composer
         Task { [weak self] in
             do {
                 _ = try await shell.supervisor.request("pullRequests.comment", payload: payload)
-                self?.view.composer?.commentPosted()
-                self?.view.closeComposer()
-                self?.reload(invalidate: false)
+                composer?.commentPosted()
+                guard let self else { return }
+                if let composer, self.view.composer === composer { self.view.closeComposer() }
+                if self.stillShows(shown) { self.reload(invalidate: false) }
             } catch {
-                self?.view.composer?.commentSubmitting = nil
+                composer?.commentSubmitting = nil
                 self?.toast("Could not post the comment", nil, .error)
             }
         }
@@ -366,17 +393,18 @@ final class PullRequestDetailBinding {
     /// `PullRequestReviewForm.submit`: the verdict, the summary and the pending line comments in one request.
     private func review(_ verdict: String, body: String, comments: [PullRequestReviewCommentDraft]) {
         guard let shell, let ref = reference else { return }
-        let provider = view.detail?.provider
+        let provider = view.detail?.provider, shown = showing, composer = view.composer
         Task { [weak self] in
             do {
                 _ = try await shell.supervisor.request("pullRequests.submitReview", payload: PullRequestPayloads.submitReview(ref, verdict: verdict, body: body, comments: comments))
-                self?.view.composer?.reviewSubmitted(body: body, comments: comments)
-                self?.view.closeComposer()
-                self?.toast(PullRequestWriteLogic.reviewSent(verdict, provider: provider), nil, .success)
-                self?.reload(invalidate: false)
+                composer?.reviewSubmitted(body: body, comments: comments)
+                guard let self else { return }
+                if let composer, self.view.composer === composer { self.view.closeComposer() }
+                self.toast(PullRequestWriteLogic.reviewSent(verdict, provider: provider), nil, .success)
+                if self.stillShows(shown) { self.reload(invalidate: false) }
             } catch {
                 // The draft is kept.
-                self?.view.composer?.reviewPending = false
+                composer?.reviewPending = false
                 self?.toast("The review could not be submitted", nil, .error)
             }
         }
@@ -389,14 +417,17 @@ final class PullRequestDetailBinding {
     private func write(_ method: String, _ build: (PullRequestRef) -> JSONValue?, failure: String, refresh: Bool = true,
                        done: @escaping @MainActor (Bool) -> Void) {
         guard let shell, let ref = reference, let payload = build(ref) else { done(false); return }
+        let shown = showing
         Task { [weak self] in
             do {
                 _ = try await shell.supervisor.request(method, payload: payload)
+                // `done` edits the shown pull request's editors, so another one's never closes.
+                guard let self, self.stillShows(shown) else { return }
                 done(true)
-                if refresh { self?.reload(invalidate: false) }
+                if refresh { self.reload(invalidate: false) }
             } catch {
                 self?.toast(failure, Self.failure(error, number: ref.number).1, .error)
-                done(false)
+                if self?.stillShows(shown) == true { done(false) }
             }
         }
     }
@@ -449,19 +480,21 @@ final class PullRequestDetailBinding {
     /// `performCommentAction`: post the comment, then close or reopen.
     private func commentAction(_ body: String, _ action: String) {
         guard let shell, let ref = reference, let payload = PullRequestPayloads.comment(ref, body: body) else { return }
+        let shown = showing, composer = view.composer, provider = view.detail?.provider
         view.actionPending = true
         Task { [weak self] in
             do {
                 _ = try await shell.supervisor.request("pullRequests.comment", payload: payload)
             } catch {
-                self?.view.actionPending = false
-                self?.view.composer?.commentSubmitting = nil
+                if self?.stillShows(shown) == true { self?.view.actionPending = false }
+                composer?.commentSubmitting = nil
                 self?.toast("Could not post the comment", nil, .error)
                 return
             }
-            self?.view.composer?.commentPosted()
-            self?.view.closeComposer()
-            self?.perform(action, mergeMethod: nil)
+            composer?.commentPosted()
+            guard let self else { return }
+            if let composer, self.view.composer === composer { self.view.closeComposer() }
+            self.run(action, mergeMethod: nil, shell: shell, ref: ref, shown: shown, provider: provider)
         }
     }
 
@@ -586,6 +619,7 @@ final class PullRequestDetailBinding {
         guard let payload = PullRequestWriteLogic.stackActionPayload(stack, ref: ref, action: action, mergeMethod: method) else { return }
         view.stackPending = true
         toast(action == "merge" ? "Merging stack..." : "Rebasing stack...", nil, .info)
+        let shown = showing
         Task { [weak self] in
             do {
                 _ = try await shell.supervisor.request("pullRequests.runAction", payload: payload)
@@ -594,9 +628,10 @@ final class PullRequestDetailBinding {
             } catch {
                 self?.toast(action == "merge" ? "Could not merge the stack" : "Could not rebase the stack", Self.failure(error, number: ref.number).1, .error)
             }
-            self?.view.stackPending = false
-            self?.onActed?(action)
-            self?.reload(invalidate: false)
+            guard let self, self.stillShows(shown) else { return }
+            self.view.stackPending = false
+            self.onActed?(action)
+            self.reload(invalidate: false)
         }
     }
 

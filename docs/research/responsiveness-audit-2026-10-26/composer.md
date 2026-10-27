@@ -12,6 +12,8 @@ Local upstream: `~/CandyWrapper-research/t3code`, checked out at `v0.1.2-nightly
 
 ### C1. P1: send failure restores the old prompt into a different thread
 
+**Fixed 2026-10-27.** See [Fixed since the audit](README.md#fixed-since-the-audit).
+
 **Reachable entry:** ordinary Enter or Send, `Packages/CandyKit/Sources/Features/Composer/ComposerView.swift:745-748`, through `ComposerController.swift:302`. Both existing-thread dispatch failure (`ComposerController.swift:1959-1961`) and foreground draft-launch failure (`:1908-1913`) reach `sendFailed`.
 
 **Defect:** `App/Sources/ComposerController.swift:2210-2211` checks only whether the currently displayed editor is empty. It writes failed text into that editor and calls `remember`, which persists against the current `draftKey` (`:1248-1253`). The captured original `key` is used for error reporting, not text restoration. `showThread` explicitly permits navigation and changes the target while a request runs (`:838-851`). Attachments, in contrast, restore to the original key (`:1960`, `:3842-3845`).
@@ -39,6 +41,8 @@ Local upstream: `~/CandyWrapper-research/t3code`, checked out at `v0.1.2-nightly
 **Parent scenario:** two sandbox environments for one logical project; ready file and image separately; switch A to B then send. Inspect upload destination and dispatch attachment IDs. Also delay image preparation before switching, and delay auto-balance completion while adding an attachment. The latter is a useful stress scenario rather than a separately confirmed finding.
 
 ### C3. P1: upload retry sends an old snapshot and clears newer typing
+
+**Fixed 2026-10-27.** See [Fixed since the audit](README.md#fixed-since-the-audit).
 
 **Reachable entry:** Send with a retryable failed upload. Failed status intentionally does not block Send (`Packages/CandyKit/Sources/Features/Composer/ComposerAttachments.swift:135-143`). The controller saves `(text, mode, background)` in `sendAfterRetry` and starts retrying (`App/Sources/ComposerController.swift:1715-1721`).
 

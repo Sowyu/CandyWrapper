@@ -10,15 +10,17 @@ Product baseline: `0ced803c3ec141b3a58ab31e5bc401d6f61a06e3`, following the init
 
 | Finding | Consequence | Evidence |
 | --- | --- | --- |
-| [F1](files-actions.md) | Comment on PR A can close or reopen PR B after navigation. | Production-method harness reproduced both targets. |
-| [F2](files-actions.md) | A late comment success clears PR B's unsent text. | Production-method harness reproduced text loss. |
-| [C1](composer.md) | Failed-send recovery restores A's prompt into B, or fails to recover A while B has text. | Extracted recovery body reproduced both cases. |
-| [C3](composer.md) | Upload retry sends the saved prompt and clears newer typing. | Extracted resume body reproduced lost typing. |
-| [SA1](session-actions.md) | A browser download's 403/404 error body replaces an existing destination file. | Production save method and real temporary files reproduced replacement; HTTP 200 control passed. |
+| [F1](files-actions.md), fixed | Comment on PR A can close or reopen PR B after navigation. | Production-method harness reproduced both targets. |
+| [F2](files-actions.md), fixed | A late comment success clears PR B's unsent text. | Production-method harness reproduced text loss. |
+| [C1](composer.md), fixed | Failed-send recovery restores A's prompt into B, or fails to recover A while B has text. | Extracted recovery body reproduced both cases. |
+| [C3](composer.md), fixed | Upload retry sends the saved prompt and clears newer typing. | Extracted resume body reproduced lost typing. |
+| [SA1](session-actions.md), fixed | A browser download's 403/404 error body replaces an existing destination file. | Production save method and real temporary files reproduced replacement; HTTP 200 control passed. |
 | [SU1](settings-updates.md) | Overlapping project-setting writes replace whole entries and erase earlier changes. | Source trace, including the server's replacement contract. |
 | [TR-1](transport.md) | A changed relay endpoint leaves history/assets using the obsolete origin while its socket connects elsewhere. | Source trace. Requires endpoint rotation and an unavailable old origin. |
 
-Keep operation targets, drafts, file identities and revisions fixed across each await. These findings support focused repairs; they do not establish a need to rewrite the client. Product fixes are outside this audit commit.
+Keep operation targets, drafts, file identities and revisions fixed across each await.
+
+C1, C3, F1, F2 and SA1 were fixed on 2026-10-27; see [Fixed since the audit](#fixed-since-the-audit). The other findings are still open. These findings support focused repairs; they do not establish a need to rewrite the client. Product fixes are outside this audit commit.
 
 ## Loading measurements
 
@@ -90,11 +92,11 @@ The intentionally failing regressions assert the desired behavior. The PR harnes
 
 | ID | Priority | Evidence | Finding |
 | --- | --- | --- | --- |
-| [C1](composer.md) | P1 | Executed | Failed send recovery restores text into another thread |
-| [C3](composer.md) | P1 | Executed | Upload retry sends old text and clears newer typing |
-| [F1](files-actions.md) | P1 | Executed | Comment-and-close/reopen can act on a different pull request |
-| [F2](files-actions.md) | P1 | Executed | A late comment success erases another pull request draft |
-| [SA1](session-actions.md) | P1 | Executed | Browser download error bodies replace existing destination files |
+| [C1](composer.md) | P1 | Executed | Fixed 2026-10-27. Failed send recovery restores text into another thread |
+| [C3](composer.md) | P1 | Executed | Fixed 2026-10-27. Upload retry sends old text and clears newer typing |
+| [F1](files-actions.md) | P1 | Executed | Fixed 2026-10-27. Comment-and-close/reopen can act on a different pull request |
+| [F2](files-actions.md) | P1 | Executed | Fixed 2026-10-27. A late comment success erases another pull request draft |
+| [SA1](session-actions.md) | P1 | Executed | Fixed 2026-10-27. Browser download error bodies replace existing destination files |
 | [SU1](settings-updates.md) | P1 | Source | Overlapping project-setting writes erase earlier changes |
 | [TR-1](transport.md) | P1 | Source | Changed relay endpoint leaves HTTP history and assets on an obsolete origin |
 | [C2](composer.md) | P2 | Source | Changing machine keeps attachment upload IDs from the previous machine |
@@ -120,6 +122,24 @@ The intentionally failing regressions assert the desired behavior. The PR harnes
 | [IMG-3](images.md) | P3 | Executed | Malformed image bytes leave the file preview blank |
 | [IMG-5](images.md) | P3 | Source | Media Save silently drops signing and HTTP failures |
 | [OH-5](orchestrator-helper.md) | P3 | Executed | An earlier read clears the busy state of a queued connector mutation |
+
+## Fixed since the audit
+
+On 2026-10-27, commit "fix: late replies keep their own draft, thread and pull request; failed downloads leave files alone" fixed these:
+
+- C1. `sendFailed` restores the text under the key it was sent from, and only if that draft is empty. The editor changes only while it still shows that key. A failed first send whose project key now holds a newer draft comes back under its own draft id.
+- C3. `resumeSendAfterRetry` sends only if the editor still holds the text that was sent. Otherwise the newer text stays and a toast says the message wasn't sent.
+- F1 and F2. Comment, review, comment-and-close, actions, edits and stack actions keep their pull request and environment. The close or reopen goes to the pull request that got the comment. A reply only touches the composer that sent it, and it reloads, clears pending state or closes an editor only during the same showing of its pull request. Leaving and coming back counts as a new showing, so an old title save can't close a newer title edit. Switching pull requests clears the old pending and saving flags.
+- SA1. `DownloadedFile.save` refuses a non-2xx reply or a body that doesn't match the announced `sizeBytes`. It stages the file on the destination's volume and swaps it in with `replaceItemAt`, so the original survives any failure.
+
+The three harnesses now assert the fixed behavior and exit 1 if a bug comes back. Run against the code before the fix, they fail every bug case: 7 composer, 2 download and 9 pull request. Their controls pass both before and after.
+
+```sh
+CW_COMPOSER_AUDIT_REPRO=1 /usr/bin/python3 scripts/audit-composer-recovery
+CW_SESSION_ACTIONS_AUDIT_REPRO=1 /usr/bin/python3 scripts/audit-session-actions
+python3 docs/research/responsiveness-audit-2026-10-26/files-actions-harness.py --run
+scripts/test --filter DownloadedFileTests
+```
 
 ## Review and coverage limits
 

@@ -10,6 +10,8 @@ Scope: `App/Sources/FilesController.swift`, `GitController.swift`, `PullRequests
 
 ### F1. P1: Comment and close/reopen can act on a different pull request
 
+**Fixed 2026-10-27.** See [Fixed since the audit](README.md#fixed-since-the-audit).
+
 **Trigger and reachability:** Open PR A, submit a comment with Close or Reopen, and switch to another PR B before A's comment RPC finishes. The shared binding changes target through `PullRequestsController.sync()` at `App/Sources/PullRequestsController.swift:695-698` or the standalone page's `syncDetail()` at `App/Sources/PullRequestsPage.swift:600-605`. `PullRequestDetailBinding.show()` replaces its environment and target at `App/Sources/PullRequestsController.swift:139-142` without canceling the write.
 
 **Trace:** `commentAction` captures A's `shell` and reference at `App/Sources/PullRequestsController.swift:447`, posts A's comment at `:451`, then calls `self?.perform(action, mergeMethod: nil)` at `:460`. `perform` obtains the current shell/reference at `:327` and sends the state change at `:332`.
@@ -21,6 +23,8 @@ Scope: `App/Sources/FilesController.swift`, `GitController.swift`, `PullRequests
 **Reproduction artifact:** `files-actions-harness.py` extracts `commentAction`, `perform`, and `comment` verbatim from the current production file. Its first case gates the comment, changes the binding's reference/environment, then observes the action payload. Not executed here.
 
 ### F2. P1: A late comment success erases another PR's unsent comment
+
+**Fixed 2026-10-27.** See [Fixed since the audit](README.md#fixed-since-the-audit).
 
 **Trigger and reachability:** Submit an ordinary comment on A, switch to B while it is pending, open B's composer, and type an unsent comment before A replies. Ordinary comment submission does not set the shared `actionPending` flag (`App/Sources/PullRequestsController.swift:348-355`). Switching targets builds a composer with B's identity (`Packages/CandyKit/Sources/Features/PullRequests/PullRequestDetailView.swift:754-763`).
 

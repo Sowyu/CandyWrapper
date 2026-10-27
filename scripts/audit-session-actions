@@ -1,9 +1,10 @@
 #!/usr/bin/python3
 """Opt-in production-method harness. Run in the parent's execution lane only.
 
-Extracts BrowserController.saveDownload unchanged and replaces its collaborators
-with local fakes. No app, screen, RPC, account, or network access. Exit 1 records
-an unsafe download save. Compilation and execution each have a time limit.
+Extracts BrowserController.saveDownload unchanged, with the package's
+DownloadedFile when it exists, and replaces its other collaborators with local
+fakes. No app, screen, RPC, account, or network access. Exit 1 records an unsafe
+download save (SA1). Compilation and execution each have a time limit.
 """
 import os
 from pathlib import Path
@@ -22,6 +23,8 @@ while depth:
     depth += (source[end] == "{") - (source[end] == "}")
     end += 1
 method = source[start:end].replace("private func ", "func ", 1)
+helper = root / "Packages/CandyKit/Sources/T3Client/DownloadedFile.swift"
+helper = helper.read_text() if helper.exists() else ""
 
 swift = r'''
 import Foundation
@@ -91,7 +94,7 @@ enum Response { case OK }
     let environments = Environments()
     let panel = Panel()
 '''
-swift += method + "\n}\n"
+swift += method + "\n}\n" + helper + "\n"
 swift += r'''
 @main struct Main {
     @MainActor static func main() async throws {

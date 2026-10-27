@@ -17,6 +17,8 @@ this checkout's `T3_VERSION`. No web research was needed for repository behavior
 
 ### SA1: A failed browser download can replace an existing file with an error body
 
+**Fixed 2026-10-27.** See [Fixed since the audit](README.md#fixed-since-the-audit).
+
 **P1, source-traced.** `App/Sources/BrowserController.swift:580-585` discards the
 HTTP response from `URLSession.shared.download`, removes the destination, and
 moves the downloaded temporary file there. HTTP 404 and 403 responses normally

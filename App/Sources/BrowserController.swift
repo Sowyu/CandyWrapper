@@ -465,9 +465,9 @@ final class BrowserController {
         case .clipboard(let text):
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
-        case .download(let id, let fileName, _):
+        case .download(let id, let fileName, let sizeBytes):
             panel.toasts.show(ToastView(title: "Downloaded \(fileName)", kind: .info, actionTitle: "Save", action: { [weak self] in
-                self?.saveDownload(id: id, fileName: fileName)
+                self?.saveDownload(id: id, fileName: fileName, sizeBytes: Int(exactly: sizeBytes))
             }))
         case .fileChooser(let id, let multiple, let accept):
             stream?.chooser = id
@@ -566,8 +566,9 @@ final class BrowserController {
         }
     }
 
-    /// The download happened on the environment; this saves the finished file on this Mac.
-    private func saveDownload(id downloadId: String, fileName: String) {
+    /// The download happened on the environment; this saves the finished file on this Mac. An error page or a
+    /// body of the wrong size is refused and leaves an existing file at the destination as it was.
+    private func saveDownload(id downloadId: String, fileName: String, sizeBytes: Int? = nil) {
         guard let tab = panelTab?.tabId ?? panelStream?.tabId, let id = threadId, let env = id.environmentId,
               let shell = environments.session(env), let window = panel.window else { return }
         let save = NSSavePanel()
@@ -580,9 +581,8 @@ final class BrowserController {
                     let ticket = try await http.webSocketTicket(token: token)
                     guard let url = PreviewStream.httpURL(base: http.baseURL, route: "download", query: [("threadId", thread), ("tabId", tab), ("id", downloadId)],
                                                           ticket: ticket.ticket) else { return }
-                    let (file, _) = try await URLSession.shared.download(from: url)
-                    try? FileManager.default.removeItem(at: target)
-                    try FileManager.default.moveItem(at: file, to: target)
+                    let (file, response) = try await URLSession.shared.download(from: url)
+                    try DownloadedFile.save(file, response: response, expectedBytes: sizeBytes, to: target)
                 } catch {
                     self?.panel.toasts.show(ToastView(title: "Could not save \(fileName)", message: error.localizedDescription, kind: .error))
                 }
