@@ -335,6 +335,12 @@ final class MarkdownTextBox {
         return (baseline / lineHeight).rounded(.down) * lineHeight
     }
 
+    /// The height of the line box holding `baseline`: `lineHeight`, or more where an inline formula grew it.
+    func lineHeight(baseline: CGFloat) -> CGFloat {
+        guard let lineTops, let i = lineTops.lastIndex(where: { $0 < baseline }), i + 1 < lineTops.count else { return lineHeight }
+        return lineTops[i + 1] - lineTops[i]
+    }
+
     /// Horizontal extent and baseline of `range` on each line it touches, relative to the box.
     /// `clip`, in box coordinates, skips the lines far from it.
     func spans(_ range: NSRange, clip: CGRect? = nil) -> [(x0: CGFloat, x1: CGFloat, baseline: CGFloat)] {

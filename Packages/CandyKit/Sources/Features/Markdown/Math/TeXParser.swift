@@ -30,7 +30,8 @@ indirect enum MathNode: Sendable {
     /// Horizontal space in em of the current size, or in mu when `mu`.
     case space(CGFloat, mu: Bool)
     case style(MathStyleKind)
-    case array(rows: [[[MathNode]]], columns: [Character], kind: TeXParser.ArrayKind)
+    /// `gaps[i]`: the extra space `\\[dim]` asks for after row i, in em.
+    case array(rows: [[[MathNode]]], columns: [Character], kind: TeXParser.ArrayKind, gaps: [CGFloat])
     case phantom([MathNode], width: Bool, height: Bool)
     case boxed([MathNode])
 }
@@ -40,7 +41,7 @@ struct TeXParser {
     struct Unsupported: Error { let reason: String }
 
     enum Variant: Sendable { case normal, roman, italic, bold, boldItalic, blackboard, calligraphic, fraktur, sans, mono }
-    enum ArrayKind: Sendable { case matrix, cases, aligned, gathered, array, substack }
+    enum ArrayKind: Sendable { case matrix, smallMatrix, cases, aligned, alignedAt, gathered, array, substack }
 
     private let tokens: [Token]
     private var at = 0
@@ -49,7 +50,10 @@ struct TeXParser {
     enum Token: Equatable { case command(String), char(Character), begin, end, sup, sub, align, eof }
 
     static func parse(_ tex: String) throws -> [MathNode] {
-        var p = TeXParser(tokens: tokenize(tex))
+        let tokens = tokenize(tex)
+        // A budget like KaTeX's maxExpand: huge or pathological input shows as source instead of costing the main thread.
+        guard tokens.count <= 5_000 else { throw Unsupported(reason: "too long") }
+        var p = TeXParser(tokens: tokens)
         let list = try p.list(variant: .normal, until: [.eof])
         return list
     }
@@ -235,6 +239,10 @@ struct TeXParser {
     // MARK: Atoms
 
     private mutating func atom(variant: Variant) throws -> [MathNode] {
+        // Unbraced arguments (`\sqrt\sqrt\sqrt x`) recurse through here without passing `list`.
+        depth += 1
+        defer { depth -= 1 }
+        guard depth < 100 else { throw Unsupported(reason: "nesting") }
         switch next() {
         case .begin:
             let inner = try list(variant: variant, until: [.end])
@@ -348,7 +356,9 @@ struct TeXParser {
         if let em = Symbols.spaces[name] { return [.space(em, mu: false)] }
         if let accent = Symbols.accents[name] { return [.accent(accent.0, try argument(variant: variant), stretchy: accent.1)] }
         if let v = Symbols.fonts[name] {
-            return [.group(try argument(variant: v), .ord)]
+            let body = try argument(variant: v)
+            // KaTeX's font.ts: `\boldsymbol{+}` stays a binary operator, `\boldsymbol{=}` a relation.
+            return [.group(body, name == "boldsymbol" || name == "bm" ? Self.mainClass(body) : .ord)]
         }
         if let cls = Symbols.classCommands[name] {
             let body = try argument(variant: variant)
@@ -428,8 +438,8 @@ struct TeXParser {
         case "substack":
             skipSpaces()
             guard case .begin = next() else { throw Unsupported(reason: "\\substack argument") }
-            let rows = try arrayRows(variant: variant, end: .end)
-            return [.array(rows: rows, columns: ["c"], kind: .substack)]
+            let (rows, gaps) = try arrayRows(variant: variant, end: .end)
+            return [.array(rows: rows, columns: ["c"], kind: .substack, gaps: gaps)]
         case "begin": return [try environment(variant: variant)]
         case "limits", "nolimits": throw Unsupported(reason: "\\\(name) after a non-operator")
         default:
@@ -445,7 +455,8 @@ struct TeXParser {
         let on = n == "limits"
         switch node {
         case .largeOp(let s, _): return .largeOp(s, limits: on)
-        case .namedOp(let t, _): return .namedOp(t, limits: on)
+        // Forced limits stack in any style; `.overUnder` with nothing over or under does that.
+        case .namedOp(let t, _): return on ? .overUnder(base: [.namedOp(t, limits: true)], over: nil, under: nil, brace: nil, .op) : .namedOp(t, limits: false)
         case .group(let b, .op) where on: return .overUnder(base: b, over: nil, under: nil, brace: nil, .op)
         default: return node
         }
@@ -500,54 +511,75 @@ struct TeXParser {
             columns = Array(try rawArgument().filter { !$0.isWhitespace })
             guard !columns.isEmpty, columns.allSatisfy({ "lcr".contains($0) }) else { throw Unsupported(reason: "array columns") }
         }
-        let rows = try arrayRows(variant: variant, end: .command("end"))
+        // `alignedat{n}` names its column pairs first.
+        if name == "alignedat" { guard let n = Int(try rawArgument()), (1...20).contains(n) else { throw Unsupported(reason: "alignedat count") } }
+        let (rows, gaps) = try arrayRows(variant: variant, end: .command("end"))
         _ = next()
         guard try rawArgument() == name else { throw Unsupported(reason: "mismatched \\end") }
         let delims: [String: (Unicode.Scalar?, Unicode.Scalar?)] = [
             "pmatrix": ("(", ")"), "bmatrix": ("[", "]"), "Bmatrix": ("{", "}"), "vmatrix": ("|", "|"), "Vmatrix": ("\u{2016}", "\u{2016}"),
         ]
         switch name {
-        case "matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix", "smallmatrix":
-            let array = MathNode.array(rows: rows, columns: [], kind: .matrix)
-            let wrapped: MathNode = name == "smallmatrix" ? .group([.style(.script), array], .ord) : array
-            guard let (l, r) = delims[name] else { return wrapped }
-            return .leftRight(left: l, body: [wrapped], right: r)
+        case "matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix":
+            let array = MathNode.array(rows: rows, columns: [], kind: .matrix, gaps: gaps)
+            guard let (l, r) = delims[name] else { return array }
+            return .leftRight(left: l, body: [array], right: r)
+        case "smallmatrix":
+            return .array(rows: rows, columns: [], kind: .smallMatrix, gaps: gaps)
         case "cases", "dcases":
-            let array = MathNode.array(rows: rows, columns: ["l", "l"], kind: .cases)
+            let array = MathNode.array(rows: rows, columns: ["l", "l"], kind: .cases, gaps: gaps)
             return .leftRight(left: "{", body: name == "dcases" ? [.style(.display), array] : [array], right: nil)
         case "rcases":
-            return .leftRight(left: nil, body: [.array(rows: rows, columns: ["l", "l"], kind: .cases)], right: "}")
-        case "aligned", "align", "align*", "split", "alignedat", "eqnarray", "eqnarray*":
-            return .array(rows: rows, columns: [], kind: .aligned)
+            return .leftRight(left: nil, body: [.array(rows: rows, columns: ["l", "l"], kind: .cases, gaps: gaps)], right: "}")
+        case "aligned", "align", "align*", "split", "eqnarray", "eqnarray*":
+            return .array(rows: rows, columns: [], kind: .aligned, gaps: gaps)
+        case "alignedat":
+            return .array(rows: rows, columns: [], kind: .alignedAt, gaps: gaps)
         case "gathered", "gather", "gather*":
-            return .array(rows: rows, columns: ["c"], kind: .gathered)
+            return .array(rows: rows, columns: ["c"], kind: .gathered, gaps: gaps)
+        case "equation", "equation*":
+            // ponytail: no "(1)" number on `equation`; add KaTeX's auto tag if replies use it
+            guard rows.count == 1, rows[0].count == 1 else { throw Unsupported(reason: "equation with rows") }
+            return .group(rows[0][0], .ord)
         case "array":
-            return .array(rows: rows, columns: columns, kind: .array)
+            return .array(rows: rows, columns: columns, kind: .array, gaps: gaps)
         default:
             throw Unsupported(reason: "environment \(name)")
         }
     }
 
     /// Cells split by `&` and rows by `\\`, until `end`. A trailing `\\` adds no row.
-    private mutating func arrayRows(variant: Variant, end: Token) throws -> [[[MathNode]]] {
-        var rows: [[[MathNode]]] = [], row: [[MathNode]] = []
+    private mutating func arrayRows(variant: Variant, end: Token) throws -> (rows: [[[MathNode]]], gaps: [CGFloat]) {
+        var rows: [[[MathNode]]] = [], row: [[MathNode]] = [], gaps: [CGFloat] = []
         while true {
             let cell = try list(variant: variant, until: [.align, .command("\\"), .command("cr"), end])
             row.append(cell)
             switch next() {
             case .align: continue
             case .command("\\"), .command("cr"):
-                // `\\[2pt]` spacing is beyond stage 1; skip its argument.
+                // `\\[2pt]`: extra space after the row.
                 skipSpaces()
+                var gap: CGFloat = 0
                 if case .char("[") = peek {
-                    while true { let t = next(); if t == .char("]") || t == .eof { break } }
+                    _ = next()
+                    var raw = ""
+                    while true {
+                        let t = next()
+                        if t == .char("]") { break }
+                        guard case .char(let c) = t, raw.count < 16 else { throw Unsupported(reason: "row spacing") }
+                        raw.append(c)
+                    }
+                    guard case .space(let em, false) = try Self.dimension(raw) else { throw Unsupported(reason: "row spacing in mu") }
+                    gap = em
                 }
                 rows.append(row); row = []
+                gaps.append(gap)
             default:
                 if !(row.count == 1 && row[0].isEmpty) || rows.isEmpty { rows.append(row) }
-                if end == .end { return rows }
+                gaps = Array((gaps + [0]).prefix(rows.count))
+                if end == .end { return (rows, gaps) }
                 at -= 1
-                return rows
+                return (rows, gaps)
             }
         }
     }

@@ -945,7 +945,7 @@ public final class MarkdownView: DSView {
             guard overlap.length > 0 else { continue }
             for span in box.spans(NSRange(location: overlap.location - offset, length: overlap.length)) {
                 rects.append(NSRect(x: origin.x + span.x0, y: origin.y + box.lineTop(baseline: span.baseline),
-                                    width: max(1, span.x1 - span.x0), height: box.lineHeight))
+                                    width: max(1, span.x1 - span.x0), height: box.lineHeight(baseline: span.baseline)))
             }
         }
         return rects
@@ -960,7 +960,7 @@ public final class MarkdownView: DSView {
             guard overlap.length > 0 else { continue }
             if let span = box.lastSpan(NSRange(location: overlap.location - offset, length: overlap.length)) {
                 last = NSRect(x: origin.x + span.x0, y: origin.y + box.lineTop(baseline: span.baseline),
-                              width: max(1, span.x1 - span.x0), height: box.lineHeight)
+                              width: max(1, span.x1 - span.x0), height: box.lineHeight(baseline: span.baseline))
             }
         }
         return last
@@ -1057,7 +1057,7 @@ public final class MarkdownView: DSView {
                         ctx.setFillColor(NSColor.selectedTextBackgroundColor.withAlphaComponent(0.5).cgColor)
                         for span in box.spans(NSRange(location: overlap.location - selectionOffset, length: overlap.length), clip: boxClip) {
                             ctx.fill(CGRect(x: origin.x + span.x0, y: origin.y + box.lineTop(baseline: span.baseline),
-                                            width: max(1, span.x1 - span.x0), height: box.lineHeight))
+                                            width: max(1, span.x1 - span.x0), height: box.lineHeight(baseline: span.baseline)))
                         }
                     }
                 }

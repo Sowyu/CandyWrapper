@@ -130,8 +130,10 @@ struct MathTypesetter {
         var out: [Item] = []
         for node in nodes {
             switch node {
-            case .style(let kind): style = Style(kind: kind, cramped: style.cramped)
-            case .space(let v, let mu): out.append(.kern(mu ? v * size(style) / 18 : v * size(style)))
+            // `\displaystyle` and friends pick the uncramped style (KaTeX styling.ts).
+            case .style(let kind): style = Style(kind: kind)
+            // mu shrinks with the style; em and pt keep text size, as KaTeX's units.ts measures them in scripts.
+            case .space(let v, let mu): out.append(.kern(mu ? v * size(style) / 18 : v * em))
             case .middle(let d): out.append(.middle(d, style))
             default:
                 let (cls, box) = try atom(node, style)
@@ -149,7 +151,7 @@ struct MathTypesetter {
         [-3, -3, 0, 0, -3, 0, 0, -3],
         [0, 0, 0, 0, 0, 0, 0, 0],
         [0, 1, -2, -3, 0, 0, 0, -1],
-        [-1, -1, 0, -1, -1, -1, -1, -1],
+        [-1, -1, 0, -3, -1, -1, -1, -1],
         [-1, 1, -2, -3, -1, 0, -1, -1],
     ]
 
@@ -207,7 +209,7 @@ struct MathTypesetter {
         case .scripts(let base, let sub, let sup):
             return try scripts(base, sub: sub, sup: sup, style)
         case .frac(let num, let den, let rule, let forced, let l, let r):
-            return (.ord, try fraction(num, den, rule: rule, style: forced.map { Style(kind: $0, cramped: style.cramped) } ?? style, left: l, right: r))
+            return (.ord, try fraction(num, den, rule: rule, style: forced.map { Style(kind: $0) } ?? style, left: l, right: r))
         case .sqrt(let body, let index):
             return (.ord, try radical(body, index: index, style))
         case .leftRight(let l, let body, let r):
@@ -238,8 +240,8 @@ struct MathTypesetter {
             return (cls, try stack(list(base, style), over: over, under: under, brace: brace, style))
         case .text(let s, let variant):
             return (.ord, try text(s, variant, style))
-        case .array(let rows, let columns, let kind):
-            return (.ord, try array(rows, columns: columns, kind: kind, style))
+        case .array(let rows, let columns, let kind, let gaps):
+            return (.ord, try array(rows, columns: columns, kind: kind, gaps: gaps, style))
         case .phantom(let body, let w, let h):
             let b = try list(body, style)
             return (.ord, MathBox(width: w ? b.width : 0, height: h ? b.height : 0, depth: h ? b.depth : 0))
@@ -303,6 +305,16 @@ struct MathTypesetter {
             // `\overbrace{…}^{label}` and `\mathop{…}\limits`: the scripts stack over and under.
             return (.op, try stack(list(b, style), over: brace == "\u{23DF}" ? nil : sup, under: brace == "\u{23DE}" ? nil : sub,
                                    brace: brace, style, extraSub: brace == "\u{23DE}" ? sub : nil, extraSup: brace == "\u{23DF}" ? sup : nil))
+        case .accent(_, let body, _) where body.count == 1:
+            // KaTeX's accent.ts: `\hat{x}^2` places the scripts on the x, as if the accent weren't there.
+            let char = try list(body, style.crampedSelf)
+            let (_, accented) = try atom(base, style)
+            var box = accented
+            box.height = char.height
+            box.isChar = char.isChar
+            var out = try attach(box, sub: sub, sup: sup, style)
+            out.height = max(out.height, accented.height)
+            return (.ord, out)
         default:
             let (cls, box) = try atom(base, style)
             return (cls, try attach(box, sub: sub, sup: sup, style))
@@ -313,20 +325,19 @@ struct MathTypesetter {
     func attach(_ base: MathBox, sub: [MathNode]?, sup: [MathNode]?, _ style: Style) throws -> MathBox {
         let supBox = try sup.map { try list($0, style.sup) }
         let subBox = try sub.map { try list($0, style.sub) }
-        var u: CGFloat = base.isChar ? 0 : base.height - k(.superscriptBaselineDropMax, style.sup)
-        var v: CGFloat = base.isChar ? 0 : base.depth + k(.subscriptBaselineDropMin, style.sub)
-        // KaTeX keeps TeX's three superscript shifts; the MATH table has two, so display style scales the second by sup1/sup2.
-        let supShift = style.cramped ? k(.superscriptShiftUpCramped, style)
-            : k(.superscriptShiftUp, style) * (style.kind == .display ? 0.413 / 0.363 : 1)
+        // KaTeX's supsub.ts with Computer Modern's sigma values (fontMetricsData): sup_drop 0.386 and sub_drop 0.05 of the
+        // script's size, sup1/sup2/sup3 0.413/0.363/0.289, sub1/sub2 0.15/0.247. The MATH table merges some of these.
+        var u: CGFloat = base.isChar ? 0 : base.height - 0.386 * size(style.sup)
+        var v: CGFloat = base.isChar ? 0 : base.depth + 0.05 * size(style.sub)
+        let supShift = (style.cramped ? 0.289 : style.kind == .display ? 0.413 : 0.363) * size(style)
         if let p = supBox {
             u = max(u, supShift, p.depth + k(.superscriptBottomMin, style))
         }
         if let b = subBox {
             if supBox == nil {
-                v = max(v, k(.subscriptShiftDown, style), b.height - k(.subscriptTopMax, style))
+                v = max(v, 0.15 * size(style), b.height - k(.subscriptTopMax, style))
             } else {
-                // TeX's sub2 (0.247em) when both scripts are present.
-                v = max(v, k(.subscriptShiftDown, style) * 0.247 / 0.15)
+                v = max(v, 0.247 * size(style))
             }
         }
         if let p = supBox, let b = subBox {
@@ -493,7 +504,7 @@ struct MathTypesetter {
         let target = total / size(style) * font.unitsPerEm
         guard let c = font.construction(g, vertical: true) else { return glyphBox(g, style) }
         if let v = c.variants.first(where: { $0.advance >= target }) { return glyphBox(v.glyph, style) }
-        if !c.parts.isEmpty { return assemble(c.parts, target: target, vertical: true, style) }
+        if !c.parts.isEmpty { return try assemble(c.parts, target: target, vertical: true, style) }
         return glyphBox(c.variants.last?.glyph ?? g, style)
     }
 
@@ -504,20 +515,23 @@ struct MathTypesetter {
         let target = width / size(style) * font.unitsPerEm
         guard let c = font.construction(g, vertical: false) else { return glyphBox(g, style) }
         if let v = c.variants.first(where: { $0.advance >= target }) { return glyphBox(v.glyph, style) }
-        if !c.parts.isEmpty { return assemble(c.parts, target: target, vertical: false, style) }
+        if !c.parts.isEmpty { return try assemble(c.parts, target: target, vertical: false, style) }
         return glyphBox(c.variants.last?.glyph ?? g, style)
     }
 
     /// Glues a glyph assembly to `target` font units: extenders repeat until the parts can reach it, then the joints
     /// share the overlap (OpenType MATH, GlyphAssembly).
-    func assemble(_ parts: [MathFont.Part], target: CGFloat, vertical: Bool, _ style: Style) -> MathBox {
+    func assemble(_ parts: [MathFont.Part], target: CGFloat, vertical: Bool, _ style: Style) throws -> MathBox {
         let minOverlap = font.minConnectorOverlap
         var sequence: [MathFont.Part] = []
-        for repeats in 1...50 {
+        var reached = false
+        for repeats in 1...200 {
             sequence = parts.flatMap { $0.extender ? Array(repeating: $0, count: repeats) : [$0] }
             let full = sequence.reduce(0) { $0 + $1.fullAdvance }
-            if full - CGFloat(sequence.count - 1) * minOverlap >= target { break }
+            if full - CGFloat(sequence.count - 1) * minOverlap >= target { reached = true; break }
         }
+        // A delimiter that can't grow tall enough would sit short of its contents; show the source instead.
+        guard reached else { throw Unsupported(reason: "delimiter too tall") }
         let full = sequence.reduce(0) { $0 + $1.fullAdvance }
         let joints = CGFloat(max(1, sequence.count - 1))
         var overlap = max(minOverlap, (full - target) / joints)
@@ -602,33 +616,34 @@ struct MathTypesetter {
 
     // MARK: Arrays
 
-    func array(_ rows: [[[MathNode]]], columns: [Character], kind: TeXParser.ArrayKind, _ style: Style) throws -> MathBox {
+    func array(_ rows: [[[MathNode]]], columns: [Character], kind: TeXParser.ArrayKind, gaps: [CGFloat], _ style: Style) throws -> MathBox {
         guard !rows.isEmpty else { return MathBox() }
         let cellStyle: Style
         switch kind {
-        case .aligned, .gathered: cellStyle = Style(kind: .display, cramped: style.cramped)
+        case .aligned, .alignedAt, .gathered: cellStyle = Style(kind: .display, cramped: style.cramped)
         case .substack: cellStyle = style
+        case .smallMatrix: cellStyle = Style(kind: .script, cramped: style.cramped)
         case .matrix, .cases, .array: cellStyle = Style(kind: style.kind == .display ? .text : style.kind, cramped: style.cramped)
         }
-        let stretch: CGFloat = kind == .cases ? 1.2 : kind == .substack ? 0.5 : 1
+        let stretch: CGFloat = kind == .cases ? 1.2 : kind == .substack || kind == .smallMatrix ? 0.5 : 1
         let skip = 1.2 * stretch * size(style)
-        let jot: CGFloat = kind == .aligned || kind == .gathered ? 0.3 * size(style) : 0
+        let jot: CGFloat = kind == .aligned || kind == .alignedAt || kind == .gathered ? 0.3 * size(style) : 0
         let columnCount = rows.map(\.count).max() ?? 0
         var cells: [[MathBox]] = []
         for row in rows {
             var line: [MathBox] = []
             for (c, cell) in row.enumerated() {
                 // `aligned` starts each right-hand column with `{}` so `&= b` spaces its relation.
-                let nodes = kind == .aligned && c % 2 == 1 ? [MathNode.group([], .ord)] + cell : cell
+                let nodes = (kind == .aligned || kind == .alignedAt) && c % 2 == 1 ? [MathNode.group([], .ord)] + cell : cell
                 line.append(try list(nodes, cellStyle))
             }
             cells.append(line)
         }
         func align(_ c: Int) -> Character {
             switch kind {
-            case .aligned: c % 2 == 0 ? "r" : "l"
+            case .aligned, .alignedAt: c % 2 == 0 ? "r" : "l"
             case .cases: "l"
-            case .gathered, .substack, .matrix: "c"
+            case .gathered, .substack, .matrix, .smallMatrix: "c"
             case .array: c < columns.count ? columns[c] : "c"
             }
         }
@@ -639,8 +654,10 @@ struct MathTypesetter {
             guard c > 0 else { return kind == .array ? colsep : 0 }
             switch kind {
             case .aligned: return c % 2 == 0 ? size(style) : 0
+            case .alignedAt, .gathered, .substack: return 0
             case .cases: return size(style)
-            case .gathered, .substack: return 0
+            // KaTeX's "small" column separation: 0.2778em at script size.
+            case .smallMatrix: return 2 * 0.2778 * size(Style(kind: .script))
             case .matrix, .array: return 2 * colsep
             }
         }
@@ -652,14 +669,18 @@ struct MathTypesetter {
         var y: CGFloat = 0
         var placed: [(MathBox, CGFloat, CGFloat)] = []
         for (r, line) in cells.enumerated() {
-            let h = max(line.map(\.height).max() ?? 0, 0.7 * skip), d = max(line.map(\.depth).max() ?? 0, 0.3 * skip)
+            let h = max(line.map(\.height).max() ?? 0, 0.7 * skip)
+            var d = max(line.map(\.depth).max() ?? 0, 0.3 * skip)
+            // `\\[dim]` (KaTeX array.ts): a positive gap deepens the row past its strut, a negative one pulls the next row up.
+            let gap = r < gaps.count ? gaps[r] * em : 0
+            if gap > 0 { d = max(d, gap + 0.3 * skip) }
             y -= h
             for (c, b) in line.enumerated() {
                 let a = align(c)
                 let dx = a == "l" ? 0 : a == "r" ? widths[c] - b.width : (widths[c] - b.width) / 2
                 placed.append((b, x[c] + dx, y))
             }
-            y -= d + (r < cells.count - 1 ? jot : 0)
+            y -= d + (r < cells.count - 1 ? jot : 0) + min(0, gap)
         }
         let total = -y
         let shift = total / 2 + k(.axisHeight, style)
