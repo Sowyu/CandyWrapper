@@ -1417,7 +1417,9 @@ public final class ThreadPanelView: DSView {
         if !onlyStreamingText, !switchingThread, !isDraft, !timeline.isInert, !opensChangedTurnOnLoad,
            projectTitle == model.projectTitle, workspaceRoot == model.workspaceRoot,
            model.acceptReadState(projection) { return }
-        timeline.setGlimmerModel(projection?.runs.max { $0.ordinal < $1.ordinal }?.modelSelection)
+        let glimmerModel = projection?.runs.max { $0.ordinal < $1.ordinal }?.modelSelection
+            ?? (try? projection?.thread.raw["modelSelection"]?.decode(as: ModelSelection.self))
+        timeline.setGlimmerModel(glimmerModel)
         if onlyStreamingText, let projection, projection.thread.id == model.projection?.thread.id, !switchingThread, !isDraft,
            !timeline.isInert, projectTitle == model.projectTitle, workspaceRoot == model.workspaceRoot {
             model.setProjection(projection)

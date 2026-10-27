@@ -364,10 +364,13 @@ final class ShineLabelView: DSView {
     }
     var sweepDuration: TimeInterval { fastMode ? 2.2 / 2.5 : 2.2 }
 
-    /// Fast uses the same options as the traits picker (TraitsPicker.tsx:497-521).
+    /// Read wire option selections as well as the legacy object form. Codex calls its fast tier
+    /// `priority` on some servers and `fast` on others.
     static func usesFastMode(_ selection: ModelSelection?) -> Bool {
-        let options = selection?.options
-        return options?["fastMode"]?.boolValue == true || options?["serviceTier"]?.stringValue == "fast"
+        let options = selection?.optionSelections ?? []
+        let fast = options.first { $0.id == "fastMode" }?.value == .bool(true)
+        let tier = options.first { $0.id == "serviceTier" }?.value
+        return fast || tier == .string("priority") || tier == .string("fast")
     }
 
     var text: String {

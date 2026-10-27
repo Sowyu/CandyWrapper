@@ -145,7 +145,15 @@ struct ThreadCompletionTests {
     @Test func glimmerSpeedsUpOnlyForFastModelOptions() throws {
         for (options, fast) in [("{}", false), (#"{"fastMode":false}"#, false),
                                 (#"{"fastMode":true}"#, true), (#"{"serviceTier":"fast"}"#, true),
-                                (#"{"serviceTier":"default"}"#, false), (#"{"serviceTier":"flex"}"#, false)] {
+                                (#"{"serviceTier":"priority"}"#, true),
+                                (#"{"serviceTier":"default"}"#, false), (#"{"serviceTier":"flex"}"#, false),
+                                ("[]", false), (#"[{"id":"fastMode","value":false}]"#, false),
+                                (#"[{"id":"fastMode","value":true}]"#, true),
+                                (#"[{"id":"serviceTier","value":"priority"}]"#, true),
+                                (#"[{"id":"serviceTier","value":"fast"}]"#, true),
+                                (#"[{"id":"serviceTier","value":"default"}]"#, false),
+                                (#"[{"id":"serviceTier","value":"flex"}]"#, false),
+                                (#"[{"id":"fastMode","value":"true"}]"#, false)] {
             let selection = ModelSelection(instanceId: ProviderInstanceId("sandbox"), model: "test", options: try json(options))
             let label = ShineLabelView()
             label.fastMode = ShineLabelView.usesFastMode(selection)
@@ -158,16 +166,62 @@ struct ThreadCompletionTests {
     }
     @Test func glimmerSpeedFollowsTheLatestRunAndResetsBetweenThreads() throws {
         let panel = ThreadPanelView()
-        let projection = try json(#"{"thread":{"id":"t"},"runs":[{"id":"new","threadId":"t","ordinal":2,"status":"running","requestedAt":"2026-10-18T00:00:00Z","modelSelection":{"instanceId":"sandbox","model":"test","options":{"serviceTier":"fast"}}},{"id":"old","threadId":"t","ordinal":1,"status":"completed","requestedAt":"2026-10-18T00:00:00Z"}],"updatedAt":"2026-10-18T00:00:00Z"}"#).decode(as: ThreadProjection.self)
+        let projection = try json(#"{"thread":{"id":"t","modelSelection":{"instanceId":"sandbox","model":"test","options":[{"id":"fastMode","value":true}]}},"runs":[{"id":"new","threadId":"t","ordinal":2,"status":"running","requestedAt":"2026-10-18T00:00:00Z","modelSelection":{"instanceId":"sandbox","model":"test","options":[{"id":"serviceTier","value":"priority"}]}},{"id":"old","threadId":"t","ordinal":1,"status":"completed","requestedAt":"2026-10-18T00:00:00Z"}],"updatedAt":"2026-10-18T00:00:00Z"}"#).decode(as: ThreadProjection.self)
         panel.setProjection(projection, projectTitle: "Sandbox", workspaceRoot: nil)
         #expect(panel.timeline.context.fastGlimmer)
         var standard = projection
         standard.runs[0].modelSelection?.options = .object([:])
         panel.setProjection(standard, projectTitle: "Sandbox", workspaceRoot: nil)
         #expect(!panel.timeline.context.fastGlimmer)
+        standard.runs[0].modelSelection = nil
+        panel.setProjection(standard, projectTitle: "Sandbox", workspaceRoot: nil)
+        #expect(panel.timeline.context.fastGlimmer)
         panel.setProjection(projection, projectTitle: "Sandbox", workspaceRoot: nil)
         panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
         #expect(!panel.timeline.context.fastGlimmer)
+    }
+    /// Check the installed animation, including Redesign's timer and both work-label masks.
+    @Test func fastGlimmerKeepsVisibilityAndReduceMotionGates() {
+        final class VisibleWindow: NSWindow {
+            override var isVisible: Bool { true }
+            override var occlusionState: NSWindow.OcclusionState { .visible }
+        }
+        Motion.reducedOverride = false
+        defer { Motion.reducedOverride = nil }
+        let window = VisibleWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 100),
+                                   styleMask: [], backing: .buffered, defer: true)
+        let tool = ShineLabelView()
+        tool.text = "Running java"; tool.shining = true
+        let thinking = ShineLabelView()
+        thinking.text = "Thinking"; thinking.style = .focus; thinking.shining = true
+        let ticker = DitherWorkingTicker()
+        ticker.set(prefix: "Working for ", value: "4s", animated: false)
+        let views: [NSView] = [tool, thinking, ticker]
+        for view in views {
+            view.frame = NSRect(x: 0, y: 0, width: 200, height: 24)
+            window.contentView?.addSubview(view)
+            view.layoutSubtreeIfNeeded()
+        }
+        func animations() -> [CAAnimation] {
+            views.flatMap { $0.subviews.compactMap { $0.layer?.mask?.animation(forKey: "shine") } }
+        }
+        #expect(animations().count == 3)
+        #expect(animations().allSatisfy { $0.duration == 2.2 })
+        tool.fastMode = true; thinking.fastMode = true; ticker.fastMode = true
+        #expect(animations().count == 3)
+        #expect(animations().allSatisfy { abs($0.duration - 0.88) < 0.000001 })
+        Motion.reducedOverride = true
+        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+        #expect(animations().isEmpty)
+        tool.fastMode = false; thinking.fastMode = false; ticker.fastMode = false
+        #expect(animations().isEmpty)
+        Motion.reducedOverride = false
+        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+        #expect(animations().count == 3)
+        #expect(animations().allSatisfy { $0.duration == 2.2 })
+        for view in views { view.isHidden = true }
+        #expect(animations().isEmpty)
+        for view in views { view.removeFromSuperview() }
     }
     @Test func permissionNoticeRequiresExplicitLegacyGrant() throws {
         func state(_ extra: String) throws -> AuthSessionState {
