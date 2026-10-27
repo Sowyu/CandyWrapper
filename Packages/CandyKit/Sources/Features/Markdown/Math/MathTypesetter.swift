@@ -283,7 +283,10 @@ struct MathTypesetter {
             let min = font.constants[.displayOperatorMinHeight] ?? 0
             g = (c.variants.first { $0.advance >= min } ?? c.variants.last)?.glyph ?? g
         }
-        let box = glyphBox(g, style)
+        var box = glyphBox(g, style)
+        // KaTeX's op.ts: an operator's width leaves out its italic correction; scripts use it instead (sup at the edge,
+        // sub pulled back by it), so `\int_a^b` hugs the glyph.
+        box.width -= box.italic
         let shift = (box.height - box.depth) / 2 - k(.axisHeight, style)
         var out = box.shifted(up: -shift)
         out.isChar = false
@@ -363,18 +366,19 @@ struct MathTypesetter {
     func limitsBox(_ op: MathBox, sup: [MathNode]?, sub: [MathNode]?, _ style: Style) throws -> MathBox {
         let supBox = try sup.map { try list($0, style.sup) }
         let subBox = try sub.map { try list($0, style.sub) }
-        let delta = op.italic, w0 = op.width - delta
+        let delta = op.italic, w0 = op.width
         let w = max(w0, supBox?.width ?? 0, subBox?.width ?? 0)
-        let extra = 0.1 * size(style)
+        // KaTeX's bigOpSpacing1 to 5 (Computer Modern's xi9 to xi13): 0.111, 0.166, 0.2, 0.6 and 0.1em.
+        let em = size(style), extra = 0.1 * em
         var out = MathBox()
         out.add(op, x: (w - w0) / 2, y: 0)
         if let p = supBox {
-            let y = op.height + max(k(.upperLimitGapMin, style) + p.depth, k(.upperLimitBaselineRiseMin, style))
+            let y = op.height + max(0.111 * em, 0.2 * em - p.depth) + p.depth
             out.add(p, x: (w - p.width) / 2 + delta / 2, y: y)
             out.height = y + p.height + extra
         }
         if let b = subBox {
-            let y = op.depth + max(k(.lowerLimitGapMin, style) + b.height, k(.lowerLimitBaselineDropMin, style))
+            let y = op.depth + max(0.166 * em, 0.6 * em - b.height) + b.height
             out.add(b, x: (w - b.width) / 2 - delta / 2, y: -y)
             out.depth = y + b.depth + extra
         }

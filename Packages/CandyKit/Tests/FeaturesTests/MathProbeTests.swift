@@ -34,6 +34,23 @@ struct MathProbeTests {
     }
 }
 
+extension MathProbeTests {
+    /// Prints each corpus formula's box next to KaTeX's: `CW_MATH_METRICS=1 scripts/test --filter MathProbeTests`.
+    @Test func metrics() throws {
+        guard ProcessInfo.processInfo.environment["CW_MATH_METRICS"] != nil else { return }
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../../design/component-reference/math/metrics.json")
+        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        for c in MathCorpus.cases {
+            let prefix = String(c.name.prefix(3))
+            guard let key = json.keys.first(where: { $0.hasPrefix(prefix) && $0.hasSuffix(".rest.light.png") }),
+                  let f = (json[key] as? [String: Any])?["formula"] as? [String: Double] else { continue }
+            guard let l = MathRenderer.layout(c.tex, display: c.display, textSize: 14) else { print("METRIC \(c.name) FALLBACK"); continue }
+            let kw = f["width"]! - (c.display ? 0 : 0)
+            print(String(format: "METRIC %@ w %.2f/%.2f h %.2f/%.2f d %.2f/%.2f", c.name, l.width, kw, l.height, f["height"]!, l.depth, f["depth"]!))
+        }
+    }
+}
+
 /// The formulas the KaTeX references cover (design/component-reference/math.json), in order.
 enum MathCorpus {
     struct Case { let name: String; let tex: String; let display: Bool }
