@@ -35,6 +35,8 @@ struct MathTypesetterTests {
             "e^{-\\frac{x^2}{2\\sigma^2}}", "\\prod_{i=1}^{n} p_i", "\\iint_D f \\, dA", "x \\to \\infty", "\\Delta t \\approx 0.1",
             "\\begin{bmatrix} x \\\\ y \\end{bmatrix}", "\\begin{smallmatrix} a & b \\\\ c & d \\end{smallmatrix}", "\\overline{z} \\cdot z = |z|^2",
             "\\begin{alignedat}{2} a &= b &\\quad c &= d \\end{alignedat}", "\\big( x \\big) + \\Bigg[ y \\Bigg]", "\\hspace{1em} x \\quad y",
+            "\\color{red}{x} + y", "{\\color{#3366ff} a + b}", "\\textcolor{blue}{x}", "A \\xrightarrow{f} B", "A \\xleftarrow[g]{f} B",
+            "\\cancel{x} + \\bcancel{y} + \\xcancel{z}", "\\begin{array}{c|c} a & b \\\\ \\hline c & d \\end{array}",
         ] {
             #expect(Self.typesets(tex) && Self.typesets(tex, display: true), "\(tex)")
         }
@@ -43,13 +45,22 @@ struct MathTypesetterTests {
     /// Beyond stage 1: the formula shows its source, never a crash or a blank.
     @Test func unsupportedFallsBack() {
         for tex in [
-            "\\color{red}{x}", "\\textcolor{red}{x}", "x \\tag{1}", "A \\xrightarrow{f} B", "\\cancel{x}", "\\begin{array}{cc} a & b \\\\ \\hline c & d \\end{array}",
+            "\\color{notacolor}{x}", "\\begin{matrix} a \\\\ \\hline b \\end{matrix}", "{x \\tag{1}}", "\\begin{array}{cx} a \\end{array}",
             "\\href{a}{b}", "\\unknowncommand", "a \\\\ b", "{x", "x}", "\\left( x", "\\begin{foo} x \\end{foo}", "x^^2", "x__2", "a & b",
             "\\frac{a}{", "\\sqrt[", "\\begin{matrix} a", "\\text{unclosed", "\\not\\alpha", "", "   ",
         ] {
             #expect(MathRenderer.layout(tex, display: false, textSize: 14) == nil, "\(tex)")
             #expect(MathRenderer.layout(tex, display: true, textSize: 14) == nil, "\(tex)")
         }
+    }
+
+    /// KaTeX takes `\tag` only in display math, at the top level.
+    @Test func tagInDisplayOnly() {
+        #expect(MathRenderer.layout("E = mc^2 \\tag{1}", display: true, textSize: 14)?.tag != nil)
+        #expect(MathRenderer.layout("E = mc^2 \\tag{1}", display: false, textSize: 14) == nil)
+        #expect(MathRenderer.layout("a \\tag{1} \\tag{2}", display: true, textSize: 14) == nil)
+        let tagged = MarkdownLayout(document: MarkdownDocument(parsing: "$$E = mc^2 \\tag{1}$$", math: true), width: 480)
+        #expect(Self.mathItems(tagged) == 2)
     }
 
     /// A reply streams character by character: every prefix lays out or falls back.

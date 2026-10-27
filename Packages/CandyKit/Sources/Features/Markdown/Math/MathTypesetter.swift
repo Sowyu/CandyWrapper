@@ -1,19 +1,25 @@
 import AppKit
 import CoreText
 
-/// A typeset formula: glyphs and rules around a baseline at the origin, y up. Width, height above the baseline
-/// and depth below it follow KaTeX's box model.
+/// A typeset formula: glyphs, rules and strokes around a baseline at the origin, y up. Width, height above the baseline
+/// and depth below it follow KaTeX's box model. Parts with no color of their own take the text color.
 final class MathLayout: @unchecked Sendable {
-    struct Glyph { let glyph: CGGlyph; let size: CGFloat; let position: CGPoint }
+    struct Glyph { let glyph: CGGlyph; let size: CGFloat; let position: CGPoint; var color: CGColor? = nil }
+    struct Stroke { let from: CGPoint; let to: CGPoint; let width: CGFloat; var color: CGColor? = nil }
     let width: CGFloat
     let height: CGFloat
     let depth: CGFloat
     let glyphs: [Glyph]
     let rules: [CGRect]
+    let ruleColors: [CGColor?]
+    let strokes: [Stroke]
+    /// A display formula's `\tag`, drawn at the column's right edge on the formula's baseline.
+    let tag: MathLayout?
 
-    init(_ box: MathBox) {
+    init(_ box: MathBox, tag: MathBox? = nil) {
         width = box.width; height = box.height; depth = box.depth
-        glyphs = box.glyphs; rules = box.rules
+        glyphs = box.glyphs; rules = box.rules; ruleColors = box.ruleColors; strokes = box.strokes
+        self.tag = tag.map { MathLayout($0) }
     }
 
     /// Draws with the baseline's left end at `origin`, in a flipped (y down) context.
@@ -24,17 +30,23 @@ final class MathLayout: @unchecked Sendable {
         ctx.saveGState()
         ctx.translateBy(x: origin.x, y: origin.y)
         ctx.scaleBy(x: 1, y: -1)
-        ctx.setFillColor(color)
-        for r in rules {
+        for (i, r) in rules.enumerated() {
+            ctx.setFillColor((i < ruleColors.count ? ruleColors[i] : nil) ?? color)
             let h = max(1 / scale, (r.height * scale).rounded() / scale)
             ctx.fill(CGRect(x: r.minX, y: (r.minY * scale).rounded() / scale, width: r.width, height: h))
+        }
+        for s in strokes {
+            ctx.setStrokeColor(s.color ?? color)
+            ctx.setLineWidth(s.width)
+            ctx.strokeLineSegments(between: [s.from, s.to])
         }
         ctx.textMatrix = .identity
         var start = 0
         while start < glyphs.count {
-            let size = glyphs[start].size
+            let size = glyphs[start].size, tint = glyphs[start].color
             var end = start
-            while end < glyphs.count, glyphs[end].size == size { end += 1 }
+            while end < glyphs.count, glyphs[end].size == size, glyphs[end].color == tint { end += 1 }
+            ctx.setFillColor(tint ?? color)
             var ids = glyphs[start..<end].map(\.glyph), points = glyphs[start..<end].map(\.position)
             CTFontDrawGlyphs(font.font(size: size), &ids, &points, ids.count, ctx)
             start = end
@@ -50,6 +62,9 @@ struct MathBox {
     var depth: CGFloat = 0
     var glyphs: [MathLayout.Glyph] = []
     var rules: [CGRect] = []
+    /// Colors for `rules` by index; shorter than `rules` where the rest take the text color.
+    var ruleColors: [CGColor?] = []
+    var strokes: [MathLayout.Stroke] = []
     /// A lone symbol's italic correction, included in `width`.
     var italic: CGFloat = 0
     /// A lone symbol: scripts sit at the font's shifts instead of hanging off the box (TeX rule 18a).
@@ -58,8 +73,12 @@ struct MathBox {
     var glyph: CGGlyph?
 
     mutating func add(_ b: MathBox, x: CGFloat, y: CGFloat) {
-        glyphs += b.glyphs.map { .init(glyph: $0.glyph, size: $0.size, position: CGPoint(x: $0.position.x + x, y: $0.position.y + y)) }
+        glyphs += b.glyphs.map { .init(glyph: $0.glyph, size: $0.size, position: CGPoint(x: $0.position.x + x, y: $0.position.y + y), color: $0.color) }
+        ruleColors += Array(repeating: nil, count: max(0, rules.count - ruleColors.count))
+        ruleColors += (0..<b.rules.count).map { $0 < b.ruleColors.count ? b.ruleColors[$0] : nil }
         rules += b.rules.map { $0.offsetBy(dx: x, dy: y) }
+        strokes += b.strokes.map { .init(from: CGPoint(x: $0.from.x + x, y: $0.from.y + y), to: CGPoint(x: $0.to.x + x, y: $0.to.y + y),
+                                          width: $0.width, color: $0.color) }
         height = max(height, b.height + y)
         depth = max(depth, b.depth - y)
     }
@@ -68,6 +87,15 @@ struct MathBox {
         var out = MathBox(width: width, italic: italic, isChar: isChar, glyph: glyph)
         out.height = -.greatestFiniteMagnitude; out.depth = -.greatestFiniteMagnitude
         out.add(self, x: 0, y: dy)
+        return out
+    }
+
+    /// Every part without a color of its own in `color` (`\color` nests: the innermost wins).
+    func tinted(_ color: CGColor) -> MathBox {
+        var out = self
+        out.glyphs = glyphs.map { var g = $0; if g.color == nil { g.color = color }; return g }
+        out.ruleColors = (0..<rules.count).map { ($0 < ruleColors.count ? ruleColors[$0] : nil) ?? color }
+        out.strokes = strokes.map { var s = $0; if s.color == nil { s.color = color }; return s }
         return out
     }
 }
@@ -108,9 +136,17 @@ struct MathTypesetter {
     func k(_ c: MathFont.Constant, _ s: Style) -> CGFloat { (font.constants[c] ?? 0) * size(s) / font.unitsPerEm }
     private func units(_ v: CGFloat, _ s: Style) -> CGFloat { v * size(s) / font.unitsPerEm }
 
-    static func layout(_ nodes: [MathNode], display: Bool, em: CGFloat, font: MathFont) throws -> MathBox {
+    /// The formula and its `\tag`. KaTeX allows a tag only in display mode.
+    static func layout(_ nodes: [MathNode], display: Bool, em: CGFloat, font: MathFont) throws -> (box: MathBox, tag: MathBox?) {
         let t = MathTypesetter(font: font, em: em)
-        return try t.list(nodes, Style(kind: display ? .display : .text))
+        var tag: MathBox?
+        var body: [MathNode] = []
+        for node in nodes {
+            guard case .tag(let text) = node else { body.append(node); continue }
+            guard display else { throw Unsupported(reason: "\\tag outside display math") }
+            tag = try t.text(text, .roman, Style(kind: .text))
+        }
+        return (try t.list(body, Style(kind: display ? .display : .text)), tag)
     }
 
     // MARK: Lists
@@ -135,6 +171,11 @@ struct MathTypesetter {
             // mu shrinks with the style; em and pt keep text size, as KaTeX's units.ts measures them in scripts.
             case .space(let v, let mu): out.append(.kern(mu ? v * size(style) / 18 : v * em))
             case .middle(let d): out.append(.middle(d, style))
+            case .colored(let color, let body):
+                // Color keeps the body's own classes, so `a \color{red}{+} b` spaces like `a + b`.
+                for item in try items(body, style) {
+                    if case .atom(let cls, let box, let s) = item { out.append(.atom(cls, box.tinted(color.cgColor), s)) } else { out.append(item) }
+                }
             default:
                 let (cls, box) = try atom(node, style)
                 out.append(.atom(cls, box, style))
@@ -240,8 +281,8 @@ struct MathTypesetter {
             return (cls, try stack(list(base, style), over: over, under: under, brace: brace, style))
         case .text(let s, let variant):
             return (.ord, try text(s, variant, style))
-        case .array(let rows, let columns, let kind, let gaps):
-            return (.ord, try array(rows, columns: columns, kind: kind, gaps: gaps, style))
+        case .array(let rows, let columns, let kind, let gaps, let hlines):
+            return (.ord, try array(rows, columns: columns, kind: kind, gaps: gaps, hlines: hlines, style))
         case .phantom(let body, let w, let h):
             let b = try list(body, style)
             return (.ord, MathBox(width: w ? b.width : 0, height: h ? b.height : 0, depth: h ? b.depth : 0))
@@ -256,7 +297,20 @@ struct MathTypesetter {
                           CGRect(x: 0, y: -out.depth, width: t, height: out.height + out.depth),
                           CGRect(x: out.width - t, y: -out.depth, width: t, height: out.height + out.depth)]
             return (.ord, out)
-        case .style, .space:
+        case .colored(let color, let body):
+            return (.ord, try list(body, style).tinted(color.cgColor))
+        case .cancel(let body, let up, let down):
+            // KaTeX's enclose.ts: a 0.046em line corner to corner, 0.2em past the box above and below.
+            var out = try list(body, style)
+            out.isChar = false
+            let pad = 0.2 * size(style), w = 0.046 * size(style)
+            let bottom = -out.depth - pad, top = out.height + pad
+            if up { out.strokes.append(.init(from: CGPoint(x: 0, y: bottom), to: CGPoint(x: out.width, y: top), width: w)) }
+            if down { out.strokes.append(.init(from: CGPoint(x: 0, y: top), to: CGPoint(x: out.width, y: bottom), width: w)) }
+            return (.ord, out)
+        case .xArrow(let arrow, let above, let below):
+            return (.rel, try xArrow(arrow, above: above, below: below, style))
+        case .style, .space, .tag:
             return (.ord, MathBox())
         }
     }
@@ -560,6 +614,25 @@ struct MathTypesetter {
         return out
     }
 
+    /// `\xrightarrow[below]{above}` (KaTeX's xArrow.ts): labels in script style, the arrow stretched 0.5em past the wider
+    /// one on each side and at least as wide as `\longrightarrow`, centered on the axis with 0.111em gaps.
+    func xArrow(_ arrow: Unicode.Scalar, above: [MathNode], below: [MathNode]?, _ style: Style) throws -> MathBox {
+        let top = try list(above, style.sup), bottom = try below.map { try list($0, style.sub) }
+        let em = size(style)
+        let width = max(max(top.width, bottom?.width ?? 0) + em, 1.6 * em)
+        let shaft = try stretch(arrow, width: width, style)
+        let w = max(width, shaft.width)
+        let axis = k(.axisHeight, style)
+        let centred = shaft.shifted(up: axis - (shaft.height - shaft.depth) / 2)
+        var out = MathBox()
+        out.add(centred, x: (w - shaft.width) / 2, y: 0)
+        let gap = 0.111 * em
+        out.add(top, x: (w - top.width) / 2, y: centred.height + gap + top.depth)
+        if let bottom { out.add(bottom, x: (w - bottom.width) / 2, y: -(centred.depth + gap + bottom.height)) }
+        out.width = w
+        return out
+    }
+
     // MARK: Accents
 
     func accent(_ a: Unicode.Scalar, _ body: [MathNode], stretchy: Bool, _ style: Style) throws -> MathBox {
@@ -620,8 +693,14 @@ struct MathTypesetter {
 
     // MARK: Arrays
 
-    func array(_ rows: [[[MathNode]]], columns: [Character], kind: TeXParser.ArrayKind, gaps: [CGFloat], _ style: Style) throws -> MathBox {
+    func array(_ rows: [[[MathNode]]], columns spec: [Character], kind: TeXParser.ArrayKind, gaps: [CGFloat], hlines: [Int] = [],
+               _ style: Style) throws -> MathBox {
         guard !rows.isEmpty else { return MathBox() }
+        // `|` in `array`'s spec: a rule before the column it precedes, at `columns.count` after the last.
+        let columns = spec.filter { $0 != "|" }
+        var vlines: [Int] = []
+        var seen = 0
+        for ch in spec { if ch == "|" { vlines.append(seen) } else { seen += 1 } }
         let cellStyle: Style
         switch kind {
         case .aligned, .alignedAt, .gathered: cellStyle = Style(kind: .display, cramped: style.cramped)
@@ -671,6 +750,7 @@ struct MathTypesetter {
         let totalWidth = cursor + (kind == .array ? colsep : 0)
         var out = MathBox()
         var y: CGFloat = 0
+        var rowBottoms: [CGFloat] = []
         var placed: [(MathBox, CGFloat, CGFloat)] = []
         for (r, line) in cells.enumerated() {
             let h = max(line.map(\.height).max() ?? 0, 0.7 * skip)
@@ -684,11 +764,24 @@ struct MathTypesetter {
                 let dx = a == "l" ? 0 : a == "r" ? widths[c] - b.width : (widths[c] - b.width) / 2
                 placed.append((b, x[c] + dx, y))
             }
+            rowBottoms.append(-(y - d))
             y -= d + (r < cells.count - 1 ? jot : 0) + min(0, gap)
         }
         let total = -y
         let shift = total / 2 + k(.axisHeight, style)
         for (b, bx, by) in placed { out.add(b, x: bx, y: by + shift) }
+        // `\arrayrulewidth` is 0.04em: rules between columns sit in the middle of their gap, rules between rows on the boundary.
+        let rule = 0.04 * size(style)
+        for v in vlines {
+            let lx = v == 0 ? 0 : v >= columnCount ? totalWidth - rule : x[v] - gap(before: v) / 2 - rule / 2
+            out.rules.append(CGRect(x: lx, y: shift - total, width: rule, height: total))
+        }
+        for h in hlines {
+            // Distance from the top: 0 above the first row, the bottom of row h - 1 below it, kept inside the box at the edges.
+            let down = h == 0 ? 0 : rowBottoms[min(h, rowBottoms.count) - 1]
+            let ly = min(shift - rule, max(shift - total, shift - down - rule / 2))
+            out.rules.append(CGRect(x: 0, y: ly, width: totalWidth, height: rule))
+        }
         out.height = shift
         out.depth = total - shift
         out.width = totalWidth
@@ -712,9 +805,9 @@ enum MathRenderer {
         if let hit = cache[key] { return hit }
         let result: MathLayout? = {
             guard let font = MathFont.shared, let nodes = try? TeXParser.parse(tex.trimmingCharacters(in: .whitespacesAndNewlines)),
-                  !nodes.isEmpty, let box = try? MathTypesetter.layout(nodes, display: display, em: textSize * scale, font: font),
+                  !nodes.isEmpty, let (box, tag) = try? MathTypesetter.layout(nodes, display: display, em: textSize * scale, font: font),
                   box.width.isFinite, box.height.isFinite, box.depth.isFinite, box.width < 20_000 else { return nil }
-            return MathLayout(box)
+            return MathLayout(box, tag: tag)
         }()
         cache[key] = .some(result)
         order.append(key)

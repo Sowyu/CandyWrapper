@@ -30,8 +30,17 @@ indirect enum MathNode: Sendable {
     /// Horizontal space in em of the current size, or in mu when `mu`.
     case space(CGFloat, mu: Bool)
     case style(MathStyleKind)
-    /// `gaps[i]`: the extra space `\\[dim]` asks for after row i, in em.
-    case array(rows: [[[MathNode]]], columns: [Character], kind: TeXParser.ArrayKind, gaps: [CGFloat])
+    /// `gaps[i]`: the extra space `\\[dim]` asks for after row i, in em. `hlines` holds the row boundaries with an `\hline`
+    /// (0 above the first row, `rows.count` below the last); `columns` may hold `|` between letters.
+    case array(rows: [[[MathNode]]], columns: [Character], kind: TeXParser.ArrayKind, gaps: [CGFloat], hlines: [Int] = [])
+    /// `\color` and `\textcolor`: the body in this color, keeping its spacing.
+    case colored(MathColor, [MathNode])
+    /// `\cancel` (`/`), `\bcancel` (`\`) and `\xcancel` (both).
+    case cancel([MathNode], up: Bool, down: Bool)
+    /// `\xrightarrow[below]{above}` and `\xleftarrow`: an arrow stretched under and over its labels.
+    case xArrow(Unicode.Scalar, above: [MathNode], below: [MathNode]?)
+    /// `\tag{…}`: a display formula's label at the column's right edge. Only the top level of a display formula holds one.
+    case tag(String)
     case phantom([MathNode], width: Bool, height: Bool)
     case boxed([MathNode])
 }
@@ -46,6 +55,7 @@ struct TeXParser {
     private let tokens: [Token]
     private var at = 0
     private var depth = 0
+    private var tags = 0
 
     enum Token: Equatable { case command(String), char(Character), begin, end, sup, sub, align, eof }
 
@@ -55,6 +65,7 @@ struct TeXParser {
         guard tokens.count <= 5_000 else { throw Unsupported(reason: "too long") }
         var p = TeXParser(tokens: tokens)
         let list = try p.list(variant: .normal, until: [.eof])
+        guard p.tags <= 1 else { throw Unsupported(reason: "several tags") }
         return list
     }
 
@@ -134,6 +145,12 @@ struct TeXParser {
                     extra = try argument(variant: variant)
                 }
                 try attach(sup: sup + extra, to: &out)
+            case .command("color"):
+                // `{\color{red} a + b}`: the rest of the group.
+                _ = next()
+                let color = try MathColor(try rawArgument())
+                out.append(.colored(color, try list(variant: variant, until: until)))
+                return out
             case .command(let n) where Self.switches[n] != nil:
                 // `{\rm d}`: the old switches restyle the rest of the group.
                 _ = next()
@@ -406,6 +423,25 @@ struct TeXParser {
         case "underset":
             let under = try argument(variant: variant), base = try argument(variant: variant)
             return [.overUnder(base: base, over: nil, under: under, brace: nil, Self.mainClass(base))]
+        case "textcolor":
+            let color = try MathColor(try rawArgument())
+            return [.colored(color, try argument(variant: variant))]
+        case "cancel", "bcancel", "xcancel":
+            return [.cancel(try argument(variant: variant), up: name != "bcancel", down: name != "cancel")]
+        case "xrightarrow", "xleftarrow", "xleftrightarrow", "xRightarrow", "xLeftarrow", "xLeftrightarrow", "xmapsto":
+            let below = try optionalArgument(variant: variant)
+            let arrows: [String: Unicode.Scalar] = ["xrightarrow": "\u{2192}", "xleftarrow": "\u{2190}", "xleftrightarrow": "\u{2194}",
+                                                    "xRightarrow": "\u{21D2}", "xLeftarrow": "\u{21D0}", "xLeftrightarrow": "\u{21D4}", "xmapsto": "\u{21A6}"]
+            return [.xArrow(arrows[name]!, above: try argument(variant: variant), below: below)]
+        case "tag":
+            skipSpaces()
+            var starred = false
+            if case .char("*") = peek { _ = next(); starred = true }
+            tags += 1
+            // Top level: `list` and this `atom` are the only frames.
+            guard depth == 2 else { throw Unsupported(reason: "\\tag inside a group") }
+            let text = try rawArgument()
+            return [.tag(starred ? text : "(\(text))")]
         case "displaystyle": return [.style(.display)]
         case "textstyle": return [.style(.text)]
         case "scriptstyle": return [.style(.script)]
@@ -438,7 +474,7 @@ struct TeXParser {
         case "substack":
             skipSpaces()
             guard case .begin = next() else { throw Unsupported(reason: "\\substack argument") }
-            let (rows, gaps) = try arrayRows(variant: variant, end: .end)
+            let (rows, gaps, _) = try arrayRows(variant: variant, end: .end)
             return [.array(rows: rows, columns: ["c"], kind: .substack, gaps: gaps)]
         case "begin": return [try environment(variant: variant)]
         case "limits", "nolimits": throw Unsupported(reason: "\\\(name) after a non-operator")
@@ -509,12 +545,13 @@ struct TeXParser {
         var columns: [Character] = []
         if name == "array" {
             columns = Array(try rawArgument().filter { !$0.isWhitespace })
-            guard !columns.isEmpty, columns.allSatisfy({ "lcr".contains($0) }) else { throw Unsupported(reason: "array columns") }
+            guard columns.contains(where: { "lcr".contains($0) }), columns.allSatisfy({ "lcr|".contains($0) }) else { throw Unsupported(reason: "array columns") }
         }
         // `alignedat{n}` names its column pairs first.
         if name == "alignedat" { guard let n = Int(try rawArgument()), (1...20).contains(n) else { throw Unsupported(reason: "alignedat count") } }
-        let (rows, gaps) = try arrayRows(variant: variant, end: .command("end"))
+        let (rows, gaps, hlines) = try arrayRows(variant: variant, end: .command("end"))
         _ = next()
+        guard hlines.isEmpty || name == "array" else { throw Unsupported(reason: "\\hline outside array") }
         guard try rawArgument() == name else { throw Unsupported(reason: "mismatched \\end") }
         let delims: [String: (Unicode.Scalar?, Unicode.Scalar?)] = [
             "pmatrix": ("(", ")"), "bmatrix": ("[", "]"), "Bmatrix": ("{", "}"), "vmatrix": ("|", "|"), "Vmatrix": ("\u{2016}", "\u{2016}"),
@@ -542,16 +579,21 @@ struct TeXParser {
             guard rows.count == 1, rows[0].count == 1 else { throw Unsupported(reason: "equation with rows") }
             return .group(rows[0][0], .ord)
         case "array":
-            return .array(rows: rows, columns: columns, kind: .array, gaps: gaps)
+            return .array(rows: rows, columns: columns, kind: .array, gaps: gaps, hlines: hlines)
         default:
             throw Unsupported(reason: "environment \(name)")
         }
     }
 
     /// Cells split by `&` and rows by `\\`, until `end`. A trailing `\\` adds no row.
-    private mutating func arrayRows(variant: Variant, end: Token) throws -> (rows: [[[MathNode]]], gaps: [CGFloat]) {
-        var rows: [[[MathNode]]] = [], row: [[MathNode]] = [], gaps: [CGFloat] = []
+    private mutating func arrayRows(variant: Variant, end: Token) throws -> (rows: [[[MathNode]]], gaps: [CGFloat], hlines: [Int]) {
+        var rows: [[[MathNode]]] = [], row: [[MathNode]] = [], gaps: [CGFloat] = [], hlines: [Int] = []
         while true {
+            // `\hline` at the start of a row draws a rule above it.
+            if row.isEmpty {
+                skipSpaces()
+                while case .command("hline") = peek { _ = next(); hlines.append(rows.count); skipSpaces() }
+            }
             let cell = try list(variant: variant, until: [.align, .command("\\"), .command("cr"), end])
             row.append(cell)
             switch next() {
@@ -577,9 +619,10 @@ struct TeXParser {
             default:
                 if !(row.count == 1 && row[0].isEmpty) || rows.isEmpty { rows.append(row) }
                 gaps = Array((gaps + [0]).prefix(rows.count))
-                if end == .end { return (rows, gaps) }
+                hlines = hlines.map { min($0, rows.count) }
+                if end == .end { return (rows, gaps, hlines) }
                 at -= 1
-                return (rows, gaps)
+                return (rows, gaps, hlines)
             }
         }
     }
@@ -722,4 +765,31 @@ enum Symbols {
         "equiv": "\u{2262}", "sim": "\u{2241}", "approx": "\u{2249}", "cong": "\u{2247}", "mid": "\u{2224}", "parallel": "\u{2226}",
         "ni": "\u{220C}", "exists": "\u{2204}", "simeq": "\u{2244}", "prec": "\u{2280}", "succ": "\u{2281}",
     ]
+}
+
+/// A color `\\color` names: KaTeX's CSS names or `#rgb` and `#rrggbb`.
+struct MathColor: Sendable, Hashable {
+    let r: CGFloat, g: CGFloat, b: CGFloat
+
+    init(_ raw: String) throws {
+        let name = raw.trimmingCharacters(in: .whitespaces).lowercased()
+        let named: [String: UInt32] = [
+            "black": 0x000000, "white": 0xFFFFFF, "red": 0xFF0000, "green": 0x008000, "blue": 0x0000FF, "yellow": 0xFFFF00,
+            "cyan": 0x00FFFF, "magenta": 0xFF00FF, "orange": 0xFFA500, "purple": 0x800080, "brown": 0xA52A2A, "gray": 0x808080,
+            "grey": 0x808080, "pink": 0xFFC0CB, "teal": 0x008080, "olive": 0x808000, "navy": 0x000080, "maroon": 0x800000,
+            "lime": 0x00FF00, "violet": 0xEE82EE, "darkgray": 0xA9A9A9, "lightgray": 0xD3D3D3, "darkblue": 0x00008B,
+            "darkred": 0x8B0000, "darkgreen": 0x006400, "gold": 0xFFD700, "indigo": 0x4B0082, "crimson": 0xDC143C,
+        ]
+        var value: UInt32
+        if let v = named[name] {
+            value = v
+        } else if name.hasPrefix("#"), let v = UInt32(name.dropFirst(), radix: 16), name.count == 7 || name.count == 4 {
+            value = name.count == 7 ? v : ((v >> 8 & 0xF) * 0x110000) | ((v >> 4 & 0xF) * 0x1100) | ((v & 0xF) * 0x11)
+        } else {
+            throw TeXParser.Unsupported(reason: "color \(raw)")
+        }
+        r = CGFloat(value >> 16 & 0xFF) / 255; g = CGFloat(value >> 8 & 0xFF) / 255; b = CGFloat(value & 0xFF) / 255
+    }
+
+    var cgColor: CGColor { CGColor(srgbRed: r, green: g, blue: b, alpha: 1) }
 }

@@ -168,7 +168,8 @@ enum MarkdownStyle {
                     // `inline-block whitespace-nowrap px-0.5` (MarkdownMath.tsx:25): one unbreakable box with 2px each side.
                     let start = out.length
                     out.append(NSAttributedString(string: "\u{00A0}", attributes: [
-                        .font: parent, .foregroundColor: color, .kern: layout.width + 2 * MarkdownMathStyle.padX - noBreakSpaceWidth(parent),
+                        .font: parent, .foregroundColor: color,
+                        .kern: min(layout.width + 2 * MarkdownMathStyle.padX, maxChipWidth) - noBreakSpaceWidth(parent),
                         .markdownFindText: math.tex, .markdownCopyText: math.copySource]))
                     formulas.append((NSRange(location: start, length: 1), layout))
                     i += 1
@@ -664,11 +665,13 @@ private struct Builder {
         mathIndex += 1
         let (above, below) = MarkdownMathStyle.content(layout, parent: font, lineHeight: MarkdownStyle.lineHeight)
         let pad = MarkdownMathStyle.padX, padY = MarkdownMathStyle.padY
-        let contentWidth = layout.width + 2 * pad
+        // A `\tag` sits at the right edge; the formula stays centered, so the content reserves the tag's width on both sides.
+        let tagRoom = layout.tag.map { $0.width + 0.5 * size * MathRenderer.scale } ?? 0
+        let contentWidth = layout.width + 2 * pad + 2 * tagRoom
         let overflows = contentWidth > width + 1.0 / 64
         let height = padY + above + below + padY + (overflows ? MarkdownMathStyle.scrollbar : 0)
         var box = Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin, height: height, baseline: padY + above)
-        let x = overflows ? pad : (width - layout.width) / 2
+        let x = overflows ? pad + tagRoom : (width - layout.width) / 2
         // One no-break space as wide as the formula carries selection, copy (its TeX) and find; the `.math` item draws it.
         let placeholder = NSAttributedString(string: "\u{00A0}", attributes: [
             .font: font, .kern: layout.width - MarkdownStyle.noBreakSpaceWidth(font), .markdownFindText: math.tex, .markdownCopyText: math.copySource])
@@ -677,6 +680,7 @@ private struct Builder {
         if overflows { box.items.append(.scroll(codeIndex: MarkdownMathStyle.scrollID(index), viewport: viewport, contentWidth: contentWidth)) }
         box.items.append(.text(textBox, CGPoint(x: x, y: padY)))
         box.items.append(.math(layout, CGPoint(x: x, y: padY + above), color))
+        if let tag = layout.tag { box.items.append(.math(tag, CGPoint(x: max(width, contentWidth) - pad - tag.width, y: padY + above), color)) }
         if overflows { box.items.append(.endClip) }
         return box
     }

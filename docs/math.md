@@ -27,14 +27,15 @@ Copying a selection puts each formula's TeX on the pasteboard as `\(…\)` or `\
 - `\text` and its variants, `\mathrm`, `\mathbf`, `\mathit`, `\mathbb`, `\mathcal`, `\mathfrak`, `\mathsf`, `\mathtt` and `\boldsymbol`.
 - Accents, including `\widehat`, `\widetilde` and the over-arrows, plus `\overline`, `\underline`, `\overbrace`, `\underbrace`, `\overset`, `\underset` and `\stackrel`.
 - Spacing commands and `\hspace` in em, ex, pt and mu, plus `\phantom` and `\boxed`.
+- `\color` and `\textcolor` with CSS names or hex, `\cancel`, `\bcancel` and `\xcancel`, `\xrightarrow` and its kin, `\hline` and `|` in `array`, and `\tag` in display math.
 
 A formula stage 1 can't typeset shows its TeX as inline code. That is the user's choice; T3 shows unparsable TeX as plain text.
 
 ## Next
 
-- `\color` and `\textcolor`, `\tag` and the `equation` number, `\xrightarrow` and `\xleftarrow`, `\cancel`, and `\hline` and `|` in `array`.
+- The `equation` environment's automatic number.
 - `\\` line breaks at the top level of a display formula.
-- An inline formula wider than the column scrolls sideways in T3; here it overflows.
+- An inline formula wider than the column scrolls sideways in T3; here it is clipped at the column's edge.
 - Math kerning (cut-ins) and KaTeX's per-glyph metrics for script attachment.
 - Citing a selection captures a formula as a space.
 - An unclosed `math` fence stays code after streaming ends, where T3 renders it.

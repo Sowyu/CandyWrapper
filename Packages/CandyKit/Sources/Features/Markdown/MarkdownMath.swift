@@ -37,11 +37,17 @@ enum MarkdownMathStyle {
         }
     }
 
+    /// Each formula's draw item. A formula wider than the column is clipped to its placeholder (`max-w-full overflow-x-auto`).
+    // ponytail: clipped, where T3 scrolls it sideways; give inline formulas scroll ids if long inline formulas show up
     static func items(_ inline: MarkdownStyle.Inline, in textBox: MarkdownTextBox, parent: NSFont, color: NSColor) -> [MarkdownLayout.Item] {
-        inline.formulas.compactMap { f in
-            guard let span = textBox.spans(f.range).first else { return nil }
+        var out: [MarkdownLayout.Item] = []
+        for f in inline.formulas {
+            guard let span = textBox.spans(f.range).first else { continue }
             let e = Self.inline(f.layout, parent: parent, lineHeight: textBox.lineHeight)
-            return .math(f.layout, CGPoint(x: span.x0 + padX, y: span.baseline + e.baseline), color)
+            let item = MarkdownLayout.Item.math(f.layout, CGPoint(x: span.x0 + padX, y: span.baseline + e.baseline), color)
+            guard f.layout.width + 2 * padX > span.x1 - span.x0 + 0.5 else { out.append(item); continue }
+            out += [.clip(CGRect(x: span.x0, y: span.baseline - e.above, width: span.x1 - span.x0, height: e.above + e.below)), item, .endClip]
         }
+        return out
     }
 }
