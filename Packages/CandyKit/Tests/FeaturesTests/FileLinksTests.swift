@@ -17,6 +17,32 @@ struct FileLinksTests {
         #expect(FileLinks.inlineCodeCandidate(source) == expected)
     }
 
+    /// T3 3669 runs candidates through parseMarkdownFileLink as well (markdown-links.ts:47-54).
+    @Test(arguments: [
+        ("cancel", nil), ("textcolor", nil), ("tag{2}", nil), ("cases", nil),
+        (#"\cancel"#, nil), (#"\textcolor"#, nil), (#"\tag{2}"#, nil), (#"\cases"#, nil),
+        ("/cancel", nil), ("/textcolor", nil), ("/tag{2}", nil),
+        ("docs/space.md", "/Users/me/repo/docs/space.md"),
+        ("App/Sources/Foo.swift", "/Users/me/repo/App/Sources/Foo.swift"),
+        ("~/CandyWrapper-research/notes", "/Users/me/CandyWrapper-research/notes"),
+        ("space.md", nil), ("./space.md", "/Users/me/repo/./space.md"),
+        ("native-math-2026-10-27", nil),
+        ("./native-math-2026-10-27", "/Users/me/repo/./native-math-2026-10-27"),
+        ("/tmp/native-math-2026-10-27", "/tmp/native-math-2026-10-27"),
+    ] as [(String, String?)])
+    func inlineCodeLinkValidation(_ source: String, _ expectedPath: String?) {
+        #expect(FileLinks.resolveInlineCode(source, cwd: "/Users/me/repo")?.filePath == expectedPath)
+    }
+
+    @MainActor @Test func latexCommandsStayCodeBesideFileChips() {
+        let doc = MarkdownDocument(parsing: #"`cancel` `textcolor` `tag{2}` `cases` `\cancel` `\textcolor` `\tag{2}` `\cases` `docs/space.md` `~/CandyWrapper-research/notes` `space.md` `./space.md` `native-math-2026-10-27` `./native-math-2026-10-27`"#)
+        let layout = MarkdownLayout(document: doc, width: 900, cwd: "/Users/me/repo")
+        #expect(layout.fileChips.map(\.meta.filePath) == [
+            "/Users/me/repo/docs/space.md", "/Users/me/CandyWrapper-research/notes",
+            "/Users/me/repo/./space.md", "/Users/me/repo/./native-math-2026-10-27",
+        ])
+    }
+
     @Test(arguments: [
         ("/Users/julius/project/AGENTS.md", "/Users/julius/project/AGENTS.md"), ("/usr/local/bin/tool", "/usr/local/bin/tool"),
         ("/tmp/favicons/", "/tmp/favicons/"), ("file:///Users/julius/project/file%2520name.md", "/Users/julius/project/file%20name.md"),

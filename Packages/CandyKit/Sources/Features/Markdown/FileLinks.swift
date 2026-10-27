@@ -61,7 +61,9 @@ public enum FileLinks {
         guard let candidate = inlineCodeCandidate(codeText) else { return nil }
         // Chat messages anchor relative paths at the workspace root (baseDir == cwd), so the
         // "names from the workspace root" rule picks the same base either way.
-        return resolve(candidate, cwd: cwd)
+        // T3 validates the candidate as a Markdown destination before resolving it
+        // (apps/web/src/markdown-links.ts:47-54). A leading slash alone is not enough.
+        return resolveLink(candidate, cwd: cwd)
     }
 
     // MARK: Links
