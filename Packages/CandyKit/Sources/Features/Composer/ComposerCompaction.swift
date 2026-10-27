@@ -87,22 +87,28 @@ public enum ComposerCompaction {
         public var hasProject = false
         /// `hasAvailableCompactionProvider`.
         public var providerAvailable = false
-        /// Working, reverting a checkpoint, preparing a worktree, environment unavailable, an approval or
-        /// question open, or the plan follow-up showing.
-        public var busy = false
+        /// Why the thread can't compact now: working, sending, the environment gone, an approval or question
+        /// open, or the plan follow-up showing. Nil when none holds.
+        public var busyReason: String?
+        public var busy: Bool { busyReason != nil }
         public init() {}
 
         public var disabled: Bool {
             !canOperateThread || !isServerThread || !hasCompactableConversation || !hasProject || !providerAvailable || busy
         }
 
-        public var reason: String? {
+        /// T3's reason. `specific` (Redesign) replaces its catch-all "right now" with the condition that holds.
+        public func reason(specific: Bool = false) -> String? {
             guard disabled else { return nil }
             if !canOperateThread { return "This connection cannot change threads." }
             if !hasProject { return "Choose a project before compacting" }
             if !providerAvailable { return "Compaction is unavailable for this provider" }
-            return "Compacting is unavailable right now"
+            guard specific else { return Self.unavailable }
+            if !isServerThread { return "Send a message before compacting" }
+            if !hasCompactableConversation { return "Nothing to compact yet" }
+            return busyReason ?? Self.unavailable
         }
+        public static let unavailable = "Compacting is unavailable right now"
     }
 
     /// `resumeCompactionTokens` (ChatView.tsx:7692-7710): the tokens a stale session would re-read,

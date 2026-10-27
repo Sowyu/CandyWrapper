@@ -63,15 +63,21 @@ import T3Protocol
     @Test func disabledReasonsFollowT3sOrder() {
         var gate = ComposerCompaction.Gate()
         gate.isServerThread = true; gate.hasCompactableConversation = true; gate.hasProject = true; gate.providerAvailable = true
-        #expect(!gate.disabled && gate.reason == nil)
-        gate.busy = true
-        #expect(gate.reason == "Compacting is unavailable right now")
+        #expect(!gate.disabled && gate.reason() == nil)
+        gate.busyReason = "Wait for the turn to finish"
+        #expect(gate.reason() == "Compacting is unavailable right now")
+        // Redesign names the condition that holds instead of T3's catch-all.
+        #expect(gate.reason(specific: true) == "Wait for the turn to finish")
+        gate.hasCompactableConversation = false
+        #expect(gate.reason(specific: true) == "Nothing to compact yet")
+        gate.isServerThread = false
+        #expect(gate.reason(specific: true) == "Send a message before compacting")
         gate.providerAvailable = false
-        #expect(gate.reason == "Compaction is unavailable for this provider")
+        #expect(gate.reason() == "Compaction is unavailable for this provider")
         gate.hasProject = false
-        #expect(gate.reason == "Choose a project before compacting")
+        #expect(gate.reason() == "Choose a project before compacting")
         gate.canOperateThread = false
-        #expect(gate.reason == "This connection cannot change threads.")
+        #expect(gate.reason() == "This connection cannot change threads.")
     }
 
     @Test func availableProviderStaysInTheLockedContinuationGroup() throws {

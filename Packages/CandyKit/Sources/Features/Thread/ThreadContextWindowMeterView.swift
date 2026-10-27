@@ -103,6 +103,8 @@ public final class ThreadContextWindowMeterView: ControlView {
     public var modelDisplayName: String?
     /// The open thread, read only when Redesign's popover opens, to estimate what fills the window.
     public var projection: ThreadProjection?
+    /// The thread's history window starts after its first item, so the estimate can't see all of the context.
+    public var hasEarlierHistory = false
     private var estimateCache: (key: String, value: ThreadContextEstimate?)?
     /// One estimate per thread revision and report, so the popover's refreshes reuse it.
     // ponytail: runs on the main thread when the popover opens, one pass over the items; move it off the main
@@ -111,9 +113,9 @@ public final class ThreadContextWindowMeterView: ControlView {
         guard capy else { return nil }
         let p = projection
         let key = "\(p?.thread.id.rawValue ?? "") \(p?.updatedAt.description ?? "") \(p?.visibleTurnItems.count ?? 0) "
-            + "\(p?.visibleTurnItems.last?.item.updatedAt.description ?? "") \(usage.used)"
+            + "\(p?.visibleTurnItems.last?.item.updatedAt.description ?? "") \(usage.used) \(hasEarlierHistory)"
         if let estimateCache, estimateCache.key == key { return estimateCache.value }
-        let value = ThreadContextEstimate.estimate(projection, used: usage.used)
+        let value = ThreadContextEstimate.estimate(projection, used: usage.used, hasEarlierHistory: hasEarlierHistory)
         estimateCache = (key, value)
         return value
     }
@@ -122,7 +124,7 @@ public final class ThreadContextWindowMeterView: ControlView {
     public var compactDisabledReason: String?
     /// `ContextWindowMeterPlaceholder` (ContextWindowMeter.tsx:177-180): with no usage yet, the composer
     /// still holds the meter's 28pt slot so the attach button does not move when it arrives.
-    public var reserved = false { didSet { if reserved != oldValue { superview?.needsLayout = true } } }
+    public var reserved = false { didSet { if reserved != oldValue { superview?.needsLayout = true; needsDisplay = true } } }
     /// Dither: Capy's ring (measured in Capy 2026-10-22), a 13pt circle with a 1.5pt stroke in a 28pt pill under the
     /// composer, opened by a click into Capy's Context popover.
     var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
@@ -153,7 +155,7 @@ public final class ThreadContextWindowMeterView: ControlView {
 
     /// The usage arc as a layer, so its `stroke-dashoffset` and `stroke` changes run 500ms `ease-out`
     /// (ContextWindowMeter.tsx:82; Tailwind's `ease-out` is `cubic-bezier(0, 0, .2, 1)`).
-    private let arc = CAShapeLayer()
+    let arc = CAShapeLayer()
     private static let easeOut = CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)
 
     private func updateArc(animated: Bool) {
@@ -185,7 +187,8 @@ public final class ThreadContextWindowMeterView: ControlView {
     }
 
     public override func draw(_ dirtyRect: NSRect) {
-        guard let ctx = NSGraphicsContext.current?.cgContext, usage != nil else { return }
+        // Redesign's pill always holds a ring, so a reserved slot shows the empty track while the usage loads.
+        guard let ctx = NSGraphicsContext.current?.cgContext, usage != nil || (capy && reserved) else { return }
         if capy, state.hoverOrPressed || detailsPopup != nil {
             ctx.addPath(CGPath(roundedRect: bounds, cornerWidth: DitherPill.radius, cornerHeight: DitherPill.radius, transform: nil))
             ctx.setFillColor(Themed.color(\.foreground, 0.07).cgColor(in: self))
@@ -432,6 +435,8 @@ final class ThreadContextWindowDetailsView: DSView {
             track.clipsToBounds = true
         }
         estimateNote.isHidden = !capy || dots.isEmpty
+        estimateNote.text = estimate?.includesEarlier == true ? "Estimated from the loaded messages; T3 reports only the total."
+            : "Estimated from this thread; T3 reports only the total."
         if !capy, let total = usage.total, total > 0 { row("Total processed", tokens(total)) }
         // `formatContextWindowCost` (ContextWindowMeter.logic.ts:139-145).
         if !capy, let cost = usage.cost { row("Cost", usage.currency + " " + String(format: abs(cost) > 0 && abs(cost) < 0.01 ? "%.4f" : "%.2f", cost)) }

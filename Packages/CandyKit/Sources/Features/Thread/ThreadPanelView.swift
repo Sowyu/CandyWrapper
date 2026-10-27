@@ -1748,8 +1748,14 @@ public final class ThreadPanelView: DSView {
         let belowY = y + height + gap
         var belowRight = px + pw
         let meter = composer.contextWindowMeter
-        if meter.superview !== self { addSubview(meter, positioned: .above, relativeTo: queue) }
-        if ringPill.superview !== self { addSubview(ringPill, positioned: .below, relativeTo: meter) }
+        // Back from another theme the meter returns from the composer above the pill it left behind, which would
+        // hide the ring, so the pill goes under it again each time.
+        if meter.superview !== self {
+            addSubview(meter, positioned: .above, relativeTo: queue)
+            addSubview(ringPill, positioned: .below, relativeTo: meter)
+        } else if ringPill.superview !== self {
+            addSubview(ringPill, positioned: .below, relativeTo: meter)
+        }
         let ringOn = docked && (meter.usage != nil || meter.reserved)
         meter.isHidden = !ringOn
         ringPill.isHidden = !ringOn

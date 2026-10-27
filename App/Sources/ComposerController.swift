@@ -5017,7 +5017,11 @@ extension ComposerController {
             serverConfig.providers, driver: provider?.driver, instanceId: pickers.current.instanceId,
             lockedInstanceId: started ? thread?.modelSelection.instanceId : nil)
         // Working (a run, a send, a rewind), the environment gone, a request open or the plan follow-up.
-        gate.busy = composer.runState.canInterrupt || composer.isBusy || shell == nil || !requests.isEmpty || showPlan
+        gate.busyReason = composer.runState.canInterrupt ? "Wait for the current turn to finish"
+            : composer.isBusy ? "Wait for the message to send"
+            : shell == nil ? "This environment is unavailable"
+            : !requests.isEmpty ? "Answer the open request first"
+            : showPlan ? "Choose what to do with the plan first" : nil
         compactUnavailable = gate.disabled
         // ChatComposer.tsx:2154-2155, 7669-7673: no provider at all, a send or a connect also disable the button.
         let noProvider = provider == nil
@@ -5028,7 +5032,8 @@ extension ComposerController {
         }
         meter.setCompactState(offered: ComposerCompaction.supportsManualCompaction(provider),
                               disabled: gate.disabled || noProvider || composer.isBusy,
-                              reason: gate.reason ?? (noProvider ? "Compacting is unavailable right now" : nil), model: modelName)
+                              reason: gate.reason(specific: ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark))
+                                ?? (noProvider ? ComposerCompaction.Gate.unavailable : nil), model: modelName)
         updateMeterSlot()
 
         // The resume offer (ChatView.tsx:7692-7710). A "Don't ask again" answer to the server's own resume

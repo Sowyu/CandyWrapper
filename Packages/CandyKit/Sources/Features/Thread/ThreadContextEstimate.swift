@@ -11,6 +11,9 @@ import T3Protocol
 /// What the measured items don't cover beyond that is tool output.
 public struct ThreadContextEstimate: Equatable, Sendable {
     public var system: Double = 0, messages: Double = 0, replies: Double = 0, tools: Double = 0, images: Double = 0
+    /// The loaded window starts after the context does: older history the client hasn't paged in is still in
+    /// context, so the fixed part holds it too and the legend says so.
+    public var includesEarlier = false
 
     // ponytail: 4 UTF-8 bytes per token, off by about 30% on prose with non-ASCII or dense code; use a real
     // tokenizer if the legend needs to be exact.
@@ -22,22 +25,24 @@ public struct ThreadContextEstimate: Equatable, Sendable {
     static let fileTokens = 30.0
 
     public var categories: [(name: String, value: Double)] {
-        [("System prompt and tools", system), ("Your messages", messages), ("Replies", replies),
+        [(includesEarlier ? "Prompt and earlier messages" : "System prompt and tools", system), ("Your messages", messages), ("Replies", replies),
          ("Tool calls and output", tools), ("Images and files", images)]
     }
 
-    /// Splits `used` across the categories. Nil without a projection.
-    public static func estimate(_ projection: ThreadProjection?, used: Double) -> Self? {
+    /// Splits `used` across the categories. Nil without a projection. `hasEarlierHistory` is the window's
+    /// `hasMoreHistory`: older items exist that the client hasn't loaded.
+    public static func estimate(_ projection: ThreadProjection?, used: Double, hasEarlierHistory: Bool = false) -> Self? {
         guard let projection else { return nil }
         func date(_ s: String?) -> Date { s.flatMap { T3Timestamp($0).date } ?? .distantPast }
         func date(_ item: TurnItem) -> Date { (item.startedAt ?? item.updatedAt).date ?? .distantPast }
         var items = projection.visibleTurnItems.map(\.item)
         // Only what is still in context: everything after the last finished compaction, plus its summary.
         // A failed, stopped or running compaction leaves the earlier history in context.
-        var since = Date.distantPast
+        var since = Date.distantPast, includesEarlier = hasEarlierHistory
         if let last = items.lastIndex(where: { $0.type == .compaction && $0.status == .completed }) {
             since = date(items[last])
             items = Array(items[last...])
+            includesEarlier = false
         }
         let at = items.map { date($0) }
         // Each provider turn's report since the compaction, oldest first.
@@ -48,7 +53,7 @@ public struct ThreadContextEstimate: Equatable, Sendable {
         }.sorted { $0.at < $1.at }
 
         // One pass in timeline order, reading the fixed part off each report as the timeline passes it.
-        var parts = Self(), base = Double.infinity, next = 0
+        var parts = Self(includesEarlier: includesEarlier), base = Double.infinity, next = 0
         var reasoning = 0.0, lastUser = -1
         func readReports(before cut: Date) {
             while next < reports.count, reports[next].at < cut {

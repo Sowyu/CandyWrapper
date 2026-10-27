@@ -15,10 +15,10 @@ struct ThreadContextEstimateTests {
     private func report(_ s: Int, _ used: Double) -> JSONValue {
         .object(["id": .string("pt\(s)"), "tokenUsage": .object(["usedTokens": .number(used), "updatedAt": at(s)])])
     }
-    private func estimate(_ items: [JSONValue], _ reports: [JSONValue], used: Double) throws -> ThreadContextEstimate {
+    private func estimate(_ items: [JSONValue], _ reports: [JSONValue], used: Double, earlier: Bool = false) throws -> ThreadContextEstimate {
         let projection = try JSONValue.object(["thread": .object(["id": .string("t")]), "visibleTurnItems": .array(items),
                                                "providerTurns": .array(reports), "updatedAt": at(59)]).decode(as: ThreadProjection.self)
-        return try #require(ThreadContextEstimate.estimate(projection, used: used))
+        return try #require(ThreadContextEstimate.estimate(projection, used: used, hasEarlierHistory: earlier))
     }
     private func text(_ n: Int) -> JSONValue { .string(String(repeating: "a", count: n)) }
     private func sum(_ e: ThreadContextEstimate) -> Double { e.categories.map(\.value).reduce(0, +) }
@@ -76,5 +76,29 @@ struct ThreadContextEstimateTests {
             item("u2", "user_message", 4, ["text": text(40), "attachments": .array([])]),
         ], [], used: 100_000)
         #expect(e.messages == 1_000 + 10)
+    }
+
+    /// A long thread loads only its latest page, so the history before it reads as part of the fixed figure. The
+    /// legend names that row for both, as on 2026-10-27 the Conductor showed 483K of 518K as "System prompt and tools".
+    @Test func aPartialWindowNamesTheEarlierMessages() throws {
+        let items = [item("u9", "user_message", 10, ["text": text(400), "attachments": .array([])]),
+                     item("a9", "assistant_message", 11, ["text": text(400), "streaming": .bool(false)])]
+        let e = try estimate(items, [report(12, 483_200)], used: 483_200, earlier: true)
+        #expect(e.includesEarlier)
+        #expect(e.categories.first?.name == "Prompt and earlier messages")
+        #expect(e.system == 483_200 - 200)
+        #expect(sum(e) == 483_200)
+        // With the whole history loaded the same split reads as the system prompt.
+        let whole = try estimate(items, [report(12, 483_200)], used: 483_200)
+        #expect(!whole.includesEarlier && whole.categories.first?.name == "System prompt and tools")
+    }
+
+    @Test func aCompactionInTheWindowCutsOffTheUnloadedHistory() throws {
+        let e = try estimate([
+            item("k1", "compaction", 3, ["summary": text(400)]),
+            item("u2", "user_message", 4, ["text": text(40), "attachments": .array([])]),
+        ], [report(5, 20_000)], used: 20_000, earlier: true)
+        #expect(!e.includesEarlier)
+        #expect(e.categories.first?.name == "System prompt and tools")
     }
 }
