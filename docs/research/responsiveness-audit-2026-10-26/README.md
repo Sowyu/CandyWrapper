@@ -147,6 +147,8 @@ On 2026-10-27, commit "fix: late replies keep their own draft, thread and pull r
 - F1 and F2. Comment, review, comment-and-close, actions, edits and stack actions keep their pull request and environment. The close or reopen goes to the pull request that got the comment. A reply only touches the composer that sent it, and it reloads, clears pending state or closes an editor only during the same showing of its pull request. Leaving and coming back counts as a new showing, so an old title save can't close a newer title edit. Switching pull requests clears the old pending and saving flags.
 - SA1. `DownloadedFile.save` refuses a non-2xx reply or a body that doesn't match the announced `sizeBytes`. It stages the file on the destination's volume and swaps it in with `replaceItemAt`, so the original survives any failure.
 
+The live on-screen walk-through of C1 and C3 is pending. Synthetic input is blocked on miniko after the T3 update: macOS allows the posted events, but neither typed text nor clicks reach the app. The harness results below are the evidence for now.
+
 The three harnesses now assert the fixed behavior and exit 1 if a bug comes back. Run against the code before the fix, they fail every bug case: 7 composer, 2 download and 9 pull request. Their controls pass both before and after.
 
 ```sh
