@@ -90,7 +90,7 @@ public enum MarkdownImages {
     /// The image's box: its natural size scaled down to at most 30rem and the message's width, ratio kept.
     /// `border` is added around the picture inside those limits (the workspace frame).
     /// `maxHeight` is a caller's height cap (`maxHeightRem`, ChatMarkdown.tsx:1608-1617).
-    static func displaySize(natural: CGSize, maxWidth: CGFloat, border: CGFloat, maxHeight: CGFloat = MarkdownStyle.imageMaxWidth) -> CGSize {
+    nonisolated static func displaySize(natural: CGSize, maxWidth: CGFloat, border: CGFloat, maxHeight: CGFloat = MarkdownStyle.imageMaxWidth) -> CGSize {
         let boxWidth = min(maxWidth, MarkdownStyle.imageMaxWidth)
         let scale = min(1, max(0, boxWidth - 2 * border) / natural.width, (maxHeight - 2 * border) / natural.height)
         return CGSize(width: natural.width * scale + 2 * border, height: natural.height * scale + 2 * border)
@@ -311,7 +311,7 @@ enum MarkdownFavicons {
     static func clear() { images = [:]; failed = [] }
 
     /// The host of an http(s) or protocol-relative link (`resolveExternalWebLinkHost`).
-    static func host(_ url: URL) -> String? {
+    nonisolated static func host(_ url: URL) -> String? {
         let raw = url.absoluteString
         let scheme = url.scheme?.lowercased()
         guard scheme == "http" || scheme == "https" || (scheme == nil && raw.hasPrefix("//")) else { return nil }

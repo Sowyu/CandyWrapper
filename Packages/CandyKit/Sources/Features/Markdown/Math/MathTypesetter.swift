@@ -805,28 +805,29 @@ struct MathTypesetter {
 }
 
 /// Typesets and caches formulas for message text.
-@MainActor
 enum MathRenderer {
     /// KaTeX sets formulas at 1.21em of the surrounding text (`.katex { font-size: 1.21em }`).
     static let scale: CGFloat = 1.21
 
-    private static var cache: [String: MathLayout?] = [:]
-    private static var order: [String] = []
+    nonisolated(unsafe) private static var cache: [String: MathLayout?] = [:]
+    nonisolated(unsafe) private static var order: [String] = []
+    private static let lock = NSLock()
 
     /// The layout of `tex`, nil when stage 1 can't typeset it and the source shows instead.
     // ponytail: FIFO of 1,000 layouts like T3's typeset cache; key on width too if layouts ever depend on it
     static func layout(_ tex: String, display: Bool, textSize: CGFloat) -> MathLayout? {
         let key = "\(display ? "d" : "i")\(textSize):\(tex)"
-        if let hit = cache[key] { return hit }
+        if let hit = lock.withLock({ cache[key] }) { return hit }
         let result: MathLayout? = {
             guard let font = MathFont.shared, let nodes = try? TeXParser.parse(tex.trimmingCharacters(in: .whitespacesAndNewlines)),
                   !nodes.isEmpty, let (box, tag) = try? MathTypesetter.layout(nodes, display: display, em: textSize * scale, font: font),
                   box.width.isFinite, box.height.isFinite, box.depth.isFinite, box.width < 20_000 else { return nil }
             return MathLayout(box, tag: tag)
         }()
-        cache[key] = .some(result)
-        order.append(key)
-        if order.count > 1_000 { cache[order.removeFirst()] = nil }
+        lock.withLock {
+            if cache.updateValue(result, forKey: key) == nil { order.append(key) }
+            if order.count > 1_000 { cache[order.removeFirst()] = nil }
+        }
         return result
     }
 }

@@ -4,7 +4,6 @@ import DesignSystem
 /// How T3 places a formula in a message (MarkdownMath.tsx:20-58, index.css `.chat-markdown-math-display`):
 /// an inline formula is an `inline-block align-middle` box with `px-0.5 py-0.75` around KaTeX's line box, and a display
 /// formula a centered block with the same padding, `my-[0.65rem]`, that scrolls sideways when wider than the column.
-@MainActor
 enum MarkdownMathStyle {
     static let padX: CGFloat = 2
     static let padY: CGFloat = 3

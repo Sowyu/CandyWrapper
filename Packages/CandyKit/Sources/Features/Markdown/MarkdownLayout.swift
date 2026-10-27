@@ -10,6 +10,18 @@ extension NSAttributedString.Key {
     static let markdownCopyText = NSAttributedString.Key("CandyMarkdownCopyText")
 }
 
+/// Runs the few main-actor lookups a layout needs (chips, image sizes, diagrams) from any thread. A layout off the main
+/// thread waits for the main thread here, so the main thread must never wait for a layout.
+func onMain<T>(_ body: @MainActor () -> T) -> T {
+    withoutActuallyEscaping(body) { body in
+        nonisolated(unsafe) let body = body
+        nonisolated(unsafe) var out: T?
+        let run = { MainActor.assumeIsolated { out = body() } }
+        if Thread.isMainThread { run() } else { DispatchQueue.main.sync(execute: run) }
+        return out!
+    }
+}
+
 /// T3's `.chat-markdown` values (`apps/web/src/index.css:1759-2073`, ChatMarkdown.tsx), research note H section 4.
 enum MarkdownStyle {
     static let fontSize: CGFloat = 14
@@ -51,12 +63,13 @@ enum MarkdownStyle {
     /// CSS `font-weight: bolder` from a parent weight.
     static func bolder(_ weight: NSFont.Weight) -> NSFont.Weight { weight.rawValue >= NSFont.Weight.semibold.rawValue ? .black : .bold }
 
-    @MainActor private static var noBreakSpaceWidths: [NSFont: CGFloat] = [:]
+    nonisolated(unsafe) private static var noBreakSpaceWidths: [NSFont: CGFloat] = [:]
+    private static let noBreakSpaceLock = NSLock()
     /// A no-break space's advance in `font`, measured once per font.
-    @MainActor static func noBreakSpaceWidth(_ font: NSFont) -> CGFloat {
-        if let width = noBreakSpaceWidths[font] { return width }
+    static func noBreakSpaceWidth(_ font: NSFont) -> CGFloat {
+        if let width = noBreakSpaceLock.withLock({ noBreakSpaceWidths[font] }) { return width }
         let width = TextLine(NSAttributedString(string: "\u{00A0}", attributes: [.font: font])).width
-        noBreakSpaceWidths[font] = width
+        noBreakSpaceLock.withLock { noBreakSpaceWidths[font] = width }
         return width
     }
 
@@ -78,7 +91,7 @@ enum MarkdownStyle {
     /// Inline runs as an attributed string. Inline code reserves its padding and border with kerning
     /// on the character before it and on its own last character; the ranges come back for the chips.
     /// With `files`, path-shaped inline code and file links become file chips (`FileChipStyle`).
-    @MainActor static func inline(_ runs: [InlineRun], size: CGFloat, weight: NSFont.Weight = .regular, color: NSColor,
+    static func inline(_ runs: [InlineRun], size: CGFloat, weight: NSFont.Weight = .regular, color: NSColor,
                        alignment: NSTextAlignment = .natural, headIndent: CGFloat = 0, firstLineIndent: CGFloat? = nil,
                        files: FileChipResolver? = nil, contexts: MarkdownContextChips? = nil,
                        maxChipWidth: CGFloat = .greatestFiniteMagnitude, findable: Bool = true) -> Inline {
@@ -128,7 +141,8 @@ enum MarkdownStyle {
             }
             func appendContextChip(_ chip: MarkdownContextChip) {
                 var chip = chip
-                let measured = ComposerChipAttachment.measure(chip.look, maxWidth: maxChipWidth)
+                let look = chip.look
+                let measured = onMain { ComposerChipAttachment.measure(look, maxWidth: maxChipWidth) }
                 chip.label = measured.label
                 chip.frame.size = measured.size
                 // One no-break space as wide as the chip: the chip never wraps and the layout item draws it.
@@ -146,7 +160,8 @@ enum MarkdownStyle {
                 while end < runs.count, runs[end].link == url { end += 1 }
                 let text = runs[i..<end].map(\.text).joined()
                 i = end
-                appendContextChip((contexts ?? MarkdownContextChips()).threadLinkChip(threadId: threadId, label: text.isEmpty ? threadId : text))
+                nonisolated(unsafe) let resolver = contexts ?? MarkdownContextChips()
+                appendContextChip(onMain { resolver.threadLinkChip(threadId: threadId, label: text.isEmpty ? threadId : text) })
                 continue
             }
             if let url = run.link, url.scheme == "t3-context", let parsed = ComposerContext.parseHref(url.absoluteString) {
@@ -160,7 +175,8 @@ enum MarkdownStyle {
                     out.append(NSAttributedString(string: label, attributes: [.font: parent, .foregroundColor: color]))
                     continue
                 }
-                appendContextChip(contexts.chip(kind: parsed.kind, contextId: parsed.contextId, label: label))
+                nonisolated(unsafe) let resolver = contexts
+                appendContextChip(onMain { resolver.chip(kind: parsed.kind, contextId: parsed.contextId, label: label) })
                 continue
             }
             if let math = run.math {
@@ -189,7 +205,8 @@ enum MarkdownStyle {
             let index = i
             i += 1
             if let label = run.skillLabel {
-                let attachment = ComposerChipAttachment(look: ComposerChipLook(kind: .skill, label: label), source: run.text, maxWidth: maxChipWidth)
+                let source = run.text
+                let attachment = onMain { ComposerChipAttachment(look: ComposerChipLook(kind: .skill, label: label), source: source, maxWidth: maxChipWidth) }
                 let chip = NSMutableAttributedString(attachment: attachment)
                 chip.addAttribute(.markdownFindText, value: label, range: NSRange(location: 0, length: chip.length))
                 out.append(chip)
@@ -261,8 +278,8 @@ enum MarkdownStyle {
 
 /// Everything a message's markdown draws at one width: positioned text, boxes, markers and the
 /// frames of the code and table buttons. Built once per width and cached by `MarkdownView`.
-@MainActor
-public final class MarkdownLayout {
+/// Built on one thread, then only read: a large message lays out off the main thread and hands the result over.
+public final class MarkdownLayout: @unchecked Sendable {
     public let width: CGFloat
     public private(set) var height: CGFloat = 0
     /// The bottom margin the last block's descendants leave inside `height` (a loose list item's `<p>`). A next
@@ -349,6 +366,11 @@ public final class MarkdownLayout {
     /// three or more backticks or tildes opens, and only a line of the same character, at least as long, closes it.
     // ponytail: fences inside block quotes count as text; parse quote markers if replies stream diagrams in quotes
     public static func endsInOpenFence(_ text: String) -> Bool {
+        // A megabyte answer asks on every update: one pass over the bytes, the same lines as the split below.
+        text.utf8.withContiguousStorageIfAvailable(endsInOpenFence(bytes:)) ?? endsInOpenFence(characters: text)
+    }
+
+    static func endsInOpenFence(characters text: String) -> Bool {
         var open: (Character, Int)?
         for line in text.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r" }) {
             let trimmed = line.drop { $0 == " " || $0 == "\t" }
@@ -364,6 +386,43 @@ public final class MarkdownLayout {
         return open != nil
     }
 
+    /// `endsInOpenFence` over UTF-8. Lines end at a lone `\n` or `\r`; a `\r\n` pair is one Character, which the split
+    /// above doesn't treat as a separator, so neither does this. Fences, spaces and tabs are ASCII, so bytes compare as
+    /// the Characters do.
+    static func endsInOpenFence(bytes: UnsafeBufferPointer<UInt8>) -> Bool {
+        let space = UInt8(ascii: " "), tab = UInt8(ascii: "\t"), cr = UInt8(ascii: "\r"), lf = UInt8(ascii: "\n")
+        let backtick = UInt8(ascii: "`"), tilde = UInt8(ascii: "~")
+        var open: (UInt8, Int)?
+        var start = 0
+        let count = bytes.count
+        while start <= count {
+            var end = start
+            while end < count {
+                let b = bytes[end]
+                if b == lf, end == 0 || bytes[end - 1] != cr { break }
+                if b == cr, end + 1 >= count || bytes[end + 1] != lf { break }
+                end += 1
+            }
+            var i = start
+            while i < end, bytes[i] == space || bytes[i] == tab { i += 1 }
+            if i < end, bytes[i] == backtick || bytes[i] == tilde {
+                let c = bytes[i]
+                var run = 0
+                while i + run < end, bytes[i + run] == c { run += 1 }
+                if run >= 3 {
+                    let rest = (i + run)..<end
+                    if let (oc, ol) = open {
+                        if c == oc, run >= ol, rest.allSatisfy({ bytes[$0] == space || bytes[$0] == tab }) { open = nil }
+                    } else if c == tilde || !rest.contains(where: { bytes[$0] == backtick }) {
+                        open = (c, run)
+                    }
+                }
+            }
+            start = end + 1
+        }
+        return open != nil
+    }
+
     private(set) var items: [Item] = []
     private(set) var controls: [Control] = []
     /// File chips in drawing order, for hit testing.
@@ -374,6 +433,13 @@ public final class MarkdownLayout {
     public private(set) var links: [(frame: CGRect, url: URL)] = []
     /// The y of each top-level block, so a streaming update can redraw from its first changed block down.
     public private(set) var blockTops: [CGFloat] = []
+    /// Code block and wide table bodies that scroll sideways, in drawing order.
+    private(set) var scrollers: [(index: Int, viewport: CGRect, contentWidth: CGFloat)] = []
+    /// The remote images and rendered diagrams, in drawing order: the views `MarkdownView` places over them.
+    private(set) var images: [Item] = []
+    /// Where drawing starts for each top-level block: its first item, and the selection offset, file chip and context chip
+    /// counts the items before it reach. A draw pass walks only the blocks its rect touches.
+    private(set) var drawStarts: [(item: Int, selection: Int, chip: Int, context: Int)] = []
 
     /// What a later layout of the same message reuses: its top-level blocks, where the flow stood
     /// after each, and the inputs every block's layout depends on.
@@ -412,9 +478,19 @@ public final class MarkdownLayout {
     /// its last blocks per update.
     /// `streaming`: a code block the answer ends with may still be open, so it shows plain until text follows it or the
     /// answer settles. Coloring it again on every token cost work in proportion to the whole fence.
+    /// `parallel`: off the main thread, a long message lays out its top-level blocks in chunks on every core. The result is
+    /// the same layout. On the main thread it stays serial, because a chunk may wait for the main thread (`onMain`).
+    static var parallelBlocksForTests: Int { Builder.parallelBlocks }
+
+    /// An empty layout `height` tall: what a view shows while its real layout is made in the background.
+    init(placeholderWidth width: CGFloat, height: CGFloat) {
+        self.width = width
+        self.height = height
+    }
+
     public init(document: MarkdownDocument, width: CGFloat, wrapsCode: Bool = true, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil, cwd: String? = nil,
                 expandedTables: Set<Int> = [], diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil, runsShell: Bool = false,
-                fitsExpandedTables: Bool = false, streaming: Bool = false, reusing previous: MarkdownLayout? = nil) {
+                fitsExpandedTables: Bool = false, streaming: Bool = false, reusing previous: MarkdownLayout? = nil, parallel: Bool = false) {
         self.width = width
         self.expandedTables = expandedTables
         if streaming, case .code = document.blocks.last { plainRoot = document.blocks.count - 1 }
@@ -431,7 +507,12 @@ public final class MarkdownLayout {
         let key = ReuseKey(unwrapped: unwrappedCode, wrapsCode: wrapsCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contexts, fileLabels: files.labelSuffixes,
                            runsShell: runsShell, fitsExpandedTables: fitsExpandedTables)
         if let previous, previous.width == width, previous.reuseKey == key { builder.previous = previous }
+        let color = bodyColor ?? MarkdownStyle.body
+        if parallel, builder.previous == nil, !Thread.isMainThread, document.blocks.count >= Builder.parallelBlocks {
+            builder.precomputed = builder.rootBoxes(document.blocks, width: width, context: .init(color: color))
+        }
         let flow = builder.flow(document.blocks, width: width, context: .init(color: bodyColor ?? MarkdownStyle.body), root: true)
+        builder.precomputed = nil
         reusedBlocks = builder.reusedBlocks
         rootBoxes = builder.rootBoxes
         reuseKey = key
@@ -444,8 +525,40 @@ public final class MarkdownLayout {
         fileChips = items.compactMap { if case .fileChip(let chip) = $0 { chip } else { nil } }
         contextChips = items.compactMap { if case .contextChip(let chip) = $0 { chip } else { nil } }
         links = items.compactMap { if case .link(let r, let url) = $0 { (r, url) } else { nil } }
+        scrollers = items.compactMap { if case .scroll(let index, let viewport, let width) = $0 { (index, viewport, width) } else { nil } }
+        images = items.filter { switch $0 { case .remoteImage, .image: true; default: false } }
         height = flow.height
         blockTops = builder.rootTops
+        var selection = 0, chip = 0, context = 0, next = 0
+        drawStarts.reserveCapacity(rootEnds.count)
+        for end in rootEnds {
+            drawStarts.append((next, selection, chip, context))
+            for item in items[next..<end.items] {
+                switch item {
+                case .text(let box, _): selection += (box.text as NSString).length + 1
+                case .fileChip: chip += 1
+                case .contextChip: context += 1
+                default: break
+                }
+            }
+            next = end.items
+        }
+    }
+
+    /// The items a draw pass over `rect` needs, with the counts the items before them reach. Glyphs and rings reach 8 pt
+    /// past their block.
+    func drawRange(_ rect: CGRect) -> (items: Range<Int>, selection: Int, chip: Int, context: Int) {
+        guard drawStarts.count == rootEnds.count, drawStarts.count == blockTops.count, !rootEnds.isEmpty else { return (items.indices, 0, 0, 0) }
+        // The first block whose bottom reaches the rect, and the first after it whose top lies below it.
+        var lo = 0, hi = rootEnds.count
+        while lo < hi { let mid = (lo + hi) / 2; if rootEnds[mid].y + 8 < rect.minY { lo = mid + 1 } else { hi = mid } }
+        let first = lo
+        hi = rootEnds.count
+        while lo < hi { let mid = (lo + hi) / 2; if blockTops[mid] - 8 <= rect.maxY { lo = mid + 1 } else { hi = mid } }
+        let end = lo
+        guard first < end else { return (0..<0, 0, 0, 0) }
+        let start = drawStarts[first]
+        return (start.item..<rootEnds[end - 1].items, start.selection, start.chip, start.context)
     }
 }
 
@@ -501,7 +614,9 @@ private struct Builder {
     var rootTops: [CGFloat] = []
     var rootEnds: [MarkdownLayout.RootEnd] = []
 
-    let boxes: TextBoxCache
+    var boxes: TextBoxCache
+    /// Root boxes laid out ahead, with the code, table and display formula counts after each (`rootBoxes`).
+    var precomputed: (boxes: [Box], ends: [(code: Int, table: Int, math: Int)])?
 
     init(unwrapped: Set<Int>, wrapsCode: Bool, files: FileChipResolver?, boxes: TextBoxCache) {
         self.unwrapped = unwrapped; self.wrapsCode = wrapsCode; self.files = files; self.boxes = boxes
@@ -511,7 +626,6 @@ private struct Builder {
     /// child's top and last child's bottom margin pass through to the parent (no border or padding
     /// stops them), except at the root, where T3 zeroes them (`.chat-markdown > :first-child`).
     /// Unchanged root blocks reuse their boxes, including blocks following a toggled table.
-    @MainActor
     mutating func flow(_ blocks: [MarkdownBlock], width: CGFloat, context: Context, root: Bool = false, tight: Bool = false) -> Box {
         var out = Box()
         var y: CGFloat = 0
@@ -549,7 +663,10 @@ private struct Builder {
         }
         for index in first..<blocks.count {
             var box: Box
-            if canReuse(index, codeIndex, tableIndex), let previous {
+            if root, let precomputed {
+                box = precomputed.boxes[index]
+                (codeIndex, tableIndex, mathIndex) = precomputed.ends[index]
+            } else if canReuse(index, codeIndex, tableIndex), let previous {
                 box = previous.rootBoxes[index]
                 codeIndex = previous.rootEnds[index].codeIndex
                 tableIndex = previous.rootEnds[index].tableIndex
@@ -577,7 +694,66 @@ private struct Builder {
         return out
     }
 
-    @MainActor
+    /// Messages with at least this many top-level blocks lay out in parallel chunks off the main thread.
+    static let parallelBlocks = 48
+
+    /// Lays out every root block at (0, 0) in parallel chunks. Each chunk starts from the code, table and display formula
+    /// counts the blocks before it reach, which a cheap pass counts first. Nil when a chunk ends on other counts than
+    /// the pass expected, and the caller lays out in series.
+    func rootBoxes(_ blocks: [MarkdownBlock], width: CGFloat, context: Context) -> (boxes: [Box], ends: [(code: Int, table: Int, math: Int)])? {
+        var code = 0, table = 0, math = 0
+        func count(_ block: MarkdownBlock) {
+            switch block {
+            case .code: code += 1
+            case .table: table += 1
+            // Only a formula that typesets takes a scroll index (`displayMath`); this also warms the formula cache.
+            case .math(let m): if MathRenderer.layout(m.tex, display: true, textSize: MarkdownStyle.fontSize) != nil { math += 1 }
+            case .blockquote(let children), .alert(_, let children): children.forEach(count)
+            case .list(let list): for item in list.items { item.blocks.forEach(count) }
+            default: break
+            }
+        }
+        var ends: [(code: Int, table: Int, math: Int)] = []
+        ends.reserveCapacity(blocks.count)
+        for block in blocks { count(block); ends.append((code, table, math)) }
+        let chunks = min(blocks.count, ProcessInfo.processInfo.activeProcessorCount * 4)
+        // Four workers: more of them hold the Objective-C runtime's locks often enough that the main thread's own layout
+        // waits on them (a resize measured 100 to 180 ms stalls with eight on an M4).
+        // ponytail: fixed at 4; tune with the large-reply stress test if layouts on many-core Macs feel slow to appear
+        let workers = max(1, min(chunks, 4, ProcessInfo.processInfo.activeProcessorCount - 2))
+        let template = self
+        nonisolated(unsafe) var results = [[Box]?](repeating: nil, count: chunks)
+        nonisolated(unsafe) var next = 0
+        let lock = NSLock()
+        DispatchQueue.concurrentPerform(iterations: workers) { _ in
+          while true {
+            let chunk: Int = lock.withLock { defer { next += 1 }; return next }
+            guard chunk < chunks else { return }
+            let range = (blocks.count * chunk / chunks)..<(blocks.count * (chunk + 1) / chunks)
+            var builder = template
+            builder.boxes = TextBoxCache(previous: nil, records: false)
+            builder.previous = nil
+            if range.lowerBound > 0 { (builder.codeIndex, builder.tableIndex, builder.mathIndex) = ends[range.lowerBound - 1] }
+            var out: [Box] = []
+            out.reserveCapacity(range.count)
+            for index in range {
+                builder.drawsPlain = index == builder.plainRoot
+                out.append(builder.layout(blocks[index], width: width, context: context, tight: false))
+                builder.drawsPlain = false
+                guard (builder.codeIndex, builder.tableIndex, builder.mathIndex) == ends[index] else { return }
+            }
+            lock.withLock { results[chunk] = out }
+          }
+        }
+        var boxes: [Box] = []
+        boxes.reserveCapacity(blocks.count)
+        for chunk in results {
+            guard let chunk else { return nil }
+            boxes += chunk
+        }
+        return (boxes, ends)
+    }
+
     mutating func layout(_ block: MarkdownBlock, width: CGFloat, context: Context, tight: Bool) -> Box {
         switch block {
         case .paragraph(let runs):
@@ -629,7 +805,8 @@ private struct Builder {
             let strut = TextLine(NSAttributedString(string: " ", attributes: [.font: MarkdownStyle.font(MarkdownStyle.fontSize)]))
             let below = MarkdownStyle.lineHeight - strut.baseline(top: 0, lineHeight: MarkdownStyle.lineHeight)
             let source = MarkdownImageSource.classify(url.absoluteString, workspaceRoot: cwd)
-            if let natural = MarkdownImages.sizes[source.key], !MarkdownImages.failed.contains(source.key) {
+            let key = source.key
+            if let natural = onMain({ MarkdownImages.failed.contains(key) ? nil : MarkdownImages.sizes[key] }) {
                 let border: CGFloat = source.framed ? 1 : 0
                 let size = MarkdownImages.displaySize(natural: natural, maxWidth: width, border: border)
                 let rect = CGRect(origin: .zero, size: size)
@@ -649,7 +826,6 @@ private struct Builder {
 
     /// A display formula, centered, scrolling sideways when wider than `width` (MarkdownMath.tsx:20-58). A formula stage 1
     /// can't typeset shows its TeX as inline code, one chip per source line.
-    @MainActor
     mutating func displayMath(_ math: MarkdownMath, width: CGFloat, color: NSColor) -> Box {
         let size = MarkdownStyle.fontSize, font = MarkdownStyle.font(size)
         guard let layout = MathRenderer.layout(math.tex, display: true, textSize: size) else {
@@ -686,7 +862,6 @@ private struct Builder {
         return box
     }
 
-    @MainActor
     func text(_ runs: [InlineRun], width: CGFloat, size: CGFloat, weight: NSFont.Weight = .regular, lineHeight: CGFloat,
               color: NSColor, alignment: NSTextAlignment = .natural, headIndent: CGFloat = 0, firstLineIndent: CGFloat? = nil,
               findable: Bool = true) -> Box {
@@ -710,7 +885,6 @@ private struct Builder {
     }
 
     /// Each favicon in its reserved space: `ms-[0.25em]`, 14px square, `vertical-align: -0.125em`.
-    @MainActor
     static func favicons(_ inline: MarkdownStyle.Inline, in textBox: MarkdownTextBox, size: CGFloat) -> [MarkdownLayout.Item] {
         inline.favicons.compactMap { favicon in
             guard let span = textBox.spans(favicon.range).first else { return nil }
@@ -718,7 +892,6 @@ private struct Builder {
         }
     }
 
-    @MainActor
     /// Link areas, and the favicon at the start of each external link from the same spans (spans cost a CTLine per line).
     static func links(_ inline: MarkdownStyle.Inline, in textBox: MarkdownTextBox, lineHeight: CGFloat, size: CGFloat) -> [MarkdownLayout.Item] {
         inline.links.flatMap { link in
@@ -734,7 +907,6 @@ private struct Builder {
     }
 
     /// Each context chip at its placeholder, `align-middle` like the file chips.
-    @MainActor
     static func contextChips(_ inline: MarkdownStyle.Inline, in textBox: MarkdownTextBox, size: CGFloat, weight: NSFont.Weight) -> [MarkdownLayout.Item] {
         let top = FileChipStyle.top(parent: MarkdownStyle.font(size, weight: weight), size: size)
         return inline.contexts.compactMap { entry in
@@ -745,7 +917,6 @@ private struct Builder {
         }
     }
 
-    @MainActor
     static func fileChips(_ inline: MarkdownStyle.Inline, in textBox: MarkdownTextBox, size: CGFloat, weight: NSFont.Weight) -> [MarkdownLayout.Item] {
         let parent = MarkdownStyle.font(size, weight: weight)
         let top = FileChipStyle.top(parent: parent, size: size), height = FileChipStyle.height(size)
@@ -760,7 +931,6 @@ private struct Builder {
 
     // MARK: Lists
 
-    @MainActor
     mutating func list(_ list: MarkdownList, width: CGFloat, context: Context) -> Box {
         var inner = context
         if list.ordered { inner.olDepth += 1 } else { inner.ulDepth += 1 }
@@ -836,7 +1006,6 @@ private struct Builder {
 
     /// A task item: the disabled checkbox sits inline where the bullet would be
     /// (`margin: 0 0.35em 0.15em calc(-1 * var(--list-gutter))`, `vertical-align: middle`), then a space.
-    @MainActor
     mutating func taskItem(_ item: MarkdownListItem, checked: Bool, width: CGFloat, gutter: CGFloat, context: Context) -> Box {
         let body = MarkdownStyle.font(MarkdownStyle.fontSize)
         let space = TextLine(NSAttributedString(string: " ", attributes: [.font: body])).width
@@ -866,7 +1035,6 @@ private struct Builder {
 
     // MARK: Alerts
 
-    @MainActor
     mutating func alert(_ kind: MarkdownAlertKind, _ children: [MarkdownBlock], width: CGFloat, context: Context) -> Box {
         let (label, icon, border, light, dark): (String, IconName, String, String, String) = switch kind {
         case .note: ("Note", .info, "blue-500", "blue-600", "blue-400")
@@ -902,16 +1070,17 @@ private struct Builder {
     /// dynamic), so long blocks keep theirs: a window resize or reopening the thread lays out again without lexing
     /// again. Lexing an 18,000 line block took 0.1 s of every layout.
     // ponytail: the last 16 blocks of 2,000 UTF-16 units or more; key by something cheaper than the text if it shows in profiles
-    @MainActor private static var coloredCodeCache: [ColoredCodeKey: NSAttributedString] = [:]
-    @MainActor fileprivate static var coloredCodeOrder: [ColoredCodeKey] = []
+    nonisolated(unsafe) private static var coloredCodeCache: [ColoredCodeKey: NSAttributedString] = [:]
+    nonisolated(unsafe) fileprivate static var coloredCodeOrder: [ColoredCodeKey] = []
+    fileprivate static let coloredCodeLock = NSLock()
+    nonisolated(unsafe) private static var italics: [NSFont: NSFont] = [:]
     struct ColoredCodeKey: Hashable { var code: String; var language: String; var font: NSFont }
 
-    @MainActor
     /// `plain` skips the tokens and the cache: an open code block of a streaming answer changes with every token.
     static func coloredCode(_ code: String, language: String, font: NSFont, plain: Bool = false) -> NSAttributedString {
         let cached = !plain && code.utf16.count >= 2_000
         let key = ColoredCodeKey(code: code, language: language, font: font)
-        if cached, let hit = coloredCodeCache[key] { return hit }
+        if cached, let hit = coloredCodeLock.withLock({ coloredCodeCache[key] }) { return hit }
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byWordWrapping
         paragraph.lineBreakStrategy = []
@@ -922,22 +1091,28 @@ private struct Builder {
         // every run's attributes, 0.1 s for an 18,000 line block.
         let string = NSMutableAttributedString(string: code, attributes: [.font: font, .foregroundColor: CodeTokenKind.plain.color,
                                                                           .paragraphStyle: paragraph])
-        let italic = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
+        // ponytail: NSFontManager off the main thread, under a lock and once per font; fall back to descriptor traits if it ever asserts
+        let italic = coloredCodeLock.withLock {
+            if let hit = italics[font] { return hit }
+            let made = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
+            italics[font] = made
+            return made
+        }
         for token in plain ? [] : CodeHighlighter.tokens(code, language: language) {
             string.addAttribute(.foregroundColor, value: token.kind.color, range: token.range)
             if token.kind == .emphasis { string.addAttribute(.font, value: italic, range: token.range) }
         }
         guard cached else { return string }
         let frozen = string.copy() as! NSAttributedString
-        coloredCodeCache[key] = frozen
-        coloredCodeOrder.append(key)
-        if coloredCodeOrder.count > 16 { coloredCodeCache[coloredCodeOrder.removeFirst()] = nil }
+        coloredCodeLock.withLock {
+            if coloredCodeCache.updateValue(frozen, forKey: key) == nil { coloredCodeOrder.append(key) }
+            if coloredCodeOrder.count > 16 { coloredCodeCache[coloredCodeOrder.removeFirst()] = nil }
+        }
         return frozen
     }
 
     // MARK: Code blocks
 
-    @MainActor
     mutating func codeBlock(language: String, title: String?, code: String, width: CGFloat, wraps: Bool, viewToggle: Bool = false,
                             plain: Bool = false) -> Box {
         let p = MarkdownStyle.codePadding
@@ -1028,7 +1203,6 @@ private struct Builder {
     /// column's width (pele's `max-width:100%`, MermaidDiagram.tsx:271-290). While it first renders, the source holds
     /// its space as an invisible `<pre>` (MarkdownMermaidCodeBlock.tsx:64-69); a failure shows the message above the
     /// source, with Retry when the renderer failed to load (MermaidDiagram.tsx:257-269, 294-320).
-    @MainActor
     func diagramBlock(code: String, index: Int, palette: MermaidDiagrams.Palette, width: CGFloat) -> Box {
         var box = Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin)
         // Find counts the source, not the diagram's own labels.
@@ -1040,7 +1214,7 @@ private struct Builder {
                                   action: .copy(code)))
         let top: CGFloat = 1 + 6 + 24, inner = max(0, width - 2)
         var y: CGFloat = 0
-        switch MermaidDiagrams.shared.result(code, palette: palette, width: inner) {
+        switch onMain({ MermaidDiagrams.shared.result(code, palette: palette, width: inner) }) {
         case .rendered(let image, let size)?:
             let w = min(size.width, inner), h = size.width > 0 ? (size.height * w / size.width).rounded() : 0
             box.items.append(.image(image, CGRect(x: 1 + ((inner - w) / 2).rounded(), y: top, width: w, height: h)))
@@ -1074,7 +1248,6 @@ private struct Builder {
     /// `MarkdownTable`: 12px cells with `0.45rem 0.75rem` padding (header `0.55rem` block padding, weight 600),
     /// none before the first column or after the last since 3669 (index.css:2138-2152, 2d620f5dcc), a 1px
     /// bottom rule at 60% border under every row, then the expand and copy buttons 2px below.
-    @MainActor
     mutating func table(_ table: MarkdownTable, width: CGFloat, context: Context) -> Box {
         let index = tableIndex
         tableIndex += 1
@@ -1253,7 +1426,7 @@ extension MarkdownLayout {
         return (widths, max(width, widths.reduce(0, +)))
     }
     /// The code of the cached colored blocks, oldest first (tests).
-    @MainActor static var coloredCodeKeys: [String] { Builder.coloredCodeOrder.map(\.code) }
+    static var coloredCodeKeys: [String] { Builder.coloredCodeLock.withLock { Builder.coloredCodeOrder.map(\.code) } }
 }
 
 private extension MarkdownLayout.Item {
@@ -1285,7 +1458,6 @@ private extension MarkdownLayout.Item {
 /// Text boxes keyed by everything that shapes them, so a streaming answer's next layout takes the
 /// ones whose text did not change (table cells and list items above the growing end) instead of
 /// running TextKit again. A layout that does not record makes boxes as before.
-@MainActor
 final class TextBoxCache {
     struct Key: Hashable {
         var string: NSAttributedString
@@ -1316,7 +1488,8 @@ final class TextBoxCache {
                                    inlineBoxes: inlineBoxes)
         }
         let key = Key(string: string, width: width, lineHeight: lineHeight, strut: strut, chipRanges: chipRanges, chipFont: chipFont, wraps: wraps)
-        if let box = made[key] ?? previous[key] {
+        // A lazy box from an earlier layout may be laying out on the main thread right now.
+        if let box = made[key] ?? previous[key], Thread.isMainThread || !box.isLazy {
             hits += 1
             made[key] = box
             return box

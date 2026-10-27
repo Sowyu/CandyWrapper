@@ -226,6 +226,7 @@ public final class TimelineView: DSView {
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         context.onMarkdownHeightChange = { [weak self] id in self?.remeasure { $0.id == id } }
+        context.onDocumentReady = { [weak self] key in self?.remeasure { key.hasPrefix($0.id) } }
         context.onDisclosure = { [weak self] id in
             self?.disclosureRowId = id
             // A toggle that changes no rows must not hold the next, unrelated update.
@@ -503,6 +504,22 @@ public final class TimelineView: DSView {
         return Self.estimate(item, width: laneFrame.width)
     }
 
+    /// `estimate`'s answer body for long text, from one pass over its bytes: lines of `perLine` points per character.
+    static func estimatedLines(_ text: String, width: CGFloat, perLine: CGFloat = 7.5) -> CGFloat {
+        // Rows ask again on every remeasure; the same text compares by its storage first.
+        if let last = lastEstimate, last.width == width, last.perLine == perLine, last.text == text { return last.lines }
+        let chars = max(1, width / perLine)
+        var lines: CGFloat = 0, run = 0
+        for byte in text.utf8 {
+            if byte == 10 { lines += max(1, ceil(CGFloat(run) / chars)); run = 0 }
+            else if byte & 0xC0 != 0x80 { run += 1 }
+        }
+        let total = lines + max(1, ceil(CGFloat(run) / chars))
+        lastEstimate = (text, width, perLine, total)
+        return total
+    }
+    private static var lastEstimate: (text: String, width: CGFloat, perLine: CGFloat, lines: CGFloat)?
+
     /// A first guess for rows not measured yet, from their kind and text length.
     static func estimate(_ item: TimelineItem, width: CGFloat) -> CGFloat {
         func lines(_ text: String, _ perLine: CGFloat) -> CGFloat {
@@ -516,7 +533,8 @@ public final class TimelineView: DSView {
                 return marker + min(176, lines(m.text, 7.5 / 0.8) * 22.75) + 24 + 44
             }
             let card = summary.map { $0.files.isEmpty ? 0 : 16 + 56 + CGFloat($0.files.count) * 28 } ?? 0
-            return lines(m.text, 7.5) * 22.75 + 4 + card + (meta ? 46 : 8)
+            let body = m.text.utf8.count >= TimelineContext.backgroundBytes ? estimatedLines(m.text, width: width) : lines(m.text, 7.5)
+            return body * 22.75 + 4 + card + (meta ? 46 : 8)
         case .assistantMeta: return 42
         case .proposedPlan(let p): return min(416, lines(p.planMarkdown, 7.5) * 22.75) + 140
         case .work(let entries, let group, _): return CGFloat(entries.count) * (group ? 24 : 28) + (group ? 4 : 8)

@@ -28,6 +28,8 @@ public final class MarkdownView: DSView {
             copiedResets = [:]
             scrollLatch = nil; thumbDrag = nil
             invalidate()
+            Self.release([lastLayout].compactMap { $0 })
+            lastLayout = nil
         }
     }
     public var onHeightChange: (() -> Void)?
@@ -182,6 +184,9 @@ public final class MarkdownView: DSView {
     /// at its width keeps. Only a document change sets it; any other invalidation drops it.
     private var reusable: MarkdownLayout?
     private var buttons: [ButtonView] = []
+    /// The control each pooled button shows, by position in `buttons`.
+    private var buttonControls: [Int] = []
+    private func button(forControl index: Int) -> ButtonView? { buttonControls.firstIndex(of: index).map { buttons[$0] } }
     private var chipViews: [FileChipHitView] = []
     private var imageViews: [AsyncImageView] = []
     private var imageTooltips: [TooltipController] = []
@@ -222,13 +227,25 @@ public final class MarkdownView: DSView {
         layer?.isOpaque = false
     }
 
+    /// A closed thread's long answer frees its layouts in the background, not as the view goes.
+    isolated deinit {
+        let dropped = Array(cache.values) + [lastLayout, reusable].compactMap { $0 }
+        cache = [:]; lastLayout = nil; reusable = nil
+        Self.release(dropped)
+    }
+
     public override func fontRuntimeDidChange() {
         super.fontRuntimeDidChange()
         invalidate()
     }
 
     private func invalidate(redraw: Bool = true) {
+        let dropped = Array(cache.values) + [lastLayout].compactMap { $0 }
+        if let shown = cache[bounds.width] ?? cache.values.first { lastLayout = shown }
+        generation += 1
+        pendingCache = nil
         cache.removeAll()
+        Self.release(dropped)
         cachedWidths.removeAll()
         reusable = nil
         invalidateIntrinsicContentSize()
@@ -256,6 +273,84 @@ public final class MarkdownView: DSView {
         if hasDiagrams { invalidate() }
     }
 
+    // MARK: Background layout
+
+    /// The owner sets this for long message text: a layout this view has no reuse for runs off the main thread, and until
+    /// it lands the view keeps showing its last layout, or reserves `pendingHeight` blank.
+    public var laysOutInBackground = false
+    /// The height to reserve while a background parse or layout runs and nothing was shown yet (the timeline's estimate).
+    public var pendingHeight: ((CGFloat) -> CGFloat)?
+    /// The last layout this view had, which stands in while the next one is made in the background.
+    private var lastLayout: MarkdownLayout?
+    /// Bumped by every change that drops the cache, so a background layout for older inputs is not cached.
+    private var generation = 0
+    /// The width a background layout is running for. One runs at a time, so a live resize lays out the width it ends on,
+    /// not every width it passes.
+    private var running: CGFloat?
+    /// Whether the view shows a stand-in for `width` (tests, and the owner's "ready" check).
+    public func isPending(forWidth width: CGFloat) -> Bool { cache[width] == nil && running != nil }
+
+    /// The reserved height for the last width asked, until the inputs change.
+    private var pendingCache: (width: CGFloat, height: CGFloat)?
+    private func reservedHeight(_ width: CGFloat) -> CGFloat {
+        if let pendingCache, pendingCache.width == width { return pendingCache.height }
+        let height = pendingHeight?(width) ?? 0
+        pendingCache = (width, height)
+        return height
+    }
+
+    /// The last layout of this message, at whatever width it had: a resize shows the old wrap for a moment, not a gap.
+    private func standIn(_ width: CGFloat) -> MarkdownLayout {
+        if let lastLayout, !lastLayout.items.isEmpty { return lastLayout }
+        return MarkdownLayout(placeholderWidth: width, height: document.blocks.isEmpty ? 0 : reservedHeight(width))
+    }
+
+    /// Starts the background layout for `width` unless one is running. A run that lands stale starts the next one, except
+    /// for a streaming answer, whose next layout reuses its blocks and lays out only the new end on the main thread.
+    private func layoutInBackground(_ width: CGFloat, make: @escaping @Sendable () -> MarkdownLayout) {
+        guard running == nil else { return }
+        let started = generation
+        running = width
+        DispatchQueue.global(qos: .userInitiated).async {
+            let made = make()
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    // Whoever drops it last, the layout is freed in the background, even if this view went meanwhile.
+                    Self.release([made])
+                    guard let self else { return }
+                    self.running = nil
+                    Self.release([self.lastLayout].compactMap { $0 })
+                    self.lastLayout = made
+                    if self.generation == started {
+                        self.store(made, width)
+                    } else if self.streaming, self.reusable == nil {
+                        // A streaming answer grew meanwhile: its next layout keeps these blocks and lays out the new end here.
+                        self.reusable = made
+                    }
+                    self.invalidateIntrinsicContentSize()
+                    self.needsLayout = true
+                    self.needsDisplay = true
+                    self.onHeightChange?()
+                }
+            }
+        }
+    }
+
+    private func store(_ made: MarkdownLayout, _ width: CGFloat) {
+        Self.release([cache.updateValue(made, forKey: width)].compactMap { $0 })
+        cachedWidths.removeAll { $0 == width }
+        cachedWidths.append(width)
+        if cachedWidths.count > 2 { Self.release([cache.removeValue(forKey: cachedWidths.removeFirst())].compactMap { $0 }) }
+    }
+
+    /// Frees long layouts on a background queue: a megabyte answer's layout holds tens of thousands of text boxes, and
+    /// freeing them took the main thread a quarter of a second. Layouts still referenced elsewhere just stay alive. The
+    /// short delay lets the caller drop its own references first, so the background queue holds the last one.
+    static func release(_ layouts: [MarkdownLayout]) {
+        guard layouts.contains(where: { $0.items.count >= 2_000 }) else { return }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.25) { withExtendedLifetime(layouts) {} }
+    }
+
     public func layout(forWidth width: CGFloat) -> MarkdownLayout {
         if let hit = cache[width] {
             if cachedWidths.last != width {
@@ -264,21 +359,44 @@ public final class MarkdownView: DSView {
             }
             return hit
         }
+        let reuse = reusable?.width == width ? reusable : nil
+        if laysOutInBackground {
+            // One run per width at a time; the view shows its stand-in meanwhile.
+            guard running == nil else { return standIn(width) }
+            // A streaming answer extends its last layout; anything else lays out whole.
+            nonisolated(unsafe) let reuse = streaming ? reuse : nil
+            if reuse != nil { reusable = nil }
+            // Everything the layout reads on the main thread is captured here; the rest is plain values.
+            let diagrams = hasDiagrams ? MarkdownLayout.Diagrams(enabled: diagramsEnabled, palette: .current(dark: effectiveAppearance.isDark), showingCode: diagramCode,
+                                                                 openIndex: streamsInOpenFence ? MarkdownLayout.codeBlockCount(document.blocks) - 1 : nil) : nil
+            nonisolated(unsafe) let contexts = contextChips
+            nonisolated(unsafe) let bodyColor = bodyColor
+            let document = document, skills = inlineSkills, wrapsCode = wrapsCode, unwrappedCode = unwrappedCode, cwd = cwd,
+                expandedTables = expandedTables, runsShell = onRunShellCommand != nil, streaming = streaming,
+                fits = chatLaneInset.map { width + $0 >= 576 } ?? false
+            layoutInBackground(width) {
+                MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: skills)), width: width,
+                               wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, expandedTables: expandedTables,
+                               diagrams: diagrams, contexts: contexts, runsShell: runsShell, fitsExpandedTables: fits, streaming: streaming,
+                               reusing: reuse, parallel: true)
+            }
+            return standIn(width)
+        }
         let diagrams = hasDiagrams ? MarkdownLayout.Diagrams(enabled: diagramsEnabled, palette: .current(dark: effectiveAppearance.isDark), showingCode: diagramCode,
                                                              openIndex: streamsInOpenFence ? MarkdownLayout.codeBlockCount(document.blocks) - 1 : nil) : nil
         let made = MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: inlineSkills)), width: width,
                                   wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, expandedTables: expandedTables, diagrams: diagrams, contexts: contextChips,
                                   runsShell: onRunShellCommand != nil, fitsExpandedTables: chatLaneInset.map { width + $0 >= 576 } ?? false,
-                                  streaming: streaming, reusing: reusable?.width == width ? reusable : nil)
-        if reusable?.width == width { reusable = nil }
-        cache[width] = made
-        cachedWidths.append(width)
-        if cachedWidths.count > 2 { cache[cachedWidths.removeFirst()] = nil }
+                                  streaming: streaming, reusing: reuse)
+        if reuse != nil { reusable = nil }
+        store(made, width)
+        lastLayout = made
         return made
     }
 
     public func height(forWidth width: CGFloat) -> CGFloat {
-        document.blocks.isEmpty ? 0 : layout(forWidth: width).height
+        // An empty document of a long answer is its text still parsing in the background.
+        document.blocks.isEmpty ? (laysOutInBackground ? reservedHeight(width) : 0) : layout(forWidth: width).height
     }
 
     public override var intrinsicContentSize: NSSize {
@@ -302,6 +420,8 @@ public final class MarkdownView: DSView {
     public var fadesNewBlocks = false
     private(set) var fadeMask: CALayer?
     private(set) var fadeBands: [(block: Int, layer: CALayer)] = []
+    /// When each band in `fadeBands` started fading.
+    private var fadeStarts: [CFTimeInterval] = []
     private var fadeEnd: CFTimeInterval = 0
     /// CSS `ease-out`.
     private static let easeOut = CAMediaTimingFunction(controlPoints: 0, 0, 0.58, 1)
@@ -317,7 +437,15 @@ public final class MarkdownView: DSView {
         }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for block in blocks {
+        // A steady stream never pauses long enough to drop the mask, so bands that finished fading go now: fully opaque,
+        // they look like the settled band above them.
+        let now = CACurrentMediaTime()
+        var finished = 0
+        while finished < fadeStarts.count, fadeStarts[finished] + 0.6 <= now { fadeBands[finished].layer.removeFromSuperlayer(); finished += 1 }
+        fadeBands.removeFirst(finished); fadeStarts.removeFirst(finished)
+        // Blocks that arrive together fade together: past a few, one band covers them all and looks the same.
+        let starts = blocks.count > 32 ? [blocks.lowerBound] : Array(blocks)
+        for block in starts {
             let band = CALayer()
             band.backgroundColor = CGColor(gray: 0, alpha: 1)
             let fade = CABasicAnimation(keyPath: "opacity")
@@ -328,6 +456,7 @@ public final class MarkdownView: DSView {
             band.add(fade, forKey: "opacity")
             mask.addSublayer(band)
             fadeBands.append((block, band))
+            fadeStarts.append(now)
         }
         fadeEnd = CACurrentMediaTime() + 0.6
         CATransaction.commit()
@@ -346,6 +475,7 @@ public final class MarkdownView: DSView {
         layer?.mask = nil
         fadeMask = nil
         fadeBands = []
+        fadeStarts = []
     }
 
     private func layoutFadeMask() {
@@ -373,25 +503,29 @@ public final class MarkdownView: DSView {
 
     public override func layout() {
         super.layout()
+        hitWindow = nil
         layoutFadeMask()
         layoutChips()
         layoutContextChips()
         layoutLinks()
         layoutImages()
         let controls = bounds.width > 0 ? layout(forWidth: bounds.width).controls : []
-        while buttons.count < controls.count {
+        let shown = shownIndices(controls.map(\.frame))
+        while buttons.count < shown.count {
             let button = ButtonView(icon: .copy, variant: .ghostMuted, size: .iconXs)
             button.iconSize = 12
             addSubview(button)
             buttons.append(button)
         }
-        for (i, button) in buttons.enumerated() {
-            guard i < controls.count else { button.isHidden = true; continue }
-            let control = controls[i]
+        buttonControls = Array(shown)
+        for (slot, button) in buttons.enumerated() {
+            guard slot < shown.count else { button.isHidden = true; continue }
+            let i = shown[slot], control = controls[i]
             button.isHidden = false
             button.frame = control.frame
             if button.title != control.title { button.title = control.title }
-            if copiedResets[i] == nil, button.icon != control.icon { button.icon = control.icon }
+            let icon = copiedResets[i] == nil ? control.icon : .check
+            if button.icon != icon { button.icon = icon }
             if button.variant != control.variant { button.variant = control.variant }
             button.toolTip = nil
             switch control.action {
@@ -430,6 +564,47 @@ public final class MarkdownView: DSView {
         }
     }
 
+    // MARK: Hit views near the viewport
+
+    /// A long message (an 8,000 code block reply has 25,000 buttons and link areas) keeps hit views only for what lies
+    /// within this distance of the visible rect, and places them again as the reader scrolls.
+    static let hitViewMargin: CGFloat = 600
+    /// Messages with up to this many hit regions of a kind keep a view for every one.
+    static let hitViewsAll = 200
+    /// The y range hit views cover now; nil while every region has one.
+    private var hitWindow: ClosedRange<CGFloat>?
+    private var clipObserver: NSObjectProtocol?
+
+    /// The indices of `frames` that get a view: all of them, or those near the visible rect in a long message.
+    private func shownIndices(_ frames: [CGRect]) -> [Int] {
+        guard frames.count > Self.hitViewsAll else { return Array(frames.indices) }
+        let visible = visibleRect
+        let window = (visible.isEmpty ? 0 : visible.minY - Self.hitViewMargin)...(visible.isEmpty ? Self.hitViewMargin : visible.maxY + Self.hitViewMargin)
+        hitWindow = window
+        observeClip()
+        return frames.indices.filter { frames[$0].maxY >= window.lowerBound && frames[$0].minY <= window.upperBound }
+    }
+
+    /// Places the hit views again once the visible rect comes within half the margin of the covered range's edge.
+    private func observeClip() {
+        guard clipObserver == nil, let clip = enclosingScrollView?.contentView else { return }
+        clip.postsBoundsChangedNotifications = true
+        clipObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let window = self.hitWindow else { return }
+                let visible = self.visibleRect, slack = Self.hitViewMargin / 2
+                if visible.isEmpty || visible.minY < window.lowerBound + slack && window.lowerBound > 0 || visible.maxY > window.upperBound - slack {
+                    self.needsLayout = true
+                }
+            }
+        }
+    }
+
+    public override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if let clipObserver { NotificationCenter.default.removeObserver(clipObserver); self.clipObserver = nil }
+    }
+
     /// Hit regions move and clip with the table content, including after a scroll without relayout.
     private func visibleFrame(_ frame: CGRect) -> CGRect {
         for scroller in codeScrollers where scroller.index < 0 {
@@ -446,13 +621,16 @@ public final class MarkdownView: DSView {
     /// One transparent view per file chip: pointer cursor, hover, tooltip, click and context menu.
     private func layoutChips() {
         let chips = bounds.width > 0 ? layout(forWidth: bounds.width).fileChips : []
-        while chipViews.count < chips.count {
+        let shown = shownIndices(chips.map(\.frame))
+        while chipViews.count < shown.count {
             let view = FileChipHitView(owner: self, index: chipViews.count)
             addSubview(view)
             chipViews.append(view)
         }
-        for (i, view) in chipViews.enumerated() {
-            guard i < chips.count else { view.isHidden = true; continue }
+        for (slot, view) in chipViews.enumerated() {
+            guard slot < shown.count else { view.isHidden = true; continue }
+            let i = shown[slot]
+            view.index = i
             view.isHidden = false
             view.frame = visibleFrame(chips[i].frame)
             view.chip = chips[i]
@@ -463,13 +641,16 @@ public final class MarkdownView: DSView {
     /// One transparent view per context chip: cursor and hover for interactive chips, tooltip, click.
     private func layoutContextChips() {
         let chips = bounds.width > 0 ? layout(forWidth: bounds.width).contextChips : []
-        while contextChipViews.count < chips.count {
+        let shown = shownIndices(chips.map(\.frame))
+        while contextChipViews.count < shown.count {
             let view = ContextChipHitView(owner: self, index: contextChipViews.count)
             addSubview(view)
             contextChipViews.append(view)
         }
-        for (i, view) in contextChipViews.enumerated() {
-            guard i < chips.count else { view.isHidden = true; continue }
+        for (slot, view) in contextChipViews.enumerated() {
+            guard slot < shown.count else { view.isHidden = true; continue }
+            let i = shown[slot]
+            view.index = i
             view.isHidden = false
             view.frame = visibleFrame(chips[i].frame)
             view.chip = chips[i]
@@ -518,13 +699,15 @@ public final class MarkdownView: DSView {
     /// One transparent view per line a web link touches: pointer cursor, click, menu, hover.
     private func layoutLinks() {
         let links = bounds.width > 0 ? layout(forWidth: bounds.width).links : []
-        while linkViews.count < links.count {
+        let shown = shownIndices(links.map(\.frame))
+        while linkViews.count < shown.count {
             let view = MarkdownLinkHitView(owner: self)
             addSubview(view)
             linkViews.append(view)
         }
-        for (i, view) in linkViews.enumerated() {
-            guard i < links.count else { view.isHidden = true; continue }
+        for (slot, view) in linkViews.enumerated() {
+            guard slot < shown.count else { view.isHidden = true; continue }
+            let i = shown[slot]
             view.isHidden = false
             view.frame = visibleFrame(links[i].frame)
             view.url = links[i].url
@@ -539,7 +722,7 @@ public final class MarkdownView: DSView {
         var placed: [(frame: CGRect, radius: CGFloat, fallback: String, tooltip: String?)] = []
         imageKeys = []
         if bounds.width > 0 {
-            for item in layout(forWidth: bounds.width).items {
+            for item in layout(forWidth: bounds.width).images {
                 switch item {
                 case .remoteImage(let url, let alt, let rect):
                     let source = MarkdownImageSource.classify(url.absoluteString, workspaceRoot: cwd)
@@ -725,7 +908,7 @@ public final class MarkdownView: DSView {
         MenuPopupView.show([
             MenuItem("Copy as Markdown") { [weak self] in self?.copy(MarkdownLayout.tableMarkdown(table), button: index) },
             MenuItem("Copy as CSV") { [weak self] in self?.copy(MarkdownLayout.tableCSV(table), button: index) }
-        ], from: buttons[index], placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4))
+        ], from: button(forControl: index) ?? self, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4))
     }
 
     func toggleTable(_ index: Int) {
@@ -742,7 +925,7 @@ public final class MarkdownView: DSView {
         guard NSPasteboard.general.setString(text, forType: .string) else { return }
         needsLayout = true
         // T3 swaps the icon to a check for 1.2s.
-        buttons[index].icon = .check
+        button(forControl: index)?.icon = .check
         copiedResets[index]?.cancel()
         let reset = DispatchWorkItem { [weak self] in
             guard let self else { return }
@@ -773,10 +956,7 @@ public final class MarkdownView: DSView {
 
     /// Code block bodies with wrapping off, in layout order.
     private var codeScrollers: [(index: Int, viewport: CGRect, contentWidth: CGFloat)] {
-        guard bounds.width > 0 else { return [] }
-        return layout(forWidth: bounds.width).items.compactMap {
-            if case .scroll(let index, let viewport, let width) = $0 { (index, viewport, width) } else { nil }
-        }
+        bounds.width > 0 ? layout(forWidth: bounds.width).scrollers : []
     }
 
     private func codeOffset(_ index: Int, _ viewport: CGRect, _ contentWidth: CGFloat) -> CGFloat {
@@ -1041,12 +1221,15 @@ public final class MarkdownView: DSView {
         ctx.setShouldSmoothFonts(FontRuntime.smoothing)
         ctx.setAllowsFontSmoothing(FontRuntime.smoothing)
         let dark = effectiveAppearance.isDark
-        var chipIndex = -1
-        var contextIndex = -1
+        let layout = layout(forWidth: bounds.width)
+        // Find counts every match before the active one, so a search walks the whole message.
+        let range = threadFindQuery.isEmpty ? layout.drawRange(dirtyRect) : (layout.items.indices, 0, 0, 0)
+        var chipIndex = range.chip - 1
+        var contextIndex = range.context - 1
         var findOccurrence = 0
-        var selectionOffset = 0
+        var selectionOffset = range.selection
         var tableFade: (CGRect, CGFloat, CGFloat)?
-        for item in layout(forWidth: bounds.width).items {
+        for item in layout.items[range.items] {
             switch item {
             case .text(let box, let origin):
                 // A long code block lays out only the lines near what this pass paints.
@@ -1313,7 +1496,7 @@ public final class MarkdownView: DSView {
 /// The interactive part of a file chip; the chip itself is drawn by `MarkdownView`.
 private final class FileChipHitView: NSView, HoverSyncClient {
     weak var owner: MarkdownView?
-    let index: Int
+    var index: Int
     var chip: FileChip? { didSet { tooltip.text = chip?.meta.targetPath ?? ""; window?.invalidateCursorRects(for: self) } }
     private lazy var tooltip = TooltipController.attach(to: self, text: "", variant: .code)
 
@@ -1354,7 +1537,7 @@ private final class FileChipHitView: NSView, HoverSyncClient {
 /// The interactive part of a context chip; the chip itself is drawn by `MarkdownView`.
 private final class ContextChipHitView: NSView, HoverSyncClient {
     weak var owner: MarkdownView?
-    let index: Int
+    var index: Int
     var chip: MarkdownContextChip? {
         didSet {
             tooltip.text = chip?.tooltip ?? ""

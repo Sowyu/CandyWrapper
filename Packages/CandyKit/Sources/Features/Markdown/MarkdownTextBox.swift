@@ -10,7 +10,6 @@ import DesignSystem
 /// Its height must be known up front, so a scan counts each paragraph's lines: in a fixed pitch font, printable ASCII
 /// and tabs are as wide as their columns, so a paragraph narrower than the box is one line. Only the paragraphs that
 /// may wrap, or hold anything else, lay out at once. An 18,000 line code block used to lay out every line on open.
-@MainActor
 final class MarkdownTextBox {
     struct Line {
         let fragment: NSTextLineFragment
@@ -51,6 +50,8 @@ final class MarkdownTextBox {
     private let manager: NSTextLayoutManager
     private let baselineOffset: CGFloat
     private let paragraphs: [Paragraph]
+    /// Lays out paragraphs when first drawn, measured or hit, so reading it mutates it: only its own thread may share it.
+    let isLazy: Bool
     /// Each paragraph's lines once laid out.
     private var laidOut: [[Line]?]
     /// How many paragraphs have laid out, for tests.
@@ -106,6 +107,7 @@ final class MarkdownTextBox {
 
         let scan = lazy == false || (lazy == nil && !chipRanges.isEmpty) || !inlineBoxes.isEmpty ? nil
             : Self.scan(string, containerWidth: containerWidth, wraps: wraps, minParagraphs: lazy == true ? 1 : Self.lazyParagraphs)
+        isLazy = scan != nil
         if let scan {
             var paragraphs = scan.paragraphs, widest = scan.widest, next = 0
             for p in paragraphs.indices {

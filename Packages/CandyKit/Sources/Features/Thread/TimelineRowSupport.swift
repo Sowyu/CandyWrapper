@@ -114,23 +114,64 @@ final class TimelineContext {
     /// The timeline hid or changed thread: the pixels and shared HTTP cache go too.
     func releasePages() { htmlCache.setActive(false) }
 
-    isolated deinit { releasePages() }
+    isolated deinit {
+        releasePages()
+        // Long parsed answers are trees of many small arrays; freeing them goes to the background too.
+        let dropped = documents.values.map(\.document)
+        documents = [:]; streamingParses = [:]
+        if dropped.contains(where: { $0.blocks.count >= 1_000 }) {
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.25) { withExtendedLifetime(dropped) {} }
+        }
+    }
 
     private var documents: [String: (text: String, breaks: Bool, math: Bool, document: MarkdownDocument)] = [:]
     /// The parse of each answer that is streaming, which the next token extends.
     private var streamingParses: [String: MarkdownDocument.Incremental] = [:]
 
+    /// Settled text at least this long parses off the main thread (about 30 ms of parsing), and its answer lays out there too.
+    static let backgroundBytes = 32_768
+    /// A settled text parsed in the background landed: its rows configure again.
+    var onDocumentReady: ((String) -> Void)?
+    /// The newest text each key wants parsed in the background, and the keys with a parse running.
+    private var parsing: [String: (text: String, breaks: Bool, math: Bool)] = [:]
+    private var parseRunning: Set<String> = []
+    /// Whether `key`'s settled text is still parsing in the background, so its row shows a stand-in.
+    func isParsing(_ key: String) -> Bool { parsing[key] != nil }
+
     /// Parses once per row and text; recycled views reuse the result. While `streaming`, a longer
     /// text reparses only what follows its last finished block; the settled text parses whole once.
+    /// Long settled text parses in the background: until it lands this returns the key's last document, or none.
     // ponytail: unbounded, one entry per message seen; trim to the rows near the viewport if huge threads show it in memory
     func document(_ key: String, _ text: String, lineBreaks: Bool, streaming: Bool = false) -> MarkdownDocument {
         // A settled message whose last streamed text was the same still parses whole once: the hit must not
-        // come from the incremental parse.
+        // come from the incremental parse. A long one keeps its incremental parse, which equals the full parse
+        // (`MarkdownIncrementalTests`), so settling doesn't parse a megabyte again.
         // "Render math" (`mathRenderingEnabled`) decides whether TeX parses as formulas, as T3's ChatMarkdown adds remark-math.
         let math = ClientSettingsStore.shared.current.bool("mathRenderingEnabled")
-        if let hit = documents[key], hit.text == text, hit.breaks == lineBreaks, hit.math == math, streaming || streamingParses[key] == nil { return hit.document }
+        if let hit = documents[key], hit.text == text, hit.breaks == lineBreaks, hit.math == math {
+            if streaming || streamingParses[key] == nil { return hit.document }
+            if text.utf8.count >= Self.backgroundBytes {
+                streamingParses[key] = nil
+                return hit.document
+            }
+        }
+        if !streaming, text.utf8.count >= Self.backgroundBytes {
+            streamingParses[key] = nil
+            if let cached = Self.cachedSettled(text, lineBreaks: lineBreaks, math: math) {
+                documents[key] = (text, lineBreaks, math, cached)
+                return cached
+            }
+            parseInBackground(key, text, lineBreaks: lineBreaks, math: math)
+            return documents[key]?.document ?? MarkdownDocument(blocks: [])
+        }
         let document: MarkdownDocument
-        if streaming {
+        if streaming, text.utf8.count >= Self.backgroundBytes, !MarkdownDocument.canSplit(text) {
+            // A reference definition or an HTML block makes every update parse whole: off the main thread, the newest
+            // text at a time, showing the last parse that landed.
+            streamingParses[key] = nil
+            parseInBackground(key, text, lineBreaks: lineBreaks, math: math)
+            return documents[key]?.document ?? MarkdownDocument(blocks: [])
+        } else if streaming {
             let parse = MarkdownDocument.parse(text, preservesLineBreaks: lineBreaks, math: math, extending: streamingParses[key])
             streamingParses[key] = parse
             document = parse.document
@@ -150,19 +191,64 @@ final class TimelineContext {
 
     private static func settled(_ text: String, lineBreaks: Bool, math: Bool) -> MarkdownDocument {
         guard text.utf8.count >= 16_384 else { return MarkdownDocument(parsing: text, preservesLineBreaks: lineBreaks, math: math) }
+        if let hit = cachedSettled(text, lineBreaks: lineBreaks, math: math) { return hit }
+        let document = MarkdownDocument(parsing: text, preservesLineBreaks: lineBreaks, math: math)
+        remember(text, lineBreaks: lineBreaks, math: math, document)
+        return document
+    }
+
+    private static func settledHash(_ text: String, _ lineBreaks: Bool, _ math: Bool) -> Int {
         var hasher = Hasher()
         hasher.combine(text)
         hasher.combine(lineBreaks)
         hasher.combine(math)
-        let hash = hasher.finalize()
-        if let hit = settledParses[hash], hit.breaks == lineBreaks, hit.math == math, hit.text == text { return hit.document }
-        let document = MarkdownDocument(parsing: text, preservesLineBreaks: lineBreaks, math: math)
-        if settledParses.updateValue((text, lineBreaks, math, document), forKey: hash) == nil { settledOrder.append(hash) }
-        if settledOrder.count > 8 { settledParses[settledOrder.removeFirst()] = nil }
-        return document
+        return hasher.finalize()
     }
 
-    func forgetDocuments() { documents.removeAll(); streamingParses.removeAll() }
+    private static func cachedSettled(_ text: String, lineBreaks: Bool, math: Bool) -> MarkdownDocument? {
+        guard let hit = settledParses[settledHash(text, lineBreaks, math)], hit.breaks == lineBreaks, hit.math == math, hit.text == text else { return nil }
+        return hit.document
+    }
+
+    private static func remember(_ text: String, lineBreaks: Bool, math: Bool, _ document: MarkdownDocument) {
+        let hash = settledHash(text, lineBreaks, math)
+        if settledParses.updateValue((text, lineBreaks, math, document), forKey: hash) == nil { settledOrder.append(hash) }
+        if settledOrder.count > 8 { settledParses[settledOrder.removeFirst()] = nil }
+    }
+
+    /// Parses the key's newest text off the main thread, one parse per key at a time, then keeps it and asks the key's
+    /// rows to configure again. A parse that lands after newer text arrived still shows, and the newest parses next.
+    private func parseInBackground(_ key: String, _ text: String, lineBreaks: Bool, math: Bool) {
+        parsing[key] = (text, lineBreaks, math)
+        guard parseRunning.insert(key).inserted else { return }
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let document = MarkdownDocument(parsing: text, preservesLineBreaks: lineBreaks, math: math)
+            await MainActor.run {
+                if text.utf8.count >= 16_384 { Self.remember(text, lineBreaks: lineBreaks, math: math, document) }
+                if document.blocks.count >= 1_000 {
+                    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.25) { withExtendedLifetime(document) {} }
+                }
+                guard let self else { return }
+                self.parseRunning.remove(key)
+                guard let wanted = self.parsing[key] else { return }
+                self.documents[key] = (text, lineBreaks, math, document)
+                if wanted.text == text, wanted.breaks == lineBreaks, wanted.math == math {
+                    self.parsing[key] = nil
+                } else {
+                    self.parseInBackground(key, wanted.text, lineBreaks: wanted.breaks, math: wanted.math)
+                }
+                self.onDocumentReady?(key)
+            }
+        }
+    }
+
+    func forgetDocuments() {
+        let dropped = documents.values.map(\.document)
+        documents.removeAll(); streamingParses.removeAll(); parsing.removeAll()
+        if dropped.contains(where: { $0.blocks.count >= 1_000 }) {
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.25) { withExtendedLifetime(dropped) {} }
+        }
+    }
 
     /// Fork from an assistant message when `canForkProjectedAssistantItem` allows it. Capabilities come from
     /// the thread's provider session for its own rows; inherited rows have none, which allows the fork.

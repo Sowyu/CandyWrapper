@@ -688,6 +688,10 @@ final class AssistantMessageRowView: TimelineRowView {
             self.context.onMarkdownHeightChange?(id)
         }
         markdown.messageID = m.id.rawValue
+        // A long answer parses and lays out off the main thread; until then it holds the timeline's estimated height.
+        let long = m.text.utf8.count >= TimelineContext.backgroundBytes
+        markdown.laysOutInBackground = long
+        markdown.pendingHeight = long ? { [text = m.text] width in TimelineView.estimatedLines(text, width: width) * 22.75 } : nil
         // The timeline caches this row's height with the reader's choices, so a recycled view takes them back.
         markdown.layoutChoices = context.markdownChoices[m.id.rawValue] ?? .init()
         markdown.onLayoutChoicesChange = { [weak context] in context?.markdownChoices[m.id.rawValue] = $0 }
@@ -702,7 +706,7 @@ final class AssistantMessageRowView: TimelineRowView {
             cardFiles = nil
             if card.superview != nil { card.isHidden = true }
         }
-        let isEmpty = m.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !m.streaming
+        let isEmpty = !m.streaming && m.text.allSatisfy(\.isWhitespace)
         empty.isHidden = !isEmpty
         markdown.isHidden = isEmpty
         markdown.inlineSkills = context.model?.inlineSkills ?? []
