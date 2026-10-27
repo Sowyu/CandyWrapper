@@ -59,9 +59,8 @@ struct TransportResponsivenessAuditTests {
         await connection.close()
     }
 
-    /// Intentionally fails on the audited source. Enable only for the centralized audit run.
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["CANDY_TRANSPORT_AUDIT_FAILURES"] == "1"),
-          .timeLimit(.minutes(1)))
+    /// Audit TR-2: a Pong must not drop the watchdog while the initial config snapshot is still owed.
+    @Test(.timeLimit(.minutes(1)))
     func pongBeforeInitialConfigMustNotRemoveLoadingRecovery() async throws {
         let socket = FakeSocket()
         let clock = ManualClock()
@@ -81,11 +80,12 @@ struct TransportResponsivenessAuditTests {
         clock.advance(by: .seconds(5))
         #expect(await eventually(seconds: 3) { socket.sent.contains(.ping) })
         socket.deliver(.pong)
-        #expect(await eventually(seconds: 3) { await !connection.watchdogRunning })
-        // The host now disappears without a TCP close. Config never sent its snapshot.
-        // All virtual deadlines pass, but the connection has no watchdog left to run.
+        // The host now disappears without a TCP close. Config never sent its snapshot,
+        // so the watchdog keeps running and the virtual deadlines close the connection.
+        #expect(await eventually(seconds: 3) { socket.sent.filter { $0 == .ping }.count == 1 })
+        #expect(await eventually(seconds: 3) { await !connection.pingOutstanding && clock.waiting == 1 })
         clock.advance(by: .seconds(60))
-        #expect(await connection.isClosed, "A pending initial snapshot still needs loading recovery after Pong")
+        #expect(await eventually(seconds: 3) { await connection.isClosed }, "A pending initial snapshot still needs loading recovery after Pong")
         await feed.stop()
         reader.cancel()
         _ = await reader.value

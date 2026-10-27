@@ -998,7 +998,7 @@ final class OrchestratorController {
     /// Merges the machine's settings documents with this Mac's, then writes the result back when it differs.
     private func pushSettings(_ env: String) async {
         guard active, let session = environments.session(env),
-              let json = try? await session.supervisor.request("scheduledTasks.list", payload: .object([:])), active else { return }
+              let json = try? await session.supervisor.request("scheduledTasks.list", payload: .object([:]), timeout: .seconds(30)), active else { return }
         // Two devices may each have made one; every side keeps the smallest id and deletes the rest.
         let found = ScheduledTask.list(json).filter { $0.title == OrchestratorSettingsSync.title }.sorted { $0.id < $1.id }
         let merge = OrchestratorSettingsSync.merge(config: config, stamps: store.stamps, documents: found.compactMap { .parse($0.prompt) },
@@ -1024,9 +1024,10 @@ final class OrchestratorController {
         input["enabled"] = .bool(false)
         input["schedule"] = .object(["type": .string("interval"), "everyMs": .number(86_400_000)])
         input["creationSource"] = .string("web")
-        _ = try? await session.supervisor.request("scheduledTasks.upsert", payload: .object(input))
+        // Each call gives up after 30 s, so one that never answers can't hold the syncs queued behind it (audit OH-2).
+        _ = try? await session.supervisor.request("scheduledTasks.upsert", payload: .object(input), timeout: .seconds(30))
         for extra in found.dropFirst() {
-            _ = try? await session.supervisor.request("scheduledTasks.delete", payload: .object(["id": .string(extra.id)]))
+            _ = try? await session.supervisor.request("scheduledTasks.delete", payload: .object(["id": .string(extra.id)]), timeout: .seconds(30))
         }
     }
 

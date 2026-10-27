@@ -17,6 +17,8 @@ public final class ConnectorsStore {
     public private(set) var states: [String: MachineState] = [:]
     /// Machines with a change on its way.
     public private(set) var busy: Set<String> = []
+    /// Changes sent and not answered yet, per machine. A read that finishes first leaves the machine busy (audit OH-5).
+    private var pendingChanges: [String: Int] = [:]
 
     public struct Actions {
         /// Reads a machine's config; the answer comes back through `set(_:_:)`.
@@ -34,9 +36,14 @@ public final class ConnectorsStore {
 
     public init() {}
 
-    public func set(_ machine: String, _ state: MachineState) {
+    /// `endsChange`: this answers one of the machine's changes from `apply`, not a read.
+    public func set(_ machine: String, _ state: MachineState, endsChange: Bool = false) {
         states[machine] = state
-        busy.remove(machine)
+        if endsChange { pendingChanges[machine, default: 1] -= 1 }
+        if pendingChanges[machine, default: 0] <= 0 {
+            pendingChanges[machine] = nil
+            busy.remove(machine)
+        }
         notify()
     }
 
@@ -58,6 +65,7 @@ public final class ConnectorsStore {
     public func apply(_ changes: [String: [AgentConfigChange]]) {
         for (machine, list) in changes where !list.isEmpty {
             busy.insert(machine)
+            pendingChanges[machine, default: 0] += 1
             actions.apply?(machine, list)
         }
         notify()

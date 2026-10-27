@@ -7,6 +7,19 @@ import Testing
     let release = HelperInstall.Release(version: "1.14.0", baseURL: URL(string: "https://github.com/Sowyu/CandyWrapper/releases/download/v1.14.0")!,
                                         sums: ["darwin-universal": "aa", "linux-x86_64": "bb", "linux-aarch64": "cc"])
 
+    /// Audit OH-1: a config line longer than the old 64K-character tail keeps its marker, however the output is cut.
+    @Test func aLongConfigLineSurvivesEveryChunkSize() {
+        let config = String(repeating: "QUJDRA==", count: 110_840 / 8)
+        let output = "$ candywrapper-helper config get\r\n\u{1B}[0mCWH-CONFIG \(config)\r\nCWH-RESULT ok\r\n$ "
+        for width in [256, 4_096, 1_000_000] {
+            var reader = HelperInstall.MarkerReader()
+            var rest = Substring(output)
+            while !rest.isEmpty { reader.append(String(rest.prefix(width))); rest = rest.dropFirst(width) }
+            #expect(reader.started)
+            #expect(reader.lines == [.config(config), .ok("")], "chunk width \(width)")
+        }
+    }
+
     /// The terminal echoes the typed line, which must never read as a result.
     @Test func theEchoedCommandCarriesNoMarker() {
         let command = HelperInstall.installCommand(release, homeId: "env-a")
