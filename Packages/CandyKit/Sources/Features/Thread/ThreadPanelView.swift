@@ -782,6 +782,7 @@ public final class ThreadPanelView: DSView {
         model.onChange = { [weak self] change in
             guard let self else { return }
             self.timeline.setItems(self.model.items, change: change)
+            if !self.switchingThread, !self.model.threadRowsPending { self.timeline.isInert = false }
             if let match = self.pendingFindMatch { self.revealThreadFind(match) }
         }
         // Banners overlay the timeline without changing its content height (`z-20`).
@@ -1423,7 +1424,6 @@ public final class ThreadPanelView: DSView {
             return
         }
         switchingThread = false
-        timeline.isInert = false
         applyingProjection = true
         defer { applyingProjection = false; evaluateProactivePanels() }
         model.projectTitle = projectTitle
@@ -1453,6 +1453,9 @@ public final class ThreadPanelView: DSView {
         }
         if rightPanelOpen, panelState.active?.kind == .diff { diffPanel.setSummaries(summaries) }
         model.setProjection(projection)
+        // A large thread derives its rows in the background. Until they apply, the shown rows are the last
+        // thread's and take no input (audit TH-2, T3's `paintOnly`, ChatView.tsx:6654-6692).
+        timeline.isInert = model.threadRowsPending
         evaluateProactivePanels()
         if projection != nil, isDraft { setDraft(projectTitle: nil) }
         updateComposerShown()

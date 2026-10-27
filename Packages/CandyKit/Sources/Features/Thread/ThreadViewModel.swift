@@ -257,7 +257,8 @@ public final class ThreadViewModel {
     /// Bumped when the thread changes, so a late result for the old thread is dropped.
     private var generation = 0
     /// The next rows belong to another thread than the ones shown (`TimelineChange.thread`).
-    private var threadRowsPending = false
+    /// A new thread's rows are still deriving; the shown rows belong to the previous thread.
+    private(set) var threadRowsPending = false
     /// Threads with at least this many visible rows update off the main thread. A full row pass
     /// over 5,700 rows takes about 30 ms and the incremental entry pass about 3 ms; below this
     /// both fit well inside a frame, and tests and small threads stay synchronous.
