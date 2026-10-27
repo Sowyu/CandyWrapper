@@ -65,6 +65,15 @@ public final class TimelineView: DSView {
     public var historyCursor: String? {
         didSet { if historyCursor != oldValue { lastNearTopId = nil } }
     }
+    /// A request that ends without a page, cancelled or failed, keeps the same cursor. Rearm then, so the
+    /// next upward gesture retries it; T3 keeps Load earlier usable after an error (MessagesTimeline.tsx:1144-1169,
+    /// audit TH-1).
+    public var historyLoading = false {
+        didSet { if oldValue && !historyLoading { lastNearTopId = nil } }
+    }
+    public var historyFailed = false {
+        didSet { if historyFailed { lastNearTopId = nil } }
+    }
     private var laidOutWidth: CGFloat = 0
     private var tiling = false
     private var retile = false

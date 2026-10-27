@@ -5,8 +5,8 @@ import T3Protocol
 import T3Store
 @testable import Features
 
-/// Expected to expose current bugs. Parent runs these explicitly during the audit.
-@Suite(.enabled(if: ProcessInfo.processInfo.environment["CW_THREAD_AUDIT_REGRESSIONS"] == "1"), .serialized)
+/// Regressions for audit TH-1 and TH-2 (docs/research/responsiveness-audit-2026-10-26/threads.md).
+@Suite(.serialized)
 @MainActor
 struct ThreadResponsivenessAuditRegressions {
     @Test func oldRowsStayInertUntilNewRowsAreApplied() async throws {
@@ -45,16 +45,25 @@ struct ThreadResponsivenessAuditRegressions {
         var requests = 0
         timeline.onNearTop = {
             if reducer.beginLoadEarlier() != nil { requests += 1 }
+            timeline.historyLoading = reducer.history.loading
         }
         // Invoke the same focused callback as an upward wheel, without a shared screen.
         timeline.scrollView.onGesture?(-60, false, false)
         #expect(requests == 1)
         reducer.failHistoryLoad(requestCursor: "audit-page", message: "Audit timeout")
         #expect(!reducer.history.loading && reducer.history.error != nil)
-        // ThreadSession.render forwards only this history field to the timeline.
+        // The history fields ThreadSession.render forwards to the timeline.
         timeline.historyCursor = reducer.history.historyCursor
+        timeline.historyLoading = reducer.history.loading
+        timeline.historyFailed = reducer.history.error != nil
         timeline.scrollView.onGesture?(-60, false, false)
         #expect(requests == 2, "a failed request must not permanently consume paging demand")
+        // A cancelled request (shell replacement) leaves the same cursor and no error.
+        reducer.cancelHistoryLoad(requestCursor: "audit-page")
+        timeline.historyLoading = reducer.history.loading
+        timeline.historyFailed = reducer.history.error != nil
+        timeline.scrollView.onGesture?(-60, false, false)
+        #expect(requests == 3, "a cancelled request must not consume paging demand either")
     }
 }
 
