@@ -363,3 +363,20 @@ public struct SettingsScopeState: Equatable, Sendable {
         return nil
     }
 }
+
+/// Server setting saves, one at a time. Each plans when its turn comes, from the settings the saves before it
+/// returned: a project override write replaces the whole entry (T3 serverSettings.ts:259-278), so two plans made
+/// from one snapshot erase each other's change (audit SU1).
+@MainActor
+public final class SettingsWriteQueue {
+    private var tail: Task<Void, Never>?
+    public init() {}
+
+    public func enqueue(_ work: @escaping @MainActor () async -> Void) {
+        let previous = tail
+        tail = Task { await previous?.value; await work() }
+    }
+
+    /// Waits for every save queued so far.
+    public func settled() async { await tail?.value }
+}

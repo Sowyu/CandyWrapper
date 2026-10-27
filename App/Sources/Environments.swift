@@ -590,6 +590,12 @@ final class Environments {
         return try await session.supervisor.request(method, payload: payload)
     }
 
+    /// One unary call that gives up after `timeout`, for calls queued behind each other.
+    func request(_ environmentId: String, _ method: String, _ payload: JSONValue, timeout: Duration) async throws -> JSONValue {
+        guard let session = session(environmentId) else { throw CommandError.notConnected }
+        return try await session.supervisor.request(method, payload: payload, timeout: timeout)
+    }
+
     /// `orchestration.dispatchCommand` on the environment of `threadId` (a scoped id). With `update`, the
     /// sidebar shows the change at once; a failure takes it back, a success keeps it until the shell
     /// reaches the command's sequence (`createOptimisticThreadLifecycle`).
