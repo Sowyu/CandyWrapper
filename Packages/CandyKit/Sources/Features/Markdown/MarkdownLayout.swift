@@ -662,7 +662,7 @@ private struct Builder {
         }
         let index = mathIndex
         mathIndex += 1
-        let (above, below) = MarkdownMathStyle.content(layout, textSize: size)
+        let (above, below) = MarkdownMathStyle.content(layout, parent: font, lineHeight: MarkdownStyle.lineHeight)
         let pad = MarkdownMathStyle.padX, padY = MarkdownMathStyle.padY
         let contentWidth = layout.width + 2 * pad
         let overflows = contentWidth > width + 1.0 / 64
@@ -691,9 +691,9 @@ private struct Builder {
         let parent = MarkdownStyle.font(size, weight: weight)
         let textBox = boxes.make(inline.string, width: width, lineHeight: lineHeight, strut: parent,
                                  chipRanges: inline.code, chipFont: DSFont.mono(MarkdownStyle.chipFontSize),
-                                 inlineBoxes: MarkdownMathStyle.inlineBoxes(inline, parent: parent, textSize: size))
+                                 inlineBoxes: MarkdownMathStyle.inlineBoxes(inline, parent: parent, lineHeight: lineHeight))
         var box = Box(height: textBox.height, baseline: textBox.firstBaseline)
-        box.items += MarkdownMathStyle.items(inline, in: textBox, parent: parent, textSize: size, color: color)
+        box.items += MarkdownMathStyle.items(inline, in: textBox, parent: parent, color: color)
         for chip in textBox.chips {
             box.items.append(.box(chip, fill: Themed.color(\.muted), border: Themed.color(\.contrastBorder), radius: MarkdownStyle.chipRadius))
         }
@@ -1131,9 +1131,9 @@ private struct Builder {
                 let cellFont = MarkdownStyle.font(size, weight: r == 0 ? .semibold : .regular)
                 let textBox = boxes.make(displayed, width: widths[c] - padding.total, lineHeight: line, strut: MarkdownStyle.font(size),
                                          chipRanges: chips, chipFont: DSFont.mono(MarkdownStyle.chipFontSize),
-                                         inlineBoxes: MarkdownMathStyle.inlineBoxes(inline, parent: cellFont, textSize: size))
+                                         inlineBoxes: MarkdownMathStyle.inlineBoxes(inline, parent: cellFont, lineHeight: line))
                 var cell = Box(height: textBox.height)
-                cell.items += MarkdownMathStyle.items(inline, in: textBox, parent: cellFont, textSize: size, color: context.color)
+                cell.items += MarkdownMathStyle.items(inline, in: textBox, parent: cellFont, color: context.color)
                 for chip in textBox.chips {
                     cell.items.append(.box(chip, fill: Themed.color(\.muted), border: Themed.color(\.contrastBorder), radius: MarkdownStyle.chipRadius))
                 }
