@@ -97,17 +97,17 @@ The intentionally failing regressions assert the desired behavior. The PR harnes
 | [F1](files-actions.md) | P1 | Executed | Fixed 2026-10-27. Comment-and-close/reopen can act on a different pull request |
 | [F2](files-actions.md) | P1 | Executed | Fixed 2026-10-27. A late comment success erases another pull request draft |
 | [SA1](session-actions.md) | P1 | Executed | Fixed 2026-10-27. Browser download error bodies replace existing destination files |
-| [SU1](settings-updates.md) | P1 | Source | Overlapping project-setting writes erase earlier changes |
-| [TR-1](transport.md) | P1 | Source | Changed relay endpoint leaves HTTP history and assets on an obsolete origin |
+| [SU1](settings-updates.md) | P1 | Source | Fixed 2026-10-27 ([repairs](#loading-image-and-connection-repairs-2026-10-27)). Overlapping project-setting writes erase earlier changes |
+| [TR-1](transport.md) | P1 | Source | Fixed 2026-10-27 ([repairs](#loading-image-and-connection-repairs-2026-10-27)). Changed relay endpoint leaves HTTP history and assets on an obsolete origin |
 | [C2](composer.md) | P2 | Source | Changing machine keeps attachment upload IDs from the previous machine |
 | [C4](composer.md) | P2 | Source | Delayed thread launch success steals current navigation |
 | [C5](composer.md) | P2 | Source | Restored upload verification never resumes its pending send |
 | [F3](files-actions.md) | P2 | Source | Viewed-file replies overwrite another pull request marks |
 | [F4](files-actions.md) | P2 | Source | Overlapping directory refreshes restore an older listing |
-| [IMG-1](images.md) | P2 | Executed | Cancelled image/PDF load replaces the newly opened file with an error |
+| [IMG-1](images.md) | P2 | Executed | Fixed 2026-10-27 ([repairs](#loading-image-and-connection-repairs-2026-10-27)). Cancelled image/PDF load replaces the newly opened file with an error |
 | [IMG-4](images.md) | P2 | Source | Orchestrator sends before selected images finish preparation |
-| [OH-1](orchestrator-helper.md) | P2 | Executed | Large helper config output loses its marker and reports a false timeout |
-| [OH-2](orchestrator-helper.md) | P2 | Source | An unanswered helper RPC blocks queued connector actions |
+| [OH-1](orchestrator-helper.md) | P2 | Executed | Fixed 2026-10-27 ([repairs](#loading-image-and-connection-repairs-2026-10-27)). Large helper config output loses its marker and reports a false timeout |
+| [OH-2](orchestrator-helper.md) | P2 | Source | Fixed 2026-10-27 ([repairs](#loading-image-and-connection-repairs-2026-10-27)). An unanswered helper RPC blocks queued connector actions |
 | [OH-3](orchestrator-helper.md) | P2 | Source | Relay calls can continue after Orchestrator is disabled |
 | [OH-4](orchestrator-helper.md) | P2 | Source | Failed Orchestrator settings writes lose their retry state |
 | [SA2](session-actions.md) | P2 | Source | Browser download Save resolves the current browser instead of its origin |
@@ -116,12 +116,27 @@ The intentionally failing regressions assert the desired behavior. The PR harnes
 | [SU2](settings-updates.md) | P2 | Source | Failed project script reads suppress same-workspace retries |
 | [SU3](settings-updates.md) | P2 | Source | Add-to-machine silently abandons navigation after three seconds |
 | [SU4](settings-updates.md) | P2 | Source | Connections access retains a replaced primary session subscription |
-| [TH-1](threads.md) | P2 | Executed | One failed history request prevents further automatic paging |
-| [TH-2](threads.md) | P2 | Executed | Old thread rows become interactive while replacement rows are pending |
-| [TR-2](transport.md) | P2 | Executed | Early Pong removes recovery while initial configuration is still missing |
-| [IMG-3](images.md) | P3 | Executed | Malformed image bytes leave the file preview blank |
+| [TH-1](threads.md) | P2 | Executed | Fixed 2026-10-27 ([repairs](#loading-image-and-connection-repairs-2026-10-27)). One failed history request prevents further automatic paging |
+| [TH-2](threads.md) | P2 | Executed | Fixed 2026-10-27 ([repairs](#loading-image-and-connection-repairs-2026-10-27)). Old thread rows become interactive while replacement rows are pending |
+| [TR-2](transport.md) | P2 | Executed | Fixed 2026-10-27 ([repairs](#loading-image-and-connection-repairs-2026-10-27)). Early Pong removes recovery while initial configuration is still missing |
+| [IMG-3](images.md) | P3 | Executed | Fixed 2026-10-27 ([repairs](#loading-image-and-connection-repairs-2026-10-27)). Malformed image bytes leave the file preview blank |
 | [IMG-5](images.md) | P3 | Source | Media Save silently drops signing and HTTP failures |
-| [OH-5](orchestrator-helper.md) | P3 | Executed | An earlier read clears the busy state of a queued connector mutation |
+| [OH-5](orchestrator-helper.md) | P3 | Executed | Fixed 2026-10-27 ([repairs](#loading-image-and-connection-repairs-2026-10-27)). An earlier read clears the busy state of a queued connector mutation |
+
+## Loading, image and connection repairs, 2026-10-27
+
+Each regression test below runs in the ordinary suite now; the opt-in gates on these cases are gone.
+
+- TH-1 fixed. A history request that ends without a page, failed or cancelled, rearms paging, so the next upward scroll retries the same cursor (`TimelineView.historyLoading` and `historyFailed`). Test: `ThreadResponsivenessAuditRegressions.failedHistoryDemandCanRetryTheSameCursor`, with a cancelled case added.
+- TH-2 fixed. The timeline stays inert until the new thread's rows apply, including the background derivation (`ThreadViewModel.threadRowsPending`), and a UI-state refresh during that time can't end it early. Test: `oldRowsStayInertUntilNewRowsAreApplied`.
+- IMG-1 fixed. An image or PDF load applies only when it wasn't cancelled and its view is still the shown body. Test: `ImageLoadingAuditTests.cancelledImageCannotReplaceTheNextFileWithItsError`.
+- IMG-3 fixed. Bytes `NSImage` can't decode show "Unable to load workspace image." Test: `successfulHTTPWithMalformedImageReportsFailure`.
+- TR-2 fixed. `subscribeServerConfig` subscribes with `snapshotFirst`, so a Pong no longer answers it and the watchdog keeps running until the snapshot arrives. Tests: `TransportResponsivenessAuditTests.pongBeforeInitialConfigMustNotRemoveLoadingRecovery` and `RPCConnectionTests.aPongDoesNotAnswerAStreamThatOwesItsSnapshot`. A server that keeps answering Pings while its config handler hangs still has no deadline.
+- OH-1 fixed. `HelperInstall.MarkerReader` scans each finished output line once and keeps only the unfinished one, so a config line of any length keeps its marker. Helper input goes in 256-character writes, under T3's 65,536-character limit. Test: `HelperInstallTests.aLongConfigLineSurvivesEveryChunkSize` at 256, 4,096 and 1,000,000-character chunks with a 110,840-character line. `reproduce-hidden-terminal.py` extracts the old `OutputBox` and no longer applies.
+- OH-2 fixed. Every hidden-terminal write gives up after 15 s and Interrupts the call (`ConnectionSupervisor.request(_:payload:timeout:)`), so a queued Connectors action runs after a stuck one. The Orchestrator settings sync and Settings saves use 30 s timeouts for the same reason. No fault-injection test drives the App target; the timeout helper is the existing `withTimeout`.
+- OH-5 fixed. `ConnectorsStore` counts pending changes per machine, and only a change's own answer clears busy. Test: `OrchestratorHelperAuditTests.earlierReadCompletionDoesNotClearQueuedMutationBusyState`.
+- SU1 reproduced in a component test and fixed. `SettingsWriteQueueTests.plansFromOneSnapshotEraseEachOther` plans two edits from one snapshot against a fake server with T3's whole-entry replacement, and the first edit is lost. Settings saves now go through `SettingsWriteQueue`: one at a time, each planned in the scope selected at the edit from the settings the earlier saves returned, with a 30 s timeout per save. A save error that lands after Settings closed shows over the thread. Test: `queuedEditsPlanFromTheLastReplyAndBothSurvive`. Not reproduced against the sandbox server, which answers too fast locally to hit the window without a delaying proxy.
+- TR-1 reproduced in a component test and fixed. `EnvironmentHTTP` had an immutable base, so a relay session's history and asset calls went to the saved tunnel. A relay session now asks `T3ConnectAuthorizer.httpBaseURL` before each authenticated call, and `baseURL`, shared by every copy, follows it for asset links. Tests: `EnvironmentHTTPRelayOriginTests`. Each new session also moves `baseURL` before it resumes, and a 401 retry is rebuilt and signed on the renewed token's tunnel (`EnvironmentHTTPRelayRetryTests`). Sign-out cleanup tells relay sessions by kind, since their origin moves. Not reproduced end to end: that needs a real T3 Connect relay, and tests never sign in.
 
 ## Fixed since the audit
 
