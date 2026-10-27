@@ -63,3 +63,4 @@ What the user decided and why, newest first. Check here before changing anything
 
 - 2026-10-23: Compact and send is offered only from 400k context tokens (T3: 100k), and a compaction below 500k asks "Compact before sending?" first; above 500k it compacts without asking. All themes.
 - 2026-10-23: Orchestrator, first called Captain (Redesign only, experimental), copies Grok Bot's bot shapes, colours and capsule eyes as closely as we can redraw them from screenshots, plus omabot's eye logic (Apache-2.0, credited). The user chose this after being told the shapes are xAI's art and CandyWrapper is public. Plan in `docs/orchestrator.md`. The user renamed Captain to Orchestrator to avoid copying Capy's name.
+- 2026-10-27: Math in messages is laid out natively (TeX layout on Latin Modern Math), not in a hidden KaTeX web view. Formulas stage 1 can't typeset show their TeX as inline code. See `docs/math.md`.
