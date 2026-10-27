@@ -28,6 +28,9 @@ public final class MarkdownView: DSView {
             copiedResets = [:]
             scrollLatch = nil; thumbDrag = nil
             invalidate()
+            // A background layout still running belongs to the last message: its result is dropped when it lands.
+            identity += 1
+            running = nil
             Self.release([lastLayout].compactMap { $0 })
             lastLayout = nil
         }
@@ -73,7 +76,7 @@ public final class MarkdownView: DSView {
             }
             let previous = wraps == wrapsCode ? cache[bounds.width] : nil
             wrapsCode = wraps
-            invalidate(redraw: previous == nil)
+            invalidate(redraw: previous == nil, document: true)
             reusable = previous
             if let previous { redrawChanges(from: previous, oldBlocks: oldValue.blocks) }
             observeDiagrams()
@@ -239,7 +242,9 @@ public final class MarkdownView: DSView {
         invalidate()
     }
 
-    private func invalidate(redraw: Bool = true) {
+    /// `document`: only the text changed, so a streaming answer may still extend a layout of its earlier text.
+    private func invalidate(redraw: Bool = true, document: Bool = false) {
+        if !document { inputs += 1 }
         let dropped = Array(cache.values) + [lastLayout].compactMap { $0 }
         if let shown = cache[bounds.width] ?? cache.values.first { lastLayout = shown }
         generation += 1
@@ -284,9 +289,14 @@ public final class MarkdownView: DSView {
     private var lastLayout: MarkdownLayout?
     /// Bumped by every change that drops the cache, so a background layout for older inputs is not cached.
     private var generation = 0
-    /// The width a background layout is running for. One runs at a time, so a live resize lays out the width it ends on,
-    /// not every width it passes.
-    private var running: CGFloat?
+    /// The background layout running: its width and token. One runs at a time, so a live resize lays out the width it
+    /// ends on, not every width it passes.
+    private var running: (width: CGFloat, token: Int)?
+    private var jobs = 0
+    /// Bumped when the view starts showing another message, and by every change other than the text, so a result that
+    /// lands later is never shown for another message or extended under other settings.
+    private var identity = 0
+    private var inputs = 0
     /// Whether the view shows a stand-in for `width` (tests, and the owner's "ready" check).
     public func isPending(forWidth width: CGFloat) -> Bool { cache[width] == nil && running != nil }
 
@@ -309,8 +319,10 @@ public final class MarkdownView: DSView {
     /// for a streaming answer, whose next layout reuses its blocks and lays out only the new end on the main thread.
     private func layoutInBackground(_ width: CGFloat, make: @escaping @Sendable () -> MarkdownLayout) {
         guard running == nil else { return }
-        let started = generation
-        running = width
+        let started = generation, startedIdentity = identity, startedInputs = inputs
+        jobs += 1
+        let token = jobs
+        running = (width, token)
         DispatchQueue.global(qos: .userInitiated).async {
             let made = make()
             DispatchQueue.main.async { [weak self] in
@@ -318,12 +330,13 @@ public final class MarkdownView: DSView {
                     // Whoever drops it last, the layout is freed in the background, even if this view went meanwhile.
                     Self.release([made])
                     guard let self else { return }
-                    self.running = nil
+                    if self.running?.token == token { self.running = nil }
+                    guard self.identity == startedIdentity else { self.needsLayout = true; return }
                     Self.release([self.lastLayout].compactMap { $0 })
                     self.lastLayout = made
                     if self.generation == started {
                         self.store(made, width)
-                    } else if self.streaming, self.reusable == nil {
+                    } else if self.streaming, self.inputs == startedInputs, self.reusable == nil {
                         // A streaming answer grew meanwhile: its next layout keeps these blocks and lays out the new end here.
                         self.reusable = made
                     }

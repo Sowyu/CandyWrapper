@@ -722,7 +722,8 @@ final class AssistantMessageRowView: TimelineRowView {
         markdown.citationSourceID = m.id.rawValue
         // `MarkdownThreadLink` (ChatMarkdown.tsx:1067-1074): `t3-thread://` links draw as thread chips.
         let model = context.model
-        let document = isEmpty ? MarkdownDocument(blocks: []) : context.document(item.id, m.text, lineBreaks: TL.preservesAssistantLineBreaks(m.text), streaming: m.streaming)
+        let document = isEmpty ? MarkdownDocument(blocks: []) : context.document(item.id, m.text, lineBreaks: TL.preservesAssistantLineBreaks(m.text), streaming: m.streaming,
+                                                                                                         background: true)
         markdown.contextChips = MarkdownContextChips.links(in: document, thread: { model?.linkedThread?(ThreadId($0)) })
         markdown.onContextChip = { action, _ in if case .openThread(let id) = action { model?.onOpenThread?(ThreadId(id)) } }
         markdown.onCiteSelection = m.streaming ? nil : { [weak model = context.model] selection, anchor in

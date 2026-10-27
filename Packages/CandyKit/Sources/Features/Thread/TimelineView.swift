@@ -92,14 +92,26 @@ public final class TimelineView: DSView {
 
     /// Scrolls the least that brings the active match inside the viewport, 96pt from its edges and clear of the
     /// composer (`reveal`, useThreadFindNavigation.ts:185-230). False when its row is not on screen.
+    /// A find match in a long answer still parsing or laying out in the background, revealed once it lands.
+    private var pendingFindReveal: String?
+
+    private func revealPendingFindMatch() {
+        guard let id = pendingFindReveal else { return }
+        guard threadFindMatch?.entryId == id else { pendingFindReveal = nil; return }
+        _ = revealActiveFindMatch(id, retry: false)
+    }
+
     private func revealActiveFindMatch(_ entryId: String, retry: Bool = true) -> Bool {
         guard threadFindMatch?.entryId == entryId, let row = visible[entryId] else { return false }
         row.layoutSubtreeIfNeeded()
         guard let local = row.activeFindRect() else {
-            // A fold opened: ask again once the row has its new height.
+            // A fold opened: ask again once the row has its new height. A long answer laying out in the background
+            // asks again when it lands.
             if retry { DispatchQueue.main.async { [weak self] in _ = self?.revealActiveFindMatch(entryId, retry: false) } }
+            else { pendingFindReveal = entryId }
             return true
         }
+        pendingFindReveal = nil
         let rect = row.convert(local, to: document)
         let viewport = scrollView.contentView.bounds
         let margin = min(96, max(0, (viewport.height - topClearance - bottomInset - rect.height) / 2))
@@ -225,8 +237,14 @@ public final class TimelineView: DSView {
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        context.onMarkdownHeightChange = { [weak self] id in self?.remeasure { $0.id == id } }
-        context.onDocumentReady = { [weak self] key in self?.remeasure { key.hasPrefix($0.id) } }
+        context.onMarkdownHeightChange = { [weak self] id in
+            self?.remeasure { $0.id == id }
+            self?.revealPendingFindMatch()
+        }
+        context.onDocumentReady = { [weak self] key in
+            self?.remeasure { $0.id == key }
+            self?.revealPendingFindMatch()
+        }
         context.onDisclosure = { [weak self] id in
             self?.disclosureRowId = id
             // A toggle that changes no rows must not hold the next, unrelated update.

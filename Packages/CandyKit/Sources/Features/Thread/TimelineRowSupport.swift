@@ -140,9 +140,10 @@ final class TimelineContext {
 
     /// Parses once per row and text; recycled views reuse the result. While `streaming`, a longer
     /// text reparses only what follows its last finished block; the settled text parses whole once.
-    /// Long settled text parses in the background: until it lands this returns the key's last document, or none.
+    /// With `background` (an answer whose row is keyed by `key` and configures again on `onDocumentReady`), long text
+    /// parses off the main thread: until it lands this returns the key's last document, or none.
     // ponytail: unbounded, one entry per message seen; trim to the rows near the viewport if huge threads show it in memory
-    func document(_ key: String, _ text: String, lineBreaks: Bool, streaming: Bool = false) -> MarkdownDocument {
+    func document(_ key: String, _ text: String, lineBreaks: Bool, streaming: Bool = false, background: Bool = false) -> MarkdownDocument {
         // A settled message whose last streamed text was the same still parses whole once: the hit must not
         // come from the incremental parse. A long one keeps its incremental parse, which equals the full parse
         // (`MarkdownIncrementalTests`), so settling doesn't parse a megabyte again.
@@ -150,12 +151,12 @@ final class TimelineContext {
         let math = ClientSettingsStore.shared.current.bool("mathRenderingEnabled")
         if let hit = documents[key], hit.text == text, hit.breaks == lineBreaks, hit.math == math {
             if streaming || streamingParses[key] == nil { return hit.document }
-            if text.utf8.count >= Self.backgroundBytes {
+            if background, text.utf8.count >= Self.backgroundBytes {
                 streamingParses[key] = nil
                 return hit.document
             }
         }
-        if !streaming, text.utf8.count >= Self.backgroundBytes {
+        if background, !streaming, text.utf8.count >= Self.backgroundBytes {
             streamingParses[key] = nil
             if let cached = Self.cachedSettled(text, lineBreaks: lineBreaks, math: math) {
                 documents[key] = (text, lineBreaks, math, cached)
@@ -165,7 +166,7 @@ final class TimelineContext {
             return documents[key]?.document ?? MarkdownDocument(blocks: [])
         }
         let document: MarkdownDocument
-        if streaming, text.utf8.count >= Self.backgroundBytes, !MarkdownDocument.canSplit(text) {
+        if background, streaming, text.utf8.count >= Self.backgroundBytes, !MarkdownDocument.canSplit(text) {
             // A reference definition or an HTML block makes every update parse whole: off the main thread, the newest
             // text at a time, showing the last parse that landed.
             streamingParses[key] = nil

@@ -90,6 +90,26 @@ struct MarkdownBackgroundLayoutTests {
         #expect(Self.signature(view.layout(forWidth: 680)) == Self.signature(expected))
     }
 
+    /// A view recycled for another message while the last one's layout runs never shows that layout.
+    @Test func recycledViewDropsTheLastMessagesLayout() async throws {
+        let view = MarkdownView(frame: NSRect(x: 0, y: 0, width: 680, height: 100))
+        view.laysOutInBackground = true
+        view.messageID = "a"
+        view.document = MarkdownDocument(parsing: String(repeating: Self.unit, count: 40) + "Only in answer alpha.")
+        _ = view.height(forWidth: 680)
+        view.messageID = "b"
+        let b = MarkdownDocument(parsing: String(repeating: Self.unit, count: 30) + "Only in answer beta.")
+        view.document = b
+        func shown() -> [String] { view.layout(forWidth: 680).items.compactMap { if case .text(let box, _) = $0 { box.text } else { nil } } }
+        let deadline = Date().addingTimeInterval(20)
+        while Date() < deadline {
+            #expect(!shown().contains { $0.contains("alpha") })
+            if !view.isPending(forWidth: 680), !shown().isEmpty { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(Self.signature(view.layout(forWidth: 680)) == Self.signature(MarkdownLayout(document: b, width: 680)))
+    }
+
     /// Long settled text parses off the main thread; the timeline's context hands the key back when it lands.
     @Test func settledTextParsesInBackground() async throws {
         let context = TimelineContext()
@@ -97,16 +117,16 @@ struct MarkdownBackgroundLayoutTests {
         #expect(text.utf8.count >= TimelineContext.backgroundBytes)
         var ready: [String] = []
         context.onDocumentReady = { ready.append($0) }
-        #expect(context.document("a", text, lineBreaks: false).blocks.isEmpty)
+        #expect(context.document("a", text, lineBreaks: false, background: true).blocks.isEmpty)
         #expect(context.isParsing("a"))
         let deadline = Date().addingTimeInterval(20)
         while ready.isEmpty, Date() < deadline { try await Task.sleep(for: .milliseconds(10)) }
         #expect(ready == ["a"])
         let math = ClientSettingsStore.shared.current.bool("mathRenderingEnabled")
-        #expect(context.document("a", text, lineBreaks: false) == MarkdownDocument(parsing: text, math: math))
+        #expect(context.document("a", text, lineBreaks: false, background: true) == MarkdownDocument(parsing: text, math: math))
         // A streamed answer that settles with the same text keeps its incremental parse, which equals the full one.
-        let streamed = context.document("b", text + "!", lineBreaks: false, streaming: true)
-        #expect(context.document("b", text + "!", lineBreaks: false) == streamed)
+        let streamed = context.document("b", text + "!", lineBreaks: false, streaming: true, background: true)
+        #expect(context.document("b", text + "!", lineBreaks: false, background: true) == streamed)
         #expect(!context.isParsing("b"))
     }
 
