@@ -302,11 +302,15 @@ public final class FileSurfaceView: DSView {
             image.setAccessibilityLabel(path)
             let host = Centered(image, size: nil, padding: 16)
             loadTask = Task { [weak self] in
-                guard let data = await self?.fetchData?(url) else {
-                    self?.replaceBody(with: FileFailureView(message: "Unable to load workspace image.", attemptedPath: nil, cwd: nil))
+                let data = await self?.fetchData?(url)
+                // A cancelled or superseded load belongs to a file that is no longer shown (audit IMG-1).
+                guard !Task.isCancelled, let self, self.body === host else { return }
+                // Bytes that don't decode get T3's error, not a blank view (FilePreviewPanel.tsx:186-205, audit IMG-3).
+                guard let data, let decoded = NSImage(data: data), decoded.isValid else {
+                    self.replaceBody(host, with: FileFailureView(message: "Unable to load workspace image.", attemptedPath: nil, cwd: nil))
                     return
                 }
-                image.image = NSImage(data: data)
+                image.image = decoded
             }
             return host
         case .audio, .video:
@@ -321,8 +325,10 @@ public final class FileSurfaceView: DSView {
             pdf.displayMode = .singlePageContinuous
             pdf.backgroundColor = .white
             loadTask = Task { [weak self] in
-                guard let data = await self?.fetchData?(url), let document = PDFDocument(data: data) else {
-                    self?.replaceBody(with: FileFailureView(message: "Unable to load file preview.", attemptedPath: nil, cwd: nil))
+                let data = await self?.fetchData?(url)
+                guard !Task.isCancelled, let self, self.body === pdf else { return }
+                guard let data, let document = PDFDocument(data: data) else {
+                    self.replaceBody(pdf, with: FileFailureView(message: "Unable to load file preview.", attemptedPath: nil, cwd: nil))
                     return
                 }
                 pdf.document = document
@@ -333,7 +339,8 @@ public final class FileSurfaceView: DSView {
         }
     }
 
-    private func replaceBody(with view: NSView) {
+    private func replaceBody(_ expected: NSView, with view: NSView) {
+        guard body === expected else { return }
         body?.removeFromSuperview()
         body = view
         addSubview(view)
