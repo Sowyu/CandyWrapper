@@ -2,6 +2,8 @@
 
 Traps earlier agents hit the hard way. Skim the ones in your area before you code.
 
+- Large replies (2026-10-27, [details](perf/large-replies-2026-10-27.md)): freeing a 1 MiB reply's `MarkdownLayout` takes the main thread up to 2 s, and it happens wherever the last reference drops, including a main-queue block's captures and a view's ivar destroyer. `MarkdownView.release` hands long layouts to a background queue after a short delay. More than four parallel layout workers made the main thread's own view layout wait on the Objective-C runtime's locks (100 to 180 ms resize stalls). The 1 ms main-queue heartbeat overstates stalls when the process is idle; measure the longest run loop pass, as `StallMonitor` does.
+
 - Recycled lists and the clip view (2026-10-24): `setFrameSize` on a scroll view's document can clamp the clip view's bounds, and its `boundsDidChangeNotification` arrives synchronously, in the middle of whatever resized it. The sidebar's observer re-tiled inside `setItems`, which then recycled the same rows again, so one view served two threads: a blank slot, a swapped title, a click opening the other thread. Skip observer work while an update owns the rows, and check with `SidebarMultiMachineTests`, which asserts every slot's view and hit test.
 
 - Measuring colors in screenshots (2026-10-23): the user's screenshots are Display P3. `NSBitmapImageRep.colorAt(...).usingColorSpace(.sRGB)` on an `NSImage`'s `tiffRepresentation` misreads them and our own captures alike (Capy's #2b948b switch read as #5ba19c, and our #5ba19c as #6bafac). Draw the `CGImage` from `CGImageSource` into a `CGContext` in sRGB and read the bytes. Values measured the old way, like Redesign's settings card in 5d2453ea, need a second look.
