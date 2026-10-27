@@ -30,6 +30,8 @@ final class SettingsController {
     var chooseIconFile: ((String, String, String, Bool, @escaping (String) -> Void) -> Void)?
     // Pages and their shared context (SettingsPages.swift).
     let pageContext = SettingsPageContext()
+    /// Server setting saves, one at a time (audit SU1).
+    let settingsWrites = SettingsWriteQueue()
     var scopeSelection = SettingsScopeSelection()
     var general: GeneralSettingsView?
     var appearance: AppearanceSettingsView?

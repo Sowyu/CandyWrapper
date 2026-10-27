@@ -37,7 +37,7 @@ extension SettingsController {
         c.appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         c.clearServer = { [weak self] keys in
             guard let self else { return }
-            self.run(self.pageContext.scope.planClear(keys))
+            self.run { $0.planClear(keys) }
         }
         c.request = { [weak self] env, method, payload in
             guard let self else { throw CancellationError() }
@@ -374,35 +374,48 @@ extension SettingsController {
 
     // MARK: Writes
 
-    private func writeServer(_ patch: [String: JSONValue]) { run(pageContext.scope.plan(patch)) }
+    private func writeServer(_ patch: [String: JSONValue]) { run { $0.plan(patch) } }
 
     /// `useRunScopedPlan`: one `server.updateSettings` per target; the reply's settings apply at once.
-    private func run(_ plan: (writes: [SettingsScopeState.Write], unavailableReason: String?)) {
+    /// Saves wait for the ones before them and plan from the settings those returned, in the scope selected at the
+    /// edit, so a quick second edit can't replace the first one's project override entry (audit SU1).
+    private func run(_ makePlan: @escaping (SettingsScopeState) -> (writes: [SettingsScopeState.Write], unavailableReason: String?)) {
+        let selection = pageContext.scope.selection
+        settingsWrites.enqueue { [weak self] in await self?.run(makePlan, selection: selection) }
+    }
+
+    private func run(_ makePlan: (SettingsScopeState) -> (writes: [SettingsScopeState.Write], unavailableReason: String?),
+                     selection: SettingsScopeSelection) async {
+        var scope = pageContext.scope
+        scope.selection = selection
+        for i in scope.environments.indices {
+            if let config = composer?.config(scope.environments[i].id) { scope.environments[i].settings = ServerSettingsValues(config.settings.raw) }
+        }
+        let plan = makePlan(scope)
         if let reason = plan.unavailableReason {
             toast("Setting not saved", reason, .warning)
             return
         }
-        Task {
-            var failures: [String] = [], saved: [String] = []
-            for w in plan.writes {
-                do {
-                    let previous = composer?.config(w.environmentId)?.settings.raw
-                    let result = try await environments.request(w.environmentId, "server.updateSettings", .object(["patch": .object(w.patch)]))
-                    composer?.applySettings(w.environmentId, result)
-                    // An older server drops a key it does not know and still succeeds (scopedSettings.ts, 8ac4b97da).
-                    if let previous, !SettingsScopeState.droppedKeys(w.patch, previous: previous, saved: result).isEmpty {
-                        failures.append("Could not save on \(w.label): This environment does not support this setting. Update T3 Code on it.")
-                        continue
-                    }
-                    saved.append(w.label)
-                } catch {
-                    failures.append("Could not save on \(w.label): \(Self.rpcMessage(error, fallback: "The save failed. Try reconnecting and saving again."))")
+        var failures: [String] = [], saved: [String] = []
+        for w in plan.writes {
+            do {
+                let previous = composer?.config(w.environmentId)?.settings.raw
+                // A save that never answers gives up after 30 s, so the saves queued behind it still run.
+                let result = try await environments.request(w.environmentId, "server.updateSettings", .object(["patch": .object(w.patch)]), timeout: .seconds(30))
+                composer?.applySettings(w.environmentId, result)
+                // An older server drops a key it does not know and still succeeds (scopedSettings.ts, 8ac4b97da).
+                if let previous, !SettingsScopeState.droppedKeys(w.patch, previous: previous, saved: result).isEmpty {
+                    failures.append("Could not save on \(w.label): This environment does not support this setting. Update T3 Code on it.")
+                    continue
                 }
+                saved.append(w.label)
+            } catch {
+                failures.append("Could not save on \(w.label): \(Self.rpcMessage(error, fallback: "The save failed. Try reconnecting and saving again."))")
             }
-            guard !failures.isEmpty else { return }
-            toast(saved.isEmpty ? "Setting not saved" : "Setting saved on some environments",
-                  (failures + (saved.isEmpty ? [] : ["Saved on \(saved.joined(separator: ", "))."])).joined(separator: "\n"), .error)
         }
+        guard !failures.isEmpty else { return }
+        toast(saved.isEmpty ? "Setting not saved" : "Setting saved on some environments",
+              (failures + (saved.isEmpty ? [] : ["Saved on \(saved.joined(separator: ", "))."])).joined(separator: "\n"), .error)
     }
 
     // MARK: Projects (ProjectSettingsPanel.tsx)
