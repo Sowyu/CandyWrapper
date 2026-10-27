@@ -2,10 +2,10 @@ import AppKit
 import Testing
 @testable import Features
 
-/// Opt-in audit regressions. These assert the intended behavior and expose existing failures.
+/// Regressions for audit IMG-1 and IMG-3 (docs/research/responsiveness-audit-2026-10-26/images.md).
 /// No window, network, server, account or fixture file is needed.
 @MainActor
-@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["CW_IMAGE_AUDIT_REGRESSIONS"] == "1"))
+@Suite(.serialized)
 struct ImageLoadingAuditTests {
     @MainActor
     final class FetchGate {
