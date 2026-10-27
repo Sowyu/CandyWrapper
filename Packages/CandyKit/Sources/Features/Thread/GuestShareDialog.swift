@@ -15,7 +15,7 @@ public final class GuestShareDialog {
     public let done = ButtonView("Done", variant: .default, size: .sm)
     public let copy = ButtonView("Copy", icon: .copy, variant: .outline, size: .sm)
     public let link = InputView()
-    private let body = Paragraph(font: DSFont.ui(14), lineHeight: 20, color: Themed.color(\.mutedForeground))
+    let body = Paragraph(font: DSFont.ui(14), lineHeight: 20, color: Themed.color(\.mutedForeground))
     private let error = Paragraph(font: DSFont.ui(12), lineHeight: 16, color: Themed.color(\.destructive))
     private let linkRow: LinkRow
     private var copiedReset: DispatchWorkItem?
@@ -60,6 +60,18 @@ public final class GuestShareDialog {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: reset)
         }
         update()
+    }
+
+    /// Follows the thread's own projection while the dialog shows, as T3's dialog reads `thread.guestShare` through
+    /// `useQuietThreadProjection` (GuestShareControls.tsx:44-46, 72), so a thread shared from the sidebar warns too.
+    /// `watchThread` is `ThreadLineageController.watchThread`; call the returned closure when the dialog closes.
+    public func follow(_ threadId: ThreadId, watchThread: ((ThreadId, @escaping @MainActor @Sendable (ThreadProjection) -> Void) -> (@MainActor () -> Void))?) -> @MainActor () -> Void {
+        guard let watchThread else { return {} }
+        return watchThread(threadId) { [weak self] projection in
+            guard let self else { return }
+            let active = projection.thread.guestShare != nil
+            if self.hasActiveShare != active { self.hasActiveShare = active }
+        }
     }
 
     public func succeeded(url: String) { state = .created(url: url) }

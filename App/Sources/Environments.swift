@@ -151,7 +151,13 @@ final class Environments {
 
     /// This client's session per environment (`GET /api/auth/session`), read once per connected session.
     private var authSessions: [String: AuthSessionState] = [:]
-    func setAuthSession(_ session: AuthSessionState?, for environmentId: String) { authSessions[environmentId] = session }
+    func setAuthSession(_ session: AuthSessionState?, for environmentId: String) {
+        guard authSessions[environmentId] != session else { return }
+        authSessions[environmentId] = session
+        onAuthSession?(environmentId)
+    }
+    /// A session's grants changed; the guest share dialog follows them while it shows.
+    var onAuthSession: ((String) -> Void)?
     func authSession(_ environmentId: String) -> AuthSessionState? { authSessions[environmentId] }
 
     /// `readEnvironmentScope(id, orchestration:operate)`: whether this connection may change threads.
@@ -162,9 +168,10 @@ final class Environments {
         return session.grants(AuthScopes.orchestrationOperate)
     }
     /// `guestShare.create`'s grant, `access:write` (clientRpcPermissions.ts:53-54 at 3669): a guest link hands thread
-    /// access to someone outside, like a pairing link. Unknown counts as allowed, as in `canOperate`.
+    /// access to someone outside, like a pairing link. A session not read yet, or a failed read, denies it, as T3's
+    /// `permissionAtom` does (commandPermissions.ts:27-33).
     func canCreateGuestShare(_ environmentId: String) -> Bool {
-        authSessions[environmentId]?.grants(AuthScopes.accessWrite) ?? true
+        authSessions[environmentId]?.grants(AuthScopes.accessWrite) ?? false
     }
     /// The route the session uses.
     func routeInUse(_ environmentId: String) -> URL? { entries[environmentId]?.session?.http.baseURL }

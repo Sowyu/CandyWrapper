@@ -14,10 +14,18 @@ final class GuestShareController {
     private var host: ModalHost?
     /// The open dialog's controller; the host keeps only its view.
     private var sheet: GuestShareDialog?
+    private var sheetThread: ThreadId?
 
     init(environments: Environments, threads: ThreadController) {
         self.environments = environments
         self.threads = threads
+        // `createGuestShare.permissionAtom` is live in T3's dialog (GuestShareControls.tsx:73-75): a session's
+        // grants landing or changing while it shows enable or disable Create link.
+        environments.onAuthSession = { [weak self, weak environments] changed in
+            guard let self, let environments, let sheet = self.sheet, let env = self.sheetThread?.environmentId, env == changed else { return }
+            let allowed = environments.canCreateGuestShare(env)
+            if sheet.canCreate != allowed { sheet.canCreate = allowed }
+        }
     }
 
     /// `canShareWithGuestAtom`: the user may call `guestShare.create` there and its Guest links beta is on. A server
@@ -28,17 +36,27 @@ final class GuestShareController {
             && threads?.composer.config(environmentId)?.settings.raw["guestSharingEnabled"] == .bool(true)
     }
 
-    /// `openGuestShareDialog` for a scoped thread id.
-    // ponytail: "A new link ends the current one." knows only the open thread's share, where T3 reads any thread's
-    // projection; read the thread's projection here if sharing from the sidebar for another thread needs it
+    /// `openGuestShareDialog` for a scoped thread id. The open thread's share shows at once; any thread's share,
+    /// the open one or another from the sidebar, then follows its own `orchestration.subscribeThread` until it closes.
+    // ponytail: the guest-sharing setting isn't read here, as in T3's dialog; the server refuses the link if it's off
     func present(_ threadId: ThreadId, in window: NSWindow) {
         guard host == nil, let env = threadId.environmentId else { return }
         let active = threads?.lineage.guest.share(for: threadId) != nil
         let sheet = GuestShareDialog(hasActiveShare: active, canCreate: environments.canCreateGuestShare(env))
+        let stopWatching = sheet.follow(threadId, watchThread: threads?.lineage.watchThread)
         let host = ModalHost.present(sheet.dialog, in: window)
         self.host = host
         self.sheet = sheet
-        host.onDismiss = { [weak self, weak host] in if self?.host === host { self?.host = nil; self?.sheet = nil } }
+        sheetThread = threadId
+        // Closing the window ends the dialog and its watch at once.
+        let windowClose = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.host?.close(animated: false) }
+        }
+        host.onDismiss = { [weak self, weak host] in
+            stopWatching()
+            NotificationCenter.default.removeObserver(windowClose)
+            if self?.host === host { self?.host = nil; self?.sheet = nil; self?.sheetThread = nil }
+        }
         sheet.onClose = { [weak host] in host?.close() }
         sheet.onCopy = { url in
             NSPasteboard.general.clearContents()
