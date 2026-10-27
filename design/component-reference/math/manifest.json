@@ -1,0 +1,158 @@
+{
+  "01-power" : {
+    "height" : 28.8203125,
+    "width" : 20.46875
+  },
+  "02-scripts" : {
+    "height" : 28.8203125,
+    "width" : 20.46875
+  },
+  "03-inline-fraction" : {
+    "height" : 28.75,
+    "width" : 14.3359375
+  },
+  "04-display-fraction" : {
+    "height" : 42.2578125,
+    "width" : 480
+  },
+  "05-square-root" : {
+    "height" : 28.75,
+    "width" : 27.8046875
+  },
+  "06-cube-root" : {
+    "height" : 28.75,
+    "width" : 480
+  },
+  "07-greek" : {
+    "height" : 28.8203125,
+    "width" : 78.390625
+  },
+  "08-gamma" : {
+    "height" : 28.8203125,
+    "width" : 117.765625
+  },
+  "09-display-sum" : {
+    "height" : 55.6171875,
+    "width" : 480
+  },
+  "10-inline-sum" : {
+    "height" : 28.8203125,
+    "width" : 59.4375
+  },
+  "11-gaussian-integral" : {
+    "height" : 46.46875,
+    "width" : 480
+  },
+  "12-inline-integral" : {
+    "height" : 30.0078125,
+    "width" : 78.375
+  },
+  "13-product" : {
+    "height" : 56.03125,
+    "width" : 480
+  },
+  "14-limit" : {
+    "height" : 40.9296875,
+    "width" : 480
+  },
+  "15-energy" : {
+    "height" : 28.8203125,
+    "width" : 69.046875
+  },
+  "16-relations" : {
+    "height" : 28.8203125,
+    "width" : 104.1484375
+  },
+  "17-delimiters" : {
+    "height" : 40.5546875,
+    "width" : 480
+  },
+  "18-matrix" : {
+    "height" : 46.6484375,
+    "width" : 480
+  },
+  "19-identity-matrix" : {
+    "height" : 66.9765625,
+    "width" : 480
+  },
+  "20-cases" : {
+    "height" : 56.8125,
+    "width" : 480
+  },
+  "21-aligned" : {
+    "height" : 51.734375,
+    "width" : 480
+  },
+  "22-text" : {
+    "height" : 28.8203125,
+    "width" : 109.21875
+  },
+  "23-accents" : {
+    "height" : 28.75,
+    "width" : 133.3359375
+  },
+  "24-blackboard" : {
+    "height" : 28.75,
+    "width" : 62.78125
+  },
+  "25-bold" : {
+    "height" : 28.75,
+    "width" : 72.1875
+  },
+  "26-quantifiers" : {
+    "height" : 28.8203125,
+    "width" : 107.546875
+  },
+  "27-binomial" : {
+    "height" : 46.6484375,
+    "width" : 480
+  },
+  "28-spacing" : {
+    "height" : 28.8203125,
+    "width" : 102.625
+  },
+  "29-divergence" : {
+    "height" : 38.921875,
+    "width" : 480
+  },
+  "30-quadratic" : {
+    "height" : 44.5546875,
+    "width" : 480
+  },
+  "31-overline" : {
+    "height" : 28.75,
+    "width" : 64.6953125
+  },
+  "32-norm" : {
+    "height" : 28.8203125,
+    "width" : 119.0625
+  },
+  "33-determinant" : {
+    "height" : 28.8203125,
+    "width" : 123.859375
+  },
+  "34-euler" : {
+    "height" : 28.8203125,
+    "width" : 480
+  },
+  "35-set" : {
+    "height" : 28.8203125,
+    "width" : 167.40625
+  },
+  "36-paragraph-energy" : {
+    "height" : 28.8203125,
+    "width" : 480
+  },
+  "37-paragraph-fraction" : {
+    "height" : 28.75,
+    "width" : 480
+  },
+  "38-paragraph-sum" : {
+    "height" : 28.8203125,
+    "width" : 480
+  },
+  "39-fallback" : {
+    "height" : 28.75,
+    "width" : 75.2578125
+  }
+}

@@ -10,6 +10,11 @@
 // `disabled` attribute, for wrappers styled with `:has()` (Input, Textarea, InputGroup).
 // `prepare` (optional) is a JS expression run once per theme after load, awaited if it returns a
 // promise, for markup that T3 builds at runtime (Shiki highlighting in the markdown spec).
+// `stylesheets` (optional) lists additional local CSS paths (repo-relative or ~/).
+// `scales` (optional) captures each device scale; scale 1 has no suffix, others use @Nx.
+// Without `scales`, filenames and the default 2x captures stay unchanged.
+// `measure` (optional) is a JS function (caseIndex, clip, scale) returning a JSON value
+// stored under the PNG filename in metrics.json. It must leave the DOM unchanged.
 // States: rest, hover, active (hover + active), focus-visible (focus + focus-visible), disabled
 // (the `disabled` attribute). Pseudo classes are forced with CSS.forcePseudoState.
 // Output: design/component-reference/<component>/<case>.<state>.<theme>.png at 2x, clipped to the
@@ -27,6 +32,12 @@ let cases = spec["cases"] as! [[String: Any]]
 let outDir = root.appendingPathComponent("design/component-reference/\(component)")
 try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
 let pad = 8.0, scale = 2.0
+// Opt-in scales keep the legacy 2x filenames and output unchanged.
+let scales = spec["scales"] as? [Double] ?? [scale]
+let stylesheets = (spec["stylesheets"] as? [String] ?? []).map { path in
+    let expanded = (path as NSString).expandingTildeInPath
+    return URL(fileURLWithPath: expanded, relativeTo: root).absoluteString
+}
 
 // MARK: - Pages
 
@@ -47,7 +58,7 @@ func page(theme: String) throws -> URL {
     }.joined(separator: "\n")
     let html = """
     <!doctype html><html lang="en" class="\(theme == "dark" ? "dark" : "")"><head><meta charset="utf-8">
-    <link rel="stylesheet" href="\(cssURL)"><style>\(harnessCSS)</style></head><body>\(body)</body></html>
+    <link rel="stylesheet" href="\(cssURL)">\(stylesheets.map { "<link rel=\"stylesheet\" href=\"\($0)\">" }.joined())<style>\(harnessCSS)</style></head><body>\(body)</body></html>
     """
     let url = work.appendingPathComponent("\(theme).html")
     try html.write(to: url, atomically: true, encoding: .utf8)
@@ -130,58 +141,74 @@ try await send("DOM.enable")
 try await send("CSS.enable")
 try await send("Emulation.setDeviceMetricsOverride", ["width": 900, "height": 900, "deviceScaleFactor": scale, "mobile": false])
 var manifest: [String: [String: Double]] = [:]
-for theme in themes {
-    try await send("Page.navigate", ["url": try page(theme: theme).absoluteString])
-    await sleep(1)
-    _ = try await evaluate("document.fonts.ready.then(() => true)")
-    if let prepare = spec["prepare"] as? String {
-        // The first import of T3's client chunks in a fresh profile can navigate the page, which
-        // drops the evaluation. Reload once and run it again.
-        var result = try await evaluate(prepare)
-        if result == nil {
-            try await send("Page.navigate", ["url": try page(theme: theme).absoluteString])
-            await sleep(1)
-            result = try await evaluate(prepare)
-        }
-        print("prepare (\(theme)): \(result ?? "no result")")
-    }
-    let docHeight = try await evaluate("document.documentElement.scrollHeight") as? Double ?? 900
-    try await send("Emulation.setDeviceMetricsOverride", ["width": 900, "height": Int(docHeight), "deviceScaleFactor": scale, "mobile": false])
-    try await settle()
-    let doc = try await send("DOM.getDocument", ["depth": 0])
-    let rootId = (doc["root"] as! [String: Any])["nodeId"] as! Int
-    let nodeIds = (try await send("DOM.querySelectorAll", ["nodeId": rootId, "selector": ".case > div > :first-child"]))["nodeIds"] as! [Int]
-    precondition(nodeIds.count == cases.count, "found \(nodeIds.count) elements for \(cases.count) cases")
-
-    for (i, c) in cases.enumerated() {
-        let name = c["name"] as! String
-        let rect = try await evaluate("(() => { const r = document.querySelectorAll('.case > div > :first-child')[\(i)].getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; })()") as! [Double]
-        manifest[name] = ["width": rect[2], "height": rect[3]]
-        let clip: [String: Any] = ["x": rect[0] - pad, "y": rect[1] - pad, "width": rect[2] + 2 * pad, "height": rect[3] + 2 * pad, "scale": 1]
-        var target = nodeIds[i]
-        if let selector = c["stateTarget"] as? String {
-            let found = try await send("DOM.querySelector", ["nodeId": nodeIds[i], "selector": selector])
-            guard let id = found["nodeId"] as? Int, id != 0 else { print("\(name): no element for stateTarget \(selector)"); exit(1) }
-            target = id
-        }
-        for state in states {
-            let forced: [String] = switch state {
-            case "hover": ["hover"]
-            case "active": ["hover", "active"]
-            case "focus-visible": ["focus", "focus-visible"]
-            default: []
+var metrics: [String: Any] = [:]
+for captureScale in scales {
+    for theme in themes {
+        try await send("Page.navigate", ["url": try page(theme: theme).absoluteString])
+        await sleep(1)
+        _ = try await evaluate("document.fonts.ready.then(() => true)")
+        if let prepare = spec["prepare"] as? String {
+            // The first import of T3's client chunks in a fresh profile can navigate the page, which
+            // drops the evaluation. Reload once and run it again.
+            var result = try await evaluate(prepare)
+            if result == nil {
+                try await send("Page.navigate", ["url": try page(theme: theme).absoluteString])
+                await sleep(1)
+                result = try await evaluate(prepare)
             }
-            if state == "disabled" { try await send("DOM.setAttributeValue", ["nodeId": target, "name": "disabled", "value": ""]) }
-            try await send("CSS.forcePseudoState", ["nodeId": target, "forcedPseudoClasses": forced])
-            try await settle()
-            let shot = try await send("Page.captureScreenshot", ["format": "png", "clip": clip, "captureBeyondViewport": false])
-            guard let b64 = shot["data"] as? String, let png = Data(base64Encoded: b64) else { print("no screenshot for \(name).\(state)"); continue }
-            try png.write(to: outDir.appendingPathComponent("\(name).\(state).\(theme).png"))
-            try await send("CSS.forcePseudoState", ["nodeId": target, "forcedPseudoClasses": [String]()])
-            if state == "disabled" { try await send("DOM.removeAttribute", ["nodeId": target, "name": "disabled"]) }
+            print("prepare (\(theme)): \(result ?? "no result")")
         }
+        let docHeight = try await evaluate("document.documentElement.scrollHeight") as? Double ?? 900
+        try await send("Emulation.setDeviceMetricsOverride", ["width": 900, "height": Int(docHeight), "deviceScaleFactor": captureScale, "mobile": false])
+        try await settle()
+        let doc = try await send("DOM.getDocument", ["depth": 0])
+        let rootId = (doc["root"] as! [String: Any])["nodeId"] as! Int
+        let nodeIds = (try await send("DOM.querySelectorAll", ["nodeId": rootId, "selector": ".case > div > :first-child"]))["nodeIds"] as! [Int]
+        precondition(nodeIds.count == cases.count, "found \(nodeIds.count) elements for \(cases.count) cases")
+
+        for (i, c) in cases.enumerated() {
+            let name = c["name"] as! String
+            let rect = try await evaluate("(() => { const r = document.querySelectorAll('.case > div > :first-child')[\(i)].getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; })()") as! [Double]
+            manifest[name] = ["width": rect[2], "height": rect[3]]
+            let clip: [String: Any] = ["x": rect[0] - pad, "y": rect[1] - pad, "width": rect[2] + 2 * pad, "height": rect[3] + 2 * pad, "scale": 1]
+            var target = nodeIds[i]
+            if let selector = c["stateTarget"] as? String {
+                let found = try await send("DOM.querySelector", ["nodeId": nodeIds[i], "selector": selector])
+                guard let id = found["nodeId"] as? Int, id != 0 else { print("\(name): no element for stateTarget \(selector)"); exit(1) }
+                target = id
+            }
+            for state in states {
+                let forced: [String] = switch state {
+                case "hover": ["hover"]
+                case "active": ["hover", "active"]
+                case "focus-visible": ["focus", "focus-visible"]
+                default: []
+                }
+                if state == "disabled" { try await send("DOM.setAttributeValue", ["nodeId": target, "name": "disabled", "value": ""]) }
+                try await send("CSS.forcePseudoState", ["nodeId": target, "forcedPseudoClasses": forced])
+                try await settle()
+                let shot = try await send("Page.captureScreenshot", ["format": "png", "clip": clip, "captureBeyondViewport": false])
+                guard let b64 = shot["data"] as? String, let png = Data(base64Encoded: b64) else { print("no screenshot for \(name).\(state)"); continue }
+                let suffix = spec["scales"] == nil || captureScale == 1 ? "" : "@\(Int(captureScale))x"
+                let filename = "\(name).\(state).\(theme)\(suffix).png"
+                try png.write(to: outDir.appendingPathComponent(filename))
+                if let measure = spec["measure"] as? String {
+                    let clipJSON = String(decoding: try JSONSerialization.data(withJSONObject: clip), as: UTF8.self)
+                    guard let value = try await evaluate("(\(measure))(\(i), \(clipJSON), \(captureScale))") else {
+                        fatalError("measurement failed for \(filename)")
+                    }
+                    metrics[filename] = value
+                }
+                try await send("CSS.forcePseudoState", ["nodeId": target, "forcedPseudoClasses": [String]()])
+                if state == "disabled" { try await send("DOM.removeAttribute", ["nodeId": target, "name": "disabled"]) }
+            }
+        }
+        print("\(theme): \(cases.count * states.count) images")
     }
-    print("\(theme): \(cases.count * states.count) images")
+}
+if spec["measure"] != nil {
+    let data = try JSONSerialization.data(withJSONObject: metrics, options: [.prettyPrinted, .sortedKeys])
+    try data.write(to: outDir.appendingPathComponent("metrics.json"))
 }
 let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
 try manifestData.write(to: outDir.appendingPathComponent("manifest.json"))

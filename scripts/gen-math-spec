@@ -1,0 +1,5 @@
+#!/bin/sh
+# Run with the research Node install when node is absent from PATH.
+set -eu
+cd "$(dirname "$0")/.."
+exec "$HOME/CandyWrapper-research/tools/node-v24.22.1-darwin-arm64/bin/node" scripts/gen-math-spec.cjs

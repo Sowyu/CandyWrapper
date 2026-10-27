@@ -1,0 +1,5258 @@
+{
+  "01-power.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 36.46875,
+      "x" : 16,
+      "y" : 16
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 16.46875,
+      "depth" : 0,
+      "height" : 13.789099999999999,
+      "width" : 16.46875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 20.46875
+    }
+  },
+  "01-power.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 36.46875,
+      "x" : 16,
+      "y" : 16
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 16.46875,
+      "depth" : 0,
+      "height" : 13.789099999999999,
+      "width" : 16.46875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 20.46875
+    }
+  },
+  "01-power.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 36.46875,
+      "x" : 16,
+      "y" : 16
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 16.46875,
+      "depth" : 0,
+      "height" : 13.789099999999999,
+      "width" : 16.46875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 20.46875
+    }
+  },
+  "01-power.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 36.46875,
+      "x" : 16,
+      "y" : 16
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 16.46875,
+      "depth" : 0,
+      "height" : 13.789099999999999,
+      "width" : 16.46875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 20.46875
+    }
+  },
+  "02-scripts.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 36.46875,
+      "x" : 16,
+      "y" : 92.8203125
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 16.46875,
+      "depth" : 4.3823800000000004,
+      "height" : 13.78952,
+      "width" : 16.46875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 20.46875
+    }
+  },
+  "02-scripts.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 36.46875,
+      "x" : 16,
+      "y" : 92.8203125
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 16.46875,
+      "depth" : 4.3823800000000004,
+      "height" : 13.78952,
+      "width" : 16.46875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 20.46875
+    }
+  },
+  "02-scripts.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 36.46875,
+      "x" : 16,
+      "y" : 92.8203125
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 16.46875,
+      "depth" : 4.3823800000000004,
+      "height" : 13.78952,
+      "width" : 16.46875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 20.46875
+    }
+  },
+  "02-scripts.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 36.46875,
+      "x" : 16,
+      "y" : 92.8203125
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 16.46875,
+      "depth" : 4.3823800000000004,
+      "height" : 13.78952,
+      "width" : 16.46875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 20.46875
+    }
+  },
+  "03-inline-fraction.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 30.3359375,
+      "x" : 16,
+      "y" : 169.640625
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 10.3359375,
+      "depth" : 5.8442999999999996,
+      "height" : 11.7729,
+      "width" : 10.3359375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 14.3359375
+    }
+  },
+  "03-inline-fraction.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 30.3359375,
+      "x" : 16,
+      "y" : 169.640625
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 10.3359375,
+      "depth" : 5.8442999999999996,
+      "height" : 11.7729,
+      "width" : 10.3359375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 14.3359375
+    }
+  },
+  "03-inline-fraction.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 30.3359375,
+      "x" : 16,
+      "y" : 169.640625
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 10.3359375,
+      "depth" : 5.8442999999999996,
+      "height" : 11.7729,
+      "width" : 10.3359375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 14.3359375
+    }
+  },
+  "03-inline-fraction.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 30.3359375,
+      "x" : 16,
+      "y" : 169.640625
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 10.3359375,
+      "depth" : 5.8442999999999996,
+      "height" : 11.7729,
+      "width" : 10.3359375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 14.3359375
+    }
+  },
+  "04-display-fraction.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 58.2578125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 246.390625
+    },
+    "formula" : {
+      "baselinePixelY" : 34.2265625,
+      "baselineY" : 34.2265625,
+      "contentWidth" : 41,
+      "depth" : 13.0319,
+      "height" : 23.225900000000003,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 42.2578125,
+      "width" : 480
+    }
+  },
+  "04-display-fraction.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 58.2578125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 246.390625
+    },
+    "formula" : {
+      "baselinePixelY" : 68.453125,
+      "baselineY" : 34.2265625,
+      "contentWidth" : 41,
+      "depth" : 13.0319,
+      "height" : 23.225900000000003,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 42.2578125,
+      "width" : 480
+    }
+  },
+  "04-display-fraction.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 58.2578125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 246.390625
+    },
+    "formula" : {
+      "baselinePixelY" : 34.2265625,
+      "baselineY" : 34.2265625,
+      "contentWidth" : 41,
+      "depth" : 13.0319,
+      "height" : 23.225900000000003,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 42.2578125,
+      "width" : 480
+    }
+  },
+  "04-display-fraction.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 58.2578125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 246.390625
+    },
+    "formula" : {
+      "baselinePixelY" : 68.453125,
+      "baselineY" : 34.2265625,
+      "contentWidth" : 41,
+      "depth" : 13.0319,
+      "height" : 23.225900000000003,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 42.2578125,
+      "width" : 480
+    }
+  },
+  "05-square-root.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 43.8046875,
+      "x" : 16,
+      "y" : 342.6484375
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 23.8046875,
+      "depth" : 4.0605200000000004,
+      "height" : 13.55668,
+      "width" : 23.8046875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 27.8046875
+    }
+  },
+  "05-square-root.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 43.8046875,
+      "x" : 16,
+      "y" : 342.6484375
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 23.8046875,
+      "depth" : 4.0605200000000004,
+      "height" : 13.55668,
+      "width" : 23.8046875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 27.8046875
+    }
+  },
+  "05-square-root.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 43.8046875,
+      "x" : 16,
+      "y" : 342.6484375
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 23.8046875,
+      "depth" : 4.0605200000000004,
+      "height" : 13.55668,
+      "width" : 23.8046875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 27.8046875
+    }
+  },
+  "05-square-root.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 43.8046875,
+      "x" : 16,
+      "y" : 342.6484375
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 23.8046875,
+      "depth" : 4.0605200000000004,
+      "height" : 13.55668,
+      "width" : 23.8046875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 27.8046875
+    }
+  },
+  "06-cube-root.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 496,
+      "x" : 16,
+      "y" : 419.3984375
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 52.515625,
+      "depth" : 2.1276600000000001,
+      "height" : 15.48954,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 480
+    }
+  },
+  "06-cube-root.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 496,
+      "x" : 16,
+      "y" : 419.3984375
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 52.515625,
+      "depth" : 2.1276600000000001,
+      "height" : 15.48954,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 480
+    }
+  },
+  "06-cube-root.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 496,
+      "x" : 16,
+      "y" : 419.3984375
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 52.515625,
+      "depth" : 2.1276600000000001,
+      "height" : 15.48954,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 480
+    }
+  },
+  "06-cube-root.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 496,
+      "x" : 16,
+      "y" : 419.3984375
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 52.515625,
+      "depth" : 2.1276600000000001,
+      "height" : 15.48954,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 480
+    }
+  },
+  "07-greek.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 94.390625,
+      "x" : 16,
+      "y" : 502.1484375
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 74.390625,
+      "depth" : 3.2931400000000002,
+      "height" : 11.761559999999999,
+      "width" : 74.390625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 78.390625
+    }
+  },
+  "07-greek.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 94.390625,
+      "x" : 16,
+      "y" : 502.1484375
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 74.390625,
+      "depth" : 3.2931400000000002,
+      "height" : 11.761559999999999,
+      "width" : 74.390625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 78.390625
+    }
+  },
+  "07-greek.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 94.390625,
+      "x" : 16,
+      "y" : 502.1484375
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 74.390625,
+      "depth" : 3.2931400000000002,
+      "height" : 11.761559999999999,
+      "width" : 74.390625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 78.390625
+    }
+  },
+  "07-greek.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 94.390625,
+      "x" : 16,
+      "y" : 502.1484375
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 74.390625,
+      "depth" : 3.2931400000000002,
+      "height" : 11.761559999999999,
+      "width" : 74.390625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 78.390625
+    }
+  },
+  "08-gamma.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 133.765625,
+      "x" : 16,
+      "y" : 578.96875
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 113.765625,
+      "depth" : 4.2350000000000003,
+      "height" : 12.702500000000001,
+      "width" : 113.765625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 117.765625
+    }
+  },
+  "08-gamma.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 133.765625,
+      "x" : 16,
+      "y" : 578.96875
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 113.765625,
+      "depth" : 4.2350000000000003,
+      "height" : 12.702500000000001,
+      "width" : 113.765625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 117.765625
+    }
+  },
+  "08-gamma.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 133.765625,
+      "x" : 16,
+      "y" : 578.96875
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 113.765625,
+      "depth" : 4.2350000000000003,
+      "height" : 12.702500000000001,
+      "width" : 113.765625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 117.765625
+    }
+  },
+  "08-gamma.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 133.765625,
+      "x" : 16,
+      "y" : 578.96875
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 113.765625,
+      "depth" : 4.2350000000000003,
+      "height" : 12.702500000000001,
+      "width" : 113.765625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 117.765625
+    }
+  },
+  "09-display-sum.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 71.6171875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 655.7890625
+    },
+    "formula" : {
+      "baselinePixelY" : 38.9765625,
+      "baselineY" : 38.9765625,
+      "contentWidth" : 122.4765625,
+      "depth" : 21.644200000000001,
+      "height" : 27.972999999999995,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 55.6171875,
+      "width" : 480
+    }
+  },
+  "09-display-sum.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 71.6171875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 655.7890625
+    },
+    "formula" : {
+      "baselinePixelY" : 77.953125,
+      "baselineY" : 38.9765625,
+      "contentWidth" : 122.4765625,
+      "depth" : 21.644200000000001,
+      "height" : 27.972999999999995,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 55.6171875,
+      "width" : 480
+    }
+  },
+  "09-display-sum.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 71.6171875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 655.7890625
+    },
+    "formula" : {
+      "baselinePixelY" : 38.9765625,
+      "baselineY" : 38.9765625,
+      "contentWidth" : 122.4765625,
+      "depth" : 21.644200000000001,
+      "height" : 27.972999999999995,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 55.6171875,
+      "width" : 480
+    }
+  },
+  "09-display-sum.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 71.6171875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 655.7890625
+    },
+    "formula" : {
+      "baselinePixelY" : 77.953125,
+      "baselineY" : 38.9765625,
+      "contentWidth" : 122.4765625,
+      "depth" : 21.644200000000001,
+      "height" : 27.972999999999995,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 55.6171875,
+      "width" : 480
+    }
+  },
+  "10-inline-sum.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 75.4375,
+      "x" : 16,
+      "y" : 765.40625
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 55.4375,
+      "depth" : 5.0769200000000003,
+      "height" : 13.618379999999998,
+      "width" : 55.4375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 59.4375
+    }
+  },
+  "10-inline-sum.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 75.4375,
+      "x" : 16,
+      "y" : 765.40625
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 55.4375,
+      "depth" : 5.0769200000000003,
+      "height" : 13.618379999999998,
+      "width" : 55.4375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 59.4375
+    }
+  },
+  "10-inline-sum.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 75.4375,
+      "x" : 16,
+      "y" : 765.40625
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 55.4375,
+      "depth" : 5.0769200000000003,
+      "height" : 13.618379999999998,
+      "width" : 55.4375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 59.4375
+    }
+  },
+  "10-inline-sum.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 75.4375,
+      "x" : 16,
+      "y" : 765.40625
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 55.4375,
+      "depth" : 5.0769200000000003,
+      "height" : 13.618379999999998,
+      "width" : 55.4375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 59.4375
+    }
+  },
+  "11-gaussian-integral.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 62.46875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 842.2265625
+    },
+    "formula" : {
+      "baselinePixelY" : 36.0234375,
+      "baselineY" : 36.0234375,
+      "contentWidth" : 134.6484375,
+      "depth" : 15.4476,
+      "height" : 25.0198,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 46.46875,
+      "width" : 480
+    }
+  },
+  "11-gaussian-integral.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 62.46875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 842.2265625
+    },
+    "formula" : {
+      "baselinePixelY" : 72.046875,
+      "baselineY" : 36.0234375,
+      "contentWidth" : 134.6484375,
+      "depth" : 15.4476,
+      "height" : 25.0198,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 46.46875,
+      "width" : 480
+    }
+  },
+  "11-gaussian-integral.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 62.46875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 842.2265625
+    },
+    "formula" : {
+      "baselinePixelY" : 36.0234375,
+      "baselineY" : 36.0234375,
+      "contentWidth" : 134.6484375,
+      "depth" : 15.4476,
+      "height" : 25.0198,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 46.46875,
+      "width" : 480
+    }
+  },
+  "11-gaussian-integral.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 62.46875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 842.2265625
+    },
+    "formula" : {
+      "baselinePixelY" : 72.046875,
+      "baselineY" : 36.0234375,
+      "contentWidth" : 134.6484375,
+      "depth" : 15.4476,
+      "height" : 25.0198,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 46.46875,
+      "width" : 480
+    }
+  },
+  "12-inline-integral.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 46.0078125,
+      "width" : 94.375,
+      "x" : 16,
+      "y" : 942.6953125
+    },
+    "formula" : {
+      "baselinePixelY" : 28.6875,
+      "baselineY" : 28.6875,
+      "contentWidth" : 74.375,
+      "depth" : 6.0272500000000004,
+      "height" : 17.68365,
+      "width" : 74.375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 30.0078125,
+      "width" : 78.375
+    }
+  },
+  "12-inline-integral.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 46.0078125,
+      "width" : 94.375,
+      "x" : 16,
+      "y" : 942.6953125
+    },
+    "formula" : {
+      "baselinePixelY" : 57.375,
+      "baselineY" : 28.6875,
+      "contentWidth" : 74.375,
+      "depth" : 6.0272500000000004,
+      "height" : 17.68365,
+      "width" : 74.375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 30.0078125,
+      "width" : 78.375
+    }
+  },
+  "12-inline-integral.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 46.0078125,
+      "width" : 94.375,
+      "x" : 16,
+      "y" : 942.6953125
+    },
+    "formula" : {
+      "baselinePixelY" : 28.6875,
+      "baselineY" : 28.6875,
+      "contentWidth" : 74.375,
+      "depth" : 6.0272500000000004,
+      "height" : 17.68365,
+      "width" : 74.375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 30.0078125,
+      "width" : 78.375
+    }
+  },
+  "12-inline-integral.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 46.0078125,
+      "width" : 94.375,
+      "x" : 16,
+      "y" : 942.6953125
+    },
+    "formula" : {
+      "baselinePixelY" : 57.375,
+      "baselineY" : 28.6875,
+      "contentWidth" : 74.375,
+      "depth" : 6.0272500000000004,
+      "height" : 17.68365,
+      "width" : 74.375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 30.0078125,
+      "width" : 78.375
+    }
+  },
+  "13-product.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 72.03125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1020.703125
+    },
+    "formula" : {
+      "baselinePixelY" : 38.9765625,
+      "baselineY" : 38.9765625,
+      "contentWidth" : 33.8828125,
+      "depth" : 22.057600000000001,
+      "height" : 27.973599999999998,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 56.03125,
+      "width" : 480
+    }
+  },
+  "13-product.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 72.03125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1020.703125
+    },
+    "formula" : {
+      "baselinePixelY" : 77.953125,
+      "baselineY" : 38.9765625,
+      "contentWidth" : 33.8828125,
+      "depth" : 22.057600000000001,
+      "height" : 27.973599999999998,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 56.03125,
+      "width" : 480
+    }
+  },
+  "13-product.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 72.03125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1020.703125
+    },
+    "formula" : {
+      "baselinePixelY" : 38.9765625,
+      "baselineY" : 38.9765625,
+      "contentWidth" : 33.8828125,
+      "depth" : 22.057600000000001,
+      "height" : 27.973599999999998,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 56.03125,
+      "width" : 480
+    }
+  },
+  "13-product.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 72.03125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1020.703125
+    },
+    "formula" : {
+      "baselinePixelY" : 77.953125,
+      "baselineY" : 38.9765625,
+      "contentWidth" : 33.8828125,
+      "depth" : 22.057600000000001,
+      "height" : 27.973599999999998,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 56.03125,
+      "width" : 480
+    }
+  },
+  "14-limit.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 56.9296875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1130.734375
+    },
+    "formula" : {
+      "baselinePixelY" : 33.7890625,
+      "baselineY" : 33.7890625,
+      "contentWidth" : 95.8359375,
+      "depth" : 12.1477,
+      "height" : 22.781999999999996,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 40.9296875,
+      "width" : 480
+    }
+  },
+  "14-limit.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 56.9296875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1130.734375
+    },
+    "formula" : {
+      "baselinePixelY" : 67.578125,
+      "baselineY" : 33.7890625,
+      "contentWidth" : 95.8359375,
+      "depth" : 12.1477,
+      "height" : 22.781999999999996,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 40.9296875,
+      "width" : 480
+    }
+  },
+  "14-limit.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 56.9296875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1130.734375
+    },
+    "formula" : {
+      "baselinePixelY" : 33.7890625,
+      "baselineY" : 33.7890625,
+      "contentWidth" : 95.8359375,
+      "depth" : 12.1477,
+      "height" : 22.781999999999996,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 40.9296875,
+      "width" : 480
+    }
+  },
+  "14-limit.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 56.9296875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1130.734375
+    },
+    "formula" : {
+      "baselinePixelY" : 67.578125,
+      "baselineY" : 33.7890625,
+      "contentWidth" : 95.8359375,
+      "depth" : 12.1477,
+      "height" : 22.781999999999996,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 40.9296875,
+      "width" : 480
+    }
+  },
+  "15-energy.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 85.046875,
+      "x" : 16,
+      "y" : 1225.6640625
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 65.046875,
+      "depth" : 0,
+      "height" : 13.789099999999999,
+      "width" : 65.046875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 69.046875
+    }
+  },
+  "15-energy.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 85.046875,
+      "x" : 16,
+      "y" : 1225.6640625
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 65.046875,
+      "depth" : 0,
+      "height" : 13.789099999999999,
+      "width" : 65.046875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 69.046875
+    }
+  },
+  "15-energy.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 85.046875,
+      "x" : 16,
+      "y" : 1225.6640625
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 65.046875,
+      "depth" : 0,
+      "height" : 13.789099999999999,
+      "width" : 65.046875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 69.046875
+    }
+  },
+  "15-energy.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 85.046875,
+      "x" : 16,
+      "y" : 1225.6640625
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 65.046875,
+      "depth" : 0,
+      "height" : 13.789099999999999,
+      "width" : 65.046875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 69.046875
+    }
+  },
+  "16-relations.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 120.1484375,
+      "x" : 16,
+      "y" : 1302.484375
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 100.1484375,
+      "depth" : 3.2931400000000002,
+      "height" : 11.761559999999999,
+      "width" : 100.1484375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 104.1484375
+    }
+  },
+  "16-relations.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 120.1484375,
+      "x" : 16,
+      "y" : 1302.484375
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 100.1484375,
+      "depth" : 3.2931400000000002,
+      "height" : 11.761559999999999,
+      "width" : 100.1484375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 104.1484375
+    }
+  },
+  "16-relations.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 120.1484375,
+      "x" : 16,
+      "y" : 1302.484375
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 100.1484375,
+      "depth" : 3.2931400000000002,
+      "height" : 11.761559999999999,
+      "width" : 100.1484375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 104.1484375
+    }
+  },
+  "16-relations.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 120.1484375,
+      "x" : 16,
+      "y" : 1302.484375
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 100.1484375,
+      "depth" : 3.2931400000000002,
+      "height" : 11.761559999999999,
+      "width" : 100.1484375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 104.1484375
+    }
+  },
+  "17-delimiters.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 56.5546875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1379.3046875
+    },
+    "formula" : {
+      "baselinePixelY" : 33.9375,
+      "baselineY" : 33.9375,
+      "contentWidth" : 40.0390625,
+      "depth" : 11.620799999999999,
+      "height" : 22.933899999999998,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 40.5546875,
+      "width" : 480
+    }
+  },
+  "17-delimiters.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 56.5546875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1379.3046875
+    },
+    "formula" : {
+      "baselinePixelY" : 67.875,
+      "baselineY" : 33.9375,
+      "contentWidth" : 40.0390625,
+      "depth" : 11.620799999999999,
+      "height" : 22.933899999999998,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 40.5546875,
+      "width" : 480
+    }
+  },
+  "17-delimiters.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 56.5546875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1379.3046875
+    },
+    "formula" : {
+      "baselinePixelY" : 33.9375,
+      "baselineY" : 33.9375,
+      "contentWidth" : 40.0390625,
+      "depth" : 11.620799999999999,
+      "height" : 22.933899999999998,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 40.5546875,
+      "width" : 480
+    }
+  },
+  "17-delimiters.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 56.5546875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1379.3046875
+    },
+    "formula" : {
+      "baselinePixelY" : 67.875,
+      "baselineY" : 33.9375,
+      "contentWidth" : 40.0390625,
+      "depth" : 11.620799999999999,
+      "height" : 22.933899999999998,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 40.5546875,
+      "width" : 480
+    }
+  },
+  "18-matrix.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 62.6484375,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1473.859375
+    },
+    "formula" : {
+      "baselinePixelY" : 35.5625,
+      "baselineY" : 35.5625,
+      "contentWidth" : 59.65625,
+      "depth" : 16.093,
+      "height" : 24.555400000000002,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 46.6484375,
+      "width" : 480
+    }
+  },
+  "18-matrix.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 62.6484375,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1473.859375
+    },
+    "formula" : {
+      "baselinePixelY" : 71.125,
+      "baselineY" : 35.5625,
+      "contentWidth" : 59.65625,
+      "depth" : 16.093,
+      "height" : 24.555400000000002,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 46.6484375,
+      "width" : 480
+    }
+  },
+  "18-matrix.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 62.6484375,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1473.859375
+    },
+    "formula" : {
+      "baselinePixelY" : 35.5625,
+      "baselineY" : 35.5625,
+      "contentWidth" : 59.65625,
+      "depth" : 16.093,
+      "height" : 24.555400000000002,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 46.6484375,
+      "width" : 480
+    }
+  },
+  "18-matrix.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 62.6484375,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1473.859375
+    },
+    "formula" : {
+      "baselinePixelY" : 71.125,
+      "baselineY" : 35.5625,
+      "contentWidth" : 59.65625,
+      "depth" : 16.093,
+      "height" : 24.555400000000002,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 46.6484375,
+      "width" : 480
+    }
+  },
+  "19-identity-matrix.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 82.9765625,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1574.5078125
+    },
+    "formula" : {
+      "baselinePixelY" : 45.7265625,
+      "baselineY" : 45.7265625,
+      "contentWidth" : 81.8984375,
+      "depth" : 26.257000000000001,
+      "height" : 34.7196,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 66.9765625,
+      "width" : 480
+    }
+  },
+  "19-identity-matrix.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 82.9765625,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1574.5078125
+    },
+    "formula" : {
+      "baselinePixelY" : 91.453125,
+      "baselineY" : 45.7265625,
+      "contentWidth" : 81.8984375,
+      "depth" : 26.257000000000001,
+      "height" : 34.7196,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 66.9765625,
+      "width" : 480
+    }
+  },
+  "19-identity-matrix.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 82.9765625,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1574.5078125
+    },
+    "formula" : {
+      "baselinePixelY" : 45.7265625,
+      "baselineY" : 45.7265625,
+      "contentWidth" : 81.8984375,
+      "depth" : 26.257000000000001,
+      "height" : 34.7196,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 66.9765625,
+      "width" : 480
+    }
+  },
+  "19-identity-matrix.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 82.9765625,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1574.5078125
+    },
+    "formula" : {
+      "baselinePixelY" : 91.453125,
+      "baselineY" : 45.7265625,
+      "contentWidth" : 81.8984375,
+      "depth" : 26.257000000000001,
+      "height" : 34.7196,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 66.9765625,
+      "width" : 480
+    }
+  },
+  "20-cases.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 72.8125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1695.484375
+    },
+    "formula" : {
+      "baselinePixelY" : 40.640625,
+      "baselineY" : 40.640625,
+      "contentWidth" : 151.8515625,
+      "depth" : 21.175000000000001,
+      "height" : 29.637499999999999,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 56.8125,
+      "width" : 480
+    }
+  },
+  "20-cases.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 72.8125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1695.484375
+    },
+    "formula" : {
+      "baselinePixelY" : 81.28125,
+      "baselineY" : 40.640625,
+      "contentWidth" : 151.8515625,
+      "depth" : 21.175000000000001,
+      "height" : 29.637499999999999,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 56.8125,
+      "width" : 480
+    }
+  },
+  "20-cases.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 72.8125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1695.484375
+    },
+    "formula" : {
+      "baselinePixelY" : 40.640625,
+      "baselineY" : 40.640625,
+      "contentWidth" : 151.8515625,
+      "depth" : 21.175000000000001,
+      "height" : 29.637499999999999,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 56.8125,
+      "width" : 480
+    }
+  },
+  "20-cases.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 72.8125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1695.484375
+    },
+    "formula" : {
+      "baselinePixelY" : 81.28125,
+      "baselineY" : 40.640625,
+      "contentWidth" : 151.8515625,
+      "depth" : 21.175000000000001,
+      "height" : 29.637499999999999,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 56.8125,
+      "width" : 480
+    }
+  },
+  "21-aligned.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 67.734375,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1806.296875
+    },
+    "formula" : {
+      "baselinePixelY" : 38.1015625,
+      "baselineY" : 38.1015625,
+      "contentWidth" : 66.859375,
+      "depth" : 18.634,
+      "height" : 27.1004,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 51.734375,
+      "width" : 480
+    }
+  },
+  "21-aligned.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 67.734375,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1806.296875
+    },
+    "formula" : {
+      "baselinePixelY" : 76.203125,
+      "baselineY" : 38.1015625,
+      "contentWidth" : 66.859375,
+      "depth" : 18.634,
+      "height" : 27.1004,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 51.734375,
+      "width" : 480
+    }
+  },
+  "21-aligned.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 67.734375,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1806.296875
+    },
+    "formula" : {
+      "baselinePixelY" : 38.1015625,
+      "baselineY" : 38.1015625,
+      "contentWidth" : 66.859375,
+      "depth" : 18.634,
+      "height" : 27.1004,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 51.734375,
+      "width" : 480
+    }
+  },
+  "21-aligned.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 67.734375,
+      "width" : 496,
+      "x" : 16,
+      "y" : 1806.296875
+    },
+    "formula" : {
+      "baselinePixelY" : 76.203125,
+      "baselineY" : 38.1015625,
+      "contentWidth" : 66.859375,
+      "depth" : 18.634,
+      "height" : 27.1004,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 51.734375,
+      "width" : 480
+    }
+  },
+  "22-text.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 125.21875,
+      "x" : 16,
+      "y" : 1912.03125
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 105.21875,
+      "depth" : 3.2931400000000002,
+      "height" : 11.761559999999999,
+      "width" : 105.21875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 109.21875
+    }
+  },
+  "22-text.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 125.21875,
+      "x" : 16,
+      "y" : 1912.03125
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 105.21875,
+      "depth" : 3.2931400000000002,
+      "height" : 11.761559999999999,
+      "width" : 105.21875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 109.21875
+    }
+  },
+  "22-text.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 125.21875,
+      "x" : 16,
+      "y" : 1912.03125
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 105.21875,
+      "depth" : 3.2931400000000002,
+      "height" : 11.761559999999999,
+      "width" : 105.21875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 109.21875
+    }
+  },
+  "22-text.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 125.21875,
+      "x" : 16,
+      "y" : 1912.03125
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 105.21875,
+      "depth" : 3.2931400000000002,
+      "height" : 11.761559999999999,
+      "width" : 105.21875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 109.21875
+    }
+  },
+  "23-accents.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 149.3359375,
+      "x" : 16,
+      "y" : 1988.8515625
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 129.3359375,
+      "depth" : 3.2931400000000002,
+      "height" : 12.088900000000001,
+      "width" : 129.3359375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 133.3359375
+    }
+  },
+  "23-accents.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 149.3359375,
+      "x" : 16,
+      "y" : 1988.8515625
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 129.3359375,
+      "depth" : 3.2931400000000002,
+      "height" : 12.088900000000001,
+      "width" : 129.3359375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 133.3359375
+    }
+  },
+  "23-accents.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 149.3359375,
+      "x" : 16,
+      "y" : 1988.8515625
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 129.3359375,
+      "depth" : 3.2931400000000002,
+      "height" : 12.088900000000001,
+      "width" : 129.3359375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 133.3359375
+    }
+  },
+  "23-accents.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 149.3359375,
+      "x" : 16,
+      "y" : 1988.8515625
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 129.3359375,
+      "depth" : 3.2931400000000002,
+      "height" : 12.088900000000001,
+      "width" : 129.3359375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 133.3359375
+    }
+  },
+  "24-blackboard.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 78.78125,
+      "x" : 16,
+      "y" : 2065.6015625
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 58.78125,
+      "depth" : 0,
+      "height" : 11.664099999999999,
+      "width" : 58.78125
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 62.78125
+    }
+  },
+  "24-blackboard.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 78.78125,
+      "x" : 16,
+      "y" : 2065.6015625
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 58.78125,
+      "depth" : 0,
+      "height" : 11.664099999999999,
+      "width" : 58.78125
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 62.78125
+    }
+  },
+  "24-blackboard.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 78.78125,
+      "x" : 16,
+      "y" : 2065.6015625
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 58.78125,
+      "depth" : 0,
+      "height" : 11.664099999999999,
+      "width" : 58.78125
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 62.78125
+    }
+  },
+  "24-blackboard.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 78.78125,
+      "x" : 16,
+      "y" : 2065.6015625
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 58.78125,
+      "depth" : 0,
+      "height" : 11.664099999999999,
+      "width" : 58.78125
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 62.78125
+    }
+  },
+  "25-bold.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 88.1875,
+      "x" : 16,
+      "y" : 2142.3515625
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 68.1875,
+      "depth" : 0,
+      "height" : 10.914099999999999,
+      "width" : 68.1875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 72.1875
+    }
+  },
+  "25-bold.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 88.1875,
+      "x" : 16,
+      "y" : 2142.3515625
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 68.1875,
+      "depth" : 0,
+      "height" : 10.914099999999999,
+      "width" : 68.1875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 72.1875
+    }
+  },
+  "25-bold.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 88.1875,
+      "x" : 16,
+      "y" : 2142.3515625
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 68.1875,
+      "depth" : 0,
+      "height" : 10.914099999999999,
+      "width" : 68.1875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 72.1875
+    }
+  },
+  "25-bold.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 88.1875,
+      "x" : 16,
+      "y" : 2142.3515625
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 68.1875,
+      "depth" : 0,
+      "height" : 10.914099999999999,
+      "width" : 68.1875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 72.1875
+    }
+  },
+  "26-quantifiers.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 123.546875,
+      "x" : 16,
+      "y" : 2219.1015625
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 103.546875,
+      "depth" : 3.2931400000000002,
+      "height" : 11.761559999999999,
+      "width" : 103.546875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 107.546875
+    }
+  },
+  "26-quantifiers.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 123.546875,
+      "x" : 16,
+      "y" : 2219.1015625
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 103.546875,
+      "depth" : 3.2931400000000002,
+      "height" : 11.761559999999999,
+      "width" : 103.546875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 107.546875
+    }
+  },
+  "26-quantifiers.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 123.546875,
+      "x" : 16,
+      "y" : 2219.1015625
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 103.546875,
+      "depth" : 3.2931400000000002,
+      "height" : 11.761559999999999,
+      "width" : 103.546875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 107.546875
+    }
+  },
+  "26-quantifiers.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 123.546875,
+      "x" : 16,
+      "y" : 2219.1015625
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 103.546875,
+      "depth" : 3.2931400000000002,
+      "height" : 11.761559999999999,
+      "width" : 103.546875
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 107.546875
+    }
+  },
+  "27-binomial.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 62.6484375,
+      "width" : 496,
+      "x" : 16,
+      "y" : 2295.921875
+    },
+    "formula" : {
+      "baselinePixelY" : 35.5625,
+      "baselineY" : 35.5625,
+      "contentWidth" : 133.9375,
+      "depth" : 16.093,
+      "height" : 24.555400000000002,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 46.6484375,
+      "width" : 480
+    }
+  },
+  "27-binomial.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 62.6484375,
+      "width" : 496,
+      "x" : 16,
+      "y" : 2295.921875
+    },
+    "formula" : {
+      "baselinePixelY" : 71.125,
+      "baselineY" : 35.5625,
+      "contentWidth" : 133.9375,
+      "depth" : 16.093,
+      "height" : 24.555400000000002,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 46.6484375,
+      "width" : 480
+    }
+  },
+  "27-binomial.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 62.6484375,
+      "width" : 496,
+      "x" : 16,
+      "y" : 2295.921875
+    },
+    "formula" : {
+      "baselinePixelY" : 35.5625,
+      "baselineY" : 35.5625,
+      "contentWidth" : 133.9375,
+      "depth" : 16.093,
+      "height" : 24.555400000000002,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 46.6484375,
+      "width" : 480
+    }
+  },
+  "27-binomial.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 62.6484375,
+      "width" : 496,
+      "x" : 16,
+      "y" : 2295.921875
+    },
+    "formula" : {
+      "baselinePixelY" : 71.125,
+      "baselineY" : 35.5625,
+      "contentWidth" : 133.9375,
+      "depth" : 16.093,
+      "height" : 24.555400000000002,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 46.6484375,
+      "width" : 480
+    }
+  },
+  "28-spacing.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 118.625,
+      "x" : 16,
+      "y" : 2396.5703125
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 98.625,
+      "depth" : 0,
+      "height" : 11.7578,
+      "width" : 98.625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 102.625
+    }
+  },
+  "28-spacing.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 118.625,
+      "x" : 16,
+      "y" : 2396.5703125
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 98.625,
+      "depth" : 0,
+      "height" : 11.7578,
+      "width" : 98.625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 102.625
+    }
+  },
+  "28-spacing.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 118.625,
+      "x" : 16,
+      "y" : 2396.5703125
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 98.625,
+      "depth" : 0,
+      "height" : 11.7578,
+      "width" : 98.625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 102.625
+    }
+  },
+  "28-spacing.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 118.625,
+      "x" : 16,
+      "y" : 2396.5703125
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 98.625,
+      "depth" : 0,
+      "height" : 11.7578,
+      "width" : 98.625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 102.625
+    }
+  },
+  "29-divergence.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 54.921875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 2473.390625
+    },
+    "formula" : {
+      "baselinePixelY" : 29.765625,
+      "baselineY" : 29.765625,
+      "contentWidth" : 80.4765625,
+      "depth" : 14.161799999999999,
+      "height" : 18.760100000000001,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 38.921875,
+      "width" : 480
+    }
+  },
+  "29-divergence.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 54.921875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 2473.390625
+    },
+    "formula" : {
+      "baselinePixelY" : 59.53125,
+      "baselineY" : 29.765625,
+      "contentWidth" : 80.4765625,
+      "depth" : 14.161799999999999,
+      "height" : 18.760100000000001,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 38.921875,
+      "width" : 480
+    }
+  },
+  "29-divergence.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 54.921875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 2473.390625
+    },
+    "formula" : {
+      "baselinePixelY" : 29.765625,
+      "baselineY" : 29.765625,
+      "contentWidth" : 80.4765625,
+      "depth" : 14.161799999999999,
+      "height" : 18.760100000000001,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 38.921875,
+      "width" : 480
+    }
+  },
+  "29-divergence.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 54.921875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 2473.390625
+    },
+    "formula" : {
+      "baselinePixelY" : 59.53125,
+      "baselineY" : 29.765625,
+      "contentWidth" : 80.4765625,
+      "depth" : 14.161799999999999,
+      "height" : 18.760100000000001,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 38.921875,
+      "width" : 480
+    }
+  },
+  "30-quadratic.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 60.5546875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 2566.3125
+    },
+    "formula" : {
+      "baselinePixelY" : 37.9375,
+      "baselineY" : 37.9375,
+      "contentWidth" : 151.125,
+      "depth" : 11.620799999999999,
+      "height" : 26.933899999999998,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 44.5546875,
+      "width" : 480
+    }
+  },
+  "30-quadratic.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 60.5546875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 2566.3125
+    },
+    "formula" : {
+      "baselinePixelY" : 75.875,
+      "baselineY" : 37.9375,
+      "contentWidth" : 151.125,
+      "depth" : 11.620799999999999,
+      "height" : 26.933899999999998,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 44.5546875,
+      "width" : 480
+    }
+  },
+  "30-quadratic.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 60.5546875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 2566.3125
+    },
+    "formula" : {
+      "baselinePixelY" : 37.9375,
+      "baselineY" : 37.9375,
+      "contentWidth" : 151.125,
+      "depth" : 11.620799999999999,
+      "height" : 26.933899999999998,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 44.5546875,
+      "width" : 480
+    }
+  },
+  "30-quadratic.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 60.5546875,
+      "width" : 496,
+      "x" : 16,
+      "y" : 2566.3125
+    },
+    "formula" : {
+      "baselinePixelY" : 75.875,
+      "baselineY" : 37.9375,
+      "contentWidth" : 151.125,
+      "depth" : 11.620799999999999,
+      "height" : 26.933899999999998,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 44.5546875,
+      "width" : 480
+    }
+  },
+  "31-overline.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 80.6953125,
+      "x" : 16,
+      "y" : 2664.8671875
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 60.6953125,
+      "depth" : 0,
+      "height" : 14.960900000000001,
+      "width" : 60.6953125
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 64.6953125
+    }
+  },
+  "31-overline.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 80.6953125,
+      "x" : 16,
+      "y" : 2664.8671875
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 60.6953125,
+      "depth" : 0,
+      "height" : 14.960900000000001,
+      "width" : 60.6953125
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 64.6953125
+    }
+  },
+  "31-overline.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 80.6953125,
+      "x" : 16,
+      "y" : 2664.8671875
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 60.6953125,
+      "depth" : 0,
+      "height" : 14.960900000000001,
+      "width" : 60.6953125
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 64.6953125
+    }
+  },
+  "31-overline.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 80.6953125,
+      "x" : 16,
+      "y" : 2664.8671875
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 60.6953125,
+      "depth" : 0,
+      "height" : 14.960900000000001,
+      "width" : 60.6953125
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 64.6953125
+    }
+  },
+  "32-norm.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 135.0625,
+      "x" : 16,
+      "y" : 2741.6171875
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 115.0625,
+      "depth" : 5.1988899999999996,
+      "height" : 15.801110000000001,
+      "width" : 115.0625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 119.0625
+    }
+  },
+  "32-norm.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 135.0625,
+      "x" : 16,
+      "y" : 2741.6171875
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 115.0625,
+      "depth" : 5.1988899999999996,
+      "height" : 15.801110000000001,
+      "width" : 115.0625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 119.0625
+    }
+  },
+  "32-norm.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 135.0625,
+      "x" : 16,
+      "y" : 2741.6171875
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 115.0625,
+      "depth" : 5.1988899999999996,
+      "height" : 15.801110000000001,
+      "width" : 115.0625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 119.0625
+    }
+  },
+  "32-norm.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 135.0625,
+      "x" : 16,
+      "y" : 2741.6171875
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 115.0625,
+      "depth" : 5.1988899999999996,
+      "height" : 15.801110000000001,
+      "width" : 115.0625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 119.0625
+    }
+  },
+  "33-determinant.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 139.859375,
+      "x" : 16,
+      "y" : 2818.4375
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 119.859375,
+      "depth" : 4.2350000000000003,
+      "height" : 12.702500000000001,
+      "width" : 119.859375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 123.859375
+    }
+  },
+  "33-determinant.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 139.859375,
+      "x" : 16,
+      "y" : 2818.4375
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 119.859375,
+      "depth" : 4.2350000000000003,
+      "height" : 12.702500000000001,
+      "width" : 119.859375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 123.859375
+    }
+  },
+  "33-determinant.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 139.859375,
+      "x" : 16,
+      "y" : 2818.4375
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 119.859375,
+      "depth" : 4.2350000000000003,
+      "height" : 12.702500000000001,
+      "width" : 119.859375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 123.859375
+    }
+  },
+  "33-determinant.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 139.859375,
+      "x" : 16,
+      "y" : 2818.4375
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 119.859375,
+      "depth" : 4.2350000000000003,
+      "height" : 12.702500000000001,
+      "width" : 119.859375
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 123.859375
+    }
+  },
+  "34-euler.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 2895.2578125
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 80.25,
+      "depth" : 1.4111,
+      "height" : 14.815500000000002,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 480
+    }
+  },
+  "34-euler.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 2895.2578125
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 80.25,
+      "depth" : 1.4111,
+      "height" : 14.815500000000002,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 480
+    }
+  },
+  "34-euler.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 2895.2578125
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 80.25,
+      "depth" : 1.4111,
+      "height" : 14.815500000000002,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 480
+    }
+  },
+  "34-euler.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 2895.2578125
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 80.25,
+      "depth" : 1.4111,
+      "height" : 14.815500000000002,
+      "width" : 476
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 480
+    }
+  },
+  "35-set.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 183.40625,
+      "x" : 16,
+      "y" : 2978.078125
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 163.40625,
+      "depth" : 4.2350000000000003,
+      "height" : 12.702500000000001,
+      "width" : 163.40625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 167.40625
+    }
+  },
+  "35-set.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 183.40625,
+      "x" : 16,
+      "y" : 2978.078125
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 163.40625,
+      "depth" : 4.2350000000000003,
+      "height" : 12.702500000000001,
+      "width" : 163.40625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 167.40625
+    }
+  },
+  "35-set.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 183.40625,
+      "x" : 16,
+      "y" : 2978.078125
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 163.40625,
+      "depth" : 4.2350000000000003,
+      "height" : 12.702500000000001,
+      "width" : 163.40625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 167.40625
+    }
+  },
+  "35-set.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 183.40625,
+      "x" : 16,
+      "y" : 2978.078125
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 163.40625,
+      "depth" : 4.2350000000000003,
+      "height" : 12.702500000000001,
+      "width" : 163.40625
+    },
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 167.40625
+    }
+  },
+  "36-paragraph-energy.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 3054.8984375
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 65.046875,
+      "depth" : 0,
+      "height" : 13.789099999999999,
+      "width" : 65.046875
+    },
+    "formulaBaselineY" : 27.5,
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "textBaselineY" : 26.1015625,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 69.046875
+    }
+  },
+  "36-paragraph-energy.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 3054.8984375
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 65.046875,
+      "depth" : 0,
+      "height" : 13.789099999999999,
+      "width" : 65.046875
+    },
+    "formulaBaselineY" : 27.5,
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "textBaselineY" : 26.1015625,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 69.046875
+    }
+  },
+  "36-paragraph-energy.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 3054.8984375
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 65.046875,
+      "depth" : 0,
+      "height" : 13.789099999999999,
+      "width" : 65.046875
+    },
+    "formulaBaselineY" : 27.5,
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "textBaselineY" : 26.1015625,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 69.046875
+    }
+  },
+  "36-paragraph-energy.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 3054.8984375
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 65.046875,
+      "depth" : 0,
+      "height" : 13.789099999999999,
+      "width" : 65.046875
+    },
+    "formulaBaselineY" : 27.5,
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "textBaselineY" : 26.1015625,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 69.046875
+    }
+  },
+  "37-paragraph-fraction.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 496,
+      "x" : 16,
+      "y" : 3131.71875
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 10.3359375,
+      "depth" : 5.8442999999999996,
+      "height" : 11.7729,
+      "width" : 10.3359375
+    },
+    "formulaBaselineY" : 27.5,
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "textBaselineY" : 26.0625,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 14.3359375
+    }
+  },
+  "37-paragraph-fraction.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 496,
+      "x" : 16,
+      "y" : 3131.71875
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 10.3359375,
+      "depth" : 5.8442999999999996,
+      "height" : 11.7729,
+      "width" : 10.3359375
+    },
+    "formulaBaselineY" : 27.5,
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "textBaselineY" : 26.0625,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 14.3359375
+    }
+  },
+  "37-paragraph-fraction.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 496,
+      "x" : 16,
+      "y" : 3131.71875
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 10.3359375,
+      "depth" : 5.8442999999999996,
+      "height" : 11.7729,
+      "width" : 10.3359375
+    },
+    "formulaBaselineY" : 27.5,
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "textBaselineY" : 26.0625,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 14.3359375
+    }
+  },
+  "37-paragraph-fraction.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 496,
+      "x" : 16,
+      "y" : 3131.71875
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 10.3359375,
+      "depth" : 5.8442999999999996,
+      "height" : 11.7729,
+      "width" : 10.3359375
+    },
+    "formulaBaselineY" : 27.5,
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "textBaselineY" : 26.0625,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 14.3359375
+    }
+  },
+  "38-paragraph-sum.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 3208.46875
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 55.4375,
+      "depth" : 5.0769200000000003,
+      "height" : 13.618379999999998,
+      "width" : 55.4375
+    },
+    "formulaBaselineY" : 27.5,
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "textBaselineY" : 26.1015625,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 59.4375
+    }
+  },
+  "38-paragraph-sum.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 3208.46875
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 55.4375,
+      "depth" : 5.0769200000000003,
+      "height" : 13.618379999999998,
+      "width" : 55.4375
+    },
+    "formulaBaselineY" : 27.5,
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "textBaselineY" : 26.1015625,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 59.4375
+    }
+  },
+  "38-paragraph-sum.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 3208.46875
+    },
+    "formula" : {
+      "baselinePixelY" : 27.5,
+      "baselineY" : 27.5,
+      "contentWidth" : 55.4375,
+      "depth" : 5.0769200000000003,
+      "height" : 13.618379999999998,
+      "width" : 55.4375
+    },
+    "formulaBaselineY" : 27.5,
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 1,
+    "textBaselineY" : 26.1015625,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 59.4375
+    }
+  },
+  "38-paragraph-sum.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.8203125,
+      "width" : 496,
+      "x" : 16,
+      "y" : 3208.46875
+    },
+    "formula" : {
+      "baselinePixelY" : 55,
+      "baselineY" : 27.5,
+      "contentWidth" : 55.4375,
+      "depth" : 5.0769200000000003,
+      "height" : 13.618379999999998,
+      "width" : 55.4375
+    },
+    "formulaBaselineY" : 27.5,
+    "loadedKatexFonts" : [
+      "KaTeX_AMS:normal:400",
+      "KaTeX_Caligraphic:normal:400",
+      "KaTeX_Main:normal:400",
+      "KaTeX_Main:normal:700",
+      "KaTeX_Math:italic:400",
+      "KaTeX_Size1:normal:400",
+      "KaTeX_Size2:normal:400",
+      "KaTeX_Size3:normal:400",
+      "KaTeX_Size4:normal:400"
+    ],
+    "scale" : 2,
+    "textBaselineY" : 26.1015625,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.8203125,
+      "width" : 59.4375
+    }
+  },
+  "39-fallback.rest.dark.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 91.2578125,
+      "x" : 16,
+      "y" : 3285.2890625
+    },
+    "fallbackBaselineY" : 27.5,
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 75.2578125
+    }
+  },
+  "39-fallback.rest.dark@2x.png" : {
+    "background" : "oklch(0.145 0 none)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 91.2578125,
+      "x" : 16,
+      "y" : 3285.2890625
+    },
+    "fallbackBaselineY" : 27.5,
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 75.2578125
+    }
+  },
+  "39-fallback.rest.light.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 91.2578125,
+      "x" : 16,
+      "y" : 3285.2890625
+    },
+    "fallbackBaselineY" : 27.5,
+    "scale" : 1,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 75.2578125
+    }
+  },
+  "39-fallback.rest.light@2x.png" : {
+    "background" : "oklch(0.992 0 0)",
+    "capture" : {
+      "height" : 44.75,
+      "width" : 91.2578125,
+      "x" : 16,
+      "y" : 3285.2890625
+    },
+    "fallbackBaselineY" : 27.5,
+    "scale" : 2,
+    "units" : "CSS px",
+    "wrapper" : {
+      "height" : 28.75,
+      "width" : 75.2578125
+    }
+  }
+}
