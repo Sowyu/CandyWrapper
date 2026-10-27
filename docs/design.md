@@ -17,6 +17,10 @@ Status on 2026-10-09: milestone 2 component library complete, waiting for the us
 
 When T3 updates: bump `T3_VERSION`, copy the new compiled CSS into `design/t3-source/main.css`, run the three scripts, then the fidelity suite.
 
+## Redesign background
+
+Redesign (Experimental) is CandyWrapper's own theme. `DitherArtView` renders its picture as static 2pt ordered-dither dots. Thread activity adds no layer, animation or timer to the art. The working wave added on 2026-10-25 was removed on 2026-10-27 because the user saw a band of dimness rather than a dither effect. The resting pixels, page scrims and brief new-thread reveal stay unchanged.
+
 ## Fonts
 
 T3 loads no web fonts. The UI uses the system stack (`-apple-system`, so SF Pro), drawn with `NSFont.systemFont`. Code text uses `ui-monospace`, and Chromium on this machine resolves that to Menlo, so `DSFont.mono` uses Menlo. Check this against the real desktop app on a Retina Mac before milestone 4, since T3's settings label the default as "SF Mono". The terminal's Symbols Nerd Font arrives with the terminal work.

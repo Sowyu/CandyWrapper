@@ -1,5 +1,7 @@
 # Decisions
 
+- 2026-10-27, user decision: remove Redesign's working wave completely because it reads as a band of dimness. Thread activity must not animate the background. Keep the resting dither art, its page scrims and the brief new-thread reveal unchanged. This supersedes the working wave added on 2026-10-25.
+
 - 2026-10-23, user decision ("allow darkmode versions of all these"): every app icon has a light and a dark Dock image, rendered by `scripts/icon/render-variants` from the Default and Dark renditions of the `AppIcon*.icon` documents into `AppIconVariants.xcassets`. The other `.icon` documents left the build, since nothing reads the alternates in Assets.car any more. Settings > Appearance > App icon appearance picks Auto, Light or Dark. Auto follows the system's appearance through `AppleInterfaceThemeChangedNotification`, not the theme, because themes force `NSApp.appearance`. The default icon style stays light in Dark mode, so Sticker in Auto uses its rendered images unless Clear or Tinted is on.
 
 What the user decided and why, newest first. Check here before changing anything these cover.

@@ -5,8 +5,8 @@ import ImageIO
 /// filling the main panel in its own colors at 2pt ordered-dither dots of brightness, held within a reach of the
 /// panel's background that keeps text readable anywhere on it. A new thread shows it fully, an open thread under a
 /// light scrim of the background, and every other page under a heavy one. It renders once per size and appearance
-/// off the main thread. Opening a new thread resolves the dots in, in Bayer order, for 0.75 s. While a thread works,
-/// the dots breathe in a slow wave (`working`); otherwise it holds still and runs nothing.
+/// off the main thread. Opening a new thread resolves the dots in, in Bayer order, for 0.75 s. Thread activity
+/// leaves the art still.
 public final class DitherArtView: NSView {
     private let art = CALayer()
     /// The background over the art, one share across the panel.
@@ -21,11 +21,6 @@ public final class DitherArtView: NSView {
     private var debounce: DispatchWorkItem?
     /// A new thread opened before the art had rendered: the first render resolves in.
     private var revealsWhenShown = false
-    /// The working wave, only while it shows or fades out.
-    private var wave: (root: CALayer, grid: CALayer, band: CAGradientLayer)?
-    /// What the wave was last laid out for, so an unchanged layout costs nothing.
-    private var waveLayout: (frame: CGRect, scale: CGFloat, color: CGColor)?
-    private var waveStopping = false
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -52,126 +47,6 @@ public final class DitherArtView: NSView {
 
     @objc private func displayOptionsChanged(_ note: Notification) { updateScrim() }
 
-    // MARK: Working wave
-
-    /// Some thread is working, the sidebar's Working status. The app sets it on every shell change.
-    @MainActor public static var working = false {
-        didSet { if working != oldValue { for art in arts.allObjects { art.updateWave() } } }
-    }
-
-    /// Starts, moves or eases out the wave. Cheap when nothing changes, so every scrim update calls it.
-    func updateWave() {
-        var working = Self.working
-        #if DEBUG
-        // Debug-only, for measuring and recording without a real turn: `defaults write <bundle id> CandyDitherWave force|off`.
-        switch UserDefaults.standard.string(forKey: "CandyDitherWave") {
-        case "force": working = true
-        case "off": working = false
-        default: break
-        }
-        #endif
-        let runs = DitherArt.waves(working: working, reduceMotion: Motion.reduced,
-                                   reduceTransparency: NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency,
-                                   page: page, hasArt: shown != nil && window != nil)
-        if runs {
-            let made = wave ?? makeWave()
-            if wave == nil || waveStopping { fadeWave(made.root, to: 1) }
-            waveStopping = false
-            wave = made
-            placeWave()
-        } else if let wave, !waveStopping {
-            // Reduce Motion stops it at once; the rest ease out.
-            if Motion.reduced { removeWave(); return }
-            waveStopping = true
-            fadeWave(wave.root) { [weak self] in if self?.waveStopping == true { self?.removeWave() } }
-        }
-    }
-
-    /// The wave between the art and the scrim: a band of the background color, seen only through a grid half a dot
-    /// wide on each dot's edge, moving across the panel. Where it passes, each dot shrinks and grows
-    /// back. Core Animation moves the band, so the app does no work per frame.
-    private func makeWave() -> (root: CALayer, grid: CALayer, band: CAGradientLayer) {
-        let root = CALayer(), grid = CALayer(), band = CAGradientLayer()
-        for l in [root, grid, band] as [CALayer] {
-            l.actions = ["bounds": NSNull(), "position": NSNull(), "opacity": NSNull(), "contents": NSNull(),
-                         "transform": NSNull(), "colors": NSNull(), "locations": NSNull()]
-        }
-        grid.magnificationFilter = .nearest
-        grid.contentsGravity = .resize
-        band.startPoint = CGPoint(x: 0, y: 0.5)
-        band.endPoint = CGPoint(x: 1, y: 0.5)
-        root.addSublayer(band)
-        root.mask = grid
-        root.opacity = 0
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        layer?.insertSublayer(root, above: art)
-        CATransaction.commit()
-        waveLayout = nil
-        return (root, grid, band)
-    }
-
-    /// Lines the grid up with the art's dots and restarts the band when the size, scale or background changed.
-    private func placeWave() {
-        guard let wave, let window else { return }
-        let frame = art.frame, scale = window.backingScaleFactor
-        let color = ThemeRuntime.palettes.palette(dark: effectiveAppearance.isDark, sidebar: false).background.nsColor.cgColor
-        if let last = waveLayout, last.frame == frame, last.scale == scale, last.color == color { return }
-        waveLayout = (frame, scale, color)
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        defer { CATransaction.commit() }
-        let bounds = CGRect(origin: .zero, size: frame.size)
-        wave.root.frame = frame
-        wave.grid.frame = bounds
-        let k = Int((DitherArt.dot * scale).rounded())
-        wave.grid.contents = DitherArt.waveGrid(columns: Int(frame.width / DitherArt.dot), rows: Int(frame.height / DitherArt.dot),
-                                                pixelsPerDot: k)
-        // The band repeats every `wavePeriod`, so moving it one period and starting over has no seam.
-        let period = DitherArt.wavePeriod, angle = DitherArt.waveAngle
-        let diagonal = hypot(frame.width, frame.height)
-        let cycles = Int(((diagonal + period) / period).rounded(.up))
-        let profile = DitherArt.waveProfile(cycles: cycles, depth: DitherArt.waveDepth(pixelsPerDot: k))
-        wave.band.bounds = CGRect(x: 0, y: 0, width: CGFloat(cycles) * period, height: diagonal)
-        wave.band.colors = profile.map { color.copy(alpha: $0.alpha)! }
-        wave.band.locations = profile.map { NSNumber(value: $0.at) }
-        wave.band.setAffineTransform(CGAffineTransform(rotationAngle: angle))
-        let step = CGPoint(x: cos(angle) * period, y: sin(angle) * period)
-        wave.band.position = CGPoint(x: bounds.midX - step.x / 2, y: bounds.midY - step.y / 2)
-        let move = CABasicAnimation(keyPath: "position")
-        move.fromValue = NSValue(point: .zero)
-        move.toValue = NSValue(point: step)
-        move.isAdditive = true
-        move.duration = DitherArt.waveDuration
-        move.repeatCount = .infinity
-        // The window server redraws the whole panel each frame of the band, so it moves at a few frames a second:
-        // 30 cost about 17% of a core there, 10 about 5%. A soft band 900pt wide hides the steps.
-        move.preferredFrameRateRange = DitherArt.waveFrameRate
-        wave.band.add(move, forKey: "wave")
-    }
-
-    private func fadeWave(_ root: CALayer, to opacity: Float = 0, done: (() -> Void)? = nil) {
-        let from = root.presentation()?.opacity ?? root.opacity
-        CATransaction.begin()
-        CATransaction.setCompletionBlock(done)
-        let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = from
-        fade.toValue = opacity
-        fade.duration = DitherArt.waveEase * Double(abs(opacity - from))
-        fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        fade.preferredFrameRateRange = Motion.loopFrameRate
-        root.opacity = opacity
-        root.add(fade, forKey: "fade")
-        CATransaction.commit()
-    }
-
-    private func removeWave() {
-        wave?.root.removeFromSuperlayer()
-        wave = nil
-        waveLayout = nil
-        waveStopping = false
-    }
-
-    var waveShowsForTesting: Bool { wave != nil && !waveStopping }
-
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
@@ -188,7 +63,7 @@ public final class DitherArtView: NSView {
             view.addSubview(made, positioned: .below, relativeTo: nil)
             return made
         }
-        if !on, let current { current.removeWave(); current.removeFromSuperview(); return nil }
+        if !on, let current { current.removeFromSuperview(); return nil }
         current?.refresh()
         return current
     }
@@ -283,7 +158,7 @@ public final class DitherArtView: NSView {
         refresh()
     }
 
-    /// A move between a 1x and a 2x screen redraws the wave's grid for the new device pixels.
+    /// A move between screens refreshes the art for the new backing scale.
     public override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         refresh()
@@ -350,7 +225,6 @@ public final class DitherArtView: NSView {
         blend.locations = ts.map { NSNumber(value: 1 - $0) }
         blend.colors = ts.map { band.copy(alpha: DitherChrome.bandBlend($0))! }
         CATransaction.commit()
-        updateWave()
     }
 
     /// Asks for the art at the current size and appearance, after the size settles.
@@ -383,7 +257,6 @@ public final class DitherArtView: NSView {
                         CATransaction.begin(); CATransaction.setDisableActions(true)
                         self.placeArt()
                         CATransaction.commit()
-                        self.updateWave()
                         if self.revealsWhenShown { self.playReveal() }
                     }
                 }
@@ -415,64 +288,6 @@ public enum DitherArt {
     nonisolated static let settingsScrim: CGFloat = 0.8
 
     enum Page: Sendable { case hero, thread, settings, page }
-
-    /// The working wave: how much of a dot's brightness a crest takes, how far apart crests are in points, how long
-    /// one takes to move that far, its angle off horizontal and how long it takes to ease in or out.
-    /// The one knob for how strong the wave reads: 0.24 in 1.14.2, which the user found too subtle on Retina.
-    nonisolated static let waveStrength: Double = 0.6
-    nonisolated static let wavePeriod: CGFloat = 1200
-    /// One period per this long: 200pt a second, the 1.14.2 pace, over a wider band.
-    nonisolated static let waveDuration: CFTimeInterval = 6
-    nonisolated static let waveAngle: CGFloat = -0.3
-    nonisolated static let waveEase: CFTimeInterval = 1.5
-    /// How often the band moves.
-    nonisolated static let waveFrameRate = CAFrameRateRange(minimum: 8, maximum: 10, preferred: 10)
-
-    /// Whether the wave runs: a thread works and the art shows on the new thread or an open one, which barely cover
-    /// it. Reduce Motion and Reduce Transparency, whose solid scrim hides the art, keep it still.
-    nonisolated static func waves(working: Bool, reduceMotion: Bool, reduceTransparency: Bool, page: Page, hasArt: Bool) -> Bool {
-        working && !reduceMotion && !reduceTransparency && hasArt && (page == .hero || page == .thread)
-    }
-
-    /// The wave's mask, one pixel per device pixel: opaque on each dot's right and bottom edge, clear inside.
-    /// Alpha only, so it holds one byte a pixel.
-    nonisolated static func waveGrid(columns: Int, rows: Int, pixelsPerDot k: Int) -> CGImage? {
-        let w = columns * k, h = rows * k
-        guard w > 0, h > 0, k > 1,
-              let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w, space: CGColorSpaceCreateDeviceGray(),
-                                  bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue),
-              let data = ctx.data?.bindMemory(to: UInt8.self, capacity: w * h) else { return nil }
-        // Row 0 of the buffer is the top, so a dot's bottom edge is its last rows.
-        let edge = k - waveLine(pixelsPerDot: k)
-        for y in 0..<h {
-            if y % k >= edge { (data + y * w).update(repeating: 255, count: w); continue }
-            for x in 0..<w where x % k >= edge { data[y * w + x] = 255 }
-        }
-        return ctx.makeImage()
-    }
-
-    /// The band's alpha at a crest, so a crest takes `waveStrength` of every dot whatever share the grid covers.
-    nonisolated static func waveDepth(pixelsPerDot k: Int) -> Double {
-        min(1, waveStrength / waveCover(pixelsPerDot: k))
-    }
-
-    /// The grid's line, in device pixels: half a dot, so its cover is 3/4 of a dot at 1x, 2x and 3x alike.
-    nonisolated static func waveLine(pixelsPerDot k: Int) -> Int { max(1, k / 2) }
-
-    /// The share of a dot the grid covers: its right and bottom `waveLine` rows of device pixels.
-    nonisolated static func waveCover(pixelsPerDot k: Int) -> Double {
-        let open = Double(k - waveLine(pixelsPerDot: k)) / Double(k)
-        return 1 - open * open
-    }
-
-    /// The band's stops across `cycles` periods: a crest of `depth` in the middle of each, nothing between.
-    nonisolated static func waveProfile(cycles: Int, depth: Double) -> [(at: Double, alpha: Double)] {
-        let perCycle = 12, n = max(cycles, 1) * perCycle
-        return (0...n).map { i in
-            let phase = Double(i % perCycle) / Double(perCycle)
-            return (Double(i) / Double(n), depth * (0.5 - 0.5 * cos(2 * .pi * phase)))
-        }
-    }
 
     /// The scrim for `page` under the system display options. Reduce Transparency covers the art with the solid
     /// background, so the frosted panes over it read as solid surfaces. Increase Contrast keeps the art as a faint
