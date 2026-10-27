@@ -612,6 +612,10 @@ private struct Builder {
             let rect = CGRect(x: 0, y: 0, width: w, height: h)
             return Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin, height: h + below,
                        items: [.box(rect, fill: Themed.color(\.muted, 0.6), border: Themed.color(\.border, 0.4), radius: 10), .remoteImage(url, alt, rect)])
+        case .math(let math):
+            var box = text([InlineRun(text: math.copySource)], width: width, size: MarkdownStyle.fontSize, lineHeight: MarkdownStyle.lineHeight, color: context.color)
+            box.top = MarkdownStyle.blockMargin; box.bottom = MarkdownStyle.blockMargin
+            return box
         }
     }
 

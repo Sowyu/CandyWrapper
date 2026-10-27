@@ -85,7 +85,7 @@ public struct MarkdownContextChips: Equatable {
                 case .list(let list): list.items.forEach { visit($0.blocks) }
                 case .blockquote(let b), .alert(_, let b): visit(b)
                 case .table(let t): ([t.header] + t.rows).forEach { $0.forEach(visit) }
-                case .code, .rule, .image: break
+                case .code, .rule, .image, .math: break
                 }
             }
         }

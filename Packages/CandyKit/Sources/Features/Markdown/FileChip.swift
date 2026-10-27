@@ -105,7 +105,7 @@ struct FileChipResolver {
                 case .list(let list): list.items.forEach { walk($0.blocks) }
                 case .blockquote(let children), .alert(_, let children): walk(children)
                 case .table(let table): ([table.header] + table.rows).forEach { $0.forEach(visit) }
-                case .code, .rule, .image: break
+                case .code, .rule, .image, .math: break
                 }
             }
         }

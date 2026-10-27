@@ -50,6 +50,7 @@ public struct ThreadMinimapItem: Equatable, Sendable {
         case .table(let t): return ([t.header] + t.rows).map { $0.map(runs).joined(separator: " ") }.joined(separator: " ")
         case .rule: return ""
         case .image(let alt, _): return alt
+        case .math(let math): return math.copySource
         }
     }
 }

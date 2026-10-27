@@ -422,6 +422,9 @@ enum OrchestratorChatText {
             case .image(let alt, _):
                 newline()
                 out.append(NSAttributedString(string: alt, attributes: [.font: body, .foregroundColor: color]))
+            case .math(let math):
+                newline()
+                out.append(NSAttributedString(string: math.copySource, attributes: [.font: DSFont.mono(size - 1), .foregroundColor: color, .paragraphStyle: para]))
             }
         }
         for b in MarkdownDocument(parsing: markdown).blocks { block(b) }

@@ -10,11 +10,12 @@ public struct MarkdownDocument: Sendable, Equatable {
     public init(blocks: [MarkdownBlock]) { self.blocks = blocks }
 
     /// `preservesLineBreaks`: soft breaks become line breaks, as T3 does for user messages (`remark-breaks`).
-    public init(parsing markdown: String, preservesLineBreaks: Bool = false) {
-        blocks = Self.parseBlocks(Substring(markdown), preservesLineBreaks: preservesLineBreaks)
+    /// `math`: read TeX formulas as T3 does with "Render math" on (`remark-math`, ChatMarkdown.tsx); off, they stay text.
+    public init(parsing markdown: String, preservesLineBreaks: Bool = false, math: Bool = false) {
+        blocks = Self.parseBlocks(Substring(markdown), preservesLineBreaks: preservesLineBreaks, math: math)
     }
 
-    private static func parseBlocks(_ source: Substring, preservesLineBreaks: Bool) -> [MarkdownBlock] {
+    private static func parseBlocks(_ source: Substring, preservesLineBreaks: Bool, math: Bool) -> [MarkdownBlock] {
         let markdown = keepingWindowsPathEscapes(source)
         // Source positions cost about 15% of the parse (a 1,000-line reply on the huge thread's cached open),
         // and only loose lists need them.
@@ -169,6 +170,7 @@ public struct MarkdownDocument: Sendable, Equatable {
         public let text: String
         public let document: MarkdownDocument
         let preservesLineBreaks: Bool
+        let math: Bool
         let stable: Substring
         let stableBlocks: [MarkdownBlock]
     }
@@ -176,24 +178,24 @@ public struct MarkdownDocument: Sendable, Equatable {
     /// Parses `markdown` like `init(parsing:)`, reusing `previous` when `markdown` starts with its
     /// stable part: only the text after it is parsed, so a token costs the size of the last few
     /// blocks, not the whole answer. The result always equals a full parse (`MarkdownIncrementalTests`).
-    public static func parse(_ markdown: String, preservesLineBreaks: Bool = false, extending previous: Incremental?) -> Incremental {
+    public static func parse(_ markdown: String, preservesLineBreaks: Bool = false, math: Bool = false, extending previous: Incremental?) -> Incremental {
         guard canSplit(markdown) else {
-            let document = MarkdownDocument(parsing: markdown, preservesLineBreaks: preservesLineBreaks)
-            return Incremental(text: markdown, document: document, preservesLineBreaks: preservesLineBreaks, stable: "", stableBlocks: [])
+            let document = MarkdownDocument(parsing: markdown, preservesLineBreaks: preservesLineBreaks, math: math)
+            return Incremental(text: markdown, document: document, preservesLineBreaks: preservesLineBreaks, math: math, stable: "", stableBlocks: [])
         }
         var start = markdown.startIndex
         var stableBlocks: [MarkdownBlock] = []
-        if let previous, previous.preservesLineBreaks == preservesLineBreaks, !previous.stable.isEmpty,
+        if let previous, previous.preservesLineBreaks == preservesLineBreaks, previous.math == math, !previous.stable.isEmpty,
            markdown.utf8.starts(with: previous.stable.utf8) {
             start = markdown.utf8.index(markdown.startIndex, offsetBy: previous.stable.utf8.count)
             stableBlocks = previous.stableBlocks
         }
         if let cut = stableCut(markdown[start...]), cut > start {
-            stableBlocks += parseBlocks(markdown[start..<cut], preservesLineBreaks: preservesLineBreaks)
+            stableBlocks += parseBlocks(markdown[start..<cut], preservesLineBreaks: preservesLineBreaks, math: math)
             start = cut
         }
-        let tail = parseBlocks(markdown[start...], preservesLineBreaks: preservesLineBreaks)
-        return Incremental(text: markdown, document: MarkdownDocument(blocks: stableBlocks + tail), preservesLineBreaks: preservesLineBreaks,
+        let tail = parseBlocks(markdown[start...], preservesLineBreaks: preservesLineBreaks, math: math)
+        return Incremental(text: markdown, document: MarkdownDocument(blocks: stableBlocks + tail), preservesLineBreaks: preservesLineBreaks, math: math,
                            stable: markdown[..<start], stableBlocks: stableBlocks)
     }
 
@@ -432,6 +434,7 @@ extension MarkdownBlock {
         case .table(let t): return ([t.header] + t.rows).map { $0.map(runs).joined(separator: ", ") }.joined(separator: "\n")
         case .rule: return ""
         case .image(let alt, _): return alt.isEmpty ? "image" : alt
+        case .math(let math): return math.copySource
         }
     }
 }
@@ -447,6 +450,25 @@ public indirect enum MarkdownBlock: Sendable, Equatable {
     case rule
     /// A paragraph holding only an image. Inline images stay in the paragraph as alt text.
     case image(alt: String, url: URL)
+    /// A display formula: `$$…$$` or `\[…\]` (alone or split out of its paragraph) or a closed ```` ```math ```` fence,
+    /// parsed only while "Render math" is on (T3's `mathRenderingEnabled`).
+    case math(MarkdownMath)
+}
+
+/// One TeX formula, as T3's `remark-math` reads it (shared/src/markdownMath.ts).
+public struct MarkdownMath: Sendable, Equatable, Hashable {
+    /// The TeX between the delimiters, as `node.value`.
+    public var tex: String
+    /// Display style: `$$…$$`, `\[…\]` or a math fence. Inline `$…$` and `\(…\)` are not.
+    public var display: Bool
+
+    public init(tex: String, display: Bool) { self.tex = tex; self.display = display }
+
+    /// What copying the formula puts on the pasteboard, as T3's `data-markdown-copy` (MarkdownMath.tsx:15-16, 27).
+    public var copySource: String {
+        let t = tex.trimmingCharacters(in: .whitespacesAndNewlines)
+        return display ? "\\[\n\(t)\n\\]" : "\\(\(t)\\)"
+    }
 }
 
 public struct MarkdownList: Sendable, Equatable {
@@ -487,6 +509,8 @@ public struct InlineRun: Sendable, Equatable {
     public var image: URL?
     /// A soft or hard break; `text` is a space or "\n".
     public var isBreak = false
+    /// An inline formula; `text` holds its copy source.
+    public var math: MarkdownMath?
 
     public init(text: String, bold: Bool = false, italic: Bool = false, strikethrough: Bool = false, code: Bool = false,
                 link: URL? = nil, image: URL? = nil, isBreak: Bool = false) {
@@ -620,6 +644,6 @@ private struct Node {
 private extension InlineRun {
     func sameStyle(as other: InlineRun) -> Bool {
         bold == other.bold && italic == other.italic && strikethrough == other.strikethrough && code == other.code
-            && link == other.link && image == other.image
+            && link == other.link && image == other.image && math == nil && other.math == nil
     }
 }
