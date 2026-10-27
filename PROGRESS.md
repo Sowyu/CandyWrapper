@@ -1,5 +1,7 @@
 # Progress
 
+- [ ] Match working-status shimmer speed to T3 3669 for Claude Fast and Codex priority (taken 2026-10-27, fast-mode-shimmer).
+
 - [ ] Remove the Redesign dither working wave, keeping the resting art and scrim unchanged (taken 2026-10-27, remove-dither-wave).
 
 - [x] Published v1.14.5 (build 72), 2026-10-27, from `bc1682cf` on main: native math, Cmd+K ranking with "In messages", guest sharing warnings and live share dialog, the context ring and its legend, no folder chips on code words, and Nightly 3669 wording. The full suite passed on that commit. Verified: ZIP and DMG sign with Team ID 8Q677AYRU7 at 1.14.5 (72), the feed's top item is 1.14.5 (72) with the ZIP's 19,095,104 bytes, and the three helper tarballs match SHA256SUMS and the app's manifest (base v1.14.5).
