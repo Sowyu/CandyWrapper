@@ -1730,7 +1730,8 @@ final class ComposerController {
         // Send retries failed uploads and goes once they finish (ChatView.tsx:6438-6446, 073734c1e9).
         let failed = ComposerAttachmentRules.retryableFailures(attachments)
         if let key = draftKey, !failed.isEmpty {
-            sendAfterRetry[key] = (text, mode, background)
+            // The editor's text as sent, before any plan follow-up wrapping, which the resumed send repeats.
+            sendAfterRetry[key] = (sentText, mode, background)
             // `retryAttachmentUpload` (attachmentUploadQueue.ts:556-572) deletes the failed server copy first.
             for a in failed { retryAttachment(a.id) }
             return
@@ -1940,12 +1941,15 @@ final class ComposerController {
                         backgroundSendFailed(error, session: session, key: sessionKey, text: text, attachments: attachments)
                         return
                     }
-                    // The draft comes back with another thread id: the server may have created this one.
+                    // The draft comes back with another thread id: the server may have created this one. When a newer
+                    // draft holds the project's key, the failed one keeps its own id so its prompt has a home.
                     let restored = NewThreadDraftLaunch.restore(session, key: sessionKey, in: &sessions)
+                        ?? NewThreadDraftLaunch.restore(session, key: session.draftId, in: &sessions)
                     if let restored, self.target == .draft(session) { self.target = .draft(restored) }
                     scheduleSave()
                     restoreAttachments(attachments, key: picksKey)
                     sendFailed(error, messageId: messageId, text: text, draft: restored ?? session, key: picksKey)
+                    syncSidebarDrafts()
                 }
             }
         case .thread(let threadId):
@@ -2231,7 +2235,7 @@ final class ComposerController {
             }), timeout: 0)
     }
 
-    /// I-composer-flow 1.7: drop the optimistic row, restore the text if the composer is still
+    /// I-composer-flow 1.7: drop the optimistic row, restore the text if its draft is still
     /// empty, and show the server's message (transport errors stay silent).
     /// `planFollowUp`: the plan card's refine or implement send (`onSubmitPlanFollowUp`, ChatView.tsx:10508-10516).
     private func sendFailed(_ error: Error, messageId: MessageId, text: String, draft: DraftSession?, key: String?, planFollowUp: Bool = false) {
@@ -2243,8 +2247,16 @@ final class ComposerController {
                 panel.setDraft(projectTitle: project.title, isScratch: isScratch(project))
             }
         }
-        let restore = composer.text.isEmpty ? text : nil
-        if let restore { composer.text = restore; remember(restore) }
+        // The text goes back to the thread or draft it was sent from, and only if that one has no newer
+        // prompt; the editor follows only while it still shows it (useComposerSend.ts:1366-1390).
+        if let key {
+            if draftKey == key, queuedEdit == nil, questionRequestId == nil {
+                if composer.text.isEmpty { composer.text = text; remember(text) }
+            } else if (prompts[key] ?? "").isEmpty {
+                prompts[key] = text
+                scheduleSave()
+            }
+        }
         refresh()
         if let rpc = error as? RPCClientError, rpc.isTransport { return }
         report(planFollowUp ? .command(Self.message(error), fallback: "Failed to send plan follow-up.") : .send(Self.message(error)), key: key)
@@ -3812,6 +3824,11 @@ extension ComposerController {
             // ChatView.tsx:5131-5135: the retry failed again, so the draft stays and says why.
             threadErrors.set(key, "Retry or remove failed uploads before sending.")
             refresh()
+            return
+        }
+        // Typing during the upload wait is newer than the snapshot, which would go out and wipe it.
+        guard composer.text == pending.text else {
+            toast(.info, "Your message changed, so it wasn't sent.", "Send again when it's ready.")
             return
         }
         send(pending.text, mode: pending.mode, background: pending.background)

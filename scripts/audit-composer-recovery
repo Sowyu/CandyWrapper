@@ -2,7 +2,9 @@
 """Opt-in, bounded extraction harness. Run only in the parent's execution lane.
 
 Uses current ComposerController method bodies, with in-memory collaborators.
-Exit 1 means a desired ownership invariant failed. No RPC, app, or account runs.
+Exit 1 means a desired ownership invariant failed: C1 or C3 of the 2026-10-26
+responsiveness audit is back. The stubs compile against the code before and
+after the fix, so the same cases show both. No RPC, app, or account runs.
 """
 import os
 from pathlib import Path
@@ -56,6 +58,7 @@ enum ComposerAttachmentRules {
     }
 }
 final class Errors { func set(_ key: String, _ message: String) {} }
+enum ToastQueue { enum Kind { case info } }
 final class Harness {
     var optimistic: [(id: MessageId)] = []
     var pendingMessageId: MessageId?
@@ -68,7 +71,12 @@ final class Harness {
     var draftAttachments: [String: [Attachment]] = [:]
     var sendAfterRetry: [String: (text: String, mode: ComposerLogic.SendMode, background: Bool)] = [:]
     var threadErrors = Errors()
+    var queuedEdit: Int?
+    var questionRequestId: String?
     var sent: [String] = []
+    var toasts: [String] = []
+    func scheduleSave() {}
+    func toast(_ kind: ToastQueue.Kind, _ title: String, _ message: String? = nil) { toasts.append(title) }
     static func message(_ error: Error) -> String? { "rejected" }
     func isScratch(_ project: Project) -> Bool { false }
     func refresh() {}
@@ -115,6 +123,30 @@ retry.sendAfterRetry["B"] = ("original snapshot", .queue, false)
 retry.resumeSendAfterRetry("B")
 check(retry.composer.text == "newer typing after Send" || retry.sent.contains("newer typing after Send"),
       "retry completion must preserve newer typing or send it by an explicit policy")
+check(!retry.sent.contains("original snapshot"), "retry completion must not send the stale snapshot")
+
+// Foreground first send of a draft: the launch fails after the user opened thread B.
+let launch = Harness()
+launch.sendFailed(RPCClientError(isTransport: false), messageId: "m-A", text: "draft prompt",
+                  draft: DraftSession(projectId: "p"), key: "draft-A")
+check(launch.composer.text.isEmpty && launch.prompts["B"] == nil, "a failed draft launch must not write into B")
+check(launch.prompts["draft-A"] == "draft prompt", "a failed draft launch must recover the draft's prompt")
+
+// Controls: a failure on the thread still shown fills its empty editor, keeps newer text, and an
+// unchanged prompt still goes once its upload retry lands.
+let same = Harness()
+same.sendFailed(RPCClientError(isTransport: false), messageId: "m-B", text: "B prompt", draft: nil, key: "B")
+check(same.composer.text == "B prompt" && same.prompts["B"] == "B prompt", "control: B's failure restores into B's empty editor")
+let sameTyped = Harness()
+sameTyped.composer.text = "newer on B"
+sameTyped.sendFailed(RPCClientError(isTransport: false), messageId: "m-B", text: "B prompt", draft: nil, key: "B")
+check(sameTyped.composer.text == "newer on B", "control: B's failure keeps B's newer text")
+let unchanged = Harness()
+unchanged.composer.text = "same prompt"
+unchanged.draftAttachments["B"] = [Attachment(status: .ready)]
+unchanged.sendAfterRetry["B"] = ("same prompt", .queue, false)
+unchanged.resumeSendAfterRetry("B")
+check(unchanged.sent == ["same prompt"], "control: an unchanged prompt sends after its retry")
 print("ownership invariant failures: \(failures)")
 exit(failures == 0 ? 0 : 1)
 '''
