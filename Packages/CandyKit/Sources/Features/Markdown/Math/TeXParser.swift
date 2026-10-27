@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// TeX atom classes, which decide the spacing between neighbours (TeXbook ch. 18, KaTeX's `mord`, `mbin`…).
