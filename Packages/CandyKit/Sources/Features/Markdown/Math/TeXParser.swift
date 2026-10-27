@@ -150,6 +150,9 @@ struct TeXParser {
                 // `{\color{red} a + b}`: the rest of the group.
                 _ = next()
                 let color = try MathColor(try rawArgument())
+                // The rest of the group sits at this group's level, so a top-level `\tag` after the switch stays top level.
+                depth -= 1
+                defer { depth += 1 }
                 out.append(.colored(color, try list(variant: variant, until: until)))
                 return out
             case .command(let n) where Self.switches[n] != nil:

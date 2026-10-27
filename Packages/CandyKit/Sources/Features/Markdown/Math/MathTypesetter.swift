@@ -35,11 +35,6 @@ final class MathLayout: @unchecked Sendable {
             let h = max(1 / scale, (r.height * scale).rounded() / scale)
             ctx.fill(CGRect(x: r.minX, y: (r.minY * scale).rounded() / scale, width: r.width, height: h))
         }
-        for s in strokes {
-            ctx.setStrokeColor(s.color ?? color)
-            ctx.setLineWidth(s.width)
-            ctx.strokeLineSegments(between: [s.from, s.to])
-        }
         ctx.textMatrix = .identity
         var start = 0
         while start < glyphs.count {
@@ -50,6 +45,12 @@ final class MathLayout: @unchecked Sendable {
             var ids = glyphs[start..<end].map(\.glyph), points = glyphs[start..<end].map(\.position)
             CTFontDrawGlyphs(font.font(size: size), &ids, &points, ids.count, ctx)
             start = end
+        }
+        // Over the glyphs, as KaTeX paints `\cancel`.
+        for s in strokes {
+            ctx.setStrokeColor(s.color ?? color)
+            ctx.setLineWidth(s.width)
+            ctx.strokeLineSegments(between: [s.from, s.to])
         }
         ctx.restoreGState()
     }
@@ -141,7 +142,12 @@ struct MathTypesetter {
         let t = MathTypesetter(font: font, em: em)
         var tag: MathBox?
         var body: [MathNode] = []
-        for node in nodes {
+        // `\color{red} x \tag{1}`: a tag in a top-level color switch still belongs to the formula.
+        let hoisted = nodes.flatMap { node -> [MathNode] in
+            guard case .colored(let c, let inner) = node, inner.contains(where: { if case .tag = $0 { true } else { false } }) else { return [node] }
+            return [.colored(c, inner.filter { if case .tag = $0 { false } else { true } })] + inner.filter { if case .tag = $0 { true } else { false } }
+        }
+        for node in hoisted {
             guard case .tag(let text) = node else { body.append(node); continue }
             guard display else { throw Unsupported(reason: "\\tag outside display math") }
             tag = try t.text(text, .roman, Style(kind: .text))
@@ -298,6 +304,11 @@ struct MathTypesetter {
                           CGRect(x: out.width - t, y: -out.depth, width: t, height: out.height + out.depth)]
             return (.ord, out)
         case .colored(let color, let body):
+            // Under scripts: a lone atom keeps its class (`\textcolor{red}{=}^!` is still a relation).
+            if body.count == 1 {
+                let (cls, box) = try atom(body[0], style)
+                return (cls, box.tinted(color.cgColor))
+            }
             return (.ord, try list(body, style).tinted(color.cgColor))
         case .cancel(let body, let up, let down):
             // KaTeX's enclose.ts: a 0.046em line corner to corner, 0.2em past the box above and below.
@@ -310,7 +321,10 @@ struct MathTypesetter {
             return (.ord, out)
         case .xArrow(let arrow, let above, let below):
             return (.rel, try xArrow(arrow, above: above, below: below, style))
-        case .style, .space, .tag:
+        case .tag:
+            // Only the top level of a display formula holds a tag; anywhere else (`x \tag{1}^2`) is beyond stage 1.
+            throw Unsupported(reason: "misplaced \\tag")
+        case .style, .space:
             return (.ord, MathBox())
         }
     }
@@ -627,7 +641,8 @@ struct MathTypesetter {
         var out = MathBox()
         out.add(centred, x: (w - shaft.width) / 2, y: 0)
         let gap = 0.111 * em
-        out.add(top, x: (w - top.width) / 2, y: centred.height + gap + top.depth)
+        // KaTeX lifts the label by its depth only past 0.25em, so a `g` keeps its descender near the arrow.
+        out.add(top, x: (w - top.width) / 2, y: centred.height + gap + (top.depth > 0.25 * em ? top.depth : 0))
         if let bottom { out.add(bottom, x: (w - bottom.width) / 2, y: -(centred.depth + gap + bottom.height)) }
         out.width = w
         return out
@@ -764,8 +779,8 @@ struct MathTypesetter {
                 let dx = a == "l" ? 0 : a == "r" ? widths[c] - b.width : (widths[c] - b.width) / 2
                 placed.append((b, x[c] + dx, y))
             }
-            rowBottoms.append(-(y - d))
             y -= d + (r < cells.count - 1 ? jot : 0) + min(0, gap)
+            rowBottoms.append(-y)
         }
         let total = -y
         let shift = total / 2 + k(.axisHeight, style)

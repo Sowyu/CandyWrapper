@@ -59,6 +59,8 @@ struct MathTypesetterTests {
         #expect(MathRenderer.layout("E = mc^2 \\tag{1}", display: true, textSize: 14)?.tag != nil)
         #expect(MathRenderer.layout("E = mc^2 \\tag{1}", display: false, textSize: 14) == nil)
         #expect(MathRenderer.layout("a \\tag{1} \\tag{2}", display: true, textSize: 14) == nil)
+        #expect(MathRenderer.layout("x \\tag{1}^2", display: false, textSize: 14) == nil)
+        #expect(MathRenderer.layout("\\color{red} x \\tag{1}", display: true, textSize: 14)?.tag != nil)
         let tagged = MarkdownLayout(document: MarkdownDocument(parsing: "$$E = mc^2 \\tag{1}$$", math: true), width: 480)
         #expect(Self.mathItems(tagged) == 2)
     }
@@ -125,6 +127,12 @@ struct MathTypesetterTests {
         // Too wide for the column: it scrolls, with a scroller past every code block's index.
         let wide = MarkdownLayout(document: MarkdownDocument(parsing: "$$" + String(repeating: "a+", count: 200) + "a$$", math: true), width: 480)
         #expect(wide.items.contains { if case .scroll(let i, _, let w) = $0 { i >= 1_000_000 && w > 480 } else { false } })
+    }
+
+    /// An inline formula wider than the column is clipped to it, inside its own item.
+    @Test func wideInlineFormulaIsClipped() {
+        let layout = MarkdownLayout(document: MarkdownDocument(parsing: "see $" + String(repeating: "a+", count: 150) + "a$ here", math: true), width: 300)
+        #expect(layout.items.contains { if case .math(_, _, _, let clip?) = $0 { clip.width <= 300 } else { false } })
     }
 
     @Test func copyGivesTeX() {

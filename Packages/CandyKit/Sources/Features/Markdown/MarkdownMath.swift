@@ -44,9 +44,9 @@ enum MarkdownMathStyle {
         for f in inline.formulas {
             guard let span = textBox.spans(f.range).first else { continue }
             let e = Self.inline(f.layout, parent: parent, lineHeight: textBox.lineHeight)
-            let item = MarkdownLayout.Item.math(f.layout, CGPoint(x: span.x0 + padX, y: span.baseline + e.baseline), color)
-            guard f.layout.width + 2 * padX > span.x1 - span.x0 + 0.5 else { out.append(item); continue }
-            out += [.clip(CGRect(x: span.x0, y: span.baseline - e.above, width: span.x1 - span.x0, height: e.above + e.below)), item, .endClip]
+            let wide = f.layout.width + 2 * padX > span.x1 - span.x0 + 0.5
+            out.append(.math(f.layout, CGPoint(x: span.x0 + padX, y: span.baseline + e.baseline), color,
+                             clip: wide ? CGRect(x: span.x0, y: span.baseline - e.above, width: span.x1 - span.x0, height: e.above + e.below) : nil))
         }
         return out
     }

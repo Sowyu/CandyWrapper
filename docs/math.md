@@ -34,6 +34,7 @@ A formula stage 1 can't typeset shows its TeX as inline code. That is the user's
 ## Next
 
 - The `equation` environment's automatic number.
+- Doubled rules in `array` (`||`, `\hline\hline`) draw as one line, and `\right` doesn't take a `\color` switched on inside `\left…\right`.
 - `\\` line breaks at the top level of a display formula.
 - An inline formula wider than the column scrolls sideways in T3; here it is clipped at the column's edge.
 - Math kerning (cut-ins) and KaTeX's per-glyph metrics for script attachment.

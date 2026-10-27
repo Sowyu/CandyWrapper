@@ -288,8 +288,9 @@ public final class MarkdownLayout {
         case link(CGRect, URL)
         /// An external link's favicon box (14pt square) for `host`.
         case favicon(String, CGRect)
-        /// A formula with its baseline's left end at the point, in the text color.
-        case math(MathLayout, CGPoint, NSColor)
+        /// A formula with its baseline's left end at the point, in the text color, clipped to the rect when it has one
+        /// (an inline formula wider than the column). The clip stays in the item so it can't unbalance a table's scroll.
+        case math(MathLayout, CGPoint, NSColor, clip: CGRect?)
         /// Text find counts but nothing draws: a diagram's source beside it (ChatMarkdown.tsx:1074-1079).
         case hiddenText(String, codeIndex: Int)
         /// Clips the items until the matching `.endClip` (wide tables).
@@ -679,8 +680,8 @@ private struct Builder {
         let viewport = CGRect(x: 0, y: 0, width: width, height: height)
         if overflows { box.items.append(.scroll(codeIndex: MarkdownMathStyle.scrollID(index), viewport: viewport, contentWidth: contentWidth)) }
         box.items.append(.text(textBox, CGPoint(x: x, y: padY)))
-        box.items.append(.math(layout, CGPoint(x: x, y: padY + above), color))
-        if let tag = layout.tag { box.items.append(.math(tag, CGPoint(x: max(width, contentWidth) - pad - tag.width, y: padY + above), color)) }
+        box.items.append(.math(layout, CGPoint(x: x, y: padY + above), color, clip: nil))
+        if let tag = layout.tag { box.items.append(.math(tag, CGPoint(x: max(width, contentWidth) - pad - tag.width, y: padY + above), color, clip: nil)) }
         if overflows { box.items.append(.endClip) }
         return box
     }
@@ -1273,7 +1274,7 @@ private extension MarkdownLayout.Item {
         case .endClip: .endClip
         case .link(let r, let url): .link(r.offsetBy(dx: p.x, dy: p.y), url)
         case .favicon(let host, let r): .favicon(host, r.offsetBy(dx: p.x, dy: p.y))
-        case .math(let layout, let o, let color): .math(layout, CGPoint(x: o.x + p.x, y: o.y + p.y), color)
+        case .math(let layout, let o, let color, let clip): .math(layout, CGPoint(x: o.x + p.x, y: o.y + p.y), color, clip: clip?.offsetBy(dx: p.x, dy: p.y))
         case .hiddenText: self
         case .image(let image, let r): .image(image, r.offsetBy(dx: p.x, dy: p.y))
         case .remoteImage(let url, let alt, let r): .remoteImage(url, alt, r.offsetBy(dx: p.x, dy: p.y))

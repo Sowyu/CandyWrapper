@@ -1129,10 +1129,13 @@ public final class MarkdownView: DSView {
                 break
             case .hiddenText(let code, _):
                 if !threadFindQuery.isEmpty { findOccurrence += ThreadFindText.count(code, threadFindQuery) }
-            case .math(let layout, let origin, let color):
+            case .math(let layout, let origin, let color, let clip):
                 guard CGRect(x: origin.x, y: origin.y - layout.height, width: layout.width, height: layout.height + layout.depth)
                     .insetBy(dx: -2, dy: -2).intersects(dirtyRect) else { break }
+                ctx.saveGState()
+                if let clip { ctx.clip(to: clip) }
                 layout.draw(in: ctx, at: CGPoint(x: origin.x, y: MarkdownTextBox.snappedBaseline(origin.y)), color: color.cgColor(in: self))
+                ctx.restoreGState()
             case .favicon(let host, let rect):
                 guard rect.intersects(dirtyRect) else { break }
                 let color = MarkdownStyle.link.cgColor(in: self)
