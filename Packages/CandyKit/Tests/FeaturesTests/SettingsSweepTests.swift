@@ -63,7 +63,7 @@ import T3Protocol
     }
     @Test func nativeNoticesShipOffline() {
         let entries = SettingsOpenSourceLicensesView.nativeEntries()
-        #expect(Set(entries.map(\.name)) == ["T3 Code", "SwiftTerm", "Lucide", "pele", "Candy Town by Aya_Lu"])
+        #expect(Set(entries.map(\.name)) == ["T3 Code", "SwiftTerm", "Lucide", "pele", "Latin Modern Math", "Candy Town by Aya_Lu"])
         #expect(entries.allSatisfy { !$0.noticeText.isEmpty && $0.bundles == ["CandyWrapper"] })
     }
 }
