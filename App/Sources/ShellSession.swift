@@ -77,6 +77,8 @@ final class ShellSession {
         http.authorize = { method, url, rejected in
             try await authorizer.authorizationHeaders(environmentId: environmentId, method: method, url: url, rejected: rejected)
         }
+        // The saved route can be a tunnel the relay has since moved; calls follow the current token's endpoint (audit TR-1).
+        http.currentBaseURL = { try await authorizer.httpBaseURL(environmentId: environmentId) }
         self.init(environmentId: environmentId, http: http, token: "", cached: cached,
                   supervisor: ConnectionSupervisor(dependencies: .init(connect: authorizer.connector(environmentId: environmentId)),
                                                    keepalive: .ping(interval: .seconds(80))))

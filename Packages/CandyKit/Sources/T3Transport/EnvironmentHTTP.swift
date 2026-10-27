@@ -44,8 +44,14 @@ public enum EnvironmentHTTPError: Error, Sendable, Equatable, CustomStringConver
 
 /// Bearer HTTP calls to one environment (protocol.md 4 and 5). Tokens never appear in logs or URLs.
 public struct EnvironmentHTTP: Sendable {
-    public let baseURL: URL
+    /// The origin calls go to. A relay environment's follows `currentBaseURL`, shared by every copy of this value.
+    public var baseURL: URL { base.value }
+    private let base: BaseBox
     private let session: URLSession
+    /// Asked before each call that carries a token, when set. A T3 Connect tunnel's endpoint can change between
+    /// tokens, and T3 replaces a relay target's base with the current one before it builds and signs a request
+    /// (client-runtime environmentHttpAuth.ts:155-177, audit TR-1). The answer also becomes `baseURL`.
+    public var currentBaseURL: (@Sendable () async throws -> URL)?
     /// T3's auth request timeout (authorization/remote.ts:25).
     public var timeout: TimeInterval = 10
     /// Headers for an authenticated request, used instead of `Bearer <token>` when set. T3 Connect
@@ -64,8 +70,26 @@ public struct EnvironmentHTTP: Sendable {
     }()
 
     public init(baseURL: URL, session: URLSession = EnvironmentHTTP.defaultSession) {
-        self.baseURL = baseURL
+        base = BaseBox(baseURL)
         self.session = session
+    }
+
+    private final class BaseBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var url: URL
+        init(_ url: URL) { self.url = url }
+        var value: URL {
+            get { lock.withLock { url } }
+            set { lock.withLock { url = newValue } }
+        }
+    }
+
+    /// The base for a call with `token`: the current relay endpoint when there is one.
+    private func resolvedBase(token: String?) async throws -> URL {
+        guard token != nil, let currentBaseURL else { return baseURL }
+        let url = try await currentBaseURL()
+        base.value = url
+        return url
     }
 
     /// `GET /.well-known/t3/environment`, no auth.
@@ -147,7 +171,7 @@ public struct EnvironmentHTTP: Sendable {
     /// GET of a signed asset URL from `assets.createUrl` (`/api/assets/<token>/<name>`, protocol.md 5).
     /// The signed path is the credential. Bodies over `maxBytes` are refused, like T3's `readBounded`.
     public func asset(_ relativeURL: String, token: String?, maxBytes: Int) async throws -> Data {
-        guard let url = URL(string: relativeURL, relativeTo: baseURL)?.absoluteURL else {
+        guard let url = URL(string: relativeURL, relativeTo: try await resolvedBase(token: token))?.absoluteURL else {
             throw EnvironmentHTTPError.invalidResponse("asset URL \(relativeURL)")
         }
         var request = URLRequest(url: url, timeoutInterval: timeout)
@@ -209,7 +233,7 @@ public struct EnvironmentHTTP: Sendable {
                                     contentType: String? = nil, as: T.Type) async throws -> T {
         // `appending(path:)` would escape a query's `?`, so a path like `ThreadHistoryRequest.path` keeps its query apart.
         let parts = path.split(separator: "?", maxSplits: 1)
-        var url = baseURL.appending(path: String(parts.first ?? ""))
+        var url = try await resolvedBase(token: token).appending(path: String(parts.first ?? ""))
         if parts.count == 2, var c = URLComponents(url: url, resolvingAgainstBaseURL: false) {
             c.percentEncodedQuery = String(parts[1])
             url = c.url ?? url

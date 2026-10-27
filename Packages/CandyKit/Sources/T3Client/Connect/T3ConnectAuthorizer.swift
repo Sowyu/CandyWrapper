@@ -217,6 +217,14 @@ public actor T3ConnectAuthorizer {
         }
     }
 
+    /// The tunnel origin the environment's current token was issued for: HTTP calls go there, wherever its
+    /// route was saved (environmentHttpAuth.ts:155-177, audit TR-1).
+    public func httpBaseURL(environmentId: String) async throws -> URL {
+        let endpoint = try await token(environmentId: environmentId).endpoint.httpBaseUrl
+        guard let url = URL(string: endpoint) else { throw DPoPError.invalidURL(endpoint) }
+        return url
+    }
+
     /// `Authorization` and `DPoP` headers for one later HTTP call to the environment
     /// (`Authorization: DPoP <token>` plus a fresh proof for that exact URL, with `ath`).
     /// After a 401, `EnvironmentHTTP` asks again with the refused token as `rejected`, which skips the

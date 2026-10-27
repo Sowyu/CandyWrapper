@@ -84,3 +84,48 @@ struct EnvironmentHTTPRetryTests {
         func add(_ v: String?) { values.append(v) }
     }
 }
+
+/// Answers 200 `{}` and records each request's host.
+final class RecordHostProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var hosts: [String] = []
+    static let lock = NSLock()
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.lock.withLock { Self.hosts.append(request.url?.host ?? "") }
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                            cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data("{}".utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+/// Audit TR-1 (docs/research/responsiveness-audit-2026-10-26/transport.md): a relay environment saved at tunnel A
+/// whose current token belongs to tunnel B. History and asset calls must go to B, and `baseURL` must follow.
+@Suite(.serialized) struct EnvironmentHTTPRelayOriginTests {
+    func http() -> EnvironmentHTTP {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RecordHostProtocol.self]
+        return EnvironmentHTTP(baseURL: URL(string: "https://tunnel-a.example")!, session: URLSession(configuration: config))
+    }
+
+    @Test func callsFollowTheCurrentRelayEndpoint() async throws {
+        RecordHostProtocol.hosts = []
+        var relay = http()
+        relay.currentBaseURL = { URL(string: "https://tunnel-b.example")! }
+        let copy = relay
+        _ = try await relay.get("api/orchestration/threads/t/history", token: "dpop", as: [String: String].self)
+        _ = try await relay.asset("/api/assets/signed/icon.png", token: "dpop", maxBytes: 1024)
+        #expect(RecordHostProtocol.hosts == ["tunnel-b.example", "tunnel-b.example"])
+        #expect(copy.baseURL.host == "tunnel-b.example", "copies made before the move build asset links on the new origin")
+    }
+
+    /// A direct route, or a call without a token, keeps its own origin.
+    @Test func withoutAResolverTheSavedOriginStays() async throws {
+        RecordHostProtocol.hosts = []
+        _ = try await http().get("api/orchestration/threads/t/history", token: "bearer", as: [String: String].self)
+        #expect(RecordHostProtocol.hosts == ["tunnel-a.example"])
+    }
+}
