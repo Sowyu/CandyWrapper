@@ -23,8 +23,8 @@ final class PaletteCommands {
     var guestShare: GuestShareController?
     /// The open palette's controller.
     var controller: CommandPaletteController? { overlay?.controller }
-    /// Thread message search (`useThreadSearch`, state/queries.ts:75-101): 2+ characters, 200 ms debounce.
-    private var search: (query: String, matches: [ThreadId: ThreadSearchMatch])?
+    /// Thread message search (`useThreadSearch`, state/queries.ts:75-101): a word of 3+ letters, 200 ms debounce.
+    private var search: (query: String, matches: [ThreadSearchMatch])?
     private var searchTask: Task<Void, Never>?
     private var pendingQuery: String?
     /// Go to file's server results (`useProjectFilePickerQuery`): the query they answer.
@@ -359,7 +359,9 @@ final class PaletteCommands {
             projectItems: { [weak self] in self?.projectSearchItems() ?? [] },
             threadItems: { [weak self] query in self?.threadItems(query: query) ?? [] },
             threadSearchPending: { [weak self] query in self?.pendingQuery == query.trimmingCharacters(in: .whitespaces) },
-            settingsItems: { [weak self] query in self?.settingsItems(query) ?? [] })
+            settingsItems: { [weak self] query in self?.settingsItems(query) ?? [] },
+            threadMessageItems: { [weak self] query in self?.threadMessageItems(query) ?? [] },
+            now: Double(nowMs))
     }
 
     var snapshot: ShellSnapshot? { sidebar?.snapshot }
@@ -522,7 +524,7 @@ final class PaletteCommands {
         }
         var result = [PaletteGroup(value: "actions", label: "Actions", items: actions)]
         // Building all 1,500 entries to keep 12 cost 9 ms a keystroke (docs/research/m10-load-2026-10-12.md).
-        let recent = threadItems(query: nil, limit: PaletteSearch.recentThreadLimit)
+        let recent = threadItems(query: nil, recentLimit: PaletteSearch.recentThreadLimit)
         if !recent.isEmpty { result.append(PaletteGroup(value: "recent-threads", label: "Recent Threads", items: recent)) }
         return result
     }
@@ -616,43 +618,74 @@ final class PaletteCommands {
         }
     }
 
-    /// `buildThreadActionItems` over every unarchived thread, newest first, with message matches for `query`;
-    /// `limit` keeps the newest only, as its `input.limit` does (CommandPalette.logic.ts:337).
-    // ponytail: text description, match line and pull request badge; T3 draws the project favicon, provider icon, status pill and highlighted match
-    private func threadItems(query: String?, limit: Int? = nil) -> [PaletteEntry] {
+    /// `buildThreadActionItems` (CommandPalette.logic.ts:384-457) over every unarchived thread but subagents, which
+    /// `filter` ranks. `recentLimit` keeps the most recently used instead, without the open thread
+    /// (CommandPalette.tsx:909-920).
+    // ponytail: text description and pull request badge; T3 draws the project favicon, provider icon and status pill
+    private func threadItems(query: String?, recentLimit: Int? = nil) -> [PaletteEntry] {
         guard let snapshot else { return [] }
         let open = threads.openThreadId
         let projects = Dictionary(snapshot.projects.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        let matches = query.flatMap { q in search.flatMap { $0.query == q.trimmingCharacters(in: .whitespaces) ? $0.matches : nil } } ?? [:]
         let ms = nowMs
-        // Sort positions, not the large shells themselves.
-        let all = snapshot.threads
-        let live = all.indices.filter { all[$0].archivedAt == nil }
-        let keys = live.map { SidebarModel.getThreadSortTimestamp(all[$0], .updatedAt) }
-        let order = keys.indices.sorted { keys[$0] > keys[$1] }.map { live[$0] }
-        return (limit.map { Array(order.prefix($0)) } ?? order)
-            .map { index in
-                let thread = all[index]
-                let projectTitle = projects[thread.projectId]?.title
-                var parts = [projectTitle, locationLabel(thread.id.environmentId)].compactMap { $0 }
-                if thread.id == open { parts.append("Current thread") }
-                let match = matches[thread.id].map { ($0.source == "user" ? "You: " : "Agent: ") + $0.snippet }
-                let stamp = (thread.latestUserMessageAt ?? thread.updatedAt).raw
-                let id = thread.id
-                var entry = PaletteEntry(value: "thread:\(thread.id.rawValue)",
-                                    searchTerms: [thread.title] + ThreadPullRequests.searchTerms(thread)
-                                        + [projectTitle ?? "", thread.branch ?? "", matches[thread.id]?.snippet ?? "", thread.id.localId.rawValue],
-                                    title: thread.title, description: parts.joined(separator: " \u{00B7} "), match: match,
-                                    timestamp: TimestampFormat.formatRelativeTimeLabel(stamp, nowMs: ms),
-                                    searchRecency: Int64(SidebarModel.getThreadSortTimestamp(thread, .updatedAt)), icon: .messageSquare,
-                                    action: .run({ [weak self] in self?.openThread(id) }, keepOpen: false))
-                if let m = matches[thread.id] { entry.matchIsUser = m.source == "user"; entry.matchQuery = query }
-                if let query {
-                    entry.pullRequestBadge = SidebarPullRequestBadge.search(thread, query: query)
-                    entry.pullRequestBadgeSettled = thread.settledOverride == .settled
-                }
-                return entry
+        let several = environments.environmentIds.count > 1
+        var all = snapshot.threads.filter { $0.archivedAt == nil && !SidebarModel.isSidebarSubagentThread($0) }
+        var subjects = all.map { thread in
+            PaletteScoring.threadSearchSubject(thread, projectTitle: projects[thread.projectId]?.title,
+                                               environmentLabel: several ? locationLabel(thread.id.environmentId) : nil)
+        }
+        if let recentLimit {
+            let order = all.indices.filter { all[$0].id != open }
+                .sorted { PaletteScoring.threadRecentUse(subjects[$0]) > PaletteScoring.threadRecentUse(subjects[$1]) }
+                .prefix(recentLimit)
+            all = order.map { all[$0] }
+            subjects = order.map { subjects[$0] }
+        }
+        return zip(all, subjects).map { thread, subject in
+            var parts = [subject.projectTitle, locationLabel(thread.id.environmentId)].compactMap { $0 }
+            if thread.id == open { parts.append("Current thread") }
+            let stamp = (thread.latestUserMessageAt ?? thread.updatedAt).raw
+            let id = thread.id
+            var entry = PaletteEntry(value: "thread:\(thread.id.rawValue)", searchTerms: [thread.title], title: thread.title,
+                                     description: parts.joined(separator: " \u{00B7} "),
+                                     timestamp: TimestampFormat.formatRelativeTimeLabel(stamp, nowMs: ms), icon: .messageSquare,
+                                     action: .run({ [weak self] in self?.pickThread(id, query: query) }, keepOpen: false))
+            entry.threadSearch = subject
+            // Last in its group: picking the thread already open does nothing.
+            entry.secondary = thread.id == open
+            if let query {
+                entry.pullRequestBadge = SidebarPullRequestBadge.search(thread, query: query)
+                entry.pullRequestBadgeSettled = thread.settledOverride == .settled
             }
+            return entry
+        }
+    }
+
+    /// `threadMessageItems` (CommandPaletteThreadItems.tsx:199-240): threads whose messages match, by
+    /// `rankMessageMatches`, skipping threads whose titles match. The snippet replaces the project line, and the
+    /// timestamp is the matching message's.
+    // ponytail: rows don't hold their places as `nextShownOrder` does, since every environment answers before any show; port it if results stream per machine
+    private func threadMessageItems(_ query: String) -> [PaletteEntry] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard let search, search.query == trimmed else { return [] }
+        let items = Dictionary(threadItems(query: query).map { ($0.value, $0) }, uniquingKeysWith: { a, _ in a })
+        let item = { (m: ThreadSearchMatch) in items["thread:\(m.threadId.rawValue)"] }
+        let ranked = PaletteScoring.rankMessageMatches(search.matches, quality: \.quality, hits: \.hits, messageCreatedAt: { $0.messageCreatedAt?.raw },
+                                                       subjectOf: { item($0)?.threadSearch },
+                                                       normalizedQuery: PaletteScoring.foldSearchQuery(trimmed), now: Double(nowMs),
+                                                       withoutTitleMatches: true)
+        var seen = Set<String>()
+        let ms = nowMs
+        return ranked.compactMap { m -> PaletteEntry? in
+            guard var entry = item(m), seen.insert(entry.value).inserted else { return nil }
+            entry.description = nil
+            if let created = m.messageCreatedAt { entry.timestamp = TimestampFormat.formatRelativeTimeLabel(created.raw, nowMs: ms) }
+            entry.match = (m.isUser ? "You: " : "Agent: ") + m.snippet
+            entry.matchIsUser = m.isUser
+            entry.matchQuery = trimmed
+            // `ThreadRowContext`: the project and machine beside the title, since the snippet takes their line.
+            entry.note = [entry.threadSearch?.projectTitle, entry.threadSearch?.environmentLabel].compactMap { $0 }.joined(separator: " \u{00B7} ")
+            return entry
+        }.prefix(PaletteScoring.paletteMessageLimit).map { $0 }
     }
 
     /// `settingsSearchItems` (CommandPalette.tsx:2310-2331): "Settings · <section>", opening the page at the row.
@@ -711,16 +744,15 @@ final class PaletteCommands {
     private func searchMessages(_ query: String) {
         searchTask?.cancel()
         let trimmed = query.trimmingCharacters(in: .whitespaces)
-        guard trimmed.count >= 2, !query.hasPrefix(">") else { pendingQuery = nil; return }
+        // The server needs a word of three or more letters to match messages (threadSearch.ts:144-146).
+        guard !query.hasPrefix(">"), !PaletteScoring.messageSearchTokens(trimmed).long.isEmpty else { pendingQuery = nil; return }
         pendingQuery = trimmed
         searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(200))
             guard !Task.isCancelled, let self else { return }
             let found = await self.environments.searchThreads(trimmed) ?? []
             guard !Task.isCancelled, self.pendingQuery == trimmed else { return }
-            var byThread: [ThreadId: ThreadSearchMatch] = [:]
-            for m in found where (m.source == "user" || m.source == "assistant") && byThread[m.threadId] == nil { byThread[m.threadId] = m }
-            self.search = (trimmed, byThread)
+            self.search = (trimmed, found.filter { $0.source == "user" || $0.source == "assistant" })
             self.pendingQuery = nil
             self.overlay?.controller.refresh()
         }
@@ -753,6 +785,22 @@ final class PaletteCommands {
     private func openThread(_ id: ThreadId) {
         showThreadView()
         threads.open(id)
+    }
+
+    /// `runThread` (CommandPaletteThreadItems.tsx:166-191): a pick from search sends its open with the query, so
+    /// the server records it, and the thread view then skips its own open. The open thread is no pick.
+    private func pickThread(_ id: ThreadId, query: String?) {
+        let query = query ?? ""
+        if !query.trimmingCharacters(in: .whitespaces).isEmpty, !query.hasPrefix(">"), id != threads.openThreadId,
+           let shell = snapshot?.threads.first(where: { $0.id == id }) {
+            _ = ThreadOpenLog.claim(id, now: Double(nowMs))
+            if !shell.lastVisitedAt.isAbsent, !shell.opens.isAbsent {
+                let visit = ThreadCommands.visit(id.localId, visitedAt: shell.updatedAt, opened: true,
+                                                 searchQuery: PaletteScoring.pickedQuery(query))
+                Task { _ = try? await self.environments.dispatch(id, visit) }
+            }
+        }
+        openThread(id)
     }
 
     private func newThread(in project: ProjectShell) {
