@@ -1029,7 +1029,8 @@ public final class SidebarContentView: DSView {
             b.frame = NSRect(x: fx, y: menuTop, width: 32, height: 32)
             fx += 36
         }
-        if accountRow.superview == nil { addSubview(accountRow, positioned: .below, relativeTo: updatePill) }
+        // Keep the account row above the list even when the update button is hidden.
+        if accountRow.superview == nil { addSubview(accountRow, positioned: .above, relativeTo: scrollArea) }
         accountRow.isHidden = !accountFooter
         if accountFooter {
             for b in [settingsButton, pullRequestsButton, usageButton] { b.isHidden = true }

@@ -26,8 +26,6 @@ final class UpdateUI {
         self.settings = settings
         self.toasts = toasts
         self.showWindow = showWindow
-        pill.isHidden = false
-        pill.superview?.needsLayout = true
         pill.onCheck = { [weak self] in self?.pillCheck() }
         pill.onDownload = { [weak self] in self?.pillDownload() }
         pill.onInstall = { [weak self] in self?.pillInstall() }

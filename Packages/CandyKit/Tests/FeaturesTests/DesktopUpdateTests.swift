@@ -1,5 +1,6 @@
 import AppKit
 import Testing
+import DesignSystem
 @testable import Features
 
 /// T3's update machine, button logic and release note shaping (updateMachine.test.ts,
@@ -91,5 +92,62 @@ struct DesktopUpdateTests {
         stable.channel = .latest
         pill.update = stable
         #expect(!pill.showsReleaseNotes && pill.tooltipText == "Update 0.1.3 downloaded. Click to restart and install.")
+    }
+
+    @Test func footerUpdateScope() {
+        defer { ThemeRuntime.apply(ThemeRuntimeInput()) }
+        for redesign in [false, true] {
+            var theme = ThemeRuntimeInput()
+            theme.ditherDark = redesign
+            theme.ditherLight = redesign
+            ThemeRuntime.apply(theme)
+            for dark in [false, true] {
+                let host = NSView(frame: NSRect(x: 0, y: 0, width: 240, height: 44))
+                host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                let pill = SidebarUpdatePillView()
+                host.addSubview(pill)
+                let account = SidebarAccountRowView()
+                host.addSubview(account)
+                let cases: [(UpdateEverythingLogic.Pending, Bool, SidebarUpdatePillView.IconStatus)] = [
+                    (.init(providers: 1), true, .idle),
+                    (.init(app: true), false, .available),
+                    (.init(servers: 1), false, .everything),
+                    (.init(app: true, servers: 1), false, .everything),
+                    (.init(runtime: true), false, .available),
+                    (.init(app: true, runtime: true, servers: 2, providers: 3), false, .everything),
+                    (.init(), true, .idle),
+                ]
+                for (pending, hidden, icon) in cases {
+                    pill.update = pending.app || pending.runtime ? base.onUpdateAvailable("0.1.3", at: at) : base
+                    pill.setEverything(summary: "Update everything", pending: pending)
+                    account.updateAllCount = pending.count
+                    #expect(pill.isHidden == hidden)
+                    #expect(pill.iconStatus == icon)
+                    let titles = account.menuItems.map(\.title)
+                    #expect(titles.prefix(3) == ["Settings", "Usage", "Appearance"])
+                    #expect(titles.dropFirst(3) == (pending.count > 0 ? ["Update all (\(pending.count))"] : []))
+                }
+            }
+        }
+    }
+
+    @Test func hiddenUpdateButtonKeepsAccountRowVisible() throws {
+        var theme = ThemeRuntimeInput()
+        theme.ditherDark = true
+        theme.ditherLight = true
+        ThemeRuntime.apply(theme)
+        defer { ThemeRuntime.apply(ThemeRuntimeInput()) }
+        for dark in [false, true] {
+            let container = SidebarContainerView()
+            let sidebar = SidebarContentView()
+            container.content = sidebar
+            let image = Snapshot.image(of: container, size: NSSize(width: 256, height: 780), dark: dark)
+            #expect(sidebar.updatePill.isHidden)
+            #expect(!sidebar.accountRow.isHidden)
+            // The avatar must actually reach the bitmap, rather than sit behind the sidebar surface.
+            let avatar = try #require(image.colorAt(x: 36, y: 1500)?.usingColorSpace(.sRGB))
+            let outside = try #require(image.colorAt(x: 4, y: 1500)?.usingColorSpace(.sRGB))
+            #expect(abs(avatar.redComponent - outside.redComponent) > 0.02)
+        }
     }
 }

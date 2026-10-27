@@ -611,7 +611,7 @@ public final class SidebarAccountRowView: ControlView {
         chevron.frame = NSRect(x: end - c, y: (h - c) / 2, width: c, height: c)
     }
 
-    private func showMenu() {
+    var menuItems: [MenuItem] {
         let lib = ThemeLibrary.shared
         let mode = lib.appearanceMode
         let appearance = [("light", "Light"), ("dark", "Dark"), ("system", "System")].map { key, title in
@@ -625,9 +625,13 @@ public final class SidebarAccountRowView: ControlView {
         if updateAllCount > 0 {
             items.append(MenuItem("Update all (\(updateAllCount))", icon: .circleArrowUp) { [weak self] in self?.onUpdateAll?() })
         }
+        return items
+    }
+
+    private func showMenu() {
         // Above the chevron, its left edge on the chevron's, reaching right out over the panel (the user's mockup,
         // 2026-10-23).
-        let menu = MenuPopupView.show(items, from: self, placement: PopupPlacement(side: .top, align: .start, sideOffset: 6, fallbackAxisSide: .none),
+        let menu = MenuPopupView.show(menuItems, from: self, placement: PopupPlacement(side: .top, align: .start, sideOffset: 6, fallbackAxisSide: .none),
                                       anchorRect: chevron.frame)
         menuOpen = menu != nil
         menu?.hostPopup?.onClose = { [weak self] in self?.menuOpen = false }

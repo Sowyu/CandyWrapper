@@ -5,7 +5,7 @@ import T3Protocol
 
 /// "Update everything" behind the sidebar update button (T3 3105 d83929ad0, eeaac49a9: sidebar/useUpdateEverything.ts,
 /// UpdateEverythingDialog.tsx, updateEverythingRun.tsx, SidebarUpdatePill.tsx:298-370). While other machines' servers
-/// or any providers are behind, the button shows the circled arrow and one click asks to update them all: providers,
+/// are behind, the button shows the circled arrow and one click asks to update them all: providers,
 /// then servers, then this app last. Nothing here runs while nobody updates; it recomputes on the changes it observes.
 @MainActor
 final class UpdateEverything {
@@ -127,15 +127,17 @@ final class UpdateEverything {
                                 providers: next.providerMachines.reduce(0) { $0 + $1.candidates.count })
         var summary = next.summary
         #if DEBUG
-        // Pretend providers wait, to see the button and "Update all (N)" against a server with nothing to update.
+        // Pretend providers wait, to check "Update all (N)" without lighting the update button.
         if let fake = ProcessInfo.processInfo.environment["CANDY_DEBUG_PENDING_PROVIDERS"].flatMap(Int.init), fake > 0 {
             pending.providers += fake
             summary = "Update \(fake) providers"
         }
         #endif
-        pill?.everythingSummary = held || runtimeOffer || pending.servers + pending.providers == 0 ? nil : summary
+        pill?.setEverything(summary: held || runtimeOffer ? nil : summary, pending: pending)
         account?.updateAllCount = L.offered(pending, runningOnThisMac: runningOnThisMac).count
-        pill?.run = run.map { (runTooltip($0), $0.localVersion != nil) }
+        pill?.run = run.flatMap { r in
+            r.localVersion != nil || r.machines.contains(where: \.updatesServer) ? (runTooltip(r), r.localVersion != nil) : nil
+        }
     }
 
     /// `useUpdateRunTooltip`: this app first, then one line per machine.

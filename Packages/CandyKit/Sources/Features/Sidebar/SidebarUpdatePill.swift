@@ -19,9 +19,11 @@ public final class SidebarUpdatePillView: ControlView {
     public var onInstall: (() -> Void)?
     /// A release link in the notes popover (`openDesktopUpdateReleaseNotes`).
     public var onOpenURL: ((String) -> Void)?
-    /// "Update this app, 2 servers, and 3 providers" while other machines or providers have updates
-    /// (`useUpdateEverything`, T3 3105 d83929ad0); a click then asks to update everything.
-    public var everythingSummary: String? { didSet { if everythingSummary != oldValue { refresh() } } }
+    /// A server update offers the full update pass, including providers. Providers alone stay in the account menu.
+    private(set) var everythingSummary: String? { didSet { if everythingSummary != oldValue { refresh() } } }
+    public func setEverything(summary: String?, pending: UpdateEverythingLogic.Pending) {
+        everythingSummary = pending.servers > 0 ? summary : nil
+    }
     /// A running pass: its tooltip lines (`useUpdateRunTooltip`) and whether this app installs last.
     public var run: (tooltip: String, installsLocal: Bool)? { didSet { if run?.tooltip != oldValue?.tooltip || run?.installsLocal != oldValue?.installsLocal { refresh() } } }
     public var onEverything: (() -> Void)?
@@ -117,6 +119,12 @@ public final class SidebarUpdatePillView: ControlView {
     }
 
     private func refresh() {
+        // The footer offers only app and server updates; manual checks remain in the app menu and Settings.
+        let hidden = !showUpdateDetails
+        if isHidden != hidden {
+            isHidden = hidden
+            superview?.needsLayout = true
+        }
         let status = iconStatus
         if status != shownIcon { rebuildIcon(status) }
         updateProgress(animated: true)
