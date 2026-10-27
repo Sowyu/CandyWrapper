@@ -1195,6 +1195,8 @@ final class ThreadController {
     private var visits = ThreadVisitTracker()
     private var visitTimer: DispatchWorkItem?
     private var visitViewShown = false
+    /// The thread whose open the view last recorded (`recordedOpenRef`).
+    private var recordedOpen: ThreadId?
     /// The wake the open thread last acknowledged, so a shell change before the visit's echo doesn't send it again.
     private var acknowledgedWake: String?
 
@@ -1216,10 +1218,21 @@ final class ThreadController {
         let shown = panel.window != nil
         // Settings and Usage unmount ChatView in T3, so its per-watermark dedupe starts over on the way back.
         if shown, !visitViewShown { visits.reset() }
+        if !shown { recordedOpen = nil }
         visitViewShown = shown
         guard shown, let id = openThreadId, let sidebar,
               let shell = sidebar.snapshot?.threads.first(where: { $0.id == id }) else { return }
         let now = TimestampFormat.nowMs()
+        // Opening a thread is one visit that also counts toward search ranking; a palette pick already sent it with
+        // its query (ThreadVisitWatermark.tsx:31-56). The open is recorded locally even when the server can't take
+        // it, so recents follow it. Only a server whose shells carry `opens` gets `opened`.
+        if recordedOpen != id {
+            recordedOpen = id
+            if ThreadOpenLog.claim(id, now: Double(now)), !shell.lastVisitedAt.isAbsent, !shell.opens.isAbsent {
+                visits.didDispatch(shell, routeKey: id.rawValue, nowMs: now)
+                Task { _ = try? await environments.dispatch(id, ThreadCommands.visit(id.localId, visitedAt: shell.updatedAt, opened: true)) }
+            }
+        }
         // Opening a woken thread dismisses its Woke pill. T3 keeps a timer wake through a visit until the pill or the
         // footer's Dismiss is clicked (Sidebar.tsx:1276-1282); the user asked for it to clear once seen (decisions.md).
         // A subagent's request wakes a snoozed thread too (T3 f4df794777); only a snoozed thread needs the scan.

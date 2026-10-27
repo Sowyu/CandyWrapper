@@ -13,6 +13,8 @@ public struct CommandPaletteItem: Sendable {
     public var matchIsUser: Bool?
     /// UTF-16 offsets in `match` of the query's hits, drawn semibold in the foreground.
     public var matchHighlights: [Int]?
+    /// A match hint's "Label:" length (`SearchMatchHintLine`): the line at muted/85 with the label at muted/70.
+    public var matchHintLabelLength: Int?
     public var shortcut: String?
     public var timestamp: String?
     /// `titleTrailingContent` text such as "Current" (`text-xs text-muted-foreground/70`).
@@ -603,9 +605,10 @@ final class CommandRowView: DSView {
         title.color = item.titleHighlights == nil ? fg : Themed.color(\.contrastMutedForeground)
         title.highlightColor = Themed.color(\.contrastForeground)
         // `text-xs text-muted-foreground/85`, the tag in info or success, hits `font-semibold text-foreground`.
-        matchLine.color = Themed.color(\.contrastMutedForeground, item.matchIsUser == nil ? 1 : 0.85)
+        matchLine.color = Themed.color(\.contrastMutedForeground, item.matchIsUser == nil && item.matchHintLabelLength == nil ? 1 : 0.85)
         matchLine.highlightColor = Themed.color(\.contrastForeground)
         matchLine.prefixColor = item.matchIsUser.map { ($0 ? 4 : 6, Themed.color($0 ? \.infoForeground : \.successForeground)) }
+            ?? item.matchHintLabelLength.map { ($0, Themed.color(\.contrastMutedForeground, 0.7)) }
         detail.color = item.descriptionHighlights == nil ? Themed.color(\.contrastMutedForeground, 0.7) : Themed.color(\.contrastMutedForeground)
         detail.highlightColor = Themed.color(\.contrastForeground)
         shortcut.color = Themed.color(\.contrastSecondaryLabel)

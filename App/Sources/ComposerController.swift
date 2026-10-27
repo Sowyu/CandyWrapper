@@ -62,6 +62,8 @@ final class ComposerController {
     private var threadFindResult: ThreadFindResult?
     private var threadFindGeneration = 0
     private var threadFindTarget: ThreadId?
+    /// Where the next find starts: the message a palette match came from (`PendingFind.start`).
+    private var threadFindStartEntryId: String?
 
     /// Opens a thread in the panel (the launch's new thread).
     var openThread: ((ThreadId) -> Void)?
@@ -4516,7 +4518,18 @@ extension ComposerController {
         return true
     }
 
+    /// `requestThreadFindQuery` (chat/threadFindActionBus.ts): find opened on `query` in the thread just opened,
+    /// starting at `startEntryId`, so a message match from the palette lands in view.
+    func openThreadFind(_ id: ThreadId, query: String, startEntryId: String?) {
+        guard openThreadId == id, openThreadFind(), panel.findOpen else { return }
+        // Setting the text runs a search through the bar's change handler, so the start goes in after it.
+        panel.findBar.input.text = query
+        threadFindStartEntryId = startEntryId
+        searchThread()
+    }
+
     private func closeThreadFind() {
+        threadFindStartEntryId = nil
         let wasOpen = panel.findOpen
         threadFindGeneration += 1
         threadFindTask?.cancel(); threadFindTask = nil
@@ -4558,7 +4571,10 @@ extension ComposerController {
         if delta != 0 || preserveSelection, let match = old?.match {
             payload["start"] = .object(["entryId": .string(match.entryId), "occurrence": .number(Double(match.occurrence))])
             payload["offset"] = .number(Double(delta))
+        } else if let entryId = threadFindStartEntryId {
+            payload["start"] = .object(["entryId": .string(entryId), "occurrence": .number(0)])
         }
+        threadFindStartEntryId = nil
         let supervisor = shell.supervisor
         let progressive = serverConfig.capabilities.contains("threadFindProgressive")
         let requestPayload = JSONValue.object(payload)

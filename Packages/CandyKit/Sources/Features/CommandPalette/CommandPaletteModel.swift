@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import T3Store
 
 /// One palette entry (`CommandPaletteActionItem` / `CommandPaletteSubmenuItem`,
 /// apps/web/src/components/CommandPalette.logic.ts:131-171).
@@ -17,8 +18,10 @@ public struct PaletteEntry {
     public var description: String?
     public var match: String?
     public var timestamp: String?
-    /// Thread recency; also makes the first search term a title that ties with other non-exact title matches.
-    public var searchRecency: Int64?
+    /// What a thread row ranks by (`threadSearch`, CommandPalette.logic.ts:431-439).
+    public var threadSearch: PaletteScoring.ThreadSearchSubject?
+    /// Why the row matched when its title shows no match ("Branch: fix-sidebar"), set by `filter`.
+    public var matchHint: PaletteScoring.SearchMatchHint?
     public var icon: IconName
     public var isDisabled = false
     public var note: String?
@@ -46,23 +49,31 @@ public struct PaletteEntry {
     /// The thread is settled: the badge takes `text-secondary-label`.
     public var pullRequestBadgeSettled = false
 
-    /// UTF-16 offsets of the query's hits in `match`, after the tag.
-    var matchHighlights: [Int]? {
-        guard let match, let isUser = matchIsUser, let query = matchQuery else { return nil }
-        let tag = isUser ? "You: " : "Agent: "
-        guard match.hasPrefix(tag) else { return nil }
-        let snippet = String(match.dropFirst(tag.count))
-        let offset = tag.utf16.count
-        return SearchExcerptView.highlights(in: snippet, query: query).flatMap { r in
-            (r.lowerBound.utf16Offset(in: snippet)..<r.upperBound.utf16Offset(in: snippet)).map { offset + $0 }
+    /// The second line: a message match (`ThreadSearchMatchExcerpt`), else a match hint ("Branch: fix-sidebar",
+    /// `SearchMatchHintLine`), with UTF-16 offsets of the hits and the length of the "Label:" tag.
+    var matchLine: (text: String, highlights: [Int], hintLabelLength: Int?)? {
+        if let match, let isUser = matchIsUser, let query = matchQuery {
+            let tag = isUser ? "You: " : "Agent: "
+            guard match.hasPrefix(tag) else { return (match, [], nil) }
+            let snippet = String(match.dropFirst(tag.count))
+            let ranges = PaletteScoring.findSearchTokenRanges(snippet, query: query)
+            return (match, Self.offsets(ranges, shift: tag.utf16.count), nil)
         }
+        if let match { return (match, [], nil) }
+        guard let hint = matchHint else { return nil }
+        let label = hint.label + ":"
+        return ("\(label) \(hint.text)", Self.offsets(hint.ranges, shift: label.utf16.count + 1), label.utf16.count)
+    }
+
+    static func offsets(_ ranges: [PaletteScoring.SearchRange], shift: Int) -> [Int] {
+        ranges.flatMap { ($0.start..<$0.end).map { $0 + shift } }
     }
 
     public init(value: String, searchTerms: [String], title: String, titleEmphasis: String? = nil, description: String? = nil,
-                match: String? = nil, timestamp: String? = nil, searchRecency: Int64? = nil, icon: IconName, isDisabled: Bool = false,
+                match: String? = nil, timestamp: String? = nil, icon: IconName, isDisabled: Bool = false,
                 note: String? = nil, shortcutCommand: String? = nil, secondary: Bool = false, action: Action) {
         self.value = value; self.searchTerms = searchTerms; self.title = title; self.titleEmphasis = titleEmphasis
-        self.description = description; self.match = match; self.timestamp = timestamp; self.searchRecency = searchRecency
+        self.description = description; self.match = match; self.timestamp = timestamp
         self.icon = icon; self.isDisabled = isDisabled; self.note = note; self.shortcutCommand = shortcutCommand
         self.secondary = secondary; self.action = action
     }
@@ -137,62 +148,108 @@ public enum PaletteSearch {
         }
     }
 
-    /// `rankSearchFieldMatch` (CommandPalette.logic.ts:416-438).
-    static func rankField(_ field: String, query: String, tokens: [String]) -> Int? {
-        let f = normalize(field)
-        guard !f.isEmpty, tokens.allSatisfy({ f.contains($0) }) else { return nil }
-        if f == query { return 3 }
-        if f.hasPrefix(query) { return 2 }
-        if f.contains(query) { return 1 }
-        return 0
-    }
-
-    /// `rankCommandPaletteItemMatch` (CommandPalette.logic.ts:440-461).
-    static func rank(_ item: PaletteEntry, query: String, tokens: [String]) -> Int {
-        let terms = item.searchTerms.filter { !$0.isEmpty }
-        for (index, field) in terms.enumerated() {
-            guard let fieldRank = rankField(field, query: query, tokens: tokens) else { continue }
-            // All non-exact thread title matches share a tier so recency breaks the tie.
-            if index == 0, item.searchRecency != nil { return 1_000 + (fieldRank == 3 ? 1 : 0) }
-            return 1_000 - index * 100 + fieldRank
+    /// `rankPaletteItem` and `scorePaletteItem` (CommandPalette.logic.ts:458-497): a thread by
+    /// `scoreThreadSearch`, anything else by its title with its search terms as keywords. A secondary row
+    /// doesn't decide where its group sits.
+    @MainActor static func score(_ item: PaletteEntry, query: String, now: Double, typos: Bool) -> PaletteScoring.SearchMatch? {
+        var match: PaletteScoring.SearchMatch?
+        if let subject = item.threadSearch {
+            match = PaletteScoring.scoreThreadSearch(query, subject, now: now, typos: typos)
+        } else {
+            let terms = item.title != item.searchTerms.first ? [item.title] + item.searchTerms : item.searchTerms
+            match = PaletteScoring.scoreSearchTerms(query, terms, typos: typos)
         }
-        return 0
+        if item.secondary { match?.groupQuality = 0 }
+        return match
     }
 
-    /// `filterCommandPaletteGroups` (CommandPalette.logic.ts:463-541). A leading `>` keeps actions only.
-    public static func filter(_ activeGroups: [PaletteGroup], query: String, isInSubmenu: Bool,
-                              projectItems: [PaletteEntry], settingsItems: [PaletteEntry] = [], threadItems: [PaletteEntry]) -> [PaletteGroup] {
+    /// `filterCommandPaletteGroups` (CommandPalette.logic.ts:499-603). Equal match classes put commands before
+    /// threads, so "new" runs "New thread". A leading `>` keeps actions only. With `rootGroups`, submenu options
+    /// join the root search as "Suggestions", and a submenu with no match falls back to it. Message matches come
+    /// last, as "In messages", so late results can't move the rows above them.
+    @MainActor public static func filter(_ activeGroups: [PaletteGroup], query: String, isInSubmenu: Bool,
+                                         rootGroups: [PaletteGroup]? = nil, projectItems: [PaletteEntry],
+                                         settingsItems: [PaletteEntry] = [], threadItems: [PaletteEntry],
+                                         threadMessageItems: [PaletteEntry] = [], now: Double? = nil) -> [PaletteGroup] {
+        let hasQuery = !query.trimmingCharacters(in: .whitespaces).isEmpty
+        if let rootGroups, isInSubmenu {
+            let scoped = filter(activeGroups, query: query, isInSubmenu: true, projectItems: projectItems,
+                                settingsItems: settingsItems, threadItems: threadItems)
+            if !scoped.isEmpty || !hasQuery { return scoped }
+            return filter(rootGroups, query: query, isInSubmenu: false, rootGroups: rootGroups, projectItems: projectItems,
+                          settingsItems: settingsItems, threadItems: threadItems, threadMessageItems: threadMessageItems, now: now)
+        }
         let actionsOnly = query.hasPrefix(">")
-        let normalized = normalize(actionsOnly ? String(query.dropFirst()) : query)
+        let normalized = PaletteScoring.foldSearchQuery(actionsOnly ? String(query.dropFirst()) : query)
         if normalized.isEmpty {
             return actionsOnly ? activeGroups.filter { $0.value == "actions" } : activeGroups
         }
-        let tokens = normalized.components(separatedBy: " ")
         var groups = activeGroups
         if actionsOnly {
             groups = groups.filter { $0.value == "actions" }
         } else if !isInSubmenu {
             groups = groups.filter { $0.value != "recent-threads" }
         }
-        if !isInSubmenu, !actionsOnly {
+        let searchesEverything = !isInSubmenu && !actionsOnly
+        // On equal match classes groups keep this order: threads, what people search for most, right after commands.
+        if searchesEverything {
+            if let rootGroups, hasQuery {
+                let nested = nestedSearchItems(rootGroups.first { $0.value == "actions" }?.items ?? [], query: query)
+                if !nested.isEmpty { groups.append(PaletteGroup(value: "nested-search", label: "Suggestions", items: nested)) }
+            }
+            if !threadItems.isEmpty { groups.append(PaletteGroup(value: "threads-search", label: "Threads", items: threadItems)) }
             if !projectItems.isEmpty { groups.append(PaletteGroup(value: "projects-search", label: "Projects", items: projectItems)) }
             if !settingsItems.isEmpty { groups.append(PaletteGroup(value: "settings-search", label: "Settings", items: settingsItems)) }
-            if !threadItems.isEmpty { groups.append(PaletteGroup(value: "threads-search", label: "Threads", items: threadItems)) }
         }
-        return groups.compactMap { group in
-            let ranked = group.items.enumerated().compactMap { index, item -> (PaletteEntry, Int, Int)? in
-                let haystack = normalize(item.searchTerms.joined(separator: " "))
-                guard tokens.allSatisfy({ haystack.contains($0) }) else { return nil }
-                return (item, index, rank(item, query: normalized, tokens: tokens))
+        let now = now ?? Double(TimestampFormat.nowMs())
+        let ranked = PaletteScoring.rankSearchGroups(groups.map { (group: $0, items: $0.items) }) { item, typos, _ in
+            score(item, query: normalized, now: now, typos: typos)
+        }
+        let threadsMatch = ranked.contains { $0.group.value == "threads-search" }
+        var result = ranked.map { entry -> PaletteGroup in
+            let value = entry.group.value
+            let limit = value == "threads-search" ? PaletteScoring.paletteThreadLimit
+                : value == "nested-search" || (searchesEverything && threadsMatch) ? PaletteScoring.paletteSecondaryLimit
+                : entry.ranked.count
+            // Secondary rows stay below the rest, in score order. Hints are built only for the rows shown.
+            let items = (entry.ranked.filter { !$0.item.secondary } + entry.ranked.filter { $0.item.secondary })
+                .prefix(limit).map { row -> PaletteEntry in
+                    guard row.match.ranges.isEmpty, let hint = row.match.explain?() else { return row.item }
+                    var item = row.item
+                    item.matchHint = hint
+                    return item
+                }
+            return PaletteGroup(value: value, label: entry.group.label, items: Array(items))
+        }
+        guard searchesEverything else { return result }
+        let listed = Set(result.flatMap { $0.items.map(\.value) })
+        let messageItems = threadMessageItems.filter { !listed.contains($0.value) }
+        if !messageItems.isEmpty { result.append(PaletteGroup(value: "threads-messages", label: "In messages", items: messageItems)) }
+        return result
+    }
+
+    /// `buildNestedSearchItems` (CommandPalette.logic.ts:605-632): every option inside a root submenu as one row,
+    /// such as "New thread in t3code" or "Change theme: Dracula".
+    public static func nestedSearchItems(_ items: [PaletteEntry], query: String) -> [PaletteEntry] {
+        let topLevelNames = Set(items.map(\.title))
+        let folded = PaletteScoring.foldSearchQuery(query)
+        return items.flatMap { parent -> [PaletteEntry] in
+            guard case .submenu(let page) = parent.action else { return [] }
+            var stem = parent.title
+            if stem.hasSuffix("...") { stem.removeLast(3) } else if stem.hasSuffix("\u{2026}") { stem.removeLast() }
+            // A query that only names the submenu ("new thread in") wants the submenu row itself.
+            if PaletteScoring.foldSearchQuery(stem).hasPrefix(folded) { return [] }
+            let prefix = stem == parent.title ? "\(stem): " : "\(stem.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)) "
+            return page.groups.flatMap(\.items).compactMap { child in
+                guard !child.isSubmenu, !child.isStatic else { return nil }
+                let title = prefix + child.title
+                guard !topLevelNames.contains(title) else { return nil }
+                var row = child
+                row.title = title
+                // Only the combined title: child keywords like "theme" would list every theme.
+                row.searchTerms = [title]
+                return row
             }
-            let items = ranked.sorted { l, r in
-                if l.0.secondary != r.0.secondary { return !l.0.secondary }
-                if l.2 != r.2 { return l.2 > r.2 }
-                let lr = l.0.searchRecency ?? 0, rr = r.0.searchRecency ?? 0
-                if lr != rr { return lr > rr }
-                return l.1 < r.1
-            }.map(\.0)
-            return items.isEmpty ? nil : PaletteGroup(value: group.value, label: group.label, items: items)
         }
     }
 

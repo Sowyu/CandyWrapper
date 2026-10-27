@@ -657,12 +657,18 @@ final class Environments {
                                      projectIds: Set<ProjectId>?, revision: Int) async -> [ThreadSearchMatch]? {
         let generation = await session.store.generation
         var payload: [String: JSONValue] = ["query": .string(query)]
-        if session.omissions.omitOlderSettled, let cut = await session.store.snapshot?.olderSettled {
+        // The server needs a word of three or more letters to match messages; a shorter query still finds the
+        // titles of older settled threads the shell leaves out (threadSearch.ts:126-151).
+        let searchMessages = !PaletteScoring.messageSearchTokens(query).long.isEmpty
+        let cut = session.omissions.omitOlderSettled ? await session.store.snapshot?.olderSettled : nil
+        guard searchMessages || cut != nil else { return [] }
+        if let cut {
             payload["olderSettledBefore"] = .string(cut.before)
             payload["environmentLabel"] = .string(label)
             if let projectIds {
                 payload["projectIds"] = .array(projectIds.filter { $0.environmentId == id }.map { .string($0.localId.rawValue) })
             }
+            if !searchMessages { payload["titlesOnly"] = .bool(true) }
         }
         guard let json = try? await session.supervisor.request("orchestration.searchThreads", payload: .object(payload)),
               !Task.isCancelled, self.shellSearchGeneration == revision, generation == (await session.store.generation),

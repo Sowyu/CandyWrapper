@@ -1,7 +1,7 @@
 import Foundation
 import T3Protocol
 
-/// `OrchestrationThreadSearchMatch` (packages/contracts/src/threadSearch.ts:22-28): a thread whose
+/// `OrchestrationThreadSearchMatch` (packages/contracts/src/threadSearch.ts:29-46): a thread whose
 /// messages the server matched for `orchestration.searchThreads`. `source` is "user" or "assistant".
 public struct ThreadSearchMatch: Decodable, Equatable, Sendable {
     public var threadId: ThreadId
@@ -10,13 +10,24 @@ public struct ThreadSearchMatch: Decodable, Equatable, Sendable {
     public var snippet: String
     /// When the matched message was written.
     public var messageCreatedAt: T3Timestamp?
+    /// How well the message matches: 1 for whole words, 0.8 for a word start, 0.3 inside words, plus a phrase or
+    /// near bonus. Absent before Nightly 3669.
+    public var quality: Double?
+    /// How many of the thread's newest messages match. Absent before Nightly 3669.
+    public var hits: Int?
+    /// The message the snippet is from. Absent before Nightly 3669.
+    public var messageId: String?
 
-    public init(threadId: ThreadId, projectId: ProjectId, source: String, snippet: String, messageCreatedAt: T3Timestamp? = nil) {
+    public init(threadId: ThreadId, projectId: ProjectId, source: String, snippet: String, messageCreatedAt: T3Timestamp? = nil,
+                quality: Double? = nil, hits: Int? = nil, messageId: String? = nil) {
         self.threadId = threadId
         self.projectId = projectId
         self.source = source
         self.snippet = snippet
         self.messageCreatedAt = messageCreatedAt
+        self.quality = quality
+        self.hits = hits
+        self.messageId = messageId
     }
 
     public var isUser: Bool { source == "user" }

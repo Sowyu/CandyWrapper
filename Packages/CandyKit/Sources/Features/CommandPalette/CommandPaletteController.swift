@@ -13,16 +13,22 @@ public final class CommandPaletteController {
         public var rootGroups: () -> [PaletteGroup]
         /// `projectSearchItems`.
         public var projectItems: () -> [PaletteEntry]
-        /// `allThreadItems` for a query, with message matches folded in.
+        /// `allThreadItems`: every visible thread, ranked by `filter`.
         public var threadItems: (String) -> [PaletteEntry]
+        /// `threadMessageItems`: threads whose messages match the query, best first, cut to what the palette shows.
+        public var threadMessageItems: (String) -> [PaletteEntry]
+        /// When the palette opened, which ranking is relative to, so rows don't reorder as time passes.
+        public var now: Double
         /// True while the thread message search for the query has not settled.
         public var threadSearchPending: (String) -> Bool
         /// `settingsSearchItems`: settings matching a non-empty query.
         public var settingsItems: (String) -> [PaletteEntry]
         public init(rootGroups: @escaping () -> [PaletteGroup], projectItems: @escaping () -> [PaletteEntry] = { [] },
                     threadItems: @escaping (String) -> [PaletteEntry] = { _ in [] }, threadSearchPending: @escaping (String) -> Bool = { _ in false },
-                    settingsItems: @escaping (String) -> [PaletteEntry] = { _ in [] }) {
+                    settingsItems: @escaping (String) -> [PaletteEntry] = { _ in [] },
+                    threadMessageItems: @escaping (String) -> [PaletteEntry] = { _ in [] }, now: Double = 0) {
             self.rootGroups = rootGroups; self.projectItems = projectItems
+            self.threadMessageItems = threadMessageItems; self.now = now
             self.threadItems = threadItems; self.threadSearchPending = threadSearchPending
             self.settingsItems = settingsItems
         }
@@ -197,10 +203,14 @@ public final class CommandPaletteController {
         let active = stack.last?.groups ?? source.rootGroups()
         let searching = !isInSubmenu && !query.hasPrefix(">")
         let hasQuery = searching && !PaletteSearch.normalize(query).isEmpty
+        let hasText = !query.trimmingCharacters(in: .whitespaces).isEmpty
         displayed = PaletteSearch.filter(active, query: query, isInSubmenu: isInSubmenu,
-                                         projectItems: searching ? source.projectItems() : [],
-                                         settingsItems: hasQuery ? source.settingsItems(query) : [],
-                                         threadItems: hasQuery ? source.threadItems(query) : [])
+                                         rootGroups: hasText && stack.last?.mode == nil ? source.rootGroups() : nil,
+                                         projectItems: searching || hasText ? source.projectItems() : [],
+                                         settingsItems: hasQuery || (isInSubmenu && hasText) ? source.settingsItems(query) : [],
+                                         threadItems: hasQuery || (isInSubmenu && hasText) ? source.threadItems(query) : [],
+                                         threadMessageItems: hasQuery || (isInSubmenu && hasText) ? source.threadMessageItems(query) : [],
+                                         now: source.now)
         flat = displayed.flatMap(\.items)
         if displayed.isEmpty {
             let pending = searching && source.threadSearchPending(query)
@@ -222,9 +232,10 @@ public final class CommandPaletteController {
         var item = CommandPaletteItem(entry.title, icon: entry.icon, description: entry.description,
                                       shortcut: entry.shortcutCommand.flatMap { ActiveKeymap.keymap.label(for: $0) },
                                       timestamp: entry.timestamp, isSubmenu: entry.isSubmenu, isDisabled: entry.isDisabled,
-                                      titleEmphasis: entry.titleEmphasis, match: entry.match, note: entry.note)
+                                      titleEmphasis: entry.titleEmphasis, match: entry.matchLine?.text, note: entry.note)
         item.matchIsUser = entry.matchIsUser
-        item.matchHighlights = entry.matchHighlights
+        item.matchHighlights = entry.matchLine.map(\.highlights)
+        item.matchHintLabelLength = entry.matchLine?.hintLabelLength
         item.glyph = entry.glyph
         if let source = entry.projectIcon { item.makeIcon = { ProjectMonogramView(source) } }
         item.titleHighlights = entry.titleHighlights

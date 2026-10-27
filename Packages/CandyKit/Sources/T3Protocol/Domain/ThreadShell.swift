@@ -70,6 +70,8 @@ public struct ThreadShell: Codable, Hashable, Sendable, Identifiable {
     public var activeOrderKey: String?
     /// Absent on servers without visited tracking; the client then uses its own watermark.
     public var lastVisitedAt: Tristate<T3Timestamp>
+    /// Open history the palette ranks by (orchestrationV2.ts:386-399, 451). Absent before Nightly 3669.
+    public var opens: Tristate<ThreadOpens>
     public var titleRegeneration: TitleRegeneration?
     public var deletedAt: T3Timestamp?
     /// Guest messages waiting for the owner to send or dismiss (orchestrationV2.ts:1930-1931). Absent before Nightly 3655.

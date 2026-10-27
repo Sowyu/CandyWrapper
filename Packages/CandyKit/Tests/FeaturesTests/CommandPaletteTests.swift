@@ -7,9 +7,15 @@ import T3Protocol
 /// Ported from apps/web/src/components/CommandPalette.logic.test.ts, plus the palette's key routing.
 @MainActor
 @Suite struct CommandPaletteTests {
-    func thread(_ id: String, _ title: String, recency: Int64, extra: [String] = []) -> PaletteEntry {
-        PaletteEntry(value: "thread:\(id)", searchTerms: [title, "Project"] + extra + [id], title: title,
-                     searchRecency: recency, icon: .messageSquare, action: .run({}, keepOpen: false))
+    static let now = Double(1_792_713_600_000) // 2026-10-23
+    static let day = 86_400_000.0
+
+    func thread(_ id: String, _ title: String, project: String? = nil, activity: Double = now - 30 * day, opens: ThreadOpens? = nil,
+                secondary: Bool = false) -> PaletteEntry {
+        var entry = PaletteEntry(value: "thread:\(id)", searchTerms: [title], title: title, icon: .messageSquare, action: .run({}, keepOpen: false))
+        entry.threadSearch = PaletteScoring.ThreadSearchSubject(id: id, title: title, projectTitle: project, activityAt: activity, opens: opens)
+        entry.secondary = secondary
+        return entry
     }
 
     func action(_ value: String, _ terms: [String], ran: (() -> Void)? = nil) -> PaletteEntry {
@@ -18,27 +24,96 @@ import T3Protocol
 
     func values(_ groups: [PaletteGroup]) -> [String] { groups.flatMap { $0.items.map(\.value) } }
 
+    func labels(_ groups: [PaletteGroup]) -> [String] { groups.map(\.label) }
+
+    func filter(_ query: String, actions: [PaletteEntry] = [], projects: [PaletteEntry] = [], settings: [PaletteEntry] = [],
+                threads: [PaletteEntry] = [], messages: [PaletteEntry] = []) -> [PaletteGroup] {
+        PaletteSearch.filter(actions.isEmpty ? [] : [PaletteGroup(value: "actions", label: "Actions", items: actions)], query: query,
+                             isInSubmenu: false, projectItems: projects, settingsItems: settings, threadItems: threads,
+                             threadMessageItems: messages, now: Self.now)
+    }
+
+    // CommandPalette.logic.test.ts:136-170.
     @Test func titleMatchesOutrankProjectMatches() {
-        let items = [thread("context", "Fix navbar spacing", recency: 20), thread("title", "Project kickoff notes", recency: 19)]
-        let groups = PaletteSearch.filter([], query: "project", isInSubmenu: false, projectItems: [], threadItems: items)
+        let items = [thread("context", "Fix navbar spacing", project: "Project"), thread("title", "Project kickoff notes", project: "Project")]
+        let groups = filter("project", threads: items)
         #expect(groups.map(\.value) == ["threads-search"])
         #expect(values(groups) == ["thread:title", "thread:context"])
     }
 
-    @Test func titleMatchesShareATierBrokenByRecency() {
-        let items = [
-            thread("old-prefix", "Convex InvalidCursor in Convex threads query", recency: 2),
-            thread("recent-title", "Disable Convex schema validation", recency: 24),
-            thread("recent-content", "Fix schema validation", recency: 25, extra: ["Please check Convex"]),
-        ]
-        let groups = PaletteSearch.filter([], query: "convex", isInSubmenu: false, projectItems: [], threadItems: items)
-        #expect(values(groups) == ["thread:recent-title", "thread:old-prefix", "thread:recent-content"])
+    // CommandPalette.logic.test.ts:172-220.
+    @Test func searchesSubmenuOptionsFromTheRoot() {
+        let projects = [action("new-thread-in:t3code", ["t3code"]), action("new-thread-in:web", ["web"])]
+        let page = PalettePage(addonIcon: .squarePen, groups: [PaletteGroup(value: "projects", label: "Projects", items: projects)])
+        let newThreadIn = PaletteEntry(value: "action:new-thread-in", searchTerms: ["new thread"], title: "New thread in...",
+                                       icon: .squarePen, action: .submenu(page))
+        let root = [PaletteGroup(value: "actions", label: "Actions", items: [newThreadIn, action("action:add-project", ["Add project"])])]
+        let threads = [thread("t", "Thread about t3code")]
+        func search(_ query: String, _ inSubmenu: Bool) -> [[String]] {
+            PaletteSearch.filter(inSubmenu ? page.groups : root, query: query, isInSubmenu: inSubmenu, rootGroups: root,
+                                 projectItems: [], threadItems: threads, now: Self.now).map { [$0.label] + $0.items.map(\.title) }
+        }
+        #expect(search("new thread in t3code", false).first == ["Suggestions", "New thread in t3code"])
+        #expect(!search("new thread", false).map { $0[0] }.contains("Suggestions"))
+        #expect(search("t3", true) == [["Projects", "t3code"]])
+        #expect(search("add project", true) == [["Actions", "Add project"]])
     }
 
-    @Test func idMatchesNeverOutrankTitles() {
-        let items = [thread("thread-alpha-1234", "Unrelated work", recency: 5), thread("thread-other-9999", "Fix thread-alpha-1234 flakes", recency: 4)]
-        let groups = PaletteSearch.filter([], query: "  THREAD-ALPHA-1234  ", isInSubmenu: false, projectItems: [], threadItems: items)
-        #expect(values(groups) == ["thread:thread-other-9999", "thread:thread-alpha-1234"])
+    // CommandPalette.logic.test.ts:222-251.
+    @Test func messageMatchesComeLastOnce() {
+        let items = [thread("title", "Disable Convex schema validation"), thread("message", "Fix schema validation")]
+        let pairs = { (m: [PaletteEntry]) in self.filter("convex", threads: items, messages: m).map { [$0.label] + $0.items.map(\.value) } }
+        #expect(pairs([]) == [["Threads", "thread:title"]])
+        #expect(pairs(items.reversed()) == [["Threads", "thread:title"], ["In messages", "thread:message"]])
+    }
+
+    // CommandPalette.logic.test.ts:253-293.
+    @Test func activeThreadStaysFirstWhileItsTitleIsTyped() {
+        let threads = [thread("t", "Compaction prompt timing and cache age", activity: Self.now - 12 * Self.day)]
+        for query in ["comp", "compa", "compac", "compact", "compacti", "compaction"] {
+            let groups = filter(query, actions: [action("action:copy", ["Copy thread ID"])],
+                                settings: [action("setting:compact", ["Compact idle threads"]),
+                                           PaletteEntry(value: "setting:providers", searchTerms: ["Providers", "compatibility"], title: "Providers",
+                                                        icon: .settings, action: .run({}, keepOpen: false))],
+                                threads: threads)
+            #expect(groups.first?.label == "Threads", "\(query)")
+        }
+    }
+
+    // CommandPalette.logic.test.ts:295-353.
+    @Test func groupsOrderByTheirBestMatch() {
+        let threads = [thread("t", "Upgrade to pnpm 12")]
+        let upload = [action("action:upload", ["Upload file"])]
+        #expect(labels(filter("upgrade", actions: upload, threads: threads)) == ["Threads"])
+        #expect(labels(filter("upl", actions: upload, threads: threads)) == ["Actions"])
+        let prs = PaletteEntry(value: "action:open-prs", searchTerms: ["Open pull requests", "pr", "prs", "review"], title: "Open pull requests",
+                               icon: .gitPullRequestArrow, action: .run({}, keepOpen: false))
+        #expect(values(filter("pr", actions: [prs, action("action:project", ["Project settings"])])) == ["action:open-prs", "action:project"])
+        #expect(labels(filter("up", actions: upload, threads: threads)) == ["Actions", "Threads"])
+        #expect(labels(filter("pnpm up", actions: upload, threads: threads)) == ["Threads"])
+    }
+
+    // CommandPalette.logic.test.ts:355-392.
+    @Test func wholeCommandNameWinsAndOpenThreadGoesLast() {
+        let threads = [thread("new", "New thread"), thread("open", "New thread layout", secondary: true), thread("other", "New thread button")]
+        let groups = filter("new thread", actions: [action("action:new-thread", ["New thread in t3code"])], threads: threads)
+        #expect(labels(groups) == ["Actions", "Threads"])
+        #expect(groups.last?.items.last?.title == "New thread layout")
+    }
+
+    // CommandPalette.logic.test.ts:394-421.
+    @Test func projectNamedForTheQueryOutranksThreads() {
+        let threads = [thread("t", "Lakebed performance gains")]
+        let projects = [action("project:lakebed", ["Lakebed", "/code/lakebed"])]
+        #expect(labels(filter("lakebed", projects: projects, threads: threads)) == ["Projects", "Threads"])
+        #expect(labels(filter("lake", projects: projects, threads: threads)) == ["Threads", "Projects"])
+    }
+
+    // CommandPalette.logic.test.ts:423-461.
+    @Test func commandStaysAboveAThreadInDailyUse() {
+        let threads = [thread("t", "New onboarding flow", activity: Self.now - Self.day,
+                              opens: ThreadOpens(openedAt: Self.now - Self.day, score: 7))]
+        #expect(labels(filter("new", actions: [action("action:new-thread", ["new thread", "chat"])], threads: threads)) == ["Actions", "Threads"])
     }
 
     @Test func normalizesAccentsAndCase() {
@@ -65,7 +140,7 @@ import T3Protocol
     @Test func actionsFilterAndRecentThreads() {
         let root = [
             PaletteGroup(value: "actions", label: "Actions", items: [action("new", ["new thread"]), action("usage", ["usage"])]),
-            PaletteGroup(value: "recent-threads", label: "Recent Threads", items: [thread("t", "new thread ideas", recency: 1)]),
+            PaletteGroup(value: "recent-threads", label: "Recent Threads", items: [thread("t", "new thread ideas")]),
         ]
         let projects = [action("project:x", ["new project x"])]
         // Empty query: the root as is.
@@ -74,8 +149,8 @@ import T3Protocol
         #expect(PaletteSearch.filter(root, query: ">", isInSubmenu: false, projectItems: projects, threadItems: []).map(\.value) == ["actions"])
         #expect(values(PaletteSearch.filter(root, query: ">new", isInSubmenu: false, projectItems: projects, threadItems: [])) == ["new"])
         // A query hides Recent Threads and adds the search groups.
-        let searched = PaletteSearch.filter(root, query: "new", isInSubmenu: false, projectItems: projects, threadItems: [thread("t", "new thread ideas", recency: 1)])
-        #expect(searched.map(\.value) == ["actions", "projects-search", "threads-search"])
+        let searched = PaletteSearch.filter(root, query: "new", isInSubmenu: false, projectItems: projects, threadItems: [thread("t", "new thread ideas")])
+        #expect(Set(searched.map(\.value)) == ["actions", "projects-search", "threads-search"])
     }
 
     @Test func enumeratesJumpShortcuts() {

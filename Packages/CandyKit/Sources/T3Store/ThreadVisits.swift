@@ -50,8 +50,14 @@ public struct ThreadVisitTracker: Sendable {
 }
 
 extension ThreadCommands {
-    /// `visitThread` (packages/client-runtime/src/operations/commands.ts:539-548).
-    public static func visit(_ threadId: ThreadId, visitedAt: T3Timestamp, commandId: String = newCommandId()) -> JSONValue {
-        command("thread.visit", threadId, commandId, ["visitedAt": .string(visitedAt.raw)])
+    /// `visitThread` (packages/client-runtime/src/operations/commands.ts:539-548). `opened` says the user opened
+    /// the thread, and `searchQuery` is the palette query that picked it (orchestrationV2.ts:2843-2852). Servers
+    /// before Nightly 3669 ignore both, so callers send them only to a server whose shells carry `opens`.
+    public static func visit(_ threadId: ThreadId, visitedAt: T3Timestamp, opened: Bool = false, searchQuery: String? = nil,
+                             commandId: String = newCommandId()) -> JSONValue {
+        var fields: [String: JSONValue] = ["visitedAt": .string(visitedAt.raw)]
+        if opened { fields["opened"] = .bool(true) }
+        if let searchQuery, !searchQuery.isEmpty { fields["searchQuery"] = .string(searchQuery) }
+        return command("thread.visit", threadId, commandId, fields)
     }
 }

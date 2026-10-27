@@ -137,7 +137,7 @@ struct SidebarLeftoverTests {
         entry.matchIsUser = false
         entry.matchQuery = " the "
         // "Agent: " is 7 UTF-16 units; "THE" sits at 4...6 of the snippet.
-        #expect(entry.matchHighlights == [11, 12, 13])
+        #expect(entry.matchLine?.highlights == [11, 12, 13])
         let item = CommandPaletteController.item(entry)
         #expect(item.matchIsUser == false && item.matchHighlights == [11, 12, 13])
     }
