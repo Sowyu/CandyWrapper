@@ -43,7 +43,7 @@ final class ConnectorsController {
     private func run(_ env: String, changes: [AgentConfigChange]?) async {
         let label = environments.label(env) ?? env
         guard let release = HelperController.release, let session = environments.session(env) else {
-            store.set(env, .failed("\(label) isn't connected."))
+            store.set(env, .failed("\(label) isn't connected."), endsChange: changes != nil)
             return
         }
         let command = HelperInstall.configCommand(release, set: changes != nil, testHome: Self.testHome, configHome: Self.configHome)
@@ -54,9 +54,9 @@ final class ConnectorsController {
         }.last
         let failure = lines.lazy.compactMap { line -> String? in if case .failed(let why) = line { why } else { nil } }.last
         if let snapshot {
-            store.set(env, .loaded(snapshot))
+            store.set(env, .loaded(snapshot), endsChange: changes != nil)
         } else {
-            store.set(env, .failed(failure.map { "\(label): \($0)" } ?? "\(label) didn't answer in time."))
+            store.set(env, .failed(failure.map { "\(label): \($0)" } ?? "\(label) didn't answer in time."), endsChange: changes != nil)
         }
         if changes != nil, let failure, snapshot != nil {
             toast("Couldn't change \(label)'s config", failure, .error)

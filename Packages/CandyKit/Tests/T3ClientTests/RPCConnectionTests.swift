@@ -312,6 +312,21 @@ struct RPCConnectionTests {
         #expect(pings(socket) == 1)
     }
 
+    /// Audit TR-2: a Pong doesn't answer a stream that owes its snapshot, so a host lost after it still closes.
+    @Test func aPongDoesNotAnswerAStreamThatOwesItsSnapshot() async throws {
+        let (c, socket, clock) = await makeWatchedConnection()
+        let stream = await c.stream("subscribeServerConfig", snapshotFirst: true)
+        let consumer = Task { for try await _ in stream {} }
+        #expect(await eventually { socket.sent.count == 1 })
+        await tick(c, clock)
+        #expect(await eventually { pings(socket) == 1 })
+        await pong(c, socket)
+        #expect(await c.watchdogRunning)
+        clock.advance(by: Self.interval * 4)
+        #expect(await eventually { await c.isClosed })
+        consumer.cancel()
+    }
+
     @Test func aStreamThatAnswersAtOnceNeverPings() async throws {
         let (c, socket, clock) = await makeWatchedConnection()
         let shell = await c.stream("orchestration.subscribeShell")

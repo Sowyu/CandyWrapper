@@ -165,14 +165,18 @@ public actor RPCConnection {
     /// Each `Chunk` is acked once its last value has been handed to the consumer, so the server
     /// never runs more than one chunk ahead (protocol.md 2.4). Cancelling the consuming task,
     /// or dropping the stream, sends `Interrupt`.
-    public func stream(_ tag: String, payload: JSONValue = .object([:])) -> RPCStream {
+    /// `snapshotFirst`: the server always sends a first chunk, so the stream owes it until it arrives, even after
+    /// a Pong. T3 answers Ping apart from its handlers (effect RpcServer.ts:806-807), and `subscribeServerConfig`
+    /// awaits `loadServerConfig` before its snapshot (ws.ts:2960-2965), so a Pong doesn't prove the snapshot is coming.
+    public func stream(_ tag: String, payload: JSONValue = .object([:]), snapshotFirst: Bool = false) -> RPCStream {
         let id = allocateID()
+        let state = StreamState()
+        state.snapshotFirst = snapshotFirst
         if let closedWith {
-            let state = StreamState()
             state.end = .failure(closedWith)
             streams[id] = state
         } else {
-            streams[id] = StreamState()
+            streams[id] = state
             write(.request(RPCRequest(id: id, tag: tag, payload: payload)))
             armWatchdog()
             OpenTiming.mark("request sent", tag)
@@ -323,8 +327,9 @@ public actor RPCConnection {
                 failPending(.protocolError(e))
             case .pong:
                 // The server answered in order, so every stream subscribed before is being served.
-                // A quiet one (a terminal, a status feed) owes nothing more.
-                for state in streams.values { state.answered = true }
+                // A quiet one (a terminal, a status feed) owes nothing more. One that owes a snapshot still
+                // waits for it (audit TR-2).
+                for state in streams.values where !state.snapshotFirst { state.answered = true }
                 let waiters = pongWaiters.values
                 pongWaiters.removeAll()
                 waiters.forEach { $0.resume() }
@@ -421,6 +426,8 @@ private final class StreamState {
     var waiter: CheckedContinuation<JSONValue?, Error>?
     /// A chunk arrived, so the server has answered the subscription.
     var answered = false
+    /// Only a chunk answers it; a Pong doesn't.
+    var snapshotFirst = false
 }
 
 /// Interrupts the stream when the last reference goes away before the stream ended.

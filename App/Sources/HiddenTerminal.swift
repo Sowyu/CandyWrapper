@@ -23,23 +23,29 @@ enum HiddenTerminal {
             stream.cancel()
             Task { @MainActor in _ = try? await environments.request(env, TerminalRPC.close, with(["deleteHistory": .bool(true)])) }
         }
+        // Every write gives up after 15 s, so a server that never answers one can't hold this run, and the machine's
+        // queued runs behind it, forever (audit OH-2). T3 limits one write to 65,536 characters (contracts terminal.ts:64-67).
+        func type(_ text: String) async throws {
+            var rest = Substring(text)
+            while !rest.isEmpty {
+                _ = try await session.supervisor.request(TerminalRPC.write, payload: with(["data": .string(String(rest.prefix(256)))]), timeout: .seconds(15))
+                rest = rest.dropFirst(256)
+                if !rest.isEmpty { try await Task.sleep(for: .milliseconds(40)) }
+            }
+        }
         do {
             // Wait for the shell's first prompt before typing.
-            for _ in 0..<40 where await output.text.isEmpty { try await Task.sleep(for: .milliseconds(250)) }
-            var rest = Substring(command)
-            while !rest.isEmpty {
-                _ = try await environments.request(env, TerminalRPC.write, with(["data": .string(String(rest.prefix(256)))]))
-                rest = rest.dropFirst(256)
-                try await Task.sleep(for: .milliseconds(40))
-            }
+            for _ in 0..<40 where await !output.reader.started { try await Task.sleep(for: .milliseconds(250)) }
+            try await type(command)
+            try await Task.sleep(for: .milliseconds(40))
             var sentInput = input == nil
             // ponytail: 3 minutes covers a 25 MB download on a slow line; raise it if installs time out there
             for _ in 0..<720 {
                 try await Task.sleep(for: .milliseconds(250))
-                let lines = HelperInstall.scan(await output.text)
+                let lines = await output.reader.lines
                 if !sentInput, lines.contains(.ready), let input {
                     sentInput = true
-                    _ = try await environments.request(env, TerminalRPC.write, with(["data": .string(input)]))
+                    try await type(input)
                 }
                 if lines.contains(where: { if case .ok = $0 { true } else if case .failed = $0 { true } else { false } }) { return lines }
             }
@@ -48,8 +54,7 @@ enum HiddenTerminal {
     }
 
     private actor OutputBox {
-        private(set) var text = ""
-        // ponytail: keeps the last 64 KB; the markers are always in the newest lines
-        func append(_ s: String) { text = String((text + s).suffix(65_536)) }
+        private(set) var reader = HelperInstall.MarkerReader()
+        func append(_ s: String) { reader.append(s) }
     }
 }

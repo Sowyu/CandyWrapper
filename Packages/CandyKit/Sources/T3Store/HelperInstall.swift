@@ -111,6 +111,26 @@ public enum HelperInstall {
         }
     }
 
+    /// Collects the marker lines of a terminal's output as it arrives. Each finished line is scanned once and only the
+    /// unfinished one is kept, so a `CWH-CONFIG` line of any length survives (audit OH-1: a 64K-character tail lost it).
+    public struct MarkerReader: Sendable {
+        public private(set) var lines: [Line] = []
+        public private(set) var started = false
+        private var partial = ""
+        public init() {}
+
+        public mutating func append(_ chunk: String) {
+            started = started || !chunk.isEmpty
+            guard let cut = chunk.lastIndex(where: \.isNewline) else {
+                // ponytail: a line past 16M characters is dropped; a config that large would be dropped by base64 decode anyway
+                partial = partial.count + chunk.count > 16_000_000 ? "" : partial + chunk
+                return
+            }
+            lines += scan(partial + chunk[...cut])
+            partial = String(chunk[chunk.index(after: cut)...])
+        }
+    }
+
     /// No quote, backslash, dollar or backtick can reach the shell from a value; ids, versions and URLs never need one.
     static func quoteless(_ s: String) -> String { String(s.unicodeScalars.filter { !"'\"\\$`".unicodeScalars.contains($0) && $0.value >= 0x20 }) }
     /// A label can't carry a tab or a line break into the pairing input.

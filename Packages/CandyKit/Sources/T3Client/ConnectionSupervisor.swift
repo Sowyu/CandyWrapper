@@ -369,6 +369,12 @@ public actor ConnectionSupervisor {
         return try await connection.request(tag, payload: payload)
     }
 
+    /// A unary call that gives up after `timeout` and throws `CancellationError`. Giving up sends `Interrupt`, so a
+    /// handler that never answers can't hold back the calls queued behind it (audit OH-2).
+    public func request(_ tag: String, payload: JSONValue = .object([:]), timeout: Duration) async throws -> JSONValue {
+        try await withTimeout(timeout) { try await self.request(tag, payload: payload) }
+    }
+
     /// Waits for a session newer than `generation`. Returns nil if the waiting task is cancelled.
     public func waitForConnection(after generation: Int) async -> (RPCConnection, Int)? {
         if let connection, state.generation > generation { return (connection, state.generation) }
@@ -615,8 +621,10 @@ extension ConnectionSupervisor {
     /// A handler may clear its cursor and throw to retry with a fresh snapshot after a bad value.
     /// Cancel the returned task to unsubscribe; that sends `Interrupt`.
     /// Ends on a normal stream completion or an `EnvironmentAuthorizationError`.
+    /// `snapshotFirst`: see `RPCConnection.stream`.
     public nonisolated func subscribe(
         _ tag: String,
+        snapshotFirst: Bool = false,
         payload: @escaping @Sendable () async -> JSONValue,
         handler: @escaping @Sendable (SubscriptionEvent) async throws -> Void
     ) -> Task<Void, Never> {
@@ -633,7 +641,7 @@ extension ConnectionSupervisor {
                 guard let (connection, gen) = session else { return }
                 do {
                     try await handler(.subscribed(generation: gen))
-                    for try await value in await connection.stream(tag, payload: await payload()) {
+                    for try await value in await connection.stream(tag, payload: await payload(), snapshotFirst: snapshotFirst) {
                         try await handler(.value(value))
                         retryDelay = .milliseconds(250)
                     }

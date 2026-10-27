@@ -41,7 +41,7 @@ public actor ServerConfigFeed {
         run = token
         stopped = false
         // rpc.ts:1787-1797; matches the composer's existing capability opt-ins.
-        let task = supervisor.subscribe("subscribeServerConfig", payload: {
+        let task = supervisor.subscribe("subscribeServerConfig", snapshotFirst: true, payload: {
             .object([
                 "environmentThemes": .bool(true),
                 "usageLimitSources": .bool(true),

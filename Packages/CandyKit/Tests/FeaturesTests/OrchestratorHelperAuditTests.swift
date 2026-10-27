@@ -3,9 +3,9 @@ import Foundation
 import Testing
 @testable import Features
 
-/// Existing failure, opt-in for the parent's centralized audit run. No app or server is needed.
+/// Regression for audit OH-5 (docs/research/responsiveness-audit-2026-10-26/orchestrator-helper.md). No app or server is needed.
 @MainActor
-@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["CW_ORCHESTRATOR_AUDIT_REGRESSIONS"] == "1"))
+@Suite(.serialized)
 struct OrchestratorHelperAuditTests {
     @Test func earlierReadCompletionDoesNotClearQueuedMutationBusyState() {
         let store = ConnectorsStore()
@@ -20,5 +20,7 @@ struct OrchestratorHelperAuditTests {
         // ConnectorsController completes the earlier read, then starts the queued mutation.
         store.set("fixture", .loaded(AgentConfigSnapshot()))
         #expect(store.busy.contains("fixture"), "The queued mutation still owns this machine's busy state")
+        store.set("fixture", .loaded(AgentConfigSnapshot()), endsChange: true)
+        #expect(!store.busy.contains("fixture"))
     }
 }
