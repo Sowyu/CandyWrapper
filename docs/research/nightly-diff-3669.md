@@ -91,7 +91,7 @@ Most seen first. The research notes behind each item, with T3 and CW file:line f
 
 ### Copy
 
-26. T3 removed em dashes from product copy (d7f3b72548) and reworded other strings. A comparison of every string literal in apps/web/src and the shared packages between the two tags found 109 removed strings that CW still had (~/CandyWrapper-research/notes/nightly-3669/strings-changed-pairs.txt pairs each with its likely replacement). Status: the composer and settings strings are ported on branch `nightly-3669` (3fd8e702). The pull request strings, which now follow each host's term, and the rest are open.
+26. T3 removed em dashes from product copy (d7f3b72548) and reworded other strings. A comparison of every string literal in apps/web/src and the shared packages between the two tags found 109 removed strings that CW still had (~/CandyWrapper-research/notes/nightly-3669/strings-changed-pairs.txt pairs each with its likely replacement). Status: done (2026-10-27, port-3669-strings). The composer and settings strings were ported earlier (3fd8e702). [All 109 outcomes](nightly-3669-strings.md) are now accounted for: 44 applied, 45 already matching and 20 without corresponding UI copy. The listed PR labels and notices follow each host’s term. Layout and actions stay as before.
 
 ## 3. Client performance
 

@@ -138,4 +138,8 @@ Paths and lines refer to the 3669 T3 source checkout:
 
 ## Verification
 
-Pending final fast lane, fidelity and app checks.
+- `scripts/test --fast`: 1,983 Swift Testing tests and 18 XCTest tests pass after rebasing onto the Cmd+K and guest-sharing changes.
+- `scripts/test --filter Fidelity`: all 136 tests pass (70 Features and 66 DesignSystem). No references or ceilings changed.
+- `scripts/build-test-app port-3669-strings`: passes, including the final app-only not-found wording fix.
+- On screen in default dark and light, launched with the sandbox on 47391 and fake T3 Connect: the sample PR with GitLab metadata shows “Copy MR number”, “Close merge request” and the composer correctly. Checked the checkout menu too. The temporary gallery metadata was restored before the final app build. No provider turns or real account sign-ins. Cropped screenshots and final logs are in `~/CandyWrapper-research/notes/port-3669-strings/`.
+- Reviewed the diff: only copy and the host metadata used to render it changed. No layout, action, wire or idle-work changes. No release.
