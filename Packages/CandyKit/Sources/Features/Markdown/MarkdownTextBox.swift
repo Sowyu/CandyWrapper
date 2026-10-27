@@ -30,6 +30,8 @@ final class MarkdownTextBox {
     }
 
     let text: String
+    /// `text`'s length in UTF-16 units, as selection and find count it.
+    let length: Int
     private(set) var height: CGFloat
     let lineHeight: CGFloat
     let lineCount: Int
@@ -91,6 +93,7 @@ final class MarkdownTextBox {
          inlineBoxes: [(index: Int, above: CGFloat, below: CGFloat)] = []) {
         self.lineHeight = lineHeight
         text = string.string
+        length = string.length
         let storage = NSTextContentStorage(), manager = NSTextLayoutManager()
         self.storage = storage
         self.manager = manager

@@ -54,3 +54,7 @@ Longest main-thread stall, p50 (max), in ms.
 The answer now appears after its background parse and layout: mixed 0.5 s at 256 KiB and 2.2 s at 1 MiB, soft breaks 0.4 s and 1.7 s. On main it appeared when the main thread came free, after the stall above. Until then the row holds the timeline's estimated height.
 
 The streaming worst case at 1 MiB is the first update in a new window: an 8 KiB reply laid out on the main thread, below the 32 KiB threshold, plus the window's first buttons and icons. Later updates stay near 30 ms.
+
+## Perf review
+
+[fc84216](2026-10-27-fc84216-w1.md) against the last three saved runs flagged `open.stall_max_ms` (one 55 ms stall) and `bench.markdown_stream_delta_full` (31.2 ms, range 24.4 to 55). A review of main without this work, [54d92da](2026-10-27-54d92da-w1.md), shows the same open stall (55.7 ms) and the same first frame (67 ms against 50 ms in the saved runs), so it came with other commits on main since those runs, not with this change. A quiet rerun of the Markdown benchmarks with this work measured `markdown_stream_delta_full` at 18.1 ms, `markdown_layout` at 47.3 ms and `markdown_parse` at 13.4 ms. Idle CPU, wakeups, idle and big-thread memory and scrolling stayed within thresholds.

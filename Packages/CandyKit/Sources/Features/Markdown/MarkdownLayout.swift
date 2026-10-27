@@ -522,11 +522,16 @@ public final class MarkdownLayout: @unchecked Sendable {
         rootEnds = builder.rootEnds
         items = flow.items
         controls = flow.controls
-        fileChips = items.compactMap { if case .fileChip(let chip) = $0 { chip } else { nil } }
-        contextChips = items.compactMap { if case .contextChip(let chip) = $0 { chip } else { nil } }
-        links = items.compactMap { if case .link(let r, let url) = $0 { (r, url) } else { nil } }
-        scrollers = items.compactMap { if case .scroll(let index, let viewport, let width) = $0 { (index, viewport, width) } else { nil } }
-        images = items.filter { switch $0 { case .remoteImage, .image: true; default: false } }
+        for item in items {
+            switch item {
+            case .fileChip(let chip): fileChips.append(chip)
+            case .contextChip(let chip): contextChips.append(chip)
+            case .link(let r, let url): links.append((r, url))
+            case .scroll(let index, let viewport, let width): scrollers.append((index, viewport, width))
+            case .remoteImage, .image: images.append(item)
+            default: break
+            }
+        }
         height = flow.height
         blockTops = builder.rootTops
         var selection = 0, chip = 0, context = 0, next = 0
@@ -535,7 +540,7 @@ public final class MarkdownLayout: @unchecked Sendable {
             drawStarts.append((next, selection, chip, context))
             for item in items[next..<end.items] {
                 switch item {
-                case .text(let box, _): selection += (box.text as NSString).length + 1
+                case .text(let box, _): selection += box.length + 1
                 case .fileChip: chip += 1
                 case .contextChip: context += 1
                 default: break
