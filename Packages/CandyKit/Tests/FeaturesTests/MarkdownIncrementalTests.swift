@@ -338,6 +338,7 @@ struct MarkdownIncrementalTests {
             case .image(_, let r): "image \(r)"
             case .remoteImage(let u, _, let r): "remote \(u) \(r)"
             case .favicon(let host, let r): "favicon \(host) \(r)"
+            case .math(let l, let p, _): "math \(l.width) \(p)"
             case .hiddenText(let code, let index): "hidden \(index) \(code)"
             }
         } + layout.controls.map { "control \($0.frame) \($0.action)" }

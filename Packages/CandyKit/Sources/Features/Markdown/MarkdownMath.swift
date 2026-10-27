@@ -1,4 +1,5 @@
 import AppKit
+import DesignSystem
 
 /// How T3 places a formula in a message (MarkdownMath.tsx:20-58, index.css `.chat-markdown-math-display`):
 /// an inline formula is an `inline-block align-middle` box with `px-0.5 py-0.75` around KaTeX's line box, and a display
