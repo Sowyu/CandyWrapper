@@ -31,12 +31,18 @@ final class MarkdownTextBox {
     }
 
     let text: String
-    let height: CGFloat
+    private(set) var height: CGFloat
     let lineHeight: CGFloat
     let lineCount: Int
     /// Inline code chips (border boxes), relative to the box.
     private(set) var chips: [CGRect] = []
-    var firstBaseline: CGFloat { lineCount == 0 ? 0 : baselineOffset }
+    var firstBaseline: CGFloat {
+        guard lineCount > 0 else { return 0 }
+        return lineTops == nil ? baselineOffset : laidOut.first??.first?.baseline ?? baselineOffset
+    }
+    /// Each line's top and the box's bottom, when inline boxes taller than the strut grow some lines, as CSS line boxes
+    /// grow around an inline-block. Nil when every line is `lineHeight` tall.
+    private var lineTops: [CGFloat]?
     /// Widest line advance, ignoring alignment, for shrink-to-fit cells.
     let usedWidth: CGFloat
 
@@ -57,6 +63,16 @@ final class MarkdownTextBox {
     /// Built on the first search, then kept with the box.
     private(set) lazy var findIndex: (text: String, sources: [NSRange]) = ThreadFindText.index(storage.textStorage ?? NSAttributedString())
 
+    /// `range` of the text as copying puts it on the pasteboard: a formula's placeholder becomes its TeX.
+    func copyText(_ range: NSRange) -> String {
+        guard let storage = storage.textStorage, range.upperBound <= storage.length else { return (text as NSString).substring(with: range) }
+        var out = ""
+        storage.enumerateAttribute(.markdownCopyText, in: range) { value, r, _ in
+            out += (value as? String) ?? storage.attributedSubstring(from: r).string
+        }
+        return out
+    }
+
     /// The ranges of `text` that find matches for `query`.
     func findRanges(_ query: String) -> [NSRange] {
         let index = findIndex
@@ -68,8 +84,10 @@ final class MarkdownTextBox {
 
     /// `chipRanges` are inline code runs, `chipFont` their font; both feed the chip rectangles.
     /// `lazy` forces lazy layout on or off; by default a box lays out lazily from `lazyParagraphs` paragraphs.
+    /// `inlineBoxes` are characters standing for inline-blocks (formulas), with how far each reaches above and below the baseline.
     init(_ string: NSAttributedString, width: CGFloat, lineHeight: CGFloat, strut: NSFont,
-         chipRanges: [NSRange] = [], chipFont: NSFont? = nil, wraps: Bool = true, lazy: Bool? = nil) {
+         chipRanges: [NSRange] = [], chipFont: NSFont? = nil, wraps: Bool = true, lazy: Bool? = nil,
+         inlineBoxes: [(index: Int, above: CGFloat, below: CGFloat)] = []) {
         self.lineHeight = lineHeight
         text = string.string
         let storage = NSTextContentStorage(), manager = NSTextLayoutManager()
@@ -86,7 +104,7 @@ final class MarkdownTextBox {
         self.baselineOffset = baselineOffset
         let documentStart = manager.documentRange.location
 
-        let scan = lazy == false || (lazy == nil && !chipRanges.isEmpty) ? nil
+        let scan = lazy == false || (lazy == nil && !chipRanges.isEmpty) || !inlineBoxes.isEmpty ? nil
             : Self.scan(string, containerWidth: containerWidth, wraps: wraps, minParagraphs: lazy == true ? 1 : Self.lazyParagraphs)
         if let scan {
             var paragraphs = scan.paragraphs, widest = scan.widest, next = 0
@@ -126,7 +144,31 @@ final class MarkdownTextBox {
             usedWidth = widest
         }
         height = CGFloat(max(1, lineCount)) * lineHeight
+        if !inlineBoxes.isEmpty { growLines(inlineBoxes) }
         if let chipFont, !chipRanges.isEmpty { chips = chipRects(chipRanges, font: chipFont) }
+    }
+
+    /// Moves each line down by what the inline boxes on the lines above it add, and stretches the lines holding them:
+    /// a line reaches `max(strut, box)` above and below its baseline.
+    private func growLines(_ boxes: [(index: Int, above: CGFloat, below: CGFloat)]) {
+        let strutBelow = lineHeight - baselineOffset
+        var tops: [CGFloat] = [0], shift: CGFloat = 0
+        for p in laidOut.indices {
+            guard let lines = laidOut[p] else { continue }
+            laidOut[p] = lines.map { line in
+                let mine = boxes.filter { $0.index >= line.start && $0.index < line.start + max(1, line.length) }
+                let above = max(baselineOffset, mine.map(\.above).max() ?? 0), below = max(strutBelow, mine.map(\.below).max() ?? 0)
+                let top = tops.last!
+                let baseline = top + above
+                shift = baseline - line.baseline
+                tops.append(top + above + below)
+                return Line(fragment: line.fragment, origin: CGPoint(x: line.origin.x, y: line.origin.y + shift), baseline: baseline,
+                            start: line.start, length: line.length, x: line.x)
+            }
+        }
+        guard tops.last! != CGFloat(lineCount) * lineHeight else { return }
+        lineTops = tops
+        height = max(lineHeight, tops.last!)
     }
 
     /// Splits `string` at `\n` for lazy layout. A paragraph that is surely one line gets `lineCount` 1 and counts
@@ -250,7 +292,7 @@ final class MarkdownTextBox {
     /// The rows `clip` reaches, in box coordinates, with one line of slack each side: glyphs can reach past their line box.
     private func rows(_ clip: CGRect?) -> Range<Int>? {
         // `cacheDisplay` and `renderInContext` can pass an unbounded clip (infinite or near-infinite), which would trap converting to Int.
-        guard let clip, abs(clip.minY) < 1e9, abs(clip.maxY) < 1e9, lineHeight > 0 else { return nil }
+        guard let clip, abs(clip.minY) < 1e9, abs(clip.maxY) < 1e9, lineHeight > 0, lineTops == nil else { return nil }
         let first = Int((clip.minY / lineHeight).rounded(.down)) - 1, last = Int((clip.maxY / lineHeight).rounded(.up)) + 1
         return first..<max(first, last + 1)
     }
@@ -278,7 +320,7 @@ final class MarkdownTextBox {
 
     func character(at point: CGPoint) -> Int {
         guard lineCount > 0 else { return 0 }
-        let row = min(lineCount - 1, max(0, Int(point.y / lineHeight)))
+        let row = min(lineCount - 1, max(0, lineTops.map { tops in tops.lastIndex { $0 <= point.y } ?? 0 } ?? Int(point.y / lineHeight)))
         guard let line = lines(touching: nil, rows: row..<(row + 1)).first else { return 0 }
         let attributed = line.fragment.attributedString.attributedSubstring(from: line.fragment.characterRange)
         let ct = CTLineCreateWithAttributedString(attributed)
@@ -288,7 +330,10 @@ final class MarkdownTextBox {
 
     /// The top of the CSS line box holding `baseline`: lines stack `lineHeight` apart from the box's top.
     /// Chromium's selection paints that whole box, not the glyphs' content area.
-    func lineTop(baseline: CGFloat) -> CGFloat { (baseline / lineHeight).rounded(.down) * lineHeight }
+    func lineTop(baseline: CGFloat) -> CGFloat {
+        if let lineTops { return lineTops.last { $0 < baseline } ?? 0 }
+        return (baseline / lineHeight).rounded(.down) * lineHeight
+    }
 
     /// Horizontal extent and baseline of `range` on each line it touches, relative to the box.
     /// `clip`, in box coordinates, skips the lines far from it.

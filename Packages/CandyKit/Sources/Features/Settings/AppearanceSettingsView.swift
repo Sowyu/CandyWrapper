@@ -209,7 +209,11 @@ public final class AppearanceSettingsView: SettingsPageBase {
                                  options: [("comfortable", "Comfortable (default)"), ("wide", "Wide"), ("full", "Full")], width: 160,
                                  reset: "chat width", hideIndicator: false)
         (width.control as? SelectView)?.valueLabels = ["Comfortable", "Wide", "Full"]
-        let s = section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), identification, diff, strip, width, appIconRow(), appIconAppearanceRow()])
+        // AppearanceSettingsPanel.tsx:354-379.
+        let math = clientSwitch("math-rendering", "Typeset LaTeX math, such as $x^2$ or \\[x^2\\], in messages and Markdown previews. The composer keeps TeX source editable.",
+                                key: "mathRenderingEnabled", reset: "math rendering", label: "Render math")
+        let s = section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), identification, diff, strip, width, math,
+                                                             appIconRow(), appIconAppearanceRow()])
         return s
     }
 

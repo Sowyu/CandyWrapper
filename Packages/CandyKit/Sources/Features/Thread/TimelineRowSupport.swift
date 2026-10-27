@@ -116,7 +116,7 @@ final class TimelineContext {
 
     isolated deinit { releasePages() }
 
-    private var documents: [String: (text: String, breaks: Bool, document: MarkdownDocument)] = [:]
+    private var documents: [String: (text: String, breaks: Bool, math: Bool, document: MarkdownDocument)] = [:]
     /// The parse of each answer that is streaming, which the next token extends.
     private var streamingParses: [String: MarkdownDocument.Incremental] = [:]
 
@@ -126,35 +126,38 @@ final class TimelineContext {
     func document(_ key: String, _ text: String, lineBreaks: Bool, streaming: Bool = false) -> MarkdownDocument {
         // A settled message whose last streamed text was the same still parses whole once: the hit must not
         // come from the incremental parse.
-        if let hit = documents[key], hit.text == text, hit.breaks == lineBreaks, streaming || streamingParses[key] == nil { return hit.document }
+        // "Render math" (`mathRenderingEnabled`) decides whether TeX parses as formulas, as T3's ChatMarkdown adds remark-math.
+        let math = ClientSettingsStore.shared.current.bool("mathRenderingEnabled")
+        if let hit = documents[key], hit.text == text, hit.breaks == lineBreaks, hit.math == math, streaming || streamingParses[key] == nil { return hit.document }
         let document: MarkdownDocument
         if streaming {
-            let parse = MarkdownDocument.parse(text, preservesLineBreaks: lineBreaks, extending: streamingParses[key])
+            let parse = MarkdownDocument.parse(text, preservesLineBreaks: lineBreaks, math: math, extending: streamingParses[key])
             streamingParses[key] = parse
             document = parse.document
         } else {
             streamingParses[key] = nil
-            document = Self.settled(text, lineBreaks: lineBreaks)
+            document = Self.settled(text, lineBreaks: lineBreaks, math: math)
         }
-        documents[key] = (text, lineBreaks, document)
+        documents[key] = (text, lineBreaks, math, document)
         return document
     }
 
     /// Long settled messages keep their parse across threads, so switching back to a thread with a 1 MB reply
     /// doesn't parse it again on the main thread (0.13 s each time).
     // ponytail: the last 8 texts of 16 KB or more, FIFO; parse off the main thread if first opens of huge replies matter
-    private static var settledParses: [Int: (text: String, breaks: Bool, document: MarkdownDocument)] = [:]
+    private static var settledParses: [Int: (text: String, breaks: Bool, math: Bool, document: MarkdownDocument)] = [:]
     private static var settledOrder: [Int] = []
 
-    private static func settled(_ text: String, lineBreaks: Bool) -> MarkdownDocument {
-        guard text.utf8.count >= 16_384 else { return MarkdownDocument(parsing: text, preservesLineBreaks: lineBreaks) }
+    private static func settled(_ text: String, lineBreaks: Bool, math: Bool) -> MarkdownDocument {
+        guard text.utf8.count >= 16_384 else { return MarkdownDocument(parsing: text, preservesLineBreaks: lineBreaks, math: math) }
         var hasher = Hasher()
         hasher.combine(text)
         hasher.combine(lineBreaks)
+        hasher.combine(math)
         let hash = hasher.finalize()
-        if let hit = settledParses[hash], hit.breaks == lineBreaks, hit.text == text { return hit.document }
-        let document = MarkdownDocument(parsing: text, preservesLineBreaks: lineBreaks)
-        if settledParses.updateValue((text, lineBreaks, document), forKey: hash) == nil { settledOrder.append(hash) }
+        if let hit = settledParses[hash], hit.breaks == lineBreaks, hit.math == math, hit.text == text { return hit.document }
+        let document = MarkdownDocument(parsing: text, preservesLineBreaks: lineBreaks, math: math)
+        if settledParses.updateValue((text, lineBreaks, math, document), forKey: hash) == nil { settledOrder.append(hash) }
         if settledOrder.count > 8 { settledParses[settledOrder.removeFirst()] = nil }
         return document
     }

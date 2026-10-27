@@ -259,7 +259,9 @@ public final class TimelineView: DSView {
             if keys.contains("chatWidth"), let self { self.laidOutWidth = -1; self.needsLayout = true }
             // Code blocks start wrapped or not by `wordWrap` (MarkdownView reads it as T3 does at mount), which changes
             // their heights: every row measures again.
-            if keys.contains("wordWrap"), let self {
+            // "Render math" changes how messages parse: drop the parses first, then measure like `wordWrap`.
+            if keys.contains("mathRenderingEnabled") { self?.context.forgetDocuments() }
+            if keys.contains("wordWrap") || keys.contains("mathRenderingEnabled"), let self {
                 self.measured.removeAll()
                 self.reconfigureVisible()
                 self.heights = self.items.map { self.height(of: $0) }

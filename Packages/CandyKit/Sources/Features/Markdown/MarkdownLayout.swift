@@ -6,6 +6,8 @@ extension NSAttributedString.Key {
     /// (packages/shared/src/threadFindText.ts): a chip's label, "" for what only draws (favicons, image
     /// alt text, code block titles), "\u{0}" where T3 starts a new text segment.
     static let markdownFindText = NSAttributedString.Key("CandyMarkdownFindText")
+    /// What copying puts on the pasteboard in place of these characters: a formula's TeX (MarkdownMath.tsx `data-markdown-copy`).
+    static let markdownCopyText = NSAttributedString.Key("CandyMarkdownCopyText")
 }
 
 /// T3's `.chat-markdown` values (`apps/web/src/index.css:1759-2073`, ChatMarkdown.tsx), research note H section 4.
@@ -69,6 +71,8 @@ enum MarkdownStyle {
         var contexts: [(range: NSRange, chip: MarkdownContextChip)] = []
         /// External link favicons: a reserved space before the link's first character.
         var favicons: [(range: NSRange, host: String)] = []
+        /// Inline formulas: a kerned no-break space as wide as the formula, drawn by a `.math` item.
+        var formulas: [(range: NSRange, layout: MathLayout)] = []
     }
 
     /// Inline runs as an attributed string. Inline code reserves its padding and border with kerning
@@ -81,6 +85,7 @@ enum MarkdownStyle {
         let out = NSMutableAttributedString()
         var contextChips: [(range: NSRange, chip: MarkdownContextChip)] = []
         var favicons: [(range: NSRange, host: String)] = []
+        var formulas: [(range: NSRange, layout: MathLayout)] = []
         var chips: [NSRange] = []
         var fileChips: [(range: NSRange, meta: FileLinkMeta, label: String)] = []
         var webLinks: [(range: NSRange, url: URL)] = []
@@ -158,6 +163,22 @@ enum MarkdownStyle {
                 appendContextChip(contexts.chip(kind: parsed.kind, contextId: parsed.contextId, label: label))
                 continue
             }
+            if let math = run.math {
+                if let layout = MathRenderer.layout(math.tex, display: false, textSize: size) {
+                    // `inline-block whitespace-nowrap px-0.5` (MarkdownMath.tsx:25): one unbreakable box with 2px each side.
+                    let start = out.length
+                    out.append(NSAttributedString(string: "\u{00A0}", attributes: [
+                        .font: parent, .foregroundColor: color, .kern: layout.width + 2 * MarkdownMathStyle.padX - noBreakSpaceWidth(parent),
+                        .markdownFindText: math.tex, .markdownCopyText: math.copySource]))
+                    formulas.append((NSRange(location: start, length: 1), layout))
+                    i += 1
+                    continue
+                }
+                // Stage 1 can't typeset it: the TeX shows as inline code.
+                run.text = math.copySource
+                run.code = true
+                run.math = nil
+            }
             var findText: String?
             if let url = run.link, let citation = ThreadAssistantCitation.parse(url.absoluteString) {
                 run.text = "❝ " + citation.label
@@ -233,7 +254,7 @@ enum MarkdownStyle {
         paragraph.headIndent = headIndent
         out.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: out.length))
         if !findable { out.addAttribute(.markdownFindText, value: "", range: NSRange(location: 0, length: out.length)) }
-        return Inline(string: out, code: chips, files: fileChips, links: webLinks, contexts: contextChips, favicons: favicons)
+        return Inline(string: out, code: chips, files: fileChips, links: webLinks, contexts: contextChips, favicons: favicons, formulas: formulas)
     }
 }
 
@@ -266,6 +287,8 @@ public final class MarkdownLayout {
         case link(CGRect, URL)
         /// An external link's favicon box (14pt square) for `host`.
         case favicon(String, CGRect)
+        /// A formula with its baseline's left end at the point, in the text color.
+        case math(MathLayout, CGPoint, NSColor)
         /// Text find counts but nothing draws: a diagram's source beside it (ChatMarkdown.tsx:1074-1079).
         case hiddenText(String, codeIndex: Int)
         /// Clips the items until the matching `.endClip` (wide tables).
@@ -367,7 +390,7 @@ public final class MarkdownLayout {
     private(set) var reusedTextBoxes = 0
     /// The flow after one top-level block: the items and controls so far, the y below the block,
     /// its own bottom margin (before the root zeroes the last one) and the next code block index.
-    fileprivate struct RootEnd { var items: Int; var controls: Int; var y: CGFloat; var bottom: CGFloat; var codeIndex: Int; var tableIndex: Int; var innerBottom: CGFloat = 0 }
+    fileprivate struct RootEnd { var items: Int; var controls: Int; var y: CGFloat; var bottom: CGFloat; var codeIndex: Int; var tableIndex: Int; var mathIndex = 0; var innerBottom: CGFloat = 0 }
     private struct ReuseKey: Equatable {
         var unwrapped: Set<Int>, wrapsCode: Bool, bodyColor: NSColor?, cwd: String?, diagrams: Diagrams?, contexts: MarkdownContextChips?, fileLabels: [String: String]
         var runsShell: Bool
@@ -459,6 +482,8 @@ private struct Builder {
     let files: FileChipResolver?
     var codeIndex = 0
     var tableIndex = 0
+    /// Display formulas so far; each scrolls as `MarkdownMathStyle.scrollID(index)`.
+    var mathIndex = 0
     var expandedTables: Set<Int> = []
     var previous: MarkdownLayout?
     var rootBoxes: [Box] = []
@@ -493,7 +518,8 @@ private struct Builder {
             guard root, let previous, index < previous.rootBlocks.count else { return false }
             let oldCode = index == 0 ? 0 : previous.rootEnds[index - 1].codeIndex
             let oldTable = index == 0 ? 0 : previous.rootEnds[index - 1].tableIndex
-            guard code == oldCode, table == oldTable, blocks[index] == previous.rootBlocks[index] else { return false }
+            let oldMath = index == 0 ? 0 : previous.rootEnds[index - 1].mathIndex
+            guard code == oldCode, table == oldTable, mathIndex == oldMath, blocks[index] == previous.rootBlocks[index] else { return false }
             // A code block laid out plain while it was open gets its colors once text follows it.
             if index == previous.plainRoot, index != plainRoot { return false }
             let tables = table..<previous.rootEnds[index].tableIndex
@@ -504,6 +530,7 @@ private struct Builder {
             while first < blocks.count, canReuse(first, codeIndex, tableIndex) {
                 codeIndex = previous.rootEnds[first].codeIndex
                 tableIndex = previous.rootEnds[first].tableIndex
+                mathIndex = previous.rootEnds[first].mathIndex
                 first += 1
             }
             if first > 0 {
@@ -524,6 +551,7 @@ private struct Builder {
                 box = previous.rootBoxes[index]
                 codeIndex = previous.rootEnds[index].codeIndex
                 tableIndex = previous.rootEnds[index].tableIndex
+                mathIndex = previous.rootEnds[index].mathIndex
                 reusedBlocks += 1
             } else {
                 drawsPlain = root && index == plainRoot
@@ -540,7 +568,7 @@ private struct Builder {
             out.add(box, at: CGPoint(x: 0, y: y))
             y += box.height
             previousBottom = box.bottom
-            if root { rootEnds.append(.init(items: out.items.count, controls: out.controls.count, y: y, bottom: ownBottom, codeIndex: codeIndex, tableIndex: tableIndex, innerBottom: box.innerBottom)) }
+            if root { rootEnds.append(.init(items: out.items.count, controls: out.controls.count, y: y, bottom: ownBottom, codeIndex: codeIndex, tableIndex: tableIndex, mathIndex: mathIndex, innerBottom: box.innerBottom)) }
         }
         out.bottom = previousBottom ?? 0
         out.height = y + (root ? rootEnds.last?.innerBottom ?? 0 : 0)
@@ -613,10 +641,44 @@ private struct Builder {
             return Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin, height: h + below,
                        items: [.box(rect, fill: Themed.color(\.muted, 0.6), border: Themed.color(\.border, 0.4), radius: 10), .remoteImage(url, alt, rect)])
         case .math(let math):
-            var box = text([InlineRun(text: math.copySource)], width: width, size: MarkdownStyle.fontSize, lineHeight: MarkdownStyle.lineHeight, color: context.color)
+            return displayMath(math, width: width, color: context.color)
+        }
+    }
+
+    /// A display formula, centered, scrolling sideways when wider than `width` (MarkdownMath.tsx:20-58). A formula stage 1
+    /// can't typeset shows its TeX as inline code, one chip per source line.
+    @MainActor
+    mutating func displayMath(_ math: MarkdownMath, width: CGFloat, color: NSColor) -> Box {
+        let size = MarkdownStyle.fontSize, font = MarkdownStyle.font(size)
+        guard let layout = MathRenderer.layout(math.tex, display: true, textSize: size) else {
+            var runs: [InlineRun] = []
+            for (i, line) in math.copySource.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+                if i > 0 { runs.append(InlineRun(text: "\n", isBreak: true)) }
+                if !line.isEmpty { runs.append(InlineRun(text: String(line), code: true)) }
+            }
+            var box = text(runs, width: width, size: size, lineHeight: MarkdownStyle.lineHeight, color: color)
             box.top = MarkdownStyle.blockMargin; box.bottom = MarkdownStyle.blockMargin
             return box
         }
+        let index = mathIndex
+        mathIndex += 1
+        let (above, below) = MarkdownMathStyle.content(layout, textSize: size)
+        let pad = MarkdownMathStyle.padX, padY = MarkdownMathStyle.padY
+        let contentWidth = layout.width + 2 * pad
+        let overflows = contentWidth > width + 1.0 / 64
+        let height = padY + above + below + padY + (overflows ? MarkdownMathStyle.scrollbar : 0)
+        var box = Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin, height: height, baseline: padY + above)
+        let x = overflows ? pad : (width - layout.width) / 2
+        // One no-break space as wide as the formula carries selection, copy (its TeX) and find; the `.math` item draws it.
+        let placeholder = NSAttributedString(string: "\u{00A0}", attributes: [
+            .font: font, .kern: layout.width - MarkdownStyle.noBreakSpaceWidth(font), .markdownFindText: math.tex, .markdownCopyText: math.copySource])
+        let textBox = boxes.make(placeholder, width: max(width, contentWidth), lineHeight: above + below, strut: font, wraps: false)
+        let viewport = CGRect(x: 0, y: 0, width: width, height: height)
+        if overflows { box.items.append(.scroll(codeIndex: MarkdownMathStyle.scrollID(index), viewport: viewport, contentWidth: contentWidth)) }
+        box.items.append(.text(textBox, CGPoint(x: x, y: padY)))
+        box.items.append(.math(layout, CGPoint(x: x, y: padY + above), color))
+        if overflows { box.items.append(.endClip) }
+        return box
     }
 
     @MainActor
@@ -626,9 +688,12 @@ private struct Builder {
         let inline = MarkdownStyle.inline(runs, size: size, weight: weight, color: color, alignment: alignment,
                                           headIndent: headIndent, firstLineIndent: firstLineIndent, files: files, contexts: contexts,
                                           maxChipWidth: width, findable: findable)
-        let textBox = boxes.make(inline.string, width: width, lineHeight: lineHeight, strut: MarkdownStyle.font(size, weight: weight),
-                                 chipRanges: inline.code, chipFont: DSFont.mono(MarkdownStyle.chipFontSize))
+        let parent = MarkdownStyle.font(size, weight: weight)
+        let textBox = boxes.make(inline.string, width: width, lineHeight: lineHeight, strut: parent,
+                                 chipRanges: inline.code, chipFont: DSFont.mono(MarkdownStyle.chipFontSize),
+                                 inlineBoxes: MarkdownMathStyle.inlineBoxes(inline, parent: parent, textSize: size))
         var box = Box(height: textBox.height, baseline: textBox.firstBaseline)
+        box.items += MarkdownMathStyle.items(inline, in: textBox, parent: parent, textSize: size, color: color)
         for chip in textBox.chips {
             box.items.append(.box(chip, fill: Themed.color(\.muted), border: Themed.color(\.contrastBorder), radius: MarkdownStyle.chipRadius))
         }
@@ -1063,9 +1128,12 @@ private struct Builder {
                     displayed.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: displayed.length))
                 }
                 let padding = MarkdownLayout.tableCellPadding(c, of: columns)
+                let cellFont = MarkdownStyle.font(size, weight: r == 0 ? .semibold : .regular)
                 let textBox = boxes.make(displayed, width: widths[c] - padding.total, lineHeight: line, strut: MarkdownStyle.font(size),
-                                         chipRanges: chips, chipFont: DSFont.mono(MarkdownStyle.chipFontSize))
+                                         chipRanges: chips, chipFont: DSFont.mono(MarkdownStyle.chipFontSize),
+                                         inlineBoxes: MarkdownMathStyle.inlineBoxes(inline, parent: cellFont, textSize: size))
                 var cell = Box(height: textBox.height)
+                cell.items += MarkdownMathStyle.items(inline, in: textBox, parent: cellFont, textSize: size, color: context.color)
                 for chip in textBox.chips {
                     cell.items.append(.box(chip, fill: Themed.color(\.muted), border: Themed.color(\.contrastBorder), radius: MarkdownStyle.chipRadius))
                 }
@@ -1201,6 +1269,7 @@ private extension MarkdownLayout.Item {
         case .endClip: .endClip
         case .link(let r, let url): .link(r.offsetBy(dx: p.x, dy: p.y), url)
         case .favicon(let host, let r): .favicon(host, r.offsetBy(dx: p.x, dy: p.y))
+        case .math(let layout, let o, let color): .math(layout, CGPoint(x: o.x + p.x, y: o.y + p.y), color)
         case .hiddenText: self
         case .image(let image, let r): .image(image, r.offsetBy(dx: p.x, dy: p.y))
         case .remoteImage(let url, let alt, let r): .remoteImage(url, alt, r.offsetBy(dx: p.x, dy: p.y))
@@ -1233,10 +1302,13 @@ final class TextBoxCache {
         self.records = records
     }
 
+    /// `inlineBoxes` follow from the string (its formulas), so they stay out of the key.
     func make(_ string: NSAttributedString, width: CGFloat, lineHeight: CGFloat, strut: NSFont,
-              chipRanges: [NSRange] = [], chipFont: NSFont? = nil, wraps: Bool = true) -> MarkdownTextBox {
+              chipRanges: [NSRange] = [], chipFont: NSFont? = nil, wraps: Bool = true,
+              inlineBoxes: [(index: Int, above: CGFloat, below: CGFloat)] = []) -> MarkdownTextBox {
         guard records else {
-            return MarkdownTextBox(string, width: width, lineHeight: lineHeight, strut: strut, chipRanges: chipRanges, chipFont: chipFont, wraps: wraps)
+            return MarkdownTextBox(string, width: width, lineHeight: lineHeight, strut: strut, chipRanges: chipRanges, chipFont: chipFont, wraps: wraps,
+                                   inlineBoxes: inlineBoxes)
         }
         let key = Key(string: string, width: width, lineHeight: lineHeight, strut: strut, chipRanges: chipRanges, chipFont: chipFont, wraps: wraps)
         if let box = made[key] ?? previous[key] {
@@ -1244,7 +1316,8 @@ final class TextBoxCache {
             made[key] = box
             return box
         }
-        let box = MarkdownTextBox(string, width: width, lineHeight: lineHeight, strut: strut, chipRanges: chipRanges, chipFont: chipFont, wraps: wraps)
+        let box = MarkdownTextBox(string, width: width, lineHeight: lineHeight, strut: strut, chipRanges: chipRanges, chipFont: chipFont, wraps: wraps,
+                                  inlineBoxes: inlineBoxes)
         made[key] = box
         return box
     }

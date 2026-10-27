@@ -150,7 +150,8 @@ public final class MarkdownView: DSView {
 
     /// Parses and shows `markdown`. User messages pass `preservesLineBreaks`.
     public func setMarkdown(_ markdown: String, preservesLineBreaks: Bool = false) {
-        document = MarkdownDocument(parsing: markdown, preservesLineBreaks: preservesLineBreaks)
+        document = MarkdownDocument(parsing: markdown, preservesLineBreaks: preservesLineBreaks,
+                                    math: ClientSettingsStore.shared.current.bool("mathRenderingEnabled"))
     }
 
     public var inlineSkills: [ServerProviderSkill] = [] { didSet { if inlineSkills != oldValue { invalidate() } } }
@@ -924,6 +925,18 @@ public final class MarkdownView: DSView {
         button.action = { [weak self] in self?.clearAssistantSelection(); self?.onCiteSelection?(captured, anchor) }
         citeButton?.removeFromSuperview(); citeButton = button; addSubview(button)
     }
+    /// The selection as copied: `selectionText` with each formula's TeX in place of its placeholder.
+    private func copiedText(_ range: NSRange) -> String {
+        var out = ""
+        for (box, _, offset) in selectionBoxes {
+            let length = (box.text as NSString).length
+            let overlap = NSIntersectionRange(range, NSRange(location: offset, length: length))
+            if overlap.length > 0 { out += box.copyText(NSRange(location: overlap.location - offset, length: overlap.length)) }
+            if range.location <= offset + length, range.upperBound > offset + length { out += "\n" }
+        }
+        return out
+    }
+
     /// Every line box the selection covers (`range.getClientRects()`).
     private func selectedLineRects(_ range: NSRange) -> [NSRect] {
         var rects: [NSRect] = []
@@ -957,7 +970,7 @@ public final class MarkdownView: DSView {
         if event.keyCode == 48, let citeButton, citeButton.isEnabled { window?.makeFirstResponder(citeButton); return }
         if event.modifierFlags.contains(.command), event.charactersIgnoringModifiers == "c", let range = assistantRange {
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString((selectionText as NSString).substring(with: range), forType: .string)
+            NSPasteboard.general.setString(copiedText(range), forType: .string)
             return
         }
         super.keyDown(with: event)
@@ -1116,6 +1129,10 @@ public final class MarkdownView: DSView {
                 break
             case .hiddenText(let code, _):
                 if !threadFindQuery.isEmpty { findOccurrence += ThreadFindText.count(code, threadFindQuery) }
+            case .math(let layout, let origin, let color):
+                guard CGRect(x: origin.x, y: origin.y - layout.height, width: layout.width, height: layout.height + layout.depth)
+                    .insetBy(dx: -2, dy: -2).intersects(dirtyRect) else { break }
+                layout.draw(in: ctx, at: CGPoint(x: origin.x, y: MarkdownTextBox.snappedBaseline(origin.y)), color: color.cgColor(in: self))
             case .favicon(let host, let rect):
                 guard rect.intersects(dirtyRect) else { break }
                 let color = MarkdownStyle.link.cgColor(in: self)

@@ -92,6 +92,8 @@ public struct ClientSettings: Equatable, Sendable {
         "sidebarThreadPreviewCount": SettingSpec(.int(1...15), .number(6)),
         "timestampFormat": SettingSpec(.literals(["locale", "12-hour", "24-hour"]), .string("locale")),
         "wordWrap": SettingSpec(.bool, .bool(true)),
+        // Opt-in TeX typesetting in messages (settings.ts:475-477, T3 #18735).
+        "mathRenderingEnabled": SettingSpec(.bool, .bool(false)),
         // Settings > SnapShots (settings.ts:493-505).
         "onboardingCompletedAt": SettingSpec(.any, .null),
         "snapShotEnabled": SettingSpec(.bool, .bool(false)),

@@ -566,7 +566,7 @@ extension SettingsController {
         labels += client("sidebarProjectSortOrder", "Project order") + client("sidebarWorkingShelfEnabled", "Working section")
         labels += server("sidebarAutoSettleAfterDays", "Auto-settle inactive threads") + server("sidebarAutoSettleOnMerge", "Auto-settle merged threads")
         labels += server("autoResumeLimitedThreads", "Auto-resume limited threads") + server("snoozeLimitedThreads", "Snooze limited threads")
-        labels += client("wordWrap", "Word wrap") + client("persistComposerContextStrip", "Composer context")
+        labels += client("mathRenderingEnabled", "Render math") + client("wordWrap", "Word wrap") + client("persistComposerContextStrip", "Composer context")
         for (family, size, label) in [("fontFamilySans", "fontSizeInterface", "Interface font"), ("fontFamilyComposer", "fontSizePrompt", "Prompt font"),
                                       ("fontFamilyCode", "fontSizeCode", "Code font"), ("fontFamilyTerminal", "fontSizeTerminal", "Terminal font")]
         where !c.isDefault(family) || !c.isDefault(size) { labels.append(label) }
@@ -610,7 +610,7 @@ extension SettingsController {
         if themes.appearanceMode != "system" { AppearanceMode.system.apply() }
         let clientKeys = ["appearanceContrast", "glassOpacity", "diffColorScheme", "chatWidth", "panelAnimationDurationMs", "environmentIdentificationMode",
                           "timestampFormat", "notificationMode", "inAppNotificationsEnabled", "sidebarThreadPreviewCount", "sidebarProjectGroupingMode",
-                          "sidebarProjectSortOrder", "sidebarWorkingShelfEnabled", "wordWrap", "persistComposerContextStrip", "fontFamilySans",
+                          "sidebarProjectSortOrder", "sidebarWorkingShelfEnabled", "mathRenderingEnabled", "wordWrap", "persistComposerContextStrip", "fontFamilySans",
                           "fontSizeInterface", "fontFamilyComposer", "fontSizePrompt", "fontFamilyCode", "fontSizeCode", "fontFamilyTerminal",
                           "fontSizeTerminal", "diffFilesCollapsed", "diffIgnoreWhitespace", "diffLayout", "proactivePanelsEnabled",
                           "showSkillsInSlashMenu", "composerCollapseOnScroll", "composerRichTextEnabled", "sendShortcut", "followUpBehavior",
