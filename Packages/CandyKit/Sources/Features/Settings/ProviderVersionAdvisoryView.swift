@@ -62,7 +62,8 @@ public enum ProviderVersionAdvisoryLogic {
 @MainActor
 func providerVersionAdvisoryButton(_ presentation: ProviderVersionAdvisoryLogic.Presentation, updating: Bool, progress: String?, problem: String?,
                                    run: (@MainActor () -> Void)?, micro: Bool = false, copy: @escaping @MainActor (String) -> Void) -> ButtonView {
-    let b = ButtonView(nil, icon: updating ? .loaderCircle : presentation.warning ? .triangleAlert : .circleArrowUp, variant: .ghostMuted, size: micro ? .iconMicro : .iconXs)
+    let b = ButtonView(nil, icon: presentation.warning ? .triangleAlert : .circleArrowUp, variant: .ghostMuted, size: micro ? .iconMicro : .iconXs)
+    b.showsSpinner = updating
     if micro { b.iconSize = 14 }
     if presentation.warning, !updating { b.iconColor = Themed.color(\.warning) }
     b.setAccessibilityLabel("\(updating ? "Updating" : presentation.title), view details")
@@ -95,7 +96,8 @@ final class ProviderVersionAdvisoryPopover: DSView {
          run: (@MainActor () -> Void)?, copy: @escaping @MainActor (String) -> Void) {
         if let run {
             let label = updating ? "Updating" : p.targetVersion.map { "Install \(ProvidersLogic.versionLabel($0) ?? $0)" } ?? "Update now"
-            let b = ButtonView(label, icon: updating ? .loaderCircle : .download, variant: .outline, size: .xs)
+            let b = ButtonView(label, icon: .download, variant: .outline, size: .xs)
+            b.showsSpinner = updating
             b.isEnabled = !updating
             b.action = { run() }
             action = b

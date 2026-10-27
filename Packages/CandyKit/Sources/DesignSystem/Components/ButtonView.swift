@@ -40,6 +40,8 @@ public final class ButtonView: ControlView {
     public var size: Size = .default { didSet { restyle(); invalidateIntrinsicContentSize() } }
     public var title: String? { didSet { label.text = title ?? ""; syncLabel(); invalidateIntrinsicContentSize() } }
     public var icon: IconName? { didSet { updateIcons() } }
+    /// Replaces the leading glyph with a visible-only, Reduce Motion-aware spinner.
+    public var showsSpinner = false { didSet { if showsSpinner != oldValue { updateIcons() } } }
     /// A leading glyph outside the generated set (T3's inline SVG components), used when `icon` is nil.
     public var iconDefinition: IconDefinition? { didSet { updateIcons() } }
     public var trailingIcon: IconName? { didSet { updateIcons() } }
@@ -71,7 +73,7 @@ public final class ButtonView: ControlView {
 
     private let decoration = BoxDecorationLayer()
     private let label = LabelView()
-    private var leadingIconView: IconView?
+    private var leadingIconView: NSView?
     private var trailingIconView: IconView?
 
     public convenience init(_ title: String? = nil, icon: IconName? = nil, variant: Variant = .default, size: Size = .default) {
@@ -212,13 +214,17 @@ public final class ButtonView: ControlView {
 
     /// Turns the leading icon, for a disclosure chevron with `transition-transform` (see `IconView.setRotation`).
     public func setIconRotation(_ degrees: CGFloat, motion: IconView.RotationMotion = .ease(0.15)) {
-        leadingIconView?.setRotation(degrees, motion: motion)
+        (leadingIconView as? IconView)?.setRotation(degrees, motion: motion)
     }
 
     private func updateIcons() {
         leadingIconView?.removeFromSuperview()
         trailingIconView?.removeFromSuperview()
-        leadingIconView = icon.map { IconView(name: $0) } ?? iconDefinition.map { IconView(definition: $0) }
+        if showsSpinner {
+            leadingIconView = SpinnerView()
+        } else {
+            leadingIconView = icon.map { IconView(name: $0) } ?? iconDefinition.map { IconView(definition: $0) }
+        }
         trailingIconView = trailingIcon.map { IconView(name: $0) }
         [leadingIconView, trailingIconView].compactMap { $0 }.forEach(addSubview)
         restyle()
@@ -253,7 +259,8 @@ public final class ButtonView: ControlView {
         decoration.boxStyle = look.box
         label.color = look.text
         for iconView in [leadingIconView, trailingIconView].compactMap({ $0 }) {
-            iconView.strokeColor = iconColor ?? look.icon
+            (iconView as? IconView)?.strokeColor = iconColor ?? look.icon
+            (iconView as? SpinnerView)?.color = iconColor ?? look.icon
         }
         if variant == .link {
             label.isUnderlined = state.hoverOrPressed

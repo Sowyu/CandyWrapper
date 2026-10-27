@@ -1234,7 +1234,7 @@ final class ProviderListRow: ControlView {
     var isSelected = false { didSet { Motion.transitioning(window == nil ? [] : transitions) { restyle() } } }
     /// The version advisory button (`icon-micro`) after the version, and the update progress in place of the status.
     var advisory: ButtonView? { didSet { oldValue?.removeFromSuperview(); advisory.map(addSubview); needsLayout = true } }
-    var updateProgress: String? { didSet { if let updateProgress { status.text = "Updating · \(updateProgress)"; dot.isHidden = true } } }
+    var updateProgress: String? { didSet { if let updateProgress { status.text = updateProgress; dot.isHidden = true } } }
     /// The project override's inheritance glyph and reset arrow before the switch (`flex h-5 items-center gap-1`).
     var overrideControls: NSView? { didSet { oldValue?.removeFromSuperview(); overrideControls.map(addSubview); needsLayout = true } }
     private var overrideWidth: CGFloat { overrideControls == nil ? 0 : 40 + 4 }

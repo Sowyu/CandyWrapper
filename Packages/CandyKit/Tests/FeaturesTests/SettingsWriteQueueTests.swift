@@ -44,7 +44,10 @@ struct SettingsWriteQueueTests {
         async let a = server.update(first[0].patch)
         async let b = server.update(second[0].patch)
         _ = await (a, b)
-        #expect(server.fleet?["enableAgentBrowserAccess"] == nil)
+        // Either request may finish last; exactly one of the two edits survives.
+        let browserSurvived = server.fleet?["enableAgentBrowserAccess"] == .bool(true)
+        let pullSurvived = server.fleet?["defaultAutoPull"] == .bool(true)
+        #expect(browserSurvived != pullSurvived)
     }
 
     @Test func queuedEditsPlanFromTheLastReplyAndBothSurvive() async {

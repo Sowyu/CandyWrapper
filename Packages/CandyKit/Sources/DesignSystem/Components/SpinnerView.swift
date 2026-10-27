@@ -45,6 +45,8 @@ public final class SpinnerView: NSView {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
+    public override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
     public override var intrinsicContentSize: NSSize { NSSize(width: size.points, height: size.points) }
 
     public override func layout() {
