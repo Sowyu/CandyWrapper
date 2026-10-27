@@ -16,7 +16,10 @@ public struct MarkdownDocument: Sendable, Equatable {
     }
 
     private static func parseBlocks(_ source: Substring, preservesLineBreaks: Bool, math: Bool) -> [MarkdownBlock] {
-        let markdown = keepingWindowsPathEscapes(source)
+        // Formulas leave the text before the Windows path pass, which then never touches their TeX: T3's
+        // `remarkKeepWindowsPaths` rewrites character escapes only, and a formula holds none.
+        let hidden = math ? MarkdownMathScanner.hiding(source) : nil
+        let markdown = keepingWindowsPathEscapes(hidden?.text ?? source)
         // Source positions cost about 15% of the parse (a 1,000-line reply on the huge thread's cached open),
         // and only loose lists need them.
         let positions = mayHaveLooseList(markdown)
@@ -24,9 +27,9 @@ public struct MarkdownDocument: Sendable, Equatable {
             allowsExtendedAttributes: true, interpretedSyntax: .full, failurePolicy: .returnPartiallyParsedIfPossible,
             appliesSourcePositionAttributes: positions)
         guard let parsed = try? AttributedString(markdown: String(markdown), options: options) else {
-            return markdown.isEmpty ? [] : [.paragraph([InlineRun(text: String(markdown))])]
+            return markdown.isEmpty ? [] : [.paragraph([InlineRun(text: String(hidden == nil ? markdown : source))])]
         }
-        var builder = TreeBuilder()
+        var builder = TreeBuilder(math: hidden?.placeholders)
         for run in parsed.runs {
             builder.append(text: String(parsed[run.range].characters), run: run, preservesLineBreaks: preservesLineBreaks)
         }
@@ -190,7 +193,7 @@ public struct MarkdownDocument: Sendable, Equatable {
             start = markdown.utf8.index(markdown.startIndex, offsetBy: previous.stable.utf8.count)
             stableBlocks = previous.stableBlocks
         }
-        if let cut = stableCut(markdown[start...]), cut > start {
+        if let cut = stableCut(markdown[start...], math: math), cut > start {
             stableBlocks += parseBlocks(markdown[start..<cut], preservesLineBreaks: preservesLineBreaks, math: math)
             start = cut
         }
@@ -226,18 +229,26 @@ public struct MarkdownDocument: Sendable, Equatable {
     /// top-level block and can't continue a list or a quote (no list marker, digit, `>` or indent).
     /// Fences follow CommonMark, as the full parse does: an opener indented 0 to 3 spaces, a closer of the same
     /// character, at least as long, indented 0 to 3 spaces, alone on its line. A line indented 4 or more is content.
-    static func stableCut(_ text: Substring) -> String.Index? {
+    /// With `math`, a `$$` or `\[` display block runs over blank lines too, so no cut falls inside an open one.
+    static func stableCut(_ text: Substring, math: Bool = false) -> String.Index? {
         var cut: String.Index?
         var openFence: (marker: Character, length: Int, indent: Int)?
+        var openMath: MarkdownMathScanner.OpenFlow?
         var previousBlank = false
         var lineStart = text.startIndex
         while lineStart < text.endIndex {
             let newline = text[lineStart...].firstIndex(of: "\n")
             let line = text[lineStart..<(newline ?? text.endIndex)]
-            if openFence == nil, previousBlank, lineStart > text.startIndex, let first = line.first, startsTopLevelBlock(first, line) {
+            if openFence == nil, openMath == nil, previousBlank, lineStart > text.startIndex, let first = line.first, startsTopLevelBlock(first, line) {
                 cut = lineStart
             }
             guard let newline else { break }
+            if math, openFence == nil, let flow = openMath ?? MarkdownMathScanner.flowOpener(line) {
+                openMath = openMath == nil || MarkdownMathScanner.flowContinues(line, flow) ? flow : nil
+                previousBlank = false
+                lineStart = text.index(after: newline)
+                continue
+            }
             let indent = line.prefix { $0 == " " }.count
             let body = line.dropFirst(indent)
             if indent <= 3, let mark = body.first, mark == "`" || mark == "~" {
@@ -272,6 +283,7 @@ public struct MarkdownDocument: Sendable, Equatable {
         switch node.kind {
         case .paragraph:
             let runs = breakingAroundImageLines(node.runs)
+            if runs.contains(where: { $0.math?.display == true }) { return splittingDisplayMath(runs) }
             if let image = standaloneImage(runs) { return [image] }
             return runs.isEmpty ? [] : [.paragraph(runs)]
         case .header(let level):
@@ -293,6 +305,12 @@ public struct MarkdownDocument: Sendable, Equatable {
             if code.hasSuffix("\n") { code.removeLast() }
             let (language, title) = parseFenceInfo(info)
             return [.code(language: language, title: title, code: code)]
+        case .math(let formula):
+            return [.math(formula)]
+        case .mathFence:
+            var tex = node.runs.map(\.text).joined()
+            if tex.hasSuffix("\n") { tex.removeLast() }
+            return [.math(MarkdownMath(tex: tex, display: true))]
         case .thematicBreak:
             return [.rule]
         case .table(let alignments):
@@ -394,6 +412,32 @@ public struct MarkdownDocument: Sendable, Equatable {
             }
             i = end
         }
+        return out
+    }
+
+    /// T3 renders `$$…$$` and `\[…\]` in display style even mid-sentence (`markdownMathRanges`); here such a
+    /// formula takes a block of its own between the paragraph's text before and after it.
+    private static func splittingDisplayMath(_ runs: [InlineRun]) -> [MarkdownBlock] {
+        var out: [MarkdownBlock] = []
+        var piece: [InlineRun] = []
+        func trimmable(_ run: InlineRun) -> Bool { run.math == nil && run.image == nil && !run.code }
+        func flush() {
+            while let first = piece.first, trimmable(first) {
+                let text = first.text.drop(while: \.isWhitespace)
+                if text.isEmpty { piece.removeFirst() } else { piece[0].text = String(text); break }
+            }
+            while let last = piece.last, trimmable(last) {
+                var text = Substring(last.text)
+                while text.last?.isWhitespace == true { text.removeLast() }
+                if text.isEmpty { piece.removeLast() } else { piece[piece.count - 1].text = String(text); break }
+            }
+            if !piece.isEmpty { out.append(standaloneImage(piece) ?? .paragraph(piece)) }
+            piece = []
+        }
+        for run in runs {
+            if let math = run.math, math.display { flush(); out.append(.math(math)) } else { piece.append(run) }
+        }
+        flush()
         return out
     }
 
@@ -525,9 +569,11 @@ public struct InlineRun: Sendable, Equatable {
 /// with an identity per block, so a run joins the open block with the same identity or opens a new one.
 private struct TreeBuilder {
     var root = Node(kind: .root, identity: -1)
+    /// The formulas `MarkdownMathScanner` hid from the parser.
+    var math: MarkdownMathScanner.Placeholders?
 
     mutating func append(text: String, run: AttributedString.Runs.Run, preservesLineBreaks: Bool) {
-        let path = (run.presentationIntent?.components ?? []).reversed().map { ($0.kind, $0.identity) }
+        let path = (run.presentationIntent?.components ?? []).reversed().map { (Node.kind($0.kind, math: math), $0.identity) }
         var inline = InlineRun(text: text)
         let lines = run.markdownSourcePosition.map { $0.startLine...max($0.startLine, $0.endLine) }
         if let i = run.inlinePresentationIntent {
@@ -540,6 +586,16 @@ private struct TreeBuilder {
         }
         inline.link = run.link
         inline.image = run.imageURL
+        if let pieces = math?.pieces(of: text) {
+            // An inline formula keeps no style of the text around it.
+            for piece in pieces {
+                var part = piece.math == nil ? inline : InlineRun(text: piece.text)
+                part.text = piece.text
+                part.math = piece.math
+                root.insert(part, lines: lines, along: path[...])
+            }
+            return
+        }
         root.insert(inline, lines: lines, along: path[...])
     }
 }
@@ -548,6 +604,8 @@ private struct Node {
     enum Kind {
         case root, paragraph, header(Int), orderedList, unorderedList, listItem(Int), blockQuote
         case codeBlock(String?), thematicBreak, table([MarkdownTable.Alignment]), tableHeaderRow, tableRow, tableCell(Int), other
+        /// A display formula's placeholder fence, and a closed ```` ```math ```` fence whose code is the TeX.
+        case math(MarkdownMath), mathFence
     }
     enum Child { case node(Node), run(InlineRun); var node: Node? { if case .node(let n) = self { return n }; return nil } }
 
@@ -588,7 +646,7 @@ private struct Node {
         }
     }
 
-    mutating func insert(_ run: InlineRun, lines l: ClosedRange<Int>?, along path: ArraySlice<(PresentationIntent.Kind, Int)>) {
+    mutating func insert(_ run: InlineRun, lines l: ClosedRange<Int>?, along path: ArraySlice<(Kind, Int)>) {
         if let l { lines = lines.map { min($0.lowerBound, l.lowerBound)...max($0.upperBound, l.upperBound) } ?? l }
         // The last child comes out of the array before it changes, so its text and children are
         // uniquely referenced and grow in place. Changing a copy while the array still held the
@@ -609,14 +667,15 @@ private struct Node {
             last.insert(run, lines: l, along: path.dropFirst())
             children.append(.node(last))
         } else {
-            var node = Node(kind: Self.kind(kind), identity: identity)
+            var node = Node(kind: kind, identity: identity)
             node.insert(run, lines: l, along: path.dropFirst())
             children.append(.node(node))
         }
     }
 
-    static func kind(_ k: PresentationIntent.Kind) -> Kind {
-        switch k {
+    static func kind(_ k: PresentationIntent.Kind, math: MarkdownMathScanner.Placeholders?) -> Kind {
+        if case .codeBlock(let hint) = k, let fence = math?.fence(hint) { return fence.map { .math($0) } ?? .mathFence }
+        return switch k {
         case .paragraph: .paragraph
         case .header(let level): .header(level)
         case .orderedList: .orderedList

@@ -89,6 +89,74 @@ struct MarkdownIncrementalTests {
     Final words without a newline
     """
 
+    static let mathAnswer = """
+    ## Energy
+
+    Inline $E = mc^2$ and \\(a^2 + b^2\\) in a sentence, display $$x$$ mid-line.
+
+    $$
+    \\sum_i x_i
+
+    = y
+    $$
+
+    Text after the block.
+
+    \\[
+    a
+
+    b
+    \\]
+
+    > $$
+    > q
+    > $$
+
+    - item \\(z\\)
+      $$
+      w
+      $$
+
+    | A | B |
+    | - | - |
+    | $|x|$ | 1 |
+
+    ```math
+    x^2
+
+    y^2
+    ```
+
+    Costs $5 and $10.
+
+    $$
+    a+\\$$
+
+    never closed
+
+    More text.
+    """
+
+    /// A `$$` or `\\[` block runs over blank lines: with math on, every streamed length still equals the full parse.
+    @Test func mathIncrementalParseEqualsFullParse() {
+        let text = Self.mathAnswer
+        var previous: MarkdownDocument.Incremental?
+        var reusedSome = false
+        var index = text.startIndex
+        while true {
+            let prefix = String(text[..<index])
+            let parse = MarkdownDocument.parse(prefix, math: true, extending: previous)
+            let full = MarkdownDocument(parsing: prefix, math: true)
+            #expect(parse.document == full, "prefix \(prefix.debugDescription)")
+            if parse.document != full { return }
+            if !parse.stable.isEmpty { reusedSome = true }
+            previous = parse
+            if index == text.endIndex { break }
+            index = text.index(after: index)
+        }
+        #expect(reusedSome)
+    }
+
     /// Every prefix, extended from the previous prefix as a stream would, equals the full parse.
     @Test func incrementalParseEqualsFullParse() {
         let text = Self.answer
@@ -144,6 +212,14 @@ struct MarkdownIncrementalTests {
         #expect(!MarkdownDocument.canSplit("[a]\n\n[a]: https://example.com"))
         #expect(!MarkdownDocument.canSplit("<!--\n\n-->"))
         #expect(MarkdownDocument.canSplit("Plain text.\n\nMore."))
+        // With math on, no cut falls inside an open display block, which runs over blank lines.
+        #expect(MarkdownDocument.stableCut(Substring("$$\na\n\nb")) != nil)
+        for open in ["$$\na\n\nb", "\\[\na\n\nb", "$$\na+\\$$\n\nb", "$$x\n\nb"] {
+            #expect(MarkdownDocument.stableCut(Substring(open), math: true) == nil, "\(open)")
+        }
+        for closed in ["$$\na\n$$\n\nb", "\\[\na\n\\]\n\nb", "$$x$$\n\nb", "$$a$$ text\n\nb"] {
+            #expect(MarkdownDocument.stableCut(Substring(closed), math: true) != nil, "\(closed)")
+        }
     }
 
     /// A layout that reuses the previous one draws the same thing as one made from scratch.
