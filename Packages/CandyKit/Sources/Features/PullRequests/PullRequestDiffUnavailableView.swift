@@ -22,7 +22,7 @@ final class PullRequestDiffUnavailableView: DSView {
     init(error: String, provider: String) {
         self.error = error
         let name = PullRequestListLogic.providerName(provider)
-        let copy = PullRequestDetailLogic.describeDiffError(error, providerName: name)
+        let copy = PullRequestDetailLogic.describeDiffError(error, providerName: name, provider: provider)
         empty = EmptyView(title: copy.title, message: copy.description, size: .compact)
         open = ButtonView("Open on \(name)", icon: .externalLink, variant: .outline, size: .sm)
         super.init(frame: .zero)

@@ -13,6 +13,7 @@ public final class PullRequestThreadDialog {
     public let cancel = ButtonView("Cancel", variant: .outline, size: .sm)
     public let local = ButtonView("Local", variant: .outline, size: .sm)
     public let worktree = ButtonView("Worktree", variant: .default, size: .sm)
+    private let terminology: ChangeRequestTerminology
     private let fields: Fields
     private var dirty = false
     /// The parsed reference (`parsePullRequestReference`), nil when the text is not one.
@@ -29,15 +30,19 @@ public final class PullRequestThreadDialog {
     public var onReference: ((String?) -> Void)?
     public var onConfirm: ((_ mode: String, _ reference: String) -> Void)?
 
-    public init(initialReference: String?) {
-        dialog = DialogView(kind: .dialog, title: "Checkout pull request",
-                            message: "Resolve a GitHub pull request, then create the draft thread in the main repo or in a dedicated worktree.")
+    public init(initialReference: String?, provider: SourceControlProviderInfo? = nil) {
+        let term = ChangeRequestTerminology.of(provider)
+        terminology = term
+        let providerName = provider.map { $0.name.isEmpty ? PullRequestListLogic.providerName($0.kind) : $0.name } ?? "GitHub"
+        dialog = DialogView(kind: .dialog, title: "Checkout \(term.singular)",
+                            message: "Resolve a \(providerName) \(term.singular), then create the draft thread in the main repo or in a dedicated worktree.")
         dialog.maxWidth = 576
-        fields = Fields(input: input)
+        fields = Fields(input: input, terminology: term)
         dialog.panelContent = [fields]
         dialog.footerButtons = [cancel, local, worktree]
+        input.placeholder = "\(term.shortLabel) URL, checkout command, or #42"
         input.text = initialReference ?? ""
-        input.setAccessibilityLabel("Pull request")
+        input.setAccessibilityLabel(term.title)
         input.onChange = { [weak self] _ in self?.dirty = true; self?.changed() }
         // Enter takes the worktree, like T3 (lines 249-260).
         input.onSubmit = { [weak self] in self?.confirm("worktree") }
@@ -66,7 +71,7 @@ public final class PullRequestThreadDialog {
     }
 
     private func update() {
-        let error = PullRequestWriteLogic.checkoutValidation(input.text, dirty: dirty) ?? prepareError ?? (resolved == nil ? resolveError : nil)
+        let error = PullRequestWriteLogic.checkoutValidation(input.text, dirty: dirty, singular: terminology.singular) ?? prepareError ?? (resolved == nil ? resolveError : nil)
         fields.set(resolved: resolved, resolving: resolving && resolved == nil && reference != nil, error: error)
         let ready = canWrite && resolved != nil && !resolving && preparing == nil
         local.isEnabled = ready
@@ -94,9 +99,11 @@ public final class PullRequestThreadDialog {
         private let error = TextBlockView()
         private var stateValue = ""
 
-        init(input: InputView) {
+        init(input: InputView, terminology: ChangeRequestTerminology) {
             self.input = input
             super.init(frame: .zero)
+            label.text = terminology.title
+            resolvingLabel.text = "Resolving \(terminology.singular)..."
             label.lineHeight = 16
             card.wantsLayer = true
             card.layer?.cornerRadius = 12

@@ -126,8 +126,8 @@ public final class PullRequestCodeView: DSView {
         }
         let empty = !loading && error == nil && patches.allSatisfy(\.isEmpty) && nextCursor == nil
         let failed = !loading && error != nil && patches.isEmpty
-        status.text = loading ? "Loading pull request diff..." : failed ? "" : error
-            ?? (empty ? (commit == nil ? "This pull request has no file changes." : "This commit has no file changes.") : "")
+        status.text = loading ? "Loading \(ChangeRequestTerminology.of(kind: detail?.provider).singular) diff..." : failed ? "" : error
+            ?? (empty ? (commit == nil ? "This \(ChangeRequestTerminology.of(kind: detail?.provider).singular) has no file changes." : "This commit has no file changes.") : "")
         status.isHidden = status.text.isEmpty
         if !failed || unavailable?.error != error {
             unavailable?.removeFromSuperview()

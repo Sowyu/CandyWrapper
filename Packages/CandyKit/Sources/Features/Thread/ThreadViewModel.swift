@@ -122,7 +122,7 @@ public final class ThreadViewModel {
     /// An error toast: title and message.
     public var showError: (@MainActor (String, String) -> Void)?
     /// Opens another thread of this environment by its local id (`onOpenThread`): a created thread's
-    /// "Open chat", a subagent card, a fork divider, "Sent by another agent".
+    /// "Open chat", a subagent card, a fork divider, "Open thread".
     public var onOpenThread: (@MainActor (ThreadId) -> Void)?
     /// A live, unarchived thread's title by local id (`threadReadTargetTitle`): `t3_thread_read` rows name it.
     public var threadTitle: (@MainActor (ThreadId) -> String?)?
@@ -131,7 +131,7 @@ public final class ThreadViewModel {
     public var linkedThread: (@MainActor (ThreadId) -> MarkdownContextChips.LinkedThread?)?
     /// Folded agent rows' sender titles for one `apply` pass, since `linkedThread` searches every shell.
     private var foldTitles: [String: String?] = [:]
-    /// "Sent by automation": Settings > Scheduled Tasks with that task's editor.
+    /// "Open automation": Settings > Scheduled Tasks with that task's editor.
     public var onOpenScheduledTask: (@MainActor (String) -> Void)?
     /// The open thread's environment's scheduled task titles by id (`scheduledTasksLive`): folded automation rows show them.
     public var scheduledTaskTitles: [String: String] = [:] { didSet { if scheduledTaskTitles != oldValue { refreshItems() } } }

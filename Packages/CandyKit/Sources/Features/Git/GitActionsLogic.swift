@@ -9,8 +9,15 @@ public struct ChangeRequestTerminology: Equatable, Sendable {
     public static let `default` = ChangeRequestTerminology(shortLabel: "PR", singular: "pull request")
 
     public static func of(_ provider: SourceControlProviderInfo?) -> ChangeRequestTerminology {
-        switch provider?.kind {
-        case nil, "github", "forgejo", "azure-devops", "bitbucket": .default
+        of(kind: provider?.kind)
+    }
+
+    public var title: String { singular.prefix(1).uppercased() + singular.dropFirst() }
+
+    /// Host wording from source-control-core/src/shared/definition.ts and each host client.
+    public static func of(kind: String?) -> ChangeRequestTerminology {
+        switch kind {
+        case nil, "github", "gitcafe", "forgejo", "azure-devops", "bitbucket": .default
         case "gitlab": ChangeRequestTerminology(shortLabel: "MR", singular: "merge request")
         default: ChangeRequestTerminology(shortLabel: "change request", singular: "change request")
         }
@@ -141,7 +148,7 @@ public enum GitActionsLogic {
     /// The menu's footnotes (GitActionsControl.tsx:1745-1757): detached HEAD and behind upstream, in warning.
     public static func menuNotes(_ status: VcsStatus?) -> [String] {
         guard let s = status else { return [] }
-        if s.refName == nil { return ["Detached HEAD: create and check out a branch to enable push and pull request actions."] }
+        if s.refName == nil { return ["Detached HEAD: create and check out a branch to enable push and \(ChangeRequestTerminology.of(s.sourceControlProvider).singular) actions."] }
         if !s.hasWorkingTreeChanges && s.behindCount > 0 && s.aheadCount == 0 { return ["Behind upstream. Pull/rebase first."] }
         return []
     }

@@ -217,7 +217,7 @@ public enum LinkPullRequestLogic {
         guard let project else { return .error("Paste the full pull request URL; this thread has no repository to resolve the number against.") }
         guard let web = ChangeRequestURL.url(kind: project.kind, host: project.host, repository: project.repository, number: number),
               let reference = ChangeRequestURL.parse(web) else {
-            return .error("Paste a full URL; this project's host has no known pull request URL.")
+            return .error("Paste a full URL; this project's host has no known \(ChangeRequestTerminology.of(kind: project.kind).singular) URL.")
         }
         return .link(Resolved(host: reference.host, repository: reference.repository, number: reference.number, url: web))
     }

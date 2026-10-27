@@ -625,10 +625,10 @@ final class PullRequestsPageController {
                 if action != "merge", let o = PullRequestListLogic.override(after: action, entry: entry, now: Date(), token: self.nextToken()) {
                     self.overrides[PullRequestListLogic.key(entry)] = o
                 }
-                self.toast(PullRequestDetailLogic.actionSuccess(action), nil, .success)
+                self.toast(PullRequestDetailLogic.actionSuccess(action, provider: entry.provider), nil, .success)
                 self.reload(keepRows: true)
             } catch {
-                self.toast(PullRequestDetailLogic.actionFailure(action), PullRequestDetailBinding.failure(error, number: entry.number).1, .error)
+                self.toast(PullRequestDetailLogic.actionFailure(action, provider: entry.provider), PullRequestDetailBinding.failure(error, number: entry.number).1, .error)
             }
         }
     }

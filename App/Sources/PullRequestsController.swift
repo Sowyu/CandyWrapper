@@ -153,7 +153,8 @@ final class PullRequestDetailBinding {
         view.projectDefaultMergeMethod = Self.serverSettings?(environmentId).flatMap {
             ProjectSettings.resolve($0, projectId: target.projectId).settings["pullRequestMergeMethod"].stringValue
         }
-        view.showLoading(number: target.number)
+        let provider = environments.snapshot(environmentId)?.projects.first { $0.id.localId.rawValue == target.projectId }?.repositoryIdentity?.provider
+        view.showLoading(number: target.number, provider: provider)
         // An old server has no pull request reads (ChatView.tsx:11005-11011).
         if capabilities.known(environmentId), !capabilities.has(environmentId, "pullRequests") {
             view.showFailure(title: "Pull requests unavailable", message: "Update this environment's T3 Code server to browse pull requests.", retry: false)
@@ -175,6 +176,7 @@ final class PullRequestDetailBinding {
         guard let shell, let ref = reference, let target else { return }
         generation += 1
         let gen = generation
+        let provider = detail?.provider ?? environments.snapshot(environmentId ?? "")?.projects.first { $0.id.localId.rawValue == target.projectId }?.repositoryIdentity?.provider
         view.refreshing = true
         Task { [weak self] in
             if invalidate { _ = try? await shell.supervisor.request("pullRequests.invalidate", payload: .object(["reference": ref.payload])) }
@@ -195,7 +197,7 @@ final class PullRequestDetailBinding {
             } catch {
                 guard let self, self.generation == gen else { return }
                 self.view.refreshing = false
-                let (title, message) = Self.failure(error, number: target.number)
+                let (title, message) = Self.failure(error, number: target.number, provider: provider)
                 self.view.showFailure(title: title, message: message)
             }
         }
@@ -325,6 +327,7 @@ final class PullRequestDetailBinding {
     /// `pullRequests.runAction`, then a fresh read.
     func perform(_ action: String, mergeMethod: String?) {
         guard let shell, let ref = reference else { return }
+        let provider = view.detail?.provider
         view.pendingAction = action
         view.actionPending = true
         Task { [weak self] in
@@ -334,13 +337,13 @@ final class PullRequestDetailBinding {
                 self.view.actionPending = false
                 // 2994 shows the new state in the panel and toasts only a revert, which opens another
                 // pull request (PullRequestDetailPanel.tsx:1027-1030).
-                if action == "revert" || action == "delete-branch" { self.toast(PullRequestDetailLogic.actionSuccess(action), nil, .success) }
+                if action == "revert" || action == "delete-branch" { self.toast(PullRequestDetailLogic.actionSuccess(action, provider: provider), nil, .success) }
                 self.onActed?(action)
                 self.reload(invalidate: action == "update-branch" || action == "approve-workflows")
             } catch {
                 guard let self else { return }
                 self.view.actionPending = false
-                self.toast(PullRequestDetailLogic.actionFailure(action), Self.failure(error, number: ref.number).1, .error)
+                self.toast(PullRequestDetailLogic.actionFailure(action, provider: provider, inPanel: true), Self.failure(error, number: ref.number, provider: provider).1, .error)
             }
         }
     }
@@ -363,12 +366,13 @@ final class PullRequestDetailBinding {
     /// `PullRequestReviewForm.submit`: the verdict, the summary and the pending line comments in one request.
     private func review(_ verdict: String, body: String, comments: [PullRequestReviewCommentDraft]) {
         guard let shell, let ref = reference else { return }
+        let provider = view.detail?.provider
         Task { [weak self] in
             do {
                 _ = try await shell.supervisor.request("pullRequests.submitReview", payload: PullRequestPayloads.submitReview(ref, verdict: verdict, body: body, comments: comments))
                 self?.view.composer?.reviewSubmitted(body: body, comments: comments)
                 self?.view.closeComposer()
-                self?.toast(PullRequestWriteLogic.verdicts.first { $0.value == verdict }?.sent ?? "Review submitted", nil, .success)
+                self?.toast(PullRequestWriteLogic.reviewSent(verdict, provider: provider), nil, .success)
                 self?.reload(invalidate: false)
             } catch {
                 // The draft is kept.
@@ -597,10 +601,11 @@ final class PullRequestDetailBinding {
     }
 
     /// A failed read as the unavailable state's title and message (`PullRequestsUnavailableState`).
-    nonisolated static func failure(_ error: Error, number: Int) -> (String, String) {
+    nonisolated static func failure(_ error: Error, number: Int, provider: String? = nil) -> (String, String) {
         if let e = error as? RPCClientError, let typed = e.typedError {
             if PullRequestErrors.isNotFound(tag: typed.tag, fields: typed.fields) {
-                return ("Pull request #\(number) not found", "It may be an issue rather than a pull request, or this account can't see it.")
+                let term = ChangeRequestTerminology.of(kind: provider)
+                return ("\(term.title) #\(number) not found", "It may be an issue rather than a \(term.singular), or this account can't see it.")
             }
             return ("Could not load pull requests", PullRequestErrors.message(tag: typed.tag, fields: typed.fields) ?? typed.message ?? typed.tag)
         }
@@ -757,11 +762,12 @@ final class ThreadPullRequestsController {
         cardKey = nil
         sync()
         let thread = cardDetailsThread
+        let provider = cardDetails[link.key.id]?.provider
         Task { [weak self] in
             guard let self else { return }
             let ok = (try? await self.environments.request(env, "pullRequests.runAction", PullRequestPayloads.action(ref, action: action, mergeMethod: mergeMethod))) != nil
             self.cardActionPending.remove(link.key.id)
-            self.panel.toasts.show(ToastView(title: ok ? PullRequestDetailLogic.actionSuccess(action) : PullRequestDetailLogic.actionFailure(action), kind: ok ? .success : .error))
+            self.panel.toasts.show(ToastView(title: ok ? PullRequestDetailLogic.actionSuccess(action, provider: provider) : PullRequestDetailLogic.actionFailure(action, provider: provider), kind: ok ? .success : .error))
             guard self.cardDetailsThread == thread else { return }
             self.cardDetails[link.key.id] = nil
             self.cardDetailsTried.remove(link.key.id)
@@ -821,17 +827,17 @@ final class ThreadPullRequestsController {
         case "ready":
             r.action.text = pending ? "Marking..." : "Ready"
             r.action.tone = .primary
-            r.action.tooltipText = "Mark this pull request as ready for review"
+            r.action.tooltipText = "Mark this \(ChangeRequestTerminology.of(kind: d.provider).singular) as ready for review"
             r.action.isEnabled = !pending
             r.action.action = { [weak self] in self?.runCardAction(link, env: env, action: "ready", mergeMethod: nil) }
         case "merge":
             r.action.text = pending ? "Merging..." : "Merge"
             r.action.tone = .primary
-            r.action.tooltipText = "Merge this pull request (\(method))"
+            r.action.tooltipText = "Merge this \(ChangeRequestTerminology.of(kind: d.provider).singular) (\(method))"
             r.action.isEnabled = !pending
             r.action.action = { [weak self] in
                 guard let self, let window = self.panel.window else { return }
-                let dialog = DialogView(kind: .alertDialog, title: "Merge pull request?", message: "This merges #\(link.number) using \(method).")
+                let dialog = DialogView(kind: .alertDialog, title: "Merge \(ChangeRequestTerminology.of(kind: d.provider).singular)?", message: "This merges #\(link.number) using \(method).")
                 let cancel = ButtonView("Cancel", variant: .outline, size: .sm)
                 let go = ButtonView("Merge", variant: .default, size: .sm)
                 dialog.footerButtons = [cancel, go]
@@ -996,16 +1002,24 @@ final class ThreadPullRequestsController {
         return detail.detail?.url ?? target.url
     }
 
+    private func terminology(for url: String) -> ChangeRequestTerminology {
+        if let loaded = detail.detail, loaded.url == url { return .of(kind: loaded.provider) }
+        let identity = ChangeRequestURL.parse(url).flatMap { parsed in
+            sidebar?.snapshot?.projects.first { $0.repositoryIdentity?.owns(parsed) == true }?.repositoryIdentity
+        }
+        return .of(kind: identity?.provider)
+    }
+
     /// `resolveThreadReferenceCopyTarget` (shared/threadReference.ts:13-40).
     func copyReferenceTarget(threadId: String) -> (value: String, title: String) {
         let url = openPanelPullRequestURL ?? ThreadPullRequests.current(thread?.pullRequests ?? [])?.url ?? thread?.linkedPullRequest?.url
-        return url.map { ($0, "PR link copied") } ?? (threadId, "Thread ID copied")
+        return url.map { ($0, "\(terminology(for: $0).shortLabel) link copied") } ?? (threadId, "Thread ID copied")
     }
 
     /// `pullRequest.copyNumber` while a pull request tab is active (PullRequestDetailPanel.tsx:745-760).
     func copyNumber() -> Bool {
         guard panel.window != nil, panel.panelState.isOpen, let target = panel.panelState.active?.pullRequest else { return false }
-        copy("#\(target.number)", title: "PR number copied")
+        copy("#\(target.number)", title: "\(terminology(for: detail.detail?.url ?? target.url ?? "").shortLabel) number copied")
         return true
     }
 
@@ -1070,21 +1084,23 @@ final class ThreadPullRequestsController {
                                                      repository: legacy?.repositoryIdentity?.pullRequestRepository ?? resolved.repository,
                                                      number: resolved.number, url: resolved.url)
         }
+        let term = terminology(for: resolved.url).singular
         Task { [weak self] in
             do {
                 _ = try await self?.environments.dispatch(thread.id, payload)
                 done(nil)
             } catch {
-                done((error as? RPCClientError)?.description ?? "Could not link the pull request.")
+                done((error as? RPCClientError)?.description ?? "Could not link the \(term).")
             }
         }
     }
 
     func unlink(_ link: ThreadPullRequestLink) {
         guard let thread else { return }
+        let term = terminology(for: link.url).singular
         change(thread: thread, resolved: LinkPullRequestLogic.Resolved(host: link.host, repository: link.repository, number: link.number, url: link.url),
                link: false) { [weak self] error in
-            if let error { self?.panel.toasts.show(ToastView(title: "Could not unlink the pull request", message: error, kind: .error)) }
+            if let error { self?.panel.toasts.show(ToastView(title: "Could not unlink the \(term)", message: error, kind: .error)) }
         }
     }
 

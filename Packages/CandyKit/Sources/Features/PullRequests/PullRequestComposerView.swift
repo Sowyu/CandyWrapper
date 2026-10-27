@@ -53,6 +53,7 @@ public final class PullRequestComposerView: DSView {
     static let width: CGFloat = 384 - 2 - 32
 
     public let reviewKey: String
+    private let terminology: ChangeRequestTerminology
     private let canComment: Bool
     private let verdicts: [String]
     private let followUp: String?
@@ -86,6 +87,7 @@ public final class PullRequestComposerView: DSView {
     public var onClose: (() -> Void)?
 
     public init(detail d: PullRequestDetail, reviewKey: String, store: PullRequestReviewStore = .shared) {
+        self.terminology = ChangeRequestTerminology.of(kind: d.provider)
         self.reviewKey = reviewKey
         self.store = store
         let offer = PullRequestWriteLogic.composerOffer(d)
@@ -114,7 +116,7 @@ public final class PullRequestComposerView: DSView {
         discard.setAccessibilityLabel("Discard pending line comments")
         discard.toolTip = "Discard pending line comments"
         close.setAccessibilityLabel("Close composer")
-        commentBox.setAccessibilityLabel("Comment on this pull request")
+        commentBox.setAccessibilityLabel("Comment on this \(terminology.singular)")
         reviewBox.setAccessibilityLabel("Review summary")
         reviewBox.placeholder = summaryRequired && verdicts.contains("request-changes")
             ? "Summarize your review (required to request changes)" : "Summarize your review (optional)"
@@ -158,7 +160,7 @@ public final class PullRequestComposerView: DSView {
         observer = NotificationCenter.default.addObserver(forName: PullRequestReviewStore.didChange, object: store, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.update() }
         }
-        setAccessibilityLabel("Pull request composer")
+        setAccessibilityLabel("\(terminology.title) composer")
         update()
     }
 
@@ -217,7 +219,7 @@ public final class PullRequestComposerView: DSView {
         modeToggle?.selectedIndex = review ? 1 : 0
         if let t = modeToggle?.items.last { t.title = count > 0 ? "Review (\(count))" : "Review" }
         titleLabel.isHidden = modeToggle != nil
-        titleLabel.text = review ? "Review pull request" : "Comment on pull request"
+        titleLabel.text = review ? "Review \(terminology.singular)" : "Comment on \(terminology.singular)"
         discard.isHidden = !(review && count > 0)
         discard.isEnabled = !reviewPending
         commentBox.isHidden = review

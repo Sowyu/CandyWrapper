@@ -56,11 +56,11 @@ public class PullRequestAnnotationCardView: DSView, DiffAnnotationContent {
     var inner: NSRect { NSRect(x: 13, y: 13, width: max(0, card.bounds.width - 26), height: max(0, card.bounds.height - 26)) }
 }
 
-/// `PendingReviewCommentCard` (PullRequestReviewAnnotation.tsx:57-86): dashed, "Pending — sent when
+/// `PendingReviewCommentCard` (PullRequestReviewAnnotation.tsx:57-86): dashed, "Pending. Sent when
 /// you submit the review", the trash, the words.
 public final class PullRequestPendingCommentCardView: PullRequestAnnotationCardView {
     private let icon = IconView(name: .messageSquare, size: 14)
-    private let label = LabelView("Pending — sent when you submit the review", font: DSFont.ui(12))
+    private let label = LabelView("Pending. Sent when you submit the review", font: DSFont.ui(12))
     private let remove = ButtonView(nil, icon: .trash2, variant: .ghost, size: .iconXs)
     private let body = TextBlockView()
     var onRemove: (() -> Void)?

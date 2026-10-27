@@ -1174,7 +1174,7 @@ final class GitController {
     // from the session's scopes once the client tracks them
     func openPullRequestDialog(_ reference: String?) {
         guard modal == nil, let target, target.isDraft, let window = panel.window else { return }
-        let dialog = PullRequestThreadDialog(initialReference: reference)
+        let dialog = PullRequestThreadDialog(initialReference: reference, provider: status?.sourceControlProvider)
         let host = present(dialog.dialog, in: window)
         host.onDismiss = { [weak self] in self?.modal = nil; self?.checkoutDialog = nil; self?.resolveTask?.cancel() }
         checkoutDialog = dialog
@@ -1216,6 +1216,7 @@ final class GitController {
               let payload = PullRequestPayloads.preparePullRequestThread(cwd: target.projectRoot, reference: reference, mode: mode,
                                                                           threadId: EnvironmentScope.localId(of: draft.threadId)) else { return }
         dialog.preparing = mode
+        let term = terminology.singular
         Task { [weak self] in
             do {
                 let value = try await shell.supervisor.request("git.preparePullRequestThread", payload: payload)
@@ -1234,7 +1235,7 @@ final class GitController {
                 // pullRequestCheckoutToast.ts:1-6).
                 if !result.isOnPullRequestHead {
                     self.toast("Checked out, but not confirmed on the latest commit",
-                               "This checkout could not be confirmed at the pull request's latest commit, so its code may differ. Local commits or uncommitted work keep a checkout where it is.",
+                               "This checkout could not be confirmed at the \(term)'s latest commit, so its code may differ. Local commits or uncommitted work keep a checkout where it is.",
                                kind: .warning)
                 }
             } catch {

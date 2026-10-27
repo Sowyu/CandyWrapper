@@ -165,6 +165,11 @@ public enum PullRequestWriteLogic {
         ("request-changes", "Request changes", "Changes requested"),
     ]
 
+    public static func reviewSent(_ verdict: String, provider: String?) -> String {
+        verdict == "approve" ? "\(ChangeRequestTerminology.of(kind: provider).title) approved"
+            : verdicts.first { $0.value == verdict }?.sent ?? "Review submitted"
+    }
+
     /// What the reader may send (Composer lines 64-68): `canComment`, and the verdicts both the host and
     /// the account allow, in T3's order.
     public static func composerOffer(_ d: PullRequestDetail) -> (canComment: Bool, verdicts: [String]) {
@@ -195,9 +200,10 @@ public enum PullRequestWriteLogic {
     }
 
     /// The trigger's accessible name (Composer lines 84-90).
-    public static func composerLabel(pending: Int, reviewStarted: Bool, canComment: Bool) -> String {
-        if pending > 0 { return "Review pull request, \(pending) \(pending == 1 ? "comment" : "comments") pending" }
-        return reviewStarted || !canComment ? "Review pull request" : "Comment on pull request"
+    public static func composerLabel(pending: Int, reviewStarted: Bool, canComment: Bool, provider: String? = nil) -> String {
+        let term = ChangeRequestTerminology.of(kind: provider).singular
+        if pending > 0 { return "Review \(term), \(pending) \(pending == 1 ? "comment" : "comments") pending" }
+        return reviewStarted || !canComment ? "Review \(term)" : "Comment on \(term)"
     }
 
     // MARK: Review threads (pullRequestDetail.logic.ts:170-189, PullRequestReviewAnnotation.tsx)

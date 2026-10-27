@@ -22,7 +22,9 @@ public final class PullRequestDetailView: DSView {
     public var context: Context = .thread { didSet { rebuild() } }
     public private(set) var phase: Phase = .loading(number: 0)
     private var failureRetry = true
+    private var loadingProvider: String?
     public private(set) var detail: PullRequestDetail?
+    private var terminology: ChangeRequestTerminology { .of(kind: detail?.provider) }
     public var activityPending = true { didSet { if activityPending != oldValue { rebuildTabs() } } }
     public var activityError: String? { didSet { if activityError != oldValue { rebuildTabs() } } }
     public var tab: Tab = .summary {
@@ -203,12 +205,12 @@ public final class PullRequestDetailView: DSView {
         checkout.trailingIcon = .chevronDown
         checkout.iconSize = 14
         more.iconSize = 16
-        more.setAccessibilityLabel("More pull request actions")
+        more.setAccessibilityLabel("More \(terminology.singular) actions")
         orderButton.iconSize = 12
         for l in [tabRule, headerRule, condensedRule] { l.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull()]; headerBox.layer?.addSublayer(l) }
         [summary, timeline, code].forEach(addSubview)
         addSubview(composerButton)
-        composerButton.setAccessibilityLabel("Comment on pull request")
+        composerButton.setAccessibilityLabel("Comment on \(terminology.singular)")
         composerButton.action = { [weak self] in self?.showComposer() }
         pendingBadge.lineHeight = 14
         pendingBadge.alignment = .center
@@ -224,7 +226,7 @@ public final class PullRequestDetailView: DSView {
         titleEditButton.setAccessibilityLabel("Edit title")
         titleEditButton.alphaValue = 0
         titleEditButton.action = { [weak self] in self?.beginTitleEdit() }
-        titleInput.setAccessibilityLabel("Pull request title")
+        titleInput.setAccessibilityLabel("\(terminology.title) title")
         titleInput.onSubmit = { [weak self] in self?.saveTitle() }
         titleInput.onCommand = { [weak self] sel in
             guard sel == #selector(NSResponder.cancelOperation(_:)) else { return false }
@@ -295,7 +297,8 @@ public final class PullRequestDetailView: DSView {
 
     // MARK: Data
 
-    public func showLoading(number: Int) {
+    public func showLoading(number: Int, provider: String? = nil) {
+        loadingProvider = provider
         phase = .loading(number: number)
         detail = nil
         rebuild()
@@ -312,6 +315,8 @@ public final class PullRequestDetailView: DSView {
     public func show(_ detail: PullRequestDetail) {
         let sameIdentity = self.detail?.url == detail.url
         self.detail = detail
+        more.setAccessibilityLabel("More \(terminology.singular) actions")
+        titleInput.setAccessibilityLabel("\(terminology.title) title")
         phase = .loaded
         if !sameIdentity {
             // Another pull request: nothing stays armed (the hook's `scopeKey`).
@@ -378,7 +383,7 @@ public final class PullRequestDetailView: DSView {
         composerButton.isHidden = true
         switch phase {
         case .loading:
-            let g = PullRequestDetailGhostView()
+            let g = PullRequestDetailGhostView(provider: loadingProvider)
             addSubview(g)
             ghost = g
         case .failed(let title, let message):
@@ -622,7 +627,7 @@ public final class PullRequestDetailView: DSView {
     private func showNumberMenu(_ event: NSEvent) {
         guard let d = detail else { return }
         var copy = MenuItem("Copy link", icon: .copy)
-        copy.action = { [weak self] in self?.onCopy?(d.url, "PR link") }
+        copy.action = { [weak self] in self?.onCopy?(d.url, "\(ChangeRequestTerminology.of(kind: d.provider).shortLabel) link") }
         var open = MenuItem(PullRequestDetailLogic.openOnHostLabel(d.provider))
         open.action = { [weak self] in self?.onOpenURL?(d.url) }
         MenuPopupView.showContextMenu([copy, open], in: numberLink, at: numberLink.convert(event.locationInWindow, from: nil))
@@ -634,7 +639,7 @@ public final class PullRequestDetailView: DSView {
         worktree.subtitle = "Its own folder and thread. Nothing you have open moves."
         worktree.action = { [weak self] in self?.onCheckout?(true) }
         var local = MenuItem("In this repository", icon: .folderGit2)
-        local.subtitle = "Switches the branch you are working in, like `gh pr checkout`."
+        local.subtitle = "Switches the branch you are working in."
         local.action = { [weak self] in self?.onCheckout?(false) }
         MenuPopupView.show([worktree, local], from: checkout, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))
     }
@@ -702,16 +707,16 @@ public final class PullRequestDetailView: DSView {
         var open = MenuItem(PullRequestDetailLogic.openOnHostLabel(d.provider), icon: .arrowUpRight)
         open.action = { [weak self] in self?.onOpenURL?(d.url) }
         var copyLink = MenuItem("Copy link", icon: .link, shortcut: "⇧⌘C")
-        copyLink.action = { [weak self] in self?.onCopy?(d.url, "PR link") }
-        var copyNumber = MenuItem("Copy PR number", icon: .copy, shortcut: "⇧⌘K")
-        copyNumber.action = { [weak self] in self?.onCopy?("#\(d.number)", "PR number") }
+        copyLink.action = { [weak self] in self?.onCopy?(d.url, "\(ChangeRequestTerminology.of(kind: d.provider).shortLabel) link") }
+        var copyNumber = MenuItem("Copy \(terminology.shortLabel) number", icon: .copy, shortcut: "⇧⌘K")
+        copyNumber.action = { [weak self] in self?.onCopy?("#\(d.number)", "\(ChangeRequestTerminology.of(kind: d.provider).shortLabel) number") }
         items += [open, copyLink, copyNumber]
         if d.state == "open" && can("close") {
             items.append(.separator)
-            items.append(confirmMenuItem("close", title: "Close pull request", armed: "Confirm close?", icon: .gitPullRequestClosed,
+            items.append(confirmMenuItem("close", title: "Close \(terminology.singular)", armed: "Confirm close?", icon: .gitPullRequestClosed,
                                          destructive: true, index: items.count, menu: menuRef))
         } else if d.state == "closed" && can("reopen") {
-            var reopen = MenuItem("Reopen pull request", icon: .gitPullRequestArrow, disabled: actionPending)
+            var reopen = MenuItem("Reopen \(terminology.singular)", icon: .gitPullRequestArrow, disabled: actionPending)
             reopen.action = { [weak self] in self?.onAction?("reopen", nil) }
             items += [.separator, reopen]
         } else if d.state == "merged" && can("revert") {
@@ -784,7 +789,7 @@ public final class PullRequestDetailView: DSView {
         if let d = detail {
             let offer = PullRequestWriteLogic.composerOffer(d)
             let started = count > 0 || !(reviewKey.map { PullRequestReviewStore.shared.summary($0) } ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            composerButton.setAccessibilityLabel(PullRequestWriteLogic.composerLabel(pending: count, reviewStarted: started, canComment: offer.canComment))
+            composerButton.setAccessibilityLabel(PullRequestWriteLogic.composerLabel(pending: count, reviewStarted: started, canComment: offer.canComment, provider: d.provider))
         }
         needsLayout = true
     }
@@ -1274,10 +1279,10 @@ final class StateBadge: DSView {
 /// `PullRequestDetailGhost`: the panel's shape while the first read is on its way.
 final class PullRequestDetailGhostView: DSView {
     private let bars = (0..<9).map { _ in SkeletonView(shape: .pill) }
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
+    init(provider: String?) {
+        super.init(frame: .zero)
         bars.forEach(addSubview)
-        setAccessibilityLabel("Loading pull request")
+        setAccessibilityLabel("Loading \(ChangeRequestTerminology.of(kind: provider ?? "unknown").singular)")
     }
     override func layout() {
         super.layout()

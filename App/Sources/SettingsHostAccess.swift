@@ -254,7 +254,7 @@ extension SettingsController {
                           detail: "To edit these settings, pair this connection with both View relay and Manage relay permissions.")]
         }
         let signedIn = t3.signedIn != nil
-        let reason: String? = !signedIn ? "Sign in to T3 Connect to manage this environment."
+        let reason: String? = !signedIn ? "Sign in to make this environment available to your other devices through T3 Connect."
             : !canManageRelay ? "Your session does not have permission to manage T3 Connect access." : nil
         let tunnel = linkState?.tunnelActive ?? false
         let publish = linkState?.publishAgentActivity ?? false

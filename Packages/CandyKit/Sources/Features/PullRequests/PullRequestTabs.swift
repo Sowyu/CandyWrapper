@@ -986,7 +986,7 @@ public final class PullRequestTimelineView: DSView {
                     let stale = newestCommit.map { e.at < $0 } ?? false
                     return TimelineEventRow(verdict: e, outcome: outcome, stale: stale, nowMs: nowMs, cwd: d.workspaceRoot)
                 }
-                return TimelineEventRow(lifecycle: e, nowMs: nowMs)
+                return TimelineEventRow(lifecycle: e, nowMs: nowMs, provider: d.provider)
             }
         }
         note.text = "No activity yet."
@@ -1062,9 +1062,10 @@ final class TimelineEventRow: DSView, StackItem {
     /// Commit rows: `transition-colors group-hover:text-primary` on the title (PullRequestTimelineTab.tsx:389).
     private var hover: HoverGroup?
 
-    init(lifecycle e: PullRequestDetailLogic.TimelineEvent, nowMs: Int64) {
-        let (icon, label): (IconName, String) = e.kind == .opened ? (.gitPullRequestArrow, "Pull request opened")
-            : e.kind == .merged ? (.gitMerge, "Pull request merged") : (.gitPullRequestClosed, "Pull request closed")
+    init(lifecycle e: PullRequestDetailLogic.TimelineEvent, nowMs: Int64, provider: String) {
+        let term = ChangeRequestTerminology.of(kind: provider).title
+        let (icon, label): (IconName, String) = e.kind == .opened ? (.gitPullRequestArrow, "\(term) opened")
+            : e.kind == .merged ? (.gitMerge, "\(term) merged") : (.gitPullRequestClosed, "\(term) closed")
         marker = TimelineMarker(actor: nil, fallback: icon)
         pinTop = false
         super.init(frame: .zero)
@@ -1418,7 +1419,7 @@ final class PullRequestDescriptionItem: DSView, StackItem, FocusWithinObserver {
 
     private func startEditing() {
         guard let d = detail else { return }
-        let e = PullRequestMarkdownEditorView(value: d.body, label: "Pull request description", placeholder: "Describe this pull request",
+        let e = PullRequestMarkdownEditorView(value: d.body, label: "\(ChangeRequestTerminology.of(kind: d.provider).title) description", placeholder: "Describe this \(ChangeRequestTerminology.of(kind: d.provider).singular)",
                                               allowEmpty: true, cwd: d.workspaceRoot)
         e.onCancel = { [weak self] in self?.stopEditing(); self?.onResize?() }
         e.onSave = { [weak self] body in self?.onSave?(body) }

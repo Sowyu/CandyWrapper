@@ -14,36 +14,38 @@ public enum PullRequestDetailLogic {
     }
 
     /// `ACTION_SUCCESS_LABELS` (PullRequestDetailPanel.tsx:203-218).
-    public static func actionSuccess(_ action: String) -> String {
-        switch action {
-        case "merge": "Pull request merged"
+    public static func actionSuccess(_ action: String, provider: String? = nil) -> String {
+        let term = ChangeRequestTerminology.of(kind: provider)
+        return switch action {
+        case "merge": "Merge requested"
         case "ready": "Marked ready for review"
         case "draft": "Converted to draft"
-        case "close": "Pull request closed"
+        case "close": "\(term.title) closed"
         case "delete-branch": "Branch deleted"
-        case "reopen": "Pull request reopened"
+        case "reopen": "\(term.title) reopened"
         case "update-branch": "Branch updated with the base branch"
-        case "enable-auto-merge": "Auto-merge turned on — merges as soon as this is ready, sooner if it already is"
-        case "disable-auto-merge": "Auto-merge turned off"
-        case "revert": "Revert pull request opened"
+        case "enable-auto-merge": "Auto-merge enabled"
+        case "disable-auto-merge": "Auto-merge disabled"
+        case "revert": "Revert \(term.singular) opened"
         case "approve-workflows": "Workflows approved"
         default: "Done"
         }
     }
 
     /// `ACTION_FAILURE_LABELS` (PullRequestDetailPanel.tsx:221-232).
-    public static func actionFailure(_ action: String) -> String {
-        switch action {
-        case "merge": "Could not merge this pull request"
+    public static func actionFailure(_ action: String, provider: String? = nil, inPanel: Bool = false) -> String {
+        let term = ChangeRequestTerminology.of(kind: provider)
+        return switch action {
+        case "merge": "Could not merge this \(term.singular)"
         case "ready": "Could not mark this ready for review"
         case "draft": "Could not convert this to a draft"
-        case "close": "Could not close this pull request"
+        case "close": "Could not close this \(term.singular)"
         case "delete-branch": "Could not delete this branch"
-        case "reopen": "Could not reopen this pull request"
+        case "reopen": "Could not reopen this \(term.singular)"
         case "update-branch": "Could not update this branch"
-        case "enable-auto-merge": "Could not turn on auto-merge"
-        case "disable-auto-merge": "Could not turn off auto-merge"
-        case "revert": "Could not open a revert pull request"
+        case "enable-auto-merge": inPanel ? "Could not turn on auto-merge" : "Could not enable auto-merge"
+        case "disable-auto-merge": inPanel ? "Could not turn off auto-merge" : "Could not disable auto-merge"
+        case "revert": "Could not open a revert \(term.singular)"
         case "approve-workflows": "Could not approve workflows"
         default: "Could not do that"
         }
@@ -109,13 +111,13 @@ public enum PullRequestDetailLogic {
 
     /// `describePullRequestDiffError` (pullRequestDiffError.ts:1-14): failures arrive wrapped in transport
     /// text, so the rate limit is recognized inside them.
-    public static func describeDiffError(_ error: String, providerName: String) -> (title: String, description: String) {
+    public static func describeDiffError(_ error: String, providerName: String, provider: String? = nil) -> (title: String, description: String) {
         if error.range(of: #"\brate limit\b|\brate[-_]limited\b|\btoo many requests\b"#, options: [.regularExpression, .caseInsensitive]) != nil {
             return ("\(providerName) rate limit reached",
                     "\(providerName) is temporarily limiting requests, so this diff couldn't be loaded. Try again after the limit resets, or view the changes on \(providerName).")
         }
         return ("Couldn't load the changes",
-                "The environment couldn't load this pull request's diff. Try again, or view the changes on \(providerName).")
+                "The environment couldn't load this \(ChangeRequestTerminology.of(kind: provider).singular)'s diff. Try again, or view the changes on \(providerName).")
     }
 
     /// `openOnHostLabel` (pullRequestLinkContextMenu.ts).
@@ -480,7 +482,7 @@ public enum PullRequestDetailLogic {
 
     /// `buildPullRequestTimeline`: opened, commits, comments and reviews, merged or closed; newest first.
     public static func timeline(_ d: PullRequestDetail) -> [TimelineEvent] {
-        var events = [TimelineEvent(id: "created", at: d.createdAt, kind: .opened, title: "opened this pull request", body: nil, markdown: false,
+        var events = [TimelineEvent(id: "created", at: d.createdAt, kind: .opened, title: "opened this \(ChangeRequestTerminology.of(kind: d.provider).singular)", body: nil, markdown: false,
                                     url: nil, actor: d.author, additions: nil, deletions: nil, path: nil, reviewState: nil, reactions: [])]
         events += d.commits.map { c in
             TimelineEvent(id: c.oid, at: c.committedDate, kind: .commit, title: "Commit \(c.oid.prefix(7))",
@@ -496,10 +498,10 @@ public enum PullRequestDetailLogic {
             return e
         }
         if let merged = d.mergedAt {
-            events.append(TimelineEvent(id: "merged", at: merged, kind: .merged, title: "Pull request merged", body: nil, markdown: false,
+            events.append(TimelineEvent(id: "merged", at: merged, kind: .merged, title: "\(ChangeRequestTerminology.of(kind: d.provider).title) merged", body: nil, markdown: false,
                                         url: nil, actor: nil, additions: nil, deletions: nil, path: nil, reviewState: nil, reactions: []))
         } else if let closed = d.closedAt {
-            events.append(TimelineEvent(id: "closed", at: closed, kind: .closed, title: "Pull request closed", body: nil, markdown: false,
+            events.append(TimelineEvent(id: "closed", at: closed, kind: .closed, title: "\(ChangeRequestTerminology.of(kind: d.provider).title) closed", body: nil, markdown: false,
                                         url: nil, actor: nil, additions: nil, deletions: nil, path: nil, reviewState: nil, reactions: []))
         }
         return events.stableSorted { $0.at > $1.at }

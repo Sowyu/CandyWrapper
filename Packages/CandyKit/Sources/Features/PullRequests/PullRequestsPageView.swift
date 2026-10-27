@@ -358,7 +358,7 @@ public final class PullRequestsPageView: DSView {
             item.shortcut = "\(l.count)"
             return item
         }
-        if labelItems.isEmpty { labelItems = [MenuItem("No labels in this view", disabled: true)] }
+        if labelItems.isEmpty { labelItems = [MenuItem("No labels found", disabled: true)] }
         var labels = MenuItem.submenu("Labels", icon: .tag, labelItems)
         labels.shortcut = selected.isEmpty ? "Any" : "\(selected.count) selected"
         items.append(labels)
@@ -734,7 +734,7 @@ final class PullRequestRowView: DSView, NSDraggingSource {
                 let b = ButtonView(label, icon: icon, variant: action == "close" ? .destructiveOutline : .outline, size: .xs)
                 b.iconSize = 12
                 b.isEnabled = !(action == "merge" && e.stack != nil)
-                b.toolTip = action == "merge" && e.stack != nil ? "Open this pull request to merge its stack" : "\(label) immediately"
+                b.toolTip = action == "merge" && e.stack != nil ? "Open this \(ChangeRequestTerminology.of(kind: e.provider).singular) to merge its stack" : "\(label) immediately"
                 b.setAccessibilityLabel("\(label) #\(e.number)")
                 b.action = { [weak self] in if let entry = self?.entry { self?.onSpeedAction?(entry, action) } }
                 b.isHidden = !speedMode

@@ -442,7 +442,7 @@ final class PaletteCommands {
         }
         if let target = commands.threadReferenceTarget {
             actions.append(PaletteEntry(value: "action:copy-thread-reference", searchTerms: ["copy", "pull request", "pr link", "thread id", "reference"],
-                                        title: target.title.hasPrefix("PR") ? "Copy PR link" : "Copy thread ID", description: target.value,
+                                        title: "Copy " + target.title.replacingOccurrences(of: " copied", with: "").replacingOccurrences(of: "Thread ID", with: "thread ID"), description: target.value,
                                         icon: .link, shortcutCommand: "thread.copyReference",
                                         action: .run({ [weak self] in self?.commands.copyThreadReference() }, keepOpen: false)))
         }

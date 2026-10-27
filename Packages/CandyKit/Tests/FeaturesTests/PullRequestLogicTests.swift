@@ -366,7 +366,7 @@ struct LinkPullRequestLogicTests {
         #expect(LinkPullRequestLogic.resolve("nonsense", project: project) == nil)
         #expect(LinkPullRequestLogic.resolve("#0", project: project) == nil)
         #expect(LinkPullRequestLogic.resolve("5", project: .init(host: "x", repository: "a/b", kind: "unknown"))
-                == .error("Paste a full URL; this project's host has no known pull request URL."))
+                == .error("Paste a full URL; this project's host has no known change request URL."))
     }
 
     @Test func validation() {
