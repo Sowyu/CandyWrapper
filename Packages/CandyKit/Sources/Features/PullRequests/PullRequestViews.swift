@@ -123,10 +123,20 @@ public final class PullRequestAvatarView: DSView {
     private func updateVerdict() {
         verdictGlyph?.removeFromSuperview(); verdictGlyph = nil
         guard let reviewOutcome, ThreadDesign.uses3814(dark: effectiveAppearance.isDark) else { return }
-        let icon: IconName = reviewOutcome == "approved" ? .circleCheck : reviewOutcome == "changes-requested" ? .circleX : .circleMinus
+        let icon: IconName = reviewOutcome == "approved" ? .circleCheck : .circleX
         let color = reviewOutcome == "approved" ? Themed.base("emerald-500", dark: "emerald-400") : Themed.color(reviewOutcome == "changes-requested" ? \.destructive : \.mutedForeground)
-        let glyph = IconView(name: icon, size: 12, strokeColor: Themed.color(\.background), fillColor: color)
+        let glyph: IconView
+        if reviewOutcome == "dismissed" {
+            let definition = IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.circle(cx: 12, cy: 12, r: 10), IconPaint(fill: .current, stroke: .current, strokeWidth: 3)),
+                IconElement(.path(d: "M8 12h8"), .lucide)])
+            glyph = IconView(definition: definition, size: 12, color: Themed.color(\.background))
+            glyph.fillColor = color
+        } else {
+            glyph = IconView(name: icon, size: 12, strokeColor: Themed.color(\.background), fillColor: color)
+        }
         glyph.strokeWidth = 3
+        glyph.layer?.zPosition = 1
         glyph.alphaValue = reviewStale ? 0.5 : 1
         addSubview(glyph); verdictGlyph = glyph
         needsLayout = true
