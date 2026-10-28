@@ -27,6 +27,19 @@ Dark mode and the default themes resolve to exactly the same palettes as before.
 - Accent-colored small text, such as a sidebar drop target label or an open collapsible's header, reads at 3.2 to 4.4:1. It is rare and transient.
 - The default light theme is T3's own palette, and CandyWrapper must match it pixel for pixel. Its text passes: muted #71717b reads at 4.6:1. Its hairlines (1.2 to 1.5:1), sidebar menu icons (2.3:1) and pierre-light syntax colors (2.1 to 4.2:1) fail, as they do in T3. Changing them needs the user's decision.
 
+## Screenshots and the dark-mode diff
+
+`capture.sh` in the notes folder renders five offline screens per theme and appearance from recorded threads, with a pinned wallpaper and pointer, so reruns are byte-identical. Builds: `ad8be957` before, `07fba982` after. `diff.py before after` gives:
+
+- All 10 dark thread and Settings General captures are byte-identical, in both themes.
+- All default light captures except Settings, Appearance are byte-identical.
+- Settings, Appearance differs in four captures (default and Redesign, light and dark): only Redesign's light thumbnail in the theme picker, whose send dot and swatch now show the darker teal. It is a picture of light mode, not dark UI.
+- Every Redesign light capture changes, as intended.
+
+`side-by-side/` holds before and after pairs for the Redesign light screens.
+
+No fidelity reference changed. Fidelity tests cover only the default themes, whose palettes are unchanged.
+
 ## Before and after
 
 | Theme | Ground | Token | Needs | Before | After |
