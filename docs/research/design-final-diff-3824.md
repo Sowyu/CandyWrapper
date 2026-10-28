@@ -54,6 +54,8 @@ Final images and reports: `/tmp/design-final-diff-final/`. The ref/ours/diff PNG
 
 ## Remaining dark chat failure
 
+Resolved by [design-final-48](design-final-48-3824.md): the final parallel run reports 4.93% light / 4.45% dark, with all 80 Redesign images exact. The source audit and controlled image comparison explain the row snapping and capture-phase fixes.
+
 Dark 48 still exceeds 5% by 0.05 percentage points. The final diff PNG shows small glyph-edge and divider displacements, rather than a missing surface. The requested card top remains 464.5pt. Instrumenting the rendered tree shows its actual top at 464.9pt, the assistant Markdown at 256.5pt and the turn-fold row at 213pt. This accounts for part of the remaining one- to two-device-pixel alignment error.
 
 An isolated AppKit probe confirms that attaching Snapshot's temporary 1x window rounds an existing clip offset of 45.4pt to 45pt. A standalone 2x window accepts half-point offsets after attachment. Before attaching a window, `scroll(to:)` and `setBoundsOrigin` both preserve the fraction. Changing only the test scroll hook therefore does not fix this, and that ineffective experiment was removed. The production scroll code and Snapshot helper remain unchanged. A general offscreen backing-scale and scroll-phase correction needs an audit of the existing exact baselines; no special offset, crop, ceiling or per-case exception was added here.
