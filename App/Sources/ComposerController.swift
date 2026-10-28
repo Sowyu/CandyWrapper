@@ -802,7 +802,8 @@ final class ComposerController {
         shortcuts.on("thread.editQueuedMessage") { [weak self] call in
             guard let self, self.isActive, case .thread = self.target, self.composer.isCaretAtStart,
                   let latest = self.panel.queue.state.items.last(where: { $0.runId != nil }), latest.isEditable,
-                  self.queuedEdit == nil, !self.queueBusy else { return false }
+                  self.queuedEdit == nil, !self.queueBusy,
+                  ComposerLogic.queuedEditBlockedReason(openQuestionCount: self.requests.userInputs.count) == nil else { return false }
             if !call.isRepeat {
                 self.panel.queue.expand()
                 self.beginEdit(latest)
@@ -1460,6 +1461,7 @@ final class ComposerController {
             : ComposerLogic.QueueState(projection: projection, optimistic: optimistic,
                                        canStartQueuedRun: targetEnvironmentId.flatMap { capabilities[$0]?.queuedRunStart } ?? false)
         panel.queue.editingRunId = queuedEdit?.runId
+        panel.queue.editBlockedReason = ComposerLogic.queuedEditBlockedReason(openQuestionCount: requests.userInputs.count)
         panel.queue.isBusy = queueBusy
         let plan = ThreadPlanFollowUp.activePlan(projection)
         let showPlan = pickers.current.interactionMode == .plan && plan != nil && requests.isEmpty && currentAttachments.isEmpty && !composer.isBusy
@@ -2448,7 +2450,8 @@ final class ComposerController {
     }
 
     private func beginEdit(_ item: ComposerLogic.QueueState.Item) {
-        guard let runId = item.runId, case .thread(let threadId) = target, queuedEdit == nil, !queueBusy else { return }
+        guard let runId = item.runId, case .thread(let threadId) = target, queuedEdit == nil, !queueBusy,
+              ComposerLogic.queuedEditBlockedReason(openQuestionCount: requests.userInputs.count) == nil else { return }
         flushPrompt()
         queuedEdit = QueuedEdit(runId: runId, threadId: threadId, originalText: item.text)
         composer.resetPromptHistory()

@@ -318,6 +318,11 @@ public enum ComposerLogic {
 
     /// `deriveThreadQueueWorkflowState` (client-runtime threadWorkflows.ts:127-163) plus the
     /// optimistic queued messages the strip shows as "saving" (QueuedRunsControl.tsx:130-132).
+    /// T3 3814 packages/client-runtime/src/queuedRunEdit.ts:72-76.
+    public static func queuedEditBlockedReason(openQuestionCount: Int) -> String? {
+        openQuestionCount > 0 ? "Answer the question to edit queued messages" : nil
+    }
+
     public struct QueueState: Sendable, Equatable {
         public struct Item: Sendable, Equatable {
             /// Nil while the message is still optimistic: every action is disabled.
