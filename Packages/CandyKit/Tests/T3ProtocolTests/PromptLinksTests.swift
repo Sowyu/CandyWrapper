@@ -56,4 +56,18 @@ struct PromptLinksTests {
         #expect(PromptLinks.read("t3code://threads/env-1", scheme: "t3code") == nil)
         #expect(PromptLinks.read("https://app.t3.codes/new?prompt=hi", scheme: "t3code") == nil)
     }
+
+    /// promptLinks.test.ts:43-54 at 3814: a checkout of the GitCafe mirror counts as the GitHub repository.
+    @Test func matchesGitCafeCheckouts() throws {
+        func project(_ id: String, _ key: String) throws -> ProjectShell {
+            try JSONDecoder().decode(ProjectShell.self, from: Data("""
+                {"id":"\(id)","title":"t","workspaceRoot":"/w","scripts":[],"createdAt":"2026-10-25T00:00:00.000Z",
+                 "updatedAt":"2026-10-25T00:00:00.000Z","repositoryIdentity":{"canonicalKey":"\(key)","locator":{"source":"git-remote","remoteName":"origin","remoteUrl":"https://\(key).git"}}}
+                """.utf8))
+        }
+        let projects = [try project("gitlab", "gitlab.com/pingdotgg/t3code"), try project("staging", "staging.git.cafe/pingdotgg/t3code"),
+                        try project("gitcafe", "git.cafe/pingdotgg/t3code")]
+        #expect(PromptLinks.project(in: projects, for: .init(owner: "pingdotgg", name: "t3code"))?.id.rawValue == "staging")
+        #expect(PromptLinks.project(in: Array(projects.prefix(1)), for: .init(owner: "pingdotgg", name: "t3code")) == nil)
+    }
 }

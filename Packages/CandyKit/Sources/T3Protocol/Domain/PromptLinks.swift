@@ -183,10 +183,15 @@ public enum PromptLinks {
 // MARK: Resolution against what this client knows (packages/client-runtime/src/promptLinks.ts)
 
 extension PromptLinks {
-    /// `findPromptLinkProject`: `projects` come most recently active first. A fork matches only its own owner.
+    /// A link's `owner/name` is GitHub's. GitCafe syncs a repository two-way with GitHub under the same path, so a
+    /// checkout cloned from git.cafe counts as the linked repository (promptLinks.ts:21-23 at 3814).
+    static let repositoryHosts = ["github.com", "git.cafe", "staging.git.cafe"]
+
+    /// `findPromptLinkProjects`: `projects` come most recently active first. A fork matches only its own owner.
     public static func project(in projects: [ProjectShell], for repository: Repository) -> ProjectShell? {
-        let key = "github.com/\(repository.owner)/\(repository.name)".lowercased()
-        return projects.first { $0.repositoryIdentity.map { $0.groupingKey.lowercased() == key } ?? false }
+        let path = "\(repository.owner)/\(repository.name)".lowercased()
+        let keys = Set(repositoryHosts.map { "\($0)/\(path)" })
+        return projects.first { $0.repositoryIdentity.map { keys.contains($0.groupingKey.lowercased()) } ?? false }
     }
 
     /// `findPromptLinkPullRequestThread`: the most recently updated thread linked to the pull request.
