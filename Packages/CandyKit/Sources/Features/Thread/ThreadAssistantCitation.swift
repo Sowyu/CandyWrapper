@@ -1,6 +1,8 @@
 import Foundation
 import AppKit
 import DesignSystem
+import T3Protocol
+import T3Store
 
 /// shared/assistantCitations.ts:38-112 and contracts/assistantCitations.ts:4-35.
 /// Offsets refer to rendered UTF-16 text. Keep them untouched when editing a comment.
@@ -225,5 +227,38 @@ public enum AssistantCitationCommentPopup {
             window.makeFirstResponder(editor.input)
         }
         return popup
+    }
+}
+
+/// T3 3814 citationProcedure.ts:36-91. Older pages populate visible turn items.
+public enum CitationHistory {
+    public enum Step: Equatable {
+        case waiting, loadEarlier
+        case found(entryId: String, runId: String?)
+        case failed(title: String, message: String)
+    }
+    public static let couldNotLoad = Step.failed(title: "Could not load the cited response",
+        message: "Load earlier turns, then click the citation to try again. Your saved quote is unchanged.")
+    public static let unavailable = Step.failed(title: "The cited response is unavailable",
+        message: "It may have been removed. The selected text is still saved in your citation.")
+
+    public static func step(messageId: String, projection: ThreadProjection?, history: ThreadHistoryMeta,
+                            status: ThreadSyncStatus, pages: Int) -> Step {
+        guard !history.loading else { return .waiting }
+        if history.error != nil { return couldNotLoad }
+        if status == .deleted { return unavailable }
+        guard let projection else { return .waiting }
+        if let item = projection.visibleTurnItems.first(where: {
+            ($0.item.type == .assistantMessage || $0.item.type == .userMessage) && $0.item.messageId?.rawValue == messageId
+        })?.item {
+            guard item.type == .assistantMessage else {
+                return .failed(title: "The citation does not refer to an assistant response",
+                               message: "The selected text is still saved in your citation.")
+            }
+            return .found(entryId: messageId, runId: item.runId?.rawValue)
+        }
+        guard status == .live else { return .waiting }
+        guard history.hasMoreHistory, history.historyCursor != nil else { return unavailable }
+        return pages >= 20 ? couldNotLoad : .loadEarlier
     }
 }
