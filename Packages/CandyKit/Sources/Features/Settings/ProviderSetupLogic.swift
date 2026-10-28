@@ -4,6 +4,14 @@ import T3Store
 
 /// AddProviderInstanceDialog.tsx:72-109, 315-354 and providerSetup.ts:78-156.
 public enum ProviderSetupLogic {
+    /// T3 apps/web/src/components/settings/MultipleAccountsNote.tsx:24-45 (3814).
+    public static let multipleAccountsFAQ = "https://github.com/pingdotgg/t3code/blob/main/docs/user/faq.md#can-i-add-a-bunch-of-accounts-for-one-provider"
+    public static func multipleAccountsMessage(driver: String, providers: [ServerProvider]) -> String? {
+        guard let name = ["codex": "Codex", "claudeAgent": "Claude"][driver],
+              providers.contains(where: { $0.driver == driver && $0.auth?["status"]?.stringValue == "authenticated" }) else { return nil }
+        return "We do not recommend managing multiple \(name) accounts in CandyWrapper."
+    }
+
     public static func instanceID(driver: String, label: String, existing: Set<String>) -> String {
         let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
         let slug = trimmed.lowercased().replacingOccurrences(of: "[^a-z0-9]+", with: "_", options: .regularExpression)

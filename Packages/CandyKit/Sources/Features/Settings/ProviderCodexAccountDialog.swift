@@ -46,6 +46,7 @@ public final class ProviderCodexAccountDialog: DialogView {
         name.onChange = { [weak self] _ in self?.sync() }
         name.onSubmit = { [weak self] in self?.create() }
         panelContent = [SettingsRowView(title: "Account name", detail: "Shown in the provider list and model picker.", control: name)]
+        if let note = multipleAccountsNote(context: context, environment: environment, driver: "codex") { panelContent.append(note) }
         cancel.action = { [weak self] in self?.close?() }
         add.action = { [weak self] in self?.create() }
         footerButtons = [cancel, add]

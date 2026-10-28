@@ -7,6 +7,39 @@ import T3Store
 @testable import Features
 
 struct ProviderSetupTests {
+    @Test func multipleAccountsWarnsOnlyForAuthenticatedMatchingDrivers() {
+        var codex = ServerProvider(instanceId: .init(rawValue: "codex_work"), driver: "codex")
+        #expect(ProviderSetupLogic.multipleAccountsMessage(driver: "codex", providers: [codex]) == nil)
+        codex.auth = .object(["status": .string("unauthenticated")])
+        #expect(ProviderSetupLogic.multipleAccountsMessage(driver: "codex", providers: [codex]) == nil)
+        codex.auth = .object(["status": .string("authenticated")])
+        #expect(ProviderSetupLogic.multipleAccountsMessage(driver: "codex", providers: [codex])?.contains("multiple Codex accounts") == true)
+        #expect(ProviderSetupLogic.multipleAccountsMessage(driver: "claudeAgent", providers: [codex]) == nil)
+        var claude = codex; claude.driver = "claudeAgent"
+        #expect(ProviderSetupLogic.multipleAccountsMessage(driver: "claudeAgent", providers: [claude])?.contains("multiple Claude accounts") == true)
+        var other = codex; other.driver = "pi"
+        #expect(ProviderSetupLogic.multipleAccountsMessage(driver: "pi", providers: [other]) == nil)
+        #expect(ProviderSetupLogic.multipleAccountsMessage(driver: "codex", providers: []) == nil)
+    }
+
+    @MainActor @Test func multipleAccountsNoteUsesTheSelectedEnvironmentInBothDialogs() throws {
+        let context = SettingsPageContext()
+        var provider = ServerProvider(instanceId: .init(rawValue: "codex"), driver: "codex")
+        provider.auth = .object(["status": .string("authenticated")])
+        context.configs["signed-in"] = ServerProviderConfig(providers: [provider])
+        let wizard = ProviderAddWizardView(context: context, environment: "signed-in", label: "Sandbox", existing: ["codex"])
+        let account = ProviderCodexAccountDialog(context: context, environment: "signed-in")
+        for dialog in [wizard as DialogView, account] {
+            let note = try #require(dialog.panelContent.compactMap { $0 as? AlertView }.first)
+            #expect(note.variant == .info)
+            #expect((note.actions.first as? ButtonView)?.title == "More info")
+        }
+        let other = ProviderAddWizardView(context: context, environment: "other", label: "Other sandbox", existing: [])
+        #expect(!other.panelContent.contains { $0 is AlertView })
+        let otherAccount = ProviderCodexAccountDialog(context: context, environment: "other")
+        #expect(!otherAccount.panelContent.contains { $0 is AlertView })
+    }
+
     @Test func collisionAndValidation() {
         let reserved: Set<String> = ["codex", "claudeAgent", "codex_2"]
         #expect(ProviderSetupLogic.instanceID(driver: "codex", label: "Codex", existing: reserved) == "codex_3")
