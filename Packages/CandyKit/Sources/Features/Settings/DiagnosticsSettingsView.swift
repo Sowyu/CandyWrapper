@@ -88,7 +88,8 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
     private var pending: Set<String> = []
     private var collapsed: Set<Int> = []
     private var windowIndex = 1
-    private var signaling: Int?
+    private(set) var signaling: Int?
+    private var signalGeneration = UUID()
     private var loadedFor: String?
     private weak var telemetrySectionView: SettingsSectionView?
     /// The OTLP export form, kept across rebuilds so drafts survive (one per environment).
@@ -140,6 +141,8 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
 
     public override func refresh() {
         if environment?.id != loadedFor {
+            // T3 3814 DiagnosticsSettings.tsx:717-721 scopes pending signals to one machine.
+            signaling = nil; signalGeneration = UUID()
             telemetryTask?.cancel(); telemetryTask = nil
             for task in loads.values { task.cancel() }
             loads.removeAll(); pending.removeAll()
@@ -408,28 +411,32 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
     }
 
     /// `signalProcess`: SIGKILL asks first; the process must still be the same one (`startTimeMs`).
-    private func signal(_ proc: JSONValue, _ signal: String) {
+    func signal(_ proc: JSONValue, _ signal: String) {
         guard let env = environment?.id, let request = context.request, signaling == nil, let pid = proc["pid"]?.intValue else { return }
+        let generation = signalGeneration
         let run: @MainActor () -> Void = { [weak self] in
-            guard let self else { return }
+            guard let self, signalGeneration == generation, environment?.id == env, signaling == nil else { return }
             self.signaling = pid
             Task { [weak self] in
                 do {
                     let result = try await request(env, "server.signalProcess",
                                                    .object(["pid": .number(Double(pid)), "startTimeMs": proc["startTimeMs"] ?? .number(0), "signal": .string(signal)]))
+                    guard let self, signalGeneration == generation, environment?.id == env else { return }
                     if result["signaled"]?.boolValue != true {
                         let message = optionValue(result["message"])?.stringValue
                         if message?.contains("not a live descendant") == true {
-                            self?.context.toast?("Process already exited", "The process is not a child of the T3 Server. It might already have exited.", .info)
+                            self.context.toast?("Process already exited", "The process is not a child of the T3 Server. It might already have exited.", .info)
                         } else {
-                            self?.context.toast?("Could not send \(signal)", message ?? "Failed to send \(signal).", .error)
+                            self.context.toast?("Could not send \(signal)", message ?? "Failed to send \(signal).", .error)
                         }
                     }
                 } catch {
-                    self?.context.toast?("Could not send \(signal)", "\(error)", .error)
+                    guard let self, signalGeneration == generation, environment?.id == env else { return }
+                    context.toast?("Could not send \(signal)", "\(error)", .error)
                 }
-                self?.signaling = nil
-                self?.load("process")
+                guard let self, signalGeneration == generation, environment?.id == env else { return }
+                signaling = nil
+                load("process")
             }
         }
         if signal == "SIGKILL" { context.confirm?("Send SIGKILL to process \(pid)? This cannot be handled by the process.", true, run) } else { run() }
