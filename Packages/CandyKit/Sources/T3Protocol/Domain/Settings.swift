@@ -436,6 +436,9 @@ public enum BackgroundActivity {
     /// `backgroundActivityOverrideSettings`: every resolved value as an override, with `changes` on top.
     public static func overrideSettings(_ s: ServerSettingsValues, _ changes: [String: JSONValue]) -> JSONValue {
         var overrides = resolveServer(s).fields
+        // 3814 drops this unused override (contracts/src/settings.ts:924-935). Preserve an
+        // older host's explicit value, without adding the removed key to a modern host's patch.
+        if s.raw["backgroundActivity"]?["overrides"]?["idleClientTtl"] == nil { overrides["idleClientTtl"] = nil }
         for (k, v) in changes { overrides[k] = v }
         return .object(["schemaVersion": .number(1), "profile": .string("custom"), "baseProfile": .string(baseProfile(s["backgroundActivity"])),
                         "overrides": .object(overrides)])

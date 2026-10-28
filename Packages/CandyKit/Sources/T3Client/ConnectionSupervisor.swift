@@ -375,6 +375,18 @@ public actor ConnectionSupervisor {
         try await withTimeout(timeout) { try await self.request(tag, payload: payload) }
     }
 
+    /// Reads one snapshot, then interrupts the stream. `scheduledTasks.list` was removed in 3814;
+    /// its subscription works on older servers too (packages/contracts/src/rpc.ts:1828-1833).
+    public func firstSnapshot(_ tag: String, payload: JSONValue = .object([:]), timeout: Duration = .seconds(30)) async throws -> JSONValue {
+        guard let connection else { throw RPCClientError.transport(.closed("not connected")) }
+        return try await withTimeout(timeout) {
+            for try await value in await connection.stream(tag, payload: payload, snapshotFirst: true) {
+                return value
+            }
+            throw RPCClientError.transport(.closed("subscription ended before its snapshot"))
+        }
+    }
+
     /// Waits for a session newer than `generation`. Returns nil if the waiting task is cancelled.
     public func waitForConnection(after generation: Int) async -> (RPCConnection, Int)? {
         if let connection, state.generation > generation { return (connection, state.generation) }

@@ -178,8 +178,10 @@ final class HelperController {
     private func revokeOld(keepNewest: Bool) async {
         for m in machines() {
             guard let shell = environments.session(m.id),
-                  let all = try? await shell.http.get("api/auth/clients", token: shell.token, as: [AuthClientSession].self) else { continue }
-            var helpers = OrchestratorHandoff.helperSessions(all).sorted { ($0.issuedAt.epochMs ?? 0) > ($1.issuedAt.epochMs ?? 0) }
+                  let event = try? await shell.supervisor.firstSnapshot("subscribeAuthAccess") else { continue }
+            var access = AuthAccessSnapshot()
+            guard (try? access.apply(event)) != nil else { continue }
+            var helpers = OrchestratorHandoff.helperSessions(access.clientSessions).sorted { ($0.issuedAt.epochMs ?? 0) > ($1.issuedAt.epochMs ?? 0) }
             if keepNewest, !helpers.isEmpty { helpers.removeFirst() }
             for s in helpers { try? await shell.http.revokeClient(sessionId: s.sessionId, token: shell.token) }
         }

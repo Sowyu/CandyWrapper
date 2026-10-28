@@ -134,6 +134,14 @@ struct NightlyCompatTests {
         #expect(configSeen && unknown == 2)
     }
 
+    @Test func removedIdleClientOverrideIsOnlyPreservedWhenTheHostAlreadyHasIt() {
+        let modern = ServerSettingsValues(.object([:]))
+        #expect(BackgroundActivity.overrideSettings(modern, ["automaticGitFetchInterval": .number(60_000)])["overrides"]?["idleClientTtl"] == nil)
+        let legacy = ServerSettingsValues(.object(["backgroundActivity": .object(["schemaVersion": .number(1), "profile": .string("custom"),
+                                                                                "overrides": .object(["idleClientTtl": .number(90_000)])])]))
+        #expect(BackgroundActivity.overrideSettings(legacy, [:])["overrides"]?["idleClientTtl"] == .number(90_000))
+    }
+
     static func settings(_ text: String) -> ServerThreadDefaults { ServerThreadDefaults(raw: UsageTests.json(text)) }
 
     @Test func sourceControlHostsFollowTheServersShape() {
