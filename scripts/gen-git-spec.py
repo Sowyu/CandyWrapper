@@ -37,6 +37,7 @@ textarea_html = f["textarea_html"]
 # EnvironmentMachineIcon.tsx:8-29 at 3814, independent of the composer's generator.
 old_machine = machine
 def machine(kind, cls):
+    if kind == "mac-studio": return old_machine(kind, cls).replace('stroke-width="2"', 'stroke-width="1.75"')
     if kind != "mac-mini": return old_machine(kind, cls)
     return (f'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" '
             f'stroke-linecap="round" stroke-linejoin="round" class="{cls}">'

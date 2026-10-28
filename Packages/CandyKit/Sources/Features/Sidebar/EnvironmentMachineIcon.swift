@@ -16,8 +16,10 @@ public enum EnvironmentMachineIcon {
             return IconDefinition(viewBox: box, elements: [
                 IconElement(.rect(x: 2, y: 8, w: 20, h: 8, rx: 2, ry: 2)), IconElement(.path(d: "M6 12h.01"))])
         case "mac-studio":
+            var paint = IconPaint.lucide
+            if ThreadDesign.uses3814 { paint.strokeWidth = 1.75 }
             return IconDefinition(viewBox: box, elements: [
-                IconElement(.rect(x: 3, y: 5, w: 18, h: 14, rx: 2, ry: 2)), IconElement(.path(d: "M7 15h.01M11 15h.01M15 15h.01"))])
+                IconElement(.rect(x: 3, y: 5, w: 18, h: 14, rx: 2, ry: 2), paint), IconElement(.path(d: "M7 15h.01M11 15h.01M15 15h.01"), paint)])
         case "cloud": return IconName.cloud.definition
         case "desktop": return IconName.monitor.definition
         case "laptop": return IconName.laptop.definition
