@@ -17,6 +17,12 @@ public final class ApprovalPanelView: ComposerBannerView {
     /// A respond call is in flight: every action is disabled.
     public var isResponding = false { didSet { if isResponding != oldValue { updateEnabled() } } }
 
+    public var canOperateThread = true { didSet { if canOperateThread != oldValue { updateEnabled() } } }
+    /// Timeline approvals expose the whole selectable command instead of the drawer's preview.
+    public var usesCompleteDetail = false
+    private let detailScroll = NSScrollView()
+    private let completeDetail = NSTextView(frame: .zero)
+
     public private(set) var approval: PendingApproval?
     private var threadId: ThreadId = ""
 
@@ -43,6 +49,22 @@ public final class ApprovalPanelView: ComposerBannerView {
     public init() {
         super.init(variant: .warning)
         [icon, kindLabel, appLabel, countLabel, detailLine, detailBlock].forEach(addSubview)
+        detailScroll.drawsBackground = false
+        detailScroll.borderType = .noBorder
+        detailScroll.useT3Scrollbars(.overlay)
+        detailScroll.contentView.drawsBackground = false
+        completeDetail.isEditable = false
+        completeDetail.isSelectable = true
+        completeDetail.isRichText = false
+        completeDetail.drawsBackground = false
+        completeDetail.textContainerInset = .zero
+        completeDetail.textContainer?.lineFragmentPadding = 0
+        completeDetail.textContainer?.widthTracksTextView = true
+        completeDetail.isHorizontallyResizable = false
+        completeDetail.isVerticallyResizable = true
+        detailScroll.documentView = completeDetail
+        detailScroll.isHidden = true
+        addSubview(detailScroll)
         detailBlock.maxLines = Int(Self.detailMaxHeight / 16)
         more.smoothsFont = false
         more.setAccessibilityLabel("More approval options")
@@ -74,7 +96,11 @@ public final class ApprovalPanelView: ComposerBannerView {
         countLabel.isHidden = pendingCount <= 1
         whyLink.isHidden = approval.fullAccessOverrideExplanation == nil
         reasonBlock.text = approval.reason ?? ""
-        reasonBlock.isHidden = approval.reason == nil
+        if usesCompleteDetail {
+            let status = approval.canRespond ? "Waiting for approval" : "Provider process is gone. Interrupt or restart the run to respond."
+            reasonBlock.text = [approval.reason, status].compactMap { $0 }.joined(separator: "\n")
+        }
+        reasonBlock.isHidden = reasonBlock.text.isEmpty
 
         let text = approval.detailText
         let prose = approval.requestKind == .mcpElicitation
@@ -84,6 +110,17 @@ public final class ApprovalPanelView: ComposerBannerView {
         detailLine.text = multiline ? "" : text
         detailBlock.text = multiline ? text : ""
         detailBlock.font = prose ? DSFont.ui(12) : DSFont.mono(12)
+        detailScroll.isHidden = !usesCompleteDetail
+        if usesCompleteDetail {
+            detailLine.isHidden = true
+            detailBlock.isHidden = true
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.minimumLineHeight = 16; paragraph.maximumLineHeight = 16
+            paragraph.lineBreakMode = .byCharWrapping
+            completeDetail.textStorage?.setAttributedString(NSAttributedString(string: text, attributes: [
+                .font: detailBlock.font, .foregroundColor: Themed.color(\.foreground), .paragraphStyle: paragraph]))
+            completeDetail.setAccessibilityLabel(prose ? "App access request" : "Approval request detail")
+        }
         // ponytail: the detail truncates (one line) or clamps at 80px where T3 scrolls; add scrolling when long commands show up
 
         buttons.forEach { $0.1.removeFromSuperview() }
@@ -103,14 +140,14 @@ public final class ApprovalPanelView: ComposerBannerView {
     }
 
     private func updateEnabled() {
-        let canRespond = approval?.canRespond ?? false
+        let canRespond = canOperateThread && (approval?.canRespond ?? false)
         buttons.forEach { $0.1.isEnabled = !isResponding && canRespond }
-        more.isEnabled = !isResponding
+        more.isEnabled = !isResponding && canRespond
     }
 
     private func respond(_ decision: ApprovalDecision) {
         // Only live requests can be answered (ChatView.tsx:10114-10146).
-        guard let approval, approval.canRespond, !isResponding else { return }
+        guard let approval, approval.canRespond, canOperateThread, !isResponding else { return }
         onRespond?(decision, RuntimeRequestCommands.respond(threadId: threadId, requestId: approval.requestId, decision: decision))
     }
 
@@ -118,7 +155,7 @@ public final class ApprovalPanelView: ComposerBannerView {
         guard let approval else { return }
         let items = approval.menuOptions.map { option in
             var item = MenuItem(option.label, icon: option.warning == nil ? nil : .triangleAlert)
-            item.isDisabled = isResponding
+            item.isDisabled = isResponding || !approval.canRespond || !canOperateThread
             item.closesOnClick = true
             item.action = { [weak self] in self?.respond(option.decision) }
             return item
@@ -137,8 +174,13 @@ public final class ApprovalPanelView: ComposerBannerView {
         return views.reduce(0) { $0 + $1.intrinsicContentSize.width } + CGFloat(max(0, views.count - 1)) * 6
     }
 
+    private func completeHeight(width: CGFloat) -> CGFloat {
+        ceil(completeDetail.attributedString().boundingRect(with: NSSize(width: max(1, width), height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]).height) + 2
+    }
     private func detailHeight(width: CGFloat) -> CGFloat {
-        detailBlock.isHidden ? 16 : min(Self.detailMaxHeight, max(16, detailBlock.height(forWidth: width)))
+        if usesCompleteDetail { return min(160, max(16, completeHeight(width: width))) }
+        return detailBlock.isHidden ? 16 : min(Self.detailMaxHeight, max(16, detailBlock.height(forWidth: width)))
     }
 
     private func contentWidth(_ width: CGFloat) -> CGFloat {
@@ -155,7 +197,7 @@ public final class ApprovalPanelView: ComposerBannerView {
         let cw = max(0, contentWidth(width))
         let content = 16 + 4 + detailHeight(width: cw) + reasonHeight(width: cw)
         let actionsRow: CGFloat = width < Self.narrow ? 12 + 24 : 0
-        return Self.pad + content + actionsRow + Self.pad + Self.overlap
+        return Self.pad + content + actionsRow + Self.pad + (usesCompleteDetail ? 0 : Self.overlap)
     }
 
     public override func layout() {
@@ -182,6 +224,10 @@ public final class ApprovalPanelView: ComposerBannerView {
         let dh = detailHeight(width: cw)
         detailLine.frame = NSRect(x: x, y: pad + 20, width: cw, height: 16)
         detailBlock.frame = NSRect(x: x, y: pad + 20, width: cw, height: dh)
+        if usesCompleteDetail {
+            detailScroll.frame = NSRect(x: x, y: pad + 20, width: cw, height: dh)
+            completeDetail.setFrameSize(NSSize(width: cw, height: max(dh, completeHeight(width: cw))))
+        }
         let rh = reasonHeight(width: cw)
         reasonBlock.frame = NSRect(x: x, y: pad + 20 + dh + 4, width: cw, height: max(0, rh - 4))
 

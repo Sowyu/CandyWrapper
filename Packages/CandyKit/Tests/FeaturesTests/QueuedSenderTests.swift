@@ -11,7 +11,7 @@ struct QueuedSenderTests {
             (#""createdBy":"agent","creationSource":"server","text":"Continue""#, "Continue", .t3code),
             (#""scheduledTaskId":"task","text":"Scheduled prompt""#, "Scheduled prompt", .automation),
             (#""createdBy":"agent","text":"[Triggered by schedule task: task]\n\nActual prompt""#, "Actual prompt", .automation),
-            (#""context":{"guest":{"name":"Visitor","text":"Guest words"}},"text":"Attributed prompt""#, "Guest words", .guest)
+            (#""context":{"guest":{"guestMessageId":"guest-message","name":"Visitor","text":"Guest words"}},"text":"Attributed prompt""#, "Guest words", .guest)
         ] {
             let json = #"{"thread":{"id":"t"},"runs":[{"id":"r","threadId":"t","ordinal":1,"userMessageId":"m","status":"queued","requestedAt":"2026-10-27T00:00:00Z"}],"messages":[{"id":"m","threadId":"t","role":"user","streaming":false,"createdAt":"2026-10-27T00:00:00Z","updatedAt":"2026-10-27T00:00:00Z",\#(fields)}],"updatedAt":"2026-10-27T00:00:00Z"}"#
             let projection = try JSONDecoder().decode(ThreadProjection.self, from: Data(json.utf8))
