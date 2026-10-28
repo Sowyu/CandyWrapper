@@ -1,0 +1,2540 @@
+[
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "nav.rest.light",
+    "after": 0.0175,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "nav.rest.dark",
+    "after": 0.0165,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "nav.back.rest.light",
+    "after": 0.0042,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "nav.back.rest.dark",
+    "after": 0.0043,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "header.rest.light",
+    "after": 0.0321,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "header.rest.dark",
+    "after": 0.0331,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "this-machine.rest.light",
+    "after": 0.011,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "this-machine.rest.dark",
+    "after": 0.0114,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "environments.empty.rest.light",
+    "after": 0.0092,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "environments.empty.rest.dark",
+    "after": 0.0097,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "environments.rows.rest.light",
+    "after": 0.0232,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "environments.rows.rest.dark",
+    "after": 0.0236,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "environments.routes.rest.light",
+    "after": 0.018,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "environments.routes.rest.dark",
+    "after": 0.0221,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "this-machine.full.rest.light",
+    "after": 0.0134,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "this-machine.full.rest.dark",
+    "after": 0.0146,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "this-machine.permissions.rest.light",
+    "after": 0.0228,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "this-machine.permissions.rest.dark",
+    "after": 0.0252,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "authorized-clients.rest.light",
+    "after": 0.0211,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "authorized-clients.rest.dark",
+    "after": 0.0222,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "authorized-clients.open.rest.light",
+    "after": 0.0205,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "authorized-clients.open.rest.dark",
+    "after": 0.0214,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "environments.permissions.rest.light",
+    "after": 0.0183,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "environments.permissions.rest.dark",
+    "after": 0.019,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "create-link-dialog.rest.light",
+    "after": 0.0448,
+    "before": null,
+    "ceiling": 0.07,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "create-link-dialog.rest.dark",
+    "after": 0.0476,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "add-dialog.rest.light",
+    "after": 0.0253,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "add-dialog.rest.dark",
+    "after": 0.0145,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "add-dialog.error.rest.light",
+    "after": 0.0319,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "add-dialog.error.rest.dark",
+    "after": 0.0141,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "add-dialog.ssh.rest.light",
+    "after": 0.0297,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "add-dialog.ssh.rest.dark",
+    "after": 0.0121,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "add-dialog.ssh-error.rest.light",
+    "after": 0.0274,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "add-dialog.ssh-error.rest.dark",
+    "after": 0.0121,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "add-dialog.route.rest.light",
+    "after": 0.0355,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "ConnectionsFidelityTests",
+    "test": "connections",
+    "case": "add-dialog.route.rest.dark",
+    "after": 0.0175,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "OnboardingSnapShotFidelityTests",
+    "test": "recoveryAndSourceDetails",
+    "case": "connection.light",
+    "after": 0.0109,
+    "before": 0.0109,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "OnboardingSnapShotFidelityTests",
+    "test": "recoveryAndSourceDetails",
+    "case": "connection.dark",
+    "after": 0.026,
+    "before": 0.026,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "OnboardingSnapShotFidelityTests",
+    "test": "recoveryAndSourceDetails",
+    "case": "settings.light",
+    "after": 0.0119,
+    "before": 0.0119,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "OnboardingSnapShotFidelityTests",
+    "test": "recoveryAndSourceDetails",
+    "case": "settings.dark",
+    "after": 0.0276,
+    "before": 0.0276,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "OnboardingSnapShotFidelityTests",
+    "test": "recoveryAndSourceDetails",
+    "case": "details.light",
+    "after": 0.0173,
+    "before": 0.0173,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "OnboardingSnapShotFidelityTests",
+    "test": "recoveryAndSourceDetails",
+    "case": "details.dark",
+    "after": 0.0173,
+    "before": 0.0173,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "ProviderSetupFidelityTests",
+    "test": "providerSetup",
+    "case": "account.idle.rest.light",
+    "after": 0.0091,
+    "before": 0.0091,
+    "ceiling": 0.145,
+    "passed": true
+  },
+  {
+    "suite": "ProviderSetupFidelityTests",
+    "test": "providerSetup",
+    "case": "account.idle.rest.dark",
+    "after": 0.01,
+    "before": 0.01,
+    "ceiling": 0.145,
+    "passed": true
+  },
+  {
+    "suite": "ProviderSetupFidelityTests",
+    "test": "providerSetup",
+    "case": "account.signed-in.rest.light",
+    "after": 0.0102,
+    "before": 0.0102,
+    "ceiling": 0.145,
+    "passed": true
+  },
+  {
+    "suite": "ProviderSetupFidelityTests",
+    "test": "providerSetup",
+    "case": "account.signed-in.rest.dark",
+    "after": 0.0108,
+    "before": 0.0108,
+    "ceiling": 0.145,
+    "passed": true
+  },
+  {
+    "suite": "ProviderSetupFidelityTests",
+    "test": "providerSetup",
+    "case": "wizard.drivers.rest.light",
+    "after": 0.0432,
+    "before": 0.0432,
+    "ceiling": 0.145,
+    "passed": true
+  },
+  {
+    "suite": "ProviderSetupFidelityTests",
+    "test": "providerSetup",
+    "case": "wizard.drivers.rest.dark",
+    "after": 0.0444,
+    "before": 0.0444,
+    "ceiling": 0.145,
+    "passed": true
+  },
+  {
+    "suite": "ReferenceScreensFidelityTests",
+    "test": "referenceScreens",
+    "case": "sidebar-collapsed.rest.light",
+    "after": 0.025,
+    "before": 0.025,
+    "ceiling": 0.055,
+    "passed": true
+  },
+  {
+    "suite": "ReferenceScreensFidelityTests",
+    "test": "referenceScreens",
+    "case": "sidebar-collapsed.rest.dark",
+    "after": 0.2976,
+    "before": 0.2976,
+    "ceiling": 0.055,
+    "passed": false
+  },
+  {
+    "suite": "ReferenceScreensFidelityTests",
+    "test": "referenceScreens",
+    "case": "find.rest.light",
+    "after": 0.0494,
+    "before": 0.0494,
+    "ceiling": 0.055,
+    "passed": true
+  },
+  {
+    "suite": "ReferenceScreensFidelityTests",
+    "test": "referenceScreens",
+    "case": "find.rest.dark",
+    "after": 0.919,
+    "before": 0.919,
+    "ceiling": 0.055,
+    "passed": false
+  },
+  {
+    "suite": "ReferenceScreensFidelityTests",
+    "test": "referenceScreens",
+    "case": "go-to-file.rest.light",
+    "after": 0.0202,
+    "before": 0.0202,
+    "ceiling": 0.055,
+    "passed": true
+  },
+  {
+    "suite": "ReferenceScreensFidelityTests",
+    "test": "referenceScreens",
+    "case": "go-to-file.rest.dark",
+    "after": 0.9409,
+    "before": 0.9409,
+    "ceiling": 0.055,
+    "passed": false
+  },
+  {
+    "suite": "ReferenceScreensFidelityTests",
+    "test": "referenceScreens",
+    "case": "project-search.rest.light",
+    "after": 0.011,
+    "before": 0.011,
+    "ceiling": 0.055,
+    "passed": true
+  },
+  {
+    "suite": "ReferenceScreensFidelityTests",
+    "test": "referenceScreens",
+    "case": "project-search.rest.dark",
+    "after": 0.8753,
+    "before": 0.8753,
+    "ceiling": 0.055,
+    "passed": false
+  },
+  {
+    "suite": "ReferenceScreensFidelityTests",
+    "test": "referenceScreens",
+    "case": "03n-narrow.light",
+    "after": 0.0726,
+    "before": 0.0726,
+    "ceiling": 0.055,
+    "passed": false
+  },
+  {
+    "suite": "ReferenceScreensFidelityTests",
+    "test": "referenceScreens",
+    "case": "03n-narrow.dark",
+    "after": 0.1964,
+    "before": 0.1964,
+    "ceiling": 0.055,
+    "passed": false
+  },
+  {
+    "suite": "SettingsModalFidelityTests",
+    "test": "shell",
+    "case": "settings.rest.light",
+    "after": 0.0082,
+    "before": 0.0082,
+    "ceiling": 0.02,
+    "passed": true
+  },
+  {
+    "suite": "SettingsModalFidelityTests",
+    "test": "shell",
+    "case": "settings.rest.dark",
+    "after": 0.001,
+    "before": 0.001,
+    "ceiling": 0.02,
+    "passed": true
+  },
+  {
+    "suite": "SettingsModalFidelityTests",
+    "test": "shell",
+    "case": "usage.rest.light",
+    "after": 0.0076,
+    "before": 0.0076,
+    "ceiling": 0.02,
+    "passed": true
+  },
+  {
+    "suite": "SettingsModalFidelityTests",
+    "test": "shell",
+    "case": "usage.rest.dark",
+    "after": 0.0003,
+    "before": 0.0003,
+    "ceiling": 0.02,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages2FidelityTests",
+    "test": "settingsPages2",
+    "case": "project.overview.rest.light",
+    "after": 0.0123,
+    "before": 0.0123,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages2FidelityTests",
+    "test": "settingsPages2",
+    "case": "project.overview.rest.dark",
+    "after": 0.0139,
+    "before": 0.0139,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages2FidelityTests",
+    "test": "settingsPages2",
+    "case": "project.actions.rest.light",
+    "after": 0.0146,
+    "before": 0.0146,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages2FidelityTests",
+    "test": "settingsPages2",
+    "case": "project.actions.rest.dark",
+    "after": 0.0155,
+    "before": 0.0155,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages2FidelityTests",
+    "test": "settingsPages2",
+    "case": "source-control.repositories.rest.light",
+    "after": 0.0219,
+    "before": 0.0219,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages2FidelityTests",
+    "test": "settingsPages2",
+    "case": "source-control.repositories.rest.dark",
+    "after": 0.0237,
+    "before": 0.0237,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages2FidelityTests",
+    "test": "settingsPages2",
+    "case": "source-control.unauthenticated.rest.light",
+    "after": 0.0236,
+    "before": 0.0236,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages2FidelityTests",
+    "test": "settingsPages2",
+    "case": "source-control.unauthenticated.rest.dark",
+    "after": 0.0259,
+    "before": 0.0259,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages2FidelityTests",
+    "test": "settingsPages2",
+    "case": "source-control.vcs.rest.light",
+    "after": 0.0165,
+    "before": 0.0165,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages2FidelityTests",
+    "test": "settingsPages2",
+    "case": "source-control.vcs.rest.dark",
+    "after": 0.0168,
+    "before": 0.0168,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages2FidelityTests",
+    "test": "settingsPages2",
+    "case": "providers.list.rest.light",
+    "after": 0.0225,
+    "before": 0.0225,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages2FidelityTests",
+    "test": "settingsPages2",
+    "case": "providers.list.rest.dark",
+    "after": 0.024,
+    "before": 0.024,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages3FidelityTests",
+    "test": "settingsPages3",
+    "case": "bitbucket.access.rest.light",
+    "after": 0.0201,
+    "before": 0.0201,
+    "ceiling": 0.11,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages3FidelityTests",
+    "test": "settingsPages3",
+    "case": "bitbucket.access.rest.dark",
+    "after": 0.0215,
+    "before": 0.0215,
+    "ceiling": 0.11,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages3FidelityTests",
+    "test": "settingsPages3",
+    "case": "bitbucket.api.rest.light",
+    "after": 0.0254,
+    "before": 0.0254,
+    "ceiling": 0.11,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages3FidelityTests",
+    "test": "settingsPages3",
+    "case": "bitbucket.api.rest.dark",
+    "after": 0.0267,
+    "before": 0.0267,
+    "ceiling": 0.11,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages3FidelityTests",
+    "test": "settingsPages3",
+    "case": "provider.environment.rest.light",
+    "after": 0.042,
+    "before": 0.042,
+    "ceiling": 0.11,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages3FidelityTests",
+    "test": "settingsPages3",
+    "case": "provider.environment.rest.dark",
+    "after": 0.0383,
+    "before": 0.0383,
+    "ceiling": 0.11,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages3FidelityTests",
+    "test": "settingsPages3",
+    "case": "connections.load-balancing.rest.light",
+    "after": 0.0173,
+    "before": 0.0173,
+    "ceiling": 0.11,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages3FidelityTests",
+    "test": "settingsPages3",
+    "case": "connections.load-balancing.rest.dark",
+    "after": 0.0219,
+    "before": 0.0219,
+    "ceiling": 0.11,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages3FidelityTests",
+    "test": "settingsPages3",
+    "case": "provider.advisory.rest.light",
+    "after": 0.0725,
+    "before": 0.0725,
+    "ceiling": 0.11,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPages3FidelityTests",
+    "test": "settingsPages3",
+    "case": "provider.advisory.rest.dark",
+    "after": 0.0722,
+    "before": 0.0722,
+    "ceiling": 0.11,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPagesFidelityTests",
+    "test": "settingsPages",
+    "case": "nav.search.rest.light",
+    "after": 0.0241,
+    "before": 0.0241,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPagesFidelityTests",
+    "test": "settingsPages",
+    "case": "nav.search.rest.dark",
+    "after": 0.0258,
+    "before": 0.0258,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPagesFidelityTests",
+    "test": "settingsPages",
+    "case": "general.notifications.rest.light",
+    "after": 0.0174,
+    "before": 0.0174,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPagesFidelityTests",
+    "test": "settingsPages",
+    "case": "general.notifications.rest.dark",
+    "after": 0.0191,
+    "before": 0.0191,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPagesFidelityTests",
+    "test": "settingsPages",
+    "case": "keybindings.navigation.rest.light",
+    "after": 0.0225,
+    "before": 0.0225,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsPagesFidelityTests",
+    "test": "settingsPages",
+    "case": "keybindings.navigation.rest.dark",
+    "after": 0.0232,
+    "before": 0.0232,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsRuntimeFidelityTests",
+    "test": "settingsRuntime",
+    "case": "telemetry.rest.light",
+    "after": 0.0683,
+    "before": 0.0683,
+    "ceiling": 0.105,
+    "passed": true
+  },
+  {
+    "suite": "SettingsRuntimeFidelityTests",
+    "test": "settingsRuntime",
+    "case": "telemetry.rest.dark",
+    "after": 0.0684,
+    "before": 0.0684,
+    "ceiling": 0.105,
+    "passed": true
+  },
+  {
+    "suite": "SettingsRuntimeFidelityTests",
+    "test": "settingsRuntime",
+    "case": "fonts.default.rest.light",
+    "after": 0.0431,
+    "before": 0.0431,
+    "ceiling": 0.105,
+    "passed": true
+  },
+  {
+    "suite": "SettingsRuntimeFidelityTests",
+    "test": "settingsRuntime",
+    "case": "fonts.default.rest.dark",
+    "after": 0.0459,
+    "before": 0.0459,
+    "ceiling": 0.105,
+    "passed": true
+  },
+  {
+    "suite": "SettingsRuntimeFidelityTests",
+    "test": "settingsRuntime",
+    "case": "fonts.custom.rest.light",
+    "after": 0.0282,
+    "before": 0.0282,
+    "ceiling": 0.105,
+    "passed": true
+  },
+  {
+    "suite": "SettingsRuntimeFidelityTests",
+    "test": "settingsRuntime",
+    "case": "fonts.custom.rest.dark",
+    "after": 0.0327,
+    "before": 0.0327,
+    "ceiling": 0.105,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "16a-settings-general.light",
+    "after": 0.0165,
+    "before": 0.0494,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "16a-settings-general.dark",
+    "after": 0.0166,
+    "before": 0.0688,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "16b-settings-general-mid.light",
+    "after": 0.0345,
+    "before": 0.0437,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "16b-settings-general-mid.dark",
+    "after": 0.0361,
+    "before": 0.0545,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "16c-settings-general-bottom.light",
+    "after": 0.0163,
+    "before": 0.0489,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "16c-settings-general-bottom.dark",
+    "after": 0.0165,
+    "before": 0.0719,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "17-settings-appearance.light",
+    "after": 0.0223,
+    "before": 0.0515,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "17-settings-appearance.dark",
+    "after": 0.02,
+    "before": 0.0663,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "19-settings-keybindings.light",
+    "after": 0.044,
+    "before": 0.0475,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "19-settings-keybindings.dark",
+    "after": 0.0449,
+    "before": 0.0582,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "32-settings-source-control.light",
+    "after": 0.0316,
+    "before": 0.0378,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "32-settings-source-control.dark",
+    "after": 0.032,
+    "before": 0.048,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "33-settings-projects.light",
+    "after": 0.0096,
+    "before": 0.022,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "33-settings-projects.dark",
+    "after": 0.0095,
+    "before": 0.1038,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "34-settings-connections.light",
+    "after": 0.0182,
+    "before": 0.0211,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "34-settings-connections.dark",
+    "after": 0.0165,
+    "before": 0.0288,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "35-settings-archived.light",
+    "after": 0.0124,
+    "before": 0.0153,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "35-settings-archived.dark",
+    "after": 0.0112,
+    "before": 0.0144,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "36-settings-scheduled-tasks.light",
+    "after": 0.0104,
+    "before": 0.0134,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "36-settings-scheduled-tasks.dark",
+    "after": 0.0102,
+    "before": 0.0225,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "37-settings-snapshots.light",
+    "after": 0.0146,
+    "before": 0.0173,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "37-settings-snapshots.dark",
+    "after": 0.0136,
+    "before": 0.0257,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "38-settings-storage.light",
+    "after": 0.0179,
+    "before": 0.065,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "38-settings-storage.dark",
+    "after": 0.018,
+    "before": 0.0728,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "39-settings-diagnostics.light",
+    "after": 0.0497,
+    "before": 0.0688,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "39-settings-diagnostics.dark",
+    "after": 0.0489,
+    "before": 0.4718,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "40-settings-integrations.light",
+    "after": 0.0457,
+    "before": 0.0564,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "40-settings-integrations.dark",
+    "after": 0.0469,
+    "before": 0.0721,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "49-settings-modal-general.light",
+    "after": 0.0165,
+    "before": 0.0494,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "49-settings-modal-general.dark",
+    "after": 0.0166,
+    "before": 0.0688,
+    "ceiling": 0.05,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "18-settings-providers.light",
+    "after": 0.0525,
+    "before": 0.071,
+    "ceiling": 0.05,
+    "passed": false
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "settings",
+    "case": "18-settings-providers.dark",
+    "after": 0.0548,
+    "before": 0.1142,
+    "ceiling": 0.05,
+    "passed": false
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "usage",
+    "case": "26-usage-limits.light",
+    "after": 0.0046,
+    "before": 0.0068,
+    "ceiling": 0.095,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "usage",
+    "case": "26-usage-limits.dark",
+    "after": 0.0044,
+    "before": 0.0067,
+    "ceiling": 0.095,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "usage",
+    "case": "26b-usage-cost.light",
+    "after": 0.01,
+    "before": 0.0113,
+    "ceiling": 0.095,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "usage",
+    "case": "26b-usage-cost.dark",
+    "after": 0.0099,
+    "before": 0.0115,
+    "ceiling": 0.095,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "usage",
+    "case": "26b-usage-tokens.light",
+    "after": 0.0097,
+    "before": 0.011,
+    "ceiling": 0.095,
+    "passed": true
+  },
+  {
+    "suite": "SettingsScreensFidelityTests",
+    "test": "usage",
+    "case": "26b-usage-tokens.dark",
+    "after": 0.0096,
+    "before": 0.0112,
+    "ceiling": 0.095,
+    "passed": true
+  },
+  {
+    "suite": "SettingsSweepFidelityTests",
+    "test": "settingsSweepStates",
+    "case": "diff-blue-orange.rest.light",
+    "after": 0.0,
+    "before": 0.0,
+    "ceiling": 0.075,
+    "passed": true
+  },
+  {
+    "suite": "SettingsSweepFidelityTests",
+    "test": "settingsSweepStates",
+    "case": "diff-blue-orange.rest.dark",
+    "after": 0.0,
+    "before": 0.0,
+    "ceiling": 0.075,
+    "passed": true
+  },
+  {
+    "suite": "SettingsSweepFidelityTests",
+    "test": "settingsSweepStates",
+    "case": "diff-default.rest.light",
+    "after": 0.0,
+    "before": 0.0,
+    "ceiling": 0.075,
+    "passed": true
+  },
+  {
+    "suite": "SettingsSweepFidelityTests",
+    "test": "settingsSweepStates",
+    "case": "diff-default.rest.dark",
+    "after": 0.0,
+    "before": 0.0,
+    "ceiling": 0.075,
+    "passed": true
+  },
+  {
+    "suite": "SettingsSweepFidelityTests",
+    "test": "settingsSweepStates",
+    "case": "invalid-project.rest.light",
+    "after": 0.0244,
+    "before": 0.0244,
+    "ceiling": 0.075,
+    "passed": true
+  },
+  {
+    "suite": "SettingsSweepFidelityTests",
+    "test": "settingsSweepStates",
+    "case": "invalid-project.rest.dark",
+    "after": 0.0262,
+    "before": 0.0262,
+    "ceiling": 0.075,
+    "passed": true
+  },
+  {
+    "suite": "SettingsSweepFidelityTests",
+    "test": "settingsSweepStates",
+    "case": "motion-preview.rest.light",
+    "after": 0.0092,
+    "before": 0.0092,
+    "ceiling": 0.075,
+    "passed": true
+  },
+  {
+    "suite": "SettingsSweepFidelityTests",
+    "test": "settingsSweepStates",
+    "case": "motion-preview.rest.dark",
+    "after": 0.0015,
+    "before": 0.0015,
+    "ceiling": 0.075,
+    "passed": true
+  },
+  {
+    "suite": "ThemeSettingsFidelityTests",
+    "test": "themeSettings",
+    "case": "header.rest.light",
+    "after": 0.0159,
+    "before": 0.0521,
+    "ceiling": 0.055,
+    "passed": true
+  },
+  {
+    "suite": "ThemeSettingsFidelityTests",
+    "test": "themeSettings",
+    "case": "header.rest.dark",
+    "after": 0.0164,
+    "before": 0.0542,
+    "ceiling": 0.055,
+    "passed": true
+  },
+  {
+    "suite": "ThemeSettingsFidelityTests",
+    "test": "themeSettings",
+    "case": "cards.rest.light",
+    "after": 0.0307,
+    "before": 0.0307,
+    "ceiling": 0.055,
+    "passed": true
+  },
+  {
+    "suite": "ThemeSettingsFidelityTests",
+    "test": "themeSettings",
+    "case": "cards.rest.dark",
+    "after": 0.0231,
+    "before": 0.0231,
+    "ceiling": 0.055,
+    "passed": true
+  },
+  {
+    "suite": "ThemeSettingsFidelityTests",
+    "test": "themeSettings",
+    "case": "editor.rest.light",
+    "after": 0.0205,
+    "before": 0.0205,
+    "ceiling": 0.055,
+    "passed": true
+  },
+  {
+    "suite": "ThemeSettingsFidelityTests",
+    "test": "themeSettings",
+    "case": "editor.rest.dark",
+    "after": 0.0218,
+    "before": 0.0218,
+    "ceiling": 0.055,
+    "passed": true
+  },
+  {
+    "suite": "UsageFidelityTests",
+    "test": "usage",
+    "case": "header.rest.light",
+    "after": 0.0361,
+    "before": 0.0361,
+    "ceiling": 0.095,
+    "passed": true
+  },
+  {
+    "suite": "UsageFidelityTests",
+    "test": "usage",
+    "case": "header.rest.dark",
+    "after": 0.0363,
+    "before": 0.0363,
+    "ceiling": 0.095,
+    "passed": true
+  },
+  {
+    "suite": "UsageFidelityTests",
+    "test": "usage",
+    "case": "chart.rest.light",
+    "after": 0.0138,
+    "before": 0.0138,
+    "ceiling": 0.095,
+    "passed": true
+  },
+  {
+    "suite": "UsageFidelityTests",
+    "test": "usage",
+    "case": "chart.rest.dark",
+    "after": 0.0145,
+    "before": 0.0145,
+    "ceiling": 0.095,
+    "passed": true
+  },
+  {
+    "suite": "UsageFidelityTests",
+    "test": "usage",
+    "case": "limits-banner.rest.light",
+    "after": 0.041,
+    "before": 0.041,
+    "ceiling": 0.095,
+    "passed": true
+  },
+  {
+    "suite": "UsageFidelityTests",
+    "test": "usage",
+    "case": "limits-banner.rest.dark",
+    "after": 0.0492,
+    "before": 0.0492,
+    "ceiling": 0.095,
+    "passed": true
+  },
+  {
+    "suite": "UsageFidelityTests",
+    "test": "usage",
+    "case": "scheduled-tasks.rest.light",
+    "after": 0.0382,
+    "before": 0.0382,
+    "ceiling": 0.095,
+    "passed": true
+  },
+  {
+    "suite": "UsageFidelityTests",
+    "test": "usage",
+    "case": "scheduled-tasks.rest.dark",
+    "after": 0.0383,
+    "before": 0.0383,
+    "ceiling": 0.095,
+    "passed": true
+  },
+  {
+    "suite": "UsageFidelityTests",
+    "test": "usage",
+    "case": "task-schedule.rest.light",
+    "after": 0.0579,
+    "before": 0.0579,
+    "ceiling": 0.095,
+    "passed": true
+  },
+  {
+    "suite": "UsageFidelityTests",
+    "test": "usage",
+    "case": "task-schedule.rest.dark",
+    "after": 0.0651,
+    "before": 0.0651,
+    "ceiling": 0.095,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "scroll-area",
+    "case": "faded.middle.hover.light",
+    "after": 0.0001,
+    "before": null,
+    "ceiling": 0.025,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "scroll-area",
+    "case": "plain.bottom.hover.light",
+    "after": 0.0001,
+    "before": null,
+    "ceiling": 0.025,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "scroll-area",
+    "case": "faded.top.hover.light",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.025,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "scroll-area",
+    "case": "faded.middle.rest.light",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.025,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "scroll-area",
+    "case": "faded.middle.hover.dark",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.025,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "scroll-area",
+    "case": "faded.top.rest.light",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.025,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "scroll-area",
+    "case": "faded.top.rest.dark",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.025,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "scroll-area",
+    "case": "faded.top.hover.dark",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.025,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "scroll-area",
+    "case": "faded.middle.rest.dark",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.025,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "scroll-area",
+    "case": "faded.near-top.rest.light",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.025,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "scroll-area",
+    "case": "faded.near-top.rest.dark",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.025,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "scroll-area",
+    "case": "faded.near-top.hover.light",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.025,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "scroll-area",
+    "case": "faded.near-top.hover.dark",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.025,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "scroll-area",
+    "case": "plain.bottom.rest.light",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.025,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "scroll-area",
+    "case": "plain.bottom.rest.dark",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.025,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "scroll-area",
+    "case": "plain.bottom.hover.dark",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.025,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "settings",
+    "case": "section.three-rows.rest.dark",
+    "after": 0.0137,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "settings",
+    "case": "section.one-row.rest.dark",
+    "after": 0.0126,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "settings",
+    "case": "section.three-rows.rest.light",
+    "after": 0.0124,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "settings",
+    "case": "section.one-row.rest.light",
+    "after": 0.0119,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "table",
+    "case": "rows.rest.dark",
+    "after": 0.0221,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "table",
+    "case": "rows.hover.dark",
+    "after": 0.0221,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "table",
+    "case": "selected.rest.dark",
+    "after": 0.0221,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "table",
+    "case": "selected.hover.dark",
+    "after": 0.0221,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "table",
+    "case": "rows.hover.light",
+    "after": 0.0192,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "table",
+    "case": "selected.hover.light",
+    "after": 0.0192,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "table",
+    "case": "rows.rest.light",
+    "after": 0.0192,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "table",
+    "case": "selected.rest.light",
+    "after": 0.0192,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "group",
+    "case": "default.separated.focus-visible.dark",
+    "after": 0.053,
+    "before": null,
+    "ceiling": 0.08,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "group",
+    "case": "default.separated.focus-visible.light",
+    "after": 0.0498,
+    "before": null,
+    "ceiling": 0.08,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "group",
+    "case": "default.separated.rest.light",
+    "after": 0.0466,
+    "before": null,
+    "ceiling": 0.08,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "group",
+    "case": "default.separated.hover.light",
+    "after": 0.0459,
+    "before": null,
+    "ceiling": 0.08,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "group",
+    "case": "default.separated.hover.dark",
+    "after": 0.0456,
+    "before": null,
+    "ceiling": 0.08,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "group",
+    "case": "default.separated.rest.dark",
+    "after": 0.0454,
+    "before": null,
+    "ceiling": 0.08,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "group",
+    "case": "outline.three.focus-visible.dark",
+    "after": 0.0447,
+    "before": null,
+    "ceiling": 0.08,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "group",
+    "case": "outline.three.focus-visible.light",
+    "after": 0.0432,
+    "before": null,
+    "ceiling": 0.08,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "group",
+    "case": "outline.three.rest.dark",
+    "after": 0.0405,
+    "before": null,
+    "ceiling": 0.08,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "group",
+    "case": "outline.three.hover.dark",
+    "after": 0.0404,
+    "before": null,
+    "ceiling": 0.08,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "group",
+    "case": "outline.three.hover.light",
+    "after": 0.0359,
+    "before": null,
+    "ceiling": 0.08,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "group",
+    "case": "outline.three.rest.light",
+    "after": 0.0358,
+    "before": null,
+    "ceiling": 0.08,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "standalone-page",
+    "case": "pairing.rest.dark",
+    "after": 0.0067,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "standalone-page",
+    "case": "pairing.rest.light",
+    "after": 0.0065,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "standalone-page",
+    "case": "error.rest.dark",
+    "after": 0.0063,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "standalone-page",
+    "case": "error.rest.light",
+    "after": 0.0061,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "standalone-page",
+    "case": "brand.rest.dark",
+    "after": 0.006,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "standalone-page",
+    "case": "brand.rest.light",
+    "after": 0.0058,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "wizard-steps",
+    "case": "current-1.focus-visible.dark",
+    "after": 0.017,
+    "before": null,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "wizard-steps",
+    "case": "current-1.rest.dark",
+    "after": 0.016,
+    "before": null,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "wizard-steps",
+    "case": "current-1.hover.dark",
+    "after": 0.016,
+    "before": null,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "wizard-steps",
+    "case": "current-1.focus-visible.light",
+    "after": 0.0157,
+    "before": null,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "wizard-steps",
+    "case": "current-1.hover.light",
+    "after": 0.0148,
+    "before": null,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "wizard-steps",
+    "case": "current-0.focus-visible.dark",
+    "after": 0.0148,
+    "before": null,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "wizard-steps",
+    "case": "current-1.rest.light",
+    "after": 0.0147,
+    "before": null,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "wizard-steps",
+    "case": "current-0.focus-visible.light",
+    "after": 0.0143,
+    "before": null,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "wizard-steps",
+    "case": "current-0.rest.dark",
+    "after": 0.0138,
+    "before": null,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "wizard-steps",
+    "case": "current-0.hover.dark",
+    "after": 0.0137,
+    "before": null,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "wizard-steps",
+    "case": "current-0.hover.light",
+    "after": 0.0135,
+    "before": null,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "wizard-steps",
+    "case": "current-0.rest.light",
+    "after": 0.0134,
+    "before": null,
+    "ceiling": 0.04,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "discovery-list",
+    "case": "two-rows.focus-visible.dark",
+    "after": 0.0259,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "discovery-list",
+    "case": "two-rows.rest.dark",
+    "after": 0.0253,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "discovery-list",
+    "case": "two-rows.hover.dark",
+    "after": 0.0252,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "discovery-list",
+    "case": "two-rows.disabled.dark",
+    "after": 0.0237,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "discovery-list",
+    "case": "two-rows.focus-visible.light",
+    "after": 0.0234,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "discovery-list",
+    "case": "two-rows.hover.light",
+    "after": 0.023,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "discovery-list",
+    "case": "two-rows.rest.light",
+    "after": 0.0228,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "discovery-list",
+    "case": "two-rows.disabled.light",
+    "after": 0.0206,
+    "before": null,
+    "ceiling": 0.045,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "middle-truncate",
+    "case": "sha-long.rest.dark",
+    "after": 0.0649,
+    "before": null,
+    "ceiling": 0.1,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "middle-truncate",
+    "case": "path.rest.dark",
+    "after": 0.0645,
+    "before": null,
+    "ceiling": 0.1,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "middle-truncate",
+    "case": "sha-long.rest.light",
+    "after": 0.0616,
+    "before": null,
+    "ceiling": 0.1,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "middle-truncate",
+    "case": "branch.rest.dark",
+    "after": 0.0606,
+    "before": null,
+    "ceiling": 0.1,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "middle-truncate",
+    "case": "path.rest.light",
+    "after": 0.0474,
+    "before": null,
+    "ceiling": 0.1,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "middle-truncate",
+    "case": "short.rest.dark",
+    "after": 0.0439,
+    "before": null,
+    "ceiling": 0.1,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "middle-truncate",
+    "case": "branch.rest.light",
+    "after": 0.0421,
+    "before": null,
+    "ceiling": 0.1,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "middle-truncate",
+    "case": "short.rest.light",
+    "after": 0.0236,
+    "before": null,
+    "ceiling": 0.1,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "panel-tab-close",
+    "case": "tab.focus-visible.dark",
+    "after": 0.1517,
+    "before": null,
+    "ceiling": 0.18,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "panel-tab-close",
+    "case": "button-hover.focus-visible.dark",
+    "after": 0.1061,
+    "before": null,
+    "ceiling": 0.12,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "panel-tab-close",
+    "case": "tab.focus-visible.light",
+    "after": 0.097,
+    "before": null,
+    "ceiling": 0.18,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "panel-tab-close",
+    "case": "button-hover.focus-visible.light",
+    "after": 0.0714,
+    "before": null,
+    "ceiling": 0.12,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "panel-tab-close",
+    "case": "button-hover.hover.light",
+    "after": 0.0253,
+    "before": null,
+    "ceiling": 0.12,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "panel-tab-close",
+    "case": "button-hover.hover.dark",
+    "after": 0.0253,
+    "before": null,
+    "ceiling": 0.12,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "panel-tab-close",
+    "case": "tab.hover.light",
+    "after": 0.0144,
+    "before": null,
+    "ceiling": 0.12,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "panel-tab-close",
+    "case": "tab.hover.dark",
+    "after": 0.0144,
+    "before": null,
+    "ceiling": 0.12,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "panel-tab-close",
+    "case": "tab.rest.light",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.12,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "panel-tab-close",
+    "case": "tab.rest.dark",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.12,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "panel-tab-close",
+    "case": "button-hover.rest.light",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.12,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "panel-tab-close",
+    "case": "button-hover.rest.dark",
+    "after": 0.0,
+    "before": null,
+    "ceiling": 0.12,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "qr-code",
+    "case": "nightly-m1-128.rest.light",
+    "after": 0.0419,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "qr-code",
+    "case": "nightly-m1-128.rest.dark",
+    "after": 0.0419,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "qr-code",
+    "case": "alnum-h1-128.rest.light",
+    "after": 0.0419,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "qr-code",
+    "case": "alnum-h1-128.rest.dark",
+    "after": 0.0419,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "qr-code",
+    "case": "pairing-m2-132.rest.light",
+    "after": 0.0409,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "qr-code",
+    "case": "pairing-m2-132.rest.dark",
+    "after": 0.0409,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "qr-code",
+    "case": "numeric-l0-128.rest.light",
+    "after": 0.0275,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "qr-code",
+    "case": "numeric-l0-128.rest.dark",
+    "after": 0.0275,
+    "before": null,
+    "ceiling": 0.065,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "disabled.focus-visible.dark",
+    "after": 0.1863,
+    "before": null,
+    "ceiling": 0.28,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "disabled.focus-visible.light",
+    "after": 0.186,
+    "before": null,
+    "ceiling": 0.28,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "default.increment.focus-visible.dark",
+    "after": 0.0442,
+    "before": null,
+    "ceiling": 0.09,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "default.increment.focus-visible.light",
+    "after": 0.0424,
+    "before": null,
+    "ceiling": 0.09,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "lg.input.focus-visible.dark",
+    "after": 0.0146,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "lg.input.focus-visible.light",
+    "after": 0.012,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "lg.input.rest.dark",
+    "after": 0.0118,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "lg.input.hover.dark",
+    "after": 0.0118,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "default.increment.rest.dark",
+    "after": 0.0117,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "default.increment.hover.dark",
+    "after": 0.0117,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "default.increment.rest.light",
+    "after": 0.0112,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "default.increment.hover.light",
+    "after": 0.0112,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "lg.input.rest.light",
+    "after": 0.0104,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "lg.input.hover.light",
+    "after": 0.0104,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "sm.input.focus-visible.dark",
+    "after": 0.0103,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "default.input.focus-visible.dark",
+    "after": 0.01,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "sm.input.focus-visible.light",
+    "after": 0.0089,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "default.input.focus-visible.light",
+    "after": 0.0086,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "sm.input.rest.light",
+    "after": 0.007,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "sm.input.hover.light",
+    "after": 0.007,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "sm.input.rest.dark",
+    "after": 0.0069,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "sm.input.hover.dark",
+    "after": 0.0069,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "default.input.rest.dark",
+    "after": 0.0069,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "default.input.hover.dark",
+    "after": 0.0069,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "default.input.rest.light",
+    "after": 0.0068,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "default.input.hover.light",
+    "after": 0.0068,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "disabled.rest.dark",
+    "after": 0.0065,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "disabled.hover.dark",
+    "after": 0.0065,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "disabled.rest.light",
+    "after": 0.0059,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  },
+  {
+    "suite": "LayoutFidelityTests",
+    "test": "number-field",
+    "case": "disabled.hover.light",
+    "after": 0.0059,
+    "before": null,
+    "ceiling": 0.035,
+    "passed": true
+  }
+]

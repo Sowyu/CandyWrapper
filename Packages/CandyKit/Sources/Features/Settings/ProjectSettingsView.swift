@@ -8,7 +8,7 @@ import T3Store
 /// defaults, actions, checkouts and removal. Only listed while a project is picked in the scope sentence.
 public final class ProjectSettingsView: ScopedSettingsPage {
     private let notice = SettingsNoticeView("")
-    private var scopeNotice: SettingsScopeNoticeView?
+    private var scopeNotice: (NSView & SettingsGroupRow)?
     private let info = AlertView(nil, message: "Can't find a setting? Keep this project picked above and hop to any other settings page.",
                                  icon: .info, variant: .info)
     private var overview: SettingsGroupView!
@@ -36,7 +36,7 @@ public final class ProjectSettingsView: ScopedSettingsPage {
     public init(context: SettingsPageContext) {
         super.init(context: context)
         usesBoundary = false
-        gap = 24
+        gap = DesignGeometry.usesClassic(self) ? 24 : 32
         // `ProjectSettingsPanel`'s states: no project, a missing one, a missing checkout.
         notice.isHidden = true
         overview = buildOverview()
@@ -78,7 +78,9 @@ public final class ProjectSettingsView: ScopedSettingsPage {
                 self?.context.selectScope?(SettingsScopeSelection(machine: nil, project: p.key)) }) }
         }
         if let choices {
-            let n = SettingsScopeNoticeView("Choose a project to manage its name, icon, checkouts and actions.", choices: choices)
+            let n: NSView & SettingsGroupRow = DesignGeometry.usesClassic(self)
+                ? SettingsScopeNoticeView("Choose a project to manage its name, icon, checkouts and actions.", choices: choices)
+                : SettingsProjectChoicesView(context: context)
             scopeNotice = n
             body = [n]
             return

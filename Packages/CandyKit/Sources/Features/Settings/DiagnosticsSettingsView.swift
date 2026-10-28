@@ -190,8 +190,8 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
         }
     }
 
-    private func header(_ kind: String, checkedAt: JSONValue?, label: String, extra: [NSView] = []) -> NSView {
-        let checked = LabelView(checkedAt?.stringValue.map { "Checked \(TimestampFormat.formatRelativeTimeLabel($0, nowMs: TimestampFormat.nowMs()))" } ?? "Checking",
+    private func header(_ kind: String, checkedAt: JSONValue?, label: String, extra: [NSView] = [], verb: String = "Checked") -> NSView {
+        let checked = LabelView(checkedAt?.stringValue.map { "\(verb) \(TimestampFormat.formatRelativeTimeLabel($0, nowMs: TimestampFormat.nowMs()))" } ?? "Checking",
                                 font: DSFont.ui(11), color: Themed.color(\.mutedForeground, checkedAt == nil ? 0.5 : 0.6))
         checked.lineHeight = 14
         checked.frame.size = NSSize(width: ceil(checked.textWidth) + 1, height: 14)
@@ -356,6 +356,24 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
     // ponytail: backend summary and history only; add the remaining telemetry groups with their detail views.
     private func telemetrySection() -> SettingsSectionView {
         let snapshot = telemetry
+        if !DesignGeometry.usesClassic(self) {
+            let section = SettingsSectionView(title: "Resource monitor", rows: [SettingsResourceFootprintView(snapshot: snapshot)] + errorRows([errors["telemetry"]]))
+            section.icon = IconView(name: .activity, size: 16, strokeColor: Themed.color(\.mutedForeground))
+            var extras: [NSView] = snapshot?["health"]?["native"]?["status"]?.stringValue.map { [SettingsResourceStatusBadge(status: $0)] } ?? []
+            if let status = snapshot?["health"]?["native"]?["status"]?.stringValue, ["degraded", "unavailable", "stopped"].contains(status) {
+                let retry = ButtonView("Retry monitor", icon: .refreshCw, variant: .outline, size: .xs)
+                retry.action = { [weak self] in
+                    guard let self, let env = self.environment?.id, let request = self.context.request else { return }
+                    Task { [weak self] in
+                        do { _ = try await request(env, "server.retryResourceTelemetry", .object([:])); self?.load("telemetry") }
+                        catch { self?.context.toast?("Could not retry resource monitor", "\(error)", .error) }
+                    }
+                }
+                extras.append(retry)
+            }
+            section.headerAction = header("telemetry", checkedAt: snapshot?["readAt"], label: "Refresh resource telemetry", extra: extras, verb: "Updated")
+            return section
+        }
         let group = snapshot?["groups"]?["backend"]
         let status = snapshot?["health"]?["native"]?["status"]?.stringValue ?? "Checking"
         let stats = StatsGridView([

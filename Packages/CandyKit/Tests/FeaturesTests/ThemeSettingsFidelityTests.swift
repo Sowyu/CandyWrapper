@@ -19,6 +19,7 @@ struct ThemeSettingsFidelityTests {
         case "header":
             let h = SettingsSubheadingView("Themes")
             h.minHeight = 24
+            h.modernMinimumHeight = 24
             h.topPadding = 20
             h.trailing = ThemeHeaderButtonsView()
             h.frame = NSRect(origin: .zero, size: NSSize(width: size.width, height: h.height(forWidth: size.width)))

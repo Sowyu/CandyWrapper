@@ -178,7 +178,7 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
         }
         return [addRow, defaultRow, manageRow]
     }
-    private func editBrowserProfile(_ profile: JSONValue?) {
+    func editBrowserProfile(_ profile: JSONValue?) {
         let dialog = DialogView(title: profile == nil ? "New profile" : "Rename profile")
         let name = InputView(placeholder: "Profile name", text: profile?["name"]?.stringValue ?? "")
         let save = ButtonView("Save"), cancel = ButtonView("Cancel", variant: .ghost)
@@ -197,7 +197,7 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
             context.writeClient?(["browserProfiles": .array(profiles)]); refresh(); modal?.close()
         }
     }
-    private func clearBrowserProfile(_ profile: JSONValue, remove: Bool) {
+    func clearBrowserProfile(_ profile: JSONValue, remove: Bool) {
         guard let id = profile["id"]?.stringValue, let request = context.request else { return }
         context.confirm?(remove ? "Remove this profile and its browsing data?" : "Clear this profile's browsing data?", true) { [weak self] in
             guard let self else { return }

@@ -320,7 +320,9 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         addHub.iconSize = 12
         usageProviders.headerAction = addHub
         addHub.action = { [weak self] in self?.openAddHub() }
-        body = [placeholder, providers, usageProviders, section(nil, "Advanced", [healthRow])]
+        var advancedRows: [any SettingsGroupRow] = [healthRow!]
+        if !DesignGeometry.usesClassic(self) { advancedRows.append(idleCompactionRow()) }
+        body = [placeholder, providers, usageProviders, section(nil, "Advanced", advancedRows)]
         providers.add.action = { [weak self] in self?.openAddProvider() }
         providers.addRow.action = { [weak self] in self?.openAddProvider() }
         providers.refresh.action = { [weak self] in self?.refreshProviders() }
@@ -805,8 +807,14 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         let nameControl = SettingsControlGroup([accent, name], gap: 8)
         nameControl.frame.size = NSSize(width: 28 + 8 + 224, height: 28)
         let nameRow = SettingsRowView(title: "Display name", control: nameControl)
-        nameRow.status = statusLine(row, provider)
-        header.group.rows = [nameRow]
+        if DesignGeometry.usesClassic(self) {
+            nameRow.status = statusLine(row, provider)
+            header.group.rows = [nameRow]
+        } else {
+            let status = SettingsRowView(title: "Status")
+            status.status = statusLine(row, provider)
+            header.group.rows = [status, nameRow]
+        }
         var sections: [NSView & SettingsGroupRow] = [header]
 
         // ProviderSettingsPanel.tsx:970-1014: a managed Codex instance gets the ChatGPT setup and its own
@@ -846,8 +854,13 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         // A server from before idle compaction modes reads no per-instance override and would keep compacting
         // after "Never" (settings.ts:1328-1375), so the row waits for one that does.
         let readsModes = context.configs[env.id].map { ServerSettingsValues($0.settings.raw).readsIdleCompactionModes } ?? false
-        let fields = managedCodex ? [] : ProvidersLogic.fields(row.driver, config: row.instance["config"])
-            .filter { $0.key != "idleCompaction" || readsModes }
+        var fields: [ProvidersLogic.Field] = managedCodex ? [] : ProvidersLogic.fields(row.driver, config: row.instance["config"])
+        fields.removeAll { $0.key == "idleCompaction" && !readsModes }
+        if !DesignGeometry.usesClassic(self) {
+            for i in fields.indices where fields[i].key == "idleCompaction" {
+                fields[i].detail = "When to compact an idle thread over 200,000 tokens: after you return, just before its prompt cache expires, or never. Overrides the default in Providers > Advanced."
+            }
+        }
         if managedCodex { sections.append(codexRuntime(row, provider: provider, env: env.id, readOnly: readOnly)) }
         if !fields.isEmpty {
             let rows: [any SettingsGroupRow] = fields.map { f in
@@ -1007,6 +1020,9 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             modelsCache = (modelsInput, modelsSection, modelsView)
         }
         sections.append(modelsSection)
+        if !DesignGeometry.usesClassic(self) {
+            for section in sections.compactMap({ $0 as? SettingsSectionView }) { section.group.variant = .embedded }
+        }
         e.sections = sections
         return e
     }
@@ -1152,7 +1168,9 @@ final class ProvidersSectionView: DSView, SettingsGroupRow {
 
     private var twoColumns: Bool { bounds.width >= 768 }
 
-    private func listHeight() -> CGFloat { list.reduce(0) { $0 + $1.height(forWidth: 272) + 1 } + 44 }
+    // ProviderSettingsPanel.tsx:1031-1049: divide-y is inside each row's box.
+    private var listGap: CGFloat { DesignGeometry.usesClassic(self) ? 1 : 0 }
+    private func listHeight() -> CGFloat { list.reduce(0) { $0 + $1.height(forWidth: 272) + listGap } + 44 }
 
     func height(forWidth width: CGFloat) -> CGFloat {
         let editorWidth = width >= 768 ? width - 272 - 2 : width - 2
@@ -1177,7 +1195,7 @@ final class ProvidersSectionView: DSView, SettingsGroupRow {
         for row in list {
             let h = row.height(forWidth: listWidth)
             row.frame = NSRect(x: inner.minX, y: y, width: listWidth, height: h)
-            y += h + 1
+            y += h + listGap
         }
         addRow.frame = NSRect(x: inner.minX, y: y, width: listWidth, height: 44)
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -1337,14 +1355,16 @@ final class ProviderListRow: ControlView {
 final class ProviderEditorView: DSView {
     var sections: [NSView & SettingsGroupRow] = [] { didSet { oldValue.forEach { $0.removeFromSuperview() }; sections.forEach(addSubview); needsLayout = true } }
     func height(forWidth width: CGFloat) -> CGFloat {
-        sections.reduce(0) { $0 + $1.height(forWidth: width - 32) } + 24 * CGFloat(max(0, sections.count - 1)) + 32
+        let padding: CGFloat = DesignGeometry.usesClassic(self) ? 16 : 0
+        return sections.reduce(0) { $0 + $1.height(forWidth: width - 2 * padding) } + 24 * CGFloat(max(0, sections.count - 1)) + 32
     }
     override func layout() {
         super.layout()
+        let padding: CGFloat = DesignGeometry.usesClassic(self) ? 16 : 0
         var y: CGFloat = 16
         for s in sections {
-            let h = s.height(forWidth: bounds.width - 32)
-            s.frame = NSRect(x: 16, y: y, width: bounds.width - 32, height: h)
+            let h = s.height(forWidth: bounds.width - 2 * padding)
+            s.frame = NSRect(x: padding, y: y, width: bounds.width - 2 * padding, height: h)
             y += h + 24
         }
     }

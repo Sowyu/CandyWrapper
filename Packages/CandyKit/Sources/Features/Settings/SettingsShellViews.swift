@@ -165,7 +165,13 @@ public final class SettingsSidebarView: DSView {
     }
     public var onSignIn: (() -> Void)?
     public var onAccount: ((NSView) -> Void)?
-    public var isRouteModal = false { didSet { needsLayout = true; needsDisplay = true } }
+    public var isRouteModal = false {
+        didSet {
+            for item in Array(items.values) + [signIn] { item.sidebarContext = !isRouteModal }
+            needsLayout = true
+            needsDisplay = true
+        }
+    }
     public var windowedMac = true { didSet { needsLayout = true } }
     public var stage: SidebarStage = .nightly { didSet { applyStage() } }
 

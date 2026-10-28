@@ -6,7 +6,7 @@ import T3Protocol
 
 /// The settings nav with search results, a General section and a Keybindings section against T3's markup in
 /// Chromium (spec from scripts/gen-settings-spec.py, references in design/component-reference/settings-pages).
-/// The Keybindings section is the first rows of design/reference/19-settings-keybindings.
+/// SettingsScreensFidelityTests separately checks the complete 3824 Keybindings modal panel.
 /// Writes ref, ours and diff PNGs plus report-settings-pages.html to `Fidelity.root`.
 @MainActor @Suite(.fidelity)
 struct SettingsPagesFidelityTests {

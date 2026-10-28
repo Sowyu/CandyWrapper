@@ -7,6 +7,8 @@ import T3Store
 /// The app fills it from the client settings store and every environment's server config.
 @MainActor
 public final class SettingsPageContext {
+    /// Whether the host supplies the desktop bridge. The native app does; browser reference fixtures do not.
+    public var desktopAvailable = true
     public var client = ClientSettings.defaults
     public var scope = SettingsScopeState(environments: [], primaryId: nil)
     /// T3's theme preference: "system", "light" or "dark".
@@ -480,6 +482,7 @@ final class SettingsSubheadingView: DSView, SettingsGroupRow {
     private let label = LabelView("", font: DSFont.ui(14), color: Themed.color(\.foreground, 0.7))
     var trailing: NSView? { didSet { oldValue?.removeFromSuperview(); trailing.map(addSubview); needsLayout = true } }
     var minHeight: CGFloat = 20
+    var modernMinimumHeight: CGFloat = 28
     var topPadding: CGFloat = 0
 
     init(_ title: String) {
@@ -489,7 +492,7 @@ final class SettingsSubheadingView: DSView, SettingsGroupRow {
         addSubview(label)
     }
 
-    func height(forWidth width: CGFloat) -> CGFloat { topPadding + (ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? minHeight : max(28, minHeight)) }
+    func height(forWidth width: CGFloat) -> CGFloat { topPadding + (ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? minHeight : max(modernMinimumHeight, minHeight)) }
 
     override func layout() {
         super.layout()

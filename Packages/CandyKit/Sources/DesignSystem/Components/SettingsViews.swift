@@ -271,7 +271,7 @@ extension SettingsRowView: SettingsGroupRow {}
 /// Rows are `SettingsRowView`s or any other `SettingsGroupRow` (T3 puts environment rows and empty states
 /// straight in the group); `[&>*+*]:border-t` gives every row after the first a 1px top border.
 public final class SettingsGroupView: BoxView {
-    public enum Variant: Sendable { case grouped, plain }
+    public enum Variant: Sendable { case grouped, plain, embedded }
     public var rows: [any SettingsGroupRow] {
         didSet { oldValue.forEach { $0.removeFromSuperview() }; rows.forEach { addSubview($0) }; restyle(); needsLayout = true }
     }
@@ -303,7 +303,7 @@ public final class SettingsGroupView: BoxView {
         }
         boxStyle = box
         for row in rows { (row as? SettingsRowView)?.topBorder = false }
-        let count = variant == .grouped ? max(0, rows.count - 1) : 0
+        let count = variant != .plain ? max(0, rows.count - 1) : 0
         while dividers.count < count {
             let l = CALayer()
             l.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull(), "hidden": NSNull()]
@@ -325,7 +325,7 @@ public final class SettingsGroupView: BoxView {
         dither ? Themed.color(light: \.foreground, 0.11, dark: \.foreground, 0.08) : Themed.color(\.contrastBorder, 0.5)
     }
 
-    private var inset: CGFloat { variant == .grouped ? 1 : 0 }
+    private var inset: CGFloat { variant == .plain ? 0 : 1 }
     private var gap: CGFloat { variant == .plain ? 4 : 1 }  // `space-y-1`, or the 1px top border
 
     /// Redesign keeps some of a card's rows in a section (`DitherSettingsSectionView`); rows this refuses stay hidden.
@@ -354,7 +354,7 @@ public final class SettingsGroupView: BoxView {
         for d in dividers { d.isHidden = true }
         for (i, row) in shown.enumerated() {
             if i > 0 {
-                if variant == .grouped {
+                if variant != .plain {
                     dividers[i - 1].frame = hairline ? CGRect(x: inset, y: y + 0.25, width: bounds.width - 2 * inset, height: 0.5)
                         : CGRect(x: inset, y: y, width: bounds.width - 2 * inset, height: 1)
                     dividers[i - 1].isHidden = false
