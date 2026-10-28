@@ -48,6 +48,7 @@ final class WelcomeOnboardingController {
     private var importedThreadCount = 0
     /// The project to open once its environment's shell lists it.
     private var landing: (env: String, projectId: String)?
+    private let landingWait = OnboardingProjectWait()
     private let importList = OnboardingImportListView()
     private var task: Task<Void, Never>?
     private var busy = false
@@ -165,6 +166,7 @@ final class WelcomeOnboardingController {
         dialog.onClose = { [weak host] in host?.close() }
         host.onDismiss = { [weak self] in
             guard let self else { return }
+            landingWait.cancel(); landing = nil; busy = false
             task?.cancel(); task = nil; self.host = nil; self.dialog = nil; codexCards = [:]
             if gateRoute == .wizard && !suspendingWelcome && ClientSettingsStore.shared.current.string("onboardingCompletedAt").isEmpty { show() }
         }
@@ -494,16 +496,18 @@ final class WelcomeOnboardingController {
         landing = project
         busy = true
         render()
-        land()
+        landingWait.start(open: { [weak self] in
+            self?.openProject?(project.env, project.projectId) == true
+        }, finish: { [weak self] opened in
+            guard let self else { return }
+            landing = nil
+            busy = false
+            complete(opened: opened)
+        })
     }
 
-    /// Waits for the landing project in its computer's shell, then finishes there.
-    private func land() {
-        guard let landing, openProject?(landing.env, landing.projectId) == true else { return }
-        self.landing = nil
-        busy = false
-        complete(opened: true)
-    }
+    /// The deadline still completes setup if no shell ever supplies the project.
+    private func land() { landingWait.projectChanged() }
 
     /// `finish` (WelcomeWizard.tsx:172-219): marks onboarding done, closes, then reports the import.
     private func complete(opened: Bool = false) {
