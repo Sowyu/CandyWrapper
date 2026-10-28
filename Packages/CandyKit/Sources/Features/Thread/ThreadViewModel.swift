@@ -20,6 +20,8 @@ struct TimelineRowUI: Hashable {
     /// Fetched output of this row's open entries whose output the stream left out.
     var outputs: [String: ToolOutputState] = [:]
     /// A secret request's answer in flight, and the error of the last one.
+    var approvalResponding = false
+    var canRespondToApproval = true
     var secretSubmitting = false
     var secretError: String?
     /// The height an MCP App reported for itself, in points.
@@ -135,6 +137,9 @@ public final class ThreadViewModel {
     /// Folded agent rows' sender titles for one `apply` pass, since `linkedThread` searches every shell.
     private var foldTitles: [String: String?] = [:]
     /// "Open automation": Settings > Scheduled Tasks with that task's editor.
+    public var onRespondToApproval: (@MainActor (JSONValue) -> Void)?
+    public var respondingApprovalRequestIds: Set<String> = [] { didSet { if respondingApprovalRequestIds != oldValue { refreshItems() } } }
+    public var canOperateThread = true { didSet { if canOperateThread != oldValue { refreshItems() } } }
     public var onOpenScheduledTask: (@MainActor (String) -> Void)?
     /// The open thread's environment's scheduled task titles by id (`scheduledTasksLive`): folded automation rows show them.
     public var scheduledTaskTitles: [String: String] = [:] { didSet { if scheduledTaskTitles != oldValue { refreshItems() } } }
@@ -478,6 +483,9 @@ public final class ThreadViewModel {
     func item(_ row: TimelineRow) -> TimelineItem {
         var ui = TimelineRowUI()
         switch row.kind {
+        case .pendingApproval(let approval):
+            ui.approvalResponding = respondingApprovalRequestIds.contains(approval.requestId)
+            ui.canRespondToApproval = canOperateThread
         case .work(let entries, _, _):
             for e in entries where !expandedEntries.isEmpty && expandedEntries.contains(e.id) {
                 ui.expandedEntries.insert(e.id)

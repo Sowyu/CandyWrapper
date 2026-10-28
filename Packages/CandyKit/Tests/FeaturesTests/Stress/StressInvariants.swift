@@ -47,6 +47,7 @@ enum StressInvariants {
         case .work(_, true, _): "details"
         case .work: "work"
         case .workLive: "live"
+        case .pendingApproval: "approval"
         case .working: "working"
         case .thinking: "thinking"
         case .workToggle: "toggle"

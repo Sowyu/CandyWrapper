@@ -907,3 +907,27 @@ final class WorkingRowView: TimelineRowView {
         rule.frame = NSRect(x: 0, y: 36, width: bounds.width, height: 1)
     }
 }
+
+/// T3 3814 TimelinePendingApprovalRow.tsx:35-122. Keep the existing native approval controls and warnings.
+final class PendingApprovalRowView: TimelineRowView {
+    private let panel = ApprovalPanelView()
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        panel.placement = .floating
+        panel.usesCompleteDetail = true
+        addSubview(panel)
+        panel.onRespond = { [weak self] _, payload in self?.context.model?.onRespondToApproval?(payload) }
+    }
+    override func configure(_ item: TimelineItem) {
+        super.configure(item)
+        guard case .pendingApproval(let approval) = item.row.kind else { return }
+        panel.canOperateThread = item.ui.canRespondToApproval
+        panel.configure(approval, pendingCount: 1, threadId: context.model?.projection?.thread.id.localId ?? "")
+        panel.isResponding = item.ui.approvalResponding
+    }
+    override func height(forWidth width: CGFloat) -> CGFloat { panel.preferredHeight(width: width) + 8 }
+    override func layout() {
+        super.layout()
+        panel.frame = NSRect(x: 0, y: 0, width: bounds.width, height: panel.preferredHeight(width: bounds.width))
+    }
+}

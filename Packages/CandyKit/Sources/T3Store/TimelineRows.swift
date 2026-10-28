@@ -47,6 +47,7 @@ public struct TimelineRow: Sendable, Hashable, Identifiable {
         /// while a `/compact` waits for its compaction row, or why a compaction T3 Code started holds the
         /// user's message back (TimelineWorkGroupRows.tsx:286-300, MessagesTimeline.logic.ts:1611-1631).
         case working(compacting: String?)
+        case pendingApproval(PendingApproval)
         /// Placeholder while running with no visible activity. `compacting` blanks it (:3793-3795).
         case thinking(groupId: String?, expanded: Bool?, compacting: Bool)
         /// Header of a settled group of tool calls.
@@ -111,6 +112,7 @@ public struct TimelineRow: Sendable, Hashable, Identifiable {
 /// sets are UI state and default to empty, so everything starts collapsed.
 public struct TimelineRowsInput: Sendable {
     public var entries: [TimelineEntry]
+    public var pendingApprovals: [PendingApproval] = []
     public var latestRun: TimelineLatestRun?
     public var runningRunId: RunId?
     public var expandedRunIds: Set<RunId> = []
@@ -190,6 +192,7 @@ public struct TimelineRowsInput: Sendable {
             entries: entries, latestRun: state.latestRun, runningRunId: state.runningRunId, isWorking: state.isWorking,
             runlessWorkActive: state.runlessWorkStartedAt != nil,
             activeTurnStartedAt: state.activeTurnStartedAt, turnDiffSummaries: memo.summaries)
+        input.pendingApprovals = PendingRequests.derive(projection).approvals
         input.isCompacting = state.isWorking && TimelineRunState.compactRequestActive(projection, latestRun: state.latestRun)
         return (input, changed)
     }
@@ -197,7 +200,7 @@ public struct TimelineRowsInput: Sendable {
     /// Everything but the entries matches `other`: the row pass would fold and group the same way.
     func sameContext(_ other: TimelineRowsInput) -> Bool {
         latestRun == other.latestRun && runningRunId == other.runningRunId && isWorking == other.isWorking
-            && isCompacting == other.isCompacting
+            && isCompacting == other.isCompacting && pendingApprovals == other.pendingApprovals
             && runlessWorkActive == other.runlessWorkActive && activeTurnStartedAt == other.activeTurnStartedAt
             && expandedRunIds == other.expandedRunIds && expandedAttemptIds == other.expandedAttemptIds
             && expandedWorkGroupIds == other.expandedWorkGroupIds && turnDiffSummaries == other.turnDiffSummaries
@@ -622,6 +625,17 @@ public enum TimelineRows {
         for fold in attemptFolds.values where !input.expandedAttemptIds.contains(fold.attemptId) {
             collapsedSuperseded.formUnion(fold.hiddenEntryIds)
         }
+        let approvals = Dictionary(input.pendingApprovals.map { ($0.requestId, $0) }, uniquingKeysWith: { _, b in b })
+        func pendingApproval(_ entry: TimelineEntry) -> PendingApproval? {
+            guard let item = entry.work?.projectedItem?.item ?? entry.work?.structuredPayload,
+                  item.type == .approvalRequest, let id = item.requestId else { return nil }
+            return approvals[id]
+        }
+        // T3 3814 MessagesTimeline.logic.ts:1432-1443 keeps pending requests out of collapsed groups.
+        for entry in entries where pendingApproval(entry) != nil {
+            collapsed.remove(entry.id)
+            collapsedSuperseded.remove(entry.id)
+        }
         func runIsActiveResponse(_ runId: RunId?) -> Bool {
             runId.map { activeResponseRunIds.contains($0) } ?? runlessWorkActive
         }
@@ -642,7 +656,7 @@ public enum TimelineRows {
             while index >= activeTurnHeaderIndex {
                 let entry = entries[index]
                 guard let w = entry.work, w.tone != .error, w.sourceActivityKind != "runtime.error",
-                    w.itemType != .systemNotice, w.itemType != .notification, w.questionAnswer == nil, runIsActiveResponse(w.runId),
+                    w.itemType != .systemNotice, w.itemType != .notification, w.questionAnswer == nil, pendingApproval(entry) == nil, runIsActiveResponse(w.runId),
                     w.sourceActivityKind != "context-compaction", !collapsed.contains(entry.id),
                     !collapsedSuperseded.contains(entry.id), folds[entry.id] == nil, attemptFolds[entry.id] == nil
                 else { break }
@@ -659,7 +673,7 @@ public enum TimelineRows {
         let activeAnchor = activeToolEntries.first
         let latestVisible = visibleActive.last
         let latestRunning = visibleActive.last { WorkLog.isActiveTurnActivity($0.work!) }
-        let keepsActivityLive = latestRunning != nil || (latestVisible.map { WorkLog.indicatesSuccess($0.work!) } ?? false)
+        let keepsActivityLive = latestRunning != nil || ((latestVisible.map { WorkLog.indicatesSuccess($0.work!) } ?? false) && approvals.isEmpty)
         let latestToolFailed = latestRunning == nil && latestVisible.map {
             $0.work!.toolLifecycleStatus != .declined && WorkLog.displayIndicatesFailure($0.work!)
         } == true
@@ -760,6 +774,10 @@ public enum TimelineRows {
             }
             if collapsedSuperseded.contains(entry.id) || activeWorkEntryIds.contains(entry.id) { continue }
 
+            if let approval = pendingApproval(entry) {
+                rows.append(TimelineRow(id: entry.id, createdAt: entry.createdAt, kind: .pendingApproval(approval)))
+                continue
+            }
             switch entry.kind {
             case .work(let work) where work.sourceActivityKind == "context-compaction":
                 let active = isInActiveRun(work)
@@ -793,7 +811,7 @@ public enum TimelineRows {
                     let next = entries[cursor]
                     guard let nextWork = next.work, nextWork.sourceActivityKind != "context-compaction", nextWork.tone != .error,
                         nextWork.sourceActivityKind != "runtime.error", nextWork.itemType != .systemNotice,
-                        nextWork.itemType != .notification, nextWork.questionAnswer == nil, !activeWorkEntryIds.contains(next.id), !collapsed.contains(next.id),
+                        nextWork.itemType != .notification, nextWork.questionAnswer == nil, pendingApproval(next) == nil, !activeWorkEntryIds.contains(next.id), !collapsed.contains(next.id),
                         !collapsedSuperseded.contains(next.id), folds[next.id] == nil, attemptFolds[next.id] == nil,
                         nextWork.runId == work.runId, next.attempt?.id == entry.attempt?.id
                     else { break }
@@ -890,7 +908,7 @@ public enum TimelineRows {
             rows[i].kind = .working(compacting: "Compacting…")
         }
         if input.isWorking, input.latestRun?.turnEnded != true, !head, !hasActiveCompaction, !compactionOnlyRunFinished,
-           !hasActivityRow || latestToolFailed {
+           latestToolFailed || (!hasActivityRow && approvals.isEmpty) {
             // A failed latest tool hands the row back to thinking; its group stays reachable.
             if latestToolFailed, let anchor = activeAnchor {
                 let groupId = workGroupId(anchor.id)
@@ -904,6 +922,15 @@ public enum TimelineRows {
             }
         }
 
+        if !head {
+            let matched = Set(rows.compactMap { row -> String? in
+                if case .pendingApproval(let approval) = row.kind { return approval.requestId }
+                return nil
+            })
+            for approval in input.pendingApprovals where !matched.contains(approval.requestId) {
+                rows.append(TimelineRow(id: "pending-approval:" + approval.requestId, createdAt: approval.createdAt, kind: .pendingApproval(approval)))
+            }
+        }
         var collapsedFoldMembers = Set<String>()
         for fold in folds.values where !input.expandedRunIds.contains(fold.runId) { collapsedFoldMembers.formUnion(fold.entryIds) }
         var result = attachTrailingToolGroupsToAssistant(attachCreatedThreadSummaries(rows, entries, collapsedFoldMembers: collapsedFoldMembers))

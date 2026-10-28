@@ -364,8 +364,11 @@ final class ComposerController {
         queue.onSteer = { [weak self] runId in self?.sendQueued(runId) }
         queue.onEdit = { [weak self] item in self?.beginEdit(item) }
         queue.onCancelEdit = { [weak self] in self?.endEdit() }
-        panel.approvalPanel.onRespond = { [weak self] _, payload in
-            self?.respond(payload, failure: ComposerFeedback.Failure.approval)
+        panel.model.onRespondToApproval = { [weak self] payload in
+            guard let self, self.environments.canOperate(self.targetEnvironmentId),
+                  let requestId = payload["requestId"]?.stringValue,
+                  self.requests.approvals.contains(where: { $0.requestId == requestId && $0.canRespond }) else { return }
+            self.respond(payload, failure: ComposerFeedback.Failure.approval)
         }
         panel.lazyQuestionPanel.configure { [weak self] question in
             question.onSubmit = { [weak self] payload in self?.submitAnswers(payload) }
@@ -1556,13 +1559,9 @@ final class ComposerController {
             composer.pending = .none
             return
         }
-        if let approval = requests.activeApproval {
-            leaveQuestion()
-            panel.approvalPanel.configure(approval, pendingCount: requests.approvals.count, threadId: threadId.localId)
-            panel.approvalPanel.isResponding = responding.contains(approval.requestId)
-            panel.drawer = .approval
-            composer.pending = .approval
-        } else if let input = requests.activeUserInput {
+        panel.model.respondingApprovalRequestIds = responding
+        panel.model.canOperateThread = environments.canOperate(threadId.environmentId)
+        if let input = requests.activeUserInput {
             let question = panel.questionPanel
             question.markdownCwd = menuCwd
             question.configure(input, threadId: threadId.localId)
@@ -1579,7 +1578,7 @@ final class ComposerController {
         } else {
             leaveQuestion()
             panel.drawer = .none
-            composer.pending = .none
+            composer.pending = requests.approvals.isEmpty ? .none : .approval
         }
     }
 

@@ -34,6 +34,7 @@ private func kind(_ row: TimelineRow) -> String {
     case .assistantMeta: "assistant-meta"
     case .work: "work"
     case .workLive: "work-live"
+    case .pendingApproval: "pending-approval"
     case .working: "working"
     case .thinking: "thinking"
     case .workToggle: "work-toggle"

@@ -37,7 +37,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     /// Distance from the top that asks for older history.
     static let nearTop: CGFloat = 600
 
-    enum Kind: Hashable { case user, workflowOpening, assistant, meta, plan, work, toggle, live, thinking, working, turnFold, attemptFold, compaction, event, subagent, secret, linkRequest, htmlRender, mcpApp }
+    enum Kind: Hashable { case approval, user, workflowOpening, assistant, meta, plan, work, toggle, live, thinking, working, turnFold, attemptFold, compaction, event, subagent, secret, linkRequest, htmlRender, mcpApp }
 
     let context = TimelineContext()
     let scrollView = ComposerTimelineScrollView()
@@ -589,6 +589,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         case .work(let entries, let group, _): return CGFloat(entries.count) * (group ? 24 : 28) + (group ? 4 : 8)
         case .workToggle, .thinking: return 36
         case .workLive: return 36
+        case .pendingApproval: return 120
         case .working: return 43
         case .turnFold: return 41.75
         case .attemptFold: return 42
@@ -872,6 +873,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         case .workToggle: .toggle
         case .workLive: .live
         case .thinking: .thinking
+        case .pendingApproval: .approval
         case .working: .working
         case .turnFold: .turnFold
         case .attemptFold: .attemptFold
@@ -901,6 +903,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         case .toggle: WorkToggleRowView()
         case .live: WorkLiveRowView()
         case .thinking: ThinkingRowView()
+        case .approval: PendingApprovalRowView()
         case .working: WorkingRowView()
         case .turnFold: TurnFoldRowView()
         case .attemptFold: AttemptFoldRowView()

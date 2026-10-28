@@ -70,6 +70,7 @@ func describe(_ row: TimelineRow) -> String {
     case .work(_, true, _): "work-details"
     case .work: "work"
     case .workLive: "work-live"
+    case .pendingApproval: "pending-approval"
     case .working: "working"
     case .thinking: "thinking"
     case .workToggle: "work-toggle"
