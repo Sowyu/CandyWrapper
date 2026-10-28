@@ -273,6 +273,15 @@ final class ComposerController {
         self.panel = panel
         self.sidebar = sidebar
         self.environments = environments
+        QuestionDraftResolution.observe { [weak self] threadId, pending in
+            guard let self else { return }
+            for key in ThreadRequestResolutionTracker.resolvedDraftKeys(Array(self.questionFiles.keys), threadId: threadId, pending: pending) {
+                self.releaseQuestionFiles(key)
+            }
+            if self.openThreadId == threadId {
+                self.panel.lazyQuestionPanel.loaded?.clearResolvedSession(pendingRequestIds: pending)
+            }
+        }
         let defaults = UserDefaults.standard
         prompts = defaults.dictionary(forKey: Self.promptsKey) as? [String: String] ?? [:]
         func decode(_ key: String) -> [String: DraftSession]? {
@@ -1543,7 +1552,6 @@ final class ComposerController {
         guard questionRequestId != nil else { return }
         questionRequestId = nil
         composer.fileRows = []
-        pruneQuestionFiles()
         composer.text = draftKey.flatMap { prompts[$0] } ?? ""
         pickers.prompt = composer.text
     }
@@ -2551,6 +2559,7 @@ extension ComposerController {
 /// and the signed upload route, then sent in `attachmentsByQuestionId`.
 fileprivate struct QuestionFile {
     let id: String
+    let environmentId: String
     let url: URL
     let name: String
     let mimeType: String
@@ -2629,7 +2638,6 @@ extension ComposerController {
     /// The question's file list and the attachment state the answer rules read. Files of requests
     /// that are no longer pending are released (ChatView.tsx:3374-3398).
     fileprivate func syncQuestionFiles() {
-        pruneQuestionFiles()
         composer.fileRows = activeQuestionKey.map { (questionFiles[$0] ?? []).map(\.row) } ?? []
         guard let session = panel.lazyQuestionPanel.loaded?.session, case .thread(let threadId) = target else { return }
         var states: [String: UserInputSession.AttachmentState] = [:]
@@ -2642,13 +2650,6 @@ extension ComposerController {
         panel.lazyQuestionPanel.loaded?.setAttachments(states)
     }
 
-    /// The open thread's files whose request is no longer pending go (other threads keep theirs).
-    fileprivate func pruneQuestionFiles() {
-        guard case .thread(let threadId) = target else { return }
-        let live = Set(requests.userInputs.flatMap { r in r.questions.map { Self.questionKey(threadId, r.requestId, $0.id) } })
-        for key in questionFiles.keys where key.hasPrefix(threadId.rawValue + "\u{0}") && !live.contains(key) { releaseQuestionFiles(key) }
-    }
-
     private func releaseQuestionFiles(_ key: String) {
         for file in questionFiles[key] ?? [] { discard(file) }
         questionFiles[key] = nil
@@ -2659,7 +2660,7 @@ extension ComposerController {
     private func discard(_ file: QuestionFile) {
         file.task?.cancel()
         if file.snapShot { try? FileManager.default.removeItem(at: file.url) }
-        guard let id = file.attachmentId, let supervisor = shell?.supervisor else { return }
+        guard let id = file.attachmentId, let supervisor = environments.session(file.environmentId)?.supervisor else { return }
         Task { _ = try? await supervisor.request("attachments.delete", payload: .object(["attachmentId": .string(id)])) }
     }
 
@@ -2700,7 +2701,7 @@ extension ComposerController {
             if size <= 0 { error = "'\(name)' is empty or could not be read."; continue }
             if size > limit { error = Self.tooLargeMessage(name, limit); continue }
             let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
-            let file = QuestionFile(id: UUID().uuidString, url: url, name: name, mimeType: mime.lowercased(), sizeBytes: size, status: .uploading(0))
+            let file = QuestionFile(id: UUID().uuidString, environmentId: targetEnvironmentId ?? "", url: url, name: name, mimeType: mime.lowercased(), sizeBytes: size, status: .uploading(0))
             questionFiles[key, default: []].append(file)
             reserved += 1
             upload(file.id, key: key)
@@ -2726,7 +2727,7 @@ extension ComposerController {
     /// `runUpload` for a question's file (`uploadAttachment` below).
     private func upload(_ id: String, key: String) {
         guard let file = questionFiles[key]?.first(where: { $0.id == id }) else { return }
-        guard let shell else { updateFile(id, key: key) { $0.status = .failed("This connection cannot upload attachments.") }; return }
+        guard let shell = environments.session(file.environmentId) else { updateFile(id, key: key) { $0.status = .failed("This connection cannot upload attachments.") }; return }
         let task = Task { [weak self] in
             let result = await Self.uploadAttachment(
                 supervisor: shell.supervisor, base: shell.http.baseURL, type: file.type, name: file.name,
@@ -3569,7 +3570,7 @@ extension ComposerController {
                 try? FileManager.default.removeItem(at: prepared.url)
                 throw CancellationError()
             }
-            var file = QuestionFile(id: UUID().uuidString, url: prepared.url, name: prepared.name, mimeType: prepared.mimeType,
+            var file = QuestionFile(id: UUID().uuidString, environmentId: targetEnvironmentId ?? "", url: prepared.url, name: prepared.name, mimeType: prepared.mimeType,
                                     sizeBytes: prepared.sizeBytes, status: .uploading(0))
             file.snapShot = true
             file.snapShotSource = snapShotSource
@@ -5130,5 +5131,15 @@ extension ComposerController {
         guard reserved != meter.reserved else { return }
         meter.reserved = reserved
         composer.needsLayout = true
+    }
+}
+
+/// Only owned foreground and keep-alive subscriptions announce authoritative request state.
+@MainActor
+enum QuestionDraftResolution {
+    private static var observers: [(ThreadId, Set<String>) -> Void] = []
+    static func observe(_ observer: @escaping (ThreadId, Set<String>) -> Void) { observers.append(observer) }
+    static func sink(_ threadId: ThreadId) -> @Sendable (Set<String>) -> Void {
+        { pending in Task { @MainActor in for observer in observers { observer(threadId, pending) } } }
     }
 }

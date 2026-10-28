@@ -36,6 +36,23 @@ private func omittedMessage(ordinal: Int = 1) -> JSONValue {
 }
 
 @Suite struct ThreadWireStoreTests {
+    @Test func requestResolutionWaitsForSynchronizationAndIgnoresReplacedSubscriptions() async throws {
+        let recorder = RequestResolutionRecorder()
+        let store = ThreadStore(threadId: "t", onChange: {}, onRequestsResolved: { recorder.append($0) })
+        let old = UUID(), current = UUID()
+        _ = await store.subscribeInput(subscription: old)
+        let projection = try bodyProjection()
+        await store.applySnapshot(ThreadDetailSnapshot(snapshotSequence: 10, projection: projection), subscription: old)
+        #expect(recorder.count == 0)
+        _ = await store.subscribeInput(subscription: current)
+        try await store.applyWire(.object(["type": .string("synchronized")]), subscription: old)
+        #expect(recorder.count == 0)
+        await store.apply([.synchronized])
+        #expect(recorder.count == 1)
+        await store.apply([.synchronized])
+        #expect(recorder.count == 1)
+    }
+
     @Test func transportRecordsSurviveSequenceDeduplicationAndReconnect() async throws {
         let store = ThreadStore(threadId: "t", onChange: {})
         await store.applySnapshot(ThreadDetailSnapshot(snapshotSequence: 20, projection: try bodyProjection()))
@@ -153,4 +170,11 @@ private func omittedMessage(ordinal: Int = 1) -> JSONValue {
         #expect(await store.lastSequence == 12)
     }
 
+}
+
+private final class RequestResolutionRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [Set<String>] = []
+    func append(_ ids: Set<String>) { lock.lock(); defer { lock.unlock() }; values.append(ids) }
+    var count: Int { lock.lock(); defer { lock.unlock() }; return values.count }
 }

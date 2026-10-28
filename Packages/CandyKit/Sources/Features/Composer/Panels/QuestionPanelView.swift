@@ -101,6 +101,13 @@ public final class QuestionPanelView: ComposerBannerView {
         refresh()
     }
 
+    public func clearResolvedSession(pendingRequestIds: Set<String>) {
+        guard let session, !pendingRequestIds.contains(session.request.requestId) else { return }
+        cancelAutoAdvance()
+        self.session = nil
+        collapsedQuestionId = nil
+    }
+
     /// Each question's files (count, still uploading or failed), from the composer's question drafts.
     public func setAttachments(_ states: [String: UserInputSession.AttachmentState]) {
         guard session != nil, session!.attachments != states else { return }
