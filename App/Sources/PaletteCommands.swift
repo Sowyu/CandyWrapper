@@ -707,7 +707,7 @@ final class PaletteCommands {
     /// `buildThreadActionItems` (CommandPalette.logic.ts:384-457) over every unarchived thread but subagents, which
     /// `filter` ranks. `recentLimit` keeps the most recently used instead, without the open thread
     /// (CommandPalette.tsx:909-920).
-    // ponytail: text description and pull request badge; T3 draws the project favicon, provider icon and status pill
+    // ponytail: the subtitle omits branch and worktree glyphs; add them with branch subtitle coverage
     private func threadItems(query: String?, recentLimit: Int? = nil) -> [PaletteEntry] {
         guard let snapshot else { return [] }
         let open = threads.openThreadId
@@ -736,6 +736,9 @@ final class PaletteCommands {
                                      timestamp: TimestampFormat.formatRelativeTimeLabel(stamp, nowMs: ms), icon: .messageSquare,
                                      action: .run({ [weak self] in self?.pickThread(id, query: query) }, keepOpen: false))
             entry.threadSearch = subject
+            entry.subtitleProject = projects[thread.projectId].map(ProjectIconSource.init)
+            entry.subtitleDriver = thread.id.environmentId.flatMap { ProviderCatalog(threads.composer.providers($0)).entry(thread.providerInstanceId)?.driver }
+            entry.leadingStatus = SidebarModel.resolveThreadStatusPill(SidebarThread(thread), lastVisitedAt: thread.lastVisitedAt.value)
             // Last in its group: picking the thread already open does nothing.
             entry.secondary = thread.id == open
             if let query {
@@ -769,6 +772,7 @@ final class PaletteCommands {
             entry.matchIsUser = m.isUser
             entry.matchQuery = trimmed
             // `ThreadRowContext`: the project and machine beside the title, since the snippet takes their line.
+            entry.noteAfterTitle = true
             entry.note = [entry.threadSearch?.projectTitle, entry.threadSearch?.environmentLabel].compactMap { $0 }.joined(separator: " \u{00B7} ")
             // Opens the thread with find on the word at the matched message, so it is in view.
             let id = m.threadId, find = PaletteScoring.findQuery(snippet: m.snippet, query: trimmed), start = m.messageId

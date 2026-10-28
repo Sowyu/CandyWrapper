@@ -25,6 +25,10 @@ public struct PaletteEntry {
     public var icon: IconName
     public var isDisabled = false
     public var note: String?
+    public var noteAfterTitle = false
+    public var leadingStatus: ThreadStatusPill?
+    public var subtitleProject: ProjectIconSource?
+    public var subtitleDriver: String?
     public var shortcutCommand: String?
     public var secondary = false
     public var action: Action

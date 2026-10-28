@@ -19,6 +19,10 @@ public struct CommandPaletteItem: Sendable {
     public var timestamp: String?
     /// `titleTrailingContent` text such as "Current" (`text-xs text-muted-foreground/70`).
     public var note: String?
+    /// Thread search places its status before the title and its project directly after it.
+    public var makeLeading: (@MainActor @Sendable () -> NSView)?
+    public var noteAfterTitle = false
+    public var makeDescription: (@MainActor @Sendable () -> NSView)?
     public var isSubmenu = false
     public var isDisabled = false
     /// A colored glyph in place of `icon` (a file type icon in the file picker).
@@ -198,7 +202,7 @@ public final class CommandPaletteView: DSView {
                     y += 28
                 }
                 for item in group.items {
-                    let h = CommandRowView.height(for: item)
+                    let h = CommandRowView.height(for: item, classic: DesignGeometry.usesClassic(self))
                     items.append(item)
                     rowSlots.append((y, h))
                     y += h
@@ -369,6 +373,11 @@ public final class CommandPaletteView: DSView {
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         syncPaneBlur()
+        if items.contains(where: { $0.makeDescription != nil }) {
+            rebuild()
+            invalidateIntrinsicContentSize()
+            needsLayout = true
+        }
         restyle()
     }
 
@@ -480,6 +489,8 @@ final class CommandRowView: DSView {
     private var iconView: IconView?
     private var customIcon: NSView?
     private var trailingView: NSView?
+    private var leadingView: NSView?
+    private var descriptionView: NSView?
     private var chevron: IconView?
     private var trailingGlyph: IconView?
     private var checkbox: CheckboxView?
@@ -492,6 +503,10 @@ final class CommandRowView: DSView {
         title.emphasizedSuffix = item.titleEmphasis
         title.font = DSFont.ui(14); title.lineHeight = 20
         addSubview(title)
+        if let make = item.makeLeading {
+            leadingView = make()
+            addSubview(leadingView!)
+        }
         if let m = item.match {
             matchLine.text = m; matchLine.font = DSFont.ui(12); matchLine.lineHeight = 16
             matchLine.highlightedIndices = item.matchHighlights
@@ -500,6 +515,7 @@ final class CommandRowView: DSView {
         if let d = item.description {
             detail.text = d; detail.font = DSFont.ui(12); detail.lineHeight = 16
             addSubview(detail)
+            if let make = item.makeDescription { descriptionView = make(); addSubview(descriptionView!) }
         }
         if let s = item.shortcut {
             shortcut.text = s
@@ -551,9 +567,11 @@ final class CommandRowView: DSView {
         restyle()
     }
 
-    /// One line: 6 + 20 + 6. Each description or match line adds 16.
-    var height: CGFloat { Self.height(for: item) }
-    static func height(for item: CommandPaletteItem) -> CGFloat { 32 + (item.description == nil ? 0 : 16) + (item.match == nil ? 0 : 16) }
+    /// One line: 6 + 20 + 6. Text captions add 16; inline icon captions add 18 in default themes.
+    var height: CGFloat { Self.height(for: item, classic: DesignGeometry.usesClassic(self)) }
+    static func height(for item: CommandPaletteItem, classic: Bool = true) -> CGFloat {
+        32 + (item.description == nil ? 0 : !classic && item.makeDescription != nil ? 18 : 16) + (item.match == nil ? 0 : 16)
+    }
 
     override func layout() {
         super.layout()
@@ -588,7 +606,8 @@ final class CommandRowView: DSView {
             trailing.frame = NSRect(x: right - w, y: (bounds.height - 16) / 2, width: w, height: 16)
             right -= w + 8
         }
-        if item.note != nil {
+        let inlineNote = item.noteAfterTitle && !DesignGeometry.usesClassic(self)
+        if item.note != nil && !inlineNote {
             // The warning button is `size="micro"`: 20px tall, `px-1.5`, with its border.
             let w = ceil(noteLabel.textWidth) + (item.noteIsWarning ? 14 : 0)
             let h: CGFloat = item.noteIsWarning ? 20 : 16
@@ -600,10 +619,26 @@ final class CommandRowView: DSView {
             trailingView.frame = NSRect(x: right - size.width, y: ((bounds.height - size.height) / 2).rounded(), width: size.width, height: size.height)
             right -= size.width + 8
         }
-        title.frame = NSRect(x: x, y: 6, width: max(0, right - x), height: 20)
+        let textX = x
+        leadingView?.isHidden = DesignGeometry.usesClassic(self)
+        if let leadingView, !leadingView.isHidden {
+            let size = leadingView.intrinsicContentSize
+            leadingView.frame = NSRect(x: x, y: 6 + (20 - size.height) / 2, width: size.width, height: size.height)
+            x += size.width + 6
+        }
+        let titleWidth = inlineNote ? min(ceil(title.textWidth), max(0, right - x)) : max(0, right - x)
+        title.frame = NSRect(x: x, y: 6, width: titleWidth, height: 20)
+        if inlineNote {
+            let nx = title.frame.maxX + 6
+            noteLabel.frame = NSRect(x: nx, y: 8, width: max(0, min(ceil(noteLabel.textWidth), right - nx)), height: 16)
+        }
+        x = textX
         var y: CGFloat = 26
         if item.match != nil { matchLine.frame = NSRect(x: x, y: y, width: max(0, right - x), height: 16); y += 16 }
         detail.frame = NSRect(x: x, y: y, width: max(0, right - x), height: 16)
+        descriptionView?.isHidden = DesignGeometry.usesClassic(self)
+        detail.isHidden = descriptionView != nil && !DesignGeometry.usesClassic(self)
+        descriptionView?.frame = NSRect(x: x, y: y, width: max(0, right - x), height: 18)
     }
 
     private func restyle() {
