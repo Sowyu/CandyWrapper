@@ -586,6 +586,13 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         return view.bounds.width
     }
 
+    /// CSS keeps fractional row positions. Snapping each row separately inserts gaps after
+    /// 22.75pt text lines (MessagesTimeline.tsx:1430-1445,1636-1644 at 3824).
+    private func rowFrame(_ index: Int, lane: (x: CGFloat, width: CGFloat)) -> NSRect {
+        let top = ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? tops[index] : TL.snap(tops[index])
+        return NSRect(x: TL.snap(lane.x), y: top, width: lane.width, height: heights[index])
+    }
+
     private func height(of item: TimelineItem) -> CGFloat {
         if let m = measured[item.id], m.width == laneFrame.width, m.item == item { return m.height }
         return Self.estimate(item, width: laneFrame.width)
@@ -870,7 +877,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         if late { recomputeTops() }
         for i in wanted {
             let view = viewFor(i)
-            let frame = NSRect(x: TL.snap(lane.x), y: TL.snap(tops[i]), width: lane.width, height: heights[i])
+            let frame = rowFrame(i, lane: lane)
             view.setContentVisible(frame.intersects(viewport))
             if view.frame != frame || relayoutAll { view.frame = frame; view.needsLayout = true }
         }
@@ -1067,7 +1074,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
             }
             if view.kind != Self.kind(items[i].row) { problems.append("view of kind \(String(describing: view.kind)) shows \(id)") }
             if view.item != items[i] { problems.append("view \(id) shows an old item") }
-            let frame = NSRect(x: TL.snap(lane.x), y: TL.snap(tops[i]), width: lane.width, height: heights[i])
+            let frame = rowFrame(i, lane: lane)
             if view.frame != frame { problems.append("view \(id) at \(view.frame), row at \(frame)") }
             // Pending layout is fine; what a laid-out row draws past its height is not.
             view.layoutSubtreeIfNeeded()

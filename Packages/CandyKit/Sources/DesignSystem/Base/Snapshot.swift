@@ -4,7 +4,10 @@ import AppKit
 /// export and the visual tests, and works without a window or a GUI session.
 @MainActor
 public enum Snapshot {
-    public static func image(of view: NSView, size: NSSize, scale: CGFloat = 2, dark: Bool) -> NSBitmapImageRep {
+    /// `prepare` runs after window attachment and layout. Position scroll contents here when a
+    /// capture needs a fractional offset: attaching to a 1x window aligns existing clip bounds.
+    public static func image(of view: NSView, size: NSSize, scale: CGFloat = 2, dark: Bool,
+                             prepare: (() -> Void)? = nil) -> NSBitmapImageRep {
         view.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         view.wantsLayer = true
         // AppKit links subview layers into the tree only inside a window. This one is never shown.
@@ -16,6 +19,7 @@ public enum Snapshot {
         layoutTree(view)
         window.display()
         CATransaction.flush()
+        prepare?()
         displayTree(view, scale: scale)
         defer { window.contentView = nil }
         if ProcessInfo.processInfo.environment["SNAPSHOT_DEBUG"] != nil {

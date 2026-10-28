@@ -31,10 +31,13 @@ public enum FontRuntime {
     nonisolated(unsafe) public private(set) static var interfaceScale: CGFloat = 1
     nonisolated(unsafe) public private(set) static var codeScale: CGFloat = 1
     nonisolated(unsafe) public private(set) static var promptSize: CGFloat = 14
+    /// A synchronous offscreen render may choose smoothing without changing live font recipes.
+    @TaskLocal public static var smoothingOverride: Bool?
+    nonisolated(unsafe) private static var configuredSmoothing = true
     /// Core Text font smoothing (stem darkening), the heavier macOS default. True by default so offscreen
     /// renders match the fidelity references (Chromium without `-webkit-font-smoothing`); the app sets it from
     /// T3's `fontSmoothing` setting, whose default `antialiased` turns it off (SettingsFontRuntime).
-    nonisolated(unsafe) public private(set) static var smoothing = true
+    public static var smoothing: Bool { smoothingOverride ?? configuredSmoothing }
     public static var input: FontRuntimeInput { state.withLock { $0.input } }
     @MainActor public private(set) static var generation = 0
     @MainActor public static func apply(_ next: FontRuntimeInput) {
@@ -49,7 +52,7 @@ public enum FontRuntime {
         interfaceScale = next.interfaceSize / 16
         codeScale = next.codeSize / 13
         promptSize = next.promptSize
-        smoothing = next.smoothing
+        configuredSmoothing = next.smoothing
         DSFont.clearCache()
         generation += 1
         // ponytail: refresh the whole window tree on changes; filter by role when views expose role ownership.

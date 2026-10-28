@@ -49,7 +49,9 @@ final class TurnFoldRowView: TimelineRowView {
         chevron.frame = NSRect(x: 4 + w + 4, y: 4 + (TL.relaxed - 14) / 2, width: 14, height: 14)
         let tw = ceil(time.textWidth)
         time.frame = NSRect(x: bounds.width - 2 - tw, y: 4 + (TL.relaxed - 16) / 2, width: tw, height: 16)
-        rule.frame = NSRect(x: 0, y: TL.snap(4 + TL.relaxed + 8), width: bounds.width, height: 1)
+        let ruleTop = 4 + TL.relaxed + 8
+        rule.frame = NSRect(x: 0, y: ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? ruleTop : TL.snap(ruleTop),
+                            width: bounds.width, height: 1)
     }
 
     override var hoverTransitions: Motion.Transition { .colors } // MessagesTimeline.tsx:2709

@@ -44,19 +44,24 @@ struct ChangedFilesFidelityTests {
             for _ in 0..<200 where panel.diffPanel.list.diff.files.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
             panel.layoutSubtreeIfNeeded()
         }
-        panel.timeline.scroll(toFraction: 0)
-        for _ in 0..<3 {
-            let card = try #require(cardView(in: panel))
-            let y = card.convert(card.bounds, to: panel).minY
-            if abs(y - cardTop) < 0.01 { break }
-            panel.timeline.scroll(by: y - cardTop)
-            panel.layoutSubtreeIfNeeded()
-        }
         let surface = GrainSurfaceView(fill: Themed.color(\.background))
         surface.frame = NSRect(x: 0, y: 0, width: 1100, height: size.height)
         panel.frame.origin.x = 256
         surface.addSubview(panel)
-        let image = Snapshot.image(of: surface, size: surface.frame.size, scale: 2, dark: dark)
+        let card = try #require(cardView(in: panel))
+        // The async diff load must not hold a global font choice across suspension.
+        let image = FontRuntime.$smoothingOverride.withValue(false) {
+            Snapshot.image(of: surface, size: surface.frame.size, scale: 2, dark: dark) {
+                panel.timeline.scroll(toFraction: 0)
+                for _ in 0..<3 {
+                    let y = card.convert(card.bounds, to: panel).minY
+                    if abs(y - cardTop) < 0.01 { break }
+                    panel.timeline.scroll(by: y - cardTop)
+                    panel.layoutSubtreeIfNeeded()
+                }
+                if openDiff { #expect(abs(card.convert(card.bounds, to: panel).minY - cardTop) < 0.01) }
+            }
+        }
         return (panel, ThreadFidelityTests.crop(image, x: 512, width: Int(size.width * 2), height: Int(size.height * 2)))
     }
 
@@ -67,9 +72,6 @@ struct ChangedFilesFidelityTests {
     }
 
     @Test func cardAndDiff() async throws {
-        var fonts = FontRuntimeInput()
-        fonts.smoothing = false
-        FontRuntime.apply(fonts)
         defer { Fidelity.pin() }
         try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
         let W = Int(Self.size.width * 2), compared = Int(ThreadFidelityTests.compared * 2)
