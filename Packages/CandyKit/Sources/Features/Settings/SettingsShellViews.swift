@@ -499,6 +499,8 @@ public final class SettingsSidebarView: DSView {
                 row?.frame = NSRect(x: 8, y: y, width: max(0, bounds.width - 16), height: dither ? 28 : 32)
                 y += dither ? 30 : 36
             }
+            // SettingsSidebarNav.tsx:379-400: gap-1 separates rows; gap-4 separates groups.
+            if !DesignGeometry.usesClassic(self), !group.sections.isEmpty { y -= 4 }
         }
         navDocument.frame.size = NSSize(width: bounds.width, height: y)
     }

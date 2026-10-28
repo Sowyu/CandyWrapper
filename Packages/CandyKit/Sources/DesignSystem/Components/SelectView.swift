@@ -105,7 +105,10 @@ public final class SelectView: ControlView {
         }
         guard fitsContent else { return NSSize(width: NSView.noIntrinsicMetric, height: m.height) }
         let lead = leading.map { $0.frame.width + m.gap } ?? 0
-        return NSSize(width: ceil(2 + 2 * m.padding + lead + ceil(label.textWidth) + m.gap + (DesignGeometry.usesClassic(self) ? 12 : 14) - 4), height: m.height)
+        let contentWidth = ceil(2 + 2 * m.padding + lead + ceil(label.textWidth) + m.gap + (DesignGeometry.usesClassic(self) ? 12 : 14) - 4)
+        // SettingsRow's w-full trigger fills its minmax(10rem, auto) control column.
+        let minimum: CGFloat = ditherSettings && !DesignGeometry.usesClassic(self) ? 160 : 0
+        return NSSize(width: max(minimum, contentWidth), height: m.height)
     }
 
     public override func layout() {

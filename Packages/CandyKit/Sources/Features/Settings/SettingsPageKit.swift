@@ -192,7 +192,7 @@ final class ResetSlot: DSView {
 
 /// `SettingInheritance`'s trigger: a `layers` glyph (size-3) tinted for overridden and mixed values, with
 /// the summary as its tooltip. Clicking shows the chain per environment.
-final class InheritanceButton: DSView {
+final class InheritanceButton: DSView, FocusWithinObserver {
     let button = ButtonView(nil, icon: .layers, variant: .ghostMuted, size: .iconMicro)
     private var tooltip: TooltipController?
     private var rowTracking: NSTrackingArea?
@@ -232,6 +232,7 @@ final class InheritanceButton: DSView {
     }
     override func mouseEntered(with event: NSEvent) { rowHovered = true; refreshVisibility() }
     override func mouseExited(with event: NSEvent) { rowHovered = false; refreshVisibility() }
+    func focusWithinChanged(_ focused: Bool) { refreshVisibility() }
 
     override func layout() { super.layout(); button.frame = bounds }
 }

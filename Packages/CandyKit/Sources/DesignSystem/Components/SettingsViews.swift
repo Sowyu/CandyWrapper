@@ -116,7 +116,11 @@ public final class SettingsRowView: DSView {
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         titleLabel.font = dither ? DSFont.ui(13) : DSFont.ui(14, weight: .medium)
         titleLabel.color = Themed.color(dither ? \.foreground : \.contrastForeground)
-        if !detailIsError { detailText.color = dither ? Themed.color(\.mutedForeground) : Themed.color(\.contrastMutedForeground, 0.8) }
+        detailText.balanced = !DesignGeometry.usesClassic(self)
+        if !detailIsError {
+            detailText.color = dither ? Themed.color(\.mutedForeground)
+                : Themed.color(\.contrastMutedForeground, DesignGeometry.usesClassic(self) ? 0.8 : 1)
+        }
         // A select sizes itself to its value under Dither, so the control column changes with the theme.
         invalidateIntrinsicContentSize(); needsLayout = true
     }
@@ -140,6 +144,7 @@ public final class SettingsRowView: DSView {
     private struct Frames { var title, detail, control: NSRect; var status = NSRect.zero; var height: CGFloat }
 
     private func frames(width: CGFloat) -> Frames {
+        let detailLimit: CGFloat = DesignGeometry.usesClassic(self) ? 576 : 672
         let top = Self.paddingY + (topBorder ? 1 : 0)
         let inner = max(0, width - 2 * Self.paddingX)
         let controlSize = control.map { c -> NSSize in
@@ -148,9 +153,9 @@ public final class SettingsRowView: DSView {
                           height: s.height == NSView.noIntrinsicMetric ? c.frame.height : s.height)
         } ?? .zero
         func detailHeight(_ w: CGFloat) -> CGFloat {
-            if let row = detailView as? SettingsGroupRow { return row.height(forWidth: min(576, w)) }
+            if let row = detailView as? SettingsGroupRow { return row.height(forWidth: min(detailLimit, w)) }
             if let detailView { return detailView.frame.height }
-            return detail == nil ? 0 : detailText.height(forWidth: min(576, w))
+            return detail == nil ? 0 : detailText.height(forWidth: min(detailLimit, w))
         }
         let hasDetail = detail != nil || detailView != nil
         func statusHeight(_ w: CGFloat) -> CGFloat {
@@ -168,7 +173,7 @@ public final class SettingsRowView: DSView {
             let rowHeight = max(th, controlSize.height)
             let textY = top + (rowHeight - th) / 2
             return Frames(title: NSRect(x: Self.paddingX, y: textY, width: textWidth, height: 20),
-                          detail: NSRect(x: Self.paddingX, y: textY + 24, width: min(576, textWidth), height: detailHeight(textWidth)),
+                          detail: NSRect(x: Self.paddingX, y: textY + 24, width: min(detailLimit, textWidth), height: detailHeight(textWidth)),
                           control: NSRect(x: width - Self.paddingX - controlSize.width, y: top + (rowHeight - controlSize.height) / 2,
                                           width: controlSize.width, height: controlSize.height),
                           status: NSRect(x: Self.paddingX, y: textY + th - statusHeight(textWidth), width: textWidth, height: statusHeight(textWidth)),
@@ -177,7 +182,7 @@ public final class SettingsRowView: DSView {
         let th = textHeight(inner)
         let controlY = top + th + 12
         return Frames(title: NSRect(x: Self.paddingX, y: top, width: inner, height: 20),
-                      detail: NSRect(x: Self.paddingX, y: top + 24, width: min(576, inner), height: detailHeight(inner)),
+                      detail: NSRect(x: Self.paddingX, y: top + 24, width: min(detailLimit, inner), height: detailHeight(inner)),
                       control: NSRect(x: Self.paddingX, y: controlY, width: inner, height: controlSize.height),
                       status: NSRect(x: Self.paddingX, y: top + th - statusHeight(inner), width: inner, height: statusHeight(inner)),
                       height: (control == nil ? top + th : controlY + controlSize.height) + footerHeight(width))
@@ -398,8 +403,11 @@ public final class SettingsSectionView: DSView {
     /// Dither (after Capy's section labels): 15pt regular in the foreground color.
     private func applyDither() {
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-        titleLabel.font = DSFont.ui(dither ? 15 : 14)
-        titleLabel.color = Themed.color(\.contrastForeground, dither ? 1 : 0.7)
+        let classic = DesignGeometry.usesClassic(self)
+        titleLabel.font = dither ? DSFont.ui(15) : classic ? DSFont.ui(14) : DSFont.ui(16, weight: .semibold)
+        titleLabel.lineHeight = classic ? 20 : 24
+        titleLabel.color = Themed.color(\.contrastForeground, dither || !classic ? 1 : 0.7)
+        needsLayout = true
     }
 
     public func height(forWidth width: CGFloat) -> CGFloat { 28 + 10 + group.height(forWidth: width) }
@@ -412,7 +420,8 @@ public final class SettingsSectionView: DSView {
         super.layout()
         let titleX: CGFloat = icon == nil ? 16 : 16 + 16 + 8
         icon?.frame = NSRect(x: 16, y: 6, width: 16, height: 16)
-        titleLabel.frame = NSRect(x: titleX, y: 4, width: max(0, bounds.width - titleX - 16 - 28 - 16), height: 20)
+        let line: CGFloat = DesignGeometry.usesClassic(self) ? 20 : 24
+        titleLabel.frame = NSRect(x: titleX, y: (28 - line) / 2, width: max(0, bounds.width - titleX - 16 - 28 - 16), height: line)
         if let action = headerAction {
             let s = action.intrinsicContentSize
             action.frame = NSRect(x: bounds.width - 16 - s.width, y: (28 - s.height) / 2, width: s.width, height: s.height)
