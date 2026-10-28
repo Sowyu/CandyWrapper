@@ -121,9 +121,6 @@ final class SidebarCustomSnoozeForm: DSView {
         let day = cal.dateComponents([.year, .month, .day], from: date)
         let todayParts = cal.dateComponents([.year, .month, .day], from: Date())
         let calendar = CalendarView(month: DateComponents(year: day.year, month: day.month), selected: day, today: todayParts)
-        let startOfToday = cal.startOfDay(for: Date())
-        // `disabled={{ before: today }}`.
-        calendar.isDisabled = { parts in (cal.date(from: parts).map { $0 < startOfToday }) ?? false }
         calendar.onSelect = { [weak self] parts in
             guard let self, let picked = cal.date(from: parts) else { return }
             // The day changes; the time field keeps its own value.
@@ -134,6 +131,20 @@ final class SidebarCustomSnoozeForm: DSView {
         }
         calendar.setAccessibilityLabel("Choose snooze date")
         calendarPopup = PopoverView(content: calendar).show(from: dateButton, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4))
+        calendarPopup?.onClose = { [weak calendar] in if let calendar { LabelClock.shared.cancel(calendar) } }
+        refreshCalendar(calendar)
+    }
+
+    /// T3 3814 CustomSnoozeDialog.tsx:64-68. Refresh once at local midnight while the calendar is visible.
+    func refreshCalendar(_ view: CalendarView, now: Date = Date()) {
+        let cal = Calendar.current, start = Calendar.current.startOfDay(for: now)
+        view.today = cal.dateComponents([.year, .month, .day], from: now)
+        view.isDisabled = { parts in cal.date(from: parts).map { $0 < start } ?? true }
+        guard let next = cal.date(byAdding: .day, value: 1, to: start) else { return }
+        LabelClock.shared.schedule(view, in: next.timeIntervalSince(now)) { [weak self, weak view] in
+            guard let self, let view else { return }
+            refreshCalendar(view)
+        }
     }
 
     private func changed() {
