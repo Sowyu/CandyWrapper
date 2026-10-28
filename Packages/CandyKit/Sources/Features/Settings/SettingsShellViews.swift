@@ -4,7 +4,8 @@ import DesignSystem
 /// The settings pages in T3's nav order (settingsSearch.ts `SETTINGS_SECTION_LABELS`, SettingsSidebarNav.tsx
 /// icons). "Project" only shows while a project scope is chosen (`isSettingsOverviewVisible`).
 public enum SettingsSection: String, CaseIterable, Sendable {
-    case projects, general, appearance, keybindings, snapShots, providers, integrations, scheduledTasks, sourceControl, storage, connections, beta, archive
+    case general, appearance, chat, diffs, keybindings, snapShots, providers, threads, browser, devices, scheduledTasks, projects, sourceControl, worktrees, connections, access, maintenance, beta, about, archive
+    case integrations, storage
     /// Redesign's Orchestrator tab, CandyWrapper's own; never in T3's nav.
     case orchestrator
     /// Redesign's Connectors tab, CandyWrapper's own; never in T3's nav.
@@ -15,22 +16,31 @@ public enum SettingsSection: String, CaseIterable, Sendable {
     case diagnostics, licenses
 
     /// The page Escape goes back to: General for the pages reached from it.
-    public var parent: SettingsSection? { self == .diagnostics || self == .licenses ? .general : nil }
+    public var parent: SettingsSection? { self == .diagnostics ? .maintenance : self == .licenses ? .about : nil }
 
     public var label: String {
         switch self {
-        case .projects: "Project"
+        case .projects: "Projects"
+        case .chat: "Chat"
+        case .diffs: "Diffs & pull requests"
+        case .threads: "Threads"
+        case .browser: "Browser"
+        case .devices: "Devices"
+        case .worktrees: "Worktrees"
+        case .access: "Sharing & access"
+        case .maintenance: "Maintenance"
+        case .about: "About"
         case .general: "General"
         case .appearance: "Appearance"
         case .keybindings: "Keybindings"
         case .snapShots: "SnapShots"
         case .providers: "Providers"
         case .integrations: "Integrations"
-        case .scheduledTasks: "Scheduled Tasks"
-        case .sourceControl: "Source Control"
+        case .scheduledTasks: "Scheduled tasks"
+        case .sourceControl: "Source control"
         case .storage: "Storage"
-        case .connections: "Connections"
-        case .beta: "Beta"
+        case .connections: "Environments"
+        case .beta: "Labs"
         case .archive: "Archive"
         case .orchestrator: "Orchestrator"
         case .connectors: "Connectors"
@@ -43,6 +53,15 @@ public enum SettingsSection: String, CaseIterable, Sendable {
     var icon: IconName {
         switch self {
         case .projects: .panelsTopLeft
+        case .chat: .messageSquareText
+        case .diffs: .fileDiff
+        case .threads: .messagesSquare
+        case .browser: .globe
+        case .devices: .smartphone
+        case .worktrees: .folderTree
+        case .access: .shieldCheck
+        case .maintenance: .wrench
+        case .about: .info
         case .general: .settings2
         case .appearance: .palette
         case .keybindings: .keyboard
@@ -63,11 +82,35 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         }
     }
 
+    /// Native deep links keep the pre-3814 aliases while opening the new concern pages.
+    public static func fromPath(_ path: String) -> SettingsSection? {
+        guard path == "/settings" || path.hasPrefix("/settings/") else { return nil }
+        let name = path.dropFirst("/settings".count).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        switch name {
+        case "labs", "beta": return .beta
+        case "archived": return .archive
+        case "scheduled-tasks": return .scheduledTasks
+        case "snap-shot": return .snapShots
+        case "source-control": return .sourceControl
+        case "open-source-licenses": return .licenses
+        case "integrations": return .browser
+        case "storage": return .maintenance
+        default: return SettingsSection(rawValue: name) ?? .general
+        }
+    }
+
     /// Pages that work.
     public var isAvailable: Bool { true }
 
     /// The nav lists Project only for a project scope (`isSettingsOverviewVisible`).
-    static let navSections = allCases.filter { $0 != .diagnostics && $0 != .licenses && $0 != .orchestrator && $0 != .connectors }
+    static let navGroups: [(label: String?, sections: [SettingsSection])] = [
+        (nil, [.general, .appearance, .chat, .diffs, .keybindings, .snapShots]),
+        ("Agents", [.providers, .threads, .browser, .devices, .scheduledTasks]),
+        ("Code", [.projects, .sourceControl, .worktrees]),
+        ("Connections", [.connections, .access]),
+        (nil, [.maintenance, .beta, .about, .archive, .experimental]),
+    ]
+    static let navSections = navGroups.flatMap(\.sections)
 
     /// SettingsSidebarNav.tsx `SnapShotIcon` (a `createLucideIcon` glyph outside the generated set).
     static let snapShotIcon = IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
@@ -90,8 +133,18 @@ public final class SettingsSidebarView: DSView {
     let back = SidebarMenuButtonView("Back", icon: .arrowLeft)
     /// Dither (after Capy): the "← Settings" row under the traffic lights, its nav rows and group labels.
     let ditherHeader = DitherSettingsNavRow("Settings", icon: .arrowLeft)
-    private(set) var ditherItems: [DitherSettingsSection: DitherSettingsNavRow] = [:]
-    private var ditherLabels: [LabelView] = []
+    private var concernRows: [SettingsSection: DitherSettingsNavRow] = [:]
+    private var groupLabels: [String: LabelView] = [:]
+    private let navDocument = DSView()
+    private lazy var navScroll = ScrollAreaView(documentView: navDocument)
+    private var shownGroups: [(label: String?, sections: [SettingsSection])] {
+        var groups = SettingsSection.navGroups
+        if isDither {
+            groups[1].sections.insert(.connectors, at: 1)
+            if OrchestratorStore.shared.config.enabled { groups[1].sections.insert(.orchestrator, at: 0) }
+        }
+        return groups
+    }
     let ditherBack = DitherSettingsNavRow("Back", icon: .arrowLeft)
     let ditherSignIn = DitherSettingsNavRow("Sign in to T3 Connect", icon: .logIn)
     private let searchFill = CALayer()
@@ -118,16 +171,12 @@ public final class SettingsSidebarView: DSView {
     public var selected: SettingsSection = .connections {
         didSet {
             for (section, item) in items { item.isActive = section == selected }
+            for (section, item) in concernRows { item.isActive = section == selected }
         }
     }
-    /// Redesign's open section (`DitherSettingsSection`); its nav replaces T3's page list.
-    public var ditherSelected: DitherSettingsSection = .general {
-        didSet { for (section, item) in ditherItems { item.isActive = section == ditherSelected } }
-    }
-    public var onSelectDither: ((DitherSettingsSection) -> Void)?
     /// A project is picked in the scope: the nav lists Project first.
     public var showsProject = false {
-        didSet { guard showsProject != oldValue else { return }; items[.projects]?.isHidden = !showsProject || isSearching; needsLayout = true }
+        didSet { guard showsProject != oldValue else { return }; needsLayout = true }
     }
     public var onSelect: ((SettingsSection) -> Void)?
     public var onBack: (() -> Void)?
@@ -190,20 +239,23 @@ public final class SettingsSidebarView: DSView {
         searchFill.cornerRadius = DitherChrome.controlRadius
         searchFill.borderWidth = 0.5
         layer?.insertSublayer(searchFill, at: 0)
-        for (label, sections) in DitherSettingsSection.groups {
-            if let label {
-                let l = LabelView(label, font: DSFont.ui(12, weight: .medium), color: Themed.color(\.sidebarMutedForeground, sidebar: true))
-                l.lineHeight = 16
-                ditherLabels.append(l)
-                addSubview(l)
+        addSubview(navScroll)
+        navScroll.scrollsHorizontally = false
+        navScroll.hideScrollbars = true
+        for item in items.values { navDocument.addSubview(item) }
+        for group in SettingsSection.navGroups {
+            if let title = group.label {
+                let label = LabelView(title, font: DSFont.ui(12, weight: .medium), color: Themed.color(\.sidebarMutedForeground, sidebar: true))
+                label.lineHeight = 16
+                groupLabels[title] = label
+                navDocument.addSubview(label)
             }
-            for section in sections {
-                let row = DitherSettingsNavRow(section.label, icon: section.icon)
-                row.isActive = section == ditherSelected
-                row.action = { [weak self] in self?.ditherSelected = section; self?.onSelectDither?(section) }
-                ditherItems[section] = row
-                addSubview(row)
-            }
+        }
+        for section in SettingsSection.navSections + [.orchestrator, .connectors] {
+            let row = DitherSettingsNavRow(section.label, icon: section.icon)
+            row.action = { [weak self] in self?.select(section) }
+            concernRows[section] = row
+            navDocument.addSubview(row)
         }
         ditherHeader.action = { [weak self] in self?.onBack?() }
         ditherBack.action = { [weak self] in self?.onBack?() }
@@ -248,7 +300,7 @@ public final class SettingsSidebarView: DSView {
         }
         noResults.isHidden = !(isSearching && results.isEmpty)
         searchKbd.isHidden = isSearching
-        for (section, item) in items { item.isHidden = isSearching || (section == .projects && !showsProject) }
+        for (section, item) in items { item.isHidden = isSearching }
         needsLayout = true
     }
 
@@ -322,9 +374,12 @@ public final class SettingsSidebarView: DSView {
         brand.isHidden = dither
         searchKbd.isHidden = dither || isSearching
         back.isHidden = dither
-        for (section, item) in items { item.isHidden = dither || isSearching || (section == .projects && !showsProject) }
+        for item in items.values { item.isHidden = dither || isSearching }
         signIn.isHidden = dither || t3Connect != .signedOut
-        for v in [ditherHeader, ditherBack] as [NSView] + Array(ditherItems.values) + ditherLabels { v.isHidden = !dither }
+        for v in [ditherHeader, ditherBack] as [NSView] { v.isHidden = !dither }
+        concernRows.values.forEach { $0.isHidden = !dither || isSearching }
+        navScroll.isHidden = isSearching
+        groupLabels.values.forEach { $0.isHidden = isSearching }
         ditherSignIn.isHidden = !dither || t3Connect != .signedOut
         searchFill.isHidden = !dither
         if dither { layoutDither(); return }
@@ -352,10 +407,7 @@ public final class SettingsSidebarView: DSView {
                 y += SettingsSearchResultRow.height + 4
             }
         } else {
-            for section in SettingsSection.navSections where section != .projects || showsProject {
-                items[section]?.frame = NSRect(x: 8, y: y, width: w - 16, height: 32)
-                y += 36
-            }
+            layoutConcernNavigation(top: y, bottom: h - (t3Connect == .signedOut ? 88 : 48), dither: false)
         }
         // `SidebarFooter` (`px-2 py-1 gap-2`): the sign-in row above `flex items-center gap-1` of Back and the avatar.
         let row: CGFloat = avatar.isHidden ? 32 : 36
@@ -388,31 +440,31 @@ public final class SettingsSidebarView: DSView {
                 y += SettingsSearchResultRow.height + 4
             }
         }
-        var labels = ditherLabels.makeIterator()
-        for (label, sections) in DitherSettingsSection.groups {
-            if label != nil, let l = labels.next() {
-                l.isHidden = isSearching
-                if !isSearching {
-                    // Capy's group header: `h-7 px-2 text-xs font-medium text-muted-foreground-2`, 12pt above it.
-                    y += 12
-                    l.frame = NSRect(x: 16, y: y + (rowH - 16) / 2, width: max(0, w - 32), height: 16)
-                    y += rowH
-                }
-            }
-            for section in sections {
-                guard let row = ditherItems[section] else { continue }
-                row.isHidden = isSearching || (section == .project && !showsProject) || (section == .orchestrator && !OrchestratorStore.shared.config.enabled)
-                if row.isHidden { continue }
-                row.frame = NSRect(x: 8, y: y, width: max(0, w - 16), height: rowH)
-                y += rowH + 2
-            }
-        }
+        layoutConcernNavigation(top: y, bottom: h - (t3Connect == .signedOut ? 88 : 48), dither: true)
         let footer: CGFloat = avatar.isHidden ? rowH : 36
         let rowY = h - 8 - footer
         ditherBack.frame = NSRect(x: 8, y: rowY + (footer - rowH) / 2, width: w - 16 - (avatar.isHidden ? 0 : 36 + 4), height: rowH)
         avatar.frame = NSRect(x: w - 8 - 36, y: rowY, width: 36, height: 36)
         ditherSignIn.frame = NSRect(x: 8, y: rowY - 2 - rowH, width: w - 16, height: rowH)
     }
+    private func layoutConcernNavigation(top: CGFloat, bottom: CGFloat, dither: Bool) {
+        navScroll.frame = NSRect(x: 0, y: top, width: bounds.width, height: max(0, bottom - top))
+        var y: CGFloat = 0
+        for (index, group) in shownGroups.enumerated() {
+            if index > 0 { y += 12 }
+            if let title = group.label, let label = groupLabels[title] {
+                label.frame = NSRect(x: 16, y: y + 4, width: max(0, bounds.width - 32), height: 16)
+                y += 28
+            }
+            for section in group.sections {
+                let row: NSView? = dither ? concernRows[section] : items[section]
+                row?.frame = NSRect(x: 8, y: y, width: max(0, bounds.width - 16), height: dither ? 28 : 32)
+                y += dither ? 30 : 36
+            }
+        }
+        navDocument.frame.size = NSSize(width: bounds.width, height: y)
+    }
+
 }
 
 /// Dither's settings nav row (after Capy's sidebar nav): 28pt, a 16pt icon and a 13pt medium label, 6pt corners,

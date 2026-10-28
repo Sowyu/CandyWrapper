@@ -211,6 +211,12 @@ public final class GeneralSettingsView: SettingsPageBase {
         return s
     }
 
+    func addWorkingShelfRow() {
+        guard let organization = anchors["organization"] as? SettingsSectionView else { return }
+        let working = clientSwitch("working-shelf", "Fold working and monitoring threads into a Working section. They return to the top of the inbox when they need you.", key: "sidebarWorkingShelfEnabled", title: "Working section")
+        organization.group.rows.insert(working, at: min(2, organization.group.rows.count))
+    }
+
     private func snoozeOptionsRow() -> SettingsRowView {
         let editor = SnoozePresetsEditor()
         let r = row("snooze-options", title: "Snooze options",

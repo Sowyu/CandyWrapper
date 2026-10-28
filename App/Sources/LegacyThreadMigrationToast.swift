@@ -82,7 +82,7 @@ final class ThreadPermissionUpdateNotice {
             }
             let toast = ToastView(title: "Permissions have changed for \(label)",
                 message: "This connection still uses the old permissions, so some actions may no longer be available. Pair again using a new link with the permissions you need.",
-                actionTitle: "Open Connections", action: { [weak self] in dismiss(); self?.openConnections?() },
+                actionTitle: "Sharing & access", action: { [weak self] in dismiss(); self?.openConnections?() },
                 secondaryTitle: "Dismiss", secondaryAction: dismiss)
             toastId = toasts.show(toast, timeout: 0)
             toast.onDidDismiss = { UserDefaults.standard.set(true, forKey: "t3code:permission-update:v1:" + environmentId) }

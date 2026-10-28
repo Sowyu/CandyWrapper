@@ -48,7 +48,7 @@ extension SettingsController {
     /// count; nothing runs otherwise. Back in view, the labels catch up once before the first tick.
     func updateAccessTicker() {
         let visible = window?.occlusionState.contains(.visible) == true
-        let live = isOpen && section == .connections && visible
+        let live = isOpen && section == .access && visible
             && (!access.pairingLinks.isEmpty || !access.clientSessions.isEmpty)
         if live, ticker == nil {
             ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -163,7 +163,7 @@ extension SettingsController {
             }
         }
         let visible = window?.occlusionState.contains(.visible) == true
-        let live = isOpen && section == .connections && linkState?.tunnelActive == true && visible
+        let live = isOpen && section == .access && linkState?.tunnelActive == true && visible
         if live, linkPoll == nil {
             linkPoll = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.loadLinkState() }

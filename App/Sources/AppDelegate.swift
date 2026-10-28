@@ -135,24 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// T3's settings routes (apps/web/src/routes/settings.*.tsx) to pages.
     static func settingsSection(_ path: String) -> SettingsSection? {
-        guard path == "/settings" || path.hasPrefix("/settings/") else { return nil }
-        let name = path.dropFirst("/settings".count).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        switch name {
-        case "appearance": return .appearance
-        case "archived": return .archive
-        case "beta": return .beta
-        case "connections": return .connections
-        case "diagnostics": return .diagnostics
-        case "integrations": return .integrations
-        case "keybindings": return .keybindings
-        case "projects": return .projects
-        case "providers": return .providers
-        case "scheduled-tasks": return .scheduledTasks
-        case "snap-shot": return .snapShots
-        case "source-control": return .sourceControl
-        case "storage": return .storage
-        default: return .general
-        }
+        SettingsSection.fromPath(path)
     }
 
     /// `kill` sends SIGTERM, which would end the app without stopping the server it started.
@@ -506,7 +489,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// One keyboard shortcut dispatcher for the window, fed by T3's keybindings (`Shortcuts`).
     private func installShortcuts(window: NSWindow, layout: SidebarLayoutView, sidebar: SidebarContentView, environments: Environments,
                                   threads: ThreadController, commands: SidebarCommands, settings: SettingsController) {
-        threads.permissionNotice.openConnections = { [weak settings] in settings?.open(); settings?.show(.connections) }
+        threads.permissionNotice.openConnections = { [weak settings] in settings?.open(.access) }
         threads.git.openSourceControlSettings = { [weak settings] in settings?.open(); settings?.show(.sourceControl) }
         let shortcuts = Shortcuts(window: window)
         threads.panel.model.onFrameShortcut = { [weak shortcuts] stroke in shortcuts?.run(stroke) }
