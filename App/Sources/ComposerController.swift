@@ -195,8 +195,14 @@ final class ComposerController {
 
     /// A queued message open in the composer (`beginEditingQueuedRun`, ChatView.tsx:4673-4699).
     /// Its text lives here, not in the thread's prompt, which comes back on save or cancel.
-    private struct QueuedEdit { let runId: RunId; let threadId: ThreadId; let originalText: String }
-    private var queuedEdit: QueuedEdit?
+    private typealias QueuedEdit = QueuedRunEdits.Edit
+    private var queuedEdits = QueuedRunEdits()
+    private var queuedEdit: QueuedEdit? {
+        guard case .thread(let id) = target else { return nil }
+        return queuedEdits.edit(id)
+    }
+    private var queuedEditWatches: [ThreadId: Task<Void, Never>] = [:]
+    private var queuedEditRuns: [ThreadId: Set<RunId>] = [:]
     /// A queue command is in flight: the strip's actions wait (`busyRunId`).
     private var queueBusy = false
 
@@ -903,7 +909,6 @@ final class ComposerController {
         var carried: [ChatMessage] = []
         if case .draft(let s) = target, s.threadId == id.rawValue { carried = optimistic }
         flushPrompt()
-        queuedEdit = nil
         questionRequestId = nil
         target = .thread(id)
         panel.usageLimitsBanner = nil
@@ -968,7 +973,6 @@ final class ComposerController {
                                        projectDefault: project.defaultModelSelection, alreadyOpen: false)
         }
         flushPrompt()
-        queuedEdit = nil
         questionRequestId = nil
         target = .draft(session)
         loadSettingsWorkspaceDefault(project, session: session)
@@ -1295,7 +1299,7 @@ final class ComposerController {
     private func loadPrompt() {
         attachmentsTargetChanged()
         composer.resetPromptHistory()
-        composer.text = draftKey.flatMap { prompts[$0] } ?? ""
+        composer.text = queuedEdit?.text ?? draftKey.flatMap { prompts[$0] } ?? ""
         pickers.prompt = composer.text
         loadComposerPeerLinks()
         refresh()
@@ -1310,7 +1314,11 @@ final class ComposerController {
         }
         pickers.prompt = text
         // An open queued edit keeps its text out of the thread's prompt.
-        guard queuedEdit == nil, let key = draftKey else { return }
+        if let edit = queuedEdit {
+            queuedEdits.update(edit.threadId, text: text)
+            return
+        }
+        guard let key = draftKey else { return }
         let attachments = currentAttachments
         pruneUnreferencedFiles(text, key: key)
         if panel.stashMenuOpen { setStashMenu(false) }
@@ -1339,7 +1347,8 @@ final class ComposerController {
     }
 
     private func flushPrompt() {
-        guard queuedEdit == nil, questionRequestId == nil else { return }
+        if let edit = queuedEdit { queuedEdits.update(edit.threadId, text: composer.text); return }
+        guard questionRequestId == nil else { return }
         if let key = draftKey { prompts[key] = composer.text.isEmpty ? nil : composer.text }
     }
 
@@ -1423,19 +1432,7 @@ final class ComposerController {
         }
         // Resume is done once a run is active again.
         if resuming, let projection, ComposerLogic.RunState(runs: projection.runs).canInterrupt { resuming = false }
-        // The edited message left the queue (it started, or another client removed it): the
-        // unsaved text moves to an empty prompt, else it is dropped (queuedMessageEdit.ts:10-24).
-        if let edit = queuedEdit, let projection, !projection.runs.contains(where: { $0.id == edit.runId && $0.status == .queued }) {
-            let unsaved = composer.text
-            queuedEdit = nil
-            composer.editingQueued = false
-            composer.resetPromptHistory()
-            let saved = draftKey.flatMap { prompts[$0] } ?? ""
-            let recovery = ComposerFeedback.recoverQueuedEdit(edited: unsaved, original: edit.originalText, threadPrompt: saved)
-            composer.text = recovery == .kept ? unsaved : saved
-            remember(composer.text)
-            if recovery != .clean { report(.queuedEditLeft(kept: recovery == .kept), key: nil) }
-        }
+        if let projection { settleQueuedEdit(threadId, runs: Set(projection.runs.filter { $0.status == .queued }.map(\.id))) }
         refresh()
     }
 
@@ -1579,7 +1576,7 @@ final class ComposerController {
         guard questionRequestId != nil else { return }
         questionRequestId = nil
         composer.fileRows = []
-        composer.text = draftKey.flatMap { prompts[$0] } ?? ""
+        composer.text = queuedEdit?.text ?? draftKey.flatMap { prompts[$0] } ?? ""
         pickers.prompt = composer.text
     }
 
@@ -2507,7 +2504,8 @@ final class ComposerController {
         guard let runId = item.runId, case .thread(let threadId) = target, queuedEdit == nil, !queueBusy,
               ComposerLogic.queuedEditBlockedReason(openQuestionCount: requests.userInputs.count) == nil else { return }
         flushPrompt()
-        queuedEdit = QueuedEdit(runId: runId, threadId: threadId, originalText: item.text)
+        queuedEdits.begin(thread: threadId, run: runId, text: item.text)
+        watchQueuedEdit(threadId)
         if let message = projection?.messages.first(where: { $0.id == item.messageId }) {
             for record in message.context?["records"]?.arrayValue ?? [] {
                 if let id = record["contextId"]?.stringValue { menuState.records[id] = record }
@@ -2522,14 +2520,55 @@ final class ComposerController {
 
     /// Cancel: back to the thread's own prompt (`cancelEditingQueuedRun`).
     private func endEdit() {
-        guard queuedEdit != nil else { return }
-        queuedEdit = nil
+        guard let edit = queuedEdit else { return }
+        queuedEdits.end(edit.threadId)
+        stopQueuedEditWatch(edit.threadId)
         loadPrompt()
+    }
+
+    /// Keep observing an edit when navigation closes the panel (queuedRunEdit.ts:143-157, 3814).
+    private func watchQueuedEdit(_ id: ThreadId) {
+        stopQueuedEditWatch(id)
+        guard let editId = queuedEdits.edit(id)?.id, let env = id.environmentId, let session = environments.session(env) else { return }
+        let store = ThreadStore(threadId: id.localId, environmentId: env, onChange: {})
+        let subscription = UUID()
+        queuedEditWatches[id] = session.supervisor.subscribe("orchestration.subscribeThread", payload: {
+            ThreadSession.encode(await store.subscribeInput(subscription: subscription))
+        }, handler: { [weak self] event in
+            guard case .value(let json) = event else { return }
+            try await ThreadSession.applyWire(json, to: store, subscription: subscription)
+            guard let projection = await store.takeUpdate()?.projection else { return }
+            let runs = Set(projection.runs.filter { $0.status == .queued }.map(\.id))
+            await MainActor.run {
+                guard let self, queuedEdits.edit(id)?.id == editId else { return }
+                settleQueuedEdit(id, runs: runs)
+            }
+        })
+    }
+
+    private func stopQueuedEditWatch(_ id: ThreadId) {
+        queuedEditWatches.removeValue(forKey: id)?.cancel()
+        queuedEditRuns[id] = nil
+    }
+
+    private func settleQueuedEdit(_ id: ThreadId, runs: Set<RunId>) {
+        guard queuedEdits.edit(id) != nil else { return }
+        queuedEditRuns[id] = runs
+        if target == .thread(id), let edit = queuedEdit, questionRequestId == nil {
+            queuedEdits.update(edit.threadId, text: composer.text)
+        }
+        guard let edit = queuedEdits.takeExited(id, queuedRuns: runs) else { return }
+        stopQueuedEditWatch(id)
+        let key = id.rawValue, saved = prompts[id.rawValue] ?? ""
+        let recovery = ComposerFeedback.recoverQueuedEdit(edited: edit.text, original: edit.originalText, threadPrompt: saved)
+        if recovery == .kept { prompts[key] = edit.text; scheduleSave() }
+        if target == .thread(id), questionRequestId == nil { loadPrompt() }
+        if recovery != .clean { report(.queuedEditLeft(kept: recovery == .kept), key: nil) }
     }
 
     /// Enter while editing saves with `queued-run.edit` and keeps the edit open on failure.
     private func saveEdit(_ edit: QueuedEdit, text: String) {
-        guard let shell, !queueBusy else { return }
+        guard let shell, !queueBusy, let claim = queuedEdits.startSave(edit.threadId) else { return }
         var fields: [String: JSONValue] = [
             "type": .string("queued-run.edit"), "commandId": .string(UUID().uuidString.lowercased()),
             "threadId": .string(edit.threadId.localId.rawValue), "runId": .string(edit.runId.rawValue), "text": .string(text),
@@ -2546,10 +2585,18 @@ final class ComposerController {
                 guard let self else { return }
                 if let key { threadErrors.set(key, nil) }
                 queueBusy = false
-                if queuedEdit?.runId == edit.runId { endEdit() } else { refresh() }
+                if queuedEdits.finishSave(claim, succeeded: true) {
+                    stopQueuedEditWatch(edit.threadId)
+                    if target == .thread(edit.threadId) { loadPrompt() }
+                }
+                refresh()
             } catch {
-                self?.queueBusy = false
-                self?.refresh()
+                if let self {
+                    queueBusy = false
+                    _ = queuedEdits.finishSave(claim, succeeded: false)
+                    if let runs = queuedEditRuns[edit.threadId] { settleQueuedEdit(edit.threadId, runs: runs) }
+                    refresh()
+                }
                 if let rpc = error as? RPCClientError, rpc.isTransport { return }
                 self?.report(.queuedEditSave, key: key)
             }
