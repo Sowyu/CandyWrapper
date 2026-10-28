@@ -158,7 +158,8 @@ private func dynamicTool(_ name: String, input: String) -> TurnItem {
         #expect(T3McpTools.definition("mcp__github__delegate_task") == nil)
         #expect(T3McpTools.definition("t3-code-thread_1_t3_thread_send")?.summaryAction == "thread-send")
         #expect(T3McpTools.definition("t3_code:preview_open")?.icon == "browser")
-        #expect(T3McpTools.all.count == 84)
+        // 3814 adds the action tools preview_act, t3_queue, t3_pending_request and t3_thread_transfer.
+        #expect(T3McpTools.all.count == 88)
     }
 
     // presentation.test.ts:197-270
