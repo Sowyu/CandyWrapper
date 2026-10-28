@@ -1,3 +1,4 @@
+# Reference stylesheet and component primitives: T3 Nightly 3814.
 """WP7.18 fidelity spec: SshPasswordPromptDialog.tsx:178-220 and RelayClientInstallDialog.tsx:87-127.
 The input markup comes from scripts/gen-forms-spec.py. Capture with scripts/component-reference."""
 import json, os

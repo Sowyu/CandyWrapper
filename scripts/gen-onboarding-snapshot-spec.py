@@ -1,3 +1,4 @@
+# Reference stylesheet and component primitives: T3 Nightly 3814.
 """FirstRunGate.tsx:199-237; SnapShotAttachmentDetails.tsx:136-171."""
 import json, os
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

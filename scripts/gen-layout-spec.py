@@ -7,9 +7,10 @@ tag in T3_VERSION. Base UI's runtime state (ScrollArea's data-hovering, thumb si
 overflow variables) is written inline, with the values Base UI computes for the same geometry.
 QR codes run T3's own bundled QrCode class (Nayuki's library, compiled into the installed client)
 in the page, so the reference matrix is T3's, not ours.
-Usage: /usr/bin/python3 -I scripts/gen-layout-spec.py
+Usage: /usr/bin/python3 -I scripts/gen-layout-spec.py [--skip-qr]
+Standalone and truncation markup target Nightly 3814; --skip-qr retains the unchanged QR encoder.
 """
-import glob, json, os
+import glob, json, os, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -135,25 +136,15 @@ cases = [{"name": "outline.three", "html": group(["Left", "Middle", "Right"]), "
 write("group", "apps/web/src/components/ui/group.tsx", ["rest", "hover", "focus-visible"], cases)
 
 # StandalonePage (standalone-page.tsx).
-BACKDROP = {
-    "pairing": "absolute inset-x-0 top-0 h-44 bg-[radial-gradient(44rem_16rem_at_top,color-mix(in_srgb,var(--color-emerald-500)_14%,transparent),transparent)]",
-    "error": "absolute inset-x-0 top-0 h-44 bg-[radial-gradient(44rem_16rem_at_top,color-mix(in_srgb,var(--color-red-500)_16%,transparent),transparent)]",
-    "brand": "absolute inset-x-0 top-0 h-72 bg-[radial-gradient(48rem_20rem_at_top,color-mix(in_srgb,var(--color-blue-500)_12%,transparent),transparent)]",
-}
-SIDE = "absolute inset-y-0 left-0 w-72 bg-[radial-gradient(28rem_18rem_at_left,color-mix(in_srgb,var(--color-sky-500)_10%,transparent),transparent)]"
-OVERLAY = {"brand": "absolute inset-0 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--background)_94%,var(--color-black))_0%,var(--background)_62%)]",
-           "other": "absolute inset-0 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--background)_90%,var(--color-black))_0%,var(--background)_55%)]"}
-
 def standalone(tone, eyebrow, title, text):
-    card_bg = "overflow-hidden bg-card/94" if tone == "brand" else "bg-card/90"
-    back = f'<div class="{BACKDROP[tone]}"></div>' + (f'<div class="{SIDE}"></div>' if tone == "pairing" else "")
-    back += f'<div class="{OVERLAY["brand" if tone == "brand" else "other"]}"></div>'
-    return (f'<div class="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-10 text-foreground sm:px-6" style="min-height:420px">'
-            f'<div class="pointer-events-none absolute inset-0 opacity-80">{back}</div>'
-            f'<div class="relative w-full max-w-xl rounded-2xl border border-border/80 shadow-2xl shadow-black/20 backdrop-blur-md {card_bg}">'
-            f'<div class="p-6 sm:p-8"><p class="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">{eyebrow}</p>'
-            f'<h1 class="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>'
-            f'<p class="mt-2 text-sm leading-relaxed text-muted-foreground">{text}</p></div></div></div>')
+    # standalone-page.tsx:8-35, 3814. The native client substitutes its own wordmark.
+    mark = '<svg class="h-3 w-auto shrink-0 text-foreground" viewBox="15.5309 37 94.3941 56.96" xmlns="http://www.w3.org/2000/svg"><path d="M33.4509 93V47.56H15.5309V37H64.3309V47.56H46.4109V93H33.4509ZM86.7253 93.96C82.832 93.96 78.9653 93.4533 75.1253 92.44C71.2853 91.3733 68.032 89.88 65.3653 87.96L70.4053 78.04C72.5386 79.5867 75.0186 80.8133 77.8453 81.72C80.672 82.6267 83.5253 83.08 86.4053 83.08C89.6586 83.08 92.2186 82.44 94.0853 81.16C95.952 79.88 96.8853 78.12 96.8853 75.88C96.8853 73.7467 96.0586 72.0667 94.4053 70.84C92.752 69.6133 90.0853 69 86.4053 69H80.4853V60.44L96.0853 42.76L97.5253 47.4H68.1653V37H107.365V45.4L91.8453 63.08L85.2853 59.32H89.0453C95.9253 59.32 101.125 60.8667 104.645 63.96C108.165 67.0533 109.925 71.0267 109.925 75.88C109.925 79.0267 109.099 81.9867 107.445 84.76C105.792 87.48 103.259 89.6933 99.8453 91.4C96.432 93.1067 92.0586 93.96 86.7253 93.96Z" fill="currentColor"></path></svg>'
+    return (f'<div class="flex h-full items-center-safe justify-center overflow-y-auto scrollbar-gutter-both bg-background px-4 py-10 text-foreground sm:px-6" style="height:420px">'
+            '<section class="dialog-glass w-full max-w-xl rounded-2xl border p-6">'
+            '<div class="flex items-baseline justify-between gap-3 text-muted-foreground">'
+            f'<span class="flex items-baseline gap-1.5" role="img" aria-label="T3 Code">{mark}<span class="text-lg font-medium tracking-tight">Code</span></span></div>'
+            f'<h1 class="mt-6 text-xl leading-tight font-semibold">{title}</h1>'
+            f'<p class="mt-2 text-sm text-muted-foreground">{text}</p></section></div>')
 
 cases = []
 for tone, eyebrow, title, text in [("pairing", "Pair device", "Connect to T3 Code", "Open this link on the device you want to pair."),
@@ -205,11 +196,17 @@ def split(value, tail=None):
             seg = len(chars) - slash - 1
             keep = seg if seg <= 16 else 10
     if keep <= 0 or len(chars) <= keep + 4: return None
-    return "".join(chars[:-keep]), "".join(chars[-keep:])
+    cut = len(chars) - keep
+    breaks = "-_./"
+    if tail is None and chars[cut - 1] not in breaks:
+        shorter = next((n for n in range(cut + 1, len(chars) - 3) if chars[n - 1] in breaks), None)
+        longer = next((n for n in range(cut - 1, max(4, len(chars) - 17), -1) if chars[n - 1] in breaks), None)
+        cut = shorter or longer or cut
+    return "".join(chars[:cut]), "".join(chars[cut:])
 
 def middle(value):
     s = split(value)
-    inner = (f'<span class="min-w-0 truncate">{s[0]}</span><span class="shrink-0">{s[1]}</span>' if s
+    inner = (f'<span class="peer min-w-0 overflow-hidden">{s[0]}</span><span class="shrink-0 peer-data-overflow:before:content-[\'…\']">{s[1]}</span>' if s
              else f'<span class="min-w-0 truncate">{value}</span>')
     return f'<span class="inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground" title="{value}">{inner}</span>'
 
@@ -218,6 +215,21 @@ for name, value in [("path", "/Users/mrm/Projects/candywrapper/Sources/ScrollAre
                     ("branch", "fix/cache-main-20260918-180825"), ("sha-long", "t3code-worktree-3b6af0b2c41d9e"), ("short", "main")]:
     cases.append({"name": name, "html": middle(value), "wrapperStyle": "display:flex;width:180px", "native": {"value": value}})
 write("middle-truncate", "apps/web/src/components/ui/middle-truncate.tsx", ["rest"], cases)
+midpath = os.path.join(ROOT, "design/component-reference/middle-truncate.json")
+with open(midpath) as f: midspec = json.load(f)
+midspec["prepare"] = """(() => { document.querySelectorAll('.peer').forEach(head => {
+ const text = head.firstChild; const overflow = head.scrollWidth > head.clientWidth;
+ head.toggleAttribute('data-overflow', overflow); if (!overflow) return;
+ const range = document.createRange(); const left = head.getBoundingClientRect().left;
+ const widthTo = n => { range.setStart(text, 0); range.setEnd(text, n); return range.getBoundingClientRect().right - left; };
+ let fits = 0, over = text.length;
+ while (over - fits > 1) { const mid = (fits + over) >> 1; if (widthTo(mid) <= head.clientWidth) fits = mid; else over = mid; }
+ const slack = Math.max(0, head.clientWidth - widthTo(fits));
+ head.style.clipPath = slack > 0 ? `inset(-0.25em ${slack}px -0.25em 0)` : '';
+ head.nextElementSibling.style.translate = slack > 0 ? `-${slack}px 0` : '';
+ }); return true; })()"""
+with open(midpath, 'w') as f: json.dump(midspec, f, indent=1)
+
 
 # PanelTabCloseButton (panel-tab-close-button.tsx) inside a `group/tab` row.
 def tab_close():
@@ -231,28 +243,34 @@ cases = [{"name": "tab", "html": tab_close(), "native": {}},
 write("panel-tab-close", "apps/web/src/components/ui/panel-tab-close-button.tsx", ["rest", "hover", "focus-visible"], cases)
 
 # QRCodeSvg (qr-code.tsx) with T3's compiled QrCode class.
-bundle = sorted(glob.glob(os.path.expanduser("~/.t3/runtime/versions/*/client/assets/main-*.js")))[-1]
-js = open(bundle).read()
-start = js.rfind("var ", 0, js.index("static encodeText("))
-end = js.index("return n.join(``)}", js.index("M${", start)) + len("return n.join(``)}")
-lib = js[start:end]
-qr_name = lib[4:lib.index("=class")]
-path_fn = lib[lib.rindex("function ") + 9:lib.rindex("(e,t){")]
-ecc = "{L:%s.Ecc.LOW,M:%s.Ecc.MEDIUM,Q:%s.Ecc.QUARTILE,H:%s.Ecc.HIGH}" % ((qr_name,) * 4)
-QR_SCRIPT = ("<script>(()=>{" + lib + ";const E=" + ecc + ";for(const d of document.querySelectorAll('div.qr:not([data-done])')){"
-             "const q=" + qr_name + ".encodeText(d.dataset.value,E[d.dataset.level]);const m=+d.dataset.margin;const n=q.size+m*2;"
-             "d.dataset.done='1';d.innerHTML=`<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 ${n} ${n}\" width=\"${d.dataset.size}\" height=\"${d.dataset.size}\" shape-rendering=\"crispEdges\">"
-             "<rect width=\"${n}\" height=\"${n}\" fill=\"#fff\"></rect><path d=\"${" + path_fn + "(q,m)}\" fill=\"#000\"></path></svg>`;}})()</script>")
+# Layout-only refreshes can retain the existing QR encoder; it did not change in 3814.
+# This also keeps a visual refresh independent of installed server bundles.
+if "--skip-qr" not in sys.argv:
+    bundle = sorted(glob.glob(os.path.expanduser("~/.t3/runtime/versions/*/client/assets/main-*.js")))[-1]
+    js = open(bundle).read()
+    start = js.rfind("var ", 0, js.index("static encodeText("))
+    end = js.index("return n.join(``)}", js.index("M${", start)) + len("return n.join(``)}")
+    lib = js[start:end]
+    qr_name = lib[4:lib.index("=class")]
+    path_fn = lib[lib.rindex("function ") + 9:lib.rindex("(e,t){")]
+    ecc = "{L:%s.Ecc.LOW,M:%s.Ecc.MEDIUM,Q:%s.Ecc.QUARTILE,H:%s.Ecc.HIGH}" % ((qr_name,) * 4)
+    QR_SCRIPT = ("<script>(()=>{" + lib + ";const E=" + ecc + ";for(const d of document.querySelectorAll('div.qr:not([data-done])')){"
+                 "const q=" + qr_name + ".encodeText(d.dataset.value,E[d.dataset.level]);const m=+d.dataset.margin;const n=q.size+m*2;"
+                 "d.dataset.done='1';d.innerHTML=`<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 ${n} ${n}\" width=\"${d.dataset.size}\" height=\"${d.dataset.size}\" shape-rendering=\"crispEdges\">"
+                 "<rect width=\"${n}\" height=\"${n}\" fill=\"#fff\"></rect><path d=\"${" + path_fn + "(q,m)}\" fill=\"#000\"></path></svg>`;}})()</script>")
 
-cases = []
-for name, value, level, margin, size in [("pairing-m2-132", "https://app.t3.codes/pair?token=abcdEFGH1234#k=Zm9vYmFy", "M", 2, 132),
-                                         ("nightly-m1-128", "https://t3.codes/download/nightly", "M", 1, 128),
-                                         ("numeric-l0-128", "0123456789012345", "L", 0, 128),
-                                         ("alnum-h1-128", "HTTPS://T3.CODES/PAIR/ABC123", "H", 1, 128)]:
-    cases.append({"name": name, "html": f'<div class="qr" style="display:block;width:{size}px;height:{size}px;line-height:0" data-value="{value}" data-level="{level}" data-margin="{margin}" data-size="{size}"></div>',
-                  "native": {"value": value, "level": level, "margin": str(margin), "size": str(size)}})
-cases[-1]["html"] += QR_SCRIPT
-write("qr-code", "apps/web/src/components/ui/qr-code.tsx", ["rest"], cases)
+    cases = []
+    for name, value, level, margin, size in [("pairing-m2-132", "https://app.t3.codes/pair?token=abcdEFGH1234#k=Zm9vYmFy", "M", 2, 132),
+                                             ("nightly-m1-128", "https://t3.codes/download/nightly", "M", 1, 128),
+                                             ("numeric-l0-128", "0123456789012345", "L", 0, 128),
+                                             ("alnum-h1-128", "HTTPS://T3.CODES/PAIR/ABC123", "H", 1, 128)]:
+        cases.append({"name": name, "html": f'<div class="qr" style="display:block;width:{size}px;height:{size}px;line-height:0" data-value="{value}" data-level="{level}" data-margin="{margin}" data-size="{size}"></div>',
+                      "native": {"value": value, "level": level, "margin": str(margin), "size": str(size)}})
+    cases[-1]["html"] += QR_SCRIPT
+    write("qr-code", "apps/web/src/components/ui/qr-code.tsx", ["rest"], cases)
+
+else:
+    print("qr-code: retained the unchanged encoder spec")
 
 # NumberField (number-field.tsx).
 NF_GROUP = "relative flex w-full justify-between rounded-lg border border-input bg-background not-dark:bg-clip-padding text-base text-foreground shadow-xs/5 ring-ring/24 transition-shadow before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] not-data-disabled:not-focus-within:not-aria-invalid:before:shadow-[0_1px_--theme(--color-black/4%)] focus-within:border-ring focus-within:ring-[3px] has-aria-invalid:border-destructive/36 has-autofill:bg-foreground/4 focus-within:has-aria-invalid:border-destructive/64 focus-within:has-aria-invalid:ring-destructive/48 data-disabled:pointer-events-none data-disabled:opacity-64 sm:text-sm dark:bg-input/32 dark:has-autofill:bg-foreground/8 dark:has-aria-invalid:ring-destructive/24 dark:not-data-disabled:not-focus-within:not-aria-invalid:before:shadow-[0_-1px_--theme(--color-white/6%)] [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0 [[data-disabled],:focus-within,[aria-invalid]]:shadow-none"

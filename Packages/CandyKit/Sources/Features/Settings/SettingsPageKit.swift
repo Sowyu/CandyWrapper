@@ -239,9 +239,11 @@ final class InlinePickerButton: ControlView {
         restyle()
     }
 
+    private var gap: CGFloat { DesignGeometry.usesClassic(self) ? 6 : 4 }
+
     override var intrinsicContentSize: NSSize {
-        let g: CGFloat = glyph == nil ? 0 : 14 + 6
-        return NSSize(width: min(288, ceil(g + label.textWidth + 6 + 14)), height: 24)
+        let g: CGFloat = glyph == nil ? 0 : 14 + gap
+        return NSSize(width: min(288, ceil(g + label.textWidth + gap + 14)), height: 24)
     }
 
     override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
@@ -250,17 +252,18 @@ final class InlinePickerButton: ControlView {
     private func restyle() {
         let solid = state.hoverOrPressed || state.popupOpen
         underline.strokeColor = Themed.color(\.foreground, solid ? 1 : 0.3).cgColor(in: self)
-        underline.lineDashPattern = solid ? nil : [1, 2]
+        underline.lineDashPattern = solid || !DesignGeometry.usesClassic(self) ? nil : [1, 2]
+        underline.isHidden = !DesignGeometry.usesClassic(self) && !solid
         chevron.strokeColor = Themed.color(\.mutedForeground)
     }
 
     override func layout() {
         super.layout()
         var x: CGFloat = 0
-        if let glyph { glyph.frame = NSRect(x: 0, y: 5, width: 14, height: 14); x = 20 }
-        let w = max(0, min(ceil(label.textWidth) + 1, bounds.width - x - 20))
+        if let glyph { glyph.frame = NSRect(x: 0, y: 5, width: 14, height: 14); x = 14 + gap }
+        let w = max(0, min(ceil(label.textWidth) + 1, bounds.width - x - 14 - gap))
         label.frame = NSRect(x: x, y: 0, width: w, height: 24)
-        chevron.frame = NSRect(x: x + w + 6, y: 5, width: 14, height: 14)
+        chevron.frame = NSRect(x: x + w + gap, y: 5, width: 14, height: 14)
         let path = CGMutablePath()
         // `underline-offset-4` under the text's baseline.
         path.move(to: CGPoint(x: x, y: 21.5)); path.addLine(to: CGPoint(x: x + w, y: 21.5))
