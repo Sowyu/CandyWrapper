@@ -98,6 +98,9 @@ public struct SidebarProjectHeaderModel: Equatable, Sendable {
     public var expanded: Bool
     /// The Pinned section, with a pin for its icon.
     public var isPinned = false
+    public var folder = false
+    public var dot: FolderDot? = nil
+    public enum FolderDot: String, Sendable { case attention, failed, unread, working }
 }
 
 /// The environments the merged shell spans: the primary (this machine), labels and machine kinds
@@ -259,6 +262,8 @@ public struct SidebarListState: Equatable, Sendable {
     public var snoozedExpanded = false
     public var settledExpanded = false
     /// The Working beta shelf (`sidebarWorkingShelfEnabled`) and whether it is open (collapsed by default).
+    public var boringSidebarEnabled = false
+    public var usesProjectFolders: Bool { boringSidebarEnabled && !dither }
     public var workingShelfEnabled = false
     public var workingExpanded = false
     /// When this client saw threads leave the Working shelf; the inbox orders by it. Not compared.
@@ -311,7 +316,7 @@ public struct SidebarListState: Equatable, Sendable {
             && a.capabilities.threadSnooze == b.capabilities.threadSnooze && a.environments == b.environments
             && a.terminalProcesses == b.terminalProcesses && a.selectedThreadIds == b.selectedThreadIds
             && a.renamingThreadId == b.renamingThreadId && a.scratchRoots == b.scratchRoots && a.grouping == b.grouping
-            && a.workingShelfEnabled == b.workingShelfEnabled && a.workingExpanded == b.workingExpanded
+            && a.boringSidebarEnabled == b.boringSidebarEnabled && a.workingShelfEnabled == b.workingShelfEnabled && a.workingExpanded == b.workingExpanded
             && a.heldOrder?.section == b.heldOrder?.section && a.heldOrder?.order == b.heldOrder?.order
             && a.collapsedProjects == b.collapsedProjects && a.dither == b.dither
             && a.projectSortOrder == b.projectSortOrder && a.projectOrder == b.projectOrder
@@ -373,7 +378,7 @@ public enum SidebarListBuilder {
                 .map { SidebarThread($0, pendingSubagentRequest: requests[$0.id]) }
             let returns = state.inboxReturns
             shelves = SidebarModel.buildShelves(threads, scopedProjectIds: scopedIds, capabilities: state.capabilities, nowMs: nowMs,
-                                                workingShelf: state.workingShelfEnabled, returnedAt: { returns?.returnedAt($0) },
+                                                workingShelf: state.workingShelfEnabled && !state.usesProjectFolders, returnedAt: { returns?.returnedAt($0) },
                                                 isWorking: { returns?.isWorking($0) ?? SidebarModel.isThreadWorking($0) })
         }
     }
@@ -468,7 +473,10 @@ public enum SidebarListBuilder {
             return first + threads.filter { !placed.contains($0.id) }
         }
         var items: [SidebarItem] = []
-        if state.dither {
+        if state.usesProjectFolders {
+            items += held(shelves.pinned, .pinned).map { row($0, .pinned) }
+            items += folderSections(held(shelves.active, .active), ctx: ctx, state: state) { row($0, .active) }
+        } else if state.dither {
             // Dither (after Capy): Pinned is a section like the projects, above them.
             let pinned = held(shelves.pinned, .pinned)
             if !pinned.isEmpty {
@@ -515,6 +523,39 @@ public enum SidebarListBuilder {
             }
         }
         return items
+    }
+
+    /// Sidebar.logic.ts:878-958 and Sidebar.tsx:495-514 (3814). Empty folders can start a thread.
+    static func folderSections(_ threads: [SidebarThread], ctx: Context, state: SidebarListState,
+                               row: (SidebarThread) -> SidebarItem) -> [SidebarItem] {
+        let groups = SidebarModel.sortProjectGroups(ctx.groups, projects: ctx.projects, threads: ctx.threadShells,
+                                                     order: state.projectSortOrder, preferred: state.projectOrder)
+        let byGroup = Dictionary(grouping: threads, by: { ctx.groupByProject[$0.shell.projectId]?.key ?? "" })
+        return groups.filter { group in ctx.scopedIds.map { !$0.isDisjoint(with: group.memberProjectIds) } ?? true }.flatMap { group -> [SidebarItem] in
+            let list = byGroup[group.key] ?? []
+            let expanded = !state.collapsedProjects.contains(group.key)
+            let hidden = expanded ? [] : list.filter { $0.id != state.activeThreadId }
+            var header = SidebarProjectHeaderModel(key: group.key, label: group.label,
+                projectTitle: group.representative.title, projectIcon: ProjectIconSource(group.representative),
+                count: hidden.count, expanded: expanded, folder: true)
+            header.dot = folderDot(hidden, visits: state.localVisits)
+            return [.projectHeader(header)] + list.filter { expanded || $0.id == state.activeThreadId }.map {
+                guard case .row(var model) = row($0) else { return row($0) }
+                model.inProjectSection = true
+                return .row(model)
+            }
+        }
+    }
+
+    static func folderDot(_ threads: [SidebarThread], visits: [ThreadId: T3Timestamp]) -> SidebarProjectHeaderModel.FolderDot? {
+        let statuses = Set(threads.map(SidebarModel.resolveSidebarThreadStatus))
+        if !statuses.isDisjoint(with: [.input, .approval, .request, .limited]) { return .attention }
+        if statuses.contains(.failed) { return .failed }
+        if threads.contains(where: {
+            SidebarModel.resolveSidebarThreadStatus($0) == .ready && SidebarModel.hasUnseenCompletion(latestRun: $0.latestRun,
+                lastVisitedAt: SidebarModel.resolveThreadLastVisitedAt(server: $0.shell.lastVisitedAt, local: visits[$0.id]))
+        }) { return .unread }
+        return statuses.contains(.working) ? .working : nil
     }
 
     static let pinnedSectionKey = "pinned"
@@ -584,7 +625,7 @@ public enum SidebarListBuilder {
         let isUnread = SidebarModel.hasUnseenCompletion(latestRun: t.latestRun, lastVisitedAt: lastVisited)
         let isWoke = SidebarModel.isWoke(t, lastVisitedAt: lastVisited, nowMs: nowMs)
         let status = SidebarModel.resolveSidebarThreadStatus(t)
-        let variant: SidebarRowModel.Variant = section == .snoozed || section == .settled ? .slim : .card
+        let variant: SidebarRowModel.Variant = section == .snoozed || section == .settled || state.usesProjectFolders && section == .active ? .slim : .card
         let action: SidebarRowModel.Action = section == .snoozed ? .unsnooze : section == .settled ? .unsettle : .settle
         let anchor: T3Timestamp? = section == .settled
             ? SidebarModel.resolveSettledThreadTimestamp(t) : (shell.latestUserMessageAt ?? shell.updatedAt)

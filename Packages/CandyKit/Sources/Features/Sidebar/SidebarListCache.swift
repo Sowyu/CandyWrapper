@@ -19,6 +19,7 @@ public final class SidebarListCache {
         var snooze: Bool
         var environments: SidebarEnvironments
         var scratchRoots: [String: String]
+        var folders: Bool
         var dither: Bool
         var olderCuts: [String: OlderSettledThreads]
         var olderCut: OlderSettledThreads?
@@ -114,10 +115,10 @@ public final class SidebarListCache {
         let shared = Shared(projects: snapshot.projects, grouping: state.grouping, primaryId: state.environments.primaryId,
                             scopeKey: state.projectScopeKey, scopedProjectIds: state.scopedProjectIds,
                             settlement: state.capabilities.threadSettlement, snooze: state.capabilities.threadSnooze,
-                            environments: state.environments, scratchRoots: state.scratchRoots, dither: state.dither,
+                            environments: state.environments, scratchRoots: state.scratchRoots, folders: state.usesProjectFolders, dither: state.dither,
                             olderCuts: snapshot.olderSettledByEnvironment, olderCut: snapshot.olderSettled)
         // ponytail: the Working beta shelf orders by this client's return times, which move on their own; it rebuilds the shelves every time, make it incremental if the beta ships on by default
-        guard shared == self.shared, var ctx = context, !state.workingShelfEnabled else {
+        guard shared == self.shared, var ctx = context, !state.workingShelfEnabled || state.usesProjectFolders else {
             structural = true
             return rebuild(snapshot: snapshot, state: state, nowMs: nowMs, shared: shared)
         }
@@ -338,7 +339,7 @@ public final class SidebarListCache {
     /// place and the rows whose labels the clock changed, by index. Nil when the list has to be built
     /// again (a thread changed shelf or order, the list state changed, or the clock went back).
     func patch(snapshot: ShellSnapshot, state: SidebarListState, nowMs: Int64) -> [(index: Int, item: SidebarItem)]? {
-        guard var layout, nowMs >= layout.nowMs, state == layout.state else { return nil }
+        guard !state.usesProjectFolders, var layout, nowMs >= layout.nowMs, state == layout.state else { return nil }
         let ctx = context(snapshot: snapshot, state: state, nowMs: nowMs)
         guard !structural else { self.layout = nil; return nil }
         // Dither's sections sorted by activity can reorder when a thread changes in place. Manual order reads no thread.

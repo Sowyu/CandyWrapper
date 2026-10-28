@@ -83,6 +83,7 @@ public struct ClientSettings: Equatable, Sendable {
         "followUpBehavior": SettingSpec(.literals(["queue", "steer"]), .string("steer")),
         "proactivePanelsEnabled": SettingSpec(.bool, .bool(false)),
         "showSkillsInSlashMenu": SettingSpec(.bool, .bool(true)),
+        "boringSidebarEnabled": SettingSpec(.bool, .bool(false)),
         "legacySidebarEnabled": SettingSpec(.bool, .bool(false)),
         "sidebarWorkingShelfEnabled": SettingSpec(.bool, .bool(false)),
         "sidebarProjectGroupingMode": SettingSpec(.literals(["repository", "repository_path", "separate"]), .string("repository")),

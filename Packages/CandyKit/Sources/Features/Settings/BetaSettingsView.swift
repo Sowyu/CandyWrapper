@@ -13,9 +13,12 @@ public final class BetaSettingsView: SettingsPageBase {
 
     public override init(context: SettingsPageContext) {
         super.init(context: context)
-        let shelf = clientSwitch("working-shelf",
-                                 "Fold working and monitoring threads into a Working section. They return to the top of the inbox when they need you.",
-                                 key: "sidebarWorkingShelfEnabled", reset: "working section", label: "Working section", title: "Working section")
+        // LabsSettingsPanel.tsx:29-50 (3814): retain legacy opt-ins until this switch changes.
+        let folders = clientSwitch("boring-sidebar",
+            "Group sidebar threads into project folders. Pinned threads stay on top, and Snoozed and Settled stay below the folders.",
+            key: "boringSidebarEnabled", label: "Boring sidebar (group by project)", title: "Boring sidebar (group by project)",
+            read: { $0.bool("boringSidebarEnabled") || $0.bool("legacySidebarEnabled") },
+            write: { ["boringSidebarEnabled": .bool($0), "legacySidebarEnabled": .bool(false)] })
         let guest = serverSwitch("guest-links", Self.guestDetail, key: "guestSharingEnabled", reset: nil, label: "Guest links")
         guest.title = "Guest links"
         let connections: (title: String, action: @MainActor () -> Void) = ("Connections", { [weak self] in self?.context.openSection?(.connections) })
@@ -42,7 +45,7 @@ public final class BetaSettingsView: SettingsPageBase {
             // Servers before Nightly 3814 can't link (settings.ts:1209, environment.ts:139-142).
             linked.isHidden = !self.context.scope.allStore("linkedEnvironmentsEnabled")
         }
-        items = [section("beta", "Beta", [shelf, guest, linked])]
+        items = [section("beta", "Beta", [folders, guest, linked])]
         binder.refresh()
     }
 }
