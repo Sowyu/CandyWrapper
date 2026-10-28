@@ -1,6 +1,6 @@
 {
-  "general.behavior" : {
-    "height" : 392,
+  "general.notifications" : {
+    "height" : 191,
     "width" : 796
   },
   "keybindings.navigation" : {

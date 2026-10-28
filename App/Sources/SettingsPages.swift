@@ -109,6 +109,7 @@ extension SettingsController {
     /// Redesign came on or went off: the pages carry its filters, so they are built again for the new layout.
     func themeChanged() {
         guard isOpen else { return }
+        updatePresentationForTheme()
         refreshPages()
         nav.needsLayout = true
     }

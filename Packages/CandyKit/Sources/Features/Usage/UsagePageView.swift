@@ -227,7 +227,7 @@ public final class UsagePageView: DSView {
 
     public override func layout() {
         super.layout()
-        let headerH = UsageHeaderView.height
+        let headerH = header.barHeight
         header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: headerH)
         header.viewport = viewport
         scroll.frame = NSRect(x: 0, y: headerH, width: bounds.width, height: max(0, bounds.height - headerH))
@@ -260,6 +260,10 @@ public final class UsagePageView: DSView {
 /// compact ghost selects and refresh.
 public final class UsageHeaderView: TopbarDragView {
     static let height: CGFloat = 52
+    public var isRouteModal = false { didSet { close.isHidden = !isRouteModal; needsLayout = true; needsDisplay = true } }
+    public var barHeight: CGFloat { isRouteModal ? 48 : Self.height }
+    public let close = ButtonView(nil, icon: .x, variant: .ghost, size: .iconSm)
+    private var isDither: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
     private let title = UsageStyle.label("Usage", 14, .medium, color: Themed.color(\.mutedForeground))
     private let slash1 = UsageStyle.label("/", 14, .medium, color: Themed.color(\.iconMuted))
     private let slash2 = UsageStyle.label("/", 14, .medium, color: Themed.color(\.iconMuted))
@@ -285,7 +289,23 @@ public final class UsageHeaderView: TopbarDragView {
             b.setAccessibilityLabel("Refresh usage")
         }
         for s in [metricSelect, periodSelect] { s.fitsContent = true; s.alignItemWithTrigger = false; s.popupAlign = .end }
+        close.isHidden = true
+        close.setAccessibilityLabel("Close")
+        close.toolTip = "Close (Esc)"
+        addSubview(close)
         setAccessibilityLabel("Usage breadcrumb")
+    }
+
+    public override var mouseDownCanMoveWindow: Bool { !isRouteModal }
+    public override func mouseDown(with event: NSEvent) { if !isRouteModal { super.mouseDown(with: event) } }
+    public override func mouseUp(with event: NSEvent) { if !isRouteModal { super.mouseUp(with: event) } }
+    public override var wantsUpdateLayer: Bool { false }
+    public override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        if isRouteModal {
+            Themed.color(\.border).setFill()
+            NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1).fill()
+        }
     }
 
     func apply(_ m: UsagePageView.Model) {
@@ -314,37 +334,46 @@ public final class UsageHeaderView: TopbarDragView {
 
     public override func layout() {
         super.layout()
-        let xl = viewport >= 1280, xxl = viewport >= 1536
+        let xl = isDither ? viewport >= 1280 : bounds.width >= 896
+        let xxl = isDither ? viewport >= 1536 : bounds.width >= 1280
         for v in [metric, period, refresh] as [NSView] { v.isHidden = !xl }
         for v in [metricSelect, periodSelect, compactRefresh] as [NSView] { v.isHidden = xl }
+        if !isDither { period.isHidden = !xl || !showsWindowLabel; periodSelect.isHidden = xl || !showsWindowLabel }
         windowLabel.isHidden = !(xxl && showsWindowLabel)
         // Right cluster first, so the breadcrumb truncates into what is left.
-        var right = bounds.width - 20
-        let controls: [NSView] = xl ? [refresh, period, metric] : [compactRefresh, periodSelect, metricSelect]
+        var right = bounds.width - (isRouteModal ? 8 : 20)
+        if isRouteModal {
+            right -= 28
+            close.frame = NSRect(x: right, y: (barHeight - 28) / 2, width: 28, height: 28)
+            right -= 4
+        }
+        let controls: [NSView] = isDither ? (xl ? [refresh, period, metric] : [compactRefresh, periodSelect, metricSelect])
+            : (xl ? [refresh, metric, period] : [compactRefresh, metricSelect, periodSelect]).filter { !$0.isHidden }
         for (i, c) in controls.enumerated() {
             let s = c.intrinsicContentSize
             right -= s.width
-            c.frame = NSRect(x: right, y: ((Self.height - s.height) / 2).rounded(), width: s.width, height: s.height)
+            c.frame = NSRect(x: right, y: ((barHeight - s.height) / 2).rounded(), width: s.width, height: s.height)
             right -= xl ? 8 : 4
             _ = i
         }
-        var x = contentStart
+        var x = isRouteModal ? 20 : contentStart
+        let y = (barHeight - 20) / 2
         let gap: CGFloat = viewport >= 640 ? 12 : 8
-        title.frame = NSRect(x: x, y: 16, width: ceil(title.textWidth) + 1, height: 20)
+        title.frame = NSRect(x: x, y: y, width: ceil(title.textWidth) + 1, height: 20)
         x = title.frame.maxX + gap
-        slash1.frame = NSRect(x: x, y: 16, width: ceil(slash1.textWidth), height: 20)
+        slash1.frame = NSRect(x: x, y: y, width: ceil(slash1.textWidth), height: 20)
         x = slash1.frame.maxX + gap
         let budget = max(0, right - 12 - x)
         let ew = min(environment.intrinsicContentSize.width, max(40, budget * 0.6))
-        environment.frame = NSRect(x: x, y: 14, width: ew, height: 24)
+        environment.frame = NSRect(x: x, y: y - 2, width: ew, height: 24)
         x = environment.frame.maxX + gap
-        slash2.frame = NSRect(x: x, y: 16, width: ceil(slash2.textWidth), height: 20)
+        slash2.frame = NSRect(x: x, y: y, width: ceil(slash2.textWidth), height: 20)
         x = slash2.frame.maxX + gap
         let pw = min(providers.intrinsicContentSize.width, max(40, right - 12 - x))
-        providers.frame = NSRect(x: x, y: 14, width: pw, height: 24)
+        providers.frame = NSRect(x: x, y: y - 2, width: pw, height: 24)
         x = providers.frame.maxX + 12
         if !windowLabel.isHidden {
-            windowLabel.frame = NSRect(x: x, y: 18, width: max(0, min(ceil(windowLabel.textWidth) + 1, right - 12 - x)), height: 16)
+            windowLabel.frame = NSRect(x: x, y: y + 2, width: max(0, min(ceil(windowLabel.textWidth) + 1, right - 12 - x)), height: 16)
         }
     }
 }
@@ -378,7 +407,11 @@ public final class UsageInlineMenuButton: ControlView {
         chevron.strokeColor = Themed.color(\.mutedForeground)
         // `opacity-0 transition-opacity`, shown on hover, keyboard focus or an open menu (UsagePage.tsx:1287,1401).
         chevron.isHidden = alert
-        HoverReveal.fade([chevron], visible: active || state.focusVisible)
+        if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
+            HoverReveal.fade([chevron], visible: active || state.focusVisible)
+        } else {
+            chevron.alphaValue = active || state.focusVisible ? 1 : 0.6
+        }
         warning.isHidden = !alert
         warning.strokeColor = Themed.color(\.warningForeground)
     }

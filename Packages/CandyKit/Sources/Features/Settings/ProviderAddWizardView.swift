@@ -7,6 +7,7 @@ public final class ProviderAddWizardView: DialogView {
     private let context: SettingsPageContext
     private let environment: String, environmentLabel: String
     private let existing: Set<String>
+    private var showMoreProviders = false
     private var driver = "codex", step = 0
     private var labels: [String: String] = [:], ids: [String: String] = [:]
     private var configs: [String: [String: JSONValue]] = [:]
@@ -51,15 +52,29 @@ public final class ProviderAddWizardView: DialogView {
         var body: [NSView] = [steps]
         if step == 0 {
             let choices = ProvidersLogic.addableDrivers(providers: context.configs[environment]?.providers ?? [])
-            let grid = ProviderAddDriverGrid(choices: choices.map { ($0.0, $0.1) }, selected: driver)
+            let modern = !ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+            let featured = modern ? choices.filter { $0.driver != "fx" } : choices
+            let grid = ProviderAddDriverGrid(choices: featured.map { ($0.0, $0.1) }, selected: driver)
             grid.onSelect = { [weak self] driver in self?.driver = driver; self?.error = nil; self?.rebuild() }
             body.append(grid)
             if let note = multipleAccountsNote(context: context, environment: environment, driver: driver) { body.append(note) }
+            if modern {
+                let more = ButtonView(showMoreProviders ? "Show less" : "Show more", variant: .ghostMuted, size: .xs)
+                more.trailingIcon = showMoreProviders ? .chevronUp : .chevronDown
+                more.action = { [weak self] in self?.showMoreProviders.toggle(); self?.rebuild() }
+                body.append(more)
+                if showMoreProviders {
+                    let extra = ProviderAddDriverGrid(choices: choices.filter { $0.driver == "fx" }.map { ($0.0, $0.1) }, selected: driver)
+                    extra.onSelect = grid.onSelect
+                    if extra.intrinsicContentSize.height > 0 { body.append(extra) }
+                }
+            }
             let search = InputView(placeholder: "Search ACP Registry", size: .sm)
             search.frame.size = NSSize(width: 180, height: 32)
             let button = ButtonView("Search registry", variant: .outline, size: .sm)
             button.action = { [weak self, weak search] in self?.search(search?.text ?? "") }
-            body.append(row("Or choose from ACP Registry", input: SettingsControlGroup([search, button])))
+            let registry = row("Or choose from ACP Registry", input: SettingsControlGroup([search, button]))
+            if !modern || showMoreProviders { body.append(registry) }
             for agent in agents.prefix(6) {
                 guard let agentID = agent["id"]?.stringValue else { continue }
                 let pick = ButtonView("Add", variant: .outline, size: .sm)
@@ -69,7 +84,7 @@ public final class ProviderAddWizardView: DialogView {
             }
             let manual = ButtonView("Enter manually", variant: .ghost, size: .sm)
             manual.action = { [weak self] in self?.driver = "acpRegistry"; self?.step = 1; self?.rebuild() }
-            body.append(manual)
+            if !modern || showMoreProviders { body.append(manual) }
         } else if step == 1 {
             let name = InputView(text: label, size: .sm)
             let instanceID = InputView(text: id, size: .sm, font: .mono)
@@ -216,11 +231,20 @@ public final class ProviderAddDriverGrid: DSView {
             let b = ProviderAddDriverChoice(driver: id, title: title, selected: id == selected)
             b.action = { [weak self] in self?.onSelect?(id) }; buttons.append(b); addSubview(b)
         }
+        frame.size.height = intrinsicContentSize.height
     }
-    public override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: CGFloat((buttons.count + 1) / 2) * 56) }
+    private var dither: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    public override var intrinsicContentSize: NSSize {
+        let rows = CGFloat((buttons.count + 1) / 2)
+        return NSSize(width: NSView.noIntrinsicMetric, height: dither ? rows * 56 : max(0, rows * 44 + max(0, rows - 1) * 12))
+    }
     public override func layout() {
-        super.layout(); let width = (bounds.width - 8) / 2
-        for (i, b) in buttons.enumerated() { b.frame = NSRect(x: CGFloat(i % 2) * (width + 8), y: CGFloat(i / 2) * 56, width: width, height: 48) }
+        super.layout()
+        let gap: CGFloat = dither ? 8 : 12
+        let width = (bounds.width - gap) / 2
+        for (i, b) in buttons.enumerated() {
+            b.frame = NSRect(x: CGFloat(i % 2) * (width + gap), y: CGFloat(i / 2) * 56, width: width, height: dither ? 48 : 44)
+        }
     }
 }
 

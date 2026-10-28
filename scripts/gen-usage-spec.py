@@ -5,7 +5,7 @@ the /usage-limits banner (ComposerUsageLimits.tsx, ComposerBanner.tsx, UsageLimi
 Scheduled Tasks list (ScheduledTasksSettings.tsx:243-460, settingsLayout.tsx) and the editor's schedule rows
 (ScheduledTasksSettings.tsx:1155-1325).
 
-Class strings are copied from those files at the tag in T3_VERSION; buttons, rows, switches, badges and
+Class strings are copied from those files at v0.1.4-nightly.20261028.3814; buttons, rows, switches, badges and
 inputs come from gen-settings-pages2-spec.py, gen-toggles-spec.py and gen-composer-attachments-spec.py.
 Usage: /usr/bin/python3 -I scripts/gen-usage-spec.py
 """
@@ -40,20 +40,19 @@ def group(variant, items, pressed, disabled=False):
 # --- 1. The header at xl (no window label below 2xl).
 INLINE = ("inline-flex shrink-0 cursor-pointer items-center gap-0.5 font-medium underline-offset-2 [text-align:var(--inline-button-text-align,center)] "
           "[white-space:var(--inline-button-white-space,nowrap)] hover:underline text-foreground min-w-0 max-w-full")
-CHEV = lucide("chevron-down", "size-3.5 opacity-0")
+CHEV = lucide("chevron-down", "size-3.5 opacity-60")
 crumb_env = f'<button type="button" class="{INLINE}"><span class="min-w-0 truncate">All environments</span><span class="flex size-3.5 shrink-0 items-center justify-center text-muted-foreground">{CHEV}</span></button>'
-crumb_prov = f'<button type="button" class="{INLINE}"><span class="min-w-0 truncate">All providers</span>{lucide("chevron-down", "size-3.5 shrink-0 text-muted-foreground opacity-0")}</button>'
+crumb_prov = f'<button type="button" class="{INLINE}"><span class="min-w-0 truncate">All providers</span>{lucide("chevron-down", "size-3.5 shrink-0 text-muted-foreground opacity-60")}</button>'
 SEP = '<li aria-hidden="true" class="flex shrink-0 items-center text-icon-muted">/</li>'
-header = ('<header class="flex shrink-0 items-center gap-3 px-5" style="height:52px"><div class="flex w-full min-w-0 items-center gap-x-3 py-2">'
+header = ('<header class="flex h-12 shrink-0 items-center gap-1 border-b ps-5 pe-2">'
           '<nav class="min-w-0"><ol class="m-0 flex min-w-0 list-none items-center gap-3 p-0 text-sm">'
           '<li class="flex min-w-0 items-center font-medium shrink-0 text-muted-foreground"><h1>Usage</h1></li>' + SEP
           + f'<li class="flex items-center font-medium shrink-0 text-muted-foreground min-w-10">{crumb_env}</li>' + SEP
           + f'<li class="flex items-center font-medium text-foreground min-w-10">{crumb_prov}</li></ol></nav>'
           '<div class="ms-auto flex min-w-0 items-center justify-end gap-2">'
           + group("segmented", ["Cost", "Tokens", "Limits"], 2)
-          + group("segmented", ["Past 24h", "7 days", "30 days", "90 days"], 2, disabled=True)
           + button("ghost", "icon-sm", lucide("refresh-cw", "size-3.5"))
-          + '</div></div></header>')
+          + '</div>' + button("ghost", "icon-sm", lucide("x", "size-4")) + '</header>')
 
 # --- 2. A 7-day cost chart (UsageProviderChart.tsx), paths from the ported maths.
 DAYS = ["2026-10-04", "2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09", "2026-10-10"]
@@ -155,14 +154,14 @@ MORE = button("ghost", "icon-sm", lucide("ellipsis", "size-4"))
 
 
 def task_row(title, prompt, status, badge, enabled):
-    desc = (f'<p class="max-w-xl text-xs leading-normal text-muted-foreground/80"><span class="line-clamp-2">{prompt}</span></p>'
+    desc = (f'<p class="max-w-2xl text-balance text-xs leading-normal text-muted-foreground"><span class="line-clamp-2">{prompt}</span></p>'
             f'<div class="pt-0.5 text-xs text-muted-foreground"><div class="flex flex-wrap items-center gap-2"><span>{status}</span>{badge}</div></div>')
     return row(title, "", f'<div class="flex items-center gap-2">{switch("default", "on" if enabled else "off", False)}{MORE}</div>', desc_html=desc)
 
 
 NEW_TASK = button("ghost-muted", "xs", lucide("plus", "size-3") + "New task")
 tasks = ('<section class="space-y-2.5"><div class="flex min-h-7 items-start justify-between gap-4 px-3 sm:px-4">'
-         '<div class="flex min-w-0 items-center gap-1"><h2 class="flex min-h-7 items-center gap-2 text-sm font-normal text-foreground/70">Scheduled tasks</h2></div>'
+         '<div class="flex min-w-0 items-center gap-1"><h2 class="flex min-h-7 items-center gap-2 text-base font-semibold text-foreground">Scheduled tasks</h2></div>'
          f'<div class="flex min-h-7 min-w-7 items-center justify-end">{NEW_TASK}</div></div>'
          '<div class="relative overflow-visible text-foreground space-y-1"><div class="space-y-8"><section><h2 class="sr-only">host</h2>'
          f'<div class="{GROUP}">'
@@ -184,13 +183,13 @@ schedule = ('<div class="space-y-3"><div class="flex items-center justify-betwee
             f'<div data-slot="toggle-group" data-variant="outline" role="group" class="{tog["G_ALWAYS"]} {OUTLINE_JOINED}">{days}</div></div></div>')
 
 cases = [
-    {"name": "header", "html": header, "wrapperStyle": "display:block;width:860px", "native": {"kind": "header"}},
+    {"name": "header", "html": header, "wrapperStyle": "display:block;width:1040px", "native": {"kind": "header"}},
     {"name": "chart", "html": chart, "wrapperStyle": "display:block;width:600px", "native": {"kind": "chart"}},
     {"name": "limits-banner", "html": banner, "wrapperStyle": "display:block;width:692px", "native": {"kind": "banner"}},
     {"name": "scheduled-tasks", "html": tasks, "wrapperStyle": "display:block;width:796px", "native": {"kind": "tasks"}},
     {"name": "task-schedule", "html": schedule, "wrapperStyle": "display:block;width:528px", "native": {"kind": "schedule"}},
 ]
-spec = {"component": "usage", "source": "apps/web/src/components/usage/UsagePage.tsx, settings/ScheduledTasksSettings.tsx",
+spec = {"component": "usage", "viewportWidth": 1100, "source": "apps/web/src/components/usage/UsagePage.tsx, settings/ScheduledTasksSettings.tsx",
         "states": ["rest"], "themes": ["light", "dark"], "cases": cases}
 with open(os.path.join(ROOT, "design/component-reference/usage.json"), "w") as f:
     json.dump(spec, f, indent=1, ensure_ascii=False)

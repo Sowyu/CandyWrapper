@@ -213,6 +213,7 @@ final class ThemeCircleButton: ControlView {
     let ball = ThemePreviewCircleView()
     var isPicked = false { didSet { restyle(); setAccessibilityValue(isPicked) } }
     private let ring = ThemeCircleRingView()
+    private let focus = CAShapeLayer()
     private let badge: ThemeCircleBadgeView
     let mode: ThemeAppearance
 
@@ -226,6 +227,10 @@ final class ThemeCircleButton: ControlView {
         addSubview(ball)
         addSubview(ring)
         addSubview(badge)
+        focus.fillColor = nil
+        focus.lineWidth = 2
+        focus.actions = ["path": NSNull(), "strokeColor": NSNull(), "hidden": NSNull()]
+        layer?.addSublayer(focus)
         setAccessibilityRole(.button)
         setAccessibilityLabel("Use \(label) \(mode.rawValue) mode")
         TooltipController.attach(to: self, text: mode == .light ? "Use for light mode only" : "Use for dark mode only")
@@ -238,6 +243,8 @@ final class ThemeCircleButton: ControlView {
     private func restyle() {
         ring.isHidden = !isPicked
         badge.isHidden = !isPicked
+        focus.isHidden = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) || !state.focusVisible
+        focus.strokeColor = Themed.color(\.foreground, 0.6).cgColor(in: self)
         needsLayout = true
     }
 
@@ -247,6 +254,9 @@ final class ThemeCircleButton: ControlView {
         let s: CGFloat = state.hovered && !isPicked ? 1.05 : 1
         ball.frame = NSRect(x: bounds.midX - 28 * s - 2, y: bounds.midY - 28 * s - 2, width: 56 * s + 4, height: 56 * s + 4)
         ring.frame = bounds
+        // ThemeSettings.tsx: the 56pt hit area's 2pt focus outline sits 5pt inside the edge.
+        focus.frame = bounds
+        focus.path = CGPath(ellipseIn: NSRect(x: bounds.midX - 23, y: bounds.midY - 23, width: 46, height: 46), transform: nil)
         // `bottom-0.5 right-0.5 size-5`.
         badge.frame = NSRect(x: bounds.width - 2 - 20, y: bounds.height - 2 - 20, width: 20, height: 20)
     }
