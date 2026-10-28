@@ -64,7 +64,7 @@ public final class SkillDetailsView: DSView {
         return "No description is available for this skill."
     }
 
-    public init(skill: ServerProviderSkill, onViewInstructions: (() -> Void)?) {
+    public init(skill: ServerProviderSkill, onViewInstructions: (@MainActor () -> Void)?) {
         title = LabelView(ProviderSkills.displayName(skill), font: DSFont.ui(14, weight: .medium))
         detail = TextBlockView(Self.description(skill), font: DSFont.ui(14), lineHeight: 20)
         showsInstructions = onViewInstructions != nil && !skill.path.isEmpty
@@ -84,7 +84,7 @@ public final class SkillDetailsView: DSView {
         detail.frame = NSRect(x: 8, y: 40, width: bounds.width - 16, height: h)
         instructions.frame = NSRect(x: 8, y: 52 + h, width: instructions.intrinsicContentSize.width, height: 32)
     }
-    public static func show(skill: ServerProviderSkill, from view: NSView, onViewInstructions: (() -> Void)?) {
+    public static func show(skill: ServerProviderSkill, from view: NSView, onViewInstructions: (@MainActor () -> Void)?) {
         PopoverView(content: SkillDetailsView(skill: skill, onViewInstructions: onViewInstructions), padding: .compact, width: .auto)
             .show(from: view, placement: PopupPlacement(side: .top, align: .center, sideOffset: 4, fallbackAxisSide: .end))
     }

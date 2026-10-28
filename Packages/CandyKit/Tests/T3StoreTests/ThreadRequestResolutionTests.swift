@@ -5,12 +5,11 @@ import T3Protocol
 struct ThreadRequestResolutionTests {
     @Test func announcesFirstStateAndRemovalsButNotOnlyAdditions() {
         var tracker = ThreadRequestResolutionTracker()
-        #expect(tracker.update(pending: ["one"]))
-        #expect(!tracker.update(pending: ["one"]))
-        #expect(!tracker.update(pending: ["one", "two"]))
-        #expect(tracker.update(pending: ["two"]))
-        #expect(tracker.update(pending: []))
-        #expect(!tracker.update(pending: []))
+        var announced: [Bool] = []
+        for pending in [["one"], ["one"], ["one", "two"], ["two"], [], []] as [Set<String>] {
+            announced.append(tracker.update(pending: pending))
+        }
+        #expect(announced == [true, false, false, true, true, false])
     }
 
     @Test func cleanupScopesRequestsAndAttachmentsToTheirThreadAndEnvironment() {
