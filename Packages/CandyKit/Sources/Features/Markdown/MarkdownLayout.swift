@@ -33,10 +33,10 @@ enum MarkdownStyle {
     static let listGutter: CGFloat = 20
     static let itemGap: CGFloat = 4
     /// Inline code: 12px mono, `padding: 0.1rem 0.35rem`, 1px border, 6px radius.
-    static let chipFontSize: CGFloat = 12
-    static let chipPaddingX: CGFloat = 5.6
-    static let chipPaddingY: CGFloat = 1.6
-    static let chipRadius: CGFloat = 6
+    static var chipFontSize: CGFloat { ThreadDesign.uses3814 ? 11.9 : 12 }
+    static var chipPaddingX: CGFloat { ThreadDesign.uses3814 ? 11.9 * 0.35 : 5.6 }
+    static var chipPaddingY: CGFloat { ThreadDesign.uses3814 ? 11.9 * 0.1 : 1.6 }
+    static var chipRadius: CGFloat { ThreadDesign.uses3814 ? 4 : 6 }
     /// Code blocks: 13px mono at `leading-snug`, `padding: 0.8rem 0.9rem`, 30px header.
     static let codeFontSize: CGFloat = 13
     static var codeLineHeight: CGFloat { 13 * FontRuntime.codeScale * 1.375 }
@@ -45,11 +45,11 @@ enum MarkdownStyle {
     /// `.chat-markdown pre::-webkit-scrollbar { height: var(--app-scrollbar-width) }`, 6px (index.css:90, 2072-2074,
     /// T3 b5a0696a98): the lane an overflowing block adds below its padding.
     static let codeScrollbar: CGFloat = 6
-    static let tableFontSize: CGFloat = 12
-    static let tableLineHeight: CGFloat = 12 * 1.625
+    static var tableFontSize: CGFloat { ThreadDesign.uses3814 ? 14 : 12 }
+    static var tableLineHeight: CGFloat { tableFontSize * 1.625 }
     static let imageMaxWidth: CGFloat = 480
 
-    static var body: NSColor { Themed.color(\.foreground, 0.8) }
+    static var body: NSColor { ThreadDesign.markdownBody }
     static var strong: NSColor { Themed.color(\.contrastForeground) }
     static var muted: NSColor { Themed.color(\.contrastMutedForeground) }
     static var link: NSColor { Themed.color(\.infoForeground) }
@@ -61,7 +61,7 @@ enum MarkdownStyle {
     }
 
     /// CSS `font-weight: bolder` from a parent weight.
-    static func bolder(_ weight: NSFont.Weight) -> NSFont.Weight { weight.rawValue >= NSFont.Weight.semibold.rawValue ? .black : .bold }
+    static func bolder(_ weight: NSFont.Weight) -> NSFont.Weight { ThreadDesign.uses3814 ? .semibold : weight.rawValue >= NSFont.Weight.semibold.rawValue ? .black : .bold }
 
     nonisolated(unsafe) private static var noBreakSpaceWidths: [NSFont: CGFloat] = [:]
     private static let noBreakSpaceLock = NSLock()
@@ -238,6 +238,7 @@ enum MarkdownStyle {
                 attributes[.font] = font(size, weight: run.bold ? bolder(weight) : weight, italic: run.italic)
                 attributes[.foregroundColor] = run.link != nil ? link : color
             }
+            if run.link?.scheme == "https" || run.link?.scheme == "http" { attributes[.markdownExternalLink] = true }
             if run.strikethrough { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
             if let findText { attributes[.markdownFindText] = findText }
             // An image inside running text shows its alt text, like a broken inline image.
@@ -728,7 +729,9 @@ private struct Builder {
         nonisolated(unsafe) var results = [[Box]?](repeating: nil, count: chunks)
         nonisolated(unsafe) var next = 0
         let lock = NSLock()
+        nonisolated(unsafe) let appearance = NSAppearance.current ?? NSAppearance(named: .aqua)!
         DispatchQueue.concurrentPerform(iterations: workers) { _ in
+          appearance.performAsCurrentDrawingAppearance {
           while true {
             let chunk: Int = lock.withLock { defer { next += 1 }; return next }
             guard chunk < chunks else { return }
@@ -746,6 +749,7 @@ private struct Builder {
                 guard (builder.codeIndex, builder.tableIndex, builder.mathIndex) == ends[index] else { return }
             }
             lock.withLock { results[chunk] = out }
+          }
           }
         }
         var boxes: [Box] = []
@@ -886,7 +890,7 @@ private struct Builder {
         var box = Box(height: textBox.height, baseline: textBox.firstBaseline)
         box.items += MarkdownMathStyle.items(inline, in: textBox, parent: parent, color: color)
         for chip in textBox.chips {
-            box.items.append(.box(chip, fill: Themed.color(\.muted), border: Themed.color(\.contrastBorder), radius: MarkdownStyle.chipRadius))
+            box.items.append(.box(chip, fill: ThreadDesign.inlineCodeFill, border: ThreadDesign.inlineCodeBorder, radius: MarkdownStyle.chipRadius))
         }
         box.items += Self.fileChips(inline, in: textBox, size: size, weight: weight)
         box.items += Self.contextChips(inline, in: textBox, size: size, weight: weight)
@@ -931,11 +935,11 @@ private struct Builder {
     static func fileChips(_ inline: MarkdownStyle.Inline, in textBox: MarkdownTextBox, size: CGFloat, weight: NSFont.Weight) -> [MarkdownLayout.Item] {
         let parent = MarkdownStyle.font(size, weight: weight)
         let top = FileChipStyle.top(parent: parent, size: size), height = FileChipStyle.height(size)
-        let em = FileChipStyle.em(size), iconSize = 1.17 * em
+        let em = FileChipStyle.em(size), iconSize = ThreadDesign.uses3814 ? size : 1.17 * em
         return inline.files.compactMap { file in
             guard let span = textBox.spans(file.range).first else { return nil }
             let frame = CGRect(x: span.x0, y: span.baseline + top, width: span.x1 - span.x0, height: height)
-            let icon = CGRect(x: frame.minX + 1 + 0.5 * em, y: frame.midY - iconSize / 2, width: iconSize, height: iconSize)
+            let icon = CGRect(x: frame.minX + (ThreadDesign.uses3814 ? 0 : 1 + 0.5 * em), y: frame.midY - iconSize / 2, width: iconSize, height: iconSize)
             return .fileChip(FileChip(frame: frame, icon: icon, meta: file.meta, label: file.label))
         }
     }
@@ -1142,7 +1146,7 @@ private struct Builder {
         box.items.append(.box(frame, fill: WindowGlass.pick(stock: Themed.color(light: \.secondary, 1, dark: \.input, 0.32),
                                                             frost: WindowGlass.denseFill),
                               border: WindowGlass.pick(stock: Themed.color(light: \.border, 0.7, dark: \.border, 0), frost: WindowGlass.edge),
-                              radius: 10))
+                              radius: ThreadDesign.uses3814 ? 8 : 10))
         // Header: `pt-1.5 pr-1.5 pl-3`, the 24px buttons set its height; title 11px mono at 72% foreground.
         // `MarkdownCodeBlockTitleContent` (ChatMarkdown.tsx:801-840): a fence title shows its file icon and the title; a bare
         // language shows only the icon of a file in that language (`syntheticFileNameForLanguageId`, pierre-icons.ts:123-169),
@@ -1262,7 +1266,8 @@ private struct Builder {
     mutating func table(_ table: MarkdownTable, width: CGFloat, context: Context) -> Box {
         let index = tableIndex
         tableIndex += 1
-        let expanded = expandedTables.contains(index)
+        let modern = ThreadDesign.uses3814
+        let expanded = modern || expandedTables.contains(index)
         let columns = table.alignments.count
         let size = MarkdownStyle.tableFontSize, line = MarkdownStyle.tableLineHeight
         func cellString(_ runs: [InlineRun], header: Bool, column: Int) -> MarkdownStyle.Inline {
@@ -1286,7 +1291,7 @@ private struct Builder {
         let total = widths.reduce(0, +)
         if total < width, total > 0 { widths = widths.map { $0 + (width - total) * $0 / total } }
         var tableWidth = max(width, total)
-        let wraps = expanded && fitsExpandedTables
+        let wraps = modern || expanded && fitsExpandedTables
         if expanded {
             (widths, tableWidth) = MarkdownLayout.expandedTableWidths(([table.header] + table.rows).enumerated().map { r, row in
                 row.prefix(columns).enumerated().map { c, runs in cellString(runs, header: r == 0, column: c).string }
@@ -1319,7 +1324,7 @@ private struct Builder {
                 var cell = Box(height: textBox.height)
                 cell.items += MarkdownMathStyle.items(inline, in: textBox, parent: cellFont, color: context.color)
                 for chip in textBox.chips {
-                    cell.items.append(.box(chip, fill: Themed.color(\.muted), border: Themed.color(\.contrastBorder), radius: MarkdownStyle.chipRadius))
+                    cell.items.append(.box(chip, fill: ThreadDesign.inlineCodeFill, border: ThreadDesign.inlineCodeBorder, radius: MarkdownStyle.chipRadius))
                 }
                 cell.items += Self.fileChips(inline, in: textBox, size: size, weight: r == 0 ? .semibold : .regular)
                 cell.items += Self.contextChips(inline, in: textBox, size: size, weight: r == 0 ? .semibold : .regular)
@@ -1342,10 +1347,12 @@ private struct Builder {
         box.items.insert(.box(viewport, fill: WindowGlass.pick(stock: .clear, frost: WindowGlass.denseFill),
                               border: WindowGlass.pick(stock: .clear, frost: WindowGlass.edge), radius: 8), at: 0)
         y = viewport.maxY
-        // The wrap toggle always shows, so a streamed cell never has to be measured for clipping (MarkdownTable.tsx,
-        // e66ffccf49 #26152 at 3814).
-        box.controls.append(.init(frame: CGRect(x: 0, y: y + 2, width: 24, height: 24), icon: expanded ? .minimize2 : .maximize2,
-                                  variant: expanded ? .secondary : .ghostMuted, action: .toggleTable(index)))
+        // Nightly 3824 wraps cells directly and keeps only Copy (MarkdownTable.tsx:29-34, #26449).
+        // Redesign and Glass retain their table controls.
+        if !modern {
+            box.controls.append(.init(frame: CGRect(x: 0, y: y + 2, width: 24, height: 24), icon: expanded ? .minimize2 : .maximize2,
+                                      variant: expanded ? .secondary : .ghostMuted, action: .toggleTable(index)))
+        }
         box.controls.append(.init(frame: CGRect(x: width - 24, y: y + 2, width: 24, height: 24), icon: .copy, variant: .ghostMuted,
                                   action: .copyTable(table)))
         box.height = y + 2 + 24
@@ -1411,13 +1418,19 @@ extension MarkdownLayout {
         var mins = [CGFloat](repeating: 0, count: columns), maxs = mins
         for (r, row) in rows.enumerated() {
             for (c, cell) in row.enumerated() where c < columns {
-                let cap: CGFloat = r == 0 ? .infinity : 384
+                let cap: CGFloat = ThreadDesign.uses3814 ? 384 : r == 0 ? .infinity : 384
                 let padding = tableCellPadding(c, of: columns).total
                 maxs[c] = max(maxs[c], min(cap, natural(cell) + padding))
                 guard fitsLane else { continue }
                 // ponytail: breaks only at spaces, not after hyphens, add UAX 14 opportunities if a column comes out wide
                 let longest = Self.unbroken.matches(in: cell.string, range: NSRange(location: 0, length: cell.length))
-                    .map { natural(cell.attributedSubstring(from: $0.range)) }.max() ?? 0
+                    .map { match -> CGFloat in
+                        let word = cell.attributedSubstring(from: match.range)
+                        if ThreadDesign.uses3814, word.length > 16, word.attribute(.markdownExternalLink, at: 0, effectiveRange: nil) != nil {
+                            return (0..<word.length).map { natural(word.attributedSubstring(from: NSRange(location: $0, length: 1))) }.max() ?? 0
+                        }
+                        return natural(word)
+                    }.max() ?? 0
                 mins[c] = max(mins[c], min(cap, longest + padding))
             }
         }

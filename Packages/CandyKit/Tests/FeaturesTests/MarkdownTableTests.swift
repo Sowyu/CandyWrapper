@@ -10,6 +10,26 @@ struct MarkdownTableTests {
     static let long = String(repeating: "A long cell with words and averylongunbrokenidentifier ", count: 4)
     static let source = "| Process | Status | Memory | Owner | Description | CPU |\n|---|---|---|---|---|---|\n| worker | running | 128 MB | sandbox | \(long) | 0.4% |"
 
+    private static func useLegacyTables() -> ThemeRuntimeInput {
+        let previous = ThemeRuntime.input
+        var legacy = previous; legacy.ditherLight = true; legacy.ditherDark = true
+        ThemeRuntime.apply(legacy)
+        return previous
+    }
+
+    @Test func defaultTablesWrapWithoutAnExpansionControl() throws {
+        let previous = ThemeRuntime.input; ThemeRuntime.apply(.init()); defer { ThemeRuntime.apply(previous) }
+        let view = view()
+        let layout = view.layout(forWidth: 600)
+        #expect(!layout.controls.contains { if case .toggleTable = $0.action { true } else { false } })
+        #expect(layout.controls.contains { if case .copyTable = $0.action { true } else { false } })
+        let width = try #require(layout.items.compactMap { if case .scroll(_, _, let width) = $0 { width } else { nil } }.first)
+        #expect(width == 600)
+        let height = layout.height
+        view.toggleTable(0)
+        #expect(view.layout(forWidth: 600).height == height)
+    }
+
     private func view() -> MarkdownView {
         let view = MarkdownView(frame: NSRect(x: 0, y: 0, width: 480, height: 200))
         view.messageID = "table-test"
@@ -19,6 +39,7 @@ struct MarkdownTableTests {
     }
 
     @Test func expansionReusesOtherBlocksAndSurvivesStreaming() throws {
+        let restore = Self.useLegacyTables(); defer { ThemeRuntime.apply(restore) }
         let view = view()
         let collapsed = view.layout(forWidth: 480)
         let button = try #require(view.subviews.compactMap { $0 as? ButtonView }.first { $0.accessibilityLabel() == "Expand table cells" })
@@ -40,6 +61,7 @@ struct MarkdownTableTests {
     }
 
     @Test func eachTableKeepsItsStateAsRowsStream() {
+        let restore = Self.useLegacyTables(); defer { ThemeRuntime.apply(restore) }
         let view = view()
         view.setMarkdown(Self.source + "\n\n" + Self.source)
         view.toggleTable(1)
@@ -65,6 +87,7 @@ struct MarkdownTableTests {
 
     /// 3814 always shows the toggle, even when no cell clips (e66ffccf49 #26152).
     @Test func toggleAlwaysShows() throws {
+        let restore = Self.useLegacyTables(); defer { ThemeRuntime.apply(restore) }
         #expect(toggles("| Name | Value |\n|---|---|\n| a | b |") == [.maximize2])
         #expect(toggles(Self.source) == [.maximize2])
         #expect(toggles("| \(Self.long) | Value |\n|---|---|\n| a | b |") == [.maximize2])
@@ -78,6 +101,7 @@ struct MarkdownTableTests {
 
     /// T3 f8b06c5fd0 (index.css:2164-2178): from a 36rem lane an expanded table shrinks to fit, down to its longest words.
     @Test func expandedTableFitsAWideLane() throws {
+        let restore = Self.useLegacyTables(); defer { ThemeRuntime.apply(restore) }
         func cells(_ rows: [[String]]) -> [[NSAttributedString]] { rows.map { $0.map { NSAttributedString(string: $0) } } }
         let natural = { (s: NSAttributedString) in CGFloat(s.length * 10) }
         let rows = cells([["Name", "A very long header"], ["x", String(repeating: "word ", count: 20) + "unbreakable"]])
@@ -105,6 +129,7 @@ struct MarkdownTableTests {
     }
 
     @Test func wideTableScrollsAndClamps() throws {
+        let restore = Self.useLegacyTables(); defer { ThemeRuntime.apply(restore) }
         let view = view()
         let scroller = try #require(view.layout(forWidth: 480).items.compactMap { item -> (Int, CGRect, CGFloat)? in
             if case .scroll(let id, let viewport, let width) = item { return (id, viewport, width) }
@@ -131,6 +156,7 @@ struct MarkdownTableTests {
     }
 
     @Test func expandingUpdatesTheTimelineRowHeight() throws {
+        let restore = Self.useLegacyTables(); defer { ThemeRuntime.apply(restore) }
         let (_, original) = try TimelineTilingTests.liveParts(ThreadTimelineTests.manyItems(copies: 1))
         var message = original
         message.text = Self.source
@@ -157,6 +183,7 @@ struct MarkdownTableTests {
     /// An answer's expanded table or unwrapped code survives its view being recycled for another answer, so the height
     /// the timeline cached with that choice still fits when the answer scrolls back.
     @Test(arguments: [true, false]) func recycledRowKeepsItsLayoutChoices(table: Bool) throws {
+        let restore = Self.useLegacyTables(); defer { ThemeRuntime.apply(restore) }
         let code = "```swift\nlet value = \"" + String(repeating: "a long line that wraps ", count: 12) + "\"\n```"
         func item(_ id: String, _ text: String) -> TimelineItem {
             let message = ChatMessage(id: MessageId(id), role: .assistant, text: text, createdAt: "2026-10-14T00:00:00Z")

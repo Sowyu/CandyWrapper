@@ -16,7 +16,10 @@ public struct FileChip {
 /// the label `leading-tight truncate`, the whole chip `align-middle`.
 enum FileChipStyle {
     static let accent = OKLab.oklch(0.62, 0.11, 215) // kind "mention"
-    static let foreground = OKLab.mix(accent, 0.22, Themed.color(\.contrastForeground))
+    private static let legacyForeground = OKLab.mix(accent, 0.22, Themed.color(\.contrastForeground))
+    static let foreground = NSColor(name: nil) { appearance in
+        ThreadDesign.uses3814(dark: appearance.isDark) ? accent : legacyForeground
+    }
     static let border = OKLab.mix(accent, 0.34, Themed.color(\.contrastBorder))
     static let hoverBorder = OKLab.mix(accent, 0.48, Themed.color(\.contrastBorder))
     static let fill = accent.withAlphaComponent(0.11)
@@ -24,17 +27,18 @@ enum FileChipStyle {
     /// The folder and fallback file glyph: lucide at `text-icon-muted`.
     static var iconMuted: NSColor { Themed.color(\.iconMuted) }
 
-    static func em(_ size: CGFloat) -> CGFloat { 0.86 * size }
+    static func em(_ size: CGFloat) -> CGFloat { ThreadDesign.uses3814 ? size : 0.86 * size }
     static func font(_ size: CGFloat) -> NSFont { DSFont.ui(em(size), weight: .medium) }
-    static func leading(_ size: CGFloat) -> CGFloat { 1 + 0.5 * em(size) + 1.17 * em(size) + 0.33 * em(size) }
-    static func trailing(_ size: CGFloat) -> CGFloat { 0.5 * em(size) + 1 }
-    static func height(_ size: CGFloat) -> CGFloat { 1.41 * em(size) }
+    static func leading(_ size: CGFloat) -> CGFloat { ThreadDesign.uses3814 ? 1.2 * size : 1 + 0.5 * em(size) + 1.17 * em(size) + 0.33 * em(size) }
+    static func trailing(_ size: CGFloat) -> CGFloat { ThreadDesign.uses3814 ? 0 : 0.5 * em(size) + 1 }
+    static func height(_ size: CGFloat) -> CGFloat { ThreadDesign.uses3814 ? ceil(font(size).ascender - font(size).descender) : 1.41 * em(size) }
 
     /// Chip top relative to the line's baseline: `vertical-align: middle` centers it on baseline - x-height / 2.
-    static func top(parent: NSFont, size: CGFloat) -> CGFloat { -parent.xHeight / 2 - height(size) / 2 }
+    static func top(parent: NSFont, size: CGFloat) -> CGFloat { ThreadDesign.uses3814 ? -font(size).ascender : -parent.xHeight / 2 - height(size) / 2 }
 
     /// The label's baseline relative to the line's baseline: its `leading-tight` line box sits centered in the chip.
     static func labelBaseline(parent: NSFont, size: CGFloat) -> CGFloat {
+        if ThreadDesign.uses3814 { return 0 }
         let line = 1.25 * em(size)
         let chipTop = top(parent: parent, size: size)
         let labelTop = chipTop + 1 + (height(size) - 2 - line) / 2

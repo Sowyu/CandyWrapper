@@ -57,7 +57,7 @@ def button(variant, icon, extra=""):
     return f'<button type="button" data-slot="button" class="{cls}"{extra}>{lucide(icon, "size-3")}</button>'
 
 ROOT_CLASS = ("chat-markdown w-full min-w-0 text-sm leading-relaxed "
-              "text-foreground/[calc(80%+var(--appearance-contrast-boost)/5)] [overflow-wrap:anywhere] [word-break:break-word]")
+              "text-foreground/[calc(90%+var(--appearance-contrast-boost)/10)] [overflow-wrap:anywhere] [word-break:break-word]")
 
 # `syntheticFileNameForLanguageId` (pierre-icons.ts) to the icon token, with PierreEntryIcon.tsx's colors.
 TITLE_ICONS = {"python": ("python", "#1a85d4", "#69b1ff"), "ts": ("typescript", "#1a85d4", "#69b1ff"),
@@ -112,14 +112,11 @@ def table(header, aligns, rows, clipped=False):
     head = "<tr>" + "".join(cell("th", h, a) for h, a in zip(header, aligns)) + "</tr>"
     body = "".join("<tr>" + "".join(cell("td", c, a) for c, a in zip(r, aligns)) + "</tr>" for r in rows)
     overflow = ";".join(f"--scroll-area-overflow-{s}:0px" for s in ["y-start", "y-end", "x-start", "x-end"])
-    return ('<div class="chat-markdown-table-container" data-expanded="true">'
+    return ('<div class="chat-markdown-table-container">'
             '<div class="relative size-full min-h-0 overflow-hidden rounded-none w-full max-w-full" data-slot="scroll-area">'
             f'<div class="{TABLE_VIEWPORT}" data-slot="scroll-area-viewport" style="{overflow}">'
             f"<table><thead>{head}</thead><tbody>{body}</tbody></table></div></div>"
-            '<div class="mt-0.5 flex items-center justify-between select-none">'
-            # Since 3315 the toggle shows only when a cell is clipped; an empty span keeps copy at the right
-            # (ChatMarkdown.tsx:663-682).
-            + (button("secondary", "minimize-2", ' aria-pressed="true" aria-label="Collapse table cells"') if clipped else "<span></span>")
+            '<div class="mt-0.5 -mx-1 flex items-center justify-end select-none">'
             + button("ghost-muted", "copy", ' aria-label="Copy table"') + "</div></div>")
 
 CASES = []
@@ -271,17 +268,12 @@ After the rule, an image:
 # File chips: MarkdownFileLink renders a ContextChip kind="mention" (ContextChip.tsx) around FileTagChipContent
 # (chat/FileTagChip.tsx): lucide folder at text-icon-muted for paths without an extension, else the pierre icon
 # tinted per theme (PierreEntryIcon.tsx; the prepare hook below picks the theme's color).
-CHIP = ("inline-flex h-[1.41em] max-w-full items-center gap-[0.33em] rounded-[0.5em] border px-[0.5em] align-middle font-medium "
-        "text-[0.86em] leading-none [&_svg]:block [&_svg]:size-[1.17em] [&_svg]:shrink-0 [&_svg]:self-center "
-        "[button&,a&,[data-popup-open]&]:cursor-pointer [button&,a&]:transition-colors [button&,a&]:motion-reduce:transition-none "
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground disabled:cursor-default "
-        "[--context-chip-accent:oklch(0.62_0.11_215)] "
-        "[--context-chip-border:color-mix(in_oklab,var(--context-chip-accent)_34%,var(--contrast-border))] "
-        "[--context-chip-border-hover:color-mix(in_oklab,var(--context-chip-accent)_48%,var(--contrast-border))] "
-        "[--context-chip-foreground:color-mix(in_oklab,var(--context-chip-accent)_22%,var(--contrast-foreground))] "
-        "border-(--context-chip-border) bg-(--context-chip-accent)/11 text-(--context-chip-foreground) "
-        "[button:enabled&,a&]:hover:border-(--context-chip-border-hover) [button:enabled&,a&]:hover:bg-(--context-chip-accent)/17 "
-        "chat-markdown-file-link")
+CHIP = ("inline-flex max-w-full items-center gap-[0.2em] font-medium leading-[normal] text-(--context-chip-ink) "
+        "[--context-chip-ink:var(--context-chip-accent)] [--document-icon-stroke:var(--context-chip-ink)] "
+        "[&_svg]:block [&_svg]:size-[1em] [&_svg]:shrink-0 [&_svg]:self-center "
+        "[button&,a&,[data-popup-open]&]:cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 "
+        "focus-visible:outline-current rounded-sm disabled:cursor-default [--context-chip-accent:oklch(0.62_0.11_215)] chat-markdown-file-link")
+
 extract_assets()
 PIERRE = open(glob.glob(os.path.join(ASSETS, "pierre-icons-*.js"))[0], encoding="utf-8").read()
 ICON_COLORS = {"typescript": ("#1a85d4", "#69b1ff"), "npm": ("#d52c36", "#ff6762")}
@@ -293,7 +285,7 @@ def pierre(token):
             f'viewBox="{m.group(1)}">{m.group(2)}</svg>')
 def chip(href, icon, label):
     return (f'<a href="{html.escape(href)}" class="{CHIP}" data-slot="context-chip">{icon}'
-            f'<span class="block min-w-0 self-center truncate leading-tight" data-slot="context-chip-label">{html.escape(label)}</span></a>')
+            f'<span class="block min-w-0 self-baseline overflow-x-clip text-ellipsis whitespace-nowrap underline decoration-transparent decoration-1 underline-offset-[0.2em]" data-slot="context-chip-label">{html.escape(label)}</span></a>')
 FOLDER = lucide("folder", "size-4 text-icon-muted")
 
 case("file-chips", """Created `/tmp/cw-approval-demo`.

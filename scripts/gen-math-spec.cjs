@@ -56,7 +56,7 @@ function math(tex, display) {
   return `<span class="${outer}" data-markdown-math="${display ? 'display':'inline'}" data-markdown-copy="${escape(source + (display ? '\n\n':''))}" role="group" aria-label="${display ? 'Display':'Inline'} equation"><span class="${scroll}" tabindex="0" aria-label="Scroll ${display ? 'display':'inline'} equation"><span class="inline-block w-max${display ? ' min-w-full':''}">${rendered}</span></span></span>`;
 }
 // ChatMarkdown.tsx:1591-1593 supplies the body typography around the wrapper.
-const markdownClass = 'chat-markdown w-full min-w-0 [overflow-wrap:anywhere] [word-break:break-word] text-sm leading-relaxed text-foreground/[calc(80%+var(--appearance-contrast-boost)/5)]';
+const markdownClass = 'chat-markdown w-full min-w-0 [overflow-wrap:anywhere] [word-break:break-word] text-sm leading-relaxed text-foreground/[calc(90%+var(--appearance-contrast-boost)/10)]';
 const cases = corpus.map(([name, display, tex], i) => ({name:`${String(i+1).padStart(2,'0')}-${name}`, tex, display:!!display, html:`<div class="${markdownClass}" style="font-size:14px;${display ? 'width:480px':'display:inline-block'}">${math(tex, !!display)}</div>`}));
 for (const [name, before, tex, after] of [
   ['paragraph-energy','Energy is ',String.raw`E = mc^2`,' here.'],
