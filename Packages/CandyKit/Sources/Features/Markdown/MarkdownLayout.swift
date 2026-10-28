@@ -1419,9 +1419,13 @@ extension MarkdownLayout {
         for (r, row) in rows.enumerated() {
             for (c, cell) in row.enumerated() where c < columns {
                 var hasFormula = false
+                var formulaWidth: CGFloat = 0
                 if ThreadDesign.uses3814 {
-                    cell.enumerateAttribute(.markdownMath, in: NSRange(location: 0, length: cell.length)) { value, _, stop in
-                        if value != nil { hasFormula = true; stop.pointee = true }
+                    cell.enumerateAttribute(.markdownMath, in: NSRange(location: 0, length: cell.length)) { value, range, _ in
+                        if value != nil {
+                            hasFormula = true
+                            formulaWidth = max(formulaWidth, natural(cell.attributedSubstring(from: range)))
+                        }
                     }
                 }
                 let cap: CGFloat = hasFormula ? .infinity : ThreadDesign.uses3814 ? 384 : r == 0 ? .infinity : 384
@@ -1440,7 +1444,7 @@ extension MarkdownLayout {
                         }
                         return natural(word)
                     }.max() ?? 0
-                mins[c] = max(mins[c], min(cap, longest + padding))
+                mins[c] = max(mins[c], min(cap, max(longest, formulaWidth) + padding))
             }
         }
         let maxSum = maxs.reduce(0, +), minSum = mins.reduce(0, +)

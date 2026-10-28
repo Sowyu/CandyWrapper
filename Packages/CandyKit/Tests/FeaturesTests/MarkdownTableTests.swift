@@ -32,10 +32,10 @@ struct MarkdownTableTests {
 
     @Test func defaultFormulaCellsKeepTheirNaturalWidth() {
         let previous = ThemeRuntime.input; ThemeRuntime.apply(.init()); defer { ThemeRuntime.apply(previous) }
-        let formula = NSAttributedString(string: "formula", attributes: [.markdownMath: true])
+        let formula = NSAttributedString(string: "\u{00A0}", attributes: [.markdownMath: true])
         let cells = [[NSAttributedString(string: "Column")], [formula]]
         let widths = MarkdownLayout.expandedTableWidths(cells, columns: 1, width: 300, fitsLane: true,
-                                                      natural: { CGFloat($0.length * 100) })
+                                                      natural: { $0.attribute(.markdownMath, at: 0, effectiveRange: nil) != nil ? 700 : CGFloat($0.length * 10) })
         #expect(widths.tableWidth == 700)
     }
 
