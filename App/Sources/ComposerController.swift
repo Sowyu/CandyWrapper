@@ -4986,7 +4986,7 @@ extension ComposerController {
         if let thread, limited {
             let reset = thread.usageLimitResetAt?.date
             let pending = recoveryPending.contains(thread.id)
-            let description = recoveryErrors[thread.id] ?? reset.map { "Resets " + $0.formatted(date: .numeric, time: .shortened) } ?? "Reset time unavailable; retry manually"
+            let description = recoveryErrors[thread.id] ?? thread.usageLimitResetAt.flatMap { reset == nil ? nil : "Resets " + UsageTime.upcoming($0.raw, nowMs: TimestampFormat.nowMs()) } ?? "Reset time unavailable; retry manually"
             var actions: [String] = []
             if ThreadUsageLimitRecovery.canSchedule(thread) {
                 actions = [pending ? "Saving..." : ThreadUsageLimitRecovery.scheduled(thread) ? "Cancel auto-resume" : "Resume at reset"]
@@ -5001,12 +5001,21 @@ extension ComposerController {
         if resetKey != recoveryResetKey {
             recoveryResetWork?.cancel(); recoveryResetWork = nil; recoveryResetKey = resetKey
             if limited, let reset = thread?.usageLimitResetAt?.date, reset > Date() {
-                let work = DispatchWorkItem { [weak self] in self?.updateThreadBanners() }
-                recoveryResetWork = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + min(reset.timeIntervalSinceNow + 0.01, 2_147_483), execute: work)
+                scheduleRecoveryResetWake(at: reset)
             }
         }
     }
+    /// Snooze greys out at the reset (`useDeadlinePassed`, UsageLimitRecoveryBanner.tsx:48 at 3814). A deadline weeks away
+    /// wakes early at the timer's 2^31 s cap and re-arms for the rest, so the banner still updates exactly at the reset.
+    private func scheduleRecoveryResetWake(at reset: Date) {
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            if reset > Date() { self.scheduleRecoveryResetWake(at: reset) } else { self.updateThreadBanners() }
+        }
+        recoveryResetWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + min(reset.timeIntervalSinceNow + 0.01, 2_147_483), execute: work)
+    }
+
     private func updateThreadRecovery(_ index: Int?) {
         guard let index, let thread = shellThread, !recoveryPending.contains(thread.id), ThreadUsageLimitRecovery.canSchedule(thread), let supervisor = shell?.supervisor else { return }
         let snoozed = ThreadUsageLimitRecovery.snoozed(thread)

@@ -5,7 +5,7 @@ import T3Store
 
 /// `formatUpcomingTimestamp` (timestampFormat.ts:202-222) with the `timestampFormat` setting.
 @MainActor
-enum UsageTime {
+public enum UsageTime {
     /// `resolveHour12` (timestampFormat.ts:94-96): "locale" follows the system's hour cycle.
     static func hour12(format: String = ClientSettingsStore.shared.current.string("timestampFormat")) -> Bool {
         switch format {
@@ -15,7 +15,7 @@ enum UsageTime {
         }
     }
 
-    static func upcoming(_ iso: String, nowMs: Int64, format: String = ClientSettingsStore.shared.current.string("timestampFormat")) -> String {
+    public static func upcoming(_ iso: String, nowMs: Int64, format: String = ClientSettingsStore.shared.current.string("timestampFormat")) -> String {
         guard let ms = T3Timestamp.parseEpochMs(iso) else { return "" }
         let date = Date(timeIntervalSince1970: Double(ms) / 1000), now = Date(timeIntervalSince1970: Double(nowMs) / 1000)
         let time = TL.timeOfDay(date, format: format)
