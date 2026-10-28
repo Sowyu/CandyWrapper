@@ -158,7 +158,7 @@ private func dynamicTool(_ name: String, input: String) -> TurnItem {
         #expect(T3McpTools.definition("mcp__github__delegate_task") == nil)
         #expect(T3McpTools.definition("t3-code-thread_1_t3_thread_send")?.summaryAction == "thread-send")
         #expect(T3McpTools.definition("t3_code:preview_open")?.icon == "browser")
-        #expect(T3McpTools.all.count == 84)
+        #expect(T3McpTools.all.count == 88)
     }
 
     // presentation.test.ts:197-270
