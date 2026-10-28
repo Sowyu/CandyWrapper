@@ -66,20 +66,20 @@ From the user's catch-up brief, Phase 1 and Phase 2 lists, mapped to commits in 
 | 4 | Skill chips in chat open the composer's details popover | 278588a61a #25432 | ported (48da3112) |
 | 5 | Citations to older responses load their history | 1316d48b0c #25371 | ported (fc007033) |
 | 6 | Warn before a second Claude or Codex account | 560ddb14d9 #25475 | ported (see appendix) |
-| 7 | "Failed to start" and "could not load" recovery screens | 433837752c #25345, 6f3f0d46ea #25317 | group A2 |
+| 7 | "Failed to start" and "could not load" recovery screens | 433837752c #25345, 6f3f0d46ea #25317 | ported (1f25d823): the startup failure screen copies a triage command and diagnostics, files a bug and offers a reinstall |
 | 8a | Find keeps its match after a thread switch | 3cb16cf165 #25463 | ported (4859bd12) |
 | 8b | Thread jump hints wait for their delay | 5effca10b3 #25636 | n/a: fixes a held-modifier timer CW doesn't have |
-| 8c | Screen readers jump to the first and last message | 6838e31b9c #23780 | group A1 |
-| 8d | Simpler "pull request created" row, armed PR confirm | 4034b5f6b5 #25613, b424c6e429 #25530 | group A2 |
+| 8c | Screen readers jump to the first and last message | 6838e31b9c #23780 | ported (f80dae9d) |
+| 8d | Simpler "pull request created" row, armed PR confirm | 4034b5f6b5 #25613, b424c6e429 #25530 | ported (eeeadfd0) |
 | 8e | Short branch names aren't clipped | 70b0abceda #25328 | already so: CW recomputes truncation on layout |
-| 8f | Undo notice placement | 1549046fd2 #25270 | group A1 |
+| 8f | Undo notice placement | 1549046fd2 #25270 | ported (f4d4d618) |
 | 8g | Usage tabs don't jump | 32507803da #25336 | phase 2 (Usage modal) |
-| 8h | Model picker doesn't jump | 5a38e6b859 #25358 | group A1 |
-| 8i | Large thread counts don't shrink labels | 03851b8e7b #25355 | group A1 |
+| 8h | Model picker doesn't jump | 5a38e6b859 #25358 | ported (d07c98a6) |
+| 8i | Large thread counts don't shrink labels | 03851b8e7b #25355 | ported (49772013) |
 | 8j | New-thread shortcut focuses palette search | 9d6a2e57fc #25315 | already so: the shortcut focuses palette search |
-| 8k | Switching back doesn't restore an old tab title | 3f9448747b #25521 | group A2 |
-| 8l | SSH password prompts wait for their dialog | 02f4ba75a2 #25239 | group A2 |
-| 8m | The picker refreshes the branch | 5b35402623 #22807 | group A2 |
+| 8k | Switching back doesn't restore an old tab title | 3f9448747b #25521 | ported (6b2f8e0a) |
+| 8l | SSH password prompts wait for their dialog | 02f4ba75a2 #25239 | ported (20b83f21) |
+| 8m | The picker refreshes the branch | 5b35402623 #22807 | ported (c0172900) |
 | 9 | cloudflared 2026.10.4 | #25572 | free with runtime: CW neither bundles nor launches cloudflared (no match in App, Packages, scripts or project.yml); the T3 runtime installs and runs it |
 | 10 | Thread status moves to the end of the timeline | bd3287b640 #25401 (in 3814) | open, wave 2 |
 | 11 | Settings grouped by concern, General split | 9db433f4ba #25651 (in 3814) | open, wave 2 (page assignment only; the modal is phase 2) |

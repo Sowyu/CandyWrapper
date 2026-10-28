@@ -6,7 +6,7 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 |---|---|---|---|---|
 | bbdc13640c | feat(desktop): import cookies from Zen Browser (#22970) | other | yes | open |
 | 87d22b00f7 | perf(shared): avoid repeated date parsing when selecting PRs (#22891) | pr/git | no | n/a |
-| 5b35402623 | fix(web): refresh the current branch when opening the picker (#22807) | pr/git | yes | open |
+| 5b35402623 | fix(web): refresh the current branch when opening the picker (#22807) | pr/git | yes | ported (c0172900) |
 | efea68679f | feat(web): attach svg files to messages (#21355) | composer | yes | open |
 | 532023a241 | feat(server): send pdf attachments to claude and antigravity as documents (#21358) | wire | server-only | free with runtime |
 | 34e9c56b9b | feat(web): play audio inline and open any file the agent shares in the viewer (#21363) | thread | yes | open |
@@ -81,7 +81,7 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | f512ff6159 | fix(web): composer banners, menus and pickers act in their handlers (#25238) | composer | yes | open |
 | 0a3b561bc0 | refactor(web): device panel reads hub state from atoms (#25265) | other | no | n/a |
 | c3888da8b4 | feat(web): New design brings back color where it means something (#25251) | other | yes (design) | phase 2 (design) |
-| 02f4ba75a2 | fix(web): SSH password prompts wait for their dialog, and the app shell drops its sync effects (#25239) | connections | yes | open |
+| 02f4ba75a2 | fix(web): SSH password prompts wait for their dialog, and the app shell drops its sync effects (#25239) | connections | yes | ported (20b83f21) |
 | a2589f22d3 | fix(mobile): review opens on Changes and keeps the section you picked (#25223) | pr/git | no | n/a |
 | 1de64942be | chore(lint): enforce react/purity (#25038) | sidebar | yes | open |
 | 8a4ad9452a | refactor(web): root notification and toast coordinators start with the app (#25233) | other | no | n/a |
@@ -94,17 +94,17 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 70b0abceda | fix(web): short branch names no longer get clipped in thread details (#25328) | pr/git | yes | already so |
 | c66f13ce97 | refactor(mobile): stream and MCP webviews tie their work to the view's lifetime (#25226) | other | no | n/a |
 | aa2c80b9e3 | fix(web): stacked notices above the composer no longer cast a dark band (#25329) | composer | yes (design) | phase 2 (design) |
-| 1549046fd2 | fix(web): thread undo notice sits above the bottom shelves instead of pushing the list (#25270) | sidebar | yes | open |
-| 6f3f0d46ea | feat(web): "could not load" screen tells users how to debug it (#25317) | connections | yes | open |
+| 1549046fd2 | fix(web): thread undo notice sits above the bottom shelves instead of pushing the list (#25270) | sidebar | yes | ported (f4d4d618) |
+| 6f3f0d46ea | feat(web): "could not load" screen tells users how to debug it (#25317) | connections | yes | ported (1f25d823) |
 | 32507803da | fix(web): usage tabs no longer jump when switching to Limits (#25336) | settings | yes (design) | phase 2 (design) |
 | 62245d8e3a | fix(web): composer bottom toolbar keeps its background under update notices (#25335) | composer | yes (design) | phase 2 (design) |
 | 931bd53614 | chore(lint): enforce flatMapConditionalToFilterOrFail (#25082) | other | no | n/a |
 | 2931461619 | chore(lint): enforce t3code/no-inline-schema-compile (#25113) | wire | no | n/a |
 | d53b446284 | chore(lint): enforce oxc/no-accumulating-spread (#25114) | other | no | n/a |
 | 695f5c9963 | chore(lint): enforce t3code/no-polling-loop-in-tests (#25120) | other | no | n/a |
-| 433837752c | feat(web): "failed to start" screen helps users recover and report the crash (#25345) | connections | yes | open |
-| 03851b8e7b | fix(web): keep large thread counts from shrinking labels (#25355) | thread | yes | open |
-| 5a38e6b859 | fix(web): model picker no longer jumps when switching providers (#25358) | composer | yes | open |
+| 433837752c | feat(web): "failed to start" screen helps users recover and report the crash (#25345) | connections | yes | ported (1f25d823) |
+| 03851b8e7b | fix(web): keep large thread counts from shrinking labels (#25355) | thread | yes | ported (49772013) |
+| 5a38e6b859 | fix(web): model picker no longer jumps when switching providers (#25358) | composer | yes | ported (d07c98a6) |
 | fb8fc1ffd3 | refactor(web): disconnect and reconnect delays read a shared deadline instead of effect timers (#25363) | connections | no | n/a |
 | 72dde22b6f | chore(lint): enforce effectFnOpportunity (#25099) | other | no | n/a |
 | e1c750e7bd | fix(web): composer body ref stops re-attaching on every render (#25409) | composer | no | n/a |
@@ -128,9 +128,9 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | f05c38f166 | fix(web): browser viewport resizes work without an open preview panel (#25462) | other | yes | open |
 | d81757eea9 | test(web): attachment preview omission tests no longer time out on CI (#25515) | other | no | n/a |
 | 7c6e85cfda | fix(web): browser history and titles show up again (#25491) | other | yes | open |
-| 3f9448747b | fix(web): switching back to a thread no longer restores its tab's older title (#25521) | other | yes | open |
+| 3f9448747b | fix(web): switching back to a thread no longer restores its tab's older title (#25521) | other | yes | ported (6b2f8e0a) |
 | e6ec114128 | refactor(web): pull request page reacts to turns and sweep Escape without effects (#25523) | pr/git | no | n/a |
-| b424c6e429 | fix(web): an armed pull request confirm no longer outlives its button (#25530) | pr/git | yes | open |
+| b424c6e429 | fix(web): an armed pull request confirm no longer outlives its button (#25530) | pr/git | yes | ported (eeeadfd0) |
 | 374e57d90b | refactor(web): provider settings and Codex setup run as explicit flows (#25524) | settings | yes | open |
 | 8e1bb0376c | test(web): attachment preview omission cases check the prepared document instead of rendering each one (#25562) | other | no | n/a |
 | b6994c5499 | fix(shared): pin T3 Connect cloudflared to 2026.10.4, which drops the compromised eMudhra intermediates (#25572) | connections | server-only | free with runtime |
@@ -139,11 +139,11 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | fe507c5a1e | fix(clients): queued messages can't be edited while a question is open (#25593) | composer | yes | ported (0c2ed9a3) |
 | 560ddb14d9 | feat(web): warn before adding a second Claude or Codex account (#25475) | settings | yes | ported |
 | 451bb459f1 | refactor(web): running timers share one clock instead of an interval each (#25616) | thread | no | n/a |
-| 4034b5f6b5 | fix(web): simplify the created pull request success row (#25613) | pr/git | yes | open |
+| 4034b5f6b5 | fix(web): simplify the created pull request success row (#25613) | pr/git | yes | ported (eeeadfd0) |
 | 5effca10b3 | fix(web): thread jump hints wait for their delay on every hold (#25636) | sidebar | yes | n/a: no held-modifier timer in CW |
 | a54ba53a5c | fix(mobile): open threads from the local cache instead of "Thread unavailable" (#25627) | thread | no | n/a |
 | 0c901edf57 | refactor(web): video previews attach listeners on their element and share one visibility observer (#25630) | thread | no | n/a |
-| 6838e31b9c | fix(web): screen readers can wrap to the first and last message of a long thread (#23780) | thread | yes | open |
+| 6838e31b9c | fix(web): screen readers can wrap to the first and last message of a long thread (#23780) | thread | yes | ported (f80dae9d) |
 | 024e593a63 | fix(client-runtime): a slow host no longer shows settings as read-only (#25526) | connections | yes | ported (f48eb038) |
 | 977a18823c | refactor(mobile): pull request list records answers where they land (#25373) | pr/git | no | n/a |
 | 9db433f4ba | refactor(web): settings group by concern, with General split into focused pages (#25651) | settings | yes (design) | phase 2 (design) |
@@ -154,7 +154,7 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 5432d8e723 | refactor(web): drafts promote from the draft store, not from route effects (#25615) | composer | no | n/a |
 | becf853def | fix(web): PDF search finds phrases that wrap across lines (#25702) | other | yes | open |
 | ed44f251d8 | feat(server): cut T3's MCP tool schemas by a third and merge 18 tools into action tools (#25423) | thread | yes | ported (49512488) |
-| daa720a986 | fix(workflows): keep completed workflows reachable (#24587) | thread | yes | open |
+| daa720a986 | fix(workflows): keep completed workflows reachable (#24587) | thread | yes | n/a: mobile Agents pill only (client-runtime threadSubagents.ts isn't used by apps/web) |
 | 10a82e86ed | fix(web): devices agents open in background threads now show up (#25714) | other | yes | open |
 | 71ba6b374c | refactor(web): optimistic chat messages leave without a timer (#25710) | composer | no | n/a |
 | 6df241d23a | feat(provider): add Vercel fx as a provider (#18277) | settings | yes | open |
@@ -163,7 +163,7 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 3425671a95 | feat(web): Add provider leads with first-class providers (#25753) | settings | yes (design) | phase 2 (design) |
 | 8e86eb2b4d | fix(client-runtime): searches and refreshes no longer wait on an unreachable environment (#25703) | connections | yes | ported (938aa3f8) |
 | 5d91ab1117 | refactor(web): command palette state lives in a store, git and branch pickers drop timer and sync effects (#25733) | palette | no | n/a |
-| 83838af7ba | fix(mobile): finished subagents stay reachable from the Agents pill (#25759) | thread | yes | open |
+| 83838af7ba | fix(mobile): finished subagents stay reachable from the Agents pill (#25759) | thread | yes | n/a: mobile Agents pill |
 | b1619f3a74 | fix(web): cancelling update everything no longer flashes the update button's focus ring and tooltip (#25774) | sidebar | no | n/a |
 | 6f6c6c14b7 | refactor(web): drop the unreachable paint-only thread timeline path (#25787) | thread | no | n/a |
 | 401b01747c | chore(release): prepare v0.1.3 | other | no | n/a |
@@ -214,7 +214,7 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 3b22620a5c | fix(server): parallel worktree launches no longer fail on .git/config lock (#25700) | pr/git | server-only | free with runtime |
 | 33d0c9637b | chore(lint): every React effect states its reason at the call site (#26161) | other | no | n/a |
 | e66ffccf49 | perf(web): stop measuring table cells while replies stream (#26152) | thread | yes | ported (0880487e) |
-| dde3fdb5a6 | feat(desktop): add a remote server by clicking its t3code://pair link (#24111) | connections | yes | open |
+| dde3fdb5a6 | feat(desktop): add a remote server by clicking its t3code://pair link (#24111) | connections | yes | not ported: t3code:// belongs to the official app; CW registering it would fight T3 for the links |
 | 4fc9e5f2fc | fix(web): settings avatar no longer hugs the modal corner (#26180) | settings | yes (design) | phase 2 (design) |
 | 294981fa72 | fix(mobile): Windows paths in messages keep their backslashes (#21454) | thread | no | n/a |
 | 7e884b2df6 | feat: triage an issue from the command palette, no terminal needed (#22753) | palette | yes | open |
