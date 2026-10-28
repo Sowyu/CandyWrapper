@@ -118,10 +118,30 @@ public enum PullRequestStyle {
 public final class PullRequestAvatarView: DSView {
     private let initial = LabelView()
     private let image = CALayer()
+    private let reviewRing = BoxDecorationLayer()
     private var loadedURL: String?
     @MainActor static var cache: [String: CGImage] = [:]
     /// A ring around the avatar (a reviewer's verdict), drawn 2px outside.
     public var ring: NSColor? { didSet { needsDisplay = true } }
+
+    /// #25829: a shape keeps verdicts legible over a colored bot avatar.
+    public var reviewOutcome: String? { didSet { updateVerdict() } }
+    public var staleReview = false { didSet { needsDisplay = true } }
+    private var verdict: IconView?
+
+    private func updateVerdict() {
+        verdict?.removeFromSuperview()
+        verdict = nil
+        guard let reviewOutcome else { return }
+        let icon: IconName = reviewOutcome == "approved" ? .circleCheck : reviewOutcome == "changes-requested" ? .circleX : .circleDashed
+        let mark = IconView(name: icon, size: 12, strokeColor: Themed.color(\.background))
+        mark.strokeWidth = 3
+        mark.layer?.zPosition = 1
+        verdict = mark
+        addSubview(mark)
+        needsLayout = true
+        needsDisplay = true
+    }
 
     public var actor: PullRequestActor? {
         didSet {
@@ -133,6 +153,9 @@ public final class PullRequestAvatarView: DSView {
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        reviewRing.host = self
+        reviewRing.outset = 4
+        layer?.addSublayer(reviewRing)
         image.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
         image.contentsGravity = .resizeAspectFill
         image.masksToBounds = true
@@ -165,6 +188,8 @@ public final class PullRequestAvatarView: DSView {
     public override func layout() {
         super.layout()
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        reviewRing.frame = bounds
+        reviewRing.layout(boxSize: bounds.size)
         image.frame = bounds
         image.cornerRadius = bounds.width / 2
         CATransaction.commit()
@@ -172,23 +197,58 @@ public final class PullRequestAvatarView: DSView {
         initial.font = DSFont.ui(min(10, size), weight: .medium)
         initial.lineHeight = bounds.height
         initial.frame = bounds
+        // Bottom/right -4px in CSS; this view is flipped.
+        verdict?.frame = NSRect(x: bounds.width - 8, y: bounds.height - 8, width: 12, height: 12)
     }
 
     public override func updateLayer() {
+        // The review ring and verdict extend beyond the face, like T3's relative wrapper.
+        // AppKit otherwise restores clipping when it attaches the view to a window.
+        let classic = DesignGeometry.usesClassic(self)
+        clipsToBounds = classic
+        layer?.masksToBounds = classic
+        reviewRing.isHidden = classic || ring == nil
         layer?.cornerRadius = bounds.width / 2
         layer?.backgroundColor = Themed.color(\.muted).cgColor(in: self)
         initial.color = Themed.color(\.mutedForeground)
+        verdict?.isHidden = DesignGeometry.usesClassic(self)
+        verdict?.strokeColor = Themed.color(\.background)
+        verdict?.fillColor = reviewOutcome == "approved" ? Themed.base("emerald-500", 1, dark: "emerald-400", 1)
+            : reviewOutcome == "changes-requested" ? Themed.color(\.destructive) : Themed.color(\.mutedForeground)
+        verdict?.alphaValue = staleReview ? 0.5 : 1
         if let ring {
             layer?.borderWidth = 0
             layer?.shadowOpacity = 0
             layer?.borderColor = nil
             ringLayer.isHidden = false
-            ringLayer.strokeColor = ring.cgColor(in: self)
+            let stroke = !classic && staleReview ? reviewOutcome.flatMap { Self.staleRings[$0] } ?? ring : ring
+            ringLayer.strokeColor = stroke.cgColor(in: self)
+            ringLayer.isHidden = !classic
+            if !classic {
+                var box = BoxStyle()
+                box.radius = bounds.width / 2
+                box.shadows = [BoxShadow(blur: 0, spread: 2, color: stroke)]
+                reviewRing.boxStyle = box
+                reviewRing.setNeedsDisplay()
+            }
             ringLayer.path = CGPath(ellipseIn: bounds.insetBy(dx: -1, dy: -1), transform: nil)
         } else {
             ringLayer.isHidden = true
         }
     }
+
+    /// CSS mixes the extended sRGB channels before gamut clipping, including emerald's negative red.
+    private static let staleRings: [String: NSColor] = Dictionary(uniqueKeysWithValues: ["approved", "changes-requested", "dismissed"].map { outcome in
+        (outcome, NSColor(name: nil) { appearance in
+            let dark = appearance.isDark
+            let palette = ThemeRuntime.palettes.palette(dark: dark, sidebar: false)
+            let tone = outcome == "approved" ? Tokens.baseColors[dark ? "emerald-400" : "emerald-500"]!
+                : outcome == "changes-requested" ? palette.destructive : palette.mutedForeground
+            let amount = outcome == "dismissed" ? 0.3 : 0.35
+            let rgb = tone.srgb * amount + palette.background.srgb * (1 - amount)
+            return NSColor(srgbRed: rgb.x, green: rgb.y, blue: rgb.z, alpha: 1)
+        })
+    })
 
     private lazy var ringLayer: CAShapeLayer = {
         let l = CAShapeLayer()
