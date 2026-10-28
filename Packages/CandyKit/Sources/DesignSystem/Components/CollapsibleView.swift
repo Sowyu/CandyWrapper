@@ -143,18 +143,19 @@ public final class CollapsibleSectionHeaderView: ControlView {
         decoration.layout(boxSize: bounds.size)
         let midY = bounds.height / 2
         var x: CGFloat = 8
-        let labelWidth = label.textWidth
-        label.frame = NSRect(x: x, y: midY - 8, width: labelWidth, height: 16)
-        x += labelWidth + 8
         var right = bounds.width - 8 - 12
         if let accessory {
             let s = accessory.intrinsicContentSize
             accessory.frame = NSRect(x: right - 8 - s.width, y: midY - s.height / 2, width: s.width, height: s.height)
             right -= 8 + s.width
         }
+        // T3 3814 ThreadRelationshipsControl.tsx:144-150 protects counts and truncates the label.
+        let labelWidth = min(label.textWidth, max(0, right - 8 - x - 8))
+        label.frame = NSRect(x: x, y: midY - 8, width: labelWidth, height: 16)
+        x += labelWidth + 8
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        rule.frame = CGRect(x: x, y: midY - 0.5, width: max(8, right - 8 - x), height: 1)
+        rule.frame = CGRect(x: x, y: midY - 0.5, width: max(0, right - 8 - x), height: 1)
         chevron.position = CGPoint(x: bounds.width - 8 - 6, y: midY)
         CATransaction.commit()
     }

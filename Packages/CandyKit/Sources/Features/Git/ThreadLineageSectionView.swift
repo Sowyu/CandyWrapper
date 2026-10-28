@@ -3,6 +3,47 @@ import DesignSystem
 import T3Protocol
 import T3Store
 
+/// The failed status and collapsed count keep their measured widths beside a truncated group label.
+final class ThreadLineageCountView: DSView {
+    let failed = LabelView("", font: DSFont.ui(10))
+    let count = LabelView("", font: DSFont.ui(12))
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        failed.lineHeight = 16
+        count.lineHeight = 16
+        failed.color = Themed.color(\.destructiveForeground)
+        count.color = Themed.color(\.mutedForeground)
+        addSubview(failed)
+        addSubview(count)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    func configure(total: Int, failures: Int, expanded: Bool) {
+        failed.text = failures > 0 ? "\(failures) failed" : ""
+        count.text = expanded ? "" : String(total)
+        failed.isHidden = failures == 0
+        count.isHidden = expanded
+        needsLayout = true
+    }
+
+    override var intrinsicContentSize: NSSize {
+        let widths = [failed, count].filter { !$0.isHidden }.map { ceil($0.textWidth) }
+        return NSSize(width: widths.reduce(0, +) + (widths.count > 1 ? 8 : 0), height: 16)
+    }
+
+    override func layout() {
+        super.layout()
+        var x: CGFloat = 0
+        for label in [failed, count] where !label.isHidden {
+            let width = ceil(label.textWidth)
+            label.frame = NSRect(x: x, y: 0, width: width, height: 16)
+            x += width + 8
+        }
+    }
+}
+
 /// The relationship icon (ThreadRelationshipIcon.tsx:46-89): a 16pt provider glyph for a subagent child, else
 /// the fallback (corner-left-up for a parent, bot for a subagent, git-fork for a fork), with an 8pt status dot
 /// at `-bottom-1 -right-1` ringed 2pt in `card`.
@@ -300,7 +341,7 @@ public final class ThreadLineageSectionView: DSView {
     private let more = ButtonView(nil, icon: .ellipsis, variant: .ghost, size: .iconXs).menuTrigger()
     private let divider = CALayer()
     private let previousHeader = CollapsibleSectionHeaderView("Previous agents", tone: .muted, expanded: false)
-    private let failedBadge = LabelView("", font: DSFont.ui(10))
+    private let counts = ThreadLineageCountView()
     /// "Previous agents" is open (`ThreadLineageGroup`'s own state, folded at first).
     var previousExpanded = false {
         didSet { if previousExpanded != oldValue { previousHeader.isExpanded = previousExpanded; rebuild() } }
@@ -333,8 +374,6 @@ public final class ThreadLineageSectionView: DSView {
         more.iconColor = Themed.color(\.contrastForeground)
         more.setAccessibilityLabel("More thread actions")
         more.action = { [weak self] in self?.openMenu() }
-        failedBadge.lineHeight = 10
-        previousHeader.accessory = failedBadge
         previousHeader.onToggle = { [weak self] on in self?.previousExpanded = on }
         for v in [heading, more, previousHeader] as [NSView] { addSubview(v) }
         setAccessibilityRole(.group)
@@ -426,11 +465,7 @@ public final class ThreadLineageSectionView: DSView {
         add("active", lineage.active)
         previousHeader.isHidden = lineage.previous.isEmpty
         if !lineage.previous.isEmpty {
-            previousHeader.title = previousExpanded ? "Previous agents" : "Previous agents (\(lineage.previous.count))"
-            let failed = lineage.previous.filter(\.failed).count
-            failedBadge.text = failed > 0 ? "\(failed) failed" : ""
-            failedBadge.isHidden = failed == 0
-            previousHeader.accessory = failed > 0 ? failedBadge : nil
+            updatePreviousHeader()
             layoutItems.append((previousHeader, 32, 0))
             if previousExpanded { add("previous", lineage.previous) }
         }
@@ -443,6 +478,16 @@ public final class ThreadLineageSectionView: DSView {
         restyle()
         needsLayout = true
         onResize?()
+    }
+
+    private func updatePreviousHeader() {
+        let ownLayout = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        previousHeader.title = ownLayout && !previousExpanded ? "Previous agents (\(lineage.previous.count))" : "Previous agents"
+        let failed = lineage.previous.filter(\.failed).count
+        counts.configure(total: lineage.previous.count, failures: failed, expanded: previousExpanded || ownLayout)
+        let accessory: NSView? = failed > 0 || (!previousExpanded && !ownLayout) ? counts : nil
+        if previousHeader.accessory !== accessory { previousHeader.accessory = accessory }
+        previousHeader.setAccessibilityLabel("Previous agents, \(lineage.previous.count)" + (failed > 0 ? ", \(failed) failed" : ""))
     }
 
     /// An open workflow's phases (each a section header that a running phase opens by itself), their
@@ -524,8 +569,9 @@ public final class ThreadLineageSectionView: DSView {
     }
 
     private func restyle() {
+        if !lineage.previous.isEmpty { updatePreviousHeader() }
         heading.color = Themed.color(\.contrastMutedForeground)
-        failedBadge.color = Themed.color(\.destructiveForeground)
+        counts.failed.color = Themed.color(\.destructiveForeground)
         needsDisplay = true
     }
 
