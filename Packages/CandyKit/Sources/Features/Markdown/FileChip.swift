@@ -105,7 +105,12 @@ struct FileChipResolver {
                 case .list(let list): list.items.forEach { walk($0.blocks) }
                 case .blockquote(let children), .alert(_, let children): walk(children)
                 case .table(let table): ([table.header] + table.rows).forEach { $0.forEach(visit) }
-                case .code, .rule, .image, .math: break
+                case .image(_, let url):
+                    if case .workspaceFile = MarkdownImageSource.classify(url.absoluteString, workspaceRoot: cwd),
+                       ![FilePreviewKind.image, .video, .audio].contains(FilePreviewKind.of(url.path)) {
+                        visit([InlineRun(text: url.lastPathComponent, link: url)])
+                    }
+                case .code, .rule, .math: break
                 }
             }
         }

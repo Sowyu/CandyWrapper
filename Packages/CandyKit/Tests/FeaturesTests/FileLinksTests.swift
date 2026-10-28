@@ -79,8 +79,8 @@ struct FileLinksTests {
         #expect(FileLinks.label(file, suffixes: [:]) == "a.ts · L12:C3")
         let home = try #require(FileLinks.resolveInlineCode("~/notes/today.md", cwd: "/Users/me/repo"))
         #expect(home.filePath == "/Users/me/notes/today.md")
-        // Media outside the workspace has no panel path (T3 opens the media viewer).
-        #expect(FileLinks.resolveInlineCode("/tmp/shot.png", cwd: "/repo")?.panelPath == nil)
+        // T3 3814 opens every host file in the file viewer, including media.
+        #expect(FileLinks.resolveInlineCode("/tmp/shot.png", cwd: "/repo")?.panelPath == "/tmp/shot.png")
         #expect(FileLinks.parentSuffixes(["/r/a/x/index.ts", "/r/b/x/index.ts", "/r/c.ts"]) == ["/r/a/x/index.ts": "a/x", "/r/b/x/index.ts": "b/x"])
         #expect(FileLinks.isFileLinkLabel("index.ts", href: "src/index.ts") && !FileLinks.isFileLinkLabel("the entry", href: "src/index.ts"))
     }

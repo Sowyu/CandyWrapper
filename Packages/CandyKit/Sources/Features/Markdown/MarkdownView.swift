@@ -191,6 +191,20 @@ public final class MarkdownView: DSView {
     private var buttonControls: [Int] = []
     private func button(forControl index: Int) -> ButtonView? { buttonControls.firstIndex(of: index).map { buttons[$0] } }
     private var chipViews: [FileChipHitView] = []
+    public var audioPlayback: InlineAudioPlayback? {
+        didSet {
+            guard audioPlayback !== oldValue else { return }
+            audioViews.values.forEach { $0.releasePlayer(); $0.removeFromSuperview() }
+            audioViews = [:]
+            needsLayout = true
+        }
+    }
+    private var audioViews: [String: ThreadMediaAttachmentView] = [:]
+    private var mediaVisible = true
+    public func setMediaVisible(_ visible: Bool) {
+        mediaVisible = visible
+        audioViews.values.forEach { $0.setVisible(visible) }
+    }
     private var imageViews: [AsyncImageView] = []
     private var imageTooltips: [TooltipController] = []
     private var imageItems: [ExpandedImagePreviewView.Item] = []
@@ -388,7 +402,7 @@ public final class MarkdownView: DSView {
                 expandedTables = expandedTables, runsShell = onRunShellCommand != nil, streaming = streaming,
                 fits = chatLaneInset.map { width + $0 >= 576 } ?? false
             layoutInBackground(width) {
-                MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: skills)), width: width,
+                MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: skills), hiddenContextIds: contexts?.inlineAudioContextIds ?? []), width: width,
                                wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, expandedTables: expandedTables,
                                diagrams: diagrams, contexts: contexts, runsShell: runsShell, fitsExpandedTables: fits, streaming: streaming,
                                reusing: reuse, parallel: true)
@@ -397,7 +411,7 @@ public final class MarkdownView: DSView {
         }
         let diagrams = hasDiagrams ? MarkdownLayout.Diagrams(enabled: diagramsEnabled, palette: .current(dark: effectiveAppearance.isDark), showingCode: diagramCode,
                                                              openIndex: streamsInOpenFence ? MarkdownLayout.codeBlockCount(document.blocks) - 1 : nil) : nil
-        let made = MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: inlineSkills)), width: width,
+        let made = MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: inlineSkills), hiddenContextIds: contextChips?.inlineAudioContextIds ?? []), width: width,
                                   wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, expandedTables: expandedTables, diagrams: diagrams, contexts: contextChips,
                                   runsShell: onRunShellCommand != nil, fitsExpandedTables: chatLaneInset.map { width + $0 >= 576 } ?? false,
                                   streaming: streaming, reusing: reuse)
@@ -744,11 +758,40 @@ public final class MarkdownView: DSView {
         imageItems = []
         var placed: [(frame: CGRect, radius: CGFloat, fallback: String, tooltip: String?)] = []
         imageKeys = []
+        var audioKeys: Set<String> = []
         if bounds.width > 0 {
             for item in layout(forWidth: bounds.width).images {
                 switch item {
                 case .remoteImage(let url, let alt, let rect):
                     let source = MarkdownImageSource.classify(url.absoluteString, workspaceRoot: cwd)
+                    if InlineAudioSource.isAudio(name: url.absoluteString), source != .blocked {
+                        let key = source.key
+                        audioKeys.insert(key)
+                        let view: ThreadMediaAttachmentView
+                        if let existing = audioViews[key] { view = existing }
+                        else {
+                            let open: (() -> Void)?
+                            if case .workspaceFile(let path) = source {
+                                open = { [weak self] in
+                                    guard let self, let meta = FileLinks.resolveLink(path, cwd: self.cwd) else { return }
+                                    self.onOpenFile?(meta, false)
+                                }
+                            } else { open = nil }
+                            view = ThreadMediaAttachmentView(id: key, name: url.scheme == "data" || url.lastPathComponent.isEmpty ? (alt.isEmpty ? "Audio" : alt) : url.lastPathComponent,
+                                audio: true, loader: { _ in
+                                    switch source {
+                                    case .workspaceFile(let path): return await MarkdownImages.audioURL(path)
+                                    case .direct(let uri): return URL(string: uri.hasPrefix("//") ? "https:" + uri : uri)
+                                    case .blocked: return nil
+                                    }
+                                }, playback: audioPlayback, onOpen: open)
+                            audioViews[key] = view
+                            addSubview(view)
+                        }
+                        view.frame = rect
+                        view.setVisible(mediaVisible)
+                        continue
+                    }
                     let key = source.key
                     let reference: MediaReference? = switch source {
                     case .workspaceFile(let path): MediaReference.file(path, workspaceRoot: cwd)
@@ -769,6 +812,10 @@ public final class MarkdownView: DSView {
             }
         }
         observeImageSizes()
+        for key in Array(audioViews.keys) where !audioKeys.contains(key) {
+            audioViews[key]?.releasePlayer()
+            audioViews.removeValue(forKey: key)?.removeFromSuperview()
+        }
         while imageViews.count > placed.count { imageViews.removeLast().removeFromSuperview(); imageTooltips.removeLast() }
         while imageViews.count < placed.count {
             let view = AsyncImageView(); view.cover = false
@@ -864,13 +911,12 @@ public final class MarkdownView: DSView {
         let kind = FilePreviewKind.of(meta.filePath)
         return (Self.fileChipShell?().openLabel != nil,
                 thread && (kind == .html || kind == .pdf) && Self.canOpenFileInBrowser?() == true && Self.onOpenFileInBrowser != nil,
-                thread && meta.panelPath != nil,
+                thread && (meta.panelPath != nil || kind == .audio),
                 thread && FileLinks.isMedia(meta.basename))
     }
 
     /// "Preview media" (`openMarkdownMedia`): an image in the media preview through a signed asset URL. A video
     /// opens in the file viewer, which plays it.
-    // ponytail: the preview shows images only; videos outside the workspace do nothing. Add video to ExpandedImagePreviewView when T3's player lands
     private func previewMedia(_ meta: FileLinkMeta) {
         if FilePreviewKind.of(meta.filePath) == .video {
             if meta.panelPath != nil { onOpenFile?(meta, false) }
