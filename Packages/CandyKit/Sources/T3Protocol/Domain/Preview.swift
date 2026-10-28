@@ -150,6 +150,12 @@ public struct DiscoveredLocalServer: Codable, Sendable, Equatable {
         public var terminalId: String
         public init(threadId: String, terminalId: String) { self.threadId = threadId; self.terminalId = terminalId }
     }
+    public struct Agent: Codable, Sendable, Equatable {
+        public var threadId: String
+        public init(threadId: String) { self.threadId = threadId }
+    }
+    /// T3 3814 preview.ts:318, absent before agent-owned port discovery.
+    public var agent: Agent?
     public var host: String
     public var port: Int
     public var url: String
@@ -157,8 +163,9 @@ public struct DiscoveredLocalServer: Codable, Sendable, Equatable {
     public var pid: Int?
     public var terminal: Terminal?
 
-    public init(host: String, port: Int, url: String, processName: String? = nil, pid: Int? = nil) {
+    public init(host: String, port: Int, url: String, processName: String? = nil, pid: Int? = nil, terminal: Terminal? = nil, agent: Agent? = nil) {
         self.host = host; self.port = port; self.url = url; self.processName = processName; self.pid = pid
+        self.terminal = terminal; self.agent = agent
     }
 }
 
@@ -181,6 +188,7 @@ public enum PreviewRPC {
     public static let close = "preview.close"
     public static let list = "preview.list"
     public static let events = "subscribePreviewEvents"
+    public static let stopLocalServer = "preview.stopLocalServer"
     public static let discoveredServers = "subscribeDiscoveredLocalServers"
 
     /// `PREVIEW_ZOOM_LEVELS`, Chrome's ladder (preview.ts:104-122).

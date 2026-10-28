@@ -20,6 +20,8 @@ final class BrowserController {
 
     /// `capabilities.serverBrowser` per environment, from its descriptor.
     private var serverBrowser: [String: Bool] = [:]
+    private var localServerStop: [String: Bool] = [:]
+    private var stoppingServer: String?
     private var profileObserver: Int?
     private var occlusionObserver: NSObjectProtocol?
     isolated deinit {
@@ -84,6 +86,11 @@ final class BrowserController {
             Self.showProfiles(in: self.panel)
             for (env, supported) in self.serverBrowser where supported { self.reportProfiles(env) }
         }
+        panel.onDetailsServersVisibilityChange = { [weak self] in self?.render() }
+        panel.lazyDetailsCard.configure { [weak self] card in
+            card.servers.onOpen = { [weak self] server, external in self?.openThreadServer(server, external: external) }
+            card.servers.onStop = { [weak self] server in self?.stopThreadServer(server) }
+        }
         wireChrome()
         wireViewer(view.viewer, mini: false)
         wireViewer(panel.miniPlayer.viewer, mini: true)
@@ -138,11 +145,13 @@ final class BrowserController {
         guard serverBrowser[env] == nil, !capabilityTasks.contains(env), let shell = environments.session(env) else { return }
         capabilityTasks.insert(env)
         Task { [weak self] in
-            let supported = (try? await shell.http.descriptor())?.capability("serverBrowser")
+            let descriptor = try? await shell.http.descriptor()
+            let supported = descriptor?.capability("serverBrowser")
             guard let self else { return }
             self.capabilityTasks.remove(env)
             guard let supported else { return }
             self.serverBrowser[env] = supported
+            self.localServerStop[env] = descriptor?.capability("localServerStop") ?? false
             if supported { self.reportProfiles(env) }
             if let id = self.threadId, id.environmentId == env {
                 self.panel.browserAvailable = supported
@@ -264,8 +273,9 @@ final class BrowserController {
             renderPanel(tabId: tabId, state: state)
         } else {
             stopStream(mini: false)
-            stopDiscovery()
+            if !detailsServersVisible { stopDiscovery() }
         }
+        renderThreadServers()
 
         // The floating player: its tab unless the panel shows that tab right now.
         let key = threadKey
@@ -320,7 +330,54 @@ final class BrowserController {
         default: view.body = .page
         }
         if isServer, let tabId { ensureStream(mini: false, tabId: tabId) } else { stopStream(mini: false) }
-        if view.body == .empty { renderEmptyState() } else { stopDiscovery() }
+        if view.body == .empty { renderEmptyState() } else if !detailsServersVisible { stopDiscovery() }
+    }
+
+    private var detailsServersVisible: Bool { panel.detailsOpen && windowVisible && panel.window != nil }
+
+    private func renderThreadServers() {
+        guard let id = threadId, let env = id.environmentId else { return }
+        if detailsServersVisible, serverBrowser[env] == true {
+            startDiscovery(env, configured: LocalServerDiscovery.boundConfiguredUrls(configuredUrls()))
+        }
+        guard let card = panel.lazyDetailsCard.loaded else { return }
+        let servers = detailsServersVisible ? ThreadServerPresentation.servers(discovered[env]?.servers ?? [], threadId: id.localId.rawValue) : []
+        let auth = environments.authSession(env)
+        card.servers.configure(servers: servers, supportsStop: localServerStop[env] == true,
+                               canOpen: auth?.grants(AuthScopes.previewOperate) == true,
+                               canStop: auth?.grants(AuthScopes.terminalOperate) == true, stopping: stoppingServer)
+    }
+
+    private func openThreadServer(_ server: DiscoveredLocalServer, external: Bool) {
+        guard let env = threadId?.environmentId, environments.authSession(env)?.grants(AuthScopes.previewOperate) == true else { return }
+        if external {
+            // T3 3814 browserTargetResolver.ts resolves loopback to the selected environment's host.
+            guard var url = URLComponents(string: server.url) else { return }
+            if let host = url.host, PreviewURL.isLoopbackHost(host),
+               let route = environments.routeInUse(env), EnvironmentRoute.kind(route) != .public,
+               let target = route.host, !PreviewURL.isLoopbackHost(target) { url.host = target }
+            if let resolved = url.url { NSWorkspace.shared.open(resolved) }
+        } else { openTab(url: server.url) }
+    }
+
+    private func stopThreadServer(_ server: DiscoveredLocalServer) {
+        guard let env = threadId?.environmentId, let shell = environments.session(env), stoppingServer == nil,
+              let input = ThreadServerPresentation.stopInput(server, supported: localServerStop[env] == true,
+                permitted: environments.authSession(env)?.grants(AuthScopes.terminalOperate) == true) else { return }
+        guard let thread = threadId,
+              ThreadServerPresentation.servers(discovered[env]?.servers ?? [], threadId: thread.localId.rawValue).contains(server) else { return }
+        let key = ThreadServersView.key(server)
+        stoppingServer = key
+        renderThreadServers()
+        Task { [weak self] in
+            do { _ = try await shell.supervisor.request(PreviewRPC.stopLocalServer, payload: input) }
+            catch {
+                self?.panel.toasts.show(ToastView(title: "Could not stop server", message: String(describing: error), kind: .error))
+            }
+            guard let self, self.stoppingServer == key else { return }
+            self.stoppingServer = nil
+            self.renderThreadServers()
+        }
     }
 
     // MARK: Empty state
@@ -868,6 +925,7 @@ final class BrowserController {
         eventStreams[environmentId]?.task.cancel()
         eventStreams[environmentId] = nil
         serverBrowser[environmentId] = nil
+        localServerStop[environmentId] = nil
     }
 
     /// The environment's session changed (reconnect): the list is fetched again.
