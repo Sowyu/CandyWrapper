@@ -4,6 +4,11 @@ import Testing
 
 /// Terminal payloads and stream values (packages/contracts/src/terminal.ts).
 struct TerminalTests {
+    @Test func sharedGridActivityDecode() throws {
+        #expect(TerminalAttachEvent(json: try Self.json(#"{"type":"activity","hasRunningSubprocess":true,"label":"top","cols":60,"rows":20}"#))
+                == .activity(hasRunningSubprocess: true, label: "top", cols: 60, rows: 20))
+    }
+
     static func json(_ text: String) throws -> JSONValue {
         try JSONDecoder().decode(JSONValue.self, from: Data(text.utf8))
     }

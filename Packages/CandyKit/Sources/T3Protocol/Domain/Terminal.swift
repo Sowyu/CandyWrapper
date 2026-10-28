@@ -24,13 +24,16 @@ public struct TerminalSessionSnapshot: Codable, Sendable, Equatable {
     public var label: String
     public var updatedAt: String
     public var sequence: Int?
+    public var cols: Int?
+    public var rows: Int?
 
     public init(threadId: String, terminalId: String, cwd: String, worktreePath: String? = nil, status: TerminalSessionStatus,
                 pid: Int? = nil, history: String, exitCode: Int? = nil, exitSignal: Int? = nil, label: String, updatedAt: String,
-                sequence: Int? = nil) {
+                sequence: Int? = nil, cols: Int? = nil, rows: Int? = nil) {
         self.threadId = threadId; self.terminalId = terminalId; self.cwd = cwd; self.worktreePath = worktreePath
         self.status = status; self.pid = pid; self.history = history; self.exitCode = exitCode; self.exitSignal = exitSignal
         self.label = label; self.updatedAt = updatedAt; self.sequence = sequence
+        self.cols = cols; self.rows = rows
     }
 }
 
@@ -65,7 +68,7 @@ public enum TerminalAttachEvent: Sendable, Equatable {
     case error(String)
     case cleared
     case restarted(TerminalSessionSnapshot)
-    case activity(hasRunningSubprocess: Bool, label: String)
+    case activity(hasRunningSubprocess: Bool, label: String, cols: Int? = nil, rows: Int? = nil)
     /// A kind this build does not know; skipped.
     case unknown(String)
 
@@ -86,7 +89,7 @@ public enum TerminalAttachEvent: Sendable, Equatable {
         case "error": self = .error(json["message"]?.stringValue ?? "Terminal error")
         case "activity":
             guard case .bool(let running)? = json["hasRunningSubprocess"] else { return nil }
-            self = .activity(hasRunningSubprocess: running, label: json["label"]?.stringValue ?? "")
+            self = .activity(hasRunningSubprocess: running, label: json["label"]?.stringValue ?? "", cols: json["cols"]?.intValue, rows: json["rows"]?.intValue)
         default: self = .unknown(type)
         }
     }

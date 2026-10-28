@@ -593,6 +593,7 @@ final class TerminalController {
     private func apply(_ event: TerminalAttachEvent, to attachment: Attachment, in host: Host) {
         guard host.attachments[attachment.terminalId] === attachment else { return }
         let outcome = attachment.model.apply(event)
+        attachment.surface.setSharedGrid(cols: attachment.model.cols, rows: attachment.model.rows)
         for action in outcome.actions { attachment.surface.apply(action) }
         if outcome.resendSize { attachment.sentGrid = nil; attachment.surface.resendSize() }
         if outcome.sessionEnded {
