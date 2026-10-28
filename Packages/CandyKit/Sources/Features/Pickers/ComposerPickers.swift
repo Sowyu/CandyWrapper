@@ -238,7 +238,7 @@ public final class ComposerPickers {
                               placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none),
                               swallowsOutsideClick: true)
         menu.onClose = { [weak self] in self?.closeOpenPopup() }
-        if NSApp.currentEvent?.type == .keyDown { menu.highlightedIndex = menu.selectable.first }
+        if NSApp.currentEvent?.type == .keyDown { menu.highlightedIndex = menu.selectableIndices.first }
         track(popup)
     }
 
@@ -329,7 +329,7 @@ public final class ComposerPickers {
         let list = PickerMenuView(entries: accessEntries(), style: .select, minimumWidth: 256 + 8)
         let popup = host.open(PickerPopupView(list), trigger: accessButton, placement: .dropdown, swallowsOutsideClick: true)
         list.onClose = { [weak self] in self?.closeOpenPopup() }
-        if NSApp.currentEvent?.type == .keyDown { list.highlightedIndex = list.selectable.first { list.entry($0).checked } }
+        if NSApp.currentEvent?.type == .keyDown { list.highlightedIndex = list.selectableIndices.first { list.entry($0).checked } }
         track(popup)
     }
 
@@ -357,7 +357,7 @@ public final class ComposerPickers {
                               placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none),
                               swallowsOutsideClick: true)
         menu.onClose = { [weak self] in self?.closeOpenPopup() }
-        if NSApp.currentEvent?.type == .keyDown { menu.highlightedIndex = menu.selectable.first }
+        if NSApp.currentEvent?.type == .keyDown { menu.highlightedIndex = menu.selectableIndices.first }
         track(popup)
     }
 

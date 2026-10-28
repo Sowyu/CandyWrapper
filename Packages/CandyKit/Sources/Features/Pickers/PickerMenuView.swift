@@ -111,10 +111,10 @@ final class PickerMenuView: DSView, PickerPopupBody, PressDragMenu {
         }
     }
 
-    var selectable: [Int] { entries.indices.filter { entries[$0].kind == .option && !entries[$0].disabled } }
+    var selectableIndices: [Int] { entries.indices.filter { entries[$0].kind == .option && !entries[$0].disabled } }
 
     func handleKey(_ key: PopupKey) -> Bool {
-        let s = selectable
+        let s = selectableIndices
         switch key {
         case .down, .up:
             guard !s.isEmpty else { return true }
@@ -160,14 +160,14 @@ final class PickerMenuView: DSView, PickerPopupBody, PressDragMenu {
 
     func pressDragRow(at windowPoint: NSPoint) -> Int? {
         let p = convert(windowPoint, from: nil)
-        return rows.firstIndex { $0.frame.contains(p) }.flatMap { selectable.contains($0) ? $0 : nil }
+        return rows.firstIndex { $0.frame.contains(p) }.flatMap { selectableIndices.contains($0) ? $0 : nil }
     }
 
     override func mouseMoved(with event: NSEvent) { if let i = row(at: event) { highlightedIndex = i } }
     override func mouseExited(with event: NSEvent) { highlightedIndex = nil }
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) { if let i = row(at: event) { pick(i) } }
-    override func resetCursorRects() { for i in selectable { addCursorRect(rows[i].frame, cursor: .pointingHand) } }
+    override func resetCursorRects() { for i in selectableIndices { addCursorRect(rows[i].frame, cursor: .pointingHand) } }
 }
 
 /// One row of `PickerMenuView`.

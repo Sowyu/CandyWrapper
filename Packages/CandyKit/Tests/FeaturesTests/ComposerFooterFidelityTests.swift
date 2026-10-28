@@ -91,14 +91,14 @@ struct ComposerFooterFidelityTests {
         let menu = PickerMenuView(entries: p.overflowEntries(), style: .menu, minimumWidth: 158)
         menu.refreshEntries = { p.overflowEntries() }
         menu.onClose = { closed = true }
-        #expect(menu.selectable.count == 4)
-        menu.pick(menu.selectable[0])
-        #expect(!closed && p.current.runtimeMode == .approvalRequired && menu.entry(menu.selectable[0]).checked)
+        #expect(menu.selectableIndices.count == 4)
+        menu.pick(menu.selectableIndices[0])
+        #expect(!closed && p.current.runtimeMode == .approvalRequired && menu.entry(menu.selectableIndices[0]).checked)
         _ = Self.fitted(p, iconOnly: 2, hidden: 2)
         let both = PickerMenuView(entries: p.overflowEntries(), style: .menu, minimumWidth: 158)
         both.onClose = { closed = true }
-        #expect(both.selectable.count == 10)
-        both.pick(both.selectable[2]) // High closes the menu
+        #expect(both.selectableIndices.count == 10)
+        both.pick(both.selectableIndices[2]) // High closes the menu
         #expect(closed && p.traitsButton.title == "High")
     }
 }

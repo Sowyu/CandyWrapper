@@ -181,8 +181,8 @@ struct PickersFidelityTests {
         #expect(view.handleKey(.left) && view.handleKey(.enter)) // rail focus lands on Claude, Enter keeps it
 
         let menu = PickerMenuView(entries: p.traitsEntries(), style: .menu, minimumWidth: 158)
-        #expect(menu.selectable.count == 6)
-        menu.pick(menu.selectable[2]) // High
+        #expect(menu.selectableIndices.count == 6)
+        menu.pick(menu.selectableIndices[2]) // High
         #expect(p.traitsButton.title == "High" && changes == 1)
         #expect(p.current.modelSelection == ModelSelection(instanceId: "claudeAgent", model: "claude-haiku-5-5",
                                                            selections: [.init(id: "effort", value: .string("high"))]))
@@ -190,7 +190,7 @@ struct PickersFidelityTests {
         p.onPromptChange = { prompt = $0 }
         p.prompt = "fix it"
         let again = PickerMenuView(entries: p.traitsEntries(), style: .menu, minimumWidth: 158)
-        again.pick(again.selectable[5]) // Ultrathink
+        again.pick(again.selectableIndices[5]) // Ultrathink
         #expect(prompt == "Ultrathink:\nfix it")
         p.prompt = "Ultrathink:\nfix it"
         #expect(p.traitsButton.title == "Ultrathink")
