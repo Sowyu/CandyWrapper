@@ -17,7 +17,8 @@ public struct ThreadVisitTracker: Sendable {
     }
 
     private var lastDispatchedKey: String?
-    private var lastDispatchAtMs: Int64 = 0
+    private var lastDispatchAtMs: Int64?
+    private var lastDispatchRoute: String?
 
     public init() {}
 
@@ -33,7 +34,7 @@ public struct ThreadVisitTracker: Sendable {
         // An unseen completion publishes at once; mid-turn bumps ride a trailing throttle.
         let completed = SidebarModel.presentLatestRun(shell)?.completedAt?.epochMs
         let unseenCompletion = completed.map { c in visited.map { c > $0 } ?? true } ?? false
-        let elapsed = nowMs - lastDispatchAtMs
+        let elapsed = lastDispatchRoute == routeKey ? lastDispatchAtMs.map { nowMs - $0 } ?? Self.throttleMs : Self.throttleMs
         return .dispatch(shell.updatedAt, delayMs: unseenCompletion || elapsed >= Self.throttleMs ? 0 : Self.throttleMs - elapsed)
     }
 
@@ -41,10 +42,15 @@ public struct ThreadVisitTracker: Sendable {
     public mutating func didDispatch(_ shell: ThreadShell, routeKey: String, nowMs: Int64) {
         lastDispatchedKey = Self.key(routeKey, shell)
         lastDispatchAtMs = nowMs
+        lastDispatchRoute = routeKey
     }
 
-    /// A new thread view (ChatView remounts): the dedupe starts over.
-    public mutating func reset() { lastDispatchedKey = nil }
+    /// A new route starts an independent tracker (T3 3814 ThreadVisitWatermark.tsx:9-20).
+    public mutating func reset() {
+        lastDispatchedKey = nil
+        lastDispatchAtMs = nil
+        lastDispatchRoute = nil
+    }
 
     private static func key(_ routeKey: String, _ shell: ThreadShell) -> String { "\(routeKey):\(shell.updatedAt.raw)" }
 }
