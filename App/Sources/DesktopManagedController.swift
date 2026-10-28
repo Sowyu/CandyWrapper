@@ -9,7 +9,9 @@ import T3Protocol
 /// (linkEnvironment.ts:51-104, relayClientInstallDialog.ts, RelayClientInstallDialog.tsx).
 @MainActor
 final class DesktopManagedController {
-    weak var window: NSWindow?
+    weak var window: NSWindow? {
+        didSet { if window != nil { showPassword() } }
+    }
     let environments: Environments
     private var passwords: [(SshPasswordPromptState, CheckedContinuation<String, Error>?)] = []
     private var passwordModal: ModalHost?
@@ -19,7 +21,7 @@ final class DesktopManagedController {
     private var previewModal: ModalHost?
     private var relayModal: ModalHost?
     private var relayState = RelayClientInstallState.idle
-    init(window: NSWindow, environments: Environments) {
+    init(window: NSWindow? = nil, environments: Environments) {
         self.window = window; self.environments = environments
         environments.ssh.passwordPrompt = { [weak self] target, _ in
             guard let self else { throw CancellationError() }
@@ -50,7 +52,9 @@ final class DesktopManagedController {
     }
     private func showPassword() {
         guard passwordModal == nil, let (request, _) = passwords.first else { return }
-        guard let window else { resolvePassword(request.id, value: nil); return }
+        // T3 3814 desktop/SshPasswordPromptDialog.tsx:47-54 queues requests until their dialog mounts.
+        // The existing expiry still ends authentication if no host arrives.
+        guard let window, window.contentView != nil else { return }
         let dialog = SshPasswordPromptDialog(state: request)
         let host = ModalHost.present(dialog, in: window); passwordModal = host
         dialog.onResponse = { [weak self] value in self?.resolvePassword(request.id, value: value) }
