@@ -226,7 +226,7 @@ final class ComposerController {
     fileprivate var questionFiles: [String: [QuestionFile]] = [:]
     /// Each environment's `questionAttachments` capability and upload limit (`fileAttachmentStagingLimit`),
     /// read from `/.well-known/t3/environment` when its session changes.
-    fileprivate var capabilities: [String: (questionAttachments: Bool, uploadLimit: Int?, threadStop: Bool, queuedRunStart: Bool)] = [:]
+    fileprivate var capabilities: [String: (questionAttachments: Bool, uploadLimit: Int?, threadStop: Bool, queuedRunStart: Bool, compactionSteer: Bool)] = [:]
     /// Redesign's "+" > Threads set it: the bare `@` it inserts lists threads, not files.
     fileprivate var browsingThreads = false
     fileprivate var supportsQuestionAttachments: Bool { targetEnvironmentId.flatMap { capabilities[$0]?.questionAttachments } ?? false }
@@ -1492,7 +1492,8 @@ final class ComposerController {
         panel.model.optimisticMessages = optimistic
         panel.queue.state = target == nil || panel.isDraft ? ComposerLogic.QueueState()
             : ComposerLogic.QueueState(projection: projection, optimistic: optimistic,
-                                       canStartQueuedRun: targetEnvironmentId.flatMap { capabilities[$0]?.queuedRunStart } ?? false)
+                                       canStartQueuedRun: targetEnvironmentId.flatMap { capabilities[$0]?.queuedRunStart } ?? false,
+                                       canSkipCompaction: targetEnvironmentId.flatMap { capabilities[$0]?.compactionSteer } ?? false)
         panel.queue.editingRunId = queuedEdit?.runId
         panel.queue.editBlockedReason = ComposerLogic.queuedEditBlockedReason(openQuestionCount: requests.userInputs.count)
         panel.queue.isBusy = queueBusy
@@ -2665,7 +2666,8 @@ extension ComposerController {
             }
             // `queued-run.start` arrived in Nightly 3486 (96f09c6558) with no capability to read, so the version decides.
             let queuedRunStart = !ServerVersionSkewLogic.serverIsBehind(descriptor.serverVersion, client: "0.1.2-nightly.20261021.3486")
-            capabilities[environmentId] = (descriptor.capability("questionAttachments"), limit, descriptor.capability("threadStop"), queuedRunStart)
+            let compactionSteer = !ServerVersionSkewLogic.serverIsBehind(descriptor.serverVersion, client: "0.1.4-nightly.20261027.3766")
+            capabilities[environmentId] = (descriptor.capability("questionAttachments"), limit, descriptor.capability("threadStop"), queuedRunStart, compactionSteer)
             menuState.pullRequestsSupported[environmentId] = descriptor.capability("pullRequests")
             refresh()
         }

@@ -16,6 +16,21 @@ struct ComposerLogicTests {
         }
     }
 
+    @Test func queuedPromotionCanSkipCompactionOnlyOnSupportingRuntimes() throws {
+        let projection = try JSONValue.object([
+            "thread": .object(["id": .string("t")]),
+            "runs": .array([.object(["id": .string("r"), "threadId": .string("t"), "ordinal": .number(1),
+                                    "userMessageId": .string("m"), "status": .string("running"), "requestedAt": .string("2026-10-27T00:00:00Z")])]),
+            "messages": .array([.object(["id": .string("m"), "threadId": .string("t"), "runId": .string("r"),
+                                        "role": .string("user"), "text": .string("/compact"), "streaming": .bool(false),
+                                        "createdAt": .string("2026-10-27T00:00:00Z"), "updatedAt": .string("2026-10-27T00:00:00Z")])])
+        ]).decode(as: ThreadProjection.self)
+        #expect(!L.QueueState(projection: projection).canPromoteToSteer)
+        let modern = L.QueueState(projection: projection, canSkipCompaction: true)
+        #expect(modern.canPromoteToSteer && modern.promoteSkipsCompaction)
+        #expect(modern.activeRunId == "r" && !modern.canSendNow)
+    }
+
     @Test func sendShortcutModes() {
         let enter = L.Key(isReturn: true), mod = L.Key(isReturn: true, mod: true)
         // mode, prompt, key, expected

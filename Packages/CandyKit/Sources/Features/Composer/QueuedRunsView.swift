@@ -97,7 +97,7 @@ public final class QueuedRunsView: ComposerBannerView {
                           canSend: state.canSendNow || state.canPromoteToSteer, 
                           editBlocked: editBlockedReason != nil,
                           editTip: editBlockedReason ?? "Edit in the composer" + (i == queued - 1 && item.runId != nil ? editShortcutLabel.map { " (\($0))" } ?? "" : ""),
-                          steerTip: (state.canSendNow ? "Start a turn with this message" : "Send into the current turn")
+                          steerTip: (state.canSendNow ? "Start a turn with this message" : state.promoteSkipsCompaction ? "Skip compaction and send this message" : "Send into the current turn")
                             + (i == 0 ? steerShortcutLabel.map { " (\($0))" } ?? "" : ""))
         }
         needsLayout = true
