@@ -1,5 +1,7 @@
 # Progress
 
+- [ ] Resolve the final 48 turn-chat spacing and fractional snapshot scroll at 3824 (taken 2026-10-28, design-final-48). Local commits only; no push.
+
 - [x] Clear the final 3824 miscellaneous fidelity blockers (taken 2026-10-28, design-final-misc): scope Redesign constructor colors, align Providers (3.39% light / 3.62% dark) and the footer (4.73% / 4.87%). Three final parallel combined runs keep all 80 Redesign images exact; three parallel fast runs pass 2,224 Swift Testing tests and 19 XCTest tests each. Six unchanged diff and 48 turn-chat failures remain for the parallel task. [Source, fixes and validation](docs/research/design-final-misc-3824.md). Local commits only; offscreen checks only.
 
 - [ ] Finish panel and dialog screen fidelity at 3824 (taken 2026-10-28, design-screens-panels). Migrated the assigned fixtures and added 28 direct screen crops, all passing their existing surface limits. Default inline approval, palette thread metadata and find controls are ported; all 80 standalone Redesign images remain exact, the fast lane passes, and the isolated app builds. Six assertions remain: split/stacked diff in both themes need context loading, and turn chat in both themes needs the narrow thread rendering fix. 20 is a native NSMenu and 52 has no native pre-authentication counterpart. [Per-case before/after results, source citations and handoff](docs/research/design-screens-panels-3824.md). Offscreen checks only; local commits, no push.
