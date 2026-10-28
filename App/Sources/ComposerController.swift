@@ -2550,8 +2550,8 @@ final class ComposerController {
             guard let projection = await store.takeUpdate()?.projection else { return }
             let runs = Set(projection.runs.filter { $0.status == .queued }.map(\.id))
             await MainActor.run {
-                guard let self, queuedEdits.edit(id)?.id == editId else { return }
-                settleQueuedEdit(id, runs: runs)
+                guard let self, self.queuedEdits.edit(id)?.id == editId else { return }
+                self.settleQueuedEdit(id, runs: runs)
             }
         })
     }
