@@ -7,7 +7,7 @@
 here="${0:A:h}"
 "$here/wait-origin"
 slow=(
-  Fidelity WebFrameSuites Mermaid GalleryExport Stress
+  Fidelity RedesignBaseline WebFrameSuites Mermaid GalleryExport Stress
   pagesMatchAFullPass streamedTurnsMatchAFullDeriveAtEveryStep offMainUpdatesMatchSynchronousOnes
   incrementalBuildsMatchFreshBuilds contentViewPatchesTheList oneThreadChangeBuildsOneRow
   everyThreadChangedInPlaceMatchesFreshBuild longLiveThreadKeepsTheContract failedProbeReconnectsWithoutWaiting
