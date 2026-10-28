@@ -186,7 +186,7 @@ enum MarkdownStyle {
                     out.append(NSAttributedString(string: "\u{00A0}", attributes: [
                         .font: parent, .foregroundColor: color,
                         .kern: min(layout.width + 2 * MarkdownMathStyle.padX, maxChipWidth) - noBreakSpaceWidth(parent),
-                        .markdownFindText: math.tex, .markdownCopyText: math.copySource]))
+                        .markdownMath: true, .markdownFindText: math.tex, .markdownCopyText: math.copySource]))
                     formulas.append((NSRange(location: start, length: 1), layout))
                     i += 1
                     continue
@@ -866,7 +866,7 @@ private struct Builder {
         let x = overflows ? pad + tagRoom : (width - layout.width) / 2
         // One no-break space as wide as the formula carries selection, copy (its TeX) and find; the `.math` item draws it.
         let placeholder = NSAttributedString(string: "\u{00A0}", attributes: [
-            .font: font, .kern: layout.width - MarkdownStyle.noBreakSpaceWidth(font), .markdownFindText: math.tex, .markdownCopyText: math.copySource])
+            .font: font, .kern: layout.width - MarkdownStyle.noBreakSpaceWidth(font), .markdownMath: true, .markdownFindText: math.tex, .markdownCopyText: math.copySource])
         let textBox = boxes.make(placeholder, width: max(width, contentWidth), lineHeight: above + below, strut: font, wraps: false)
         let viewport = CGRect(x: 0, y: 0, width: width, height: height)
         if overflows { box.items.append(.scroll(codeIndex: MarkdownMathStyle.scrollID(index), viewport: viewport, contentWidth: contentWidth)) }
@@ -1418,7 +1418,13 @@ extension MarkdownLayout {
         var mins = [CGFloat](repeating: 0, count: columns), maxs = mins
         for (r, row) in rows.enumerated() {
             for (c, cell) in row.enumerated() where c < columns {
-                let cap: CGFloat = ThreadDesign.uses3814 ? 384 : r == 0 ? .infinity : 384
+                var hasFormula = false
+                if ThreadDesign.uses3814 {
+                    cell.enumerateAttribute(.markdownMath, in: NSRange(location: 0, length: cell.length)) { value, _, stop in
+                        if value != nil { hasFormula = true; stop.pointee = true }
+                    }
+                }
+                let cap: CGFloat = hasFormula ? .infinity : ThreadDesign.uses3814 ? 384 : r == 0 ? .infinity : 384
                 let padding = tableCellPadding(c, of: columns).total
                 maxs[c] = max(maxs[c], min(cap, natural(cell) + padding))
                 guard fitsLane else { continue }
@@ -1427,7 +1433,10 @@ extension MarkdownLayout {
                     .map { match -> CGFloat in
                         let word = cell.attributedSubstring(from: match.range)
                         if ThreadDesign.uses3814, word.length > 16, word.attribute(.markdownExternalLink, at: 0, effectiveRange: nil) != nil {
-                            return (0..<word.length).map { natural(word.attributedSubstring(from: NSRange(location: $0, length: 1))) }.max() ?? 0
+                            return word.string.indices.map { index in
+                                let end = word.string.index(after: index)
+                                return natural(word.attributedSubstring(from: NSRange(index..<end, in: word.string)))
+                            }.max() ?? 0
                         }
                         return natural(word)
                     }.max() ?? 0

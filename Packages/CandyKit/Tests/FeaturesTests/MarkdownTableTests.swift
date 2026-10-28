@@ -30,6 +30,15 @@ struct MarkdownTableTests {
         #expect(view.layout(forWidth: 600).height == height)
     }
 
+    @Test func defaultFormulaCellsKeepTheirNaturalWidth() {
+        let previous = ThemeRuntime.input; ThemeRuntime.apply(.init()); defer { ThemeRuntime.apply(previous) }
+        let formula = NSAttributedString(string: "formula", attributes: [.markdownMath: true])
+        let cells = [[NSAttributedString(string: "Column")], [formula]]
+        let widths = MarkdownLayout.expandedTableWidths(cells, columns: 1, width: 300, fitsLane: true,
+                                                      natural: { CGFloat($0.length * 100) })
+        #expect(widths.tableWidth == 700)
+    }
+
     private func view() -> MarkdownView {
         let view = MarkdownView(frame: NSRect(x: 0, y: 0, width: 480, height: 200))
         view.messageID = "table-test"

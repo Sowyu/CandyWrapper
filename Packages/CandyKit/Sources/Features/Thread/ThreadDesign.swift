@@ -31,5 +31,6 @@ enum ThreadDesign {
 }
 
 extension NSAttributedString.Key {
+    static let markdownMath = NSAttributedString.Key("CandyMarkdownMath")
     static let markdownExternalLink = Self("CandyMarkdownExternalLink")
 }
