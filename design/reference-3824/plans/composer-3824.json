@@ -1,0 +1,120 @@
+{
+  "base": "http://127.0.0.1:47403",
+  "width": 1100,
+  "height": 780,
+  "scale": 2,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "states": [
+    {
+      "name": "53-effort-menu-permissions",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "click": "[data-composer-shortcut~=\"composer.effort\"]"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "54-composer-effort-bars",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "click": "[aria-label=\"Settings\"]"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>e.textContent.trim()==='Appearance').click()"
+        },
+        {
+          "wait": 1200
+        },
+        {
+          "js": "document.querySelector('[aria-label=\"Effort display\"]').scrollIntoView({block:'center'})"
+        },
+        {
+          "wait": 400
+        },
+        {
+          "click": "[aria-label=\"Effort display\"]"
+        },
+        {
+          "click": "text=Bars"
+        },
+        {
+          "wait": 700
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 1000
+        },
+        {
+          "js": "document.querySelector('[data-composer-effort-glyph]')?.outerHTML",
+          "log": true
+        }
+      ],
+      "afterActions": [
+        {
+          "click": "[aria-label=\"Settings\"]"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>e.textContent.trim()==='Appearance').click()"
+        },
+        {
+          "wait": 1200
+        },
+        {
+          "js": "document.querySelector('[aria-label=\"Effort display\"]').scrollIntoView({block:'center'})"
+        },
+        {
+          "wait": 400
+        },
+        {
+          "click": "[aria-label=\"Effort display\"]"
+        },
+        {
+          "click": "text=Word (default)"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "key": "Escape"
+        }
+      ]
+    }
+  ]
+}

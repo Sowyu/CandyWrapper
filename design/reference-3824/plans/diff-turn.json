@@ -1,0 +1,115 @@
+{
+  "base": "http://127.0.0.1:47403",
+  "width": 1100,
+  "height": 780,
+  "scale": 2,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "states": [
+    {
+      "name": "47-changed-files-card",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/bf25a232-a113-43ea-b29b-d5690a3759ce",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/bf25a232-a113-43ea-b29b-d5690a3759ce"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 1300
+        },
+        {
+          "js": "[...document.querySelectorAll('button')].filter(b=>/close|dismiss/i.test(b.getAttribute('aria-label')||'')&&b.closest('[data-slot*=toast],[role=status],[role=alert],li')).map(b=>(b.click(),b.getAttribute('aria-label')))",
+          "log": true
+        },
+        {
+          "wait": 400
+        },
+        {
+          "js": "(()=>{const c=document.querySelector('[data-changed-files-state]');c.scrollIntoView({block:'center'});const r=c.getBoundingClientRect();return JSON.stringify({top:r.top,left:r.left,w:r.width,h:r.height})})()",
+          "log": true
+        },
+        {
+          "wait": 600
+        },
+        {
+          "js": "(()=>{const c=document.querySelector('[data-changed-files-state]');c.scrollIntoView({block:'center'});const r=c.getBoundingClientRect();return JSON.stringify({top:r.top,left:r.left,w:r.width,h:r.height})})()",
+          "log": true
+        },
+        {
+          "wait": 300
+        }
+      ]
+    },
+    {
+      "name": "48-diff-turn-file",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/bf25a232-a113-43ea-b29b-d5690a3759ce",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/bf25a232-a113-43ea-b29b-d5690a3759ce"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 1300
+        },
+        {
+          "js": "[...document.querySelectorAll('button')].filter(b=>/close|dismiss/i.test(b.getAttribute('aria-label')||'')&&b.closest('[data-slot*=toast],[role=status],[role=alert],li')).map(b=>(b.click(),b.getAttribute('aria-label')))",
+          "log": true
+        },
+        {
+          "wait": 400
+        },
+        {
+          "js": "(()=>{const c=document.querySelector('[data-changed-files-state]');c.scrollIntoView({block:'center'});const r=c.getBoundingClientRect();return JSON.stringify({top:r.top,left:r.left,w:r.width,h:r.height})})()",
+          "log": true
+        },
+        {
+          "wait": 600
+        },
+        {
+          "js": "(()=>{const c=document.querySelector('[data-changed-files-state]');c.scrollIntoView({block:'center'});const r=c.getBoundingClientRect();return JSON.stringify({top:r.top,left:r.left,w:r.width,h:r.height})})()",
+          "log": true
+        },
+        {
+          "click": "text=notes.md"
+        },
+        {
+          "wait": 2000
+        },
+        {
+          "hover": "[data-right-panel-surface-content]"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "js": "(()=>{const r=document.querySelector('[data-changed-files-state]').getBoundingClientRect();return JSON.stringify({top:r.top,left:r.left,w:r.width,h:r.height})})()",
+          "log": true
+        },
+        {
+          "click": "[aria-label=\"Stacked diff view\"]"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "base": "http://127.0.0.1:47403",
+  "width": 1100,
+  "height": 780,
+  "scale": 2,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "states": [
+    {
+      "name": "51-composer-branch-notice",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "wait": 5000
+        },
+        {
+          "click": ".composer-tiptap"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "js": "document.querySelector('.composer-tiptap').focus();document.execCommand('selectAll');document.execCommand('delete')"
+        },
+        {
+          "type": "Continue reviewing this demo."
+        },
+        {
+          "wait": 3500
+        }
+      ],
+      "afterActions": [
+        {
+          "click": ".composer-tiptap"
+        },
+        {
+          "key": "a",
+          "meta": true
+        },
+        {
+          "key": "Backspace"
+        }
+      ]
+    }
+  ]
+}
