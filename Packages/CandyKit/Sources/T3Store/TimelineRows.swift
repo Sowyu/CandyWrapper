@@ -405,14 +405,46 @@ public enum TimelineRows {
         var hiddenEntryIds: Set<String>
     }
 
-    /// `deriveSupersededAttemptFolds`: hides provider output of a superseded attempt. User
-    /// messages, resource cards, live subagents and notices stay; failed runs are exempt.
-    static func supersededAttemptFolds(_ entries: [TimelineEntry], unfoldedRunIds: Set<RunId>, liveSubagentEntryIds: Set<String>) -> [String: AttemptFold] {
+    /// `completeSupersededReplyEntryIds` (MessagesTimeline.logic.ts:722-768, T3 2994 ec43786140): final replies of
+    /// superseded attempts that finished before the steer replaced them. A steer stamps the attempt's `completedAt`
+    /// when it is sent, and the provider closes a reply it cut off only after that, so a reply that completed earlier
+    /// was whole. It must be the attempt's last output: trailing tool or reasoning work means the attempt went on.
+    static func completeSupersededReplyEntryIds(_ entries: [TimelineEntry]) -> Set<String> {
+        var lastOutput: [RunAttemptId: TimelineEntry] = [:]
+        for entry in entries {
+            guard let attempt = entry.attempt, attempt.status == "superseded" else { continue }
+            switch entry.kind {
+            case .message(let message, _) where message.role != .user: break
+            case .work(let work) where work.itemType != .systemNotice && work.itemType != .notification: break
+            default: continue
+            }
+            lastOutput[attempt.id] = entry
+        }
+        var ids = Set<String>()
+        for entry in lastOutput.values {
+            guard case .message(let message, let row) = entry.kind, !message.streaming, let item = row?.item,
+                  item.type == .assistantMessage, item.status == .completed,
+                  let done = item.completedAt?.epochMs, let superseded = entry.attempt?.completedAt?.epochMs, done < superseded
+            else { continue }
+            ids.insert(entry.id)
+        }
+        return ids
+    }
+
+    /// `deriveSupersededAttemptFolds`: hides provider output of a superseded attempt that the steer cut off. User
+    /// messages, handoffs, resource cards, live subagents and notices stay; failed runs and attempts whose reply
+    /// was already complete are exempt.
+    static func supersededAttemptFolds(_ entries: [TimelineEntry], unfoldedRunIds: Set<RunId>, liveSubagentEntryIds: Set<String>,
+                                       completeReplyEntryIds: Set<String> = []) -> [String: AttemptFold] {
+        let completeAttemptIds = completeReplyEntryIds.isEmpty ? []
+            : Set(entries.compactMap { completeReplyEntryIds.contains($0.id) ? $0.attempt?.id : nil })
         var order: [RunAttemptId] = []
         var byAttempt: [RunAttemptId: [TimelineEntry]] = [:]
         for entry in entries {
-            guard let attempt = entry.attempt, attempt.status == "superseded", !unfoldedRunIds.contains(attempt.runId),
-                entry.message?.role != .user, !entry.isPersistentResourceCard, !entry.isWebContent, !liveSubagentEntryIds.contains(entry.id),
+            guard let attempt = entry.attempt, attempt.status == "superseded", !completeAttemptIds.contains(attempt.id),
+                !unfoldedRunIds.contains(attempt.runId),
+                entry.message?.role != .user, entry.eventItem?.item.type != .handoff,
+                !entry.isPersistentResourceCard, !entry.isWebContent, !liveSubagentEntryIds.contains(entry.id),
                 entry.work?.itemType != .systemNotice
             else { continue }
             if byAttempt[attempt.id] == nil { order.append(attempt.id) }
@@ -445,7 +477,7 @@ public enum TimelineRows {
     /// answer behind "Worked for ...". Failures, work in progress and resource cards stay.
     static func turnFolds(
         _ entries: [TimelineEntry], terminalIds: Set<MessageId>, latestRun: TimelineLatestRun?, unfoldedRunIds: Set<RunId>,
-        runlessWorkActive: Bool, liveSubagentEntryIds: Set<String>
+        runlessWorkActive: Bool, liveSubagentEntryIds: Set<String>, completeSupersededReplyEntryIds: Set<String> = []
     ) -> [String: TurnFold] {
         var interruptedRunIds = Set<RunId>()
         // Where each run's prompt sits (T3 3105 9a01524f3, MessagesTimeline.logic.ts:1034-1040).
@@ -526,7 +558,10 @@ public enum TimelineRows {
                 let isFoldableTrailing = entry.work.map { $0.toolLifecycleStatus != .inProgress && !WorkLog.displayIndicatesFailure($0) } ?? false
                 if !isCompaction, index > terminalIndex, !isFoldableTrailing { continue }
                 // Linked resources and still-working children outlive their run.
-                if entry.isPersistentResourceCard || liveSubagentEntryIds.contains(entry.id) { continue }
+                // A finished reply a steer superseded answers its prompt, so it stays out (MessagesTimeline.logic.ts:1110-1116).
+                if entry.isPersistentResourceCard || liveSubagentEntryIds.contains(entry.id) || completeSupersededReplyEntryIds.contains(entry.id) {
+                    continue
+                }
                 if entry.work?.itemType == .notification { continue }
                 // User input stays visible after the surrounding work settles (80df91b52b, MessagesTimeline.logic.ts:1151-1152).
                 if entry.work?.questionAnswer != nil { continue }
@@ -610,7 +645,9 @@ public enum TimelineRows {
         let unsettled = unsettledRunId(input.latestRun, runningRunId: input.runningRunId)
         let failed = failedRunIds(entries, latestRun: input.latestRun)
         let liveSubagents = liveSubagentCardEntryIds(entries)
-        let attemptFolds = supersededAttemptFolds(entries, unfoldedRunIds: failed, liveSubagentEntryIds: liveSubagents)
+        let completeReplies = completeSupersededReplyEntryIds(entries)
+        let attemptFolds = supersededAttemptFolds(entries, unfoldedRunIds: failed, liveSubagentEntryIds: liveSubagents,
+                                                  completeReplyEntryIds: completeReplies)
         // The runs after the last prompt are in the later part, so only the unsettled run can be here.
         let activeResponseRunIds = head ? Set(unsettled.map { [$0] } ?? [])
             : activeVisualResponseRunIds(entries, unsettledRunId: unsettled, isWorking: input.isWorking)
@@ -618,7 +655,8 @@ public enum TimelineRows {
         // Live runless work keeps only the last prompt's runless turn open, and that prompt is later.
         let folds = turnFolds(
             entries, terminalIds: terminalIds, latestRun: input.latestRun, unfoldedRunIds: activeResponseRunIds.union(failed),
-            runlessWorkActive: runlessWorkActive && !head, liveSubagentEntryIds: liveSubagents)
+            runlessWorkActive: runlessWorkActive && !head, liveSubagentEntryIds: liveSubagents,
+            completeSupersededReplyEntryIds: completeReplies)
         var collapsed = Set<String>()
         for fold in folds.values where !input.expandedRunIds.contains(fold.runId) { collapsed.formUnion(fold.hiddenEntryIds) }
         var collapsedSuperseded = Set<String>()
