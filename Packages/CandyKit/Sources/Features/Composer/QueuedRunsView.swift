@@ -17,6 +17,7 @@ public final class QueuedRunsView: ComposerBannerView {
     public var editingRunId: RunId? { didSet { if editingRunId != oldValue { rebuild() } } }
     /// A queue command is in flight: every row action is disabled (`busyRunId`).
     public var isBusy = false { didSet { if isBusy != oldValue { rebuild() } } }
+    public var editBlockedReason: String? { didSet { if editBlockedReason != oldValue { rebuild() } } }
     public private(set) var expanded = true
 
     public var onEdit: ((ComposerLogic.QueueState.Item) -> Void)?
@@ -104,7 +105,8 @@ public final class QueuedRunsView: ComposerBannerView {
             row.configure(item, editing: item.runId != nil && item.runId == editingRunId,
                           canReorder: state.canReorder && item.runId != nil, busy: isBusy || item.runId == nil,
                           canSend: state.canSendNow || state.canPromoteToSteer, sendNow: state.canSendNow,
-                          editTip: "Edit in the composer" + (i == queued - 1 && item.runId != nil ? editShortcutLabel.map { " (\($0))" } ?? "" : ""),
+                          editBlocked: editBlockedReason != nil,
+                          editTip: editBlockedReason ?? "Edit in the composer" + (i == queued - 1 && item.runId != nil ? editShortcutLabel.map { " (\($0))" } ?? "" : ""),
                           steerTip: (state.canSendNow ? "Start a turn with this message" : "Send as a steer instead")
                             + (i == 0 ? steerShortcutLabel.map { " (\($0))" } ?? "" : ""))
         }
@@ -116,7 +118,7 @@ public final class QueuedRunsView: ComposerBannerView {
         if preferredHeight != before || state.items.count != count { onHeightChange?() }
     }
 
-    fileprivate func edit(_ i: Int) { if state.items.indices.contains(i) { onEdit?(state.items[i]) } }
+    func edit(_ i: Int) { if editBlockedReason == nil, !isBusy, state.items.indices.contains(i), state.items[i].isEditable { onEdit?(state.items[i]) } }
     fileprivate func cancelEdit() { onCancelEdit?() }
     fileprivate func steer(_ i: Int) { if let id = state.items[safe: i]?.runId { onSteer?(id) } }
     fileprivate func remove(_ i: Int) { if let id = state.items[safe: i]?.runId { onRemove?(id) } }
@@ -287,7 +289,7 @@ private final class QueuedRowView: DSView {
 
     /// `sendNow`: the thread is stopped, so the button starts a turn with the message (QueuedRunsControl.tsx:447-462).
     func configure(_ item: ComposerLogic.QueueState.Item, editing: Bool, canReorder: Bool, busy: Bool, canSend: Bool, sendNow: Bool,
-                   editTip: String, steerTip steerText: String) {
+                   editBlocked: Bool, editTip: String, steerTip steerText: String) {
         self.editing = editing
         runId = item.runId
         self.editTip.text = editTip
@@ -307,7 +309,8 @@ private final class QueuedRowView: DSView {
         for b in [edit, steer, remove] { b.isHidden = editing; b.isEnabled = !busy }
         steer.isEnabled = !busy && canSend
         steer.title = sendNow ? "Send now" : "Steer"
-        edit.isEnabled = !busy && item.isEditable
+        edit.isEnabled = !busy && item.isEditable && !editBlocked
+        edit.setAccessibilityHelp(editTip)
         steerTip.text = steerText
         cancel.isHidden = !editing
         needsDisplay = true
