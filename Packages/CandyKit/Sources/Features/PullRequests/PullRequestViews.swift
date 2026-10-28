@@ -118,10 +118,12 @@ public enum PullRequestStyle {
 public final class PullRequestAvatarView: DSView {
     private let initial = LabelView()
     private var verdictGlyph: IconView?
+    private var legacyClipsToBounds = true
     public var reviewOutcome: String? { didSet { updateVerdict() } }
     public var reviewStale = false { didSet { updateVerdict() } }
     private func updateVerdict() {
         verdictGlyph?.removeFromSuperview(); verdictGlyph = nil
+        clipsToBounds = reviewOutcome != nil && ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? false : legacyClipsToBounds
         guard let reviewOutcome, ThreadDesign.uses3814(dark: effectiveAppearance.isDark) else { return }
         let icon: IconName = reviewOutcome == "approved" ? .circleCheck : .circleX
         let color = reviewOutcome == "approved" ? Themed.base("emerald-500", dark: "emerald-400") : Themed.color(reviewOutcome == "changes-requested" ? \.destructive : \.mutedForeground)
@@ -158,6 +160,7 @@ public final class PullRequestAvatarView: DSView {
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        legacyClipsToBounds = clipsToBounds
         image.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
         image.contentsGravity = .resizeAspectFill
         image.masksToBounds = true
@@ -201,15 +204,31 @@ public final class PullRequestAvatarView: DSView {
     }
 
     public override func updateLayer() {
-        layer?.cornerRadius = bounds.width / 2
-        layer?.backgroundColor = Themed.color(\.muted).cgColor(in: self)
+        let showsVerdict = reviewOutcome != nil && ThreadDesign.uses3814(dark: effectiveAppearance.isDark)
+        layer?.cornerRadius = showsVerdict ? 0 : bounds.width / 2
+        layer?.backgroundColor = showsVerdict ? nil : Themed.color(\.muted).cgColor(in: self)
+        image.backgroundColor = showsVerdict ? Themed.color(\.muted).cgColor(in: self) : nil
+        if showsVerdict { layer?.masksToBounds = false }
         initial.color = Themed.color(\.mutedForeground)
         if let ring {
             layer?.borderWidth = 0
             layer?.shadowOpacity = 0
             layer?.borderColor = nil
             ringLayer.isHidden = false
-            ringLayer.strokeColor = ring.cgColor(in: self)
+            ringLayer.frame = showsVerdict ? bounds : .zero
+            var stroke = ring
+            if showsVerdict, reviewStale, let reviewOutcome {
+                // T3 mixes stale rings with the canvas in sRGB, rather than making the stroke translucent.
+                effectiveAppearance.performAsCurrentDrawingAppearance {
+                    let foreground = PullRequestStyle.outcomeRing(reviewOutcome, stale: false).usingColorSpace(.extendedSRGB)!
+                    let background = Themed.color(\.background).usingColorSpace(.extendedSRGB)!
+                    let alpha: CGFloat = reviewOutcome == "dismissed" ? 0.3 : 0.35
+                    stroke = NSColor(srgbRed: foreground.redComponent * alpha + background.redComponent * (1 - alpha),
+                                     green: foreground.greenComponent * alpha + background.greenComponent * (1 - alpha),
+                                     blue: foreground.blueComponent * alpha + background.blueComponent * (1 - alpha), alpha: 1)
+                }
+            }
+            ringLayer.strokeColor = stroke.cgColor(in: self)
             ringLayer.path = CGPath(ellipseIn: bounds.insetBy(dx: -1, dy: -1), transform: nil)
         } else {
             ringLayer.isHidden = true
