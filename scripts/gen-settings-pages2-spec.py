@@ -20,8 +20,7 @@ lucide, button, merge, conn, pop = ns["lucide"], ns["button"], ns["merge"], ns["
 switch, row, select, SPAN, LAYERS, GROUP, ROW = ns["switch"], ns["row"], ns["select"], ns["SPAN"], ns["LAYERS"], ns["GROUP"], ns["ROW"]
 form_ns = conn["form_ns"]
 def section(title, children, icon="", action=""):
-    return conn["section"](title, children, icon, action).replace(
-        "text-sm font-normal text-foreground/70", "text-base font-semibold text-foreground")
+    return conn["section"](title, children, icon, action)
 exec(open(os.path.join(ROOT, "scripts/gen-forms-spec.py")).read().split("cases = [{\"name\": f\"{v}.default\"")[0].split("def svg(")[0], form_ns)
 fsrc = open(os.path.join(ROOT, "scripts/gen-forms-spec.py")).read()
 exec(fsrc[fsrc.index("BADGE = "):fsrc.index("cases = [{\"name\": f\"{v}.default\"")], form_ns)

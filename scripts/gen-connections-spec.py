@@ -118,7 +118,7 @@ header = ('<header class="flex shrink-0 items-center gap-3" style="height:52px;p
           '<li aria-hidden="true" class="flex shrink-0 items-center text-icon-muted">/</li>'
           '<li aria-current="page" class="flex min-w-0 items-center font-medium text-foreground truncate">Connections</li></ol></nav></div></header>')
 
-# SettingsSection / SettingsGroup / SettingsRow (settingsLayout.tsx).
+# SettingsSection / SettingsGroup / SettingsRow (3824 settingsLayout.tsx:235,467-499, #24865).
 GROUP = "relative overflow-visible text-foreground rounded-xl border border-border/60 bg-card/40 shadow-xs/5 [&>*+*]:border-t [&>*+*]:border-border/50 [&>[data-slot=settings-row]]:rounded-none"
 ROW = "@container/settings-row rounded-xl px-3 sm:px-4 aria-disabled:opacity-64 aria-disabled:[&_*]:text-muted-foreground py-3"
 ELLIPSIS = button("ghost-muted", "icon-xs", lucide("ellipsis", "size-3.5"))
@@ -126,7 +126,7 @@ ELLIPSIS = button("ghost-muted", "icon-xs", lucide("ellipsis", "size-3.5"))
 
 def section(title, children, icon="", action=""):
     return (f'<section class="space-y-2.5"><div class="flex min-h-7 items-start justify-between gap-4 px-3 sm:px-4">'
-            f'<div class="flex min-w-0 items-center gap-1"><h2 class="flex min-h-7 items-center gap-2 text-sm font-normal text-foreground/70">{icon}{title}</h2></div>'
+            f'<div class="flex min-w-0 items-center gap-1"><h2 class="flex min-h-7 items-center gap-2 text-base font-semibold text-foreground">{icon}{title}</h2></div>'
             f'<div class="flex min-h-7 min-w-7 items-center justify-end">{action}</div></div><div class="{GROUP}">{children}</div></section>')
 
 
@@ -135,7 +135,7 @@ def settings_row(title, desc, control):
             '@min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">'
             f'<div class="min-w-0 flex-1 space-y-1"><div class="flex min-h-5 items-center gap-1.5"><h3 class="text-sm font-medium text-foreground">{title}</h3>'
             '<span class="inline-flex h-5 w-5 shrink-0 items-center justify-center"></span></div>'
-            f'<p class="max-w-xl text-xs leading-normal text-muted-foreground/80">{desc}</p></div>'
+            f'<p class="max-w-2xl text-balance text-xs leading-normal text-muted-foreground">{desc}</p></div>'
             f'<div class="flex w-full min-w-0 shrink-0 items-center gap-2 @min-[32rem]/settings-row:w-auto @min-[32rem]/settings-row:justify-end">{control}</div></div></div>')
 
 
@@ -258,7 +258,7 @@ def host_row(title, desc, control=None):
             '@min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">'
             f'<div class="min-w-0 flex-1 space-y-1"><div class="flex min-h-5 items-center gap-1.5"><h3 class="text-sm font-medium text-foreground">{title}</h3>'
             '<span class="inline-flex h-5 w-5 shrink-0 items-center justify-center"></span></div>'
-            f'<p class="max-w-xl text-xs leading-normal text-muted-foreground/80">{desc}</p></div></div></div>')
+            f'<p class="max-w-2xl text-balance text-xs leading-normal text-muted-foreground">{desc}</p></div></div></div>')
 
 
 GRANTS = [("View environment", True), ("Operate tasks", True), ("Change environment settings", True), ("Manage providers", True),

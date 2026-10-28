@@ -211,7 +211,10 @@ public class SettingsPageBase: SettingsStackView {
             stack.add(header: scope.environmentLabel(e), machine: e.machine, layers: layers)
         }
         let pop = PopoverView(content: stack, padding: .none, width: .md)
-        _ = pop.show(from: trigger, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4))
+        let popup = pop.show(from: trigger, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4))
+        let marker = trigger.superview as? InheritanceButton
+        marker?.refreshVisibility()
+        popup?.onClose = { [weak marker] in marker?.refreshVisibility() }
     }
 
     /// `formatValue` (SettingInheritance.tsx) for the keys these pages show.
