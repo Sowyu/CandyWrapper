@@ -82,9 +82,6 @@ struct DiffFidelityTests {
     /// 3824 expands both sandbox files. 09 uses split layout and 10 uses stacked layout.
     @Test(arguments: ["10-diff-unified", "09-diff-split"])
     func panel(_ reference: String) async throws {
-        var fonts = FontRuntimeInput()
-        fonts.smoothing = false
-        FontRuntime.apply(fonts)
         defer { Fidelity.pin() }
         var rows = "", cases: [(String, Double)] = []
         for theme in ["light", "dark"] {
@@ -111,7 +108,9 @@ struct DiffFidelityTests {
             for _ in 0..<200 where panel.list.diff.files.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
             try #require(!panel.list.diff.files.isEmpty)
             panel.list.setAllCollapsed(false)
-            let ours = Snapshot.image(of: panel, size: NSSize(width: crop.width / 2, height: crop.height / 2), scale: 2, dark: theme == "dark")
+            let ours = FontRuntime.$smoothingOverride.withValue(false) {
+                Snapshot.image(of: panel, size: NSSize(width: crop.width / 2, height: crop.height / 2), scale: 2, dark: theme == "dark")
+            }
             cases.append(("\(reference).\(theme)", try Self.record("\(reference).\(theme)", ref: ref, ours: ours, rows: &rows)))
         }
         print(String(format: "FIDELITY Diff panel %@: mean differing %.2f%%", reference, cases.map(\.1).reduce(0, +) / 2 * 100))
