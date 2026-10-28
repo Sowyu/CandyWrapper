@@ -18,6 +18,26 @@ struct GitActionsLogicTests {
                   pr: pr.map { VcsStatus.ChangeRequest(number: 1, title: "t", url: "u", baseRef: "main", headRef: "x", state: $0) })
     }
 
+    @Test func createdPullRequestSuccessIsConciseAndOlderResultsKeepTheirCopy() throws {
+        var fields: [String: JSONValue] = [
+            "action": .string("create_pr"), "branch": .object(["status": .string("unchanged")]),
+            "toast": .object(["title": .string("Server title"), "description": .string("Repeated PR title"),
+                              "cta": .object(["kind": .string("none")])])
+        ]
+        let old = try JSONValue.object(fields).decode(as: GitRunStackedActionResult.self)
+        #expect(L.inlineSuccess(old).title == "Server title")
+        #expect(L.inlineSuccess(old).description == "Repeated PR title")
+        fields["pr"] = .object(["status": .string("created")])
+        let created = try JSONValue.object(fields).decode(as: GitRunStackedActionResult.self)
+        #expect(L.inlineSuccess(created).title == "Created PR")
+        #expect(L.inlineSuccess(created).description == nil)
+        #expect(L.inlineSuccess(created, terminology: .of(SourceControlProviderInfo(kind: "gitlab"))).title == "Created MR")
+        fields["pr"] = .object(["status": .string("existing")])
+        let existing = try JSONValue.object(fields).decode(as: GitRunStackedActionResult.self)
+        #expect(L.inlineSuccess(existing).title == "Server title")
+        #expect(L.inlineSuccess(existing).description == "Repeated PR title")
+    }
+
     @Test func quickActions() {
         func q(_ s: VcsStatus?, busy: Bool = false, isDefault: Bool = false, remote: Bool = true) -> (String, L.QuickAction.Kind, GitStackedAction?, Bool) {
             let a = L.quickAction(s, busy: busy, isDefaultRef: isDefault, hasPrimaryRemote: remote)

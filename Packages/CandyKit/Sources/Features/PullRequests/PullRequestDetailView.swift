@@ -378,6 +378,7 @@ public final class PullRequestDetailView: DSView {
         ghost?.removeFromSuperview(); ghost = nil
         failure?.removeFromSuperview(); failure = nil
         let loaded = phase == .loaded && detail != nil
+        if !loaded { inlineConfirm.detached() }
         headerBox.isHidden = !loaded
         [summary, timeline, code].forEach { $0.isHidden = !loaded }
         composerButton.isHidden = true
@@ -486,8 +487,24 @@ public final class PullRequestDetailView: DSView {
         needsLayout = true
     }
 
+    public override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil { inlineConfirm.detached() }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { rebuildActions() }
+    }
+
+    public override func viewDidHide() {
+        super.viewDidHide()
+        inlineConfirm.disarm()
+    }
+
     /// The header's merge slot (`resolvePullRequestPrimaryControl`).
     private func rebuildActions() {
+        inlineConfirm.detached(slot: "header")
         let previous = (primary as? ButtonView).flatMap { b in b.reservedTitles.isEmpty ? nil : (b.reservedTitles, b.frame.width) }
         defer {
             // The same confirm button relabeled (armed, pending or back): its width animates.
@@ -741,6 +758,14 @@ public final class PullRequestDetailView: DSView {
         }
         let popup = MenuPopupView.show(items, from: more, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))
         menuRef.popup = popup
+        let previousClose = popup?.hostPopup?.onClose
+        popup?.hostPopup?.onClose = { [weak self] in
+            previousClose?()
+            if menuRef.armedIndex != nil {
+                self?.inlineConfirm.detached()
+                menuRef.armedIndex = nil
+            }
+        }
         // base-ui focuses the highlighted row, which blurs an armed one and disarms it.
         popup?.onHighlight = { [weak self] i in
             guard let self, let i, let armed = menuRef.armedIndex, i != armed else { return }

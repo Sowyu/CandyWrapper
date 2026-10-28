@@ -984,7 +984,8 @@ final class GitController {
             switch outcome {
             case .success(let result):
                 if let branch = GitActionsLogic.createdBranch(result) { self.setThreadBranch(branch, worktreePath: target.worktreePath, on: target) }
-                self.showSuccess(result.toast.title, result.toast.description, key: key)
+                let success = GitActionsLogic.inlineSuccess(result, terminology: self.terminology)
+                self.showSuccess(success.title, success.description, key: key)
             case .failure(let error):
                 self.toast("Action failed", Self.message(error), kind: .error)
             }

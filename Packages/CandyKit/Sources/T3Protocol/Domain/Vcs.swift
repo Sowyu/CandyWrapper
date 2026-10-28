@@ -185,9 +185,11 @@ public struct GitRunStackedActionResult: Decodable, Hashable, Sendable {
         public var description: String?
         public var cta: Cta
     }
+    public struct PullRequest: Decodable, Hashable, Sendable { public var status: String }
     public var action: GitStackedAction
     public var branch: Branch
     public var toast: Toast
+    public var pr: PullRequest?
 }
 
 /// `GitActionProgressEvent` (git.ts:451-500). Exactly one `action_finished` or `action_failed` ends the stream.

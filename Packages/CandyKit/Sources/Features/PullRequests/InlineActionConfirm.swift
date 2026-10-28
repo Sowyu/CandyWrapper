@@ -8,8 +8,7 @@ import AppKit
 public final class InlineActionConfirm {
     private struct Armed {
         let action: String
-        /// Which control: the header slot or a menu row. T3 compares DOM nodes; CandyWrapper
-        /// rebuilds its header buttons, so a slot name stands in for the node.
+        /// Which control: the header slot or a menu row. Its owner invalidates it on removal.
         let slot: String
         let contains: (NSEvent) -> Bool
         let onDisarm: () -> Void
@@ -60,6 +59,13 @@ public final class InlineActionConfirm {
         timeout = work
         schedule(timeoutSeconds, work)
         return false
+    }
+
+    /// A control left its owner. Clear without relabeling the control being removed.
+    /// T3 3814 pullRequest/useInlineActionConfirm.ts:47-58 releases the armed element on detach.
+    public func detached(slot: String? = nil) {
+        guard let armed, slot == nil || armed.slot == slot else { return }
+        clear()
     }
 
     /// Puts an armed control back, as a press elsewhere would.
