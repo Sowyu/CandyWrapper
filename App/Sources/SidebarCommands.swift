@@ -254,18 +254,22 @@ final class SidebarCommands {
         }
     }
 
-    /// "Copy PR link" or "Copy thread ID" for the open thread; nothing on a draft. Returns the copied value.
+    /// "Copy PR link" or "Copy thread" for the open thread; nothing on a draft. Returns the copied value.
     @discardableResult
     func copyThreadReference() -> String? {
         guard let target = threadReferenceTarget else { return nil }
-        copy(target.value, title: target.title)
+        if target.write(to: .general) { toast(target.title, target.description, .success) }
         return target.value
     }
 
     /// What `thread.copyReference` copies, nil when there is none.
-    var threadReferenceTarget: (value: String, title: String)? {
-        guard let id = threads.openThreadId else { return nil }
-        return threads.pullRequests.copyReferenceTarget(threadId: id.localId.rawValue)
+    var threadReferenceTarget: ThreadReferenceClipboard? {
+        guard let id = threads.openThreadId, let env = id.environmentId else { return nil }
+        let target = threads.pullRequests.copyReferenceTarget(threadId: id.localId.rawValue)
+        let title = sidebar?.snapshot?.threads.first { $0.id == id }?.title ?? id.localId.rawValue
+        return ThreadReferenceClipboard(threadId: id.localId.rawValue, title: title, environmentId: env,
+                                        pullRequestURL: target.value == id.localId.rawValue ? nil : target.value,
+                                        pullRequestTitle: target.title)
     }
 
     /// The value `thread.copyReference` copies, nil when there is none.
@@ -643,6 +647,10 @@ final class SidebarCommands {
             copy(path, title: "Path copied")
         case "copy-branch":
             if let branch = thread.branch { copy(branch, title: "Branch copied") }
+        case "copy-thread":
+            guard let env = id.environmentId else { return }
+            let target = ThreadReferenceClipboard(threadId: id.localId.rawValue, title: thread.title, environmentId: env)
+            if target.write(to: .general) { toast(target.title, target.description, .success) }
         case "copy-thread-id":
             copy(id.localId.rawValue, title: "Thread ID copied")
         case "archive": archive(id)

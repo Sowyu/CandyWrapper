@@ -18,6 +18,10 @@ private let now: T3Timestamp = "2026-10-10T12:00:00.000Z"
 
 @Suite("Thread command payloads")
 struct ThreadCommandPayloadTests {
+    @Test func copyThreadNeedsNoOperateGrant() {
+        #expect(!ThreadActionMenu.requiresOperate("copy-thread"))
+    }
+
     @Test func simpleCommandsCarryTypeCommandIdAndThread() {
         let cases: [(JSONValue, String)] = [
             (ThreadCommands.settle(id, commandId: "c"), "thread.settle"),
@@ -280,7 +284,7 @@ struct ThreadActionMenuTests {
         #expect(items.map(\.id) == ["new-thread-on-branch", "pin", "settle", "snooze", "rename", "regenerate-title", "mark-unread",
                                     "filter-by-project", "auto-settle", "copy", "project-settings", "archive", "delete"])
         #expect(items.first { $0.id == "filter-by-project" }?.label == "Filter by demo")
-        #expect(items.first { $0.id == "copy" }?.children.map(\.id) == ["copy-path", "copy-branch", "copy-thread-id"])
+        #expect(items.first { $0.id == "copy" }?.children.map(\.id) == ["copy-path", "copy-branch", "copy-thread", "copy-thread-id"])
         #expect(items.filter(\.separatorBefore).map(\.id) == ["rename", "copy", "archive"])
     }
 

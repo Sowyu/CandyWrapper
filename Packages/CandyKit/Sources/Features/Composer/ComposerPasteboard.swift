@@ -58,3 +58,32 @@ final class ComposerFileDrop {
         return true
     }
 }
+
+/// T3 3814, client-runtime/src/threadReference.ts:27-81. PR references remain URLs; thread
+/// references carry both canonical Markdown and the context fragment for rich paste.
+public struct ThreadReferenceClipboard {
+    public let value: String
+    public let description: String
+    public let title: String
+    public let html: String?
+
+    public init(threadId: String, title: String, environmentId: String, pullRequestURL: String? = nil, pullRequestTitle: String = "PR link copied") {
+        if let pullRequestURL {
+            value = pullRequestURL; description = pullRequestURL; self.title = pullRequestTitle; html = nil
+        } else {
+            let record = ComposerContext.threadRecord(threadId: threadId, title: title, environmentId: environmentId)
+            value = ComposerContext.reference(ComposerContext.threadReference(threadId: threadId, title: title))
+            description = record["title"]?.stringValue ?? title
+            self.title = "Thread copied"
+            html = ComposerContext.clipboardHTML(text: value, records: [record], environmentId: environmentId)
+        }
+    }
+
+    @MainActor @discardableResult public func write(to pasteboard: NSPasteboard) -> Bool {
+        let item = NSPasteboardItem()
+        item.setString(value, forType: .string)
+        if let html { item.setString(html, forType: .html) }
+        pasteboard.clearContents()
+        return pasteboard.writeObjects([item])
+    }
+}

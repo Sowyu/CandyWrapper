@@ -550,7 +550,7 @@ public enum ThreadActionMenu {
 
     /// Actions that change the thread; the rest stay open to read-only connections.
     public static func requiresOperate(_ id: String) -> Bool {
-        !["new-thread-on-branch", "project-settings", "mark-unread", "share-guest", "copy", "copy-path", "copy-branch", "copy-thread-id"].contains(id)
+        !["new-thread-on-branch", "project-settings", "mark-unread", "share-guest", "copy", "copy-path", "copy-branch", "copy-thread", "copy-thread-id"].contains(id)
     }
 
     public static func items(_ s: State) -> [ThreadMenuItem] {
@@ -584,6 +584,7 @@ public enum ThreadActionMenu {
         }
         var copy: [ThreadMenuItem] = [.init("copy-path", "Path")]
         if s.branch != nil { copy.append(.init("copy-branch", "Branch")) }
+        copy.append(.init("copy-thread", "Thread"))
         copy.append(.init("copy-thread-id", "Thread ID"))
         items.append(.init("copy", "Copy", separatorBefore: true, children: copy))
         items.append(.init("project-settings", "Project settings"))
