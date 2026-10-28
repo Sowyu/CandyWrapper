@@ -41,12 +41,18 @@ public actor ServerConfigFeed {
         run = token
         stopped = false
         // rpc.ts:1787-1797; matches the composer's existing capability opt-ins.
+        let supervisor = self.supervisor
         let task = supervisor.subscribe("subscribeServerConfig", snapshotFirst: true, payload: {
-            .object([
+            var fields: [String: JSONValue] = [
                 "environmentThemes": .bool(true),
                 "usageLimitSources": .bool(true),
                 "usageLimitsCommand": .bool(true),
-            ])
+            ]
+            // Opt out only when the descriptor promises on-demand refresh replies (environment.ts:106).
+            if await supervisor.serverCapabilities.contains("providerWorkspaceSnapshotsOnDemand") {
+                fields["workspaceSnapshotsOnDemand"] = .bool(true)
+            }
+            return .object(fields)
         }, handler: { [weak self] event in
             await self?.receive(event, run: token)
         })

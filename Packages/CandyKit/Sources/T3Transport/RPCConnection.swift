@@ -40,6 +40,7 @@ public enum RPCClientError: Error, Sendable, Equatable, CustomStringConvertible 
 public actor RPCConnection {
     /// The descriptor checked while opening this socket, when the connector supplies it.
     public nonisolated let serverVersion: String?
+    public nonisolated let serverCapabilities: Set<String>
     private let socket: any RPCSocket
     private var nextID = 1
     private var unary: [RPCRequestID: CheckedContinuation<JSONValue, Error>] = [:]
@@ -72,14 +73,15 @@ public actor RPCConnection {
     private var watchGeneration = 0
     private let traceNumber = RPCTrace.connectionNumber()
 
-    public init(socket: any RPCSocket, livenessInterval: Duration = .seconds(5), serverVersion: String? = nil) {
-        self.init(socket: socket, livenessInterval: livenessInterval, clock: .continuous, serverVersion: serverVersion)
+    public init(socket: any RPCSocket, livenessInterval: Duration = .seconds(5), serverVersion: String? = nil, serverCapabilities: Set<String> = []) {
+        self.init(socket: socket, livenessInterval: livenessInterval, clock: .continuous, serverVersion: serverVersion, serverCapabilities: serverCapabilities)
     }
 
     /// `clock` drives the watchdog; tests step it by hand.
-    init(socket: any RPCSocket, livenessInterval: Duration, clock: SleepClock, serverVersion: String? = nil) {
+    init(socket: any RPCSocket, livenessInterval: Duration, clock: SleepClock, serverVersion: String? = nil, serverCapabilities: Set<String> = []) {
         self.socket = socket
         self.serverVersion = serverVersion
+        self.serverCapabilities = serverCapabilities
         self.livenessInterval = livenessInterval
         self.clock = clock
         lastInbound = clock.now()

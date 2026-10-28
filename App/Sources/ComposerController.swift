@@ -183,6 +183,7 @@ final class ComposerController {
     /// `server.getConfig` providers and settings per environment, followed through `subscribeServerConfig`
     /// on each environment's session (T3 follows every environment's config, CR/state/server.ts:437).
     private var serverConfigs: [String: ServerProviderConfig] = [:]
+    private var workspaceSnapshots: [String: ProviderWorkspaceSnapshots] = [:]
     private var configSubscriptions: [String: (shell: ShellSession, task: Task<Void, Never>)] = [:]
     private var serverConfig: ServerProviderConfig {
         targetEnvironmentId.flatMap { serverConfigs[$0] } ?? ServerProviderConfig(providers: [])
@@ -496,6 +497,7 @@ final class ComposerController {
 
     private func configChanged(_ event: ServerConfigEvent, environmentId: String) {
         var config = serverConfigs[environmentId] ?? ServerProviderConfig(providers: [])
+        let previousProviders = config.providers
         var refreshComposer = true
         switch event {
         case .snapshot(let snapshot):
@@ -515,9 +517,12 @@ final class ComposerController {
         case .usageLimitSourcesUpdated(let sources): config.usageLimitSources = sources
         case .providerStatuses(let providers):
             guard config.providers != providers else { return }
-            let unchanged = config.providers.count == providers.count
-                && zip(config.providers, providers).allSatisfy { $0.hasSamePresentation(as: $1) }
-            config.providers = providers
+            var next = config
+            next.providers = providers
+            let merged = workspaceSnapshots[environmentId]?.merging(next) ?? next
+            let unchanged = config.providers.count == merged.providers.count
+                && zip(config.providers, merged.providers).allSatisfy { $0.hasSamePresentation(as: $1) }
+            config.providers = merged.providers
             refreshComposer = !unchanged
         case .settingsUpdated(let settings): config.settings = settings
         case .keybindingsUpdated(let rules):
@@ -530,7 +535,16 @@ final class ComposerController {
             if environmentId == environments.primaryId { showKeybindingsWarning(message, config: config) }
         case .other: return
         }
-        serverConfigs[environmentId] = config
+        let merged = workspaceSnapshots[environmentId]?.merging(config) ?? config
+        if merged.capabilities.contains("providerWorkspaceSnapshotsOnDemand") {
+            for previous in previousProviders {
+                let current = merged.providers.first { $0.instanceId == previous.instanceId }
+                for snapshot in previous.workspaceSnapshots ?? [] where current?.workspaceSnapshot(snapshot.cwd) == nil {
+                    menuState.workspaceRefresh.removeValue(forKey: "\(environmentId)|\(previous.instanceId.rawValue)|\(snapshot.cwd)")
+                }
+            }
+        }
+        serverConfigs[environmentId] = merged
         // App shortcuts follow the primary environment's keybindings (`primaryServerKeybindingsAtom`).
         if environmentId == environments.primaryId {
             ActiveKeymap.setServerRules(config.keybindings)
@@ -688,6 +702,7 @@ final class ComposerController {
         configSubscriptions.removeValue(forKey: environmentId)?.task.cancel()
         capabilityTasks.removeValue(forKey: environmentId)?.cancel()
         serverConfigs[environmentId] = nil
+        workspaceSnapshots[environmentId] = nil
         capabilities[environmentId] = nil
         migrationGenerations[environmentId] = nil
         // Sessions are keyed by project group; the environment is in the session's project id.
@@ -1345,12 +1360,11 @@ final class ComposerController {
         panel.toasts.show(ToastView(title: "Agent session will restart", message: "Your next message starts a fresh session.", kind: .success))
         guard let env = id.environmentId, let cwd else { return }
         let instance = runtime != nil ? thread.providerInstanceId.rawValue : thread.modelSelection.instanceId.rawValue
+        let basis = serverConfigs[env]?.providers.first { $0.instanceId.rawValue == instance }
         let reply = try await environments.request(env, "server.refreshProviders",
-                                                   .object(["instanceId": .string(instance), "cwd": .string(cwd), "fresh": .bool(true)]))
+                                                   workspaceRefreshInput(env: env, instance: instance, cwd: cwd, fresh: true))
         if let providers = try? reply["providers"]?.decode(as: [ServerProvider].self) {
-            var config = serverConfigs[env] ?? ServerProviderConfig(providers: [])
-            config.providers = providers
-            serverConfigs[env] = config
+            applyWorkspaceReply(providers, env: env, instance: instance, cwd: cwd, fresh: true, basis: basis)
         }
     }
 
@@ -3116,16 +3130,37 @@ extension ComposerController {
            let checked = T3Timestamp(snapshot.checkedAt).date, Date().timeIntervalSince(checked) < ttl { return }
         menuState.workspaceRefresh[key] = Date()
         let supervisor = shell.supervisor
-        let payload: JSONValue = .object(["instanceId": .string(provider.instanceId.rawValue), "cwd": .string(cwd)])
+        let payload = workspaceRefreshInput(env: env, instance: provider.instanceId.rawValue, cwd: cwd)
         Task { [weak self] in
-            guard let reply = try? await supervisor.request("server.refreshProviders", payload: payload),
-                  let providers = try? reply["providers"]?.decode(as: [ServerProvider].self), let self else { return }
-            var config = serverConfigs[env] ?? ServerProviderConfig(providers: [])
-            config.providers = providers
-            serverConfigs[env] = config
+            let reply = try? await supervisor.request("server.refreshProviders", payload: payload)
+            guard let self, environments.session(env) === shell else { return }
+            guard let providers = try? reply?["providers"]?.decode(as: [ServerProvider].self) else {
+                menuState.workspaceRefresh.removeValue(forKey: key)
+                return
+            }
+            applyWorkspaceReply(providers, env: env, instance: provider.instanceId.rawValue, cwd: cwd, fresh: false, basis: provider)
             if panel.menus.isOpen { panel.menus.reload() }
             composer.refreshChips()
         }
+    }
+
+    private func workspaceRefreshInput(env: String, instance: String, cwd: String, fresh: Bool = false) -> JSONValue {
+        var fields: [String: JSONValue] = ["instanceId": .string(instance), "cwd": .string(cwd)]
+        if fresh { fields["fresh"] = .bool(true) }
+        return ProviderWorkspaceSnapshots.refreshInput(.object(fields), capabilities: serverConfigs[env]?.capabilities ?? [])
+    }
+
+    private func applyWorkspaceReply(_ providers: [ServerProvider], env: String, instance: String, cwd: String,
+                                     fresh: Bool, basis: ServerProvider?) {
+        guard var config = serverConfigs[env] else { return }
+        if config.capabilities.contains("providerWorkspaceSnapshotsOnDemand") {
+            workspaceSnapshots[env, default: ProviderWorkspaceSnapshots()].record(instanceId: ProviderInstanceId(instance), cwd: cwd,
+                                                                                 fresh: fresh, providers: providers, basis: basis)
+            config = workspaceSnapshots[env]?.merging(config) ?? config
+        } else {
+            config.providers = providers
+        }
+        serverConfigs[env] = config
     }
 
     // MARK: Picks and chips
