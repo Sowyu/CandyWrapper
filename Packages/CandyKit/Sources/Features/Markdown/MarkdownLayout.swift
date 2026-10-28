@@ -1086,6 +1086,9 @@ private struct Builder {
         titleAndBody.height = title.height + (children.isEmpty ? 0 : gap + body.height)
         // `my-1 border-l-2 pl-3`: 4px margins that collapse with the children's.
         var box = Box(top: max(4, title.top), bottom: max(4, children.isEmpty ? title.bottom : body.bottom), height: titleAndBody.height)
+        // The root zeroes the alert's own margin, but its last paragraph's margin still collapses through it
+        // (index.css:1869-1881). The assistant meta gap then collapses with that margin too.
+        if ThreadDesign.uses3814 { box.innerBottom = children.isEmpty ? title.bottom : body.bottom }
         box.items.append(.box(CGRect(x: 0, y: 0, width: 2, height: titleAndBody.height), fill: Themed.base(border, 0.7), border: nil, radius: 0))
         box.add(titleAndBody, at: CGPoint(x: indent, y: 0))
         return box
@@ -1114,7 +1117,7 @@ private struct Builder {
         paragraph.tabStops = []
         // The paragraph style goes in before the tokens split the string into runs: added after, it rebuilt
         // every run's attributes, 0.1 s for an 18,000 line block.
-        let string = NSMutableAttributedString(string: code, attributes: [.font: font, .foregroundColor: CodeTokenKind.plain.color,
+        let string = NSMutableAttributedString(string: code, attributes: [.font: font, .foregroundColor: CodeTokenKind.plain.markdownColor,
                                                                           .paragraphStyle: paragraph])
         // ponytail: NSFontManager off the main thread, under a lock and once per font; fall back to descriptor traits if it ever asserts
         let italic = coloredCodeLock.withLock {
@@ -1124,7 +1127,7 @@ private struct Builder {
             return made
         }
         for token in plain ? [] : CodeHighlighter.tokens(code, language: language) {
-            string.addAttribute(.foregroundColor, value: token.kind.color, range: token.range)
+            string.addAttribute(.foregroundColor, value: token.kind.markdownColor, range: token.range)
             if token.kind == .emphasis { string.addAttribute(.font, value: italic, range: token.range) }
         }
         guard cached else { return string }

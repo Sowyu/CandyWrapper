@@ -100,6 +100,7 @@ struct ReferenceScreensFidelityTests {
         }
         // 03n: the 800pt window, so the 640pt breakpoints see the window; the sidebar takes 208pt (SidebarWidth caps it at
         // 800 - 640) and only the thread panel above the composer is compared.
+        let fonts = ThreadFidelityTests.capturedFonts(); defer { FontRuntime.apply(fonts) }
         let window = NSSize(width: 800, height: 780)
         let w = Int((window.width - SidebarMetrics.minWidth) * 2), h = Int(ThreadFidelityTests.compared * 2)
         for theme in ["light", "dark"] {
