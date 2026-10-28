@@ -2105,9 +2105,9 @@ public final class ThreadPanelView: DSView {
             }
         }
         panelResize.isHidden = !rightPanelOpen || rightPanelMaximized || sheet
-        // The sheet has no maximize control (ChatView.tsx:11211-11232). It fades with the slide, `transition-opacity`
+        // Nightly 3814 keeps maximize beside the sheet controls (ChatView.tsx:3795-3804). It fades with the slide, `transition-opacity`
         // over the same duration and curve (ChatView.tsx:11213-11224).
-        maximize.isHidden = sheet || (!rightPanelOpen && panelGhost == nil)
+        maximize.isHidden = (sheet && !ThreadDesign.uses3814(dark: effectiveAppearance.isDark)) || (!rightPanelOpen && panelGhost == nil)
         maximize.alphaValue = panelSlide.isRunning ? panelSlide.value : 1
         panelResize.frame = NSRect(x: chat - 4, y: panelTop, width: 8, height: max(0, bounds.height - panelTop))
         if rightPanelOpen || panelGhost != nil {
