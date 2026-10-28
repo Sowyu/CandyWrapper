@@ -633,6 +633,7 @@ final class ThreadController {
             guard let self, let env = self.openThreadId?.environmentId else { return PeerLinkDialog.answerFailure(CancellationError()) }
             do {
                 _ = try await self.environments.request(env, "peerLinks.answerRequest", LinkRequestAnswer.payload(item, .object(["type": .string("decline")])))
+                self.onPeerLinksChanged?(env)
                 return nil
             } catch {
                 return PeerLinkDialog.answerFailure(error)
@@ -1526,6 +1527,9 @@ final class ThreadController {
     var offersScratch: () -> Bool = { false }
     /// The panel moved to another thread or draft (route history).
     var onRouteChange: (() -> Void)?
+    /// An answered link request may have added a link, so lists of the environment's links reload
+    /// (T3 3824 #26434: `peerLinkEnvironment.answerRequest` refreshes `peerLinks.list`).
+    var onPeerLinksChanged: ((String) -> Void)?
 
     private func updateNoProjectsHero(_ snapshot: ShellSnapshot) {
         let show = snapshot.projects.isEmpty
@@ -1675,12 +1679,14 @@ extension ThreadController {
                     if choice.useExisting, let id = choice.machine?.environmentId {
                         let answer: JSONValue = .object(["type": .string("use-existing"), "environmentId": .string(id)])
                         _ = try await self.environments.request(env, "peerLinks.answerRequest", LinkRequestAnswer.payload(item, answer))
+                        self.onPeerLinksChanged?(env)
                         return choice.machine?.label
                     }
                     guard let answer = LinkRequestAnswer.link(environmentId: choice.machine?.environmentId, label: choice.machine?.label,
                                                                         urls: choice.urls, access: choice.access, pairingCode: choice.pairingCode)
                     else { throw CancellationError() }
                     _ = try await self.environments.request(env, "peerLinks.answerRequest", LinkRequestAnswer.payload(item, answer))
+                    self.onPeerLinksChanged?(env)
                     return choice.machine?.label
                 })
         }

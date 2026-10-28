@@ -32,6 +32,12 @@ extension SettingsController {
         for id in peerLinkHosts() where peerLinks[id] == nil { reloadPeerLinks(id) }
     }
 
+    /// After an answered link request: reload a list on screen in place, or drop it so the next visit reads it.
+    func peerLinksChanged(_ id: String) {
+        guard peerLinks[id] != nil else { return }
+        if isOpen, section == .connections { reloadPeerLinks(id) } else { peerLinks[id] = nil }
+    }
+
     func reloadPeerLinks(_ id: String) {
         if peerLinks[id] == nil { peerLinks[id] = .loading }
         Task {
