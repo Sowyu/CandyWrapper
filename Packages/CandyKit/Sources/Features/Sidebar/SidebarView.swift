@@ -386,7 +386,8 @@ public final class SidebarContentView: DSView {
             contextMenu: { [weak self] in self?.actions.contextMenu($0, $1, $2) },
             pin: { [weak self] in self?.actions.pin($0) }, archive: { [weak self] in self?.actions.archive($0) },
             moreMenu: { [weak self] in self?.actions.moreMenu($0, $1) },
-            jumpHint: { [weak self] in self?.jumpHint($0) })
+            jumpHint: { [weak self] in self?.jumpHint($0) },
+            providerTooltip: { [weak self] in self?.providerTooltip($0) })
         undoNotice.onUndo = { [weak self] in self?.actions.undo() }
         backButton.action = { [weak self] in self?.actions.back() }
         brand.action = { [weak self] in self?.actions.goHome() }
@@ -745,6 +746,14 @@ public final class SidebarContentView: DSView {
 
     /// A checkout's branch arrived or changed: the open card shows or hides its mismatch line.
     public func checkoutBranchChanged() { list.refreshHoverCard() }
+
+    /// The row's provider stack, named: the current model, then earlier providers, most recent first. The shell keeps
+    /// only the current model, so earlier ones go by their provider's name.
+    func providerTooltip(_ id: ThreadId) -> String? {
+        guard let thread = snapshot?.threads.first(where: { $0.id == id }), let p = actions.hoverProvider(thread) else { return nil }
+        var seen = Set<String>()
+        return ([p.label] + p.handedOffFrom.reversed()).filter { seen.insert($0).inserted }.joined(separator: ", ")
+    }
 
     /// `SidebarThreadTooltip`'s props for a thread.
     func hoverCardModel(_ id: ThreadId) -> SidebarThreadHoverCardModel? {

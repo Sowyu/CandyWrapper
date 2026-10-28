@@ -44,7 +44,8 @@ public struct SidebarRowModel: Equatable, Sendable {
     public var snoozeLabel: String?
     /// Start of the work a Working row counts from.
     public var workingStartedMs: Int64?
-    public var providerIcon: String
+    /// The drivers the thread ran on, distinct and most recent first: the current one, then `providerInstanceHistory`.
+    public var providers: [String]
     /// `EnvironmentMachineKind` of a thread on another environment, nil on the primary one (Sidebar.tsx:1370-1375, 2196-2205).
     public var environmentMachine: String? = nil
     /// A scratch-project thread's machine label on line 3, when projects span environments and the
@@ -605,7 +606,7 @@ public enum SidebarListBuilder {
             timeLabel: SidebarModel.threadTimeLabel(t, section: section, nowMs: nowMs),
             snoozeLabel: wake.map { snoozeWakeLabel(wakeMs: $0, nowMs: nowMs) },
             workingStartedMs: working,
-            providerIcon: providerDriver(shell.runtimeInstanceId),
+            providers: providerStack(history: (shell.providerInstanceHistory ?? []).map(\.rawValue), current: shell.runtimeInstanceId),
             environmentMachine: state.environments.rowMachine(shell.id),
             canSnooze: SidebarModel.canSnooze(t, nowMs: nowMs),
             terminalProcessCount: state.terminalProcesses[shell.id] ?? 0,
@@ -630,8 +631,21 @@ public enum SidebarListBuilder {
     static func providerDriver(_ instance: String) -> String {
         let id = instance.lowercased()
         if id.contains("codex") || id.contains("openai") { return "codex" }
-        if id.contains("cursor") { return "cursor" }
-        return "claude"
+        for driver in ["opencode", "cursor", "grok", "antigravity", "muse"] where id.contains(driver) { return driver }
+        return "claudeAgent"
+    }
+
+    /// `resolveThreadProviderStack` (client-runtime state/models.ts:360-368) by driver instead of instance: the
+    /// history runs oldest to newest and the current instance comes last, so walking it backwards puts the most
+    /// recent first. Each driver shows once, at its latest use.
+    public static func providerStack(history: [String], current: String) -> [String] {
+        var seen = Set<String>()
+        return (history + [current]).reversed().map(providerDriver).filter { seen.insert($0).inserted }
+    }
+
+    /// The first `limit` drivers and how many the "+N" stands for.
+    public static func cappedProviders(_ drivers: [String], limit: Int = 3) -> (shown: [String], overflow: Int) {
+        (Array(drivers.prefix(limit)), max(0, drivers.count - limit))
     }
 
     // MARK: Refresh

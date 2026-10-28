@@ -530,6 +530,8 @@ struct SidebarRowActions {
     var archive: (ThreadId) -> Void = { _ in }
     var moreMenu: (ThreadId, NSView) -> Void = { _, _ in }
     var jumpHint: (ThreadId) -> String? = { _ in nil }
+    /// The provider stack's tooltip: the current model, then earlier providers.
+    var providerTooltip: (ThreadId) -> String? = { _ in nil }
 }
 
 /// Dither's hover actions (after Capy): the jump shortcut, Settle and Snooze when the row can, then ⋯, all same-size
@@ -575,7 +577,7 @@ final class SidebarCardRowView: SidebarRowBase {
     private let branch = LabelView()
     /// A scratch thread's machine on line 3 (`size-3 text-muted-foreground/40`).
     private let scratchMachine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 12, height: 12))
-    private let provider = ProviderGlyphView()
+    private let provider = ProviderStackView()
     /// A remote thread's machine (`size-3.5`, `text-sidebar-muted-foreground/70`, Sidebar.tsx:2196-2205).
     private let machine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
     let terminal = TerminalStatusGlyph()
@@ -746,8 +748,7 @@ final class SidebarCardRowView: SidebarRowBase {
         scratchMachine.kind = showsScratch ? r.scratchMachine : nil
         scratchMachine.isHidden = !showsScratch
         scratchMachine.color = SB.c(\.mutedForeground, 0.4)
-        provider.driver = r.providerIcon
-        provider.isHidden = capyRow
+        provider.set(r.providers, dither: capyRow)
         machine.kind = r.environmentMachine
         // Dither drops the trailing machine glyph.
         machine.isHidden = r.environmentMachine == nil || showsScratch || capyRow
@@ -874,9 +875,12 @@ final class SidebarCardRowView: SidebarRowBase {
         }
         // Line 3: branch and provider, `mt-0.5`, text-xs. Dither: the meta line under the title.
         let y3 = capy ? top + 21 : top + 46
-        provider.frame = NSRect(x: right - 14, y: y3 + 1, width: 14, height: 14)
+        let stackWidth = provider.preferredWidth
+        provider.frame = NSRect(x: right - stackWidth, y: y3 + 1, width: stackWidth, height: 14)
+        removeAllToolTips()
+        if stackWidth > 0 { addToolTip(provider.frame, owner: self, userData: nil) }
         // `ml-auto gap-1`: the machine sits 4pt left of the provider.
-        var trailing = capy ? right + 4 : right - 14
+        var trailing = stackWidth > 0 ? right - stackWidth : capy ? right + 4 : right
         if !machine.isHidden { machine.frame = NSRect(x: trailing - 4 - 14, y: y3 + 1, width: 14, height: 14); trailing -= 18 }
         // The terminal glyph follows the branch, `gap-1.5` before the provider group.
         if !prBadge.isHidden {
@@ -900,6 +904,14 @@ final class SidebarCardRowView: SidebarRowBase {
     }
 }
 
+extension SidebarCardRowView: NSViewToolTipOwner {
+    /// Asked only when the tooltip shows, so a resting list never builds it.
+    func view(_ view: NSView, stringForToolTip tag: NSView.ToolTipTag, point: NSPoint, userData data: UnsafeMutableRawPointer?) -> String {
+        guard let r = row else { return "" }
+        return actions.providerTooltip(r.id) ?? r.providers.map(SidebarProviderUpdatePillModel.displayName).joined(separator: ", ")
+    }
+}
+
 /// The status icon slot: a 16px lucide glyph swapped per status.
 final class StatusIconSlot: NSView {
     private(set) var icon: IconName?
@@ -916,21 +928,73 @@ final class StatusIconSlot: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
-/// `SidebarProviderStack` reduced to the current provider: a 14px glyph at 60% opacity.
-// ponytail: one glyph; draw the earlier owners small and grayscale once providerInstanceHistory has rows that need it
-final class ProviderGlyphView: NSView {
-    var driver = "" { didSet { if driver != oldValue { rebuild() } } }
-    private var glyph: IconView?
+/// `SidebarProviderStack` (SidebarThreadRow.tsx:179-222), one glyph per driver, the most recent at the right edge.
+/// Default themes: the current provider 14px at 60%, earlier ones 12px, gray, at 35%, `gap-1.5`. Redesign: every
+/// glyph 12px in the secondary color. Past three drivers a "+N" leads.
+final class ProviderStackView: NSView {
+    private var built: (drivers: [String], dither: Bool)?
+    private var glyphs: [NSView] = []
+    private let more = LabelView()
+    private var dither = false
+    private(set) var preferredWidth: CGFloat = 0
+    override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
-    private func rebuild() {
-        glyph?.removeFromSuperview()
-        let name: IconName = driver == "codex" ? (IconName(rawValue: "brandOpenAI") ?? .brandClaudeAI) : .brandClaudeAI
-        let v = IconView(name: name, size: 14, strokeColor: Themed.color(\.foreground))
-        v.alphaValue = 0.6
-        v.frame = bounds
-        v.autoresizingMask = [.width, .height]
-        addSubview(v)
-        glyph = v
+
+    func set(_ drivers: [String], dither: Bool) {
+        let (shown, overflow) = SidebarListBuilder.cappedProviders(drivers)
+        self.dither = dither
+        if built?.drivers != shown || built?.dither != dither {
+            glyphs.forEach { $0.removeFromSuperview() }
+            glyphs = shown.enumerated().map { i, driver in
+                let current = i == 0 && !dither
+                let v = current ? ProviderIcon.make(driver: driver, displayName: SidebarProviderUpdatePillModel.displayName(driver), size: 14,
+                                                    color: Themed.color(\.foreground))
+                    : Self.mono(driver, color: Themed.color(\.foreground))
+                v.alphaValue = dither ? 1 : current ? 0.6 : 0.35
+                addSubview(v)
+                return v
+            }
+            built = (shown, dither)
+        }
+        if dither { for case let v as IconView in glyphs { v.strokeColor = SB.c(\.secondaryLabel) } }
+        more.text = overflow > 0 ? "+\(overflow)" : ""
+        more.font = SB.tabular(dither ? 10 : 11)
+        more.lineHeight = 14
+        more.color = dither ? SB.c(\.secondaryLabel) : SB.c(\.mutedForeground, 0.6)
+        if more.superview == nil && overflow > 0 { addSubview(more) }
+        more.isHidden = overflow == 0
+        let gap: CGFloat = dither ? 4 : 6
+        preferredWidth = glyphs.enumerated().reduce(0) { $0 + glyphSize($1.offset) } + gap * CGFloat(max(0, glyphs.count - 1))
+            + (overflow > 0 ? ceil(more.textWidth) + 1 + gap : 0)
+        needsLayout = true
+    }
+
+    private func glyphSize(_ i: Int) -> CGFloat { i == 0 && !dither ? 14 : 12 }
+
+    override func layout() {
+        super.layout()
+        let gap: CGFloat = dither ? 4 : 6
+        var x = bounds.width
+        for (i, v) in glyphs.enumerated() {
+            let s = glyphSize(i)
+            x -= s
+            v.frame = NSRect(x: x, y: (bounds.height - s) / 2, width: s, height: s)
+            x -= gap
+        }
+        if !more.isHidden {
+            let w = ceil(more.textWidth) + 1
+            more.frame = NSRect(x: x - w, y: (bounds.height - 14) / 2, width: w, height: 14)
+        }
+    }
+
+    /// A one-color glyph: Claude's spark and OpenCode's frame take the color instead of their brand fills.
+    private static func mono(_ driver: String, color: NSColor) -> NSView {
+        switch driver {
+        case "claudeAgent": IconView(definition: ProviderIcon.monoClaude, size: 12, color: color)
+        case "opencode": IconView(definition: ProviderPackageIcons.openCodeOuter, size: 12, color: color)
+        case "grok": IconView(definition: ProviderPackageIcons.grok, size: 12, color: color)
+        default: ProviderIcon.make(driver: driver, displayName: SidebarProviderUpdatePillModel.displayName(driver), size: 12, color: color)
+        }
     }
 }
 
