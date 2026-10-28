@@ -69,7 +69,7 @@ final class RunningThreadKeepAlive {
             let relay = retained?.relay ?? ShellSession.ChangeRelay()
             relay.set {}
             let store = retained?.store ?? ThreadStore(threadId: id.localId, cache: environments.threadCache, environmentId: env,
-                                                       onChange: { relay.fire() })
+                                                       onChange: { relay.fire() }, onRequestsResolved: QuestionDraftResolution.sink(id))
             kept[id] = subscribe(store: store, relay: relay, session: session)
         }
     }

@@ -510,3 +510,25 @@ public enum RuntimeRequestCommands {
                  "threadId": .string(threadId.rawValue), "requestId": .string(requestId)])
     }
 }
+
+/// T3 3814 packages/client-runtime/src/state/threadRequests.ts:199-215.
+/// Only synchronized thread owners feed this tracker. Cached and missing detail cannot resolve drafts.
+public struct ThreadRequestResolutionTracker: Sendable {
+    private var announced: Set<String>?
+    public init() {}
+
+    public mutating func update(pending: Set<String>) -> Bool {
+        let resolved = announced.map { !$0.subtracting(pending).isEmpty } ?? true
+        announced = pending
+        return resolved
+    }
+
+    public static func resolvedDraftKeys(_ keys: [String], threadId: ThreadId, pending: Set<String>) -> [String] {
+        let prefix = threadId.rawValue + "\u{0}"
+        return keys.filter { key in
+            guard key.hasPrefix(prefix) else { return false }
+            let request = key.dropFirst(prefix.count).split(separator: "\u{0}", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init)
+            return request.map { !pending.contains($0) } ?? false
+        }
+    }
+}

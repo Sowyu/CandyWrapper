@@ -63,7 +63,7 @@ final class ThreadSession {
         self.sidebar = sidebar
         let relay = retained?.relay ?? ShellSession.ChangeRelay()
         self.relay = relay
-        let store = retained?.store ?? ThreadStore(threadId: threadId.localId, cache: cache, environmentId: environmentId, onFirstChange: { relay.fire(streaming: $0) })
+        let store = retained?.store ?? ThreadStore(threadId: threadId.localId, cache: cache, environmentId: environmentId, onFirstChange: { relay.fire(streaming: $0) }, onRequestsResolved: QuestionDraftResolution.sink(threadId))
         self.store = store
         relay.setStreaming { [weak self] streaming in Task { @MainActor in self?.requestPull(streaming: streaming) } }
         panel.onLoadEarlier = { [weak self] in self?.loadEarlier() }
