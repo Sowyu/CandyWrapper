@@ -71,7 +71,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .scheduledTasks: .calendarClock
         case .sourceControl: .gitBranch
         case .storage: .hardDrive
-        case .connections: .link2
+        case .connections: .server
         case .beta: .flaskConical
         case .archive: .archive
         case .orchestrator: .workflow
@@ -453,8 +453,9 @@ public final class SettingsSidebarView: DSView {
         for (index, group) in shownGroups.enumerated() {
             if index > 0 { y += 12 }
             if let title = group.label, let label = groupLabels[title] {
-                label.frame = NSRect(x: 16, y: y + 4, width: max(0, bounds.width - 32), height: 16)
-                y += 28
+                // Nightly 3754 SettingsSidebarNav.tsx:368-380: 16px heading, then gap-1.
+                label.frame = NSRect(x: 16, y: y + (dither ? 4 : 0), width: max(0, bounds.width - 32), height: 16)
+                y += dither ? 28 : 20
             }
             for section in group.sections {
                 let row: NSView? = dither ? concernRows[section] : items[section]
@@ -524,7 +525,7 @@ final class DitherSettingsNavRow: ControlView {
 }
 
 /// One settings search result (SettingsSidebarNav.tsx:296-322): `SidebarMenuButton size="sm"` with
-/// `h-auto min-h-10 items-start`, the page's icon (`size-3.5 h-5`, centered on the title's line, muted at 60%), the title (14px
+/// `h-auto min-h-10 items-start`, the page's icon (`size-4`, sidebar icon color), the title (14px
 /// medium) over the page label (`text-2xs`, muted at 75%). The active result is `data-active`.
 final class SettingsSearchResultRow: ControlView {
     static let height: CGFloat = 8 + 20 + 16 + 8
@@ -533,6 +534,7 @@ final class SettingsSearchResultRow: ControlView {
     private let title = LabelView("", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.sidebarForeground, sidebar: true))
     private let subtitle = LabelView("", font: DSFont.ui(11), color: Themed.color(\.sidebarMutedForeground, 0.75, sidebar: true))
     var isActive = false { didSet { restyle() } }
+    private var dither = false
     var onHover: (() -> Void)?
 
     override init(frame frameRect: NSRect) {
@@ -550,15 +552,16 @@ final class SettingsSearchResultRow: ControlView {
 
     /// Under Redesign the result names the section it opens in.
     func configure(_ item: SettingsSearchItem, dither: Bool = false) {
+        self.dither = dither
         let home = dither ? DitherSettingsSection.home(of: item.to, anchor: item.anchor) : nil
         let label = home?.label ?? item.to.label
         title.text = item.title
         subtitle.text = label
         icon.removeFromSuperview()
-        let color = Themed.color(\.sidebarMutedForeground, 0.6, sidebar: true)
+        let color = dither ? Themed.color(\.sidebarMutedForeground, 0.6, sidebar: true) : Themed.color(\.sidebarIconColor, sidebar: true)
         icon = home.map { IconView(name: $0.icon, size: 14, strokeColor: color) }
-            ?? (item.to == .snapShots ? IconView(definition: SettingsSection.snapShotIcon, size: 14, color: color)
-                : IconView(name: item.to.icon, size: 14, strokeColor: color))
+            ?? (item.to == .snapShots ? IconView(definition: SettingsSection.snapShotIcon, size: dither ? 14 : 16, color: color)
+                : IconView(name: item.to.icon, size: dither ? 14 : 16, strokeColor: color))
         addSubview(icon)
         restyle()
         needsLayout = true
@@ -579,15 +582,16 @@ final class SettingsSearchResultRow: ControlView {
         decoration.boxStyle = box
         // `hover:[&>svg]` and `data-[active=true]:[&>svg]:text-sidebar-foreground` beat the icon's own muted class.
         icon.strokeColor = isActive || state.hovered ? Themed.color(\.sidebarForeground, sidebar: true)
-            : Themed.color(\.sidebarMutedForeground, 0.6, sidebar: true)
+            : (dither ? Themed.color(\.sidebarMutedForeground, 0.6, sidebar: true) : Themed.color(\.sidebarIconColor, sidebar: true))
     }
 
     override func layout() {
         super.layout()
         decoration.layout(boxSize: bounds.size)
-        icon.frame = NSRect(x: 8, y: 11, width: 14, height: 14)
-        title.frame = NSRect(x: 30, y: 8, width: max(0, bounds.width - 38), height: 20)
-        subtitle.frame = NSRect(x: 30, y: 28, width: max(0, bounds.width - 38), height: 16)
+        icon.frame = NSRect(x: 8, y: dither ? 11 : 8, width: dither ? 14 : 16, height: dither ? 14 : 16)
+        let textX: CGFloat = dither ? 30 : 32
+        title.frame = NSRect(x: textX, y: 8, width: max(0, bounds.width - textX - 8), height: 20)
+        subtitle.frame = NSRect(x: textX, y: 28, width: max(0, bounds.width - textX - 8), height: 16)
     }
 }
 

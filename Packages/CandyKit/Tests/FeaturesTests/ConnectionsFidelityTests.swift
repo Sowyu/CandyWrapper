@@ -37,7 +37,9 @@ struct ConnectionsFidelityTests {
             let nav = SettingsSidebarView()
             nav.stage = .none
             let box = SidebarBox(frame: NSRect(origin: .zero, size: size))
-            nav.frame = NSRect(x: 0, y: n["kind"] == "nav" ? -52 : -(800 - 40), width: size.width, height: 800)
+            // Fit the complete classic nav between the 52px brand row and 48px footer reserve.
+            let height = n["kind"] == "nav" ? max(800, size.height + 52 + 48) : 800
+            nav.frame = NSRect(x: 0, y: n["kind"] == "nav" ? -52 : -(800 - 40), width: size.width, height: height)
             box.clipsToBounds = true
             box.addSubview(nav)
             nav.layoutSubtreeIfNeeded()

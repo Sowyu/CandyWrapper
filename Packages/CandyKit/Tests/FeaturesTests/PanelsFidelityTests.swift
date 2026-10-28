@@ -35,7 +35,7 @@ struct PanelsFidelityTests {
         options: [.init(label: "Python (Recommended)", description: "Fast to write, standard library covers most CLI needs, no build step.")])
 
     /// The capture each state compares with. 05 comes from the 3473 web client, where the composer
-    /// stays usable under an approval (a93b03c8a5); 06 is still the 2861 one.
+    /// stays usable under an approval (a93b03c8a5); 06 comes from the 3754 classic web client with radio options (d414cb5103).
     static func file(_ reference: String, _ theme: String) -> String {
         "design/reference/\(reference == "05-approval-request" ? "05-approval-request-3473" : reference).\(theme).png"
     }

@@ -29,6 +29,9 @@ struct SettingsPagesFidelityTests {
         case "nav-search":
             let nav = SettingsSidebarView()
             nav.stage = .none
+            // The classic reference is pinned to 3754. Snooze options arrived in 3814
+            // (93a9e079b1), after T3 removed the classic design switch.
+            nav.searchItems.removeAll { $0.id == "snooze-options" }
             nav.setQuery("time")
             let box = ConnectionsFidelityTests.SidebarBox(frame: NSRect(origin: .zero, size: size))
             nav.frame = NSRect(x: 0, y: -52, width: size.width, height: 800)
