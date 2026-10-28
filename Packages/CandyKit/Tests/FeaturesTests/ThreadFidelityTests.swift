@@ -102,7 +102,7 @@ struct ThreadFidelityTests {
         for (reference, title, fraction) in cases {
             for theme in ["light", "dark"] {
                 let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
-                    "design/reference-3814/\(reference).\(theme).png"))))
+                    "design/reference-3824/\(reference).\(theme).png"))))
                 let ref = Self.crop(full, x: full.pixelsWide - w, width: w, height: h)
                 let ours = Self.crop(try Self.render(title, fraction: fraction, dark: theme == "dark"), x: 0, width: w, height: h)
                 let bands = [("header", 0, 52), ("timeline", 52, Int(Self.compared))]

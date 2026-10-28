@@ -5,7 +5,7 @@ import T3Protocol
 import T3Store
 @testable import Features
 
-/// The reference screens no other case covered: find in thread's match paint (design/reference-3814/43-find-in-thread),
+/// The reference screens no other case covered: find in thread's match paint (design/reference-3824/43-find-in-thread),
 /// Go to file (45-go-to-file), Search project contents on a Python file (46-project-search) and the top bar with the
 /// sidebar collapsed (31-sidebar-collapsed shows it open, so that case follows T3's source), against T3's markup in
 /// Chromium (spec from scripts/gen-reference-screens-spec.py, references in design/component-reference/reference-screens).
@@ -103,7 +103,7 @@ struct ReferenceScreensFidelityTests {
         let window = NSSize(width: 800, height: 780)
         let w = Int((window.width - SidebarMetrics.minWidth) * 2), h = Int(ThreadFidelityTests.compared * 2)
         for theme in ["light", "dark"] {
-            let full = try #require(NSBitmapImageRep(data: Data(contentsOf: repo.appendingPathComponent("design/reference-3814/03n-kitchen-sink-narrow.\(theme).png"))))
+            let full = try #require(NSBitmapImageRep(data: Data(contentsOf: repo.appendingPathComponent("design/reference-3824/03n-kitchen-sink-narrow.\(theme).png"))))
             let ref = ThreadFidelityTests.crop(full, x: full.pixelsWide - w, width: w, height: h)
             let projection = try #require(try ThreadFidelityTests.projection(ThreadPreview.markdownThread))
             let panel = ThreadPanelView(frame: .zero)
@@ -116,7 +116,7 @@ struct ReferenceScreensFidelityTests {
             layout.layoutSubtreeIfNeeded()
             panel.setProjection(projection, projectTitle: "demo-repo", workspaceRoot: nil)
             panel.layoutSubtreeIfNeeded()
-            // reference-3814/plans/narrow.json records this viewport at 30%.
+            // reference-3824/plans/narrow.json records this viewport at 30%.
             panel.timeline.scroll(toFraction: 0.3)
             let image = Snapshot.image(of: layout, size: window, scale: 2, dark: theme == "dark")
             try record("03n-narrow.\(theme)", ref, ThreadFidelityTests.crop(image, x: image.pixelsWide - w, width: w, height: h))
