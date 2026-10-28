@@ -244,6 +244,12 @@ public final class CommandPaletteController {
         item.trailingIcon = entry.trailingIcon
         item.trailingCheckbox = entry.trailingCheckbox
         item.noteIsWarning = entry.noteIsWarning
+        item.noteAfterTitle = entry.noteAfterTitle
+        if let project = entry.subtitleProject, let text = entry.description {
+            let driver = entry.subtitleDriver
+            item.makeDescription = { PaletteThreadSubtitleView(project: project, text: text, driver: driver) }
+        }
+        if let status = entry.leadingStatus { item.makeLeading = { PaletteThreadStatusView(status) } }
         if let badge = entry.pullRequestBadge {
             let settled = entry.pullRequestBadgeSettled
             item.makeTrailing = { SearchPullRequestBadgeView(badge, settled: settled) }

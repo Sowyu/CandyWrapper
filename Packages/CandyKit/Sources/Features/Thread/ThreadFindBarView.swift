@@ -47,15 +47,20 @@ public final class ThreadFindBarView: DSView {
     }
     public override func layout() {
         super.layout()
+        let classic = DesignGeometry.usesClassic(self)
+        count.alignment = classic ? .left : .center
+        let size: InputView.Size = classic ? .default : .sm
+        if input.size != size { input.size = size }
         group.frame = bounds
         group.layoutSubtreeIfNeeded()
-        var x = bounds.width - 6
+        var x = bounds.width - (classic ? 6 : 5)
         for button in [close, next, previous] {
             x -= 24; button.frame = NSRect(x: x, y: 6, width: 24, height: 24)
+            if !classic { x -= 2 }
         }
         if !retry.isHidden { x -= 42; retry.frame = NSRect(x: x, y: 6, width: 42, height: 24) }
         let w = max(40, ceil(count.textWidth))
-        x -= w + 4
+        x -= w + (classic ? 4 : 0)
         count.frame = NSRect(x: x, y: 10, width: w, height: 16)
         input.frame.size.width = max(0, x - 2)
     }

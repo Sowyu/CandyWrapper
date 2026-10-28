@@ -6,7 +6,7 @@ import DesignSystem
 /// The diff panel against T3. `body`: DiffListView against T3's own @pierre/diffs rendering each
 /// patch in Chromium with T3's CSS (spec from scripts/gen-diff-spec.py, references in
 /// design/component-reference/diff). `panel`: DiffPanelView against the right panel of
-/// design/reference/09-diff-split and 10-diff-unified, rebuilt from the file list those captures show.
+/// design/reference-3824/09-diff-split and 10-diff-unified, rebuilt from the file list those captures show.
 /// Writes ref, ours and diff PNGs plus `Fidelity.root`/report-diff.html.
 @MainActor @Suite(.fidelity)
 struct DiffFidelityTests {
@@ -78,21 +78,24 @@ struct DiffFidelityTests {
     /// The panel area of the 2200x1560 captures: x from the panel's left border (1234 px) to the
     /// window edge, y from the header row (103 px, under the right panel's tab strip, which is not
     /// part of DiffPanel) to the bottom.
-    /// Both captures show the split toggle pressed (the setting stayed split after the 09 capture),
-    /// and every file is collapsed, so the two differ only by capture noise.
+    /// 3824 expands both sandbox files. 09 uses split layout and 10 uses stacked layout.
     @Test(arguments: ["10-diff-unified", "09-diff-split"])
     func panel(_ reference: String) throws {
+        var fonts = FontRuntimeInput()
+        fonts.smoothing = false
+        FontRuntime.apply(fonts)
+        defer { Fidelity.pin() }
         var rows = "", cases: [(String, Double)] = []
         for theme in ["light", "dark"] {
-            let full = try #require(NSBitmapImageRep(data: Data(contentsOf: Self.repo.appendingPathComponent("design/reference/\(reference).\(theme).png"))))
+            let full = try #require(NSBitmapImageRep(data: Data(contentsOf: Self.repo.appendingPathComponent("design/reference-3824/\(reference).\(theme).png"))))
             let crop = CGRect(x: 1234, y: 103, width: 966, height: 1457)
             let ref = NSBitmapImageRep(cgImage: full.cgImage!.cropping(to: crop)!)
             let panel = DiffPanelView()
             panel.showsRefresh = true
-            panel.statStyle = .aligned
-            panel.layoutStyle = .split
+            panel.statStyle = .pierre
+            panel.layoutStyle = reference == "09-diff-split" ? .split : .unified
             panel.bodyOffset = 0.5
-            panel.showPatch(DiffPreview.referencePatch(), scopeLabel: "Uncommitted")
+            panel.showPatch(try String(contentsOf: Self.repo.appendingPathComponent("fixtures/3824-panel.patch"), encoding: .utf8), scopeLabel: "Changes", collapsed: false)
             let ours = Snapshot.image(of: panel, size: NSSize(width: crop.width / 2, height: crop.height / 2), scale: 2, dark: theme == "dark")
             cases.append(("\(reference).\(theme)", try Self.record("\(reference).\(theme)", ref: ref, ours: ours, rows: &rows)))
         }
@@ -101,7 +104,7 @@ struct DiffFidelityTests {
         Self.ceilings.check("panel \(reference)", cases)
     }
 
-    /// The gallery panels, written for review (no reference: T3 shows no expanded file in 09 or 10). An export tool,
+    /// The gallery panels, written for review. An export tool,
     /// not a test: runs only with CW_EXPORT=1.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["CW_EXPORT"] != nil, "export tool, set CW_EXPORT=1"))
     func gallery() throws {

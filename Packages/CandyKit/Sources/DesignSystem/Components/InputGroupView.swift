@@ -74,7 +74,7 @@ public final class InputGroupView: DSView {
     public override func layout() {
         super.layout()
         decoration.layout(boxSize: bounds.size)
-        let inputHeight: CGFloat = 30
+        let inputHeight = DesignGeometry.usesClassic(self) ? CGFloat(30) : input.intrinsicContentSize.height
         let y = (bounds.height - inputHeight) / 2
         // Addons: inline-start has padding-start 11px, svg -mx-0.5; a kbd last child pulls in by 5.6px.
         var x: CGFloat = 1

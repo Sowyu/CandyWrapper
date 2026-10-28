@@ -5,12 +5,9 @@ import T3Protocol
 import T3Store
 @testable import Features
 
-/// The approval and question banners against design/reference 05 and 06, light and dark. Only
-/// the banner is ours here: it is placed where T3 docks it (22px inside the 736px composer, its
-/// bottom 17px under the composer's top) on the main panel's surface, and the compared band runs
-/// from just above the banner to the composer's top edge. The data is the reference threads'
-/// (fixtures/transcripts/04-threads.jsonl). Writes ref, ours and diff PNGs plus
-/// report-panels.html to `Fidelity.root`.
+/// The 3824 question and composer at their established crops. The old approval drawer crop now
+/// checks that the drawer is absent; PanelScreensFidelityTests also checks its new inline row.
+/// Redesign's question fixtures remain separate from these sandbox screen fixtures.
 @MainActor @Suite(.fidelity)
 struct PanelsFidelityTests {
     /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
@@ -34,11 +31,19 @@ struct PanelsFidelityTests {
         id: "Which language or runtime should it be written in?", header: "Language", question: "Which language or runtime should it be written in?",
         options: [.init(label: "Python (Recommended)", description: "Fast to write, standard library covers most CLI needs, no build step.")])
 
-    /// The capture each state compares with. 05 comes from the 3473 web client, where the composer
-    /// stays usable under an approval (a93b03c8a5); 06 comes from the 3754 classic web client with radio options (d414cb5103).
+    /// The original and -3473 image sets remain unchanged.
     static func file(_ reference: String, _ theme: String) -> String {
-        "design/reference/\(reference == "05-approval-request" ? "05-approval-request-3473" : reference).\(theme).png"
+        "design/reference-3824/\(reference).\(theme).png"
     }
+
+    static let screenPurpose = UserInputQuestion(
+        id: "purpose", header: "Purpose", question: "What is the purpose of this session?",
+        options: [
+            .init(label: "Learning", description: "Walk through the code and explain how it works."),
+            .init(label: "Automation", description: "Script repeated tasks so they run without manual steps."),
+            .init(label: "Integration", description: "Connect this project to another service, API, or tool."),
+            .init(label: "General use", description: "Everyday coding and edits with no specific goal."),
+        ])
 
     /// The banner view and the composer top (css px) measured on the capture.
     static func banner(_ reference: String) -> (ComposerBannerView, CGFloat, CGFloat) {
@@ -49,9 +54,9 @@ struct PanelsFidelityTests {
             return (panel, panel.preferredHeight(width: bannerWidth), 616)
         }
         let panel = QuestionPanelView()
-        panel.configure(PendingUserInput(requestId: "q", createdAt: nil, questions: [purpose, language], responseCapability: "live",
-                                         dismissible: false), threadId: "t")
-        return (panel, panel.preferredHeight(width: bannerWidth), 612)
+        panel.configure(PendingUserInput(requestId: "q", createdAt: nil, questions: [screenPurpose, language], responseCapability: "live",
+                                         dismissible: true), threadId: "t")
+        return (panel, panel.preferredHeight(width: bannerWidth), 644.5)
     }
 
     static func render(_ reference: String, dark: Bool) -> (NSBitmapImageRep, CGFloat, CGFloat) {
@@ -60,7 +65,7 @@ struct PanelsFidelityTests {
         container.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         let top = composerTop + ComposerBannerView.overlap - height
         view.frame = NSRect(x: bannerX, y: top, width: bannerWidth, height: height)
-        container.addSubview(view)
+        if reference != "05-approval-request" { container.addSubview(view) }
         container.layoutSubtreeIfNeeded()
         return (Snapshot.image(of: ThreadFidelityTests.onSurface(container), size: container.frame.size, scale: 2, dark: dark), top, composerTop)
     }
@@ -115,6 +120,29 @@ struct PanelsFidelityTests {
         #expect(sent.count == 1)
     }
 
+    @Test func inlineApprovalUsesTheSameResponseGuards() throws {
+        let view = PendingApprovalInlineView()
+        let approval = PendingApproval(requestId: "r", requestKind: .fileChange, createdAt: nil,
+                                       detail: "approval-3824.txt", appName: nil, options: nil, canRespond: true)
+        var sent: [JSONValue] = []
+        view.onRespond = { sent.append($0) }
+        view.configure(approval, threadId: "t", enabled: true)
+        let accept = try #require(view.subviews.compactMap { $0 as? ThreadStatusLineAction }.first { $0.label.text == "Approve" })
+        accept.performAction()
+        #expect(sent.count == 1)
+        #expect(sent[0]["threadId"] == .string("t"))
+        #expect(sent[0]["requestId"] == .string("r"))
+        #expect(sent[0]["decision"] == .string("accept"))
+        view.configure(approval, threadId: "t", enabled: false)
+        accept.performAction()
+        #expect(sent.count == 1)
+        var expired = approval
+        expired.canRespond = false
+        view.configure(expired, threadId: "t", enabled: true)
+        accept.performAction()
+        #expect(sent.count == 1)
+    }
+
     @Test func questionKeysAndAutoAdvance() async throws {
         let panel = QuestionPanelView()
         panel.configure(PendingUserInput(requestId: "q", createdAt: nil, questions: [Self.purpose, Self.language],
@@ -154,14 +182,15 @@ struct PanelsFidelityTests {
                 if reference == "05-approval-request" {
                     panel.approvalPanel.configure(PendingApproval(requestId: "r", requestKind: .fileChange, createdAt: nil,
                         detail: "approval-demo.txt", appName: nil, options: nil, canRespond: true), pendingCount: 1, threadId: "t")
-                    panel.drawer = .approval
+                    panel.drawer = .none
+                    panel.timeline.isHidden = true
                     // The reference thread runs Supervised, which is what asks for the approval.
                     PickerMenuView(entries: pickers.accessEntries(), style: .select, minimumWidth: 264).pick(0)
                     placeholder.approvalPending = true
                     panel.composer.pending = .approval
                 } else {
-                    panel.questionPanel.configure(PendingUserInput(requestId: "q", createdAt: nil, questions: [Self.purpose, Self.language],
-                        responseCapability: "live", dismissible: false), threadId: "t")
+                    panel.questionPanel.configure(PendingUserInput(requestId: "q", createdAt: nil, questions: [Self.screenPurpose, Self.language],
+                        responseCapability: "live", dismissible: true), threadId: "t")
                     panel.drawer = .question
                     placeholder.questionChoiceOnly = false
                     panel.composer.pending = .question(.init(label: "Next question", compactLabel: "Next", enabled: false,
@@ -171,7 +200,9 @@ struct PanelsFidelityTests {
                 panel.layoutSubtreeIfNeeded()
                 panel.timeline.scroll(toFraction: 1)
                 let banner: NSView = reference == "05-approval-request" ? panel.approvalPanel : panel.questionPanel
-                let top = banner.frame.minY - 8
+                let top = reference == "05-approval-request"
+                    ? panel.composer.frame.minY + ComposerBannerView.overlap - panel.approvalPanel.preferredHeight(width: Self.bannerWidth) - 8
+                    : banner.frame.minY - 8
                 let rendered = Snapshot.image(of: ThreadFidelityTests.onSurface(panel), size: panel.frame.size, scale: 2, dark: dark)
                 let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(Self.file(reference, theme)))))
                 let w = Int(Self.panelWidth * 2), h = Int((780 - top) * 2)
