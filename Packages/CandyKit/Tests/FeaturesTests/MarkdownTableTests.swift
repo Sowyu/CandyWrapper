@@ -63,12 +63,13 @@ struct MarkdownTableTests {
         }
     }
 
-    @Test func toggleShowsOnlyWhenACellIsClipped() throws {
-        #expect(toggles("| Name | Value |\n|---|---|\n| a | b |").isEmpty)
+    /// 3814 always shows the toggle, even when no cell clips (e66ffccf49 #26152).
+    @Test func toggleAlwaysShows() throws {
+        #expect(toggles("| Name | Value |\n|---|---|\n| a | b |") == [.maximize2])
         #expect(toggles(Self.source) == [.maximize2])
         #expect(toggles("| \(Self.long) | Value |\n|---|---|\n| a | b |") == [.maximize2])
         #expect(toggles(Self.source, expand: true) == [.minimize2])
-        // The copy menu stays right-aligned without the toggle.
+        // The copy menu stays right-aligned.
         let view = MarkdownView(frame: NSRect(x: 0, y: 0, width: 480, height: 200))
         view.setMarkdown("| Name | Value |\n|---|---|\n| a | b |")
         let copy = try #require(view.layout(forWidth: 480).controls.first { if case .copyTable = $0.action { return true }; return false })

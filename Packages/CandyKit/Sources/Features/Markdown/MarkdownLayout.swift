@@ -1269,19 +1269,14 @@ private struct Builder {
             boxes.make(s, width: 0, lineHeight: line, strut: MarkdownStyle.font(size), wraps: false).usedWidth
         }
         var widths = [CGFloat](repeating: 0, count: columns)
-        var naturals: [(column: Int, width: CGFloat)] = []
         for row in [table.header] + table.rows {
             for (c, runs) in row.enumerated() where c < columns {
                 let n = natural(cellString(runs, header: row == table.header, column: c).string)
-                naturals.append((c, n))
                 widths[c] = max(widths[c], min(384, n + MarkdownLayout.tableCellPadding(c, of: columns).total))
             }
         }
         let total = widths.reduce(0, +)
         if total < width, total > 0 { widths = widths.map { $0 + (width - total) * $0 / total } }
-        // T3 shows the wrap toggle only when a header or body cell is clipped unwrapped (ChatMarkdown.tsx:540-560, :665).
-        // Columns stop at 384pt, so a cell clips when its text outgrows its column. Expanding keeps the same widths.
-        let clipped = naturals.contains { $0.width + MarkdownLayout.tableCellPadding($0.column, of: columns).total > widths[$0.column] }
         var tableWidth = max(width, total)
         let wraps = expanded && fitsExpandedTables
         if expanded {
@@ -1339,10 +1334,10 @@ private struct Builder {
         box.items.insert(.box(viewport, fill: WindowGlass.pick(stock: .clear, frost: WindowGlass.denseFill),
                               border: WindowGlass.pick(stock: .clear, frost: WindowGlass.edge), radius: 8), at: 0)
         y = viewport.maxY
-        if clipped {
-            box.controls.append(.init(frame: CGRect(x: 0, y: y + 2, width: 24, height: 24), icon: expanded ? .minimize2 : .maximize2,
-                                      variant: expanded ? .secondary : .ghostMuted, action: .toggleTable(index)))
-        }
+        // The wrap toggle always shows, so a streamed cell never has to be measured for clipping (MarkdownTable.tsx,
+        // e66ffccf49 #26152 at 3814).
+        box.controls.append(.init(frame: CGRect(x: 0, y: y + 2, width: 24, height: 24), icon: expanded ? .minimize2 : .maximize2,
+                                  variant: expanded ? .secondary : .ghostMuted, action: .toggleTable(index)))
         box.controls.append(.init(frame: CGRect(x: width - 24, y: y + 2, width: 24, height: 24), icon: .copy, variant: .ghostMuted,
                                   action: .copyTable(table)))
         box.height = y + 2 + 24
