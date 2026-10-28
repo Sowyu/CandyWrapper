@@ -42,7 +42,11 @@ struct ThreadFidelityTests {
 
     static func render(_ title: String, fraction: CGFloat, dark: Bool) throws -> NSBitmapImageRep {
         let projection = try #require(try Self.projection(title))
-        let panel = ThreadPanelView(frame: NSRect(origin: .zero, size: size))
+        let surface = GrainSurfaceView(fill: Themed.color(\.background))
+        let windowSize = NSSize(width: 1100, height: size.height)
+        surface.frame = NSRect(origin: .zero, size: windowSize)
+        let panel = ThreadPanelView(frame: NSRect(x: 256, y: 0, width: size.width, height: size.height))
+        surface.addSubview(panel)
         panel.referenceViewportWidth = 1100 // The reference includes the 256pt sidebar outside this crop.
         panel.bottomInset = composerInset
         panel.model.runShellCommand = { _ in } // a thread with a project: shell blocks show "Run in terminal"
@@ -50,7 +54,9 @@ struct ThreadFidelityTests {
         panel.setProjection(projection, projectTitle: "demo-repo", workspaceRoot: nil)
         panel.layoutSubtreeIfNeeded()
         panel.timeline.scroll(toFraction: fraction)
-        return Snapshot.image(of: onSurface(panel), size: size, scale: 2, dark: dark)
+        // Preserve the panel's actual window x so the header does not reserve traffic-light space.
+        let whole = Snapshot.image(of: surface, size: windowSize, scale: 2, dark: dark)
+        return crop(whole, x: 512, width: Int(size.width * 2), height: Int(size.height * 2))
     }
 
     static func crop(_ rep: NSBitmapImageRep, x: Int, width: Int, height: Int) -> NSBitmapImageRep {
