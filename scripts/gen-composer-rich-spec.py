@@ -36,7 +36,7 @@ cases = [
      '<ul data-type="taskList">' + task(False, "Open task") + task(True, "Done task") + "</ul>",
      "- [ ] Open task\n- [x] Done task"),
 ]
-spec = {"component": "composer-rich", "states": ["rest"], "themes": ["light", "dark"], "cases": [
+spec = {"sourceVersion": "v0.1.4-nightly.20261028.3824", "component": "composer-rich", "states": ["rest"], "themes": ["light", "dark"], "cases": [
     {"name": name, "html": '<div class="composer-tiptap text-sm leading-relaxed text-foreground whitespace-pre-wrap" style="width:560px;display:flow-root">' + html + '</div>',
      "native": {"text": text}, "wrapperStyle": "display:block;width:560px"} for name, html, text in cases]}
 with open(os.path.join(root, 'design/component-reference/composer-rich.json'), 'w') as f: json.dump(spec, f, indent=2)

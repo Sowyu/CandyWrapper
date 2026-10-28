@@ -35,5 +35,5 @@ body = '<div class="flex min-w-0 max-w-80 flex-col gap-2 px-1 py-2"><div class="
 body += '<div class="flex min-w-0 items-center gap-2">' + lucide('bot','size-3 shrink-0') + '<span class="text-foreground/75">Not reported</span></div>'
 body += '<div class="flex min-w-0 items-center justify-between gap-4"><span class="inline-flex items-center gap-1 rounded-sm font-medium capitalize text-success">' + lucide('check','size-3 shrink-0') + 'Completed</span><span class="tabular-nums">1m 05s</span></div>'
 body += '<div class="flex min-w-0 items-center gap-2">' + lucide('terminal','size-3 shrink-0') + '<span>Found two problems</span></div></div></div>'
-cases.append({'name':'hover-card', 'html': t['tooltip']('glass', body).replace('rounded-md','rounded-lg').replace('text-balance','text-left'), 'wrapperStyle':'display:block;width:320px', 'native':{}})
-with open(os.path.join(ROOT,'design/component-reference/mcp-followups.json'),'w') as f: json.dump({'component':'mcp-followups','states':['rest'],'themes':['light','dark'],'cases':cases},f,indent=2)
+cases.append({'name':'hover-card', 'html': t['tooltip']('glass', body).replace('rounded-md','rounded-lg').replace('text-balance','text-left'), 'wrapperStyle':'display:inline-block;max-width:320px', 'native':{}})
+with open(os.path.join(ROOT,'design/component-reference/mcp-followups.json'),'w') as f: json.dump({'sourceVersion': 'v0.1.4-nightly.20261028.3814', 'component':'mcp-followups','states':['rest'],'themes':['light','dark'],'cases':cases},f,indent=2)

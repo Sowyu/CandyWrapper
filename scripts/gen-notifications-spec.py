@@ -37,14 +37,14 @@ CASES = [
     ("failed", "error", "circle-alert", "text-destructive-foreground", "circleAlert", "destructiveForeground", "Thread failed", "Migrate the billing tables to the new schema"),
     ("input", "warning", "message-circle-question", "text-info-foreground", "messageCircleQuestion", "infoForeground", "Input needed", "Pick a color palette"),
 ]
-toast_spec = {"component": "thread-toast", "source": "apps/web/src/components/ThreadNotificationCoordinator.tsx", "states": ["rest"],
+toast_spec = {"sourceVersion": "v0.1.4-nightly.20261028.3814", "component": "thread-toast", "source": "apps/web/src/components/ThreadNotificationCoordinator.tsx", "states": ["rest"],
               "themes": ["light", "dark"], "cases": [
     {"name": name, "html": thread_toast(kind, icon, color, title, desc), "wrapperStyle": "position:relative;display:block;width:360px;height:120px",
      "native": {"kind": kind, "icon": native_icon, "color": native_color, "title": title, "description": desc, "action": "Open thread"}}
     for name, kind, icon, color, native_icon, native_color, title, desc in CASES]}
 
 OVERLAY = "rounded-full bg-foreground/95 px-8 py-4 text-2xl font-bold text-background shadow-xl"
-overlay_spec = {"component": "quit-hold-overlay", "source": "apps/web/src/components/QuitHoldOverlay.tsx", "states": ["rest"],
+overlay_spec = {"sourceVersion": "v0.1.4-nightly.20261028.3814", "component": "quit-hold-overlay", "source": "apps/web/src/components/QuitHoldOverlay.tsx", "states": ["rest"],
                 "themes": ["light", "dark"], "cases": [
     {"name": mode, "html": f'<div class="{OVERLAY}">{text}</div>', "wrapperStyle": "display:inline-block;padding:0",
      "native": {"mode": mode, "text": text}}
