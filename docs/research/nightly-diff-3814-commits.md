@@ -176,7 +176,7 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 1702d55214 | fix(web,mobile): bot approvals are visible on the PR summary (#25829) | pr/git | yes | ported (ed18558a); avatar verdict glyph is phase 2 |
 | f3b058cd6a | fix(web,mobile): stopped runs no longer look like errors (#25830) | thread | yes | open |
 | e5f2e5dbbc | fix(client-runtime): iOS resume keeps live sockets and drops dead ones 4x faster (#25824) | connections | yes | skip: macOS already preserves/probes sockets (T3Client/ConnectionSupervisor.swift:318,524) |
-| 56695ae3ec | feat: model labels show the name you'd say out loud (#24205) | composer | yes | open |
+| 56695ae3ec | feat: model labels show the name you'd say out loud (#24205) | composer | yes | phase 2: T3 shows the spoken labels only in its new design; ported (189b993e) and reverted (068aa9c3) until phase 2's references |
 | 4cb29a56f6 | fix(web): switching a file between markdown and the editor no longer saves a draft twice (#25768) | other | no | n/a |
 | 92e645032c | fix(web,mobile): queued messages get a simpler Send now row, no reordering (#25846) | composer | yes | open |
 | ad068d7c93 | fix(web): Steer no longer does nothing while a compaction runs (#25837) | composer | yes | open |

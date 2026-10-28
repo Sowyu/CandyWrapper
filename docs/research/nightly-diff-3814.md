@@ -99,6 +99,10 @@ From the user's catch-up brief, Phase 1 and Phase 2 lists, mapped to commits in 
 - Pull requests: bot approvals on the summary (1702d55214), checks stay current (f4e140764f), the Code tab skips dropped commits (2083a22919), triage an issue from the palette (7e884b2df6 #22753).
 - Add a remote server from a `t3code://pair` link (dde3fdb5a6 #24111), F6 between workspace areas (2525252c96).
 
+### References from 3754
+
+Three fidelity suites failed after porting the question panel's radio options (#23255) and the settings regroup (#25651), because their references showed T3's older content. 3814 has only the new design, but 3754 contains both changes and still had the old-design switch, so 06-user-input-request (light, dark, docked) was recaptured from the 3754 web client with New design off, and the grouped settings and Connections nav references were regenerated from 3754's SettingsSidebarNav markup with the existing stylesheet (4f5fd475, design/reference/README.md). No ceiling changed. Spoken model labels (#24205) have no such build, since T3 added them after the switch was gone, so they wait for phase 2 (068aa9c3).
+
 ## 5. Method and validation
 
 Four research passes (GPT-6.1 Sol, medium) read the 246 commits that touch apps/web/src, packages/client-runtime, packages/contracts or packages/shared, one batch each, and wrote a verdict per hash (~/CandyWrapper-research/notes/nightly-3814/findings-1..4.md): 139 apply, 98 don't, 9 are server-only. The other 256 commits touch only the server, mobile, desktop or tooling.
