@@ -27,6 +27,7 @@ public final class ScheduledTasksSettingsView: ScopedSettingsPage {
     /// A task to open once its list arrives (`taskId` from the thread automations panel).
     public var linkedTask: (environmentId: String, taskId: String)?
     private var busy: Set<String> = []
+    private weak var activeEditor: ScheduledTaskEditor?
 
     public init(context: SettingsPageContext) {
         super.init(context: context)
@@ -63,7 +64,11 @@ public final class ScheduledTasksSettingsView: ScopedSettingsPage {
                     if let link = linkedTask, link.environmentId == env.id {
                         if let t = tasks.first(where: { $0.id == link.taskId }) {
                             linkedTask = nil
-                            DispatchQueue.main.async { [weak self] in self?.openEditor(environmentId: env.id, task: t) }
+                            // T3 3814 ScheduledTasksSettings.tsx:385-391: the user's existing editor wins.
+                            DispatchQueue.main.async { [weak self] in
+                                guard let self, activeEditor == nil else { return }
+                                openEditor(environmentId: env.id, task: t)
+                            }
                         } else {
                             rows.append(SettingsRowView(title: "Task unavailable", detail: "This task no longer exists or is outside the selected project scope."))
                         }
@@ -138,6 +143,7 @@ public final class ScheduledTasksSettingsView: ScopedSettingsPage {
     func openEditor(environmentId: String?, task: ScheduledTask?) {
         guard let env = environmentId ?? context.scope.representative?.id else { return }
         let editor = ScheduledTaskEditor(context: context, environmentId: env, task: task)
+        activeEditor = editor
         editor.present()
     }
 
