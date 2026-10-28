@@ -68,9 +68,28 @@ public enum UpdateEverythingLogic {
         return count == 0 ? nil : count == 1 ? "Server update available" : "\(count) server updates available"
     }
 
+    public struct MachineRow: Equatable, Sendable {
+        public enum App: String, Sendable { case thisApp = "This app", server = "Server", desktopApp = "Desktop app" }
+        public var environmentId: String?
+        public var label: String
+        public var app: App?
+        public var providers: [String]
+        public var skipped: String?
+    }
+
+    public struct Description: Equatable, Sendable {
+        public var summary: String
+        public var lines: [String]
+        public var version: String?
+        public var providerCount: Int
+        public var rows: [MachineRow]
+        public var updatingRows: [MachineRow] { rows.filter { $0.app != nil || !$0.providers.isEmpty } }
+    }
+
     /// `describeUpdateEverything`: "Update this app, 2 servers, and 3 providers", and a line per machine.
     public static func describe(localVersion: String?, servers: [Machine], target: String,
-                                providerMachines: [(environmentId: String, label: String, providers: [String])]) -> (summary: String, lines: [String]) {
+                                providerMachines: [(environmentId: String, label: String, providers: [String])],
+                                localMachines: [(environmentId: String, label: String)] = [], skipped: [Skipped] = []) -> Description {
         let providerCount = providerMachines.reduce(0) { $0 + $1.providers.count }
         let summary = "Update " + joinList([localVersion != nil ? "this app" : nil, count(servers.count, "server"), count(providerCount, "provider")].compactMap { $0 })
         var order: [String] = [], items: [String: (label: String, items: [String])] = [:]
@@ -85,7 +104,27 @@ public enum UpdateEverythingLogic {
         for m in providerMachines { add(m.environmentId, m.label, m.providers) }
         let lines = (localVersion.map { ["This app: \($0), restarts last"] } ?? [])
             + order.map { "\(items[$0]!.label): \(items[$0]!.items.joined(separator: ", "))" }
-        return (summary, lines)
+        // updateEverything.logic.ts:387-458 (3814): one row per environment, in insertion order.
+        var rows: [MachineRow] = []
+        func update(_ id: String?, _ label: String, _ change: (inout MachineRow) -> Void) {
+            if let index = rows.firstIndex(where: { $0.environmentId == id }) { change(&rows[index]) }
+            else {
+                var row = MachineRow(environmentId: id, label: label, app: nil, providers: [], skipped: nil)
+                change(&row); rows.append(row)
+            }
+        }
+        if localVersion != nil {
+            if localMachines.isEmpty { update(nil, "This app") { $0.app = .thisApp } }
+            for local in localMachines { update(local.environmentId, local.label) { $0.app = .thisApp } }
+        }
+        for server in servers {
+            update(server.environmentId, server.label) { $0.app = server.capabilities.selfUpdate == .desktopManaged && !server.ownServer ? .desktopApp : .server }
+        }
+        for machine in providerMachines { update(machine.environmentId, machine.label) { $0.providers = machine.providers } }
+        for machine in skipped { update(machine.environmentId, machine.label) { $0.skipped = machine.reason } }
+        return Description(summary: summary, lines: lines,
+            version: localVersion ?? (servers.contains { $0.capabilities.selfUpdate != .desktopManaged || $0.ownServer } ? target : nil),
+            providerCount: providerCount, rows: rows)
     }
 
     /// `UpdateRunMachineStatus` and its tooltip words.

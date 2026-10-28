@@ -29,7 +29,7 @@ final class UpdateEverything {
 
     struct Plan {
         var summary: String
-        var lines: [String]
+        var description: L.Description
         var servers: [L.Machine]
         var skipped: [L.Skipped]
         var providerMachines: [(environmentId: String, label: String, candidates: [ServerProvider])]
@@ -138,8 +138,9 @@ final class UpdateEverything {
         }
         let local = action != .none ? DesktopUpdateLogic.downloadedVersion(updater.state) : nil
         let d = L.describe(localVersion: local, servers: servers, target: target,
-                           providerMachines: providerMachines.map { ($0.environmentId, $0.label, $0.candidates.map { SidebarProviderUpdatePillModel.displayName($0.driver) }) })
-        return Plan(summary: d.summary, lines: d.lines, servers: servers, skipped: skipped, providerMachines: providerMachines, localVersion: local,
+                           providerMachines: providerMachines.map { ($0.environmentId, $0.label, $0.candidates.map { SidebarProviderUpdatePillModel.displayName($0.driver) }) },
+                           localMachines: environments.environmentIds.filter { serverUpdates.isOwnServer($0) }.map { ($0, environments.label($0) ?? $0) }, skipped: skipped)
+        return Plan(summary: d.summary, description: d, servers: servers, skipped: skipped, providerMachines: providerMachines, localVersion: local,
                     serverNotice: L.serverUpdateNotice(machineSnapshot, target: target))
     }
 
@@ -208,15 +209,30 @@ final class UpdateEverything {
     private func confirm(runtimeAfter: Bool = false) {
         let plan = makePlan()
         guard run == nil, let window, !(plan.servers.isEmpty && plan.providerMachines.isEmpty) else { return }
-        let dialog = DialogView(kind: .alertDialog, title: "\(plan.summary)?", message: plan.lines.joined(separator: "\n"))
+        let count = plan.description.updatingRows.count
+        let version = plan.description.version.map { "Version \($0)" }
+        let providers = plan.description.providerCount
+        let details = [version, providers > 0 ? "\(providers) provider \(providers == 1 ? "update" : "updates")" : nil].compactMap { $0 }.joined(separator: " · ")
+        let dialog = DialogView(kind: .alertDialog, title: "Update \(count) \(count == 1 ? "machine" : "machines")?", message: details)
+        dialog.maxWidth = 576
+        let running = Dictionary(uniqueKeysWithValues: plan.servers.map { server in
+            (server.environmentId, environments.snapshot(server.environmentId)?.threads.filter { ["preparing", "starting", "running"].contains($0.status.rawValue) }.count ?? 0)
+        })
+        let content = UpdateEverythingDialogContent(plan.description, running: running)
+        dialog.panelContent = [content]
         let threads = runningThreads(plan.servers)
-        let notes = [L.threadsLine(stopped: threads.stopped, continuing: threads.continuing),
-                     plan.skipped.isEmpty ? nil : plan.skipped.map { "Skips \($0.label): \($0.reason)" }.joined(separator: "\n")].compactMap { $0 }
+        let notes = [L.threadsLine(stopped: threads.stopped, continuing: threads.continuing)].compactMap { $0 }
         if !notes.isEmpty { dialog.headerContent = NotesView(notes) }
         let cancel = ButtonView("Cancel", variant: .outline)
         let ok = ButtonView("Update")
         dialog.footerButtons = [cancel, ok]
         let host = ModalHost.present(dialog, in: window)
+        content.onHeightChange = { [weak host, weak dialog] in
+            guard let dialog else { return }
+            dialog.panelContent = dialog.panelContent
+            host?.needsLayout = true
+        }
+        window.makeFirstResponder(cancel)
         cancel.action = { [weak host] in host?.close() }
         ok.action = { [weak self, weak host] in host?.close(); self?.start(runtimeAfter: runtimeAfter) }
     }
