@@ -29,6 +29,8 @@ public final class SidebarMenuButtonView: ControlView {
     public var iconDefinition: IconDefinition? { didSet { updateIcon() } }
     public var size: Size = .default { didSet { restyle(); invalidateIntrinsicContentSize() } }
     public var variant: Variant = .default { didSet { restyle() } }
+    /// SettingsSidebarNav lives outside T3's data-app-sidebar palette scope.
+    public var sidebarContext = true { didSet { if sidebarContext != oldValue { restyle() } } }
     /// A clear compose glyph in CandyWrapper's Glass sidebar header.
     public var isHeaderAction = false { didSet { restyle() } }
     public let kind: Kind
@@ -131,7 +133,8 @@ public final class SidebarMenuButtonView: ControlView {
     }
 
     private func restyle() {
-        var look = SidebarRowStyles.look(kind: kind, size: size, variant: variant, active: isActive, state: state, classic: DesignGeometry.usesClassic(self))
+        var look = SidebarRowStyles.look(kind: kind, size: size, variant: variant, active: isActive, state: state,
+                                        classic: DesignGeometry.usesClassic(self), sidebar: sidebarContext)
         if isHeaderAction, WindowGlass.isActive(for: self) {
             look.box.radius = 10
             look.box.border = nil
@@ -158,13 +161,13 @@ enum SidebarRowStyles {
     struct Look { var box: BoxStyle; var text: NSColor; var icon: NSColor; var font: NSFont; var line: CGFloat }
 
     static func look(kind: SidebarMenuButtonView.Kind, size: SidebarMenuButtonView.Size, variant: SidebarMenuButtonView.Variant,
-                     active: Bool, state: ControlView.State, classic: Bool) -> Look {
-        let fg = Themed.color(\.contrastSidebarForeground, sidebar: true)
+                     active: Bool, state: ControlView.State, classic: Bool, sidebar: Bool) -> Look {
+        let fg = Themed.color(\.contrastSidebarForeground, sidebar: sidebar)
         var box = BoxStyle()
         box.border = nil
-        let hoverFill = Themed.color(\.sidebarRowHover, sidebar: true)
-        let activeFill = Themed.color(\.sidebarRowActive, sidebar: true)
-        let selectedFill = Themed.color(\.sidebarRowSelected, sidebar: true)
+        let hoverFill = Themed.color(\.sidebarRowHover, sidebar: sidebar)
+        let activeFill = Themed.color(\.sidebarRowActive, sidebar: sidebar)
+        let selectedFill = Themed.color(\.sidebarRowSelected, sidebar: sidebar)
 
         if case .sub(let small) = kind {
             box.radius = classic ? 10 : 8
@@ -173,23 +176,23 @@ enum SidebarRowStyles {
             if state.active { box.fill = activeFill }
             if active { box.fill = selectedFill }
             if state.focusVisible { box.shadows = [BoxShadow(spread: 2, color: Themed.color(\.ring))] }
-            return Look(box: box, text: fg, icon: Themed.color(\.contrastSidebarMutedForeground, sidebar: true),
+            return Look(box: box, text: fg, icon: Themed.color(\.contrastSidebarMutedForeground, sidebar: sidebar),
                         font: DSFont.ui(small ? 12 : 14), line: small ? 16 : 20)
         }
 
         let m = size.metrics
         box.radius = !classic && (size == .sm || size == .lg) ? 8 : m.radius
-        var text = Themed.color(\.contrastSidebarMutedForeground, 0.8, sidebar: true)
-        var icon = Themed.color(\.sidebarIconColor, sidebar: true)
+        var text = Themed.color(\.contrastSidebarMutedForeground, 0.8, sidebar: sidebar)
+        var icon = Themed.color(\.sidebarIconColor, sidebar: sidebar)
         var ringColor = Themed.color(\.ring)
         var weight: NSFont.Weight = .medium
         if variant == .outline {
             // The outline variant sets no font-medium or muted color, so the row inherits sidebar-foreground at 400.
             text = fg
             weight = active ? .medium : .regular
-            box.fill = Themed.color(\.sidebarControlSurface, sidebar: true)
-            box.shadows = [BoxShadow(spread: 1, color: Themed.color(\.sidebarBorder, sidebar: true))]
-            ringColor = Themed.color(\.sidebarBorder, sidebar: true)
+            box.fill = Themed.color(\.sidebarControlSurface, sidebar: sidebar)
+            box.shadows = [BoxShadow(spread: 1, color: Themed.color(\.sidebarBorder, sidebar: sidebar))]
+            ringColor = Themed.color(\.sidebarBorder, sidebar: sidebar)
         }
         if state.hovered { box.fill = hoverFill; text = fg; icon = fg }
         if state.active { box.fill = activeFill; text = fg; icon = fg }

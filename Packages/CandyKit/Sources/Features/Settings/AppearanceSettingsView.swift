@@ -69,6 +69,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
         let themeHeading = SettingsSubheadingView(SettingsSearch.title("theme"))
         // `flex min-h-8 pt-2`: 8 of the 32 are the top padding.
         themeHeading.minHeight = 24
+        themeHeading.modernMinimumHeight = 24
         themeHeading.topPadding = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? 8 : 20
         let buttons = ThemeHeaderButtonsView()
         themeHeading.trailing = buttons
@@ -503,7 +504,7 @@ final class ModeTilesView: DSView, SettingsGroupRow {
         tiles[0].isActive = true
     }
 
-    func height(forWidth width: CGFloat) -> CGFloat { 8 + 140 + 6 + 16 + 8 }
+    func height(forWidth width: CGFloat) -> CGFloat { 8 + 140 + 6 + 16 + 8 + (DesignGeometry.usesClassic(self) ? 0 : 2) }
 
     override func layout() {
         super.layout()
@@ -545,7 +546,7 @@ final class ModeTilesView: DSView, SettingsGroupRow {
             if isActive {
                 box.fill = Themed.color(\.accent, 0.3)
                 box.border = .clear
-                box.shadows = [BoxShadow(spread: 1, color: Themed.color(\.ring), inset: true)]
+                box.shadows = [BoxShadow(spread: DesignGeometry.usesClassic(self) ? 1 : 2, color: Themed.color(\.ring), inset: true)]
             } else {
                 box.border = Themed.color(\.border, 0.7)
                 box.fill = state.hovered ? Themed.color(\.accent, 0.1) : Themed.color(\.card, 0.6)

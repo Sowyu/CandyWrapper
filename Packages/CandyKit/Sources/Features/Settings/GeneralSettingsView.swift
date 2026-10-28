@@ -51,31 +51,6 @@ public final class GeneralSettingsView: SettingsPageBase {
         return super.anchor(id)
     }
 
-    /// "Compact idle threads" (SettingsPanels.tsx:973-1020, `scopedIdleCompaction` scopedSettings.ts:149-155): targets
-    /// compare by the mode each resolves to, and "Never" is offered only when every target can store it.
-    private func idleCompactionRow() -> SettingsRowView {
-        let modes = ServerSettingsValues.idleCompactionModes
-        let select = settingsSelect(modes.map(\.label), width: 224)
-        select.setAccessibilityLabel("Compact idle threads")
-        let r = row("compact-idle-threads",
-                    detail: "When to compact an idle Claude thread over 200,000 tokens: after you return, just before its prompt cache expires, or never. Each Claude provider can override this.",
-                    control: select)
-        _ = bindServerRow(r, keys: ["idleCompaction", "compactIdleThreads"], reset: "compact idle threads",
-                          isDefault: { [weak self] in self?.server.globalIdleCompaction == "onReturn" },
-                          resetPatch: { ["idleCompaction": .string("onReturn")] })
-        select.onChange = { [weak self] i in self?.context.patchServer(["idleCompaction": .string(modes[i].value)]) }
-        binder.add { [weak self, weak select] in
-            guard let self, let select else { return }
-            let targets = self.context.scope.targets
-            let resolved = Set(targets.map(\.settings.globalIdleCompaction))
-            select.placeholder = self.context.scope.connected.isEmpty ? "Unavailable" : "Mixed"
-            select.selectedIndex = resolved.count > 1 ? nil : modes.firstIndex { $0.value == self.server.globalIdleCompaction }
-            // A server from before modes has only the on/off switch, so it cannot store "Never".
-            select.disabledOptions = targets.allSatisfy(\.settings.readsIdleCompactionModes) ? [] : [modes.count - 1]
-        }
-        return r
-    }
-
     // MARK: New threads (ProjectDefaultsSettings.tsx:252-385)
 
     private func newThreadsSection() -> SettingsSectionView {
@@ -216,7 +191,9 @@ public final class GeneralSettingsView: SettingsPageBase {
 
     func addWorkingShelfRow() {
         guard let organization = anchors["organization"] as? SettingsSectionView else { return }
-        let working = clientSwitch("working-shelf", "Fold working and monitoring threads into a Working section. They return to the top of the inbox when they need you.", key: "sidebarWorkingShelfEnabled", title: "Working section")
+        let detail = "Fold working and monitoring threads into a Working section. They return to the top of the inbox when they need you."
+        let working = clientSwitch("working-shelf", ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? detail
+            : detail + " The boring sidebar in Labs has no Working section.", key: "sidebarWorkingShelfEnabled", title: "Working section")
         organization.group.rows.insert(working, at: min(2, organization.group.rows.count))
     }
 
@@ -312,7 +289,9 @@ public final class GeneralSettingsView: SettingsPageBase {
                 ? "Press ⌘ + Enter for single-line prompts or ⌘ + Shift + Enter for multiline prompts to do the opposite for one message."
                 : "Press ⌘\(shortcut == "mod-enter" ? " + Shift" : "") + Enter to do the opposite for one message.")
         }
-        let updates = serverSwitch("provider-update-checks", "Check installed provider CLIs for newer available versions.",
+        let updates = serverSwitch("provider-update-checks", DesignGeometry.usesClassic(self)
+            ? "Check installed provider CLIs for newer available versions."
+            : "Check installed provider CLIs for newer available versions and fetch model catalog updates. When off, new models may not appear.",
                                    key: "enableProviderUpdateChecks", reset: "provider update checks", label: "Check provider versions")
         let continueRow = serverSwitch("continue-threads-after-server-update",
                                        "Automatically resume interrupted threads after an update, crash, or machine restart on the selected environments.",
@@ -434,7 +413,7 @@ public final class GeneralSettingsView: SettingsPageBase {
         let quit = clientSelect("quit-confirmation", "Hold mode also quits on two quick presses.", key: "confirmQuit",
                                 options: [("direct", "Direct"), ("hold", "Hold"), ("double-click", "Double press")], width: 160,
                                 reset: "quit shortcut behavior", label: "Quit shortcut behavior")
-        return section("confirmations", "Confirmations", [unpin, archive, delete, quit])
+        return section("confirmations", "Confirmations", [unpin, archive, delete] + (context.desktopAvailable ? [quit] : []))
     }
 
     // MARK: Text generation, About, Diagnostics, Legacy

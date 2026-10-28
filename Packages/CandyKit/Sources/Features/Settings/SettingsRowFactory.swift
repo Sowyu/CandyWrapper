@@ -314,3 +314,30 @@ final class ChainView: DSView {
         }
     }
 }
+
+extension SettingsPageBase {
+    /// "Compact idle threads" (SettingsPanels.tsx:973-1020, `scopedIdleCompaction` scopedSettings.ts:149-155): targets
+    /// compare by the mode each resolves to, and "Never" is offered only when every target can store it.
+    func idleCompactionRow() -> SettingsRowView {
+        let modes = ServerSettingsValues.idleCompactionModes
+        let select = settingsSelect(modes.map(\.label), width: 224)
+        select.setAccessibilityLabel("Compact idle threads")
+        let r = row("compact-idle-threads",
+                    detail: "When to compact an idle Claude thread over 200,000 tokens: after you return, just before its prompt cache expires, or never. Each Claude provider can override this.",
+                    control: select)
+        _ = bindServerRow(r, keys: ["idleCompaction", "compactIdleThreads"], reset: "compact idle threads",
+                          isDefault: { [weak self] in self?.server.globalIdleCompaction == "onReturn" },
+                          resetPatch: { ["idleCompaction": .string("onReturn")] })
+        select.onChange = { [weak self] i in self?.context.patchServer(["idleCompaction": .string(modes[i].value)]) }
+        binder.add { [weak self, weak select] in
+            guard let self, let select else { return }
+            let targets = self.context.scope.targets
+            let resolved = Set(targets.map(\.settings.globalIdleCompaction))
+            select.placeholder = self.context.scope.connected.isEmpty ? "Unavailable" : "Mixed"
+            select.selectedIndex = resolved.count > 1 ? nil : modes.firstIndex { $0.value == self.server.globalIdleCompaction }
+            // A server from before modes has only the on/off switch, so it cannot store "Never".
+            select.disabledOptions = targets.allSatisfy(\.settings.readsIdleCompactionModes) ? [] : [modes.count - 1]
+        }
+        return r
+    }
+}

@@ -12,6 +12,14 @@ public final class ConcernSettingsView: SettingsPageBase {
 
     public init(context: SettingsPageContext, section: SettingsSection) {
         self.section = section
+        if section == .browser, !ThemeRuntime.framesPanes(dark: false), !ThemeRuntime.framesPanes(dark: true) {
+            let browser = BrowserSettingsPage(context: context)
+            sources = [browser]
+            super.init(context: context)
+            browser.onHeightChange = { [weak self] in self?.onHeightChange?() }
+            items = sources
+            return
+        }
         let slices = Self.slices(section)
         sources = slices.map { slice in
             let groups = slice.groups.map { Set($0.map(\.key)) }
@@ -68,7 +76,7 @@ public final class ConcernSettingsView: SettingsPageBase {
         typealias G = DitherSettingsSlice.Group
         switch page {
         case .general: return [
-            .init(.general, [G("behavior", "Notifications", rows: ["thread-notifications", "in-app-notifications", "menu-bar"])]),
+            .init(.general, [G("behavior", "Notifications", rows: ["thread-notifications", "in-app-notifications"])]),
             .init(.general, [G("organization", "Sidebar", rows: ["project-grouping", "project-order", "working-shelf"])]),
             .init(.general, [G("confirmations", nil)]),
             .init(.general, [G("behavior", "Display", rows: ["time-format"])])
@@ -114,10 +122,11 @@ public final class ConcernSettingsView: SettingsPageBase {
             .init(.general, [G("about", "App", rows: ["app-version", "update-track"])]),
             .init(.general, [G("about", "Legal", rows: ["privacy-policy"]), G("Diagnostics", "Licenses", rows: ["open-source-licenses"])])
         ]
-        case .providers: return [
-            .init(.providers, scope: true),
-            .init(.general, [G("organization", "Advanced", rows: ["compact-idle-threads"])])
-        ]
+        case .providers:
+            if ThemeRuntime.framesPanes(dark: false) || ThemeRuntime.framesPanes(dark: true) {
+                return [.init(.providers, scope: true), .init(.general, [G("organization", "Advanced", rows: ["compact-idle-threads"])])]
+            }
+            return [.init(.providers, scope: true)]
         case .sourceControl: return [.init(.sourceControl, scope: true, [G("source-control-defaults", nil), G("source-control", nil),
             G("Version Control", nil), G("Source Control Providers", nil), G("Server environment", nil),
             G("source-control-text-generation", "Writing", rows: ["source-control-writer-model", "source-control-writing-style"])])]
