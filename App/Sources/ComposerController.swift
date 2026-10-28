@@ -29,7 +29,8 @@ final class ComposerController {
     private let environments: Environments
     private var settingsWorkspaceTask: Task<Void, Never>?
     private var settingsWorkspaceSendPending = false
-    private(set) var target: Target?
+    private(set) var target: Target? { didSet { if target != oldValue { navigationGeneration += 1 } } }
+    private(set) var navigationGeneration = 0
     private var projection: ThreadProjection?
     /// Sent messages the stream hasn't confirmed, for the open thread.
     private var optimistic: [ChatMessage] = []
@@ -114,6 +115,15 @@ final class ComposerController {
         panel.toasts.show(ToastView(title: "This prompt had hidden characters, it may be malicious",
                                     message: "CandyWrapper removed \(n) hidden character\(n == 1 ? "" : "s"). Read the prompt before you send it.",
                                     kind: .warning), timeout: 0)
+    }
+
+    /// A prepared triage prompt only seeds an empty draft, as useHandleNewThread.ts:337-349 (3814).
+    func seedTriagePrompt(_ text: String) {
+        guard case .draft = target, composer.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              currentAttachments.isEmpty, queuedEdit == nil, questionRequestId == nil else { return }
+        composer.text = text
+        remember(text)
+        focusComposer()
     }
 
     /// `placeLinkedPrompt`: the open thread's or draft's composer takes the prompt to read and send. Text the user

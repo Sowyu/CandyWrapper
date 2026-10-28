@@ -48,7 +48,8 @@ final class SettingsController {
         if let clientObserver { ClientSettingsStore.shared.removeObserver(clientObserver) }
         if let themeObserver { NotificationCenter.default.removeObserver(themeObserver) }
     }
-    private(set) var isOpen = false
+    private(set) var isOpen = false { didSet { if isOpen != oldValue { navigationGeneration += 1 } } }
+    private(set) var navigationGeneration = 0
     /// Settings opened, changed page or closed (route history).
     var onOnboardingReturn: (() -> Void)?
     var onRouteChange: (() -> Void)?

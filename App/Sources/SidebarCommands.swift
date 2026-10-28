@@ -21,7 +21,8 @@ final class SidebarCommands {
     /// One settle and one snooze per thread at a time (Sidebar.tsx:3314-3317, 4173).
     private var settling: Set<ThreadId> = []
     private var snoozing: Set<ThreadId> = []
-    private var utilityPage: NSView?
+    private var utilityPage: NSView? { didSet { navigationGeneration += 1 } }
+    private(set) var navigationGeneration = 0
     /// The Pull Requests page, made on first open and kept for the session (its panel is session state).
     private lazy var pullRequestsPage: PullRequestsPageController = {
         let c = PullRequestsPageController(sidebar: sidebar!, environments: environments, capabilities: threads.pullRequests.capabilities)
