@@ -33,6 +33,26 @@ struct BackgroundWorkBannerTests {
         #expect(BackgroundWorkPresentation.present([task(.command), task(.command)])?.title == "Running 2 commands")
     }
 
+    @Test func newestActivityWinsAndOneTaskKeepsItsOwnDurationAndChild() throws {
+        func item(_ id: String, taskId: String, progress: String, updated: String) throws -> TurnItem {
+            try TurnItem(json: .object(["id": .string(id), "type": .string("subagent"), "threadId": .string("t"),
+                "ordinal": .number(1), "status": .string("running"), "nativeItemRef": .object(["nativeId": .string(taskId)]),
+                "progress": .string(progress), "childThreadId": .string("child"),
+                "startedAt": .string("2026-10-28T00:00:00Z"), "updatedAt": .string(updated)]))
+        }
+        let tasks = [PendingBackgroundTask(taskId: "a", description: "First", kind: .subagent),
+                     PendingBackgroundTask(taskId: "b", description: "Second", kind: .subagent)]
+        let items = [try item("one", taskId: "a", progress: "Earlier", updated: "2026-10-28T00:00:01Z"),
+                     try item("two", taskId: "b", progress: "  Reading\n files  ", updated: "2026-10-28T00:00:02Z")]
+        let multiple = BackgroundWorkPresentation.activity(try #require(BackgroundWorkPresentation.present(tasks)), turnItems: items)
+        #expect(multiple.detail == "Second: Reading files")
+        #expect(multiple.startedAt == nil && multiple.childThreadId == nil)
+        let one = BackgroundWorkPresentation.activity(try #require(BackgroundWorkPresentation.present([tasks[1]])), turnItems: items)
+        #expect(one.title == "Waiting on Second" && one.detail == "Reading files")
+        #expect(one.startedAt == "2026-10-28T00:00:00Z" && one.childThreadId == "child")
+        #expect(!one.commandsOnly)
+    }
+
     /// Redesign's indicator drops the titles.
     @Test func shortTitles() throws {
         func short(_ tasks: [PendingBackgroundTask]) throws -> String { BackgroundWorkPresentation.shortTitle(try #require(BackgroundWorkPresentation.present(tasks))) }

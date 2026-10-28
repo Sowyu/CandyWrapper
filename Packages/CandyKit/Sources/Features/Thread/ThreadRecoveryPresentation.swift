@@ -66,6 +66,31 @@ public enum BackgroundWorkPresentation {
         public var waiting: Bool
     }
 
+    public struct Activity: Equatable {
+        public var title: String
+        public var detail: String?
+        public var startedAt: T3Timestamp?
+        public var childThreadId: ThreadId?
+        public var commandsOnly: Bool
+    }
+
+    /// T3 3814 ThreadActivityBanners.tsx:118-194 joins task ids to the newest subagent progress.
+    public static func activity(_ value: Value, turnItems: [TurnItem]) -> Activity {
+        let rows = value.items.map { task -> (Item, String?, TurnItem?) in
+            let item = turnItems.last { ($0["nativeItemRef"]?["nativeId"]?.stringValue ?? $0.id.rawValue) == task.taskId }
+            let progress = item?.type == .subagent ? item?.string("progress")?.split(whereSeparator: \.isWhitespace).joined(separator: " ") : nil
+            return (task, progress?.isEmpty == false ? progress : nil, item)
+        }
+        let only = rows.count == 1 ? rows.first : nil
+        let newest = rows.filter { $0.1 != nil }.max { ($0.2?.updatedAt.epochMs ?? 0) < ($1.2?.updatedAt.epochMs ?? 0) }
+        let title = only.map { (value.waiting ? "Waiting on " : "Running ") + $0.0.label } ?? value.title
+        let detail = only != nil ? only?.1 : newest.map { $0.0.label + ": " + ($0.1 ?? "") } ?? rows.map { $0.0.label }.joined(separator: ", ")
+        let start = only?.2?.string("startedAt").map { T3Timestamp($0) }
+        let child = only.flatMap { $0.0.childThreadId ?? $0.2?.string("childThreadId").map { ThreadId($0) } }
+        return Activity(title: title, detail: detail, startedAt: start, childThreadId: child,
+                        commandsOnly: rows.allSatisfy { $0.0.kind != .subagent })
+    }
+
     private static func noun(_ kind: BackgroundTaskKind) -> (order: Int, singular: String, plural: String) {
         switch kind {
         case .subagent: (0, "subagent", "subagents")
