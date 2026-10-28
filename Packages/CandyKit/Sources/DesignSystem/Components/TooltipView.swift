@@ -8,7 +8,7 @@ public final class TooltipView: DSView, PopupContent {
     private let decoration = BoxDecorationLayer()
     private let dropShadow = PopupShadowLayer()
     private let label = LabelView()
-    public var frostRadius: CGFloat { 8 }
+    public var frostRadius: CGFloat { DesignGeometry.radius(8, in: self) }
 
     public init(_ text: String, variant: Variant = .default) {
         self.variant = variant
@@ -18,10 +18,7 @@ public final class TooltipView: DSView, PopupContent {
         layer?.addSublayer(dropShadow)
         layer?.addSublayer(decoration)
         layer?.masksToBounds = false
-        let look = (variant == .glass ? PopupSurface.tooltipGlass : .tooltip).split(radius: 8)
-        decoration.boxStyle = look.box
-        dropShadow.radius = 8
-        dropShadow.shadows = look.shadows
+        applySurface()
         label.text = text
         label.color = PopupSurface.text
         if variant == .code {
@@ -32,6 +29,13 @@ public final class TooltipView: DSView, PopupContent {
             label.lineHeight = 16.5   // leading-snug beats text-xs
         }
         addSubview(label)
+    }
+
+    private func applySurface() {
+        let look = (variant == .glass ? PopupSurface.tooltipGlass : .tooltip).split(radius: DesignGeometry.radius(8, in: self))
+        decoration.boxStyle = look.box
+        dropShadow.radius = DesignGeometry.radius(8, in: self)
+        dropShadow.shadows = look.shadows
     }
 
     public var text: String {
@@ -83,6 +87,7 @@ public final class TooltipView: DSView, PopupContent {
         super.viewDidChangeEffectiveAppearance()
         decoration.setNeedsDisplay()
         dropShadow.update(boxSize: bounds.size)
+        applySurface()
     }
 }
 

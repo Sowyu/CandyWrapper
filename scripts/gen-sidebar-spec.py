@@ -19,8 +19,8 @@ MB_BASE = "peer/menu-button flex w-full cursor-pointer items-center gap-[var(--s
 MB_SIZE = {
     "default": "h-8 rounded-[var(--control-radius)] px-[var(--sidebar-row-content-inset)] py-1.5 text-sm",
     "icon": "size-8 justify-center rounded-[var(--control-radius)] p-0",
-    "lg": "h-12 rounded-lg p-2 text-sm group-data-[collapsible=icon]:p-0!",
-    "sm": "h-7 rounded-lg p-2 text-xs",
+    "lg": "h-12 rounded-[var(--control-radius)] px-[var(--sidebar-row-content-inset)] py-2 text-sm group-data-[collapsible=icon]:p-0!",
+    "sm": "h-7 rounded-[var(--control-radius)] px-[var(--sidebar-row-content-inset)] py-2 text-xs",
 }
 MB_VARIANT = {"default": "font-medium text-sidebar-muted-foreground/80", "outline": "bg-sidebar-control-surface ring-1 ring-sidebar-border"}
 SIDEBAR_BOX = '<div data-app-sidebar="" class="bg-sidebar text-sidebar-foreground" style="width:240px;padding:8px">{}</div>'

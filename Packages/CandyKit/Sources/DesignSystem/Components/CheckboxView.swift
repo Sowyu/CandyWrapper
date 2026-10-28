@@ -95,7 +95,15 @@ public class ChoiceView: ControlView {
         }
         if state.focusVisible {
             let ring = isInvalid ? Themed.color(light: \.destructive, 0.48, dark: \.destructive, 0.24) : Themed.color(\.ring)
-            box.shadows = BoxShadow.focusRing(ring: ring, offset: Themed.color(\.background)) + box.shadows
+            if !round && !DesignGeometry.usesClassic(self) {
+                // checkbox.tsx:7-10: the outline sits inside, with a 1px background gap on the indicator.
+                box.border = ring
+                box.borderWidth = 2
+                box.shadows = checked || value == .mixed
+                    ? [BoxShadow(spread: 1, color: Themed.color(\.background), inset: true)] : []
+            } else {
+                box.shadows = BoxShadow.focusRing(ring: ring, offset: Themed.color(\.background)) + box.shadows
+            }
         }
         decoration.boxStyle = box
 

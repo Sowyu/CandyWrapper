@@ -41,7 +41,7 @@ public final class PanelTabCloseButton: ControlView {
 
     private func restyle() {
         var box = BoxStyle()
-        box.radius = 6 // rounded-sm
+        box.radius = DesignGeometry.radius(6, in: self) // rounded-sm
         if state.hovered { box.fill = Themed.color(\.muted) }
         decoration.boxStyle = box
         let showClose = isTabHovered || state.focusVisible

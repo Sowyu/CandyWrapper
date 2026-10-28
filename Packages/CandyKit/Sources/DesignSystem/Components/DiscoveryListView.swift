@@ -11,14 +11,14 @@ public final class DiscoveryListView: BoxView {
         dividers = rows.dropFirst().map { _ in CALayer() }
         super.init(frame: .zero)
         var box = BoxStyle()
-        box.radius = 14
+        box.radius = DesignGeometry.radius(14, in: self)
         box.border = Themed.color(\.contrastBorder, 0.7)
         box.fill = WindowGlass.paneFill
         boxStyle = box
         rows.forEach(addSubview)
         dividers.forEach { layer?.addSublayer($0) }
         // `overflow-hidden`: row hovers stay inside the rounded frame.
-        layer?.cornerRadius = 14
+        layer?.cornerRadius = DesignGeometry.radius(14, in: self)
         layer?.masksToBounds = true
     }
 

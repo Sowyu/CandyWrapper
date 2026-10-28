@@ -147,6 +147,7 @@ public class FieldView: DSView {
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         decoration.setNeedsDisplay()
+        restyle()
     }
 
     public override func layout() {

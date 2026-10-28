@@ -148,8 +148,8 @@ for size in ("default", "sm"):
 specs["switch"] = {"source": "apps/web/src/components/ui/switch.tsx", "states": ["rest", "active", "focus-visible"], "cases": cases}
 
 # 4. Checkbox (checkbox.tsx:11-54) and 5. Radio (radio-group.tsx:22-30)
-C_ROOT = "relative inline-flex size-4.5 shrink-0 items-center justify-center rounded-[.25rem] border border-input bg-background not-dark:bg-clip-padding shadow-xs/5 outline-none ring-ring transition-shadow before:pointer-events-none before:absolute before:inset-0 before:rounded-[3px] not-data-disabled:not-data-checked:not-aria-invalid:before:shadow-[0_1px_--theme(--color-black/4%)] focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background aria-invalid:border-destructive/36 focus-visible:aria-invalid:border-destructive/64 focus-visible:aria-invalid:ring-destructive/48 data-disabled:opacity-64 sm:size-4 dark:not-data-checked:bg-input/32 dark:aria-invalid:ring-destructive/24 dark:not-data-disabled:not-data-checked:not-aria-invalid:before:shadow-[0_-1px_--theme(--color-white/6%)] [[data-disabled],[data-checked],[aria-invalid]]:shadow-none"
-C_IND = "-inset-px absolute flex items-center justify-center rounded-[.25rem] text-primary-foreground data-unchecked:hidden data-checked:bg-primary data-indeterminate:text-foreground"
+C_ROOT = 'relative inline-flex size-4.5 shrink-0 items-center justify-center rounded-[.25rem] border border-input bg-background not-dark:bg-clip-padding shadow-xs/5 outline-none transition-shadow before:pointer-events-none before:absolute before:inset-0 before:rounded-[3px] not-data-disabled:not-data-checked:not-aria-invalid:before:shadow-[0_1px_--theme(--color-black/4%)] focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-ring aria-invalid:border-destructive/36 focus-visible:aria-invalid:border-destructive/64 focus-visible:aria-invalid:outline-destructive/48 data-disabled:opacity-64 sm:size-4 dark:not-data-checked:bg-input/32 dark:focus-visible:aria-invalid:outline-destructive/24 dark:not-data-disabled:not-data-checked:not-aria-invalid:before:shadow-[0_-1px_--theme(--color-white/6%)] [[data-disabled],[data-checked],[aria-invalid]]:shadow-none'
+C_IND = '-inset-px absolute flex items-center justify-center rounded-[.25rem] text-primary-foreground data-unchecked:hidden data-checked:bg-primary data-indeterminate:text-foreground in-[[data-slot=checkbox]:focus-visible]:inset-shadow-[0_0_0_3px_var(--background)] in-[[data-slot=checkbox]:focus-visible]:outline-2 in-[[data-slot=checkbox]:focus-visible]:outline-solid in-[[data-slot=checkbox]:focus-visible]:-outline-offset-2 in-[[data-slot=checkbox]:focus-visible]:outline-inherit'
 R_ROOT = "relative inline-flex size-4.5 shrink-0 items-center justify-center rounded-full border border-input bg-background not-dark:bg-clip-padding shadow-xs/5 outline-none transition-shadow before:pointer-events-none before:absolute before:inset-0 before:rounded-full not-data-disabled:not-data-checked:not-aria-invalid:before:shadow-[0_1px_--theme(--color-black/4%)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background aria-invalid:border-destructive/36 focus-visible:aria-invalid:border-destructive/64 focus-visible:aria-invalid:ring-destructive/48 data-disabled:opacity-64 sm:size-4 dark:not-data-checked:bg-input/32 dark:aria-invalid:ring-destructive/24 dark:not-data-disabled:not-data-checked:not-aria-invalid:before:shadow-[0_-1px_--theme(--color-white/6%)] [[data-disabled],[data-checked],[aria-invalid]]:shadow-none"
 R_IND = "-inset-px absolute flex size-4.5 items-center justify-center rounded-full before:size-2 before:rounded-full before:bg-primary-foreground data-unchecked:hidden data-checked:bg-primary sm:size-4 sm:before:size-1.5"
 CHECK = svg('<path d="M5.252 12.7 10.2 18.63 18.748 5.37"></path>', "size-3.5 sm:size-3", 3)
@@ -237,8 +237,8 @@ specs["empty"] = {"source": "apps/web/src/components/ui/empty.tsx", "states": ["
 
 # 17. CollapsibleSectionHeader (collapsible-section-header.tsx)
 TONES = {
-    "muted": ("text-sidebar-muted-foreground/60", "bg-sidebar-border/60"),
-    "info": ("text-blue-600 dark:text-blue-400", "bg-blue-500/20 dark:bg-blue-400/15"),
+    "muted": ("text-sidebar-muted-foreground", "bg-sidebar-border/50"),
+    "info": ("text-sidebar-muted-foreground", "bg-sidebar-border/50"),
     "emphasized": ("text-sidebar-foreground/80", "bg-sidebar-foreground/25"),
     "accent": ("text-primary", "bg-primary/50"),
 }
@@ -247,7 +247,7 @@ CHEVRON = '<path d="m6 9 6 6 6-6"></path>'
 cases = []
 for tone, (label, line) in TONES.items():
     for expanded in (False, True):
-        chev = svg(CHEVRON, "size-3 shrink-0 transition-transform" + (" rotate-180" if expanded else ""))
+        chev = svg(CHEVRON, "size-3 shrink-0 transition-transform" + ("" if expanded else " -rotate-90"))
         html = (f'<button type="button" aria-expanded="{str(expanded).lower()}" class="{merge(H_BTN + " " + label)}">'
                 f'<span class="shrink-0">Projects</span><span aria-hidden="true" class="h-px min-w-2 flex-1 {line}"></span>{chev}</button>')
         cases.append({"name": f"{tone}.{'open' if expanded else 'closed'}", "html": html, "wrapperStyle": "display:block;width:240px",

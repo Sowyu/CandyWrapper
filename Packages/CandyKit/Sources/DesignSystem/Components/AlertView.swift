@@ -143,6 +143,7 @@ public final class AlertView: DSView {
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         decoration.setNeedsDisplay()
+        restyle()
     }
 
     private func restyle() {
@@ -153,7 +154,7 @@ public final class AlertView: DSView {
         descriptionLabel.lineHeight = m.line
 
         var box = BoxStyle()
-        box.radius = sidebar ? 10 : 14
+        box.radius = DesignGeometry.radius(sidebar ? 10 : 14, in: self)
         let cardFg = Themed.color(\.contrastCardForeground)
         var text = cardFg, description = Themed.color(\.contrastMutedForeground), iconColor = Themed.color(\.contrastMutedForeground)
         switch variant {

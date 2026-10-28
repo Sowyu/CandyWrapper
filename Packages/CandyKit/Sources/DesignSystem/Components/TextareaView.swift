@@ -78,7 +78,7 @@ public final class TextareaView: FieldView {
             placeholderLabel.color = Themed.color(\.mutedForeground)
             return
         }
-        decoration.boxStyle = FieldStyles.frame(state: state, radius: 10)
+        decoration.boxStyle = FieldStyles.frame(state: state, radius: DesignGeometry.radius(10, in: self))
         // No placeholder class: preflight's `currentcolor` at 50%.
         placeholderLabel.color = Themed.color(\.contrastForeground, 0.5)
     }

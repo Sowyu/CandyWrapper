@@ -127,10 +127,11 @@ struct LayoutFidelityTests {
 
     /// `splitForMiddleTruncate` cases.
     @Test func middleTruncateSplit() {
-        #expect(MiddleTruncateView.split("/Users/mrm/Sources/ScrollAreaView.swift")?.tail == "View.swift") // segment over 16: 10
+        #expect(MiddleTruncateView.split("/Users/mrm/Sources/ScrollAreaView.swift")?.tail == "swift") // segment over 16: 10
         #expect(MiddleTruncateView.split("/Users/mrm/Sources/Short.swift")?.tail == "Short.swift")
-        #expect(MiddleTruncateView.split("fix/cache-main-20260918-180825")?.tail == "918-180825")
+        #expect(MiddleTruncateView.split("fix/cache-main-20260918-180825")?.tail == "180825")
         #expect(MiddleTruncateView.split("main") == nil)
+        #expect(MiddleTruncateView.split("fix/cache-main-20260918-180825", classic: true)?.tail == "918-180825")
         #expect(MiddleTruncateView.split("abcdefghijklmn") == nil)  // 14 chars: tail 10 + 4
         #expect(MiddleTruncateView.split("abcdefghijklmno")?.head == "abcde")
         #expect(MiddleTruncateView.split("abcdef", tail: 1)?.tail == "f")

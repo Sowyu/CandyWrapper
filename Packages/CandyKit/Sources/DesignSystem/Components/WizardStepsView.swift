@@ -16,7 +16,7 @@ public final class WizardStepsView: BoxView {
         self.currentStep = currentStep
         super.init(frame: .zero)
         var box = BoxStyle()
-        box.radius = 14
+        box.radius = DesignGeometry.radius(14, in: self)
         box.fill = Themed.pick(light: Tokens.baseColors["zinc-25"]!.nsColor, dark: Themed.white(0.04))
         box.shadows = [BoxShadow(spread: 1, color: Themed.pick(light: Themed.black(0.05), dark: Themed.white(0.05)))]
         boxStyle = box
@@ -89,7 +89,7 @@ public final class WizardStepView: ControlView {
     func restyle() {
         let current = owner.currentStep
         var box = BoxStyle()
-        box.radius = 10
+        box.radius = DesignGeometry.radius(10, in: self)
         if index == current || (state.hovered && state.enabled) { box.fill = Themed.color(\.card) }
         if index == current {
             box.shadows = [BoxShadow(spread: 1, color: Themed.pick(light: Themed.black(0.05), dark: Themed.white(0.05))),
@@ -99,7 +99,7 @@ public final class WizardStepView: ControlView {
         decoration.boxStyle = box
 
         var d = BoxStyle()
-        d.radius = 10
+        d.radius = DesignGeometry.radius(10, in: self)
         if index < current {
             d.fill = Themed.color(\.primary)
             d.shadows = [BoxShadow(spread: 1, color: Themed.color(\.primary))]

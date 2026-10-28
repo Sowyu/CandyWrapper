@@ -183,7 +183,7 @@ public final class EmptyView: DSView {
         override func updateLayer() {
             for (i, card) in cards.enumerated() {
                 var box = BoxStyle()
-                box.radius = 8
+                box.radius = DesignGeometry.radius(8, in: self)
                 box.border = Themed.color(\.contrastBorder)
                 box.fill = Themed.color(\.card)
                 box.backgroundClip = .paddingInLight

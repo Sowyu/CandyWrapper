@@ -78,6 +78,7 @@ public final class BadgeView: DSView {
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         decoration.setNeedsDisplay()
+        restyle()
     }
 
     private func updateIcon() {
@@ -96,7 +97,7 @@ public final class BadgeView: DSView {
         label.font = DSFont.ui(m.font, weight: .medium)
         label.lineHeight = m.line
         var box = BoxStyle()
-        box.radius = m.radius
+        box.radius = size == .sm || size == .control ? m.radius : DesignGeometry.radius(m.radius, in: self)
         box.border = .clear
         let text: NSColor
         switch variant {

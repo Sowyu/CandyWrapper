@@ -158,11 +158,15 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu, HoverSync
         layer?.masksToBounds = false
         clip.layer?.masksToBounds = true
         addSubview(clip)
-        let look = surface.split()
-        decoration.boxStyle = look.box
-        dropShadow.radius = 10
-        dropShadow.shadows = look.shadows
+        applySurface()
         rebuild()
+    }
+
+    private func applySurface() {
+        let look = surface.split(radius: DesignGeometry.radius(10, in: self))
+        decoration.boxStyle = look.box
+        dropShadow.radius = DesignGeometry.radius(10, in: self)
+        dropShadow.shadows = look.shadows
     }
 
     var surface: PopupSurface { style == .autocomplete ? .opaque : .glass }
@@ -278,6 +282,7 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu, HoverSync
         super.viewDidChangeEffectiveAppearance()
         decoration.setNeedsDisplay()
         dropShadow.update(boxSize: bounds.size)
+        applySurface()
     }
 
     // MARK: Keyboard (base-ui menu navigation: loop, skip disabled, typeahead)
@@ -710,7 +715,7 @@ final class MenuRowView: DSView {
             let shape = CAShapeLayer()
             var t = CGAffineTransform(scaleX: 16.0 / 24, y: 16.0 / 24)
             shape.path = (try? SVGPath.parse("M5.252 12.7 10.2 18.63 18.748 5.37"))?.copy(using: &t)
-            shape.lineWidth = 2 * 16.0 / 24
+            shape.lineWidth = (DesignGeometry.usesClassic(self) ? 2 : 1.75) * 16.0 / 24
             shape.lineCap = .round
             shape.lineJoin = .round
             shape.fillColor = nil
@@ -725,7 +730,7 @@ final class MenuRowView: DSView {
 
     private func restyle() {
         var box = BoxStyle()
-        box.radius = 6
+        box.radius = DesignGeometry.radius(6, in: self)
         let accent = Themed.color(\.accent)
         let selectedFill = Themed.color(\.contrastForeground, 0.08)
         let selected = item.isChecked && !isCheckbox
@@ -737,7 +742,9 @@ final class MenuRowView: DSView {
             // The selected rule comes after the highlighted one, so it wins.
             box.fill = selected ? selectedFill : (highlighted ? accent : nil)
         case .combobox:
-            box.fill = highlighted ? accent : (selected ? selectedFill : nil)
+            let classic = DesignGeometry.usesClassic(self)
+            box.fill = highlighted ? (classic ? accent : Themed.color(\.contrastForeground, 0.09))
+                : (selected ? (classic ? selectedFill : Themed.color(\.contrastForeground, 0.06)) : nil)
         case .autocomplete:
             box.fill = highlighted ? accent : (selected ? Themed.color(\.accent, 0.5) : nil)
         }
