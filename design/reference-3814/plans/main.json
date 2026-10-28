@@ -1,0 +1,1145 @@
+{
+  "base": "http://127.0.0.1:47402",
+  "width": 1100,
+  "height": 780,
+  "scale": 2,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "states": [
+    {
+      "name": "02-sidebar-populated",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "03a-kitchen-sink-top",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "(()=>{const els=[...document.querySelectorAll('main *, [data-slot] *')].filter(e=>e.scrollHeight>e.clientHeight+50&&['auto','scroll'].includes(getComputedStyle(e).overflowY)&&e.clientWidth>600);const e=els.sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(!e)return 'none';e.scrollTop=(e.scrollHeight-e.clientHeight)*0;return e.scrollTop})()",
+          "log": true
+        }
+      ]
+    },
+    {
+      "name": "03b-kitchen-sink-middle",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "(()=>{const els=[...document.querySelectorAll('main *, [data-slot] *')].filter(e=>e.scrollHeight>e.clientHeight+50&&['auto','scroll'].includes(getComputedStyle(e).overflowY)&&e.clientWidth>600);const e=els.sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(!e)return 'none';e.scrollTop=(e.scrollHeight-e.clientHeight)*0.5;return e.scrollTop})()",
+          "log": true
+        }
+      ]
+    },
+    {
+      "name": "03c-kitchen-sink-bottom",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "(()=>{const els=[...document.querySelectorAll('main *, [data-slot] *')].filter(e=>e.scrollHeight>e.clientHeight+50&&['auto','scroll'].includes(getComputedStyle(e).overflowY)&&e.clientWidth>600);const e=els.sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(!e)return 'none';e.scrollTop=(e.scrollHeight-e.clientHeight)*1;return e.scrollTop})()",
+          "log": true
+        }
+      ]
+    },
+    {
+      "name": "03d-kitchen-sink-commands",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/8d5ff2ba-941e-49a2-9ae0-3916db77505c",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/8d5ff2ba-941e-49a2-9ae0-3916db77505c"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "(()=>{const els=[...document.querySelectorAll('main *, [data-slot] *')].filter(e=>e.scrollHeight>e.clientHeight+50&&['auto','scroll'].includes(getComputedStyle(e).overflowY)&&e.clientWidth>600);const e=els.sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(!e)return 'none';e.scrollTop=(e.scrollHeight-e.clientHeight)*1;return e.scrollTop})()",
+          "log": true
+        }
+      ]
+    },
+    {
+      "name": "04-new-thread-draft",
+      "path": "/",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "05-approval-request",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/7feb68ab-4029-4fb4-a371-b50c7781807b",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/7feb68ab-4029-4fb4-a371-b50c7781807b"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "06-user-input-request",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/f4dd517f-bc10-4b13-9400-4b1715f3b6f2",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/f4dd517f-bc10-4b13-9400-4b1715f3b6f2"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "07-palette-default",
+      "path": "/",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "key": "k",
+          "meta": true
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "08-palette-search",
+      "path": "/",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "key": "k",
+          "meta": true
+        },
+        {
+          "wait": 600
+        },
+        {
+          "type": "hello"
+        },
+        {
+          "wait": 1200
+        }
+      ]
+    },
+    {
+      "name": "09-diff-split",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/bf25a232-a113-43ea-b29b-d5690a3759ce",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/bf25a232-a113-43ea-b29b-d5690a3759ce"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "key": "d",
+          "meta": true
+        },
+        {
+          "wait": 1200
+        },
+        {
+          "click": "[aria-label=\"Split diff view\"]"
+        },
+        {
+          "js": "document.querySelector('[aria-label=\"Expand all files\"]')?.click()",
+          "log": true
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "10-diff-unified",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/bf25a232-a113-43ea-b29b-d5690a3759ce",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/bf25a232-a113-43ea-b29b-d5690a3759ce"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "key": "d",
+          "meta": true
+        },
+        {
+          "wait": 1200
+        },
+        {
+          "click": "[aria-label=\"Stacked diff view\"]"
+        },
+        {
+          "js": "document.querySelector('[aria-label=\"Expand all files\"]')?.click()",
+          "log": true
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "11-terminal-drawer",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "key": "j",
+          "meta": true
+        },
+        {
+          "wait": 2000
+        }
+      ]
+    },
+    {
+      "name": "12-right-panel-files",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "key": "b",
+          "meta": true,
+          "alt": true
+        },
+        {
+          "wait": 1000
+        },
+        {
+          "click": "text=Files"
+        },
+        {
+          "wait": 1000
+        },
+        {
+          "click": "text=hello.py"
+        },
+        {
+          "wait": 1500
+        }
+      ]
+    },
+    {
+      "name": "13-model-picker",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "document.querySelector('[data-chat-provider-model-picker-label]').closest('button').click()",
+          "log": true
+        },
+        {
+          "wait": 1200
+        }
+      ]
+    },
+    {
+      "name": "14-composer-slash-menu",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "click": ".composer-tiptap"
+        },
+        {
+          "type": "/"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "15-composer-at-mention",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "click": ".composer-tiptap"
+        },
+        {
+          "type": "@hel"
+        },
+        {
+          "wait": 1000
+        }
+      ]
+    },
+    {
+      "name": "16a-settings-general",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "click": "[aria-label=\"Settings\"]"
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>e.textContent.trim()===\"General\").click()",
+          "log": true
+        },
+        {
+          "wait": 1800
+        },
+        {
+          "js": "(()=>{const e=[...(document.querySelector('[data-app-modal]')||document).querySelectorAll('*')].filter(e=>e.scrollHeight>e.clientHeight+30&&['auto','scroll'].includes(getComputedStyle(e).overflowY)&&e.clientWidth>350).sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(e)e.scrollTop=(e.scrollHeight-e.clientHeight)*0;return e?.scrollTop})()",
+          "log": true
+        }
+      ]
+    },
+    {
+      "name": "16b-settings-general-mid",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "click": "[aria-label=\"Settings\"]"
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>e.textContent.trim()===\"General\").click()",
+          "log": true
+        },
+        {
+          "wait": 1800
+        },
+        {
+          "js": "(()=>{const e=[...(document.querySelector('[data-app-modal]')||document).querySelectorAll('*')].filter(e=>e.scrollHeight>e.clientHeight+30&&['auto','scroll'].includes(getComputedStyle(e).overflowY)&&e.clientWidth>350).sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(e)e.scrollTop=(e.scrollHeight-e.clientHeight)*0.5;return e?.scrollTop})()",
+          "log": true
+        }
+      ]
+    },
+    {
+      "name": "16c-settings-general-bottom",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "click": "[aria-label=\"Settings\"]"
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>e.textContent.trim()===\"General\").click()",
+          "log": true
+        },
+        {
+          "wait": 1800
+        },
+        {
+          "js": "(()=>{const e=[...(document.querySelector('[data-app-modal]')||document).querySelectorAll('*')].filter(e=>e.scrollHeight>e.clientHeight+30&&['auto','scroll'].includes(getComputedStyle(e).overflowY)&&e.clientWidth>350).sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(e)e.scrollTop=(e.scrollHeight-e.clientHeight)*1;return e?.scrollTop})()",
+          "log": true
+        }
+      ]
+    },
+    {
+      "name": "17-settings-appearance",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "click": "[aria-label=\"Settings\"]"
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>e.textContent.trim()===\"Appearance\").click()",
+          "log": true
+        },
+        {
+          "wait": 1800
+        }
+      ]
+    },
+    {
+      "name": "18-settings-providers",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "click": "[aria-label=\"Settings\"]"
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>e.textContent.trim()===\"Providers\").click()",
+          "log": true
+        },
+        {
+          "wait": 1800
+        },
+        {
+          "click": "text=Claude"
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "(()=>{const e=[...(document.querySelector('[data-app-modal]')||document).querySelectorAll('*')].filter(e=>e.scrollHeight>e.clientHeight+30&&['auto','scroll'].includes(getComputedStyle(e).overflowY)&&e.clientWidth>350).sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(e)e.scrollTop=(e.scrollHeight-e.clientHeight)*0.45;return e?.scrollTop})()",
+          "log": true
+        }
+      ]
+    },
+    {
+      "name": "19-settings-keybindings",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "click": "[aria-label=\"Settings\"]"
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>e.textContent.trim()===\"Keybindings\").click()",
+          "log": true
+        },
+        {
+          "wait": 1800
+        }
+      ]
+    },
+    {
+      "name": "20-sidebar-thread-context-menu",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "(()=>{const e=document.querySelector('[data-sidebar-row$=\"10c87a17-cd06-4845-ae25-7733f48ef018\"]');const r=e.getBoundingClientRect();e.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.x+60,clientY:r.y+20,button:2}));})()",
+          "log": true
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "21-git-actions-menu",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "click": "[aria-label=\"Toggle thread details panel\"]"
+        },
+        {
+          "click": "[aria-label=\"Git action options\"]"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "27-welcome",
+      "path": "/welcome",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/welcome"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "wait": 2500
+        }
+      ]
+    },
+    {
+      "name": "31-sidebar-collapsed",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "key": "b",
+          "meta": true
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "32-settings-source-control",
+      "path": "/settings/source-control",
+      "actions": [
+        {
+          "wait": 1800
+        }
+      ]
+    },
+    {
+      "name": "33-settings-projects",
+      "path": "/settings/projects",
+      "actions": [
+        {
+          "wait": 1800
+        }
+      ]
+    },
+    {
+      "name": "34-settings-connections",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "click": "[aria-label=\"Settings\"]"
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>e.textContent.trim()===\"Environments\").click()",
+          "log": true
+        },
+        {
+          "wait": 1800
+        }
+      ]
+    },
+    {
+      "name": "35-settings-archived",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "click": "[aria-label=\"Settings\"]"
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>e.textContent.trim()===\"Archive\").click()",
+          "log": true
+        },
+        {
+          "wait": 1800
+        }
+      ]
+    },
+    {
+      "name": "36-settings-scheduled-tasks",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "click": "[aria-label=\"Settings\"]"
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>e.textContent.trim()===\"Scheduled tasks\").click()",
+          "log": true
+        },
+        {
+          "wait": 1800
+        }
+      ]
+    },
+    {
+      "name": "37-settings-snapshots",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "click": "[aria-label=\"Settings\"]"
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>e.textContent.trim()===\"SnapShots\").click()",
+          "log": true
+        },
+        {
+          "wait": 1800
+        }
+      ]
+    },
+    {
+      "name": "38-settings-storage",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "click": "[aria-label=\"Settings\"]"
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>e.textContent.trim()===\"Maintenance\").click()",
+          "log": true
+        },
+        {
+          "wait": 1800
+        }
+      ]
+    },
+    {
+      "name": "39-settings-diagnostics",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "click": "[aria-label=\"Settings\"]"
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>e.textContent.trim()===\"Maintenance\").click()",
+          "log": true
+        },
+        {
+          "wait": 1800
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] a')].find(e=>e.textContent.trim()==='View diagnostics').click()",
+          "log": true
+        },
+        {
+          "wait": 1800
+        }
+      ]
+    },
+    {
+      "name": "40-settings-integrations",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "click": "[aria-label=\"Settings\"]"
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>e.textContent.trim()===\"Browser\").click()",
+          "log": true
+        },
+        {
+          "wait": 1800
+        }
+      ]
+    },
+    {
+      "name": "41-traits-picker",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "click": "[data-composer-shortcut=\"composer.effort\"]"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "42-access-mode-picker",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "click": "[aria-label=\"Runtime mode\"]"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "43-find-in-thread",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "key": "f",
+          "meta": true
+        },
+        {
+          "wait": 400
+        },
+        {
+          "type": "markdown"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "44-thread-details-panel",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "click": "[aria-label=\"Toggle thread details panel\"]"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "45-go-to-file",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "key": "p",
+          "meta": true
+        },
+        {
+          "wait": 1200
+        }
+      ]
+    },
+    {
+      "name": "46-project-search",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "key": "f",
+          "meta": true,
+          "shift": true
+        },
+        {
+          "wait": 400
+        },
+        {
+          "type": "hello"
+        },
+        {
+          "wait": 1500
+        }
+      ]
+    }
+  ]
+}
