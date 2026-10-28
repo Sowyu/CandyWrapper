@@ -77,7 +77,7 @@ struct ChangedFilesFidelityTests {
         let chat = 360 * 2
         var lines: [String] = [], cases: [(String, Double)] = [], images = ""
         for theme in ["light", "dark"] {
-            for (reference, openDiff, cardTop) in [("47-changed-files-card", false, 351.5), ("48-diff-turn-file", true, 464)] {
+            for (reference, openDiff, cardTop) in [("47-changed-files-card", false, 351.5), ("48-diff-turn-file", true, 464.5)] {
                 let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
                     "design/reference-3824/\(reference).\(theme).png"))))
                 let (panel, image) = try await Self.render(dark: theme == "dark", openDiff: openDiff, cardTop: cardTop)
