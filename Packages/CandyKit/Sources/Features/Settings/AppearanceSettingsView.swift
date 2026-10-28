@@ -8,6 +8,8 @@ import T3Protocol
 /// (`SETTINGS_DEVICE_ONLY_PATHS`).
 public final class AppearanceSettingsView: SettingsPageBase {
     static let advancedKey = "settings.typographyAdvanced"
+    private var advancedInterface: SettingsAdvancedRows?
+    private let wholePage: Bool
     private var typography: SettingsSectionView?
     private var advancedSwitch = SwitchView(isOn: false, size: .default)
     /// T3 discovers installed families asynchronously and shares the result (FontFamilyPicker.tsx:48-61).
@@ -26,15 +28,18 @@ public final class AppearanceSettingsView: SettingsPageBase {
         fontRow("terminal-font", detail: "Terminal output, independent from code blocks and diffs.", family: "fontFamilyTerminal",
                 size: "fontSizeTerminal", range: 8...20, defaultFamily: "SF Mono", reset: "terminal font"),
         clientSwitch("font-smoothing", "Use thinner grayscale text smoothing instead of the macOS default.", key: "fontSmoothing", reset: "font smoothing")]
-    private lazy var wordWrap = clientSwitch("word-wrap", "Wrap long lines in code blocks, tables, diffs, and file previews by default.",
-                                             key: "wordWrap", reset: "word wrapping", label: "Wrap code, tables, diffs, and file previews by default")
+    private lazy var wordWrap = clientSwitch("word-wrap", ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        ? "Wrap long lines in code blocks, tables, diffs, and file previews by default." : "Wrap long lines in code blocks, diffs, and file previews by default.",
+        key: "wordWrap", reset: "word wrapping", label: ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        ? "Wrap code, tables, diffs, and file previews by default" : "Wrap code, diffs, and file previews by default")
 
     public init(context: SettingsPageContext, groups: Set<String>? = nil) {
+        wholePage = groups == nil
         super.init(context: context)
         var body: [NSView & SettingsGroupRow] = []
         if groups?.contains("appearance") != false { body.append(colorsSection()) }
         if groups?.contains("appearance-interface") != false { body.append(interfaceSection()) }
-        if groups?.contains("motion") != false { body.append(motionSection()) }
+        if groups?.contains("motion") != false, ThemeRuntime.isDither(dark: effectiveAppearance.isDark) || !wholePage { body.append(motionSection()) }
         if groups?.contains("typography") != false { body.append(typographySection()) }
         items = body
     }
@@ -47,6 +52,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
 
     /// A search jump to an advanced font row turns Advanced on first (`ADVANCED_TYPOGRAPHY_TARGET_IDS`).
     public override func anchor(_ id: String) -> NSView? {
+        if ["panel-animations", "environment-identification", "appearance-interface", "composer-context"].contains(id) { advancedInterface?.setOpen(true) }
         if ["prompt-font", "terminal-font", "font-smoothing"].contains(id), !isAdvanced { setAdvanced(true) }
         if id == "code-font" || id == "interface-font" { _ = typography }
         return super.anchor(id)
@@ -63,7 +69,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
         let themeHeading = SettingsSubheadingView(SettingsSearch.title("theme"))
         // `flex min-h-8 pt-2`: 8 of the 32 are the top padding.
         themeHeading.minHeight = 24
-        themeHeading.topPadding = 8
+        themeHeading.topPadding = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? 8 : 20
         let buttons = ThemeHeaderButtonsView()
         themeHeading.trailing = buttons
         buttons.create.action = { [weak self] in self?.createTheme() }
@@ -201,8 +207,13 @@ public final class AppearanceSettingsView: SettingsPageBase {
                                  key: "appearanceContrast", range: 50...200, step: 5, reset: "contrast")
         let glass = sliderRow("setting-glass-opacity", "Higher values make menus, dialogs, and the composer more solid.",
                               key: "glassOpacity", range: 10...100, step: 5, reset: "glass opacity")
-        let identification = clientSelect("environment-identification", "Choose how Dev and Nightly environments are identified.",
-                                          key: "environmentIdentificationMode", options: [("artwork", "Artwork"), ("pill", "Version pill"), ("none", "None")],
+        let modern = !ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        let nightly = context.runtimeUpdate?.channel != .latest
+        let artworkOptions: [(String, String)] = !modern ? [("artwork", "Artwork"), ("pill", "Version pill"), ("none", "None")]
+            : nightly ? [("artwork", "Nightly artwork"), ("dev-artwork", "Dev artwork"), ("pill", "Version pill"), ("none", "None")]
+            : [("artwork", "None"), ("nightly-artwork", "Nightly artwork"), ("dev-artwork", "Dev artwork")]
+        let identification = clientSelect("environment-identification", modern && !nightly ? "Show Dev or Nightly artwork in the sidebar header." : "Choose how Dev and Nightly environments are identified.",
+                                          key: "environmentIdentificationMode", options: artworkOptions,
                                           width: 160, reset: "environment identification")
         anchors["appearance-interface"] = nil
         let diff = clientSelect("diff-color-scheme", "Choose colors for additions and deletions, including change counts.", key: "diffColorScheme",
@@ -223,9 +234,18 @@ public final class AppearanceSettingsView: SettingsPageBase {
         // AppearanceSettingsPanel.tsx:354-379.
         let math = clientSwitch("math-rendering", "Typeset LaTeX math, such as $x^2$ or \\[x^2\\], in messages and Markdown previews. The composer keeps TeX source editable.",
                                 key: "mathRenderingEnabled", reset: "math rendering", label: "Render math")
-        let s = section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), identification, diff, strip, width, math,
-                                                             appIconRow(), appIconAppearanceRow()])
-        return s
+        if modern, wholePage {
+            let motion = motionSection()
+            let rows = motion.group.rows
+            motion.group.rows = []
+            let advanced = SettingsAdvancedRows(rows: rows + [identification, strip])
+            advanced.onHeightChange = { [weak self] in self?.onHeightChange?() }
+            advancedInterface = advanced
+            return section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), width, math,
+                                                                  appIconRow(), appIconAppearanceRow(), advanced])
+        }
+        return section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), identification, diff, strip, width, math,
+                                                              appIconRow(), appIconAppearanceRow()])
     }
 
     /// CandyWrapper's own row for the Dither theme's picture: choose one, or go back to the desktop picture.

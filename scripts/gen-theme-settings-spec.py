@@ -3,7 +3,7 @@ Themes heading, a row of theme cards (T3 Code picked for both sides, T3 Chat, Gr
 guided (simple) form.
 
 Class strings are copied from apps/web/src/components/settings/{ThemeSettings.tsx, ThemePreviewCircles.tsx,
-ThemeEditorPanel.tsx, ThemeColorPicker.tsx} and packages/shared/src/themePreview.ts at the tag in T3_VERSION. Buttons,
+ThemeEditorPanel.tsx, ThemeColorPicker.tsx} and packages/shared/src/themePreview.ts at v0.1.4-nightly.20261028.3814. Buttons,
 icons, inputs, switches and the segmented toggle group come from gen-connections-spec.py and gen-toggles-spec.py.
 The editor's `fixed bottom-4 right-4` placement is replaced by a static box; everything else is T3's markup.
 Usage: /usr/bin/python3 -I scripts/gen-theme-settings-spec.py [t3code checkout]
@@ -91,8 +91,8 @@ for name in ("T3_CHAT_THEME", "GROVE_THEME"):
     cards.append(card(label, previews, set(), ["copy"]))
 grid = ('<div class="grid w-full gap-2" style="grid-template-columns:repeat(auto-fit, minmax(min(100%, 16rem), 1fr))">' + "".join(cards) + "</div>")
 
-header = ('<div class="flex min-h-8 flex-wrap items-center justify-between gap-3 px-3 pt-2 sm:px-4">'
-          '<h3 class="text-sm font-normal text-foreground/70">Themes</h3><div class="flex flex-wrap items-center justify-end gap-2">'
+header = ('<div class="flex min-h-8 flex-wrap items-center justify-between gap-3 px-3 pt-5 sm:px-4">'
+          '<h3 class="text-base font-semibold text-foreground">Themes</h3><div class="flex flex-wrap items-center justify-end gap-2">'
           + button("outline", "xs", lucide("paintbrush") + "Create theme") + button("outline", "xs", lucide("plus") + "Add theme") + "</div></div>")
 
 # The editor (ThemeEditorPanel.tsx:1118-1312) in its guided form.
