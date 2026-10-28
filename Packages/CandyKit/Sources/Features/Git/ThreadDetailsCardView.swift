@@ -444,7 +444,18 @@ public final class DiffTotalsView: DSView {
         update()
     }
 
+    private var gap: CGFloat { DesignGeometry.usesClassic(self) ? 4 : 6 }
+
+    private func updateMetrics() {
+        let font = DSFont.mono(DesignGeometry.usesClassic(self) ? 11 : 12)
+        guard plus.font != font else { return }
+        plus.font = font; minus.font = font
+        invalidateIntrinsicContentSize()
+        superview?.needsLayout = true
+    }
+
     private func update() {
+        updateMetrics()
         plus.text = "+\(insertions)"
         minus.text = "-\(deletions)"
         invalidateIntrinsicContentSize()
@@ -452,17 +463,21 @@ public final class DiffTotalsView: DSView {
         needsLayout = true
     }
 
-    public override var intrinsicContentSize: NSSize { NSSize(width: ceil(plus.textWidth) + 4 + ceil(minus.textWidth), height: 16) }
+    public override var intrinsicContentSize: NSSize { NSSize(width: ceil(plus.textWidth) + gap + ceil(minus.textWidth), height: 16) }
 
     public override func layout() {
         super.layout()
+        updateMetrics()
         let y = isFlipped ? glyphOffset : -glyphOffset
         plus.frame = NSRect(x: 0, y: y, width: ceil(plus.textWidth), height: 16)
         minus.frame = NSRect(x: ceil(plus.textWidth) + 4, y: y, width: ceil(minus.textWidth), height: 16)
     }
 
     public override func updateLayer() {
-        plus.color = Themed.color(\.diffAddition); minus.color = Themed.color(\.diffDeletion)  // ba1907e8e0, GitActionsControl.tsx
+        updateMetrics()
+        let classic = DesignGeometry.usesClassic(self)
+        plus.color = Themed.color(classic ? \.diffAddition : insertions == 0 ? \.mutedForeground : \.diffAdditionForeground)
+        minus.color = Themed.color(classic ? \.diffDeletion : deletions == 0 ? \.mutedForeground : \.diffDeletionForeground)
     }
 }
 

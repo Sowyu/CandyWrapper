@@ -1,4 +1,4 @@
-"""DevicePanel.tsx:233-310 empty and unavailable states, in T3's exact classes."""
+"""Nightly 3824 DevicePanel.tsx:233-310 empty and unavailable states, in T3's exact classes."""
 import json, os
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ns = {'__file__': os.path.join(ROOT, 'scripts/gen-files-spec.py')}

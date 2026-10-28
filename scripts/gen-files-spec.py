@@ -3,7 +3,7 @@ tab strip (RightPanelTabs.tsx:1097-1262), the surface launcher (`RightPanelEmpty
 surface (FileBrowserPanel.tsx:492-573) and a file tab's subheader (FilePreviewPanel.tsx:1225-1300,
 FileBreadcrumbs.tsx), all in the panel's inline mode (`data-preview-panel-mode="inline"`).
 
-Class strings are copied from those files at the tag in T3_VERSION. The tree is @pierre/trees: its
+Class strings are copied from those files at Nightly 3824 (CANDY_T3_SOURCE selects the source tree). The tree is @pierre/trees: its
 stylesheet comes from T3's client bundle (the `@layer base` literal in fileTreeExpansion-*.js) with
 T3's PIERRE_TREE_UNSAFE_CSS and host variables, in a shadow root like the library's; the row markup
 copies the library's sections (`[spacing][icon][content]`, data attributes from the bundle's row
@@ -11,11 +11,18 @@ renderer). File icons are T3's sprite symbols (pierre-icons-*.js).
 
 Usage: /usr/bin/python3 -I scripts/gen-files-spec.py
 """
-import glob, json, os, re
+import glob, json, os, re, subprocess
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESEARCH = os.environ.get("CANDY_RESEARCH") or "/Users/mrm/CandyWrapper-research"
-T3 = os.path.join(RESEARCH, "t3code/apps/web/src")
+T3 = os.environ.get("CANDY_T3_SOURCE") or os.path.join(RESEARCH, "t3code/apps/web/src")
+
+def source_file(relative):
+    """Read the design tag without changing the shared checkout."""
+    if os.environ.get("CANDY_T3_SOURCE"):
+        return open(os.path.join(os.environ["CANDY_T3_SOURCE"], relative)).read()
+    return subprocess.check_output(["git", "-C", os.path.expanduser("~/CandyWrapper-research/t3code"), "show",
+        "v0.1.4-nightly.20261028.3824:apps/web/src/" + relative], text=True)
 LUCIDE = os.path.join(RESEARCH, "downloads/lucide-static-0.564.0/package/icons")
 ASSETS = os.path.join(RESEARCH, "t3-client-assets")
 
@@ -52,7 +59,7 @@ def symbol(sym_id):
     return m.group(1), re.sub(r"\s+", " ", m.group(2)).strip()
 
 # PierreEntryIcon's colors (light, dark) per token.
-entry = open(os.path.join(T3, "components/chat/PierreEntryIcon.tsx")).read()
+entry = source_file("components/chat/PierreEntryIcon.tsx")
 COLORS = {m.group(1): (m.group(2), m.group(3)) for m in re.finditer(r'(\w+): \["(#[0-9a-f]{6})", "(#[0-9a-f]{6})"\]', entry)}
 TOKENS = {"ts": "typescript", "py": "python", "md": "markdown", "txt": "text", "swift": "swift"}
 
@@ -74,7 +81,7 @@ def literal(start):
         out.append(bundle[j]); j += 1
     return "".join(out)
 TREE_CSS = literal(bundle.index("`@layer base {\n  :host {\n    --trees-accent"))
-theme = open(os.path.join(T3, "pierre-tree-theme.ts")).read()
+theme = source_file("pierre-tree-theme.ts")
 UNSAFE = theme[theme.index("PIERRE_TREE_UNSAFE_CSS = `") + len("PIERRE_TREE_UNSAFE_CSS = `"):]
 UNSAFE = UNSAFE[:UNSAFE.index("`;")]
 CHEVRON_BOX, CHEVRON = symbol("file-tree-icon-chevron")

@@ -1,4 +1,4 @@
-"""WP7.12b visual states from the official component markup. No browser UI ships."""
+"""Nightly 3824 panel visual states from the official component markup. No browser UI ships."""
 import json, os
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ns = {'__file__': os.path.join(ROOT, 'scripts/gen-files-spec.py')}

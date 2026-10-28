@@ -4,15 +4,22 @@ run context, branch, git actions split button and Changes rows (ThreadDetailsPan
 ThreadDetailsControl.tsx, threadDetailsPanelStyles.ts, GitActionsControl.tsx), the git actions menu in its panel
 form, and the commit dialog (GitActionsControl.tsx:1983-2134).
 
-Class strings come from those files at the tag in T3_VERSION; the panel classes are read from
+Class strings come from those files at Nightly 3824 (CANDY_T3_SOURCE selects the source tree); the panel classes are read from
 threadDetailsPanelStyles.ts so they stay exact. Helpers (lucide, composer control, surfaces, buttons, dialog
 parts, menu rows, textarea) are reused from the run-on, overlays, popups and forms generators.
 Usage: /usr/bin/python3 -I scripts/gen-git-spec.py
 """
-import json, os, re
+import json, os, re, subprocess
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-T3 = "/Users/mrm/CandyWrapper-research/t3code/apps/web/src/components"
+T3 = os.path.join(os.environ.get("CANDY_T3_SOURCE") or os.path.expanduser("~/CandyWrapper-research/t3code/apps/web/src"), "components")
+
+def source_file(relative):
+    """Read the design tag without changing the shared checkout."""
+    if os.environ.get("CANDY_T3_SOURCE"):
+        return open(os.path.join(os.environ["CANDY_T3_SOURCE"], relative)).read()
+    return subprocess.check_output(["git", "-C", os.path.expanduser("~/CandyWrapper-research/t3code"), "show",
+        "v0.1.4-nightly.20261028.3824:apps/web/src/" + relative], text=True)
 
 def load(name, until):
     src = open(os.path.join(ROOT, "scripts", name)).read()
@@ -35,7 +42,7 @@ MENU_POPUP, MENU_ITEM = p["MENU_POPUP"], p["MENU_ITEM"]
 textarea_html = f["textarea_html"]
 
 # threadDetailsPanelStyles.ts: resolve the template strings.
-styles_src = open(os.path.join(T3, "chat/threadDetailsPanelStyles.ts")).read()
+styles_src = source_file("components/chat/threadDetailsPanelStyles.ts")
 S = {}
 for name, value in re.findall(r"const (THREAD_DETAILS_\w+) =\s*([`\"].*?[`\"]);", styles_src, re.S):
     S[name] = re.sub(r"\$\{(\w+)\}", lambda m: S[m.group(1)], value[1:-1])
@@ -74,8 +81,8 @@ def card(machine_kind, env_label, branch, quick_label, quick_icon, plus, minus):
              + f'<span aria-hidden="true" class="{S["THREAD_DETAILS_PANEL_SPLIT_SEPARATOR_CLASS"]}"></span>'
              + control("secondary", lucide("chevron-down", CHEVRON_PANEL)) + '</div>')
     changes = control("row", f'{lucide("file-diff", ICON)}<span class="flex-1 text-left">Changes</span>'
-                      f'<span class="flex items-center gap-1 font-mono text-2xs tabular-nums"><span class="text-success">+{plus}</span>'
-                      f'<span class="text-destructive">-{minus}</span></span>')
+                      f'<span class="flex items-center gap-1.5 font-mono text-xs tabular-nums"><span class="text-diff-addition-foreground">+{plus}</span>'
+                      f'<span class="text-diff-deletion-foreground">-{minus}</span></span>')
     section = "px-2 pt-2 pb-2.5"
     return ('<div class="dropdown-glass isolate contain-paint grid max-h-full grid-rows-[minmax(0,1fr)] overflow-hidden rounded-3xl" '
             'style="width:264px"><div><div>'
@@ -92,13 +99,11 @@ def strip(workspace, folder, branch):
     run = toolbar_trigger(f'<span class="inline-flex shrink-0">{lucide(folder, "size-3 shrink-0")}</span>', workspace,
                           "min-w-0 max-w-[48%] flex-initial justify-start")
     br = toolbar_trigger(lucide("git-branch", "size-3 shrink-0 opacity-70"), middle(branch), "min-w-0 max-w-full active:scale-100")
-    return (f'<div data-slot="composer-shell" data-with-context="true" class="{SHELL}" style="width:600px">'
+    # 3824 BranchToolbar: both selectors sit together in the plain row below the card.
+    row = STRIP.replace(" gap-1 text-xs font-normal text-muted-foreground/70", "")
+    return (f'<div data-slot="composer-shell" data-context-row="true" class="{SHELL}" style="width:600px">'
             f'<div data-slot="composer-host" class="{HOST}"><div class="relative z-10" style="height:64px"></div></div>'
-            '<div class="min-h-0"><div class="relative z-0"><div class="pointer-events-auto">'
-            f'<div data-slot="composer-context-strip" class="{STRIP}">{run}'
-            '<div class="flex min-w-0 flex-1 items-center justify-start overflow-x-clip overflow-y-visible"></div>'
-            f'<div class="flex min-w-0 items-center gap-1 min-w-0 flex-initial justify-end"><span class="flex min-w-0">{br}</span></div>'
-            '</div></div></div></div></div>')
+            f'<div data-slot="composer-context-strip" class="{row}">{run}{br}</div></div>')
 
 DIS = ' data-disabled=""'
 

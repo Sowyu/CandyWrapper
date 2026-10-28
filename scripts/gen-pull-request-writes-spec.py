@@ -2,7 +2,7 @@
 pull request popups. The checks popover (PullRequestChecksPopover.tsx:200-216 with ChecksBody, lines
 74-122), the composer in review mode (PullRequestComposer.tsx:102-186 with PullRequestReviewForm.tsx:
 124-174) and a Markdown pull request link's preview card (PullRequestLinkPreview.tsx:117-149 on
-ui/preview-card.tsx). Class strings are copied from those files at the tag in T3_VERSION; popover, select,
+ui/preview-card.tsx). Class strings are copied from those files at Nightly 3824; popover, select,
 textarea, toggle, button and lucide helpers come from the popups, forms, toggles, overlays and run-on
 generators. Data matches fixtures/pull-requests (relative times at 2026-10-10T16:00Z).
 Usage: /usr/bin/python3 -I scripts/gen-pull-request-writes-spec.py
@@ -48,14 +48,14 @@ STATUS = {"failure": ("circle-x", "text-destructive", "Failed"), "success": ("ci
 def check_row(name, status, details):
     ic, tone, label = STATUS[status]
     link = '<button type="button" class="shrink-0 text-primary hover:underline">Details</button>' if details else ""
-    return (f'<li class="flex items-center gap-2 text-xs">{lucide(ic, "size-3.5 shrink-0 " + tone)}'
-            f'<span class="min-w-0 flex-1 truncate">{name}</span><span class="shrink-0 text-muted-foreground">{label}</span>{link}</li>')
+    return (f'<li class="col-span-full grid grid-cols-subgrid items-center text-xs">{lucide(ic, "size-3.5 shrink-0 " + tone)}'
+            f'<span class="min-w-0 truncate">{name}</span><span class="justify-self-end whitespace-nowrap text-muted-foreground">{label}</span>{link}</li>')
 
 # Failing: one failure needs attention and two completed ones fold behind "Show all".
 checks_html = popover("md", (
     '<p class="mb-2 font-medium text-sm">Some checks were not successful</p>'
     '<p class="mb-2 text-muted-foreground text-xs">1 of 3 failing</p>'
-    '<div class="max-h-64 overflow-hidden"><ul class="flex flex-col gap-1">'
+    '<div class="max-h-64 overflow-hidden"><ul class="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] gap-x-2 gap-y-1">'
     + check_row("Typecheck", "failure", True) + '</ul></div>'
     + button("ghost", "xs", "Show all")))
 
@@ -68,7 +68,7 @@ SELECT_XS = ("h-7 gap-1 rounded-md px-[calc(--spacing(2)-1px)] text-sm before:ro
              "[&_svg:not([class*='size-'])]:size-4 sm:[&_svg:not([class*='size-'])]:size-3.5")
 select = (f'<button type="button" class="{S_BASE + " " + S_VARIANT["default"].replace("w-full min-w-36 ", "") + " " + SELECT_XS + " w-auto min-w-0"}" data-slot="select-trigger">'
           f'<span class="flex-1 truncate" data-slot="select-value"><span class="flex items-center gap-1.5">{lucide("message-square", "size-3")}Comment</span></span>'
-          f'<span data-slot="select-icon" class="flex">{lucide("chevron-down", "-me-1 size-3 opacity-50")}</span></button>')
+          f'<span data-slot="select-icon" class="flex">{lucide("chevron-down", "size-3.5 text-muted-foreground/80")}</span></button>')
 review_html = popover("lg", (
     f'<div class="mb-3 flex items-center justify-between gap-2"><div data-slot="toggle-group" role="group" class="{G_CLS}">{toggles}</div>'
     f'<div class="flex items-center gap-1">{close}</div></div>'

@@ -4,7 +4,7 @@ and without discovered servers and recent URLs (PreviewEmptyState.tsx, PreviewLo
 PreviewRecentUrlCard.tsx, BrowserMockup.tsx), the unreachable page (PreviewUnreachable.tsx), and
 Search project contents (search/ProjectContentSearchDialog.tsx) in the command palette.
 
-Class strings are copied from those files at the tag in T3_VERSION. The search rows use a .txt file,
+Class strings are copied from those files at Nightly 3824. The search rows use a .txt file,
 which Shiki leaves in the theme's foreground, so no grammar is needed on either side.
 
 Usage: /usr/bin/python3 -I scripts/gen-browser-spec.py

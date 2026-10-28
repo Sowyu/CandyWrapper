@@ -367,6 +367,7 @@ public final class TerminalListAsideView: DSView {
         }
 
         override func updateLayer() {
+            layer?.cornerRadius = DesignGeometry.radius(8, in: self)
             let fg = Themed.color(active || hovered ? \.foreground : \.mutedForeground)
             label.color = fg
             glyph.strokeColor = fg
