@@ -48,6 +48,7 @@ final class PullRequestsPageController {
     private var loading = false
     private var refreshing = false
     private var hosts: [PullRequestProviderSummary] = []
+    private var readConnections: [String: Int] = [:]
     private var stats: [String: (Int, Int)] = [:]
     private var overrides: [String: PullRequestListLogic.Override] = [:]
     private var overrideToken = 0
@@ -72,6 +73,14 @@ final class PullRequestsPageController {
         state = prefs["state"] ?? "open"
         involvement = prefs["involvement"] ?? "all"
         detail = PullRequestDetailBinding(surface: container.lazyDetail, environments: environments, capabilities: capabilities)
+        readConnections = environments.connectedGenerations
+        _ = environments.observe { [weak self] in
+            guard let self else { return }
+            let connected = self.environments.connectedGenerations
+            let reconnected = connected.contains { self.readConnections[$0.key] != $0.value }
+            self.readConnections = connected
+            if reconnected, self.visible { self.reload(keepRows: true) }
+        }
         detail.toast = { [weak self] title, message, kind in self?.toast(title, message, kind) }
         detail.onStatus = { [weak self] id, tone in self?.container.pullRequestStatus[id] = tone }
         detail.onActed = { [weak self] action in
@@ -308,6 +317,7 @@ final class PullRequestsPageController {
                     }
                 } catch {
                     failure = PullRequestDetailBinding.failure(error, number: 0).1
+                    merged.entries += (self.answer?.result.entries ?? []).filter { $0.environmentId == env }
                 }
             }
             guard self.generation == gen else { return }

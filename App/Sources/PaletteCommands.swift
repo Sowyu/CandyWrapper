@@ -27,6 +27,7 @@ final class PaletteCommands {
     private var search: (query: String, matches: [ThreadSearchMatch])?
     private var searchTask: Task<Void, Never>?
     private var pendingQuery: String?
+    private var searchConnections: [String: Int] = [:]
     /// When the palette opened: titles and messages rank against it, so rows don't reorder as time passes.
     private var openedAt = 0.0
     /// Go to file's server results (`useProjectFilePickerQuery`): the query they answer.
@@ -43,6 +44,14 @@ final class PaletteCommands {
         self.threads = threads
         self.commands = commands
         self.settings = settings
+        searchConnections = environments.connectedGenerations
+        _ = environments.observe { [weak self] in
+            guard let self else { return }
+            let connected = self.environments.connectedGenerations
+            let reconnected = connected.contains { self.searchConnections[$0.key] != $0.value }
+            self.searchConnections = connected
+            if reconnected, self.isOpen, let query = self.pendingQuery ?? self.search?.query { self.searchMessages(query) }
+        }
     }
 
     var isOpen: Bool { overlay != nil }
@@ -760,9 +769,10 @@ final class PaletteCommands {
         searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(200))
             guard !Task.isCancelled, let self else { return }
-            let found = await self.environments.searchThreads(trimmed) ?? []
+            let found = await self.environments.searchThreads(trimmed)
             guard !Task.isCancelled, self.pendingQuery == trimmed else { return }
-            self.search = (trimmed, found.filter { $0.source == "user" || $0.source == "assistant" })
+            // Failed reads retain the last answer; a reconnect retries it (runtime.ts:724-752, 3814).
+            if let found { self.search = (trimmed, found.filter { $0.source == "user" || $0.source == "assistant" }) }
             self.pendingQuery = nil
             self.overlay?.controller.refresh()
         }
