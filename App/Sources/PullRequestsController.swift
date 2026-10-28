@@ -1104,7 +1104,8 @@ final class ThreadPullRequestsController {
                 if let error { dialog.submitError = error } else { host.close() }
             }
         }
-        DispatchQueue.main.async { window.makeFirstResponder(dialog.input) }
+        // T3 3814 PullRequestThreadDialog.tsx:194-203 focuses and selects each opened form.
+        DispatchQueue.main.async { window.makeFirstResponder(dialog.input); (window.firstResponder as? NSTextView)?.selectAll(nil) }
     }
 
     /// `changeLink` (usePullRequestLinking.ts:84-111) through the command the server advertises.
