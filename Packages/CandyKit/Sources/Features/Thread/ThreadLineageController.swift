@@ -202,7 +202,7 @@ public final class ThreadLineageController {
     static func modelName(_ row: SubagentStrip.Row, _ providers: [ServerProvider]) -> String {
         let provider = providers.first { $0.instanceId.rawValue == row.providerInstanceId }
         guard let slug = row.model, !slug.isEmpty else { return provider?.displayName ?? provider?.driver ?? row.driver }
-        return provider.flatMap { ThreadRelationships.resolveModel($0.models, slug) }.map(ModelNames.trigger)
+        return provider.flatMap { ThreadRelationships.resolveModel($0.models, slug) }.map { ModelNames.trigger($0, driver: provider?.driver) }
             ?? ThreadRelationships.modelSlugName(slug)
     }
 
@@ -351,7 +351,7 @@ public final class ThreadLineageController {
         let model = provider.flatMap { p in selection.flatMap { ThreadRelationships.resolveModel(p.models, $0.model) } }
         bar.driver = provider?.driver
         bar.providerName = provider?.displayName ?? provider?.driver ?? ""
-        bar.modelLabel = model.map { ModelNames.trigger($0) } ?? ThreadRelationships.modelSlugName(selection?.model ?? "")
+        bar.modelLabel = model.map { ModelNames.trigger($0, driver: provider?.driver) } ?? ThreadRelationships.modelSlugName(selection?.model ?? "")
         bar.effortLabel = selection.flatMap {
             ThreadRelationships.effortLabel($0, model: model, reported: ThreadRelationships.reportedSelection(projection, instanceId: $0.instanceId))
         }
