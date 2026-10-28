@@ -908,15 +908,19 @@ final class WorkingRowView: TimelineRowView {
     }
 }
 
-/// T3 3814 TimelinePendingApprovalRow.tsx:35-122. Keep the existing native approval controls and warnings.
+/// T3 3824 TimelinePendingApprovalRow.tsx:43-120. Classic themes retain their existing approval card.
 final class PendingApprovalRowView: TimelineRowView {
     private let panel = ApprovalPanelView()
+    private let inline = PendingApprovalInlineView()
+    private var modern: Bool { ThreadDesign.uses3814(dark: effectiveAppearance.isDark) }
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         panel.placement = .floating
         panel.usesCompleteDetail = true
         addSubview(panel)
         panel.onRespond = { [weak self] _, payload in self?.context.model?.onRespondToApproval?(payload) }
+        addSubview(inline)
+        inline.onRespond = { [weak self] payload in self?.context.model?.onRespondToApproval?(payload) }
     }
     override func configure(_ item: TimelineItem) {
         super.configure(item)
@@ -924,10 +928,19 @@ final class PendingApprovalRowView: TimelineRowView {
         panel.canOperateThread = item.ui.canRespondToApproval
         panel.configure(approval, pendingCount: 1, threadId: context.model?.projection?.thread.id.localId ?? "")
         panel.isResponding = item.ui.approvalResponding
+        inline.configure(approval, threadId: context.model?.projection?.thread.id.localId ?? "",
+                         enabled: item.ui.canRespondToApproval && !item.ui.approvalResponding)
+        panel.isHidden = modern
+        inline.isHidden = !modern
     }
-    override func height(forWidth width: CGFloat) -> CGFloat { panel.preferredHeight(width: width) + 8 }
+    override func height(forWidth width: CGFloat) -> CGFloat {
+        modern ? inline.height(forWidth: width) : panel.preferredHeight(width: width) + 8
+    }
     override func layout() {
         super.layout()
+        panel.isHidden = modern
+        inline.isHidden = !modern
         panel.frame = NSRect(x: 0, y: 0, width: bounds.width, height: panel.preferredHeight(width: bounds.width))
+        inline.frame = NSRect(x: 0, y: 0, width: bounds.width, height: inline.height(forWidth: bounds.width))
     }
 }
