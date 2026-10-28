@@ -102,6 +102,7 @@ public enum Pairing {
     /// Checks the descriptor before it spends the one-time code: a route must reach
     /// `expectedEnvironmentId`, and the protocol must match. Then redeems the code at `/oauth/token`.
     public static func pair(host: String, code: String, expectedEnvironmentId: String? = nil, identity: ClientIdentity,
+                            knownEnvironments: [EnvironmentRegistration] = [],
                             session: URLSession = EnvironmentHTTP.defaultSession) async throws -> Result {
         let fields = try fields(host: host, code: code)
         let base = try baseURL(host: fields.host)
@@ -110,6 +111,9 @@ public enum Pairing {
         do { descriptor = try await http.descriptor() } catch { throw presented(error, url: base.appending(path: ".well-known/t3/environment")) }
         if let expected = expectedEnvironmentId, descriptor.environmentId != expected {
             throw PairingError("That address reaches \(descriptor.label), a different machine. Add it as its own environment instead.")
+        }
+        if expectedEnvironmentId == nil {
+            try assertKnownAddress(environmentId: descriptor.environmentId, route: base, saved: knownEnvironments)
         }
         // An outdated server that can update itself is still saved, so it can be updated from here (onboarding.ts:126-130).
         if let message = compatibilityError(descriptor), !serverUpdateRequired(descriptor) { throw PairingError(message) }
@@ -120,6 +124,13 @@ public enum Pairing {
             throw presented(error, url: base.appending(path: "oauth/token"))
         }
         return Result(descriptor: descriptor, baseURL: base, token: token.accessToken)
+    }
+
+    /// Check before redeeming a code, then again under the catalog lock (registry.ts:544-577, 3814).
+    public static func assertKnownAddress(environmentId: String, route: URL, saved: [EnvironmentRegistration]) throws {
+        guard let known = saved.first(where: { $0.environmentId == environmentId }),
+              !known.routes.contains(where: { EnvironmentRoute.origin($0) == EnvironmentRoute.origin(route) }) else { return }
+        throw PairingError("That address claims to be \(known.label), which is already saved. Add it as a route from that environment's settings instead.")
     }
 
     /// errors.ts `mapRemoteEnvironmentError` and rpc/http.ts's request errors.

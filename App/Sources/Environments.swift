@@ -298,13 +298,13 @@ final class Environments {
     /// (onboarding.ts `registerPairingConnection`). Pairing the local environment saves nothing, as
     /// T3's registry ignores platform environments. Returns the environment's label.
     func pair(host: String, code: String, routeTarget: String?) async throws -> String {
-        let result = try await Pairing.pair(host: host, code: code, expectedEnvironmentId: routeTarget, identity: identity)
+        let result = try await Pairing.pair(host: host, code: code, expectedEnvironmentId: routeTarget, identity: identity, knownEnvironments: saved)
         let d = result.descriptor
         guard d.environmentId != primaryId else { return d.label }
         let registration = EnvironmentRegistration(environmentId: d.environmentId, label: d.label, httpBaseURL: result.baseURL,
                                                    machine: d.platform?.machine)
         let catalog = self.catalog, token = result.token
-        let stored = try await Task.detached { try catalog.add(registration, token: token) }.value
+        let stored = try await Task.detached { try catalog.add(registration, token: token, knownAddressOnly: routeTarget == nil) }.value
         upsertSaved(stored)
         // A new route to a machine that is already connected leaves its session on the route it uses. A
         // session keeps its token for life, so re-pairing the route it uses, or a session in error (a

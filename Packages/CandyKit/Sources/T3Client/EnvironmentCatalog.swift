@@ -160,11 +160,14 @@ public struct EnvironmentCatalog: Sendable {
     /// An id that is already saved keeps its place, switch and routes: the route joins them, or replaces
     /// the route with the same origin (registry.ts `register`, routes.ts `upsertRoute`).
     @discardableResult
-    public func add(_ registration: EnvironmentRegistration, token: String) throws -> EnvironmentRegistration {
+    public func add(_ registration: EnvironmentRegistration, token: String, knownAddressOnly: Bool = false) throws -> EnvironmentRegistration {
         try locked {
             let route = registration.httpBaseURL
-            try credentials.save(token: token, environmentId: EnvironmentRoute.connectionId(environmentId: registration.environmentId, route))
             var all = read()
+            if knownAddressOnly {
+                try Pairing.assertKnownAddress(environmentId: registration.environmentId, route: route, saved: all)
+            }
+            try credentials.save(token: token, environmentId: EnvironmentRoute.connectionId(environmentId: registration.environmentId, route))
             var saved = registration
             if let i = all.firstIndex(where: { $0.environmentId == registration.environmentId }) {
                 saved = all[i]
