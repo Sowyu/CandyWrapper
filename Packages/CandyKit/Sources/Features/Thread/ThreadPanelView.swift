@@ -302,6 +302,11 @@ public final class ThreadHeaderView: TopbarDragView {
             frost.layer?.borderColor = DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor
         }
     }
+    public override func updateLayer() {
+        // ChatView's bg-background header covers the scrolled rows in the default themes.
+        layer?.backgroundColor = ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? Themed.color(\.background).cgColor(in: self) : nil
+    }
+
 }
 
 /// The read-only thread: header over the timeline, on the panel background, and the right panel
