@@ -98,6 +98,7 @@ final class PullRequestsPageController {
 
     private func wirePage() {
         page.onQuery = { [weak self] text in self?.typed(text) }
+        page.onQuerySubmit = { [weak self] text in self?.submitSearch(text) }
         page.onSort = { [weak self] v in self?.sort = v; self?.savePrefs(); self?.render() }
         page.onState = { [weak self] v in self?.state = v; self?.savePrefs(); self?.reload() }
         page.onInvolvement = { [weak self] v in self?.involvement = v; self?.savePrefs(); self?.reload() }
@@ -243,10 +244,16 @@ final class PullRequestsPageController {
         searchTask = Task { [weak self] in
             try? await Task.sleep(for: PullRequestListLogic.searchDebounce)
             guard !Task.isCancelled, let self else { return }
-            self.sentQuery = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            self.pageSize = PullRequestListLogic.pageSize
-            self.reload(keepRows: true)
+            self.submitSearch(text)
         }
+    }
+
+    private func submitSearch(_ text: String) {
+        searchTask?.cancel(); searchTask = nil
+        query = text
+        sentQuery = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        pageSize = PullRequestListLogic.pageSize
+        reload(keepRows: true)
     }
 
     /// `refreshFromHost`: `pullRequests.invalidate` on every environment read, then the list.

@@ -198,7 +198,9 @@ final class PullRequestDetailBinding {
         Task { [weak self] in
             if invalidate { _ = try? await shell.supervisor.request("pullRequests.invalidate", payload: .object(["reference": ref.payload])) }
             do {
-                let reply = try await shell.supervisor.request("pullRequests.detail", payload: ref.payload)
+                var input = ref.json
+                input["allowStale"] = .bool(false)
+                let reply = try await shell.supervisor.request("pullRequests.detail", payload: .object(input))
                 let d = try reply.decode(as: PullRequestDetail.self)
                 guard let self, self.generation == gen else { return }
                 self.detail = d

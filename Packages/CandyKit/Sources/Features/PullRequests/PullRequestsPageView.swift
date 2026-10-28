@@ -85,6 +85,7 @@ public final class PullRequestsPageView: DSView {
 
     // Callbacks.
     public var onQuery: ((String) -> Void)?
+    public var onQuerySubmit: ((String) -> Void)?
     public var onSort: ((String) -> Void)?
     public var onState: ((String) -> Void)?
     public var onInvolvement: ((String) -> Void)?
@@ -130,6 +131,12 @@ public final class PullRequestsPageView: DSView {
         addSubview(header)
         search.input.setAccessibilityLabel("Search pull requests")
         search.input.onChange = { [weak self] text in self?.onQuery?(text) }
+        // T3 3814 PullRequestListFilters.tsx:121-134 submits Return and completed text pastes immediately.
+        search.input.onSubmit = { [weak self] in guard let self else { return }; onQuerySubmit?(search.input.text) }
+        search.input.onPaste = { [weak self] _ in
+            DispatchQueue.main.async { [weak self] in guard let self else { return }; onQuerySubmit?(search.input.text) }
+            return false
+        }
         filtersButton.accessory = filterCount
         sortButton.setAccessibilityLabel("Sort pull requests")
         providerButton.setAccessibilityLabel("Filter by provider")
