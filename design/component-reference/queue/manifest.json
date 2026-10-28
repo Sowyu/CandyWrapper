@@ -1,0 +1,30 @@
+{
+  "agent" : {
+    "height" : 82,
+    "width" : 600
+  },
+  "automation" : {
+    "height" : 82,
+    "width" : 600
+  },
+  "editing" : {
+    "height" : 82,
+    "width" : 600
+  },
+  "guest" : {
+    "height" : 102,
+    "width" : 600
+  },
+  "long" : {
+    "height" : 122,
+    "width" : 600
+  },
+  "server" : {
+    "height" : 102,
+    "width" : 600
+  },
+  "user" : {
+    "height" : 82,
+    "width" : 600
+  }
+}

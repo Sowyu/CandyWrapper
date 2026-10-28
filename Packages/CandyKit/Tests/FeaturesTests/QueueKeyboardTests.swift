@@ -1,13 +1,14 @@
 import AppKit
 import Testing
+import DesignSystem
+import T3Store
 import T3Protocol
 @testable import Features
 
-/// Arrow keys on a queued row's grip (QueuedRunsControl.tsx:350-359): up moves before the previous
-/// run, down before the run two below or to the end; edges, saving rows and a busy queue do nothing.
+/// Send now uses the same action while running or stopped; questions and in-flight commands block editing.
 @MainActor
 struct QueueKeyboardTests {
-    @Test func openQuestionsBlockEditingWithoutBlockingReorder() {
+    @Test func openQuestionsBlockEditingAndBusyQueuesWait() {
         #expect(ComposerLogic.queuedEditBlockedReason(openQuestionCount: 0) == nil)
         let reason = ComposerLogic.queuedEditBlockedReason(openQuestionCount: 1)
         #expect(reason == "Answer the question to edit queued messages")
@@ -26,6 +27,34 @@ struct QueueKeyboardTests {
         #expect(edits == 1)
     }
 
+    @Test func senderTitlesRefreshWithoutChangingTheQueue() {
+        let view = QueuedRunsView()
+        let message = ChatMessage(id: "m", role: .user, text: "Review", createdAt: "2026-10-28T00:00:00Z", createdBy: "agent", senderThreadId: "sender")
+        view.state = .init(items: [.init(runId: "r", messageId: "m", text: "Review", message: message)])
+        func labels(_ root: NSView) -> [LabelView] { root.subviews.flatMap { ($0 as? LabelView).map { [$0] } ?? labels($0) } }
+        #expect(labels(view).contains { $0.text == "Agent" })
+        view.senderThreadTitles = ["sender": "Review helper"]
+        #expect(labels(view).contains { $0.text == "Review helper" })
+        view.senderThreadTitles = ["sender": "  New title  "]
+        #expect(labels(view).contains { $0.text == "New title" })
+    }
+
+    @Test func runningAndStoppedQueuesBothOfferSendNow() {
+        for running in [false, true] {
+            let view = QueuedRunsView()
+            view.state = .init(items: [.init(runId: "a", messageId: "m", text: "queued")],
+                               canPromoteToSteer: running, canSendNow: !running)
+            func buttons(_ root: NSView) -> [ButtonView] {
+                root.subviews.flatMap { ($0 as? ButtonView).map { [$0] } ?? buttons($0) }
+            }
+            let send = buttons(view).first { $0.title == "Send now" }
+            #expect(send?.isEnabled == true)
+            var sent: RunId?
+            view.onSteer = { sent = $0 }
+            send?.action?()
+            #expect(sent == "a")
+        }
+    }
     @Test func arrowReorder() {
         let ids = ["a", "b", "c"].map { RunId($0) }
         let view = QueuedRunsView()
