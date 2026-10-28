@@ -358,9 +358,6 @@ final class ComposerController {
         }
         let queue = panel.queue
         queue.onRemove = { [weak self] runId in self?.queueCommand("queued-run.cancel", ["runId": .string(runId.rawValue)]) }
-        queue.onReorder = { [weak self] runId, before in
-            self?.queueCommand("queued-run.reorder", ["runId": .string(runId.rawValue), "beforeRunId": before.map { .string($0.rawValue) } ?? .null])
-        }
         queue.onSteer = { [weak self] runId in self?.sendQueued(runId) }
         queue.onEdit = { [weak self] item in self?.beginEdit(item) }
         queue.onCancelEdit = { [weak self] in self?.endEdit() }
