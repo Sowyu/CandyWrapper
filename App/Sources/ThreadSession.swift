@@ -1230,6 +1230,7 @@ final class ThreadController {
         // its query (ThreadVisitWatermark.tsx:31-56). The open is recorded locally even when the server can't take
         // it, so recents follow it. Only a server whose shells carry `opens` gets `opened`.
         if recordedOpen != id {
+            visits.reset()
             recordedOpen = id
             if ThreadOpenLog.claim(id, now: Double(now)), !shell.lastVisitedAt.isAbsent, !shell.opens.isAbsent {
                 visits.didDispatch(shell, routeKey: id.rawValue, nowMs: now)

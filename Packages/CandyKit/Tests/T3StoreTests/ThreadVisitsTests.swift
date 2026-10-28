@@ -31,6 +31,23 @@ import Testing
         #expect(tracker.decide(shell, routeKey: "e:t", local: nil, nowMs: now + 50) == .dispatch(shell.updatedAt, delayMs: 0))
     }
 
+    @Test func switchingRoutesAndRapidReopensStartWithoutThePreviousThrottle() {
+        let shell = thread {
+            $0.lastVisitedAt = .value("2026-06-19T23:00:00.000Z")
+            $0.status = .running
+            $0.latestRunCompletedAt = .null
+        }
+        var tracker = ThreadVisitTracker()
+        tracker.didDispatch(shell, routeKey: "a:t", nowMs: now)
+        #expect(tracker.decide(shell, routeKey: "b:t", local: nil, nowMs: now + 50) == .dispatch(shell.updatedAt, delayMs: 0))
+        tracker.reset()
+        #expect(tracker.decide(shell, routeKey: "a:t", local: nil, nowMs: now + 100) == .dispatch(shell.updatedAt, delayMs: 0))
+        tracker.didDispatch(shell, routeKey: "a:t", nowMs: now + 100)
+        var newer = shell
+        newer.updatedAt = "2026-06-20T00:00:31.000Z"
+        #expect(tracker.decide(newer, routeKey: "a:t", local: nil, nowMs: now + 200) == .dispatch(newer.updatedAt, delayMs: 9_900))
+    }
+
     @Test func midTurnActivityRidesATrailingThrottle() {
         var shell = thread {
             $0.lastVisitedAt = .value("2026-06-19T23:00:00.000Z")
