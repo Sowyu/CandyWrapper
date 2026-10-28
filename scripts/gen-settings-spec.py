@@ -4,7 +4,7 @@ indicator), and a Keybindings section.
 
 Class strings are copied from apps/web/src/components/settings/{SettingsSidebarNav.tsx, settingsLayout.tsx,
 SettingsPanels.tsx, NotificationSettings.tsx, SettingInheritance.tsx, KeybindingsSettings.tsx}, ui/sidebar.tsx,
-ui/select.tsx and ui/kbd.tsx at the tag in T3_VERSION. The nav, row and section helpers come from
+ui/select.tsx and ui/kbd.tsx at v0.1.4-nightly.20261028.3814. The nav, row and section helpers come from
 gen-connections-spec.py, the switch from gen-toggles-spec.py, the select trigger from gen-popups-spec.py.
 Usage: /usr/bin/python3 -I scripts/gen-settings-spec.py
 """
@@ -26,7 +26,7 @@ lucide, button, merge, MB, SIDEBAR, KBD = conn["lucide"], conn["button"], conn["
 switch = conn["tog_ns"]["switch"]
 SIDEBAR_INPUT = conn["SIDEBAR_INPUT"]
 
-# Nightly 3754 SettingsSidebarNav.tsx:313-348 with the query "time": the clear button replaces the Kbd, results replace the nav.
+# Nightly 3824 SettingsSidebarNav.tsx:264-358 with the query "time": the clear button replaces the Kbd, results replace the nav.
 MB_SM = merge(MB.replace("h-8 rounded-[var(--control-radius)] px-[var(--sidebar-row-content-inset)] py-1.5 text-sm",
                          "h-7 rounded-lg p-2 text-xs") + " h-auto min-h-10 items-start") + " text-left"
 # The script's merge drops `text-left` next to `text-xs`; tailwind-merge keeps both (alignment and size differ).
@@ -35,8 +35,8 @@ search = ('<div class="flex h-8 items-center gap-2 rounded-md px-2 py-1.5 text-s
           f'{lucide("search", "size-4 shrink-0 text-sidebar-muted-foreground/80")}'
           f'<input type="search" placeholder="Search" value="time" class="{SIDEBAR_INPUT}">{CLEAR}</div>')
 RESULTS = [("Time format", "General", "settings-2"), ("Permissions", "Threads", "messages-square"),
-           ("Days of inactivity before auto-settle", "Threads", "messages-square"), ("Collapse composer on scroll", "Chat", "message-square-text"),
-           ("Simulator support", "Devices", "smartphone")]
+           ("Snooze options", "Threads", "messages-square"),
+           ("Days of inactivity before auto-settle", "Threads", "messages-square"), ("Simulator support", "Devices", "smartphone")]
 
 
 def result(title, section, icon, active):
@@ -48,7 +48,7 @@ def result(title, section, icon, active):
 
 
 results = "".join(result(t, s, i, n == 0) for n, (t, s, i) in enumerate(RESULTS))
-nav_search = SIDEBAR.format('<div class="relative flex w-full min-w-0 flex-col p-[var(--sidebar-content-inset)]"><div class="flex flex-col gap-2">'
+nav_search = SIDEBAR.replace('data-app-sidebar=""', "").format('<div class="relative flex w-full min-w-0 flex-col p-[var(--sidebar-content-inset)]"><div class="flex flex-col gap-2">'
                             f'{search}<ul class="flex w-full min-w-0 flex-col gap-1" role="listbox">{results}</ul></div></div>')
 
 # SettingsRow (settingsLayout.tsx:451-497) with the inheritance and reset spans.
@@ -59,8 +59,8 @@ LAYERS = button("ghost-muted", "icon-micro", lucide("layers", "size-3"))
 
 
 def row(title, desc, control, server=False, desc_html=None, title_html=None):
-    spans = (SPAN.format(LAYERS) if server else "") + SPAN.format("")
-    d = desc_html if desc_html is not None else f'<p class="max-w-xl text-xs leading-normal text-muted-foreground/80">{desc}</p>'
+    spans = (SPAN.format(LAYERS).replace('class="inline-flex', 'class="opacity-0 inline-flex', 1) if server else "") + SPAN.format("")
+    d = desc_html if desc_html is not None else f'<p class="max-w-2xl text-balance text-xs leading-normal text-muted-foreground">{desc}</p>'
     return (f'<div data-slot="settings-row" class="{ROW}"><div class="flex flex-col gap-3 @min-[32rem]/settings-row:grid '
             '@min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">'
             f'<div class="min-w-0 flex-1 space-y-1"><div class="flex min-h-5 items-center gap-1.5"><h3 class="text-sm font-medium text-foreground">{title_html or title}</h3>'
@@ -75,19 +75,15 @@ def select(value, width_cls):
 
 def section(title, rows):
     return (f'<section class="space-y-2.5"><div class="flex min-h-7 items-start justify-between gap-4 px-3 sm:px-4">'
-            f'<div class="flex min-w-0 items-center gap-1"><h2 class="flex min-h-7 items-center gap-2 text-sm font-normal text-foreground/70">{title}</h2></div>'
+            f'<div class="flex min-w-0 items-center gap-1"><h2 class="flex min-h-7 items-center gap-2 text-base font-semibold text-foreground">{title}</h2></div>'
             f'<div class="flex min-h-7 min-w-7 items-center justify-end"></div></div><div class="{GROUP}">{rows}</div></section>')
 
 
-behavior = section("Behavior", "".join([
+behavior = section("Notifications", "".join([
     row("Thread notifications", "System alerts when a thread finishes, fails, or needs input or approval. Applies to this device while T3 Code is open.",
         select("Off", "w-full sm:w-56")),
     row("In-app notifications", "Show a toast when another thread finishes, fails, or needs input or approval while this app has focus.",
         switch("default", "off", False)),
-    row("Time format", "System default follows your browser or OS clock preference.", select("System default", "w-full sm:w-40")),
-    row("Response streaming", "Each paragraph or code block appears as soon as it is complete.",
-        select("Show finished paragraphs", "w-full sm:w-56"), server=True),
-    row("Hide whitespace changes", "Set whether the diff panel ignores whitespace-only edits by default.", switch("default", "on", False)),
 ]))
 
 # KeybindingsSettings.tsx: rows with the When line, the hover menu span and the pill (KeybindingPill, kbd.tsx).
@@ -102,7 +98,7 @@ def kbds(parts):
 def binding(label, parts, when):
     variant = "ghost" if when else "ghost-muted"
     trigger = button(variant, "micro", f'<span class="truncate font-mono">{when or "Always"}</span>{lucide("chevron-down", "size-3.5 shrink-0 opacity-60")}', "min-w-0 shrink")
-    desc = ('<p class="max-w-xl text-xs leading-normal text-muted-foreground/80"><span class="flex h-6 items-center gap-1.5">'
+    desc = ('<p class="max-w-2xl text-balance text-xs leading-normal text-muted-foreground"><span class="flex h-6 items-center gap-1.5">'
             f'<span class="text-xs leading-none text-muted-foreground/70">When</span>{trigger}</span></p>')
     control = ('<div class="flex flex-wrap items-center justify-end gap-1.5"><span class="flex items-center opacity-0"></span>'
                f'<button type="button" class="{PILL}">{kbds(parts)}</button></div>')
@@ -119,7 +115,7 @@ keybindings = section("Navigation", "".join([
 W796 = "display:block;width:796px"
 cases = [
     {"name": "nav.search", "html": nav_search, "wrapperStyle": "display:block", "native": {"kind": "nav-search"}},
-    {"name": "general.behavior", "html": behavior, "wrapperStyle": W796, "native": {"kind": "behavior"}},
+    {"name": "general.notifications", "html": behavior, "wrapperStyle": W796, "native": {"kind": "behavior"}},
     {"name": "keybindings.navigation", "html": keybindings, "wrapperStyle": W796, "native": {"kind": "keybindings"}},
 ]
 spec = {"component": "settings-pages", "source": "apps/web/src/components/settings/SettingsPanels.tsx", "states": ["rest"],

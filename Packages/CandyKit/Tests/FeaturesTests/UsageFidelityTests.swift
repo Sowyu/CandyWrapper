@@ -26,6 +26,7 @@ struct UsageFidelityTests {
         switch kind {
         case "header":
             let h = UsageHeaderView()
+            h.isRouteModal = true
             h.viewport = 1440
             var m = UsagePageView.Model()
             m.metric = "limits"

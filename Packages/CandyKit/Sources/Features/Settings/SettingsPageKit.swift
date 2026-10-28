@@ -195,8 +195,12 @@ final class ResetSlot: DSView {
 final class InheritanceButton: DSView {
     let button = ButtonView(nil, icon: .layers, variant: .ghostMuted, size: .iconMicro)
     private var tooltip: TooltipController?
+    private var rowTracking: NSTrackingArea?
+    private weak var trackedRow: NSView?
+    private var rowHovered = false
+    var hasOverridingProjects = false { didSet { refreshVisibility() } }
     var onOpen: ((NSView) -> Void)?
-    var state: SettingInheritanceState = .default { didSet { restyle() } }
+    var state: SettingInheritanceState = .default { didSet { refreshVisibility() } }
     var summary = "" { didSet { tooltip?.text = summary; button.setAccessibilityLabel("\(summary). Show where this value comes from") } }
 
     override init(frame frameRect: NSRect) {
@@ -205,12 +209,29 @@ final class InheritanceButton: DSView {
         tooltip = TooltipController.attach(to: button, text: "")
         button.action = { [weak self] in guard let self else { return }; self.tooltip?.hide(); self.onOpen?(self.button) }
         addSubview(button)
-        restyle()
+        refreshVisibility()
     }
 
-    private func restyle() {
+    func refreshVisibility() {
         button.iconColor = state == .overridden ? Themed.color(\.primary) : state == .mixed ? Themed.color(\.warning) : nil
+        let localValue = state == .default || state == .environment
+        button.alphaValue = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) || !localValue || hasOverridingProjects
+            || rowHovered || button.state.focusVisible || button.state.popupOpen ? 1 : 0
     }
+
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refreshVisibility() }
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        if let rowTracking { trackedRow?.removeTrackingArea(rowTracking) }
+        rowTracking = nil
+        trackedRow = superview
+        guard let superview else { return }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        superview.addTrackingArea(area)
+        rowTracking = area
+    }
+    override func mouseEntered(with event: NSEvent) { rowHovered = true; refreshVisibility() }
+    override func mouseExited(with event: NSEvent) { rowHovered = false; refreshVisibility() }
 
     override func layout() { super.layout(); button.frame = bounds }
 }
@@ -221,6 +242,8 @@ final class InlinePickerButton: ControlView {
     private let label = LabelView("", font: DSFont.ui(16, weight: .medium), color: Themed.color(\.foreground))
     private let chevron = IconView(name: .chevronDown, size: 14)
     private let underline = CAShapeLayer()
+    private let bordered = ButtonView(nil, variant: .outline, size: .sm)
+    private var modern: Bool { !ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
     var glyph: NSView? { didSet { oldValue?.removeFromSuperview(); glyph.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true } }
     var title = "" { didSet { label.text = title; invalidateIntrinsicContentSize(); needsLayout = true } }
 
@@ -235,35 +258,58 @@ final class InlinePickerButton: ControlView {
         underline.lineDashPattern = [1, 2]
         underline.actions = ["path": NSNull(), "strokeColor": NSNull(), "lineDashPattern": NSNull()]
         layer?.addSublayer(underline)
+        bordered.iconSize = 14
+        bordered.action = { [weak self] in self?.action?() }
+        addSubview(bordered)
         setAccessibilityRole(.popUpButton)
         restyle()
     }
 
-    private var gap: CGFloat { DesignGeometry.usesClassic(self) ? 6 : 4 }
+    override var acceptsFirstResponder: Bool { !modern && super.acceptsFirstResponder }
 
     override var intrinsicContentSize: NSSize {
-        let g: CGFloat = glyph == nil ? 0 : 14 + gap
-        return NSSize(width: min(288, ceil(g + label.textWidth + gap + 14)), height: 24)
+        if modern {
+            label.font = DSFont.ui(14)
+            return NSSize(width: min(288, 16 + (glyph == nil ? 0 : 20) + ceil(label.textWidth) + 6 + 14), height: 28)
+        }
+        let g: CGFloat = glyph == nil ? 0 : 14 + 6
+        return NSSize(width: min(288, ceil(g + label.textWidth + 6 + 14)), height: 24)
     }
 
     override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
 
     private func restyle() {
+        bordered.isHidden = !modern
+        label.font = modern ? DSFont.ui(14) : DSFont.ui(16, weight: .medium)
+        label.lineHeight = modern ? 20 : 24
+        chevron.strokeWidth = modern ? 1.75 : nil
+        chevron.alphaValue = modern ? 0.7 : 1
+        underline.isHidden = modern
         let solid = state.hoverOrPressed || state.popupOpen
         underline.strokeColor = Themed.color(\.foreground, solid ? 1 : 0.3).cgColor(in: self)
-        underline.lineDashPattern = solid || !DesignGeometry.usesClassic(self) ? nil : [1, 2]
-        underline.isHidden = !DesignGeometry.usesClassic(self) && !solid
+        underline.lineDashPattern = solid ? nil : [1, 2]
         chevron.strokeColor = Themed.color(\.mutedForeground)
     }
 
     override func layout() {
         super.layout()
+        restyle()
+        if modern {
+            bordered.frame = bounds
+            addSubview(bordered, positioned: .below, relativeTo: label)
+            let x: CGFloat = glyph == nil ? 8 : 28
+            if let glyph { glyph.frame = NSRect(x: 8, y: (bounds.height - 14) / 2, width: 14, height: 14) }
+            let w = max(0, min(ceil(label.textWidth) + 1, bounds.width - x - 28))
+            label.frame = NSRect(x: x, y: (bounds.height - 20) / 2, width: w, height: 20)
+            chevron.frame = NSRect(x: bounds.width - 20, y: (bounds.height - 14) / 2, width: 14, height: 14)
+            return
+        }
         var x: CGFloat = 0
-        if let glyph { glyph.frame = NSRect(x: 0, y: 5, width: 14, height: 14); x = 14 + gap }
-        let w = max(0, min(ceil(label.textWidth) + 1, bounds.width - x - 14 - gap))
+        if let glyph { glyph.frame = NSRect(x: 0, y: 5, width: 14, height: 14); x = 20 }
+        let w = max(0, min(ceil(label.textWidth) + 1, bounds.width - x - 20))
         label.frame = NSRect(x: x, y: 0, width: w, height: 24)
-        chevron.frame = NSRect(x: x + w + gap, y: 5, width: 14, height: 14)
+        chevron.frame = NSRect(x: x + w + 6, y: 5, width: 14, height: 14)
         let path = CGMutablePath()
         // `underline-offset-4` under the text's baseline.
         path.move(to: CGPoint(x: x, y: 21.5)); path.addLine(to: CGPoint(x: x + w, y: 21.5))
@@ -370,10 +416,32 @@ final class SettingsScopeSentenceView: DSView, SettingsGroupRow {
         MenuPopupView.show(items, from: project, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none))
     }
 
-    func height(forWidth width: CGFloat) -> CGFloat { 24 }
-
+    private var modern: Bool { !ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    func height(forWidth width: CGFloat) -> CGFloat {
+        guard modern else { return 24 }
+        updateFonts()
+        let first = ceil(lead.textWidth) + 1 + 6 + project.intrinsicContentSize.width
+        let second = ceil(connective.textWidth) + 1 + 6 + environment.intrinsicContentSize.width
+        return first + 6 + second > width - 32 ? 60 : 28
+    }
+    private func updateFonts() {
+        for l in [lead, connective] { l.font = DSFont.ui(modern ? 14 : 16); l.lineHeight = modern ? 20 : 24 }
+    }
     override func layout() {
         super.layout()
+        updateFonts()
+        if modern {
+            var x: CGFloat = 16, y: CGFloat = 0
+            for pair: (LabelView, InlinePickerButton) in [(lead, project), (connective, environment)] {
+                let lw = ceil(pair.0.textWidth) + 1
+                let width = min(pair.1.intrinsicContentSize.width, max(0, bounds.width - 32 - lw - 6))
+                if x > 16, x + lw + 6 + width > bounds.width - 16 { x = 16; y += 32 }
+                pair.0.frame = NSRect(x: x, y: y + 4, width: lw, height: 20)
+                pair.1.frame = NSRect(x: x + lw + 6, y: y, width: width, height: 28)
+                x += lw + 6 + width + 6
+            }
+            return
+        }
         var x: CGFloat = 16
         func place(_ v: NSView, _ w: CGFloat) { v.frame = NSRect(x: x, y: 0, width: w, height: 24); x += w + 6 }
         place(lead, ceil(lead.textWidth) + 1)
@@ -420,12 +488,15 @@ final class SettingsSubheadingView: DSView, SettingsGroupRow {
         addSubview(label)
     }
 
-    func height(forWidth width: CGFloat) -> CGFloat { topPadding + minHeight }
+    func height(forWidth width: CGFloat) -> CGFloat { topPadding + (ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? minHeight : max(28, minHeight)) }
 
     override func layout() {
         super.layout()
+        let modern = !ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        label.font = modern ? DSFont.ui(16, weight: .semibold) : DSFont.ui(14)
+        label.color = Themed.color(\.foreground, modern ? 1 : 0.7)
         let h = bounds.height - topPadding
-        label.frame = NSRect(x: 16, y: topPadding + (h - 20) / 2, width: ceil(label.textWidth) + 1, height: 20)
+        label.frame = NSRect(x: 16, y: topPadding + (h - (modern ? 24 : 20)) / 2, width: ceil(label.textWidth) + 1, height: modern ? 24 : 20)
         if let trailing {
             let s = trailing.intrinsicContentSize
             trailing.frame = NSRect(x: bounds.width - 16 - s.width, y: topPadding + (h - s.height) / 2, width: s.width, height: s.height)

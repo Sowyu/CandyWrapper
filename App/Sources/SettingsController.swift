@@ -5,9 +5,8 @@ import T3Client
 import T3Protocol
 import T3Store
 
-/// Settings as pages inside the main window (T3's `/settings/*` routes): the settings nav replaces the
-/// thread sidebar, the page replaces the thread panel, and Back or Escape returns. General, Appearance,
-/// Keybindings (SettingsPages.swift) and Connections work. Cmd+, and the sidebar footer's Settings button open it.
+/// Settings floats over the current route in default themes (3814 AppRouteModal.tsx:40-64).
+/// Redesign keeps its settings tab and sidebar. Cmd+, and the sidebar Settings action open it.
 @MainActor
 final class SettingsController {
     weak var window: NSWindow?
@@ -59,6 +58,7 @@ final class SettingsController {
     var onThreadViewReturn: () -> Void = {}
     /// The local environment's descriptor, read when the page opens (label, machine, version).
     var primaryDescriptor: EnvironmentDescriptor?
+    private var routeModal: AppRouteModalView?
     var modal: ModalHost?
     /// Version skew and server updates, shared with the composer notice.
     var serverUpdates: ServerUpdates? {
@@ -187,12 +187,20 @@ final class SettingsController {
         guard !isOpen, let layout else { return }
         buildViews()
         isOpen = true
+        nav.isRouteModal = !isDither
+        page.header.isRouteModal = !isDither
         nav.windowedMac = (threadSidebar as? SidebarContentView)?.windowedMac ?? true
-        layout.sidebar.content = nav
-        threadPanel.removeFromSuperview()
-        layout.mainContent = page
+        if !isDither, let window {
+            routeModal = AppRouteModalView.present(label: "Settings", content: page, navigation: nav, in: window)
+            routeModal?.onDismiss = { [weak self] in self?.finishClose(record: true) }
+            page.header.close.action = { [weak self] in self?.close() }
+        } else {
+            layout.sidebar.content = nav
+            threadPanel.removeFromSuperview()
+            layout.mainContent = page
+        }
         show(section)
-        window?.makeFirstResponder(page)
+        if routeModal == nil { window?.makeFirstResponder(page) }
         startHostAccess()
         refresh()
         loadPrimaryDescriptor()
@@ -200,11 +208,38 @@ final class SettingsController {
         t3.refreshMachines()
     }
 
+    /// Moving between default themes and Redesign changes the route presentation immediately.
+    func updatePresentationForTheme() {
+        guard isOpen, let layout, let window, (routeModal != nil) == isDither else { return }
+        routeModal?.onDismiss = nil
+        routeModal?.close(animated: false)
+        routeModal = nil
+        nav.removeFromSuperview()
+        page.removeFromSuperview()
+        nav.isRouteModal = !isDither
+        page.header.isRouteModal = !isDither
+        // Rebuild the selected page with the destination theme's layout, including Redesign's tabs.
+        page.page = nil
+        general = nil; appearance = nil; keybindingsPage = nil; extraPages = [:]; ditherPages = [:]; ditherSection = nil
+        if isDither {
+            layout.sidebar.content = nav
+            layout.mainContent = page
+        } else {
+            layout.sidebar.content = threadSidebar
+            layout.mainContent = threadPanel
+            routeModal = AppRouteModalView.present(label: "Settings", content: page, navigation: nav, in: window)
+            routeModal?.onDismiss = { [weak self] in self?.finishClose(record: true) }
+            page.header.close.action = { [weak self] in self?.close() }
+        }
+        show(section)
+    }
+
     /// Escape (`useEscapeToGoBack`): T3 leaves Settings for the last main app screen from any page
     /// (routes/settings.tsx:115-116). Diagnostics and Open source licenses, reached from General, go back to
     /// General first, as the user asked. A held key does nothing more (`event.repeat`).
     func escape() {
         guard isOpen, NSApp.currentEvent?.isARepeat != true else { return }
+        if routeModal != nil { close(); return }
         if isDither, ditherSection == nil, let parent = DitherSettingsSection.parent(of: section) {
             show(dither: parent)
             window?.makeFirstResponder(page)
@@ -218,20 +253,33 @@ final class SettingsController {
 
     /// `record` false leaves the route history to the page that replaces Settings.
     func close(record: Bool = true) {
+        guard isOpen else { return }
+        if let routeModal {
+            routeModal.onDismiss = { [weak self] in self?.finishClose(record: record) }
+            routeModal.close(animated: record)
+        } else {
+            finishClose(record: record)
+        }
+    }
+
+    private func finishClose(record: Bool) {
         guard isOpen, let layout else { return }
+        let wasModal = routeModal != nil
+        routeModal = nil
         modal?.close()
         stopHostAccess()
         isOpen = false
         updateScheduledTaskWatch()
-        layout.sidebar.content = threadSidebar
+        if !wasModal { layout.sidebar.content = threadSidebar }
         page.removeFromSuperview()
+        nav.removeFromSuperview()
         // A closed Settings gives back its pages (T3 unmounts the route); the next open builds the one it shows.
         page.page = nil
         general = nil; appearance = nil; keybindingsPage = nil; extraPages = [:]; ditherPages = [:]; ditherSection = nil
         projectFiles = [:]; projectFileLoads = []
-        layout.mainContent = threadPanel
+        if !wasModal { layout.mainContent = threadPanel }
         if record { onRouteChange?() }
-        onThreadViewReturn()
+        if !wasModal { onThreadViewReturn() }
         let returnToWelcome = onOnboardingReturn; onOnboardingReturn = nil; returnToWelcome?()
     }
 

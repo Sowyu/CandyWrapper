@@ -44,8 +44,15 @@ public struct SourceControlDiscoveryItem: Equatable, Sendable {
     var notReady: Bool { !isProvider && !implemented }
     var authStatus: String? { auth?["status"]?.stringValue }
 
-    /// `itemStatusDot`.
+    /// 3824 SourceControlSettings.tsx:98-109 (#22778).
     var dot: NSColor {
+        if notReady { return Themed.color(\.mutedForeground, 0.35) }
+        if isProvider { return status == "available" && authStatus == "authenticated" ? Themed.color(\.success) : Themed.color(\.mutedForeground, 0.35) }
+        return status == "available" ? Themed.color(\.success) : Themed.color(\.warning)
+    }
+
+    /// Redesign keeps the presentation saved before the new default design.
+    var legacyDot: NSColor {
         if notReady { return Themed.color(\.mutedForeground, 0.35) }
         if status != "available" { return Themed.color(\.warning) }
         if isProvider, authStatus != "authenticated" { return Themed.color(\.warning) }
@@ -597,7 +604,7 @@ final class SourceControlDiscoveryRow: DSView, SettingsGroupRow {
         hover = HoverGroup(self) { [weak self] _ in self?.restyleHover(transitioning: true) }
         addSubview(mark)
         dot.cornerRadius = 4
-        dot.backgroundColor = item.dot.cgColor
+        dot.backgroundColor = (ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? item.legacyDot : item.dot).cgColor
         if item.icon != nil {
             dot.borderWidth = 2
             dot.borderColor = Themed.color(\.background).cgColor
@@ -609,7 +616,7 @@ final class SourceControlDiscoveryRow: DSView, SettingsGroupRow {
         version.lineHeight = 16
         version.isHidden = item.version == nil
         if let b = item.badge {
-            let v = BadgeView(b, variant: .warning, size: .sm)
+            let v = BadgeView(b, variant: b == "Not authenticated" && !ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? .secondary : .warning, size: .sm)
             badge = v
             addSubview(v)
         }
@@ -702,7 +709,8 @@ final class SourceControlDiscoveryRow: DSView, SettingsGroupRow {
     override func updateLayer() {
         super.updateLayer()
         restyleHover(transitioning: false)
-        dot.backgroundColor = item.dot.cgColor(in: self)
+        if item.badge == "Not authenticated" { badge?.variant = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? .warning : .secondary }
+        dot.backgroundColor = (ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? item.legacyDot : item.dot).cgColor(in: self)
         if item.icon != nil { dot.borderColor = Themed.color(\.background).cgColor(in: self) }
     }
 }

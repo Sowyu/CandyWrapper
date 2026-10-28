@@ -69,6 +69,10 @@ struct SettingsPages2FidelityTests {
         case "repositories":
             let page = SourceControlSettingsView(context: environmentContext())
             return sized(try #require(page.anchor("source-control-defaults") as? SettingsSectionView), size)
+        case "unauthenticated":
+            let item = try json(#"{"kind":"github","label":"GitHub","executable":"gh","status":"available","auth":{"status":"unauthenticated"}}"#)
+            let row = SourceControlDiscoveryRow(item: SourceControlDiscoveryItem(item, provider: true), details: SettingsGroupNote(""))
+            return sized(row, size)
         case "vcs":
             let result = json(#"""
             {"versionControlSystems": [

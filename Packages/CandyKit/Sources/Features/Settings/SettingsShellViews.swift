@@ -165,6 +165,7 @@ public final class SettingsSidebarView: DSView {
     }
     public var onSignIn: (() -> Void)?
     public var onAccount: ((NSView) -> Void)?
+    public var isRouteModal = false { didSet { needsLayout = true; needsDisplay = true } }
     public var windowedMac = true { didSet { needsLayout = true } }
     public var stage: SidebarStage = .nightly { didSet { applyStage() } }
 
@@ -247,6 +248,7 @@ public final class SettingsSidebarView: DSView {
             if let title = group.label {
                 let label = LabelView(title, font: DSFont.ui(12, weight: .medium), color: Themed.color(\.sidebarMutedForeground, sidebar: true))
                 label.lineHeight = 16
+                label.color = Themed.color(\.sidebarMutedForeground, 0.8, sidebar: true)
                 groupLabels[title] = label
                 navDocument.addSubview(label)
             }
@@ -278,11 +280,17 @@ public final class SettingsSidebarView: DSView {
         search.field.currentEditor()?.selectAll(nil)
     }
 
+    /// The search consumes its first Escape before the route modal dismisses (SettingsSidebarNav.tsx:227-233).
+    func consumeSearchEscape() -> Bool {
+        guard isSearching, let editor = search.field.currentEditor(), window?.firstResponder === editor else { return false }
+        return searchCommand(#selector(NSResponder.cancelOperation(_:)))
+    }
+
     /// Sets the query as if typed (tests, captures).
     func setQuery(_ query: String) { search.text = query; activeResult = 0; runSearch() }
 
     private func runSearch() {
-        results = isSearching ? SettingsSearch.search(search.text, in: searchItems) : []
+        results = isSearching ? SettingsSearch.search(search.text, in: isDither ? searchItems : searchItems.filter { $0.id != "composer-collapse" }) : []
         activeResult = min(activeResult, max(results.count - 1, 0))
         while resultRows.count < results.count {
             let row = SettingsSearchResultRow()
@@ -351,6 +359,7 @@ public final class SettingsSidebarView: DSView {
 
     public override func updateLayer() {
         super.updateLayer()
+        layer?.backgroundColor = nil
         // Capy's search field: a `--section` fill under a `--border-1` hairline.
         searchFill.backgroundColor = Themed.color(light: \.foreground, 0.04, dark: \.foreground, 0.035).cgColor(in: self)
         searchFill.borderColor = Themed.color(light: \.foreground, 0.08, dark: \.foreground, 0.08).cgColor(in: self)
@@ -383,6 +392,7 @@ public final class SettingsSidebarView: DSView {
         ditherSignIn.isHidden = !dither || t3Connect != .signedOut
         searchFill.isHidden = !dither
         if dither { layoutDither(); return }
+        if isRouteModal { layoutModal(); return }
         let w = bounds.width, h = bounds.height
         // `SidebarChromeHeader`, as in the thread sidebar.
         backdrop.frame = NSRect(x: 0, y: 0, width: w, height: 80)
@@ -417,12 +427,38 @@ public final class SettingsSidebarView: DSView {
         signIn.frame = NSRect(x: 8, y: rowY - 8 - 32, width: w - 16, height: 32)
     }
 
+    /// SettingsSidebarNav.tsx:255-438, without the thread sidebar's titlebar and Back row.
+    private func layoutModal() {
+        let w = bounds.width, h = bounds.height
+        noResults.color = Themed.color(\.sidebarMutedForeground)
+        avatar.sidebarContext = false
+        for v in [brand, trigger, backdrop, environmentPill, back] as [NSView] { v.isHidden = true }
+        search.frame = NSRect(x: 8, y: 8, width: max(0, w - 16), height: 32)
+        let kbd = searchKbd.intrinsicContentSize
+        searchKbd.frame = NSRect(x: w - 16 - kbd.width, y: 8 + (32 - kbd.height) / 2, width: kbd.width, height: kbd.height)
+        if isSearching {
+            noResults.frame = NSRect(x: 16, y: 72, width: max(0, w - 32), height: 16)
+            var y: CGFloat = 48
+            for row in resultRows where !row.isHidden {
+                row.frame = NSRect(x: 8, y: y, width: max(0, w - 16), height: SettingsSearchResultRow.height)
+                y += SettingsSearchResultRow.height + 4
+            }
+        } else {
+            layoutConcernNavigation(top: 48, bottom: h - (avatar.isHidden ? (signIn.isHidden ? 0 : 48) : 52), dither: false)
+        }
+        // #26180: the account hit area has its own px-2 py-1 inside SidebarFooter's px-2 py-1.
+        avatar.frame = NSRect(x: 8, y: h - 44, width: 36, height: 36)
+        signIn.frame = NSRect(x: 8, y: h - 40, width: max(0, w - 16), height: 32)
+    }
+
+
     /// Dither, after Capy's settings sidebar: the traffic lights keep the 52pt titlebar row (the window draws back and
     /// forward at its right end), then "← Settings" with the collapse button, a filled search field and 28pt nav rows
     /// in labelled groups; Sign in and Back as rows in the footer.
     private func layoutDither() {
         let w = bounds.width, h = bounds.height
         let rowH = DitherSettingsNavRow.height
+        avatar.sidebarContext = true
         var y: CGFloat = DitherChrome.band
         ditherHeader.frame = NSRect(x: 8, y: y, width: max(0, w - 16 - 28 - 4), height: rowH)
         trigger.frame = NSRect(x: w - 8 - 28, y: y, width: 28, height: 28)
@@ -451,9 +487,10 @@ public final class SettingsSidebarView: DSView {
         navScroll.frame = NSRect(x: 0, y: top, width: bounds.width, height: max(0, bottom - top))
         var y: CGFloat = 0
         for (index, group) in shownGroups.enumerated() {
-            if index > 0 { y += 12 }
+            if index > 0 { y += dither ? 12 : 16 }
             if let title = group.label, let label = groupLabels[title] {
                 // Nightly 3754 SettingsSidebarNav.tsx:368-380: 16px heading, then gap-1.
+                label.color = Themed.color(\.sidebarMutedForeground, dither ? 1 : 0.8, sidebar: !isRouteModal)
                 label.frame = NSRect(x: 16, y: y + (dither ? 4 : 0), width: max(0, bounds.width - 32), height: 16)
                 y += dither ? 28 : 20
             }
@@ -531,8 +568,8 @@ final class SettingsSearchResultRow: ControlView {
     static let height: CGFloat = 8 + 20 + 16 + 8
     private let decoration = BoxDecorationLayer()
     private var icon = IconView(name: .settings2, size: 14)
-    private let title = LabelView("", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.sidebarForeground, sidebar: true))
-    private let subtitle = LabelView("", font: DSFont.ui(11), color: Themed.color(\.sidebarMutedForeground, 0.75, sidebar: true))
+    private let title = LabelView("", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.sidebarForeground))
+    private let subtitle = LabelView("", font: DSFont.ui(11), color: Themed.color(\.sidebarMutedForeground, 0.75))
     var isActive = false { didSet { restyle() } }
     private var dither = false
     var onHover: (() -> Void)?
@@ -545,7 +582,7 @@ final class SettingsSearchResultRow: ControlView {
         title.lineHeight = 20
         subtitle.lineHeight = 16
         for v in [icon, title, subtitle] as [NSView] { addSubview(v) }
-        icon.strokeColor = Themed.color(\.sidebarMutedForeground, 0.6, sidebar: true)
+        icon.strokeColor = Themed.color(\.sidebarMutedForeground, 0.6, sidebar: dither)
         setAccessibilityRole(.button)
         restyle()
     }
@@ -553,12 +590,14 @@ final class SettingsSearchResultRow: ControlView {
     /// Under Redesign the result names the section it opens in.
     func configure(_ item: SettingsSearchItem, dither: Bool = false) {
         self.dither = dither
+        title.color = Themed.color(\.sidebarForeground, sidebar: dither)
+        subtitle.color = Themed.color(\.sidebarMutedForeground, 0.75, sidebar: dither)
         let home = dither ? DitherSettingsSection.home(of: item.to, anchor: item.anchor) : nil
         let label = home?.label ?? item.to.label
         title.text = item.title
         subtitle.text = label
         icon.removeFromSuperview()
-        let color = dither ? Themed.color(\.sidebarMutedForeground, 0.6, sidebar: true) : Themed.color(\.sidebarIconColor, sidebar: true)
+        let color = dither ? Themed.color(\.sidebarMutedForeground, 0.6, sidebar: dither) : Themed.color(\.sidebarIconColor, sidebar: dither)
         icon = home.map { IconView(name: $0.icon, size: 14, strokeColor: color) }
             ?? (item.to == .snapShots ? IconView(definition: SettingsSection.snapShotIcon, size: dither ? 14 : 16, color: color)
                 : IconView(name: item.to.icon, size: dither ? 14 : 16, strokeColor: color))
@@ -576,13 +615,13 @@ final class SettingsSearchResultRow: ControlView {
 
     private func restyle() {
         var box = BoxStyle()
-        box.radius = 10
-        if state.hovered { box.fill = Themed.color(\.sidebarRowHover, sidebar: true) }
-        if isActive { box.fill = Themed.color(\.sidebarRowSelected, sidebar: true) }
+        box.radius = dither ? 10 : 8
+        if state.hovered { box.fill = Themed.color(\.sidebarRowHover, sidebar: dither) }
+        if isActive { box.fill = Themed.color(\.sidebarRowSelected, sidebar: dither) }
         decoration.boxStyle = box
         // `hover:[&>svg]` and `data-[active=true]:[&>svg]:text-sidebar-foreground` beat the icon's own muted class.
-        icon.strokeColor = isActive || state.hovered ? Themed.color(\.sidebarForeground, sidebar: true)
-            : (dither ? Themed.color(\.sidebarMutedForeground, 0.6, sidebar: true) : Themed.color(\.sidebarIconColor, sidebar: true))
+        icon.strokeColor = isActive || state.hovered ? Themed.color(\.sidebarForeground, sidebar: dither)
+            : (dither ? Themed.color(\.sidebarMutedForeground, 0.6, sidebar: dither) : Themed.color(\.sidebarIconColor, sidebar: dither))
     }
 
     override func layout() {
@@ -597,6 +636,7 @@ final class SettingsSearchResultRow: ControlView {
 
 /// Clerk's `UserButton` trigger (`rounded-lg p-1 hover:bg-sidebar-row-hover`, avatar `size-7`).
 public final class T3ConnectAvatarButton: ControlView {
+    var sidebarContext = true { didSet { if sidebarContext != oldValue { needsDisplay = true } } }
     private let avatar = ClerkAvatarView(size: 28)
     public var email = "" {
         didSet {
@@ -619,7 +659,8 @@ public final class T3ConnectAvatarButton: ControlView {
     public override func stateDidChange(from old: State) { super.stateDidChange(from: old); needsDisplay = true }
 
     public override func updateLayer() {
-        layer?.backgroundColor = state.hoverOrPressed ? Themed.color(\.sidebarRowHover, sidebar: true).cgColor(in: self) : nil
+        layer?.cornerRadius = sidebarContext ? 10 : 8
+        layer?.backgroundColor = state.hoverOrPressed ? Themed.color(\.sidebarRowHover, sidebar: sidebarContext).cgColor(in: self) : nil
     }
 
     public override func layout() {
@@ -743,8 +784,8 @@ public final class SettingsPageView: DSView {
     public override func layout() {
         super.layout()
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-        header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: SettingsHeaderView.height)
-        scroll.frame = NSRect(x: 0, y: SettingsHeaderView.height, width: bounds.width, height: max(0, bounds.height - SettingsHeaderView.height))
+        header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: header.barHeight)
+        scroll.frame = NSRect(x: 0, y: header.barHeight, width: bounds.width, height: max(0, bounds.height - header.barHeight))
         let gutter: CGFloat = 6
         let inner = max(0, bounds.width - 2 * gutter)
         // Dither: Capy's centred column, about 800pt of content; the two-pane pages keep their width.
@@ -773,6 +814,9 @@ public final class SettingsPageView: DSView {
 /// 20px gutter. The bar drags the window.
 public final class SettingsHeaderView: TopbarDragView {
     static let height: CGFloat = 52
+    public var isRouteModal = false { didSet { close.isHidden = !isRouteModal; needsLayout = true; needsDisplay = true } }
+    public var barHeight: CGFloat { isRouteModal ? 48 : Self.height }
+    public let close = ButtonView(nil, icon: .x, variant: .ghost, size: .iconSm)
     private let root = LabelView("Settings", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.mutedForeground))
     private let slash = LabelView("/", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.iconMuted))
     private let current = LabelView("", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground))
@@ -796,14 +840,33 @@ public final class SettingsHeaderView: TopbarDragView {
         restore.iconSize = 14
         restore.isHidden = true
         addSubview(restore)
+        close.isHidden = true
+        close.toolTip = "Close (Esc)"
+        close.setAccessibilityLabel("Close")
+        addSubview(close)
     }
 
+    public override var mouseDownCanMoveWindow: Bool { !isRouteModal }
+    public override func mouseDown(with event: NSEvent) { if !isRouteModal { super.mouseDown(with: event) } }
+    public override func mouseUp(with event: NSEvent) { if !isRouteModal { super.mouseUp(with: event) } }
+    public override func updateLayer() {
+        super.updateLayer()
+        layer?.borderWidth = 0
+    }
+    public override var wantsUpdateLayer: Bool { false }
+    public override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        if isRouteModal {
+            Themed.color(\.border).setFill()
+            NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1).fill()
+        }
+    }
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsLayout = true }
 
     public override func layout() {
         super.layout()
-        let y = (Self.height - 20) / 2
-        var x = contentStart
+        let y = (barHeight - 20) / 2
+        var x = isRouteModal ? 20 : contentStart
         // Dither: Capy's settings have no breadcrumb, the page shows its own title (`SettingsPageView.ditherTitle`).
         let crumbless = section != nil && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         current.isHidden = crumbless
@@ -817,6 +880,7 @@ public final class SettingsHeaderView: TopbarDragView {
         }
         current.frame = NSRect(x: x, y: y, width: max(0, min(ceil(current.textWidth) + 1, bounds.width - 20 - x)), height: 20)
         let rw = restore.intrinsicContentSize.width + 8
-        restore.frame = NSRect(x: bounds.width - 20 - rw, y: (Self.height - 24) / 2, width: rw, height: 24)
+        close.frame = NSRect(x: bounds.width - 8 - 28, y: (barHeight - 28) / 2, width: 28, height: 28)
+        restore.frame = NSRect(x: bounds.width - (isRouteModal ? 40 : 20) - rw, y: (barHeight - 24) / 2, width: rw, height: 24)
     }
 }

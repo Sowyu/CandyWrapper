@@ -304,7 +304,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.orchestrator = orchestrator
         orchestrator.showPane = { [weak commands] view in commands?.openUtilityPage(.orchestrator, view: view) }
         orchestrator.closePane = { [weak commands] in commands?.closeUtilityPage() }
-        orchestrator.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open(.orchestrator) }
+        orchestrator.openSettings = { [weak settings, weak commands] in commands?.prepareForSettings(); settings?.open(.orchestrator) }
         orchestrator.toast = { [weak threads] title, message, kind in threads?.panel.toasts.show(ToastView(title: title, message: message, kind: kind)) }
         let connectors = ConnectorsController(environments: environments)
         self.connectors = connectors
@@ -312,9 +312,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         commands.onOrchestratorHidden = { [weak orchestrator] in orchestrator?.paneClosed() }
         commands.extraMenuItems = { [weak orchestrator] id in orchestrator?.menuItems(id) ?? [] }
         commands.performExtra = { [weak orchestrator] choice, id in orchestrator?.perform(choice, id) ?? false }
-        sidebar.actions.openSettings = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open() }
-        sidebar.accountRow.onOpenMachines = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.open(.connections) }
-        sidebar.actions.openAutomations = { [weak settings, weak commands] in commands?.closeUtilityPage(); settings?.show(.scheduledTasks) }
+        sidebar.actions.openSettings = { [weak settings, weak commands] in commands?.prepareForSettings(); settings?.open() }
+        sidebar.accountRow.onOpenMachines = { [weak settings, weak commands] in commands?.prepareForSettings(); settings?.open(.connections) }
+        sidebar.actions.openAutomations = { [weak settings, weak commands] in commands?.prepareForSettings(); settings?.show(.scheduledTasks) }
         let updater = UpdateController()
         self.updater = updater
         let runtime = RuntimeUpdateController(window: window, current: { [weak self, weak environments, weak threads] in
@@ -547,7 +547,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         threads.composer.scratchEnvironment = { [weak palette] in palette?.scratchTargetEnvironmentId }
         threads.composer.onStartWithoutProject = { [weak palette] env in palette?.startScratchThread(env) }
         threads.composer.onManageProjects = { [weak commands, weak settings] in
-            commands?.closeUtilityPage()
+            commands?.prepareForSettings()
             settings?.open()
             settings?.show(.projects)
         }
@@ -573,7 +573,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environments.observe(providerConnectionChanged)
         providerConnectionChanged()
         sidebar.providerUpdatePill.onOpenSettings = { [weak settings, weak commands] in
-            commands?.closeUtilityPage()
+            commands?.prepareForSettings()
             settings?.open()
             settings?.show(.providers)
         }
@@ -632,7 +632,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard threads.composer.hasDraft(draftId) else { return false }
                 settings.close(); commands.closeUtilityPage(); sidebar.actions.openDraft(draftId)
             case .settings(let section):
-                commands.closeUtilityPage(); settings.open(); settings.show(section)
+                commands.prepareForSettings(); settings.open(); settings.show(section)
             case .pullRequests:
                 settings.close(); commands.openUtilityPage(.pullRequests)
             case .usage:
@@ -1047,7 +1047,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Cmd+, : the settings pages, Connections first while it is the only one built. T3 lands on General.
     @objc func openSettings(_ sender: Any?) {
         mainWindow?.makeKeyAndOrderFront(nil)
-        sidebarCommands?.closeUtilityPage()
+        sidebarCommands?.prepareForSettings()
         settings?.open()
     }
 

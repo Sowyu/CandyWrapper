@@ -108,6 +108,13 @@ public class SettingsPageBase: SettingsStackView {
             let scope = self.context.scope
             let inh = scope.inheritance(keys)
             inheritance.state = inh.state
+            inheritance.hasOverridingProjects = !scope.isProjectScope && scope.projects.contains { project in
+                project.members.contains { member in
+                    guard let settings = scope.connected.first(where: { $0.id == member.environmentId })?.settings else { return false }
+                    let resolved = ProjectSettings.resolve(settings, projectId: member.projectId, legacy: member.legacy)
+                    return keys.contains { resolved.sources[$0] == .project }
+                }
+            }
             inheritance.summary = inh.summary
             inheritance.isHidden = scope.connected.isEmpty
             let inert = scope.inertReason(for: keys)

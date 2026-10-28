@@ -293,12 +293,14 @@ public final class ModalHost: DSView {
         guard let out = context(small.width, small.height), let from = small.data, let to = out.data else { return nil }
         var src = vImage_Buffer(data: from, height: vImagePixelCount(small.height), width: vImagePixelCount(small.width), rowBytes: small.bytesPerRow)
         var dst = vImage_Buffer(data: to, height: vImagePixelCount(out.height), width: vImagePixelCount(out.width), rowBytes: out.bytesPerRow)
-        // Gaussian, sigma 1, cut at 3 sigma: 64 * exp(-x^2 / 2) for x in -3...3. Edges extend, like
+        // Core Image's sigma-1 Gaussian, measured from its response to one bright pixel (center, then
+        // 1, 2 and 3 pixels out); it is a little wider than exp(-x^2 / 2). Edges extend, like
         // `clampedToExtent()`. Premultiplied channels blur correctly as they are.
-        let taps: [Int16] = [1, 9, 39, 64, 39, 9, 1]
-        let kernel = taps.flatMap { a in taps.map { a * $0 } }
-        let divisor = Int32(taps.reduce(0, +)) * Int32(taps.reduce(0, +))
-        let status = vImageConvolve_ARGB8888(&src, &dst, nil, 0, 0, kernel, 7, 7, divisor, nil, vImage_Flags(kvImageEdgeExtend))
+        let half: [Float] = [0.14668, 0.09261, 0.02323, 0.00231]
+        let taps = (-3...3).map { half[abs($0)] }
+        let sum = taps.reduce(0, +)
+        let kernel = taps.flatMap { a in taps.map { a * $0 / (sum * sum) } }
+        let status = vImageConvolveFloatKernel_ARGB8888(&src, &dst, nil, 0, 0, kernel, 7, 7, 0, nil, vImage_Flags(kvImageEdgeExtend))
         return status == kvImageNoError ? out.makeImage() : nil
     }
 
