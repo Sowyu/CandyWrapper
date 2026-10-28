@@ -740,7 +740,12 @@ public enum TimelineRows {
                 }
             }
             // The interrupt result is the marker; the request is transient bookkeeping.
-            if entry.eventItem?.item.type == .runInterruptRequest { continue }
+            if let event = entry.eventItem?.item {
+                // T3 3814 MessagesTimeline.logic.ts:1670-1682: the stopped compaction already has its own divider.
+                if event.type == .runInterruptRequest { continue }
+                if event.type == .runInterruptResult, let run = event.runId,
+                   compactionRuns[run] != nil, compactedRunIds.contains(run) { continue }
+            }
             if let fold = folds[entry.id] {
                 rows.append(TimelineRow(
                     id: "turn-fold:\(fold.runId.rawValue)", createdAt: fold.createdAt,

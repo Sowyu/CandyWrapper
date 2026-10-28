@@ -341,6 +341,7 @@ public enum ComposerLogic {
         /// `resolveActiveThreadRun`: the last `preparing`, `starting`, `running` or `waiting` run.
         public var activeRunId: RunId?
         public var isHeld = false
+        public var promoteSkipsCompaction = false
         public var canPromoteToSteer = false
         /// No run is active on a live thread, so a queued message can start its own turn with
         /// `queued-run.start` (threadWorkflows.ts:156-160, 96f09c6558).
@@ -353,7 +354,7 @@ public enum ComposerLogic {
 
         /// `optimistic`: sent messages the stream hasn't confirmed; the queued ones show as saving.
         /// `canStartQueuedRun`: the server takes `queued-run.start`, which servers before Nightly 3486 reject.
-        public init(projection: ThreadProjection?, optimistic: [ChatMessage] = [], canStartQueuedRun: Bool = true) {
+        public init(projection: ThreadProjection?, optimistic: [ChatMessage] = [], canStartQueuedRun: Bool = true, canSkipCompaction: Bool = false) {
             let saving = optimistic.filter { $0.inputIntent == .queuedTurn }
             guard let p = projection else {
                 items = saving.map { Item(runId: nil, messageId: $0.id, text: $0.text) }
@@ -382,7 +383,11 @@ public enum ComposerLogic {
             let steerable = activeRun?.status == .running && activeRun?.activeAttemptId != nil && p.providerTurns.contains {
                 $0["runAttemptId"]?.stringValue == activeRun?.activeAttemptId?.rawValue && $0["status"]?.stringValue == "running"
             }
-            canPromoteToSteer = steerable && (turns?["supportsActiveSteering"] == .bool(true) || turns?["supportsSteeringByInterruptRestart"] == .bool(true))
+            // T3 3814 threadWorkflows.ts:130-142,170-174. Older runtimes silently ignore this command during compaction.
+            promoteSkipsCompaction = canSkipCompaction && activeRun?.userMessageId.flatMap { messages[$0] }.map {
+                $0.role == "user" && $0.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "/compact"
+            } == true
+            canPromoteToSteer = promoteSkipsCompaction || steerable && (turns?["supportsActiveSteering"] == .bool(true) || turns?["supportsSteeringByInterruptRestart"] == .bool(true))
         }
 
         /// `resolveThreadProviderSession` (threadWorkflows.ts:64-88).
