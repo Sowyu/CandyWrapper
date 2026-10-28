@@ -2109,6 +2109,11 @@ public final class ThreadPanelView: DSView {
         // over the same duration and curve (ChatView.tsx:11213-11224).
         maximize.isHidden = (sheet && !ThreadDesign.uses3814(dark: effectiveAppearance.isDark)) || (!rightPanelOpen && panelGhost == nil)
         maximize.alphaValue = panelSlide.isRunning ? panelSlide.value : 1
+        // The sheet covers the canvas at z=21, including its title bar.
+        let controlsAboveSheet = sheet && ThreadDesign.uses3814(dark: effectiveAppearance.isDark)
+        for control in [header.toggles[2], header.toggles[1], maximize] {
+            control.layer?.zPosition = controlsAboveSheet ? 22 : 0
+        }
         panelResize.frame = NSRect(x: chat - 4, y: panelTop, width: 8, height: max(0, bounds.height - panelTop))
         if rightPanelOpen || panelGhost != nil {
             // The window's panel controls: `mr-px` and 12px from the right, `gap-1`.

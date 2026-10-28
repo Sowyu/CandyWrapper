@@ -1,5 +1,6 @@
 import AppKit
 import Testing
+import DesignSystem
 import T3Protocol
 import T3Store
 @testable import Features
@@ -51,6 +52,22 @@ struct PanelCompletionTests {
         #expect(panel.handleRightPanelSheetKey(escape))
         #expect(!panel.panelState.isOpen)
     }
+    @Test func narrowSheetOffersAnActionableMaximizeControl() throws {
+        let old = ThemeRuntime.input; ThemeRuntime.apply(.init()); defer { ThemeRuntime.apply(old) }
+        let panel = ThreadPanelView(frame: NSRect(x: 0, y: 0, width: 900, height: 700))
+        panel.referenceViewportWidth = 900
+        panel.mutatePanel { $0.open(.diff); return [] }
+        panel.layoutSubtreeIfNeeded()
+        #expect(panel.rightPanelSheetOpen)
+        let maximize = try #require(panel.subviews.compactMap { $0 as? ToggleView }.first { $0.accessibilityLabel() == "Maximize panel" })
+        #expect(!maximize.isHidden)
+        maximize.performAction()
+        panel.layoutSubtreeIfNeeded()
+        #expect(panel.rightPanelMaximized)
+        #expect(!panel.rightPanelSheetOpen)
+        #expect(maximize.accessibilityLabel() == "Restore panel size")
+    }
+
     @Test func threeDResourcesAreVisibilityScoped() {
         let stream = DevicePanelStreamView()
         #expect(stream.threeDView == nil)
