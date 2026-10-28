@@ -173,7 +173,7 @@ public final class ComposerPickers {
             accessButton.paddingOverride = (6, 8)
             modelButton.textOnly = true; traitsButton.textOnly = true
             modelButton.paddingOverride = (8, 4); traitsButton.paddingOverride = (bars && effort?.special == false ? 2 : 0, 4)
-            traitsButton.mutedLabel = true
+            traitsButton.mutedLabel = effort.map { !bars || $0.special } ?? false
             accessButton.icon = IconView(definition: current.runtimeMode == .fullAccess ? Self.fullAccessGlyph : mode.icon.definition, size: 16)
             controlsView.showsBuild = context.interactionModeEnabled(current.entry?.provider)
             controlsView.build.emphasized = current.interactionMode == .plan
@@ -578,9 +578,12 @@ public final class PickerControlsView: DSView {
     /// Each block is its 5pt separator, `gap-1` and the trigger (`flex w-max gap-1`); under Dither just the trigger.
     var measurement: ComposerFooterLayout.Measurement {
         let b = blocks.map(\.1), sep: CGFloat = noSeparators ? 0 : 9
+        // 3824 TraitsPicker.tsx:653-655: -ms-1 reduces the effort block's flow width too.
+        let modern = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
+        func margin(_ control: ComposerControlView) -> CGFloat { modern && control === traits ? -4 : 0 }
         return ComposerFooterLayout.Measurement(gap: ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? 2 : 4, naturalFixedWidth: model.naturalWidth + (showsBuild ? build.naturalWidth + 2 : 0), minimumFixedWidth: model.minimumWidth + (showsBuild ? build.naturalWidth + 2 : 0),
-                                                blockWidths: b.map { sep + $0.width(showingLabel: !($0 === access && permissionsIconOnly)) },
-                                                iconOnlyBlockWidths: b.map { sep + $0.width(showingLabel: false) },
+                                                blockWidths: b.map { sep + margin($0) + $0.width(showingLabel: !($0 === access && permissionsIconOnly)) },
+                                                iconOnlyBlockWidths: b.map { sep + margin($0) + $0.width(showingLabel: false) },
                                                 overflowWidth: overflow.naturalWidth)
     }
 
@@ -634,8 +637,8 @@ public final class PickerControlsView: DSView {
         func natural(_ v: NSView) -> CGFloat { (v as? ComposerControlView)?.naturalWidth ?? 5 }
         let modern = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
         let gap: CGFloat = modern ? 2 : 4
-        let fixed = items.dropFirst().map(natural).reduce(0, +) + CGFloat(items.count - 1) * gap
-        // Fractional widths like CSS; boxes snap to device pixels the way Chromium paints them.
+        let fixed = items.dropFirst().map { natural($0) - (modern && $0 === traits ? 4 : 0) }.reduce(0, +) + CGFloat(items.count - 1) * gap
+        // Default controls retain CSS fractions; the older themes keep their backing-pixel grid.
         func snap(_ v: CGFloat) -> CGFloat { (v * 2).rounded() / 2 }
         var x: CGFloat = modern ? max(0, bounds.width - min(model.naturalWidth, max(0, bounds.width - fixed)) - fixed) : 0
         for v in items {
@@ -643,7 +646,7 @@ public final class PickerControlsView: DSView {
             if v === model { w = max(model.minimumWidth, min(w, bounds.width - fixed)) }
             let h: CGFloat = v is ComposerControlView ? 28 : 16
             if modern && v === traits { x -= 4 }
-            v.frame = NSRect(x: snap(x), y: (bounds.height - h) / 2, width: snap(x + w) - snap(x), height: h)
+            v.frame = NSRect(x: modern ? x : snap(x), y: (bounds.height - h) / 2, width: modern ? w : snap(x + w) - snap(x), height: h)
             x += w + gap
         }
         if fit != old { onFitChange?() }

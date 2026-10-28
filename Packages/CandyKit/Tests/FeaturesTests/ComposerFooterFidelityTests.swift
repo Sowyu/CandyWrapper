@@ -43,7 +43,7 @@ struct ComposerFooterFidelityTests {
                 let p = try PickersFidelityTests.pickers()
                 if native["kind"] == "cluster" {
                     let iconOnly = Int(native["iconOnly"]!)!, hidden = Int(native["hidden"]!)!
-                    if native["bars"] == "true" { p.traitsButton.icon = ComposerEffortGlyphView(.init(count: 4, filled: 2, label: "Medium", special: false)); p.traitsButton.title = ""; p.traitsButton.paddingOverride = (2, 4) }
+                    if native["bars"] == "true" { p.traitsButton.icon = ComposerEffortGlyphView(.init(count: 4, filled: 2, label: "Medium", special: false)); p.traitsButton.title = ""; p.traitsButton.paddingOverride = (2, 4); p.traitsButton.mutedLabel = false }
                     let v = Self.fitted(p, iconOnly: iconOnly, hidden: hidden)
                     #expect(v.fit == ComposerFooterLayout.Fit(hiddenCount: hidden, iconOnlyCount: iconOnly))
                     // The reference starts at the first block's separator, one gap after the model.

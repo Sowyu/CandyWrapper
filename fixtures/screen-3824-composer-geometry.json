@@ -1,0 +1,45 @@
+{
+  "sourceVersion": "v0.1.4-nightly.20261028.3824",
+  "plan": "design/reference-3824/plans/main.json, 03c-kitchen-sink-bottom",
+  "viewport": {
+    "width": 1100,
+    "height": 780,
+    "scale": 2
+  },
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "controls": [
+    {
+      "text": "Haiku 5.5",
+      "rect": {
+        "x": 842.0703125,
+        "y": 721,
+        "width": 98.046875,
+        "height": 28
+      },
+      "font": "500 14px / 20px -apple-system, \"system-ui\", \"Inter Variable\", \"Segoe UI\", system-ui, sans-serif"
+    },
+    {
+      "text": "Medium",
+      "rect": {
+        "x": 938.1171875,
+        "y": 721,
+        "width": 58.8828125,
+        "height": 28
+      },
+      "font": "500 14px / 20px -apple-system, \"system-ui\", \"Inter Variable\", \"Segoe UI\", system-ui, sans-serif"
+    },
+    {
+      "text": "Medium",
+      "rect": {
+        "x": 939.1171875,
+        "y": 724.0625,
+        "width": 52.8828125,
+        "height": 21.8671875
+      },
+      "font": "500 14px / 20px -apple-system, \"system-ui\", \"Inter Variable\", \"Segoe UI\", system-ui, sans-serif"
+    }
+  ]
+}

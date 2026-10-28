@@ -5,11 +5,10 @@ import T3Protocol
 import T3Store
 @testable import Features
 
-/// The composer pickers against design/reference 13 (model picker), 41 (traits menu) and 42 (access
-/// select), light and dark, plus the footer controls against the closed footer in 03c. Each popup
-/// is cropped at its border box from the capture; the data is the recorded server config in
-/// fixtures/transcripts/01-basic.jsonl with Claude Haiku 5.5 selected, as in the captures. Writes
-/// ref, ours and diff PNGs plus report-pickers.html to `Fidelity.root`.
+/// The 3824 model picker (13), combined effort/permissions menus (41, 53), and closed footer
+/// controls (03c). Popups use their border boxes at their new anchor positions. The model catalog
+/// comes from the recorded 3814 sandbox reused for the 3824 captures.
+/// Writes ref, ours and diff PNGs plus report-pickers.html to `Fidelity.root`.
 @MainActor @Suite(.fidelity)
 struct PickersFidelityTests {
     /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
@@ -18,8 +17,8 @@ struct PickersFidelityTests {
     ]
     static let out = Fidelity.root.appendingPathComponent("pickers")
 
-    static func recordedConfig() throws -> ServerProviderConfig {
-        let text = try String(contentsOf: SidebarFidelityTests.repo.appendingPathComponent("fixtures/transcripts/01-basic.jsonl"), encoding: .utf8)
+    static func recordedConfig(transcript: String = "01-basic") throws -> ServerProviderConfig {
+        let text = try String(contentsOf: SidebarFidelityTests.repo.appendingPathComponent("fixtures/transcripts/\(transcript).jsonl"), encoding: .utf8)
         var configId: String?
         for line in text.split(separator: "\n") {
             let record = try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
@@ -47,10 +46,10 @@ struct PickersFidelityTests {
     }
 
     /// The popup on the page background, sized to the reference's border box.
-    static func render(_ view: NSView, size: CGSize, backdrop: NSColor, dark: Bool) -> NSBitmapImageRep {
+    static func render(_ view: NSView, size: CGSize, backdrop: NSColor, dark: Bool, contentFrame: CGRect? = nil) -> NSBitmapImageRep {
         let container = DSView(frame: NSRect(origin: .zero, size: size))
         container.layer?.backgroundColor = backdrop.cgColor
-        view.frame = container.bounds
+        view.frame = contentFrame ?? container.bounds
         container.addSubview(view)
         return Snapshot.image(of: container, size: size, scale: 2, dark: dark)
     }
@@ -70,7 +69,8 @@ struct PickersFidelityTests {
         let make: @MainActor (ComposerPickers) -> (NSView, CGSize)
     }
 
-    static let cases: [Case] = [
+    // Freeze the 979c85e5 Redesign inputs independently of the default-theme screen migration.
+    static let redesignCases: [Case] = [
         Case(reference: "13-model-picker", rect: CGRect(x: 317, y: 411, width: 362, height: 298), backdropAt: CGPoint(x: 314, y: 420)) { p in
             let config = try! PickersFidelityTests.recordedConfig()
             let view = ModelPickerView(catalog: ProviderCatalog(config.providers), favorites: [], active: "claudeAgent", activeModel: "claude-haiku-5-5")
@@ -91,13 +91,37 @@ struct PickersFidelityTests {
         },
     ]
 
+    static let cases: [Case] = [
+        Case(reference: "13-model-picker", rect: CGRect(x: 578, y: 434, width: 362, height: 283), backdropAt: CGPoint(x: 575, y: 440)) { p in
+            let config = try! PickersFidelityTests.recordedConfig(transcript: "24-nightly-3814")
+            let view = ModelPickerView(catalog: ProviderCatalog(config.providers), favorites: [], active: "claudeAgent", activeModel: "claude-haiku-5-5")
+            // The capture focuses the search field on open (blue underline).
+            var focused = view.search.state
+            focused.focused = true
+            view.search.previewState(focused)
+            let popup = PickerPopupView(view)
+            return (popup, popup.popupSize)
+        },
+        // 3824 ComposerControlsBar.tsx:169-190 always puts Permissions in the effort menu.
+        // The old standalone 42 access select is retired; its replacement is the explicit 53 case.
+        // The 3824 capture plan also routes screen 42 to that same combined menu.
+        Case(reference: "41-traits-picker", rect: CGRect(x: 699, y: 382, width: 298, height: 335), backdropAt: CGPoint(x: 696, y: 390)) { p in
+            let popup = PickerPopupView(p.optionsMenu(includingTraits: true))
+            return (popup, popup.popupSize)
+        },
+        Case(reference: "53-effort-menu-permissions", rect: CGRect(x: 699, y: 382, width: 298, height: 335), backdropAt: CGPoint(x: 696, y: 390)) { p in
+            let popup = PickerPopupView(p.optionsMenu(includingTraits: true))
+            return (popup, popup.popupSize)
+        },
+    ]
+
     @Test func popupsAgainstReferences() throws {
         try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
         var lines: [String] = [], cases: [(String, Double)] = [], images = ""
         for c in Self.cases {
             for theme in ["light", "dark"] {
                 let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
-                    "design/reference/\(c.reference).\(theme).png"))))
+                    "design/reference-3824/\(c.reference).\(theme).png"))))
                 let ref = Self.crop(full, c.rect)
                 let (view, natural) = c.make(try Self.pickers())
                 let ours = Self.render(view, size: c.rect.size, backdrop: Self.color(full, c.backdropAt.x, c.backdropAt.y), dark: theme == "dark")
@@ -115,15 +139,18 @@ struct PickersFidelityTests {
                 #expect(abs(natural.width - c.rect.width) < 1 && abs(natural.height - c.rect.height) < 1, "\(line)")
             }
         }
-        // The closed footer controls in 03c: model, traits, access from the model trigger's left edge.
+        // The closed footer controls in 03c: model and effort; default permissions live in its menu.
         for theme in ["light", "dark"] {
             let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
-                "design/reference/03c-kitchen-sink-bottom.\(theme).png"))))
-            let p = try Self.pickers()
+                "design/reference-3824/03c-kitchen-sink-bottom.\(theme).png"))))
+            let p = try Screen3824Fixtures.pickers()
             let width = p.controlsView.intrinsicContentSize.width
-            let rect = CGRect(x: 317, y: 713, width: (width * 2).rounded(.up) / 2, height: 28)
+            // Preserve the official fractional anchor inside its enclosing 2x pixel crop.
+            // Measured boxes and fonts are in fixtures/screen-3824-composer-geometry.json.
+            let rect = CGRect(x: 841.5, y: 721, width: (width * 2).rounded(.up) / 2, height: 28)
             let ref = Self.crop(full, rect)
-            let ours = Self.render(p.controlsView, size: rect.size, backdrop: Self.color(full, 760, 727), dark: theme == "dark")
+            let ours = Self.render(p.controlsView, size: rect.size, backdrop: Self.color(full, 800, 730), dark: theme == "dark",
+                                   contentFrame: CGRect(x: 842.0703125 - rect.minX, y: 0, width: width, height: 28))
             let (total, _, diff) = SidebarFidelityTests.compare(ref, ours, bands: [])
             let base = "03c-footer-controls.\(theme)"
             try ref.representation(using: .png, properties: [:])!.write(to: Self.out.appendingPathComponent("\(base).ref.png"))
