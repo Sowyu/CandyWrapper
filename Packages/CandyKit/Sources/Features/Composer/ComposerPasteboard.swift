@@ -8,7 +8,7 @@ public struct ComposerIncomingFile: Sendable {
     public init(url: URL, name: String? = nil, mimeType: String? = nil) {
         self.url = url
         self.name = name ?? (url.lastPathComponent.isEmpty ? "file" : url.lastPathComponent)
-        self.mimeType = mimeType ?? ComposerAttachmentRules.mimeType(for: url)
+        self.mimeType = ComposerAttachmentRules.fileMimeType(name: self.name, mimeType: mimeType ?? ComposerAttachmentRules.mimeType(for: url))
     }
 }
 
