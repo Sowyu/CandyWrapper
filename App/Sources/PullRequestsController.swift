@@ -261,6 +261,10 @@ final class PullRequestDetailBinding {
     /// viewed marks; later slices follow `nextCursor` (PullRequestCodeTab.tsx:254-340, 620-640).
     private func loadCode() {
         guard let ref = reference, let d = detail, d.capabilities.diff else { return }
+        // A commit opened from the timeline or left selected across a force-push may no longer be part of the
+        // pull request: read it as All commits instead of requesting its diff (PullRequestCodeTab.tsx:316-322 at 3814).
+        // ponytail: commits arrive with the activity, so an empty list keeps the selection until it loads
+        if let c = commit, !d.commits.isEmpty, !d.commits.contains(where: { $0.oid == c }) { commit = nil }
         let key = "\(ref.projectId):\(ref.repository):\(ref.number):\(commit ?? "all"):\(d.updatedAt)"
         guard patchKey != key else { return }
         patchKey = key
