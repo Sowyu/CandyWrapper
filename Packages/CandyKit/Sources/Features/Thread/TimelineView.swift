@@ -473,6 +473,8 @@ public final class TimelineView: DSView {
         OpenTiming.end("first frame", "\(items.count) rows, \(visible.count) row views, \(createdRowViews) created")
     }
 
+    public func releaseFollowForNavigation() { followsEnd = false }
+
     /// Jump to a server search entry already present in the window of history.
     @discardableResult
     public func revealFindEntry(_ entryId: String) -> Bool {
