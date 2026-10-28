@@ -154,6 +154,18 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
 
     /// Whether the grid sits on the bottom edge (scrollback exists), as last laid out.
     private var anchoredBottom = false
+    private var sharedCols: Int?
+    private var sharedRows: Int?
+    private var measuredGrid: (cols: Int, rows: Int)?
+
+    /// Render the shared PTY grid while continuing to report this viewer's full available size.
+    /// T3 3814: apps/web/src/terminal/ghostty/surface.ts:896-934.
+    public func setSharedGrid(cols: Int?, rows: Int?) {
+        guard sharedCols != cols || sharedRows != rows else { return }
+        sharedCols = cols; sharedRows = rows
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+    }
 
     /// `terminalContentOriginY` (surface.ts:152-169, 1900-1915): at the top like a fresh terminal until scrollback
     /// exists, then on the bottom edge with the sub-row remainder above row 0, so the prompt stays put while the
@@ -161,6 +173,19 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
     public override func layout() {
         super.layout()
         var frame = bounds.insetBy(dx: Self.padding, dy: Self.padding)
+        let size = terminal.getOptimalFrameSize()
+        let current = terminal.getTerminal()
+        let cellWidth = size.width / CGFloat(max(1, current.cols))
+        let cellHeight = size.height / CGFloat(max(1, current.rows))
+        if cellWidth > 0, cellHeight > 0 {
+            let local = (cols: max(1, Int(frame.width / cellWidth)), rows: max(1, Int(frame.height / cellHeight)))
+            if measuredGrid?.cols != local.cols || measuredGrid?.rows != local.rows {
+                measuredGrid = local
+                onResize?(local.cols, local.rows)
+            }
+            if let sharedCols { frame.size.width = CGFloat(max(1, min(local.cols, sharedCols))) * cellWidth + 0.01 }
+            if let sharedRows { frame.size.height = CGFloat(max(1, min(local.rows, sharedRows))) * cellHeight + 0.01 }
+        }
         anchoredBottom = terminal.canScroll
         let rows = max(1, terminal.getTerminal().rows)
         let cell = terminal.getOptimalFrameSize().height / CGFloat(rows)
@@ -202,7 +227,7 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
 
     /// Reports the current grid again (after the session became writable).
     public func resendSize() {
-        let t = terminal.getTerminal()
+        let t = measuredGrid ?? grid
         onResize?(t.cols, t.rows)
     }
 
@@ -224,7 +249,7 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
     // MARK: TerminalViewDelegate
 
     public func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
-        onResize?(newCols, newRows)
+        if sharedCols == nil && sharedRows == nil { onResize?(newCols, newRows) }
     }
 
     public func setTerminalTitle(source: TerminalView, title: String) {}

@@ -5,6 +5,20 @@ import T3Protocol
 
 /// The drawer's state, the sidebar's terminal activity and the attach stream's state machine.
 struct TerminalStateTests {
+    @Test func sharedGridFollowsSnapshotsAndActivityButOldSnapshotsResetIt() {
+        var model = TerminalSessionModel()
+        var snapshot = Self.snapshot(.running)
+        snapshot.cols = 80; snapshot.rows = 24
+        _ = model.apply(.snapshot(snapshot))
+        #expect(model.cols == 80 && model.rows == 24)
+        let outcome = model.apply(.activity(hasRunningSubprocess: true, label: "top", cols: 60, rows: 20))
+        #expect(model.cols == 60 && model.rows == 20 && outcome.actions.isEmpty && !outcome.resendSize)
+        _ = model.apply(.activity(hasRunningSubprocess: false, label: "shell"))
+        #expect(model.cols == 60 && model.rows == 20)
+        _ = model.apply(.restarted(Self.snapshot(.running)))
+        #expect(model.cols == nil && model.rows == nil)
+    }
+
     static func snapshot(_ status: TerminalSessionStatus, history: String = "") -> TerminalSessionSnapshot {
         TerminalSessionSnapshot(threadId: "t", terminalId: "term-1", cwd: "/repo", status: status, history: history, label: "zsh", updatedAt: "x")
     }

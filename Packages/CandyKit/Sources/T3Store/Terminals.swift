@@ -352,6 +352,8 @@ public struct TerminalSessionModel: Sendable, Equatable {
     public private(set) var status: Status = .closed
     public private(set) var label = ""
     public private(set) var hasRunningSubprocess = false
+    public private(set) var cols: Int?
+    public private(set) var rows: Int?
     /// Events applied since the attach began (`version`); 0 before the first snapshot.
     public private(set) var version = 0
     private var exitHandled = false
@@ -375,6 +377,7 @@ public struct TerminalSessionModel: Sendable, Equatable {
         case .snapshot(let snapshot), .restarted(let snapshot):
             status = Status(snapshot.status)
             label = snapshot.label
+            cols = snapshot.cols; rows = snapshot.rows
             out.actions.append(.reset(snapshot.history))
             out.resendSize = status == .running
         case .output(let data):
@@ -389,9 +392,11 @@ public struct TerminalSessionModel: Sendable, Equatable {
         case .error(let message):
             status = .error
             out.actions.append(.message(message))
-        case .activity(let running, let newLabel):
+        case .activity(let running, let newLabel, let newCols, let newRows):
             hasRunningSubprocess = running
             label = newLabel
+            if let newCols { cols = newCols }
+            if let newRows { rows = newRows }
             return out
         case .unknown:
             return out
