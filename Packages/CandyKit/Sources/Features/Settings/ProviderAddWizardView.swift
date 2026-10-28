@@ -231,11 +231,20 @@ public final class ProviderAddDriverGrid: DSView {
             let b = ProviderAddDriverChoice(driver: id, title: title, selected: id == selected)
             b.action = { [weak self] in self?.onSelect?(id) }; buttons.append(b); addSubview(b)
         }
+        frame.size.height = intrinsicContentSize.height
     }
-    public override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: CGFloat((buttons.count + 1) / 2) * 56) }
+    private var dither: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    public override var intrinsicContentSize: NSSize {
+        let rows = CGFloat((buttons.count + 1) / 2)
+        return NSSize(width: NSView.noIntrinsicMetric, height: dither ? rows * 56 : max(0, rows * 44 + max(0, rows - 1) * 12))
+    }
     public override func layout() {
-        super.layout(); let width = (bounds.width - 8) / 2
-        for (i, b) in buttons.enumerated() { b.frame = NSRect(x: CGFloat(i % 2) * (width + 8), y: CGFloat(i / 2) * 56, width: width, height: 48) }
+        super.layout()
+        let gap: CGFloat = dither ? 8 : 12
+        let width = (bounds.width - gap) / 2
+        for (i, b) in buttons.enumerated() {
+            b.frame = NSRect(x: CGFloat(i % 2) * (width + gap), y: CGFloat(i / 2) * 56, width: width, height: dither ? 48 : 44)
+        }
     }
 }
 
