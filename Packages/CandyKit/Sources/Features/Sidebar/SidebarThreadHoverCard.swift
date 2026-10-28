@@ -54,7 +54,7 @@ public final class SidebarThreadHoverCardView: DSView, PopupContent {
         layer?.addSublayer(decoration)
         layer?.masksToBounds = false
         var box = BoxStyle()
-        box.radius = 8
+        box.radius = DesignGeometry.radius(8, in: self)
         box.fill = PopupSurface.glassFill
         box.border = Themed.color(\.contrastForeground, 0.1)
         box.shadows = [BoxShadow(y: 20, blur: 25, spread: -5, color: Themed.black(0.25)), BoxShadow(y: 8, blur: 10, spread: -6, color: Themed.black(0.25))]
@@ -188,7 +188,7 @@ public final class SidebarThreadHoverCardView: DSView, PopupContent {
 
     public override func updateLayer() {
         // Redesign: a card, 12 like the popup blur under it; T3's 8 elsewhere.
-        let radius: CGFloat = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.cardRadius : 8
+        let radius: CGFloat = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.cardRadius : DesignGeometry.radius(8, in: self)
         if decoration.boxStyle.radius != radius { decoration.boxStyle.radius = radius }
         decoration.setNeedsDisplay()
         title.color = Themed.color(\.foreground)

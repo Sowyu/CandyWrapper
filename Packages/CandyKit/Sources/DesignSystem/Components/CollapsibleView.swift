@@ -155,13 +155,14 @@ public final class CollapsibleSectionHeaderView: ControlView {
         x += labelWidth + 8
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        rule.isHidden = accessory != nil && !DesignGeometry.usesClassic(self)
         rule.frame = CGRect(x: x, y: midY - 0.5, width: max(0, right - 8 - x), height: 1)
         chevron.position = CGPoint(x: bounds.width - 8 - 6, y: midY)
         CATransaction.commit()
     }
 
     private func rotateChevron(animated: Bool) {
-        let angle: CGFloat = isExpanded ? .pi : 0
+        let angle: CGFloat = DesignGeometry.usesClassic(self) ? (isExpanded ? .pi : 0) : (isExpanded ? 0 : -.pi / 2)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         if animated, window != nil, !Motion.reduced {
@@ -181,18 +182,20 @@ public final class CollapsibleSectionHeaderView: ControlView {
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         decoration.setNeedsDisplay()
+        rotateChevron(animated: false)
+        restyle()
     }
 
     private func restyle() {
         let text: NSColor, line: NSColor
         switch tone {
         case .muted:
-            text = Themed.color(\.contrastSidebarMutedForeground, 0.6)
-            line = Themed.color(\.contrastSidebarBorder, 0.6)
+            text = Themed.color(\.contrastSidebarMutedForeground, DesignGeometry.usesClassic(self) ? 0.6 : 1)
+            line = Themed.color(\.contrastSidebarBorder, DesignGeometry.usesClassic(self) ? 0.6 : 0.5)
         case .info:
             let b4 = Tokens.baseColors["blue-400"]!
-            text = Themed.color(light: Tokens.baseColors["blue-600"]!, 1, dark: b4, 1)
-            line = Themed.color(light: Tokens.baseColors["blue-500"]!, 0.2, dark: b4, 0.15)
+            text = DesignGeometry.usesClassic(self) ? Themed.color(light: Tokens.baseColors["blue-600"]!, 1, dark: b4, 1) : Themed.color(\.contrastSidebarMutedForeground)
+            line = DesignGeometry.usesClassic(self) ? Themed.color(light: Tokens.baseColors["blue-500"]!, 0.2, dark: b4, 0.15) : Themed.color(\.contrastSidebarBorder, 0.5)
         case .emphasized:
             text = Themed.color(\.contrastSidebarForeground, 0.8)
             line = Themed.color(\.contrastSidebarForeground, 0.25)
@@ -202,7 +205,7 @@ public final class CollapsibleSectionHeaderView: ControlView {
         }
         label.color = text
         var box = BoxStyle()
-        box.radius = 8
+        box.radius = DesignGeometry.radius(8, in: self)
         // `ring-inset` is in the class list, but Chromium paints this ring outside the box with T3's
         // compiled CSS (fidelity 18.9% inset vs 1.7% outside), so we copy the render, not the class name.
         if state.focusVisible { box.shadows = [BoxShadow(spread: 2, color: Themed.color(\.ring, 0.7))] }

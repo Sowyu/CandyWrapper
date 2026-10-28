@@ -18,6 +18,8 @@ public final class PopoverView: DSView, PopupContent {
     public let content: NSView
     public let padding: Padding
     public let width: Width
+    private let beforeLine: Bool
+    private let tooltipStyle: Bool
     private let decoration = BoxDecorationLayer()
     private let dropShadow = PopupShadowLayer()
     /// Keys for the content first (an editor's Enter and Escape); true when used.
@@ -30,20 +32,26 @@ public final class PopoverView: DSView, PopupContent {
         self.content = content
         self.padding = padding
         self.width = width
+        self.beforeLine = beforeLine
+        self.tooltipStyle = tooltipStyle
         super.init(frame: .zero)
         decoration.host = self
         dropShadow.host = self
         layer?.addSublayer(dropShadow)
         layer?.addSublayer(decoration)
         layer?.masksToBounds = false
-        let radius: CGFloat = tooltipStyle ? 8 : 10
+        applySurface()
+        addSubview(content)
+    }
+
+    private func applySurface() {
+        let radius = DesignGeometry.radius(tooltipStyle ? 8 : 10, in: self)
         let look = PopupSurface.glass.split(radius: radius, beforeLine: beforeLine)
         decoration.boxStyle = look.box
         dropShadow.radius = radius
         dropShadow.shadows = tooltipStyle
             ? [BoxShadow(y: 4, blur: 6, spread: -1, color: Themed.black(0.05)), BoxShadow(y: 2, blur: 4, spread: -2, color: Themed.black(0.05))]
             : look.shadows
-        addSubview(content)
     }
 
     public override var intrinsicContentSize: NSSize {
@@ -65,6 +73,7 @@ public final class PopoverView: DSView, PopupContent {
         super.viewDidChangeEffectiveAppearance()
         decoration.setNeedsDisplay()
         dropShadow.update(boxSize: bounds.size)
+        applySurface()
     }
 
     /// Opens under `trigger`: bottom, center, 4px, scale .98 and fade in over 150ms, and the same out (T3 3105 f570294df).

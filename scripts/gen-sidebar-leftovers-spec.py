@@ -1,3 +1,4 @@
+# Reference stylesheet and component primitives: T3 Nightly 3814.
 """Writes design/component-reference/sidebar-leftovers.json for scripts/component-reference: the sidebar states
 WP7.9 added. The empty list's Add project button, the inline rename field, the provider update pill, the thread
 hover card and the thread drag ghost.
@@ -103,6 +104,14 @@ add("pill.error", pill("error", "triangle-alert", "Claude update failed", True),
 add("hover-card", CARD, {"kind": "hover-card"}, box=False)
 add("ghost", ghost("Ship the sidebar virtualization", 1), {"kind": "ghost", "count": "1"}, box=False)
 add("ghost.many", ghost("Port the timestamp formatter", 3), {"kind": "ghost", "count": "3"}, box=False)
+
+# SidebarProjectFolderHeader.tsx:65-109 (#21039): open and folded rows.
+for expanded in [True, False]:
+    meta = '' if expanded else '<span class="size-1.5 shrink-0 rounded-full bg-warning"></span><span class="shrink-0 text-xs tabular-nums text-sidebar-muted-foreground">3</span>'
+    html = ('<div class="group/project-folder relative list-none"><button type="button" class="flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-(--control-radius) px-(--sidebar-row-content-inset) text-left outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">'
+            + favicon('candywrapper', 'size-4 shrink-0') + '<span class="min-w-0 flex-1 truncate text-sm font-medium text-sidebar-foreground/90">candywrapper</span>' + meta
+            + lucide('chevron-down', 'size-3 shrink-0 text-sidebar-muted-foreground transition-transform' + ('' if expanded else ' -rotate-90')) + '</button></div>')
+    add('folder.' + ('open' if expanded else 'closed'), html, {'kind': 'folder', 'expanded': str(expanded).lower()})
 
 out = {"component": "sidebar-leftovers", "source": "apps/web/src/components/Sidebar.tsx", "states": ["rest", "hover", "focus-visible"],
        "themes": ["light", "dark"], "cases": cases}

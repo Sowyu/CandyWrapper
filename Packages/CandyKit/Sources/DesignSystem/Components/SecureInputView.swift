@@ -75,7 +75,7 @@ public final class SecureInputView: DSView, NSTextFieldDelegate {
     }
 
     private func restyle() {
-        decoration.boxStyle = FieldStyles.frame(state: state, radius: 10)
+        decoration.boxStyle = FieldStyles.frame(state: state, radius: DesignGeometry.radius(10, in: self))
     }
 
     public override func viewDidChangeEffectiveAppearance() {
@@ -83,6 +83,7 @@ public final class SecureInputView: DSView, NSTextFieldDelegate {
         field.textColor = Themed.color(\.contrastForeground)
         applyPlaceholder()
         decoration.setNeedsDisplay()
+        restyle()
     }
 
     public override func layout() {

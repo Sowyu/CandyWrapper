@@ -31,6 +31,13 @@ struct SidebarLeftoversFidelityTests {
             row.configure(.noProjects)
             if state == "hover" { var s = row.button.state; s.hovered = true; row.button.previewState(s) }
             return inBox(row, height: SidebarItem.noProjects.height)
+        case "folder":
+            let expanded = n["expanded"] == "true"
+            let row = SidebarProjectHeaderRowView()
+            let model = SidebarProjectHeaderModel(key: "folder", label: "candywrapper", projectTitle: "candywrapper", projectIcon: nil,
+                                                  count: 3, expanded: expanded, folder: true, dot: expanded ? nil : .attention)
+            row.configure(.projectHeader(model))
+            return inBox(row, height: 32)
         case "rename":
             let field = SidebarRenameFieldView()
             field.begin(ThreadId("t"), title: "Create a file named approval-demo.txt")

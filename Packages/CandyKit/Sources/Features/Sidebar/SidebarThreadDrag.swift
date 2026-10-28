@@ -38,7 +38,7 @@ final class SidebarThreadDragGhostView: DSView {
         addSubview(icon)
         addSubview(title)
         more.map(addSubview)
-        layer?.cornerRadius = 10
+        layer?.cornerRadius = DesignGeometry.radius(10, in: self)
         layer?.borderWidth = 1
         // `border px-3 py-2`: 1 + 12 on each side around the icon, `gap-2`, the title and the count; 1 + 8 + 20 + 8 + 1 tall.
         let w = min(288, 1 + 12 + 16 + 8 + title.textWidth + (more.map { 8 + ceil($0.textWidth) + 12 } ?? 0) + 12 + 1)

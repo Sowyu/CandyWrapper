@@ -79,7 +79,7 @@ public final class NumberFieldView: BoxView {
         var state = FieldView.State()
         state.focused = focused
         state.enabled = isEnabled
-        var box = FieldStyles.frame(state: state, radius: 10)
+        var box = FieldStyles.frame(state: state, radius: DesignGeometry.radius(10, in: self))
         if !isEnabled { box.shadows = [] }
         boxStyle = box
     }
@@ -133,7 +133,7 @@ final class NumberStepperView: ControlView {
 
     private func restyle() {
         var box = BoxStyle()
-        box.radius = 9
+        box.radius = DesignGeometry.radius(9, in: self)
         box.corners = corners
         if state.hovered { box.fill = Themed.color(\.accent) }
         decoration.boxStyle = box

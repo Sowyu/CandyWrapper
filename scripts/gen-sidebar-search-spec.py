@@ -85,7 +85,7 @@ def status(text, search):
     return f'<div class="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">{text}</div>'
 
 # The scope popup (Sidebar.tsx:5035-5120) built from combobox.tsx:109-237 and input.tsx, at a fixed 200px width.
-ITEM = "flex min-h-8 in-data-[side=none]:min-w-[calc(var(--anchor-width)+1.25rem)] cursor-pointer items-center rounded-sm px-2 py-1 text-base outline-none not-data-disabled:hover:bg-accent data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-selected:bg-foreground/[0.08] data-selected:text-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground [&[data-highlighted][data-selected]]:bg-accent [&[data-highlighted][data-selected]]:text-accent-foreground data-disabled:opacity-64 sm:min-h-7 sm:text-sm [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+ITEM = "flex min-h-8 in-data-[side=none]:min-w-[calc(var(--anchor-width)+1.25rem)] cursor-pointer items-center rounded-sm px-2 py-1 text-base outline-none not-data-disabled:hover:bg-foreground/[0.09] data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-selected:bg-foreground/[0.06] data-selected:text-foreground data-highlighted:bg-foreground/[0.09] data-highlighted:text-accent-foreground [&[data-highlighted][data-selected]]:bg-foreground/[0.09] [&[data-highlighted][data-selected]]:text-accent-foreground data-disabled:opacity-64 sm:min-h-7 sm:text-sm [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0"
 # button.tsx base + ghost-muted + icon-xs (as in scripts/gen-button-spec.py), then the row's `ml-auto`.
 GHOST_MUTED_ICON_XS = ("[--control-icon-color:currentColor] [&_svg]:-mx-0.5 relative inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[var(--control-radius)] border font-medium text-base outline-none transition-[box-shadow,scale] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--control-radius)-1px)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background sm:text-sm [&_svg:not([class*='text-'])]:text-[var(--control-icon-color)] [&_svg]:pointer-events-none [&_svg]:shrink-0 "
                        "border-transparent text-muted-foreground data-pressed:bg-accent [:hover,[data-pressed]]:bg-accent [:hover,[data-pressed]]:text-foreground "
@@ -95,6 +95,9 @@ INPUT = "h-7.5 w-full min-w-0 rounded-[inherit] px-[calc(--spacing(2.5)-1px)] le
 def scope_item(label, project=None, selected=False, highlighted=False):
     attrs = (' data-selected=""' if selected else "") + (' data-highlighted=""' if highlighted else "")
     icon = favicon(project, "size-4 shrink-0") if project else svg(FOLDER, "size-4 shrink-0")
+    if selected:
+        icon = ('<span class="relative flex shrink-0">' + icon + '<span class="pointer-events-none absolute -right-1 -bottom-1 grid size-3 place-items-center rounded-full bg-primary ring-2 ring-popover">'
+                + svg('<path d="M20 6 9 17l-5-5"></path>', 'size-2 text-primary-foreground').replace('stroke-width="2"', 'stroke-width="4"') + '</span></span>')
     settings = (f'<button type="button" tabindex="-1" aria-hidden="true" class="{GHOST_MUTED_ICON_XS}">{svg(SETTINGS, "size-3.5")}</button>'
                 if project else "")
     return (f'<div role="option" data-slot="combobox-item" class="{ITEM}"{attrs}>'

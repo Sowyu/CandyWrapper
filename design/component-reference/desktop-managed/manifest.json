@@ -32,11 +32,11 @@
     "width" : 398
   },
   "ssh" : {
-    "height" : 112,
+    "height" : 132,
     "width" : 398
   },
   "ssh-expired" : {
-    "height" : 92,
+    "height" : 112,
     "width" : 398
   }
 }

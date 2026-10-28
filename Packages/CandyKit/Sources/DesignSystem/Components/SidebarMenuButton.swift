@@ -82,7 +82,7 @@ public final class SidebarMenuButtonView: ControlView {
     public override func layout() {
         super.layout()
         decoration.layout(boxSize: bounds.size)
-        let padding: CGFloat = isSub ? 8 : size.metrics.padding
+        let padding: CGFloat = isSub ? 8 : (!DesignGeometry.usesClassic(self) && (size == .sm || size == .lg) ? 10 : size.metrics.padding)
         let line: CGFloat = isSub ? (font.pointSize == 12 ? 16 : 20) : size.metrics.line
         if size == .icon && !isSub {
             iconView?.frame = NSRect(x: (bounds.width - 16) / 2, y: (bounds.height - 16) / 2, width: 16, height: 16)
@@ -131,7 +131,7 @@ public final class SidebarMenuButtonView: ControlView {
     }
 
     private func restyle() {
-        var look = SidebarRowStyles.look(kind: kind, size: size, variant: variant, active: isActive, state: state)
+        var look = SidebarRowStyles.look(kind: kind, size: size, variant: variant, active: isActive, state: state, classic: DesignGeometry.usesClassic(self))
         if isHeaderAction, WindowGlass.isActive(for: self) {
             look.box.radius = 10
             look.box.border = nil
@@ -158,7 +158,7 @@ enum SidebarRowStyles {
     struct Look { var box: BoxStyle; var text: NSColor; var icon: NSColor; var font: NSFont; var line: CGFloat }
 
     static func look(kind: SidebarMenuButtonView.Kind, size: SidebarMenuButtonView.Size, variant: SidebarMenuButtonView.Variant,
-                     active: Bool, state: ControlView.State) -> Look {
+                     active: Bool, state: ControlView.State, classic: Bool) -> Look {
         let fg = Themed.color(\.contrastSidebarForeground, sidebar: true)
         var box = BoxStyle()
         box.border = nil
@@ -167,7 +167,7 @@ enum SidebarRowStyles {
         let selectedFill = Themed.color(\.sidebarRowSelected, sidebar: true)
 
         if case .sub(let small) = kind {
-            box.radius = 10
+            box.radius = classic ? 10 : 8
             // Source order: hover, then active, then data-active (selected) last.
             if state.hovered { box.fill = hoverFill }
             if state.active { box.fill = activeFill }
@@ -178,7 +178,7 @@ enum SidebarRowStyles {
         }
 
         let m = size.metrics
-        box.radius = m.radius
+        box.radius = !classic && (size == .sm || size == .lg) ? 8 : m.radius
         var text = Themed.color(\.contrastSidebarMutedForeground, 0.8, sidebar: true)
         var icon = Themed.color(\.sidebarIconColor, sidebar: true)
         var ringColor = Themed.color(\.ring)

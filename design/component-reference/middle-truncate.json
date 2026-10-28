@@ -11,7 +11,7 @@
  "cases": [
   {
    "name": "path",
-   "html": "<span class=\"inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground\" title=\"/Users/mrm/Projects/candywrapper/Sources/ScrollAreaView.swift\"><span class=\"min-w-0 truncate\">/Users/mrm/Projects/candywrapper/Sources/ScrollArea</span><span class=\"shrink-0\">View.swift</span></span>",
+   "html": "<span class=\"inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground\" title=\"/Users/mrm/Projects/candywrapper/Sources/ScrollAreaView.swift\"><span class=\"peer min-w-0 overflow-hidden\">/Users/mrm/Projects/candywrapper/Sources/ScrollAreaView.</span><span class=\"shrink-0 peer-data-overflow:before:content-['\u2026']\">swift</span></span>",
    "wrapperStyle": "display:flex;width:180px",
    "native": {
     "value": "/Users/mrm/Projects/candywrapper/Sources/ScrollAreaView.swift"
@@ -19,7 +19,7 @@
   },
   {
    "name": "branch",
-   "html": "<span class=\"inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground\" title=\"fix/cache-main-20260918-180825\"><span class=\"min-w-0 truncate\">fix/cache-main-20260</span><span class=\"shrink-0\">918-180825</span></span>",
+   "html": "<span class=\"inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground\" title=\"fix/cache-main-20260918-180825\"><span class=\"peer min-w-0 overflow-hidden\">fix/cache-main-20260918-</span><span class=\"shrink-0 peer-data-overflow:before:content-['\u2026']\">180825</span></span>",
    "wrapperStyle": "display:flex;width:180px",
    "native": {
     "value": "fix/cache-main-20260918-180825"
@@ -27,7 +27,7 @@
   },
   {
    "name": "sha-long",
-   "html": "<span class=\"inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground\" title=\"t3code-worktree-3b6af0b2c41d9e\"><span class=\"min-w-0 truncate\">t3code-worktree-3b6a</span><span class=\"shrink-0\">f0b2c41d9e</span></span>",
+   "html": "<span class=\"inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground\" title=\"t3code-worktree-3b6af0b2c41d9e\"><span class=\"peer min-w-0 overflow-hidden\">t3code-worktree-</span><span class=\"shrink-0 peer-data-overflow:before:content-['\u2026']\">3b6af0b2c41d9e</span></span>",
    "wrapperStyle": "display:flex;width:180px",
    "native": {
     "value": "t3code-worktree-3b6af0b2c41d9e"
@@ -41,5 +41,6 @@
     "value": "main"
    }
   }
- ]
+ ],
+ "prepare": "(() => { document.querySelectorAll('.peer').forEach(head => {\n const text = head.firstChild; const overflow = head.scrollWidth > head.clientWidth;\n head.toggleAttribute('data-overflow', overflow); if (!overflow) return;\n const range = document.createRange(); const left = head.getBoundingClientRect().left;\n const widthTo = n => { range.setStart(text, 0); range.setEnd(text, n); return range.getBoundingClientRect().right - left; };\n let fits = 0, over = text.length;\n while (over - fits > 1) { const mid = (fits + over) >> 1; if (widthTo(mid) <= head.clientWidth) fits = mid; else over = mid; }\n const slack = Math.max(0, head.clientWidth - widthTo(fits));\n head.style.clipPath = slack > 0 ? `inset(-0.25em ${slack}px -0.25em 0)` : '';\n head.nextElementSibling.style.translate = slack > 0 ? `-${slack}px 0` : '';\n }); return true; })()"
 }

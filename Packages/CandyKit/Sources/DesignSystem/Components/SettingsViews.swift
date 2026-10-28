@@ -291,7 +291,7 @@ public final class SettingsGroupView: BoxView {
             box.border = Themed.color(light: \.foreground, 0.08, dark: \.foreground, 0.06)
             box.fill = Themed.pick(light: Themed.color(\.card, 0.82), dark: Self.ditherDarkCard)
         } else if variant == .grouped {
-            box.radius = 14
+            box.radius = DesignGeometry.radius(14, in: self)
             box.border = Themed.color(\.contrastBorder, 0.6)
             box.fill = Themed.color(\.card, 0.4)
             box.shadows = [BoxShadow(y: 1, blur: 2, color: Themed.black(0.05))]

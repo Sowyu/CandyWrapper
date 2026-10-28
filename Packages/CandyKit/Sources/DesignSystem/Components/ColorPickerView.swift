@@ -135,11 +135,23 @@ public final class ColorHueSliderView: DSView {
 
     public override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        if showsFocus {
+        if showsFocus && DesignGeometry.usesClassic(self) {
             ctx.addPath(CGPath(roundedRect: bounds.insetBy(dx: -4, dy: -4), cornerWidth: 16, cornerHeight: 16, transform: nil))
             ctx.setFillColor(Themed.color(\.ring).cgColor(in: self)); ctx.fillPath()
             ctx.addPath(CGPath(roundedRect: bounds.insetBy(dx: -2, dy: -2), cornerWidth: 14, cornerHeight: 14, transform: nil))
             ctx.setFillColor(Themed.color(\.popover).cgColor(in: self)); ctx.fillPath()
+        }
+        if showsFocus && !DesignGeometry.usesClassic(self) {
+            // color-picker.tsx:199: a 2px popover offset, then the 2px inset ring.
+            for (outside, inside, color) in [(CGFloat(0), CGFloat(2), Themed.color(\.popover)),
+                                               (CGFloat(2), CGFloat(4), Themed.color(\.ring))] {
+                let path = CGMutablePath()
+                path.addPath(CGPath(roundedRect: bounds.insetBy(dx: outside, dy: outside), cornerWidth: 12 - outside, cornerHeight: 12 - outside, transform: nil))
+                path.addPath(CGPath(roundedRect: bounds.insetBy(dx: inside, dy: inside), cornerWidth: 12 - inside, cornerHeight: 12 - inside, transform: nil))
+                ctx.addPath(path)
+                ctx.setFillColor(color.cgColor(in: self))
+                ctx.fillPath(using: .evenOdd)
+            }
         }
         let track = CGRect(x: 0, y: (bounds.height - 10) / 2, width: bounds.width, height: 10)
         let trackPath = CGPath(roundedRect: track, cornerWidth: 5, cornerHeight: 5, transform: nil)

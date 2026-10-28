@@ -242,13 +242,14 @@ public final class ButtonView: ControlView {
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         decoration.setNeedsDisplay()
+        restyle()
     }
 
     private func restyle() {
         let m = size.metrics
         label.font = monospaced ? DSFont.mono(m.font, weight: .medium) : DSFont.ui(m.font, weight: .medium)
         label.lineHeight = m.line
-        var look = ButtonStyles.look(variant: variant, state: state, radius: m.radius)
+        var look = ButtonStyles.look(variant: variant, state: state, radius: size == .micro || size == .iconMicro ? DesignGeometry.radius(m.radius, in: self) : m.radius)
         if joinedSides.leading || joinedSides.trailing {
             var corners = BoxStyle.Corners.all
             if joinedSides.leading { corners.subtract(.leading) }

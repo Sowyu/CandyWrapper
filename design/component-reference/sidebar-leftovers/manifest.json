@@ -1,4 +1,12 @@
 {
+  "folder.closed" : {
+    "height" : 48,
+    "width" : 240
+  },
+  "folder.open" : {
+    "height" : 48,
+    "width" : 240
+  },
   "ghost" : {
     "height" : 38,
     "width" : 241.4296875
