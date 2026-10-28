@@ -337,6 +337,12 @@ public enum WorkLog {
         return data?["output"] ?? data?["result"] ?? data?["rawOutput"] ?? data?["content"]
     }
 
+    static func toolInput(_ entry: WorkLogEntry) -> JSONValue? {
+        if let item = entry.structuredPayload, item.type == .dynamicTool { return item.input }
+        let data = entry.toolData
+        return data?["arguments"] ?? data?["input"] ?? data?["rawInput"]
+    }
+
     static func indicatesFailure(_ entry: WorkLogEntry, includeCommand: Bool) -> Bool {
         // Rows are derived again on every stream update, and checking every tool's output each
         // time cost about 10% CPU on a long thread. An item gets a new `updatedAt` whenever it
@@ -430,7 +436,7 @@ public enum WorkLog {
 
     /// `resolveWorkEntryToolPresentation` (work-log/presentation.ts:199-212).
     public static func toolPresentation(_ entry: WorkLogEntry, fallbackStatus: ToolLifecycleStatus? = nil) -> T3ToolPresentation? {
-        guard let definition = T3McpTools.definition(toolName(entry)) else { return nil }
+        guard let definition = T3McpTools.definition(toolName(entry), input: toolInput(entry)) else { return nil }
         let status = t3ToolResultIndicatesFailure(toolOutput(entry)) ? .failed : (entry.toolLifecycleStatus ?? fallbackStatus)
         let verb = switch status {
         case .inProgress: definition.running
@@ -560,7 +566,7 @@ public enum WorkLog {
         var groups: [Group] = []
         var sources: [(key: String, source: ToolActivitySource)] = []
         for entry in entries {
-            let t3Action = T3McpTools.definition(toolName(entry))?.summaryAction
+            let t3Action = T3McpTools.definition(toolName(entry), input: toolInput(entry))?.summaryAction
             if let source = entry.toolSource, t3Action == nil {
                 if let index = sources.firstIndex(where: { $0.key == source.key }) { sources[index].source = source } else { sources.append((source.key, source)) }
                 continue
