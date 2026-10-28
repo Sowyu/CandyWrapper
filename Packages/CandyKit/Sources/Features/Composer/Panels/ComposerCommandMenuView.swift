@@ -135,6 +135,8 @@ private final class MenuRowView: DSView {
                                     basename: (path as NSString).lastPathComponent, line: nil, column: nil)
             let (definition, color) = isDirectory ? (IconName.folder.definition, FileChipStyle.iconMuted) : FileChipStyle.icon(for: meta)
             icon = IconView(definition: definition, size: 16, color: color)
+        case .environment(_, _, let machine):
+            icon = IconView(definition: EnvironmentMachineIcon.definition(machine), size: 16, color: Themed.color(\.secondaryLabel))
         case .thread:
             icon = IconView(name: .messagesSquare, size: 16, strokeColor: Themed.color(\.secondaryLabel))
         case .pullRequest(let pr):

@@ -11,6 +11,15 @@ struct PeerLinkTests {
 
     private let now = Date(timeIntervalSince1970: 1_793_188_800) // 2026-10-28T12:00:00Z
 
+    @Test func composerLinkNamesExcludeExpiredAndPreferClientNames() {
+        func link(_ id: String, _ status: PeerLinkSummary.Status) -> PeerLinkSummary {
+            .init(environmentId: id, label: "Link name", urls: [], access: "read-only", linkedAt: "", expiresAt: "", status: status)
+        }
+        #expect(PeerLinks.names([link("a", .reachable), link("b", .unreachable), link("c", .expired)], labels: ["a": "Renamed"]) == ["a": "Renamed", "b": "Link name"])
+        #expect(!PeerLinks.offered(capabilities: ["peerLinks"], settings: .object([:])))
+        #expect(!PeerLinks.offered(capabilities: [], settings: .object(["linkedEnvironmentsEnabled": .bool(true)])))
+    }
+
     @Test func listDecodesTheServerReply() throws {
         let reply = try JSONValue(parsing: Data("""
         {"links":[{"environmentId":"bb23b57a","label":"Sandbox B","urls":["http://127.0.0.1:47399"],"access":"read-only",

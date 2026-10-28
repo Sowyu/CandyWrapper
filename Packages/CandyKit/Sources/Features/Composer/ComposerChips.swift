@@ -12,6 +12,7 @@ public struct ComposerChipLook: Equatable, Sendable {
         case skill
         case citation
         case thread
+        case environment(machine: String)
         /// `open`, `draft`, `merged`, `closed`, or nil for a pull request whose state is unknown.
         case pullRequest(state: String?)
         /// A draft attachment (`ImageChipButton`, `FileChip`): label middle-truncated to 36, then the size.
@@ -59,7 +60,8 @@ public struct ComposerChipLook: Equatable, Sendable {
     /// link whose record is missing the dashed `UnresolvedChip` (composerContextPresentation.tsx).
     public static func look(for token: ComposerInlineToken, skillLabel: (String) -> String,
                             record: (String) -> JSONValue?, threadTitle: (JSONValue) -> String? = { _ in nil },
-                            threadProject: (JSONValue) -> ProjectIconSource? = { _ in nil }) -> ComposerChipLook {
+                            threadProject: (JSONValue) -> ProjectIconSource? = { _ in nil },
+                            environment: (String) -> (label: String?, machine: String?) = { _ in (nil, nil) }) -> ComposerChipLook {
         switch token.kind {
         case .mention(let path):
             let base = path.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? path
@@ -70,6 +72,9 @@ public struct ComposerChipLook: Equatable, Sendable {
         case .context(let kind, let contextId, let label):
             guard let r = record(contextId), r["kind"]?.stringValue == kind else { return ComposerChipLook(kind: .unresolved, label: label) }
             switch kind {
+            case "environment":
+                let live = environment(r["environmentId"]?.stringValue ?? "")
+                return ComposerChipLook(kind: .environment(machine: live.machine ?? "server"), label: live.label ?? r["label"]?.stringValue ?? label)
             case "thread":
                 return ComposerChipLook(kind: .thread, label: threadTitle(r) ?? r["title"]?.stringValue ?? label, project: threadProject(r))
             case "terminal":
@@ -93,6 +98,7 @@ public struct ComposerChipLook: Equatable, Sendable {
         case .image: OKLab.oklch(0.62, 0.16, 16)
         case .file: OKLab.oklch(0.62, 0.136, 237)
         case .video: OKLab.oklch(0.62, 0.16, 48)
+        case .environment: OKLab.oklch(0.62, 0.11, 145)
         case .thread: OKLab.oklch(0.62, 0.12, 190)
         case .reviewComment: OKLab.oklch(0.62, 0.16, 292)
         case .terminal: OKLab.oklch(0.62, 0.134, 163)
@@ -122,6 +128,7 @@ public struct ComposerChipLook: Equatable, Sendable {
             let meta = FileLinkMeta(filePath: name, targetPath: name, workspaceRelativePath: name, basename: name, line: nil, column: nil)
             return FileChipStyle.icon(for: meta)
         case .video: return (IconName.film.definition, nil)
+        case .environment(let machine): return (EnvironmentMachineIcon.definition(machine), nil)
         case .thread: return (IconName.messagesSquare.definition, nil)
         case .reviewComment: return (IconName.messageSquare.definition, nil)
         case .terminal: return (IconName.terminal.definition, nil)
