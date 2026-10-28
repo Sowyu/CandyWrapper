@@ -26,6 +26,7 @@ final class PaletteCommands {
     /// Thread message search (`useThreadSearch`, state/queries.ts:75-101): a word of 3+ letters, 200 ms debounce.
     private var search: (query: String, matches: [ThreadSearchMatch])?
     private var searchTask: Task<Void, Never>?
+    private var triageTask: Task<Void, Never>?
     private var pendingQuery: String?
     private var searchConnections: [String: Int] = [:]
     /// When the palette opened: titles and messages rank against it, so rows don't reorder as time passes.
@@ -440,6 +441,11 @@ final class PaletteCommands {
                                         shortcutCommand: "chat.newWithoutProject",
                                         action: .run({ [weak self] in self?.startScratchThread(env) }, keepOpen: false)))
         }
+        if let env = triageEnvironment, supportsTriage(env) {
+            actions.append(PaletteEntry(value: "action:triage", searchTerms: ["triage", "bug", "issue", "report", "broken", "debug", "help", "support"],
+                                        title: "Triage an issue", description: "An agent investigates a T3 Code problem and helps file an issue", icon: .bug,
+                                        action: .run({ [weak self] in self?.startTriage(env) }, keepOpen: false)))
+        }
         if let id = threads.openThreadId, let env = id.environmentId,
            threads.composer.config(env)?.capabilities.contains("threadFind") == true {
             actions.append(PaletteEntry(value: "find-current-thread", searchTerms: ["find", "search", "messages", "plans"],
@@ -616,6 +622,73 @@ final class PaletteCommands {
             } catch {
                 let message = (error as? RPCClientError)?.typedError?.message ?? (error as? LocalizedError)?.errorDescription
                 self.threads.panel.toasts.show(ToastView(title: "Could not start without a project", message: message ?? "An error occurred.", kind: .error))
+            }
+        }
+    }
+
+    private func supportsTriage(_ env: String) -> Bool {
+        threads.composer.config(env)?.capabilities.contains("triage") == true
+            && environments.authSession(env)?.grants(AuthScopes.orchestrationOperate) == true
+    }
+
+    private var triageEnvironment: String? {
+        TriageLogic.environment(onScreen: threads.composer.targetEnvironmentId, primary: environments.primaryId,
+                               connected: environments.environmentIds.filter { environments.state($0)?.status == .connected },
+                               supports: supportsTriage)
+    }
+
+    /// T3 3814 hooks/useStartTriage.ts:38-106. Never send the RPC to an older runtime.
+    private func startTriage(_ env: String) {
+        guard triageTask == nil, supportsTriage(env) else { return }
+        let route = (threads.composer.navigationGeneration, settings.navigationGeneration, commands.navigationGeneration)
+        var pendingToast: Int?
+        let pending = DispatchWorkItem { [weak self] in
+            pendingToast = self?.threads.panel.toasts.show(ToastView(title: "Starting triage…", kind: .loading), timeout: 0)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: pending)
+        triageTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                pending.cancel()
+                if let pendingToast { threads.panel.toasts.dismiss(pendingToast) }
+                triageTask = nil
+            }
+            do {
+                guard threads.composer.config(env)?.scratchWorkspaceRoot != nil else {
+                    throw SidebarCommands.CommandMessage(errorDescription: "This machine cannot start threads without a project.")
+                }
+                try await TriageLogic.prepare(supported: supportsTriage(env), prepare: {
+                    let client: JSONValue = .object(["label": .string("CandyWrapper"), "deviceType": .string("desktop"),
+                        "os": .string("macOS"), "appVersion": .string(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0")])
+                    let reply = try await environments.request(env, "server.prepareTriage", .object(["client": client]))
+                    guard let prompt = reply["prompt"]?.stringValue else { throw SidebarCommands.CommandMessage(errorDescription: "The server returned no triage prompt.") }
+                    return prompt
+                }, scratch: {
+                    let reply = try await environments.request(env, "projects.ensureScratch", .object([:]))
+                    guard let local = reply["projectId"]?.stringValue else { throw SidebarCommands.CommandMessage(errorDescription: "The server returned no scratch project.") }
+                    let id = ProjectId(EnvironmentScope.key(env, local))
+                    for _ in 0..<100 {
+                        if sidebar?.snapshot?.projects.contains(where: { $0.id == id }) == true { return id }
+                        try await Task.sleep(for: .milliseconds(100))
+                    }
+                    throw SidebarCommands.CommandMessage(errorDescription: "The scratch project did not load.")
+                }, stillHere: {
+                    route == (threads.composer.navigationGeneration, settings.navigationGeneration, commands.navigationGeneration)
+                }, show: { id, prompt in
+                    guard let project = sidebar?.snapshot?.projects.first(where: { $0.id == id }) else { return }
+                    newThread(in: project)
+                    threads.composer.seedTriagePrompt(prompt)
+                })
+            } catch is CancellationError {
+                return
+            } catch {
+                let message = (error as? RPCClientError)?.typedError?.message ?? (error as? LocalizedError)?.errorDescription ?? "An error occurred."
+                threads.panel.toasts.show(ToastView(title: "Could not start triage",
+                    message: message + " Run npx t3 triage in a terminal on that machine instead.", kind: .error,
+                    actionTitle: "Copy command", action: {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(TriageLogic.cliCommand, forType: .string)
+                    }), timeout: 0)
             }
         }
     }
