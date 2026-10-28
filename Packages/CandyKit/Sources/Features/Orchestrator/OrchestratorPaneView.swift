@@ -220,7 +220,8 @@ public final class OrchestratorPaneView: DSView {
     }
 
     private func open(_ local: String) {
-        onOpenThread?(ThreadId(local).scoped(to: state.environmentId))
+        let link = ThreadLink(href: local)
+        onOpenThread?(ThreadId(link?.threadId ?? local).scoped(to: link?.environmentId ?? state.environmentId))
     }
 
     public func set(_ next: OrchestratorPaneState) {
@@ -612,7 +613,7 @@ final class OrchestratorChatView: DSView {
     }
 
     private func openLink(_ url: URL) {
-        if url.scheme == "t3-thread", let id = url.pathComponents.last, !id.isEmpty, id != "/" { onOpenThread?(id); return }
+        if let link = ThreadLink(href: url.absoluteString) { onOpenThread?(link.lookupKey); return }
         NSWorkspace.shared.open(url)
     }
 

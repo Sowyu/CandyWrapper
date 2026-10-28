@@ -281,6 +281,7 @@ final class UserMessageRowView: TimelineRowView {
         let model = context.model
         let document = context.document(item.id, text, lineBreaks: true)
         markdown.contextChips = MarkdownContextChips.message(context: m.context, attachments: m.attachments, document: document,
+                                                             environmentId: model?.environmentId,
                                                              thread: { model?.linkedThread?(ThreadId($0)) })
         if let load = model?.attachmentImage {
             markdown.contextImageLoader = { id, side in await load(id, side, true) }
@@ -724,7 +725,7 @@ final class AssistantMessageRowView: TimelineRowView {
         let model = context.model
         let document = isEmpty ? MarkdownDocument(blocks: []) : context.document(item.id, m.text, lineBreaks: TL.preservesAssistantLineBreaks(m.text), streaming: m.streaming,
                                                                                                          background: true)
-        markdown.contextChips = MarkdownContextChips.links(in: document, thread: { model?.linkedThread?(ThreadId($0)) })
+        markdown.contextChips = MarkdownContextChips.links(in: document, environmentId: model?.environmentId, thread: { model?.linkedThread?(ThreadId($0)) })
         markdown.onContextChip = { action, _ in if case .openThread(let id) = action { model?.onOpenThread?(ThreadId(id)) } }
         markdown.onCiteSelection = m.streaming ? nil : { [weak model = context.model] selection, anchor in
             model?.onCiteSelection?(m.id.rawValue, selection, anchor)
