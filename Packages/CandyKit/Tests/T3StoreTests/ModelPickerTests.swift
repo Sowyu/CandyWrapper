@@ -8,6 +8,31 @@ import T3Protocol
 /// ChatView tests (I-composer-flow.md 8.5).
 @MainActor
 struct ModelPickerTests {
+    @Test func spokenModelNamesKeepAmbiguousFamiliesAndFullListNames() {
+        let cases: [(String, String?, String?)] = [
+            ("Claude Opus 5.5", "claudeAgent", "Opus 5.5"),
+            ("GPT-6.1-Sol", "codex", "6.1 Sol"),
+            ("GPT 6.0 Astra", "codex", "6.0 Astra"),
+            ("Grok 4 Pro", "opencode", nil),
+            ("Claude Opus 5.5", nil, "Opus 5.5"),
+            ("NVIDIA: Nemotron 3 Super", nil, "Nemotron 3 Super"),
+            ("GPT-5.5", "codex", nil),
+            ("Gemini 3.1 Pro", "antigravity", "3.1 Pro"),
+            ("Gemini 3.1 Pro", "opencode", nil),
+            ("Grok 4 Pro", "cursor", "4 Pro"),
+            ("Muse 2 Flash (preview)", "muse", "2 Flash (preview)"),
+        ]
+        for (name, driver, expected) in cases {
+            #expect(ModelNames.shortName(name, driver: driver) == expected)
+            let model = ServerProviderModel(slug: "unchanged-id", name: name)
+            #expect(ModelNames.trigger(model, driver: driver) == (expected ?? name))
+            #expect(ModelNames.display(model) == name)
+            #expect(model.slug == "unchanged-id")
+        }
+        let explicit = ServerProviderModel(slug: "m", name: "Claude Opus 5.5", shortName: "Custom")
+        #expect(ModelNames.trigger(explicit, driver: "claudeAgent") == "Custom")
+    }
+
     static func recordedConfig() throws -> ServerProviderConfig {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -235,7 +260,7 @@ struct ModelPickerTests {
         let ctx = ComposerSelectionContext(catalog: catalog, serverDefaults: config.settings)
         // A new draft with nothing remembered: the first ready instance and its declared default.
         var r = store.resolve("draft", ctx)
-        #expect(r.instanceId == "claudeAgent" && r.modelSlug == "claude-fable-5-1" && r.triggerLabel == "Claude Fable 5.1")
+        #expect(r.instanceId == "claudeAgent" && r.modelSlug == "claude-fable-5-1" && r.triggerLabel == "Fable 5.1")
         #expect(r.runtimeMode == .fullAccess && r.runtimeModeOptions == RuntimeMode.all && r.interactionMode == .default)
         #expect(r.modelSelection == ModelSelection(instanceId: "claudeAgent", model: "claude-fable-5-1", selections: nil))
 

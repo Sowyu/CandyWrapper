@@ -115,7 +115,7 @@ public final class ComposerPickers {
         var modelTitle = current.triggerLabel
         if let multiple = currentMultiple {
             modelTitle = ModelFanout.triggerLabel(multiple.map { s in
-                context.catalog.entry(s.instanceId)?.model(s.model).map(ModelNames.trigger) ?? s.model
+                context.catalog.entry(s.instanceId)?.model(s.model).map { ModelNames.trigger($0, driver: context.catalog.entry(s.instanceId)?.driver) } ?? s.model
             })
         }
         let label = ModelTraits.triggerLabel(current.descriptors, ultrathink: ultrathinkControlled, provider: current.entry?.driver)
