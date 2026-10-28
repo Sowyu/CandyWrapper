@@ -171,7 +171,27 @@ public final class ThreadViewModel {
 
     /// `secrets.answerRequest` with the input; nil on success, else the message the card shows.
     public var answerSecret: (@MainActor (JSONValue) async -> String?)?
+    /// Secret and link request cards' answer in flight and its error, by row id.
     private var secretStates: [String: (submitting: Bool, error: String?)] = [:]
+
+    /// `peerLinks.answerRequest` with a decline; nil on success, else the card's message (LinkRequestCard.tsx:99-112).
+    public var declineLinkRequest: (@MainActor (TurnItem) async -> String?)?
+    /// "Review link…" or "Choose machine…": the app's link dialog for the request.
+    public var reviewLinkRequest: (@MainActor (TurnItem) -> Void)?
+    /// This session may answer link requests on the open thread's environment (`access:write`, clientRpcPermissions.ts:67).
+    public var canAnswerLinkRequests: (@MainActor () -> Bool)?
+
+    func declineLink(_ rowId: String, _ item: TurnItem) {
+        guard let declineLinkRequest, secretStates[rowId]?.submitting != true else { return }
+        secretStates[rowId] = (true, nil)
+        refreshRow(rowId)
+        Task { [weak self] in
+            let failure = await declineLinkRequest(item)
+            guard let self else { return }
+            self.secretStates[rowId] = failure.map { (false, $0) }
+            self.refreshRow(rowId)
+        }
+    }
 
     /// Sends a secret request's answer; the row shows the progress and any error.
     func answerSecretRequest(_ rowId: String, _ input: JSONValue) {
@@ -490,7 +510,7 @@ public final class ThreadViewModel {
                 ui.folderOverrides = folderOverrides[run] ?? [:]
             }
         case .proposedPlan(let p): ui.planExpanded = expandedPlans.contains(p.id.rawValue)
-        case .event(let p, _, _) where p.item.type == .secretRequest:
+        case .event(let p, _, _) where p.item.type == .secretRequest || p.item.type == .linkRequest:
             if let state = secretStates[row.id] { ui.secretSubmitting = state.submitting; ui.secretError = state.error }
         case .event(let p, let group, _) where p.item.type == .subagent:
             let ids = Set((group ?? [p]).compactMap { $0.string("subagentId") })

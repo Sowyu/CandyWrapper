@@ -124,7 +124,7 @@ public struct TimelineEntry: Sendable, Hashable, Identifiable {
     /// and secret request events never fold.
     public var isPersistentResourceCard: Bool {
         guard let item = eventItem?.item else { return false }
-        return item.type == .fork || item.type == .threadCreated || item.type == .secretRequest
+        return item.type == .fork || item.type == .threadCreated || item.type == .secretRequest || item.type == .linkRequest
     }
 }
 
@@ -205,7 +205,7 @@ public enum WorkflowOpening {
 
 public enum TimelineEntries {
     static let standaloneEventTypes: Set<TurnItemType> = [
-        .fork, .handoff, .runInterruptRequest, .runInterruptResult, .secretRequest, .subagent,
+        .fork, .handoff, .runInterruptRequest, .runInterruptResult, .secretRequest, .linkRequest, .subagent,
     ]
 
     /// `serverAcknowledgedUserMessageIds` (ChatView.tsx:1751-1766, `deriveCommittedServerUserMessageIds`

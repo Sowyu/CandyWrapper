@@ -589,6 +589,22 @@ final class ThreadController {
                 return SecretRequests.genericFailure
             }
         }
+        // An agent's link request (LinkRequestCard.tsx at 3814): Decline answers in place, Review opens the link dialog,
+        // and both go to `peerLinks.answerRequest` on the thread's environment.
+        panel.model.canAnswerLinkRequests = { [weak self] in
+            guard let self, let env = self.openThreadId?.environmentId else { return false }
+            return self.environments.canCreateGuestShare(env)
+        }
+        panel.model.declineLinkRequest = { [weak self] item in
+            guard let self, let env = self.openThreadId?.environmentId else { return PeerLinkDialog.answerFailure(CancellationError()) }
+            do {
+                _ = try await self.environments.request(env, "peerLinks.answerRequest", LinkRequestAnswer.payload(item, .object(["type": .string("decline")])))
+                return nil
+            } catch {
+                return PeerLinkDialog.answerFailure(error)
+            }
+        }
+        panel.model.reviewLinkRequest = { [weak self] item in self?.reviewLinkRequest(item) }
         lineage.providers = { [weak composer] env in composer?.providers(env) ?? [] }
         lineage.selectedModel = { [weak composer] in composer?.selectedModel }
         composer.onModelChange = { [weak self] in self?.lineage.syncFooter() }
@@ -1582,6 +1598,46 @@ final class ThreadController {
             open(remembered)
         } else if let project = SidebarModel.sortProjectsForSidebar(snapshot.projects, threads: snapshot.threads, order: .updatedAt).first {
             _ = composer.newThread(in: project)
+        }
+    }
+}
+
+extension ThreadController {
+    /// "Review link…" on an agent's link request (LinkRequestCard.tsx `LinkRequestDialog` at 3814): the machine it named
+    /// is fixed, a hint preselects the best match, an address it named is filled in; the access starts at its suggestion.
+    func reviewLinkRequest(_ item: TurnItem) {
+        guard let window = panel.window, let env = openThreadId?.environmentId else { return }
+        Task {
+            // `useLinkableMachines` lists the environment's links on open, to mark the machines already linked.
+            let links = (try? PeerLinkSummary.list(try await environments.request(env, "peerLinks.list", .object([:])))) ?? []
+            let linked = Set(links.filter { $0.status != .expired }.map(\.environmentId))
+            var machines = PeerLinkDialog.machines(environments, hostId: env, primaryLabel: nil, linked: linked)
+            let named = item.string("environmentId"), url = item.string("url")
+            if let named, !machines.contains(where: { $0.environmentId == named }) {
+                // A machine this app doesn't know: link it at the address the agent gave, or one typed in.
+                machines.insert(LinkableMachine(environmentId: named, label: item.string("label") ?? url ?? "a machine", connected: false,
+                                                linked: linked.contains(named), urls: url.map { [$0] } ?? [], canMint: false), at: 0)
+            } else if let named, let url, let i = machines.firstIndex(where: { $0.environmentId == named }), !machines[i].urls.contains(url) {
+                machines[i].urls.append(url)
+            }
+            let addressOnly = named == nil && url != nil
+            let choice = addressOnly ? LinkEnvironmentFormView.anotherAddress
+                : LinkRequestAnswer.initialMachine(environmentId: named, hint: item.string("hint"), labels: machines.map { ($0.environmentId, $0.label) })
+            PeerLinkDialog.present(
+                in: window, environments: environments, machines: addressOnly ? [] : machines,
+                initialChoice: choice, initialAccess: item.string("requestedAccess") ?? "approval-required",
+                lockMachine: named != nil, address: addressOnly ? url : nil,
+                toast: { [weak self] title, message, kind in
+                    self?.panel.toasts.show(ToastView(title: title, message: message, kind: kind))
+                },
+                failureMessage: PeerLinkDialog.answerFailure,
+                commit: { [weak self] choice in
+                    guard let self, let answer = LinkRequestAnswer.link(environmentId: choice.machine?.environmentId, label: choice.machine?.label,
+                                                                        urls: choice.urls, access: choice.access, pairingCode: choice.pairingCode)
+                    else { throw CancellationError() }
+                    _ = try await self.environments.request(env, "peerLinks.answerRequest", LinkRequestAnswer.payload(item, answer))
+                    return choice.machine?.label
+                })
         }
     }
 }
