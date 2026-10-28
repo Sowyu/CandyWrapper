@@ -49,6 +49,17 @@ struct SettingsConcernTests {
         }
     }
 
+    @Test func devicePagesStayUsableWithAnOfflineEnvironmentSelected() {
+        let context = SettingsPageContext()
+        context.scope = SettingsScopeState(environments: [.init(id: "offline", label: "Offline", connected: false)], primaryId: "offline")
+        context.scope.selection.machine = "offline"
+        for section in [SettingsSection.general, .chat, .diffs, .about] {
+            let page = ConcernSettingsView(context: context, section: section)
+            page.refresh()
+            #expect(page.height(forWidth: 720) > 100, "\(section) keeps device settings visible")
+        }
+    }
+
     @Test func labsKeepsBetaAboveLegacyFeatures() {
         let page = BetaSettingsView(context: SettingsPageContext())
         #expect(page.items.compactMap { ($0 as? SettingsSectionView)?.title } == ["Beta", "Legacy features"])

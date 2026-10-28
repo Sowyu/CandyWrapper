@@ -12,27 +12,30 @@ public final class GeneralSettingsView: SettingsPageBase {
     private var autoSettleRows: [SettingsRowView] = []
     private var daysRow: SettingsRowView?
     private var legacy: SettingsFoldedSectionView?
+    var usesBoundary = true
 
-    public override init(context: SettingsPageContext) {
+    public init(context: SettingsPageContext, groups: Set<String>? = nil) {
         sentence = SettingsScopeSentenceView(context: context)
         super.init(context: context)
         var items: [NSView & SettingsGroupRow] = [sentence, boundary]
-        items.append(newThreadsSection())
-        items.append(organizationSection())
-        items.append(behaviorSection())
-        items.append(projectsSection())
-        items.append(confirmationsSection())
-        items.append(textGenerationSection())
-        items.append(aboutSection())
-        items.append(diagnosticsSection())
-        let legacy = legacySection()
-        self.legacy = legacy
-        items.append(legacy)
+        if groups?.contains("project-defaults") != false { items.append(newThreadsSection()) }
+        if groups?.contains("organization") != false { items.append(organizationSection()) }
+        if groups?.contains("behavior") != false { items.append(behaviorSection()) }
+        if groups?.contains("projects-and-threads") != false { items.append(projectsSection()) }
+        if groups?.contains("confirmations") != false { items.append(confirmationsSection()) }
+        if groups?.contains("text-generation") != false { items.append(textGenerationSection()) }
+        if groups?.contains("about") != false { items.append(aboutSection()) }
+        if groups?.contains("Diagnostics") != false { items.append(diagnosticsSection()) }
+        if groups?.contains("legacy-features") != false {
+            let legacy = legacySection()
+            self.legacy = legacy
+            items.append(legacy)
+        }
         self.items = items
         binder.add { [weak self] in
             guard let self else { return }
             self.sentence.refresh()
-            let message = self.context.scope.boundaryMessage
+            let message = self.usesBoundary ? self.context.scope.boundaryMessage : nil
             self.boundary.isHidden = message == nil
             self.boundary.message = message ?? ""
             // The scope boundary replaces the page body with its notice.
