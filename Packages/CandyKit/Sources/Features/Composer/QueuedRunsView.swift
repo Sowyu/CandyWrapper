@@ -1,6 +1,7 @@
 import AppKit
 import DesignSystem
 import T3Protocol
+import T3Store
 
 /// The "Queued" strip docked above the composer (QueuedRunsControl.tsx, ComposerBanner.tsx):
 /// a header that folds the list, then one row per queued message with the text,
@@ -20,6 +21,11 @@ public final class QueuedRunsView: ComposerBannerView {
     public var editBlockedReason: String? { didSet { if editBlockedReason != oldValue { rebuild() } } }
     public private(set) var expanded = true
 
+    public var threadTitle: ((ThreadId) -> String?)?
+    public var senderThreadTitles: [String: String] = [:] { didSet { if senderThreadTitles != oldValue { rebuild() } } }
+    public var scheduledTaskTitles: [String: String] = [:] { didSet { if scheduledTaskTitles != oldValue { rebuild() } } }
+    public var onOpenThread: ((ThreadId) -> Void)?
+    public var onOpenScheduledTask: ((String) -> Void)?
     public var onEdit: ((ComposerLogic.QueueState.Item) -> Void)?
     public var onCancelEdit: (() -> Void)?
     public var onSteer: ((RunId) -> Void)?
@@ -39,9 +45,10 @@ public final class QueuedRunsView: ComposerBannerView {
 
     private var listHeight: CGFloat {
         guard expanded, !state.items.isEmpty else { return 0 }
-        let n = CGFloat(state.items.count)
-        return min(Self.listMax, n * Self.row + (n - 1))
+        return min(Self.listMax, state.items.reduce(CGFloat(0)) { $0 + rowHeight($1) + 1 } - 1)
     }
+
+    private func rowHeight(_ item: ComposerLogic.QueueState.Item) -> CGFloat { item.message == nil ? Self.row : Self.row + 18 }
 
     private let header = HeaderRow()
     private let scroll = NSScrollView()
@@ -94,7 +101,7 @@ public final class QueuedRunsView: ComposerBannerView {
             row.index = i
             row.configure(item, editing: item.runId != nil && item.runId == editingRunId,
                           busy: isBusy || item.runId == nil,
-                          canSend: state.canSendNow || state.canPromoteToSteer, 
+                          canSend: state.canSendNow || state.canPromoteToSteer,
                           editBlocked: editBlockedReason != nil,
                           editTip: editBlockedReason ?? "Edit in the composer" + (i == queued - 1 && item.runId != nil ? editShortcutLabel.map { " (\($0))" } ?? "" : ""),
                           steerTip: (state.canSendNow ? "Start a turn with this message" : state.promoteSkipsCompaction ? "Skip compaction and send this message" : "Send into the current turn")
@@ -117,12 +124,14 @@ public final class QueuedRunsView: ComposerBannerView {
         let inner = w - 2 * Self.pad
         header.frame = NSRect(x: Self.pad, y: Self.pad, width: inner, height: Self.row)
         scroll.frame = NSRect(x: Self.pad, y: Self.pad + Self.row, width: inner, height: listHeight)
-        let n = CGFloat(rows.count)
-        let full = max(0, n * Self.row + (n - 1))
+        let full = max(0, state.items.reduce(CGFloat(0)) { $0 + rowHeight($1) + 1 } - 1)
         // ponytail: no scroll fade and no `pe-2` scrollbar gutter when the list overflows 128pt; add with long queues
         list.frame = NSRect(x: 0, y: 0, width: inner, height: full)
+        var y: CGFloat = 0
         for (i, row) in rows.enumerated() {
-            row.frame = NSRect(x: 0, y: CGFloat(i) * (Self.row + 1), width: inner, height: Self.row)
+            let height = rowHeight(state.items[i])
+            row.frame = NSRect(x: 0, y: y, width: inner, height: height)
+            y += height + 1
         }
     }
 }
@@ -195,6 +204,9 @@ private final class QueuedRowView: DSView {
     private let text = bannerLabel(Themed.color(\.foreground, 0.8))
     /// `shrink-0 text-guest-foreground`, before a guest's text.
     private let guestName = bannerLabel(GuestColors.foreground)
+    private let source = ButtonView(variant: .ghostMuted, size: .xs)
+    private let timestamp = bannerLabel(Themed.color(\.mutedForeground))
+    private var message: ChatMessage?
     private let edit = bannerButton(nil, icon: .pencil, variant: .ghostMuted, size: .iconXs, tip: "Edit in the composer")
     private let steer = bannerButton("Steer", icon: .arrowUp, variant: .ghostMuted, size: .xs, tip: "Send as a steer instead")
     private let remove = bannerButton(nil, icon: .x, variant: .ghost, size: .iconXs, tip: "Remove from queue")
@@ -214,7 +226,7 @@ private final class QueuedRowView: DSView {
         saving.setAccessibilityElement(true)
         saving.setAccessibilityRole(.image)
         saving.setAccessibilityLabel("Saving queued message") // QueuedRunsControl.tsx:369-372
-        [saving, guestName, text, edit, steer, remove, cancel].forEach(addSubview)
+        [saving, guestName, text, source, timestamp, edit, steer, remove, cancel].forEach(addSubview)
         TooltipController.attach(to: remove, text: "Remove from queue")
         edit.action = { [weak self] in guard let self else { return }; owner?.edit(index) }
         steer.action = { [weak self] in guard let self else { return }; owner?.steer(index) }
@@ -226,6 +238,26 @@ private final class QueuedRowView: DSView {
     func configure(_ item: ComposerLogic.QueueState.Item, editing: Bool, busy: Bool, canSend: Bool,
                    editBlocked: Bool, editTip: String, steerTip steerText: String) {
         self.editing = editing
+        message = item.message
+        let presentation = item.message.map(UserMessagePresentation.resolve)
+        // T3 3814 QueuedRunsControl.tsx:393-525 uses the sent message's attribution and timestamp.
+        let senderTitle = item.message?.senderThreadId.flatMap { owner?.senderThreadTitles[$0] ?? owner?.threadTitle?(ThreadId($0)) }?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title: String? = switch presentation?.attribution {
+        case .automation: presentation?.scheduledTaskId.flatMap { owner?.scheduledTaskTitles[$0] }.map { "Automation: " + $0 } ?? "Automation"
+        case .agent: senderTitle?.isEmpty == false ? senderTitle : "Agent"
+        case .t3code: "Sent by T3 Code"
+        default: nil
+        }
+        source.title = title ?? ""
+        source.isHidden = title == nil
+        source.isEnabled = presentation?.scheduledTaskId != nil || item.message?.senderThreadId != nil
+        source.action = { [weak self] in
+            guard let self, let message else { return }
+            if let task = UserMessagePresentation.resolve(message).scheduledTaskId { owner?.onOpenScheduledTask?(task) }
+            else if let sender = message.senderThreadId { owner?.onOpenThread?(ThreadId(sender)) }
+        }
+        timestamp.text = item.message.map { TL.dayAwareTimestamp($0.createdAt, now: Date()) } ?? ""
+        timestamp.isHidden = item.message == nil
         runId = item.runId
         self.editTip.text = editTip
         // Context links as their labels and citations as the quoted text (QueuedRunsControl.tsx:250-254).
@@ -256,26 +288,30 @@ private final class QueuedRowView: DSView {
 
     override func layout() {
         super.layout()
-        let h = bounds.height
+        let h: CGFloat = QueuedRunsView.row
+        let top = message == nil ? CGFloat(0) : 18
+        source.frame = NSRect(x: 2, y: 0, width: min(ceil(source.intrinsicContentSize.width), max(0, bounds.width - 90)), height: 18)
+        let tw = ceil(timestamp.textWidth)
+        timestamp.frame = NSRect(x: max(0, bounds.width - tw - 4), y: 1, width: tw, height: 16)
         // Actions right to left with `gap-1`.
         var right = bounds.width
         let visible = editing ? [cancel] : [remove, steer, edit]
         for b in visible {
             let s = b.intrinsicContentSize
             right -= s.width
-            b.frame = NSRect(x: right, y: (h - s.height) / 2, width: s.width, height: s.height)
+            b.frame = NSRect(x: right, y: top + (h - s.height) / 2, width: s.width, height: s.height)
             right -= 4
         }
         var x: CGFloat = 6
         if !saving.isHidden {
-            saving.frame = NSRect(x: x, y: (h - 12) / 2, width: 12, height: 12)
+            saving.frame = NSRect(x: x, y: top + (h - 12) / 2, width: 12, height: 12)
             x += 12 + 4
         }
         if !guestName.isHidden {
             let gw = min(ceil(guestName.textWidth) + 1, max(0, right - x))
-            guestName.frame = NSRect(x: x, y: (h - 16) / 2, width: gw, height: 16)
+            guestName.frame = NSRect(x: x, y: top + (h - 16) / 2, width: gw, height: 16)
             x += gw + 4
         }
-        text.frame = NSRect(x: x, y: (h - 16) / 2, width: max(0, right - x), height: 16)
+        text.frame = NSRect(x: x, y: top + (h - 16) / 2, width: max(0, right - x), height: 16)
     }
 }

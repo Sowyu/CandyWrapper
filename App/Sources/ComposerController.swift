@@ -357,6 +357,9 @@ final class ComposerController {
             self?.onModelChange?()
         }
         let queue = panel.queue
+        queue.threadTitle = { [weak panel] in panel?.model.linkedThread?($0)?.title }
+        queue.onOpenThread = { [weak panel] in panel?.model.onOpenThread?($0) }
+        queue.onOpenScheduledTask = { [weak panel] in panel?.model.onOpenScheduledTask?($0) }
         queue.onRemove = { [weak self] runId in self?.queueCommand("queued-run.cancel", ["runId": .string(runId.rawValue)]) }
         queue.onSteer = { [weak self] runId in self?.sendQueued(runId) }
         queue.onEdit = { [weak self] item in self?.beginEdit(item) }
@@ -1494,6 +1497,14 @@ final class ComposerController {
             : ComposerLogic.QueueState(projection: projection, optimistic: optimistic,
                                        canStartQueuedRun: targetEnvironmentId.flatMap { capabilities[$0]?.queuedRunStart } ?? false,
                                        canSkipCompaction: targetEnvironmentId.flatMap { capabilities[$0]?.compactionSteer } ?? false)
+        var queuedSenderTitles: [String: String] = [:]
+        for item in panel.queue.state.items {
+            if let sender = item.message?.senderThreadId, let title = panel.model.linkedThread?(ThreadId(sender))?.title {
+                queuedSenderTitles[sender] = title
+            }
+        }
+        panel.queue.senderThreadTitles = queuedSenderTitles
+        panel.queue.scheduledTaskTitles = panel.model.scheduledTaskTitles
         panel.queue.editingRunId = queuedEdit?.runId
         panel.queue.editBlockedReason = ComposerLogic.queuedEditBlockedReason(openQuestionCount: requests.userInputs.count)
         panel.queue.isBusy = queueBusy
@@ -2466,7 +2477,7 @@ final class ComposerController {
 
     // MARK: Queue
 
-    /// One strip command (`queued-run.cancel`, `queued-run.reorder`): the strip is busy until it returns.
+    /// One queue command (`queued-run.cancel`, `queued-run.start`): the strip is busy until it returns.
     private func queueCommand(_ type: String, _ fields: [String: JSONValue]) {
         guard let shell, case .thread(let threadId) = target, !queueBusy else { return }
         var command = fields
