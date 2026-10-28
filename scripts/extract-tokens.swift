@@ -8,18 +8,23 @@ import Foundation
 let root = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL.deletingLastPathComponent().deletingLastPathComponent()
 var dumpPath: String?
 var loadPath: String?
+var designVersion: String?
 do {
     var it = CommandLine.arguments.dropFirst().makeIterator()
     while let a = it.next() {
-        if a == "--dump" { dumpPath = it.next() }
+        if a == "--version" { designVersion = it.next() }
+        else if a == "--dump" { dumpPath = it.next() }
         else if a == "--load" { loadPath = it.next() }   // regenerate from a dump without a browser
     }
 }
 let cssURL = root.appendingPathComponent("design/t3-source/main.css")
 let swiftOut = root.appendingPathComponent("Packages/CandyKit/Sources/DesignSystem/Tokens/Tokens.generated.swift")
 let docOut = root.appendingPathComponent("docs/design-tokens.md")
-let css = try String(contentsOf: cssURL, encoding: .utf8)
-let t3Version = (try? String(contentsOf: root.appendingPathComponent("T3_VERSION"), encoding: .utf8))?
+// Keep the removed role available to CandyWrapper's own frozen palettes. T3 no longer paints it.
+let sourceCSS = try String(contentsOf: cssURL, encoding: .utf8)
+let compatibilityCSS = sourceCSS.contains("--update-surface:") ? "" : ":root{--update-surface:transparent}"
+let css = sourceCSS + compatibilityCSS
+let t3Version = designVersion ?? (try? String(contentsOf: root.appendingPathComponent("T3_VERSION"), encoding: .utf8))?
     .trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown"
 
 func fail(_ m: String) -> Never { FileHandle.standardError.write(Data((m + "\n").utf8)); exit(1) }

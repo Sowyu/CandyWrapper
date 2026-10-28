@@ -170,8 +170,12 @@ public enum ThemeRuntime {
     public nonisolated static func resolve(_ input: ThemeRuntimeInput) -> ThemePalettes {
         // The stock palettes at stock contrast are the extracted tokens themselves.
         let stock = input.contrast == 100
-        let light = input.light == nil && stock ? nil : evaluate(input.light, contrast: input.contrast, contexts: (0, 2))
-        let dark = input.dark == nil && stock ? nil : evaluate(input.dark, contrast: input.contrast, contexts: (1, 3))
+        let candyLight = input.glassLight || input.ditherLight
+        let candyDark = input.glassDark || input.ditherDark
+        let light = input.light == nil && stock && !candyLight ? nil
+            : evaluate(input.light, contrast: input.contrast, contexts: (0, 2), candyTheme: candyLight)
+        let dark = input.dark == nil && stock && !candyDark ? nil
+            : evaluate(input.dark, contrast: input.contrast, contexts: (1, 3), candyTheme: candyDark)
         func diff(_ palette: Palette, dark: Bool) -> Palette {
             guard input.blueOrangeDiff else { return palette }
             // index.css:2086-2099 and the bundled Tailwind theme colors.
@@ -182,6 +186,15 @@ public enum ThemeRuntime {
                 switch Palette.memberNames[i] {
                 case "--diff-addition", "--diff-addition-foreground": return addition
                 case "--diff-deletion", "--diff-deletion-foreground": return deletion
+                // index.css at 3814:1291-1301. Keep CandyWrapper's existing diff colors.
+                case "--diff-added-icon" where !(dark ? candyDark : candyLight):
+                    return ThemeCSSColor.transparent.token
+                case "--diff-modified-icon" where !(dark ? candyDark : candyLight):
+                    let muted = palette.mutedForeground
+                    let alpha = dark ? 0.65 : 1.0
+                    var srgb = muted.srgb, p3 = muted.displayP3
+                    srgb.w *= alpha; p3.w *= alpha
+                    return TokenColor(srgb: srgb, displayP3: p3)
                 default: return members[i]
                 }
             })
@@ -213,6 +226,10 @@ public enum ThemeRuntime {
 
     private nonisolated static let parsedStandard = ThemeExpressions.standard.map { $0.map(parse) }
     private nonisolated static let parsedThemed = ThemeExpressions.themed.map { $0.map(parse) }
+    private nonisolated static let parsedCandyStandard = CandyTheme3669.standard.map { $0.map(parse) }
+    private nonisolated static let parsedCandyThemed = CandyTheme3669.themed.map { $0.map(parse) }
+    private nonisolated static let candyIndices = Dictionary(uniqueKeysWithValues:
+        CandyTheme3669.names.enumerated().map { ($0.element, $0.offset) })
     private nonisolated static let parsedBuiltIn = ThemeExpressions.builtIn.mapValues { $0.mapValues { $0.map(parse) } }
 
     private nonisolated static func parse(_ css: String) -> ThemeCSSExpression {
@@ -220,7 +237,7 @@ public enum ThemeRuntime {
     }
 
     /// The main and sidebar palettes for one appearance (`contexts` index the expression columns).
-    nonisolated static func evaluate(_ half: ThemeRuntimeHalf?, contrast: Int, contexts: (Int, Int)) -> (Palette, Palette) {
+    nonisolated static func evaluate(_ half: ThemeRuntimeHalf?, contrast: Int, contexts: (Int, Int), candyTheme: Bool = false) -> (Palette, Palette) {
         let percents = [
             "--appearance-contrast-base": Double(min(contrast, 100)),
             "--appearance-contrast-boost": Double(max(contrast - 100, 0)),
@@ -229,10 +246,15 @@ public enum ThemeRuntime {
         var colors: [String: ThemeCSSColor] = [:]
         for (role, value) in half?.colors ?? [:] { colors[role.cssVariable] = ThemeCSSColor.parse(value) }
         let table = half == nil ? parsedStandard : parsedThemed
+        let candyTable = candyTheme ? (half == nil ? parsedCandyStandard : parsedCandyThemed) : []
         let builtIn = half?.builtInId.flatMap { parsedBuiltIn[$0] } ?? [:]
         func palette(_ column: Int) -> Palette {
             Palette(members: { i in
-                (builtIn[i]?[column] ?? table[i][column]).evaluate(colors: colors, percents: percents).token
+                if candyTheme, let oldIndex = candyIndices[Palette.memberNames[i]] {
+                    if half == nil && contrast == 100 { return CandyTheme3669.colors[oldIndex][column] }
+                    return candyTable[oldIndex][column].evaluate(colors: colors, percents: percents).token
+                }
+                return (builtIn[i]?[column] ?? table[i][column]).evaluate(colors: colors, percents: percents).token
             })
         }
         return (palette(contexts.0), palette(contexts.1))

@@ -51,9 +51,9 @@ public struct ThemeDefinition: Equatable, Sendable {
 
     /// CandyWrapper's own theme, not in T3: T3 Code's stock colors over a window the system frosts with a
     /// behind-window blur (`WindowGlass`). Its id can't clash with a theme saved in T3, whose ids never
-    /// carry this prefix by convention, and the runtime paints it with the stock tokens, not these colors.
+    /// carry this prefix by convention. The runtime uses its frozen tokens instead of these editor colors.
     public static let glass = ThemeDefinition(id: "candywrapper-glass", label: "Glass", appearance: .light,
-                                              colors: standardLightColors, variants: [.dark: standardDarkColors])
+                                              colors: CandyTheme3669.lightColors, variants: [.dark: CandyTheme3669.darkColors])
 
     /// CandyWrapper's own theme, not in T3: the stock look with a dithered picture the user chose (the desktop picture
     /// until they do) in the main panel (`DitherArtView`). Every other surface stays solid.
@@ -63,7 +63,7 @@ public struct ThemeDefinition: Equatable, Sendable {
     /// Dither's palette: Capy's default theme, its hover and selected fills translucent overlays like Capy's `--secondary`, from its stylesheet (`--bg`, `--panel`, `--card`, `--popover`, the text
     /// mixes and the teal `--primary`, docs/research in ~/CandyWrapper-research/capy-design.md). Near-black cool grays,
     /// the chrome a step darker than the panel, and teal for the focus ring, selection and send button.
-    static let capyDarkColors: [ThemeColorRole: String] = standardDarkColors.merging([
+    static let capyDarkColors: [ThemeColorRole: String] = CandyTheme3669.darkColors.merging([
         .canvas: "#131314", .chrome: "#0a0a0b", .toolbar: "#0a0a0b", .toolbarBorder: "#1d1d1e", .toolbarControl: "#181819",
         .toolbarControlHover: "#ffffff14", .surface: "#181819", .surfaceRaised: "#202021", .surfaceOverlay: "#202021",
         .text: "#f5f5f5", .textMuted: "#aaaaab", .border: "#232324", .input: "#2a2a2b", .focus: "#2b948b",
@@ -80,7 +80,7 @@ public struct ThemeDefinition: Equatable, Sendable {
     /// Light departs from Capy where its grays fail WCAG AA over the art: muted text, placeholders and labels reach
     /// 4.5:1 over the darkest dot the light scrim allows (`DitherArt.lightScrim`), icons and control edges 3:1, the
     /// accent dark enough for white labels (`DitherAccent.lightAccent`), and dividers show as a line (docs/research/light-mode-readability-2026-10-28.md).
-    static let capyLightColors: [ThemeColorRole: String] = standardLightColors.merging([
+    static let capyLightColors: [ThemeColorRole: String] = CandyTheme3669.lightColors.merging([
         .canvas: "#f9f9f9", .chrome: "#ececec", .toolbar: "#ececec", .toolbarBorder: "#c2c2c2", .toolbarControl: "#ffffff",
         .toolbarControlHover: "#0000000d", .surface: "#ffffff", .surfaceRaised: "#ffffff", .surfaceOverlay: "#ffffff",
         .text: "#1e1e1e", .textMuted: "#5a5a5a", .border: "#c2c2c2", .input: "#858585", .focus: "#07837a",

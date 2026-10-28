@@ -8,14 +8,14 @@ Status on 2026-10-09: milestone 2 component library complete, waiting for the us
 
 | What | Source | Command |
 |---|---|---|
-| Design tokens | `design/t3-source/main.css`, T3's compiled stylesheet for the version in `T3_VERSION` | `scripts/extract-tokens` |
+| Design tokens | `design/t3-source/main.css`, T3's compiled stylesheet at the version recorded in `design/t3-source/README.md` | `scripts/extract-tokens` |
 | Icons | lucide-static 0.564.0 (the version T3 pins) and T3's brand SVGs in `apps/web/src/components/Icons.tsx` | `scripts/extract-icons` |
 | Component references | T3's own component markup and class strings, rendered with `main.css` in headless Chromium | `scripts/component-reference` |
-| Fidelity report | our components rendered offscreen at 2x, diffed against the references | `cd Packages/CandyKit && swift test --filter Fidelity` |
+| Fidelity report | our components rendered offscreen at 2x, diffed against the references | `scripts/test --filter Fidelity` |
 
 `scripts/extract-tokens` lets Chromium resolve every CSS variable (var chains, `color-mix()`, `oklch()`) in light, dark and the sidebar subtree. The extraction therefore matches T3's rendering, not our reading of the CSS. The full token sheet is generated into [design-tokens.md](design-tokens.md).
 
-When T3 updates: bump `T3_VERSION`, copy the new compiled CSS into `design/t3-source/main.css`, run the three scripts, then the fidelity suite.
+When T3 updates: copy the new compiled CSS into `design/t3-source/main.css`, run the generators, then the fidelity suite. During a staged design port, pass `--version <stylesheet version>` to `scripts/extract-tokens` and `T3_DESIGN_VERSION=<stylesheet version>` to `scripts/gen-theme-palettes.py`; the runtime pin in `T3_VERSION` can move later.
 
 ## Redesign background
 
@@ -23,7 +23,7 @@ Redesign (Experimental) is CandyWrapper's own theme. `DitherArtView` renders its
 
 ## Fonts
 
-T3 loads no web fonts. The UI uses the system stack (`-apple-system`, so SF Pro), drawn with `NSFont.systemFont`. Code text uses `ui-monospace`, and Chromium on this machine resolves that to Menlo, so `DSFont.mono` uses Menlo. Check this against the real desktop app on a Retina Mac before milestone 4, since T3's settings label the default as "SF Mono". The terminal's Symbols Nerd Font arrives with the terminal work.
+T3 Nightly 3814 ships Inter Variable (`apps/web/src/main.tsx:4`), after `-apple-system` and BlinkMacSystemFont in the sans stack (`index.css:170-175`). Chromium still selects `.SFNS-Regular` on macOS, confirmed with `CSS.getPlatformFontsForNode`. The native UI uses `NSFont.systemFont`. Code text uses `ui-monospace`, and Chromium on this machine resolves that to Menlo, so `DSFont.mono` uses Menlo. Check this against the real desktop app on a Retina Mac before milestone 4, since T3's settings label the default as "SF Mono". The terminal's Symbols Nerd Font arrives with the terminal work.
 
 Text is drawn with Core Text with font smoothing on. Measured against Chromium, smoothing gives 2.91% differing pixels on Button and plain antialiasing 3.27%. Baselines are rounded in device pixels the way Blink does.
 

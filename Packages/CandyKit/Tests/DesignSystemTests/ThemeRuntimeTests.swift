@@ -66,6 +66,11 @@ final class ThemeRuntimeTests: XCTestCase {
             XCTAssertEqual(palette.diffAddition, palette.diffAdditionForeground)
             XCTAssertEqual(palette.diffDeletion, palette.diffDeletionForeground)
         }
+        for (dark, palette) in [(false, output.light), (true, output.dark)] {
+            XCTAssertEqual(palette.diffAddedIcon.srgb.w, 0)
+            XCTAssertEqual(palette.diffModifiedIcon.srgb.x, palette.mutedForeground.srgb.x)
+            XCTAssertEqual(palette.diffModifiedIcon.srgb.w, palette.mutedForeground.srgb.w * (dark ? 0.65 : 1))
+        }
         XCTAssertTrue(ThemeRuntime.resolve(.init()).isSame(as: .standard))
     }
 
@@ -116,24 +121,23 @@ final class ThemeRuntimeTests: XCTestCase {
         XCTAssertTrue(box.needsDisplay())
     }
 
-    /// T3 Code's own palette as a theme (the editor's default draft) paints what the stock tokens paint.
-    func testStandardColorsAsAThemeMatchTheStockLook() {
-        for (dark, stock) in [(false, Tokens.light), (true, Tokens.dark)] {
-            let colors = ThemePalette.standardColors(dark ? .dark : .light)
+    /// 3814's shared editor defaults still use the older canvas/text colors. A theme must use its supplied
+    /// role values even when T3's unthemed CSS has moved on (themePalettes.ts:111-236; index.css:1113-1228).
+    func testStandardColorsAsAThemeUseTheSharedRoleValues() {
+        let roles: [(KeyPath<Palette, TokenColor>, ThemeColorRole)] = [
+            (\.sidebar, .sidebar), (\.sidebarForeground, .sidebarForeground),
+            (\.background, .canvas), (\.card, .surface), (\.foreground, .text), (\.primary, .messageAction),
+        ]
+        for appearance in ThemeAppearance.allCases {
+            let colors = ThemePalette.standardColors(appearance)
             let half = ThemeRuntimeHalf(colors: colors)
-            let p = ThemeRuntime.resolve(ThemeRuntimeInput(light: half, dark: half)).palette(dark: dark, sidebar: false)
-            let sb = ThemeRuntime.resolve(ThemeRuntimeInput(light: half, dark: half)).palette(dark: dark, sidebar: true)
-            let sbStock = dark ? Tokens.sidebarDark : Tokens.sidebarLight
-            for key in [\Palette.sidebar, \.sidebarForeground] {
-                let got = sb[keyPath: key].srgb, want = sbStock[keyPath: key].srgb
-                let d = (0..<3).map { abs(got[$0] - want[$0]) }.max()!
-                XCTAssertLessThan(d, 0.03, "sidebar \(key) dark=\(dark): \(got) vs \(want)")
-            }
-            // Alpha tokens (border, message surface) are flattened in T3's standard theme palette, so they are not compared.
-            for key in [\Palette.background, \.card, \.foreground, \.primary] {
-                let got = p[keyPath: key].srgb, want = stock[keyPath: key].srgb
-                let d = (0..<3).map { abs(got[$0] - want[$0]) }.max()!
-                XCTAssertLessThan(d, 0.03, "\(key) dark=\(dark): \(got) vs \(want)")
+            let palettes = ThemeRuntime.resolve(ThemeRuntimeInput(light: half, dark: half))
+            for sidebar in [false, true] {
+                let palette = palettes.palette(dark: appearance == .dark, sidebar: sidebar)
+                for (key, role) in roles {
+                    let expected = ThemeCSSColor.parse(colors[role]!)!.token
+                    XCTAssertEqual(palette[keyPath: key], expected, "\(appearance) sidebar=\(sidebar) \(role)")
+                }
             }
         }
     }
