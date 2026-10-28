@@ -730,7 +730,9 @@ private struct Builder {
         nonisolated(unsafe) var next = 0
         let lock = NSLock()
         nonisolated(unsafe) let appearance = NSAppearance.current ?? NSAppearance(named: .aqua)!
+        let design = ThreadDesign.uses3814
         DispatchQueue.concurrentPerform(iterations: workers) { _ in
+          ThreadDesign.$layoutUses3814.withValue(design) {
           appearance.performAsCurrentDrawingAppearance {
           while true {
             let chunk: Int = lock.withLock { defer { next += 1 }; return next }
@@ -749,6 +751,7 @@ private struct Builder {
                 guard (builder.codeIndex, builder.tableIndex, builder.mathIndex) == ends[index] else { return }
             }
             lock.withLock { results[chunk] = out }
+          }
           }
           }
         }

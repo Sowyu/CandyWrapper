@@ -1,6 +1,6 @@
 # Progress
 
-- [ ] Fix parallel Markdown theme isolation and the three 3824 thread screen differences (taken 2026-10-28, design-thread-followup). Local commits only, offscreen checks only.
+- [ ] Fix parallel Markdown theme isolation and the three 3824 thread screen differences (taken 2026-10-28, design-thread-followup). Race fixed; three consecutive parallel fast runs pass (2,221 Swift Testing tests and 19 XCTest tests each), plus the opt-in gallery check. Screen follow-up pending. Local commits only, offscreen checks only.
 
 - [x] Port Nightly 3814/3824 thread timeline, Markdown and thread details for default themes (taken 2026-10-28, design-thread). Regenerated component markup and references, integrated the 3824 captures, and kept all 80 Redesign images exact. All 298 scoped component cases pass; three screen cases remain above their unchanged ceilings. The serial fast lane passes 2,220 Swift Testing tests and 19 XCTest tests; the parallel run exposed a global-theme test-isolation race in background Markdown layout. Deferred work-history loading/retry/skeleton state remains a follow-up. [Source audit, commits and per-suite before/after results](docs/research/nightly-thread-3824-design.md). Local commits only; no push or release.
 

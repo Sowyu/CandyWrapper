@@ -7,7 +7,7 @@ import T3Store
 @testable import Features
 
 /// Long answers parse and lay out off the main thread: the result must be the layout the main thread would make.
-@Suite(.serialized)
+@Suite(.serialized, .threadDesign(true))
 @MainActor
 struct MarkdownBackgroundLayoutTests {
     /// How long a test waits for a background layout. Alone one lands in 0.08 s, but in the full parallel suite the
@@ -68,8 +68,11 @@ struct MarkdownBackgroundLayoutTests {
         let document = MarkdownDocument(parsing: String(repeating: Self.unit, count: 40), math: true)
         #expect(document.blocks.count >= MarkdownLayout.parallelBlocksForTests)
         let serial = MarkdownLayout(document: document, width: 680, unwrappedCode: [3, 7], cwd: "/tmp", expandedTables: [2], runsShell: true)
+        let design = ThreadDesign.uses3814
         let parallel = await Task.detached {
-            MarkdownLayout(document: document, width: 680, unwrappedCode: [3, 7], cwd: "/tmp", expandedTables: [2], runsShell: true, parallel: true)
+            ThreadDesign.$layoutUses3814.withValue(design) {
+                MarkdownLayout(document: document, width: 680, unwrappedCode: [3, 7], cwd: "/tmp", expandedTables: [2], runsShell: true, parallel: true)
+            }
         }.value
         let a = Self.signature(serial), b = Self.signature(parallel)
         #expect(a.count == b.count)
@@ -77,22 +80,24 @@ struct MarkdownBackgroundLayoutTests {
     }
 
     /// A long document lays out in the background: the view reserves the pending height, then takes the same layout.
-    @Test func viewLaysOutInBackground() async throws {
-        let document = MarkdownDocument(parsing: String(repeating: Self.unit, count: 40))
-        let view = MarkdownView(frame: NSRect(x: 0, y: 0, width: 680, height: 100))
-        view.laysOutInBackground = true
-        view.pendingHeight = { _ in 1234 }
-        var changes = 0
-        view.onHeightChange = { changes += 1 }
-        view.document = document
-        #expect(view.height(forWidth: 680) == 1234)
-        #expect(view.isPending(forWidth: 680))
-        let deadline = Date().addingTimeInterval(Self.backgroundWait)
-        while view.isPending(forWidth: 680), Date() < deadline { try await Task.sleep(for: .milliseconds(10)) }
-        #expect(!view.isPending(forWidth: 680))
-        #expect(changes == 1)
-        let expected = MarkdownLayout(document: document, width: 680)
-        #expect(Self.signature(view.layout(forWidth: 680)) == Self.signature(expected))
+    @Test(arguments: [true, false]) func viewLaysOutInBackground(modern: Bool) async throws {
+        try await ThreadDesign.$layoutUses3814.withValue(modern) {
+            let document = MarkdownDocument(parsing: String(repeating: Self.unit, count: 40))
+            let view = MarkdownView(frame: NSRect(x: 0, y: 0, width: 680, height: 100))
+            view.laysOutInBackground = true
+            view.pendingHeight = { _ in 1234 }
+            var changes = 0
+            view.onHeightChange = { changes += 1 }
+            view.document = document
+            #expect(view.height(forWidth: 680) == 1234)
+            #expect(view.isPending(forWidth: 680))
+            let deadline = Date().addingTimeInterval(Self.backgroundWait)
+            while view.isPending(forWidth: 680), Date() < deadline { try await Task.sleep(for: .milliseconds(10)) }
+            #expect(!view.isPending(forWidth: 680))
+            #expect(changes == 1)
+            let expected = MarkdownLayout(document: document, width: 680)
+            #expect(Self.signature(view.layout(forWidth: 680)) == Self.signature(expected))
+        }
     }
 
     /// A view recycled for another message while the last one's layout runs never shows that layout.
