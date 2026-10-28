@@ -88,6 +88,33 @@ struct NightlyCompatTests {
         #expect(configSeen && shellThreads > 100 && threadSeen)
     }
 
+    /// A read-only session against the 3814 sandbox, with the same migrated thread as 3473/3669.
+    @Test func recorded3814ConfigShellAndThreadDecode() throws {
+        var configSeen = false, shellThreads = 0, threadSeen = false
+        for frame in try WireTests.load("24-nightly-3814") where frame.dir == "recv" && frame.kind == "ws" {
+            let value = try JSONDecoder().decode(JSONValue.self, from: frame.bodyData)
+            if value["requestId"]?.stringValue == "1", let config = value["exit"]?["value"] {
+                let decoded = try config.decode(as: ServerProviderConfig.self)
+                #expect(decoded.capabilities.contains("providerWorkspaceSnapshotsOnDemand"))
+                configSeen = true
+            }
+            for item in value["values"]?.arrayValue ?? [] {
+                if value["requestId"]?.stringValue == "3", case .snapshot(let shell, _) = try item.decode(as: ShellStreamItem.self) {
+                    shellThreads = max(shellThreads, shell.threads.count)
+                }
+                if value["requestId"]?.stringValue == "4" {
+                    _ = try item.decode(as: ThreadStreamItem.self)
+                    if let projection = item["projection"] {
+                        let decoded = try projection.decode(as: ThreadProjection.self)
+                        #expect(Set(decoded.visibleTurnItems.map(\.item.type.rawValue)).isSuperset(of: ["fork", "compaction", "subagent"]))
+                        threadSeen = true
+                    }
+                }
+            }
+        }
+        #expect(configSeen && shellThreads > 100 && threadSeen)
+    }
+
     @Test func futureRecordedConfigAndFramesDecode() throws {
         var unknown = 0, configSeen = false
         for frame in try WireTests.load("21-future-server") where frame.dir == "recv" {
