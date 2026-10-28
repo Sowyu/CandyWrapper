@@ -6,6 +6,8 @@ import DesignSystem
 /// text, `shadow-xs` at 24% of the fill, hover fill `message-action-hover`, and 64% opacity with
 /// no shadow while disabled. The question footer uses it at 28px tall (`sm:h-7`), 12 or 16 padding.
 final class MessageActionPill: ControlView {
+    var tooltip = "" { didSet { if tooltip != oldValue { tip.text = tooltip; setAccessibilityHelp(tooltip) } } }
+    private lazy var tip = TooltipController.attach(to: self, text: "")
     var title = "" { didSet { if title != oldValue { label.text = title; invalidateIntrinsicContentSize(); needsLayout = true } } }
     /// `px-3` compact, `px-4` otherwise.
     var compact = true { didSet { if compact != oldValue { invalidateIntrinsicContentSize(); needsLayout = true } } }

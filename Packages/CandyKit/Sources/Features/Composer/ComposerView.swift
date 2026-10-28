@@ -552,6 +552,7 @@ public final class ComposerView: DSView {
         // With a question open the round button is only Stop (`renderStopGenerationButton(true)`).
         let face = questionFooter != nil ? .stop
             : ComposerLogic.primaryAction(run: runState, hasContent: hasContent, busy: isBusy, mode: sendMode, editingQueued: editingQueued)
+        if primary.face != face { needsLayout = true }
         primary.face = face
         let validationMessage = ComposerLogic.lengthValidationMessage(prompt)
         let status = ComposerLogic.submitStatus(environmentUnavailable: environmentUnavailable, providerUnavailable: providerUnavailable,
@@ -592,7 +593,15 @@ public final class ComposerView: DSView {
                 primary.setAccessibilityLabel(face == .queue ? "Queue message" : "Steer message")
             }
         }
+        // Typing and send blockers refresh without a layout when the editor keeps its height.
+        // Both halves must follow the send button immediately (T3 3669 ComposerPrimaryActions.tsx:320-326).
+        compactSend.isEnabled = primary.isEnabled
+        compactSendMenu.isEnabled = primary.isEnabled
         if let tokens = compactBeforeSendTokens {
+            let compactDisabledReason = status ?? validationMessage ?? (!hasContent ? "Write a message or attach a file to send" : nil)
+            compactSend.tooltip = compactDisabledReason
+                ?? "Summarize \(ThreadContextWindowUsage.tokens(tokens)) tokens of history, then send"
+            compactSendMenu.tooltip = compactDisabledReason ?? "Send options"
             compactPill.tokens = ThreadContextWindowUsage.tokens(tokens)
             compactPill.keepFullHistory = keepFullHistory
         }
@@ -720,8 +729,7 @@ public final class ComposerView: DSView {
         }
     }
 
-    /// `MenuPopup align="end" side="top"` with "Implement in a new thread".
-    /// Sends once with compaction on or off, leaving the thread's standing choice as the user set it.
+    /// Selects compaction on or off before sending, as the Compact chip does.
     private func sendCompacting(_ compacting: Bool) {
         if keepFullHistory == compacting { onToggleKeepFullHistory?() }
         submit()
@@ -969,9 +977,6 @@ public final class ComposerView: DSView {
         compactSendMenu.isHidden = !splitCompact
         if splitCompact {
             primary.isHidden = true
-            compactSend.isEnabled = primary.isEnabled
-            compactSendMenu.isEnabled = primary.isEnabled
-            compactSend.toolTip = "Summarize \(compactBeforeSendTokens.map(ThreadContextWindowUsage.tokens) ?? "") tokens of history, then send"
             let cw = compactSendMenu.intrinsicContentSize.width
             compactSendMenu.frame = NSRect(x: right - cw, y: midY - 16, width: cw, height: 32)
             let w = compactSend.intrinsicContentSize.width
