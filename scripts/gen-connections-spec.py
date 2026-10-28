@@ -60,15 +60,23 @@ def button(variant, size, inner, extra_cls="", attrs=""):
     return f'<button type="button" data-slot="button" class="{cls}"{attrs}>{inner}</button>'
 
 
-# Settings nav (SettingsSidebarNav.tsx:244-345) with the sidebar.tsx menu button.
+# Settings nav: Nightly 3754 SettingsSidebarNav.tsx:244-405, classic design, with the existing sidebar.tsx menu button.
 MB = ("peer/menu-button flex w-full cursor-pointer items-center gap-[var(--sidebar-control-gap)] overflow-hidden text-left outline-hidden ring-ring transition-[width,height,padding] hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:ring-2 active:bg-sidebar-row-active active:text-sidebar-foreground disabled:pointer-events-none disabled:opacity-64 aria-disabled:pointer-events-none aria-disabled:opacity-64 data-[active=true]:bg-sidebar-row-selected data-[active=true]:font-medium data-[active=true]:text-sidebar-foreground data-[state=open]:hover:bg-sidebar-row-hover data-[state=open]:hover:text-sidebar-foreground [&>span:last-child]:truncate [&>svg:not([class*='size-'])]:size-4 [&>svg]:shrink-0 [&>svg]:text-[var(--sidebar-icon-color)] hover:[&>svg]:text-sidebar-foreground active:[&>svg]:text-sidebar-foreground data-[active=true]:[&>svg]:text-sidebar-foreground "
       "h-8 rounded-[var(--control-radius)] px-[var(--sidebar-row-content-inset)] py-1.5 text-sm font-medium text-sidebar-muted-foreground/80")
 SNAPSHOT = ('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
             'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H6a3 3 0 0 0-3 3v2M16 3h2a3 3 0 0 1 3 3v2M21 16v2a3 3 0 0 1-3 3h-2M8 21H6a3 3 0 0 1-3-3v-2"></path>'
             '<rect width="10" height="8" x="7" y="8" rx="2"></rect><circle cx="12" cy="12" r="1.5"></circle></svg>')
-NAV = [("General", "settings-2"), ("Appearance", "palette"), ("Keybindings", "keyboard"), ("SnapShots", None), ("Providers", "bot"),
-       ("Integrations", "blocks"), ("Scheduled Tasks", "calendar-clock"), ("Source Control", "git-branch"), ("Storage", "hard-drive"),
-       ("Connections", "link-2"), ("Archive", "archive")]
+# Nightly 3754 settingsSearch.ts:85-143 and SettingsSidebarNav.tsx:83-106, 350-403.
+# Keep the old theme's stylesheet; only the concern groups and their content changed.
+NAV_GROUPS = [
+    (None, [("General", "settings-2"), ("Appearance", "palette"), ("Chat", "message-square-text"),
+            ("Diffs & pull requests", "file-diff"), ("Keybindings", "keyboard"), ("SnapShots", None)]),
+    ("Agents", [("Providers", "bot"), ("Threads", "messages-square"), ("Browser", "globe"),
+                ("Devices", "smartphone"), ("Scheduled tasks", "calendar-clock")]),
+    ("Code", [("Projects", "panels-top-left"), ("Source control", "git-branch"), ("Worktrees", "folder-tree")]),
+    ("Connections", [("Environments", "server"), ("Sharing & access", "shield-check")]),
+    (None, [("Maintenance", "wrench"), ("Labs", "flask-conical"), ("About", "info"), ("Archive", "archive")]),
+]
 SIDEBAR = '<div data-app-sidebar="" class="bg-sidebar text-sidebar-foreground" style="width:255px">{}</div>'
 
 
@@ -86,9 +94,17 @@ search = ('<div class="flex h-8 items-center gap-2 rounded-md px-2 py-1.5 text-s
           f'{lucide("search", "size-4 shrink-0 text-sidebar-muted-foreground/80")}'
           f'<input type="search" placeholder="Search" class="{SIDEBAR_INPUT}">'
           f'<kbd class="{KBD}" data-slot="kbd">/</kbd></div>')
-menu = "".join(menu_item(label, icon, label == "Connections", label != "Connections") for label, icon in NAV)
+def nav_group(heading, entries):
+    title = (f'<h3 class="px-2 text-xs font-medium text-sidebar-muted-foreground/80">{heading}</h3>'
+             if heading else "")
+    menu = "".join(menu_item(label, icon, label == "Environments", False) for label, icon in entries)
+    return (f'<div role="group" class="flex flex-col gap-1">{title}'
+            f'<ul class="flex w-full min-w-0 flex-col gap-1">{menu}</ul></div>')
+
+
+menu = "".join(nav_group(heading, entries) for heading, entries in NAV_GROUPS)
 nav = SIDEBAR.format('<div class="relative flex w-full min-w-0 flex-col p-[var(--sidebar-content-inset)]"><div class="flex flex-col gap-2">'
-                     f'{search}<ul class="flex w-full min-w-0 flex-col gap-1">{menu}</ul></div></div>')
+                     f'{search}<div class="flex flex-col gap-4">{menu}</div></div></div>')
 back = SIDEBAR.format('<div class="flex flex-col gap-2 px-[var(--sidebar-content-inset)] py-1"><div class="flex items-center gap-1"><div class="min-w-0 flex-1">'
                       '<ul class="flex w-full min-w-0 flex-col gap-1 flex-row items-center"><li class="group/menu-item relative min-w-0 flex-1">'
                       f'<button type="button" data-sidebar="menu-button" data-slot="sidebar-menu-button" data-active="false" class="{MB}">{lucide("arrow-left")}<span>Back</span></button>'

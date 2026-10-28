@@ -1,0 +1,46 @@
+{
+ "base": "http://127.0.0.1:47400",
+ "width": 1100,
+ "height": 780,
+ "scale": 2,
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "states": [
+  {
+   "name": "06-user-input-request",
+   "path": "/settings/appearance",
+   "actions": [
+    {
+     "js": "(()=>{const toggle=document.querySelector('[aria-label=\"New design\"]');if(toggle?.getAttribute('aria-checked')==='true') toggle.click()})()"
+    },
+    {
+     "wait": 800
+    },
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/cc77e38e-569c-437d-b3ff-16ac64620624/93145deb-c73f-4d37-827b-1603308c4826"
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "js": "document.activeElement?.blur()"
+    },
+    {
+     "hover": "header"
+    },
+    {
+     "wait": 1000
+    },
+    {
+     "js": "JSON.stringify({classic:!document.documentElement.hasAttribute('data-redesign'),question:document.querySelector('[data-pending-user-input-toggle]')?.textContent.trim()})",
+     "log": true
+    }
+   ]
+  }
+ ]
+}

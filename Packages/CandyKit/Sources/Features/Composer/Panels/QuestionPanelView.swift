@@ -41,10 +41,15 @@ public final class QuestionPanelView: ComposerBannerView {
 
     // MARK: Views
 
-    /// Default density: `px-1 py-1`, the 24px icon column, `gap-x-1`.
-    static let pad: CGFloat = 4, column: CGFloat = 24, headerHeight: CGFloat = 24
-    /// `ComposerBanner.Body`: `ps-7 pe-1 pb-1`.
-    static let bodyStart: CGFloat = 28, bodyEnd: CGFloat = 4, bodyBottom: CGFloat = 4
+    /// Default density: `px-1 py-1`; the classic question header adds `px-4 pt-1.5`.
+    /// Redesign keeps its existing spacing.
+    static let pad: CGFloat = 4
+    private var isDither: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    private var headerHeight: CGFloat { isDither ? 24 : 30 }
+    /// Nightly 3754 ComposerPendingUserInputPanel.tsx:237-245: `sm:ps-5.5 pe-4 pb-1`.
+    private var bodyStart: CGFloat { isDither ? 28 : 22 }
+    private var bodyEnd: CGFloat { isDither ? 4 : 16 }
+    static let bodyBottom: CGFloat = 4
 
     private var threadId: ThreadId = ""
     private var collapsedQuestionId: String?
@@ -53,7 +58,7 @@ public final class QuestionPanelView: ComposerBannerView {
     private let header = HeaderButton()
     private let headerLabel = glassLabel(font: DSFont.ui(12, weight: .medium), color: Themed.color(\.mutedForeground), lineHeight: 16)
     private let collapsedQuestion = glassLabel(font: DSFont.ui(12), color: Themed.color(\.secondaryLabel), lineHeight: 16)
-    private let counter = glassLabel(font: SB.tabular(10, .medium), color: Themed.color(\.mutedForeground), lineHeight: 14)
+    private let counter = glassLabel(font: SB.tabular(12, .medium), color: Themed.color(\.mutedForeground), lineHeight: 16)
     /// `ComposerBanner.ToggleIcon`: a ghost icon-xs button drawn `pointer-events-none`, so only
     /// its chevron (ghost icon color) shows and the header row takes the click.
     private let chevronDown = IconView(name: .chevronDown, size: 14, strokeColor: Themed.color(\.contrastMutedForeground))
@@ -255,60 +260,68 @@ public final class QuestionPanelView: ComposerBannerView {
     // MARK: Layout
 
     private func bodyHeight(width: CGFloat) -> CGFloat {
-        let textWidth = max(0, width - 2 * Self.pad - Self.bodyStart - Self.bodyEnd)
-        var h = questionText.height(forWidth: textWidth)
+        let textWidth = max(0, width - 2 * Self.pad - bodyStart - bodyEnd)
+        var h = (isDither ? 0 : 8) + questionText.height(forWidth: textWidth)
         if !multiHint.isHidden { h += 4 + 16 }
-        h += 8
-        for (i, row) in rows.enumerated() { h += (i > 0 ? 2 : 0) + row.height(forWidth: textWidth) }
+        h += isDither ? 8 : 6
+        for (i, row) in rows.enumerated() {
+            h += (isDither && i > 0 ? 2 : 0) + row.height(forWidth: textWidth + (isDither ? 0 : 6))
+        }
         return h + Self.bodyBottom
     }
 
     /// The banner's full height at `width`, the 17px under the composer included.
     public func preferredHeight(width: CGFloat) -> CGFloat {
         let body = isCollapsed || session == nil ? 0 : min(maxBodyHeight, bodyHeight(width: width))
-        return Self.pad + Self.headerHeight + body + Self.pad + Self.overlap
+        return Self.pad + headerHeight + body + Self.pad + Self.overlap
     }
 
     public override func layout() {
         super.layout()
         let w = bounds.width, pad = Self.pad
-        header.frame = NSRect(x: pad, y: pad, width: w - 2 * pad, height: Self.headerHeight)
-        // Header actions, right to left: dismiss, chevron, counter (`gap-1`).
-        var right = w - pad
+        header.frame = NSRect(x: pad, y: pad, width: w - 2 * pad, height: headerHeight)
+        // Nightly 3754 ComposerPendingUserInputPanel.tsx:187-212: `px-4 pt-1.5`, 24px action slots.
+        var right = w - pad - (isDither ? 0 : 16)
+        let headerInset: CGFloat = isDither ? 0 : 6
+        counter.font = SB.tabular(isDither ? 10 : 12, .medium)
+        counter.lineHeight = isDither ? 14 : 16
         if !dismiss.isHidden {
-            dismiss.frame = NSRect(x: right - 24, y: pad, width: 24, height: 24)
-            right -= 24 + 4
+            dismiss.frame = NSRect(x: right - 24, y: pad + headerInset, width: 24, height: 24)
+            right -= isDither ? 28 : 24
         }
-        for chevron in [chevronDown, chevronUp] { chevron.frame = NSRect(x: right - 19, y: pad + 5, width: 14, height: 14) }
+        for chevron in [chevronDown, chevronUp] { chevron.frame = NSRect(x: right - 19, y: pad + headerInset + 5, width: 14, height: 14) }
         right -= 24
         if !counter.isHidden {
-            let cw = ceil(counter.textWidth)
-            counter.frame = NSRect(x: right - 4 - cw, y: pad + 5, width: cw, height: 14)
-            right -= 4 + cw
+            let cw: CGFloat = isDither ? ceil(counter.textWidth) : 24
+            counter.frame = NSRect(x: right - (isDither ? 4 : 0) - cw, y: pad + (isDither ? 5 : 10), width: cw, height: isDither ? 14 : 16)
+            counter.alignment = isDither ? .left : .center
+            right -= cw + (isDither ? 4 : 0)
         }
-        let x = pad + Self.column + 4
+        let x = pad + (isDither ? 28 : 16)
         let hw = min(ceil(headerLabel.textWidth), max(0, right - 4 - x))
-        headerLabel.frame = NSRect(x: x, y: pad + 4, width: hw, height: 16)
-        collapsedQuestion.frame = NSRect(x: x + hw + 4, y: pad + 4, width: max(0, right - 4 - x - hw - 4), height: 16)
+        headerLabel.frame = NSRect(x: x, y: pad + (isDither ? 4 : 10), width: hw, height: 16)
+        collapsedQuestion.frame = NSRect(x: x + hw + 4, y: pad + (isDither ? 4 : 10), width: max(0, right - 4 - x - hw - 4), height: 16)
 
         let full = bodyHeight(width: w)
         let visible = min(maxBodyHeight, full)
-        scroll.frame = NSRect(x: pad, y: pad + Self.headerHeight, width: w - 2 * pad, height: visible)
+        scroll.frame = NSRect(x: pad, y: pad + headerHeight, width: w - 2 * pad, height: visible)
         // `pe-2` clears the overlay scrollbar once there is something to scroll.
         let scrollGutter: CGFloat = full > visible ? 8 : 0
         body.frame = NSRect(x: 0, y: 0, width: w - 2 * pad, height: full)
-        let tx = Self.bodyStart, tw = max(0, w - 2 * pad - Self.bodyStart - Self.bodyEnd - scrollGutter)
+        let tx = bodyStart, tw = max(0, w - 2 * pad - bodyStart - bodyEnd - scrollGutter)
         var y = questionText.height(forWidth: tw)
-        questionText.frame = NSRect(x: tx, y: 0, width: tw, height: y)
+        questionText.frame = NSRect(x: tx, y: isDither ? 0 : 8, width: tw, height: y)
+        y += isDither ? 0 : 8
         if !multiHint.isHidden {
             multiHint.frame = NSRect(x: tx, y: y + 4, width: tw, height: 16)
             y += 20
         }
-        y += 8
+        y += isDither ? 8 : 6
         for row in rows {
-            let h = row.height(forWidth: tw)
-            row.frame = NSRect(x: tx, y: y, width: tw, height: h)
-            y += h + 2
+            let outset: CGFloat = isDither ? 0 : 6
+            let h = row.height(forWidth: tw + outset)
+            row.frame = NSRect(x: tx - outset, y: y, width: tw + outset, height: h)
+            y += h + (isDither ? 2 : 0)
         }
     }
 }
@@ -319,14 +332,18 @@ private final class HeaderButton: ControlView {
     override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
 }
 
-/// One option button: `px-2.5 py-2 rounded-md gap-2`, label 14 medium, an optional 11px
+/// One option button: `sm:ps-1.5 py-1.5 rounded-md gap-2.5`, label 14 medium, an optional 11px
 /// description, with a radio or checkbox at the left and a number key at the right.
 final class OptionRow: DSView {
     var onClick: (() -> Void)?
     private(set) var value = ""
     private var selected = false, hovered = false, disabled = false
+    private var isDither: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    private var textInset: CGFloat { isDither ? 36 : 32 }
+    private var paddingY: CGFloat { isDither ? 8 : 6 }
+    private var trailingInset: CGFloat { isDither ? 38 : 34 }
 
-    private let label = glassLabel(font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground, 0.85), lineHeight: 20)
+    private let label = glassLabel(font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground, 0.7), lineHeight: 20)
     private let detail = glassBlock(font: DSFont.ui(11), color: Themed.color(\.secondaryLabel), lineHeight: 16)
     let key = KbdView()
     let radio = RadioView()
@@ -365,13 +382,14 @@ final class OptionRow: DSView {
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
-        let textWidth = max(0, width - 10 - 16 - 10 - 8 - 20 - 10)
-        return 8 + 20 + (detail.isHidden ? 0 : 2 + detail.height(forWidth: textWidth)) + 8
+        let textWidth = max(0, width - textInset - trailingInset)
+        return paddingY + 20 + (detail.isHidden ? 0 : 2 + detail.height(forWidth: textWidth)) + paddingY
     }
 
     override func updateLayer() {
-        // idle transparent, hover `muted/30`, selected `muted/55`; labels `fg/85`, selected `fg`.
-        let fill: NSColor? = selected ? Themed.color(\.muted, 0.55) : (hovered && !disabled ? Themed.color(\.muted, 0.3) : nil)
+        // Nightly 3754 :253-257: transparent at rest, `muted/30` only on unselected hover.
+        let fill: NSColor? = isDither && selected ? Themed.color(\.muted, 0.55)
+            : (hovered && (!selected || isDither) && !disabled ? Themed.color(\.muted, 0.3) : nil)
         let cg = fill?.cgColor(in: self)
         if layer?.backgroundColor != cg {
             if window != nil, !Motion.reduced {
@@ -379,19 +397,19 @@ final class OptionRow: DSView {
             }
             layer?.backgroundColor = cg
         }
-        label.color = Themed.color(\.foreground, selected ? 1 : 0.85)
+        label.color = Themed.color(\.foreground, selected ? 1 : (isDither ? 0.85 : 0.7))
     }
 
     override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
-        let textWidth = max(0, w - 10 - 16 - 10 - 8 - 20 - 10)
-        label.frame = NSRect(x: 36, y: 8, width: textWidth, height: 20)
-        detail.frame = NSRect(x: 36, y: 30, width: textWidth, height: max(0, h - 38))
+        let textWidth = max(0, w - textInset - trailingInset)
+        label.frame = NSRect(x: textInset, y: paddingY, width: textWidth, height: 20)
+        detail.frame = NSRect(x: textInset, y: paddingY + 22, width: textWidth, height: max(0, h - 2 * paddingY - 22))
         // T3 3814, ComposerPendingUserInputPanel.tsx:260-280: both controls align to the
         // label's first line. Selection never replaces the number key.
-        key.frame = NSRect(x: w - 10 - 20, y: 8, width: 20, height: 20)
-        radio.frame = NSRect(x: 10, y: 10, width: 16, height: 16)
+        key.frame = NSRect(x: w - (isDither ? 30 : 22), y: paddingY, width: 20, height: 20)
+        radio.frame = NSRect(x: isDither ? 10 : 6, y: paddingY + 2, width: 16, height: 16)
         checkbox.frame = radio.frame
     }
 

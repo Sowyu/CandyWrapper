@@ -26,7 +26,7 @@ lucide, button, merge, MB, SIDEBAR, KBD = conn["lucide"], conn["button"], conn["
 switch = conn["tog_ns"]["switch"]
 SIDEBAR_INPUT = conn["SIDEBAR_INPUT"]
 
-# SettingsSidebarNav.tsx:244-322 with the query "time": the clear button replaces the Kbd, results replace the nav.
+# Nightly 3754 SettingsSidebarNav.tsx:313-348 with the query "time": the clear button replaces the Kbd, results replace the nav.
 MB_SM = merge(MB.replace("h-8 rounded-[var(--control-radius)] px-[var(--sidebar-row-content-inset)] py-1.5 text-sm",
                          "h-7 rounded-lg p-2 text-xs") + " h-auto min-h-10 items-start") + " text-left"
 # The script's merge drops `text-left` next to `text-xs`; tailwind-merge keeps both (alignment and size differ).
@@ -34,15 +34,15 @@ CLEAR = button("ghost-muted", "icon-micro", lucide("x", "size-3"), "shrink-0", '
 search = ('<div class="flex h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground">'
           f'{lucide("search", "size-4 shrink-0 text-sidebar-muted-foreground/80")}'
           f'<input type="search" placeholder="Search" value="time" class="{SIDEBAR_INPUT}">{CLEAR}</div>')
-RESULTS = [("Time format", "General", "settings-2"), ("Permissions", "General", "settings-2"),
-           ("Days of inactivity before auto-settle", "General", "settings-2"), ("Collapse composer on scroll", "General", "settings-2"),
-           ("Simulator support", "Integrations", "blocks")]
+RESULTS = [("Time format", "General", "settings-2"), ("Permissions", "Threads", "messages-square"),
+           ("Days of inactivity before auto-settle", "Threads", "messages-square"), ("Collapse composer on scroll", "Chat", "message-square-text"),
+           ("Simulator support", "Devices", "smartphone")]
 
 
 def result(title, section, icon, active):
     return (f'<li data-slot="sidebar-menu-item" class="group/menu-item relative" role="presentation"><button type="button" data-sidebar="menu-button" '
             f'data-slot="sidebar-menu-button" data-size="sm" data-active="{str(active).lower()}" role="option" class="{MB_SM}">'
-            f'{lucide(icon, "mt-0.5 size-3.5 shrink-0 text-sidebar-muted-foreground/60")}<span class="min-w-0 flex-1">'
+            f'{lucide(icon, "size-4 shrink-0 text-[var(--sidebar-icon-color)]")}<span class="min-w-0 flex-1">'
             f'<span class="block truncate text-sm font-medium text-sidebar-foreground">{title}</span>'
             f'<span class="block truncate text-2xs text-sidebar-muted-foreground/75">{section}</span></span></button></li>')
 
