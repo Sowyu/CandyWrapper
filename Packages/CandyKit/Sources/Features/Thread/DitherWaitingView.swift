@@ -165,7 +165,7 @@ public final class DitherWaitingView: ControlView {
                               placement: PopupPlacement(side: .top, align: .end, sideOffset: 6, fallbackAxisSide: .none),
                               swallowsOutsideClick: true)
         list.onClose = { [weak self] in self?.closeMenu() }
-        if NSApp.currentEvent?.type == .keyDown { list.highlightedIndex = list.selectable.first }
+        if NSApp.currentEvent?.type == .keyDown { list.highlightedIndex = list.selectableIndices.first }
         menuPopup = popup
     }
 
