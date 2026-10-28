@@ -23,7 +23,8 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
     static let maxWidth: CGFloat = 288, searchHeight: CGFloat = 43, maxHeight: CGFloat = 368
 
     let items: [Item]
-    let selectedKey: String?
+    private(set) var selectedKeys: Set<String> = []
+    var selectedKey: String? { selectedKeys.first }
     let minimumWidth: CGFloat
     private(set) var shown: [Item]
     private(set) var query = ""
@@ -46,7 +47,7 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
     let extra: Extra
 
     init(groups: [SidebarModel.ProjectGroup], selectedKey: String?, minimumWidth: CGFloat,
-         environments: SidebarEnvironments = SidebarEnvironments(), extra: Extra = .allProjects) {
+         environments: SidebarEnvironments = SidebarEnvironments(), extra: Extra = .allProjects, selectedKeys: [String]? = nil) {
         self.extra = extra
         // Badges only while the projects span environments (Sidebar.tsx:2608-2611).
         let badges = SidebarEnvironments.span(groups)
@@ -57,7 +58,7 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
         }
         items = extra == .allProjects ? [Item(key: nil, label: "All projects")] + projects : projects + [Item(key: nil, label: "Add project")]
         // `selectedProjectScopeItem` falls back to "All projects" when the key's group is gone.
-        self.selectedKey = groups.contains { $0.key == selectedKey } ? selectedKey : nil
+        self.selectedKeys = Set((selectedKeys ?? selectedKey.map { [$0] } ?? []).filter { key in groups.contains { $0.key == key } })
         self.minimumWidth = minimumWidth
         shown = items
         super.init(frame: .zero)
@@ -98,7 +99,7 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
     private func reload() {
         rows.forEach { $0.removeFromSuperview() }
         rows = shown.indices.map { i in
-            let row = ScopeRowView(item: shown[i], selected: shown[i].key == selectedKey && (shown[i].key != nil || extra == .allProjects),
+            let row = ScopeRowView(item: shown[i], selected: (shown[i].key.map { selectedKeys.contains($0) } ?? (selectedKeys.isEmpty && extra == .allProjects)),
                                    extra: extra)
             row.isHighlighted = { [weak self] in self?.highlighted == i }
             row.onHover = { [weak self] in self?.highlighted = i }
@@ -114,7 +115,12 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
 
     private func choose(_ i: Int) {
         guard shown.indices.contains(i) else { return }
-        onSelect?(shown[i].key)
+        let key = shown[i].key
+        if extra == .allProjects {
+            if let key { if !selectedKeys.insert(key).inserted { selectedKeys.remove(key) } } else { selectedKeys.removeAll() }
+            reload()
+        }
+        onSelect?(key)
     }
 
     // MARK: Size and layout

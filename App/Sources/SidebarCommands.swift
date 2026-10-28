@@ -577,7 +577,7 @@ final class SidebarCommands {
         state.canOperate = environments.canOperate(thread.id.environmentId)
         // ponytail: every capability reads as supported; gate per environment from its descriptor when an old server shows up
         state.branch = thread.branch
-        state.projectFilter = rename == nil ? group.map { (label: $0.label, isActive: sidebar.state.projectScopeKey == $0.key) } : nil
+        state.projectFilter = rename == nil ? group.map { (label: $0.label, isActive: sidebar.state.projectScopeKeys.contains($0.key)) } : nil
         state.isPinned = thread.pinnedAt != nil
         state.isSettled = rename == nil ? row?.section == .settled : thread.settledOverride == .settled
         state.isSnoozed = SidebarModel.effectiveSnoozed(presented, nowMs: nowMs)
@@ -623,7 +623,7 @@ final class SidebarCommands {
         case "delete": confirmDelete(id)
         case "filter-by-project":
             // The way back to all projects is picking the scoped project again.
-            if let group, let sidebar { sidebar.setProjectScope(sidebar.state.projectScopeKey == group.key ? nil : group.key) }
+            if let group, let sidebar { sidebar.toggleProjectScope(group.key) }
         case "settle": settle(id)
         case "unsettle": unsettle(id)
         case "unsnooze": unsnooze(id)

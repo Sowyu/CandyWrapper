@@ -235,9 +235,13 @@ public final class SidebarContentView: DSView {
     let filterMonogram = ProjectMonogramView()
     /// Where the project scope persists, as T3's persisted UI store does. Nil in tests and previews.
     public var scopeDefaults: UserDefaults? {
-        didSet { state.projectScopeKey = scopeDefaults?.string(forKey: Self.scopeDefaultsKey) }
+        didSet {
+            let saved = scopeDefaults?.stringArray(forKey: Self.scopeDefaultsKey)
+                ?? scopeDefaults?.string(forKey: "sidebar.projectScopeKey").map { [$0] } ?? []
+            state.projectScopeKeys = SidebarListState.normalizedScopeKeys(saved)
+        }
     }
-    static let scopeDefaultsKey = "sidebar.projectScopeKey"
+    static let scopeDefaultsKey = "sidebar.projectScopeKeys"
     private var scopePopup: OpenPopup?
 
     /// The search field's text. Searching starts at one non-blank character (Sidebar.tsx:2896).
@@ -465,10 +469,11 @@ public final class SidebarContentView: DSView {
     }
 
     public var resolvedProjectIds: Set<ProjectId>? {
-        guard let key = state.projectScopeKey, let snapshot = listSnapshot else { return state.scopedProjectIds }
+        guard !state.projectScopeKeys.isEmpty, let snapshot = listSnapshot else { return state.scopedProjectIds }
         let groups = SidebarModel.buildProjectGroups(snapshot.projects, grouping: state.grouping,
                                                      preferredEnvironmentId: state.environments.primaryId)
-        return groups.first { $0.key == key }.map { Set($0.memberProjectIds) } ?? state.scopedProjectIds
+        let selected = state.scopeGroups(groups)
+        return selected.isEmpty ? state.scopedProjectIds : Set(selected.flatMap(\.memberProjectIds))
     }
 
     /// Keeps the list's threads, shelves and row models between rebuilds.
@@ -554,14 +559,14 @@ public final class SidebarContentView: DSView {
         // Search results replace the thread list; reveal once the list returns.
         guard !isSearching, let id = pending ?? (initialRevealOwed ? routeId : nil) else { return }
         guard let thread = snapshot?.threads.first(where: { $0.id == id }) else { return }
-        if pending != nil, state.projectScopeKey != nil, let scoped = scopedGroup.map({ Set($0.memberProjectIds) }) {
+        if pending != nil, !state.projectScopeKeys.isEmpty, let scoped = resolvedProjectIds {
             let row = [SidebarThread(thread)]
             if SidebarModel.filterSidebarV2VisibleThreads(row, scopedProjectIds: scoped).isEmpty,
                SidebarModel.filterSidebarV2VisibleThreads(row).count == 1 {
                 // The row shows under the widened scope; that rebuild scrolls to it. Async, so the scope
                 // change doesn't rebuild inside this rebuild.
                 DispatchQueue.main.async { [weak self] in
-                    guard let self, self.revealPendingId == id, self.state.projectScopeKey != nil else { return }
+                    guard let self, self.revealPendingId == id, !self.state.projectScopeKeys.isEmpty else { return }
                     self.setProjectScope(nil)
                 }
                 return
@@ -831,24 +836,35 @@ public final class SidebarContentView: DSView {
 
     // MARK: Project scope
 
-    public func setProjectScope(_ key: String?) {
-        // Scope flips drop the selection: rows selected under the old scope may be hidden now (Sidebar.tsx:2710-2714).
+    public func setProjectScope(_ key: String?) { setProjectScopes(key.map { [$0] } ?? []) }
+
+    public func setProjectScopes(_ keys: [String]) {
         clearSelection()
-        state.projectScopeKey = key
-        if let key { scopeDefaults?.set(key, forKey: Self.scopeDefaultsKey) } else { scopeDefaults?.removeObject(forKey: Self.scopeDefaultsKey) }
+        state.projectScopeKeys = SidebarListState.normalizedScopeKeys(keys)
+        scopeDefaults?.set(state.projectScopeKeys, forKey: Self.scopeDefaultsKey)
+        scopeDefaults?.removeObject(forKey: "sidebar.projectScopeKey")
     }
 
-    private var scopedGroup: SidebarModel.ProjectGroup? {
-        guard let key = state.projectScopeKey, let snapshot else { return nil }
-        return SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: state.environments.primaryId).first { $0.key == key }
+    public func toggleProjectScope(_ key: String) {
+        setProjectScopes(state.projectScopeKeys.contains(key) ? state.projectScopeKeys.filter { $0 != key } : state.projectScopeKeys + [key])
     }
+
+    private var scopedGroups: [SidebarModel.ProjectGroup] {
+        guard let snapshot else { return [] }
+        return state.scopeGroups(SidebarModel.buildProjectGroups(snapshot.projects, grouping: state.grouping,
+            preferredEnvironmentId: state.environments.primaryId))
+    }
+
+    private var scopedGroup: SidebarModel.ProjectGroup? { scopedGroups.count == 1 ? scopedGroups.first : nil }
 
     func updateScopeTrigger() {
         let group = scopedGroup
         filterMonogram.isHidden = group == nil
         if let group { filterMonogram.projectTitle = group.representative.title; filterMonogram.source = ProjectIconSource(group.representative) }
         if (filterButton.icon == nil) != (group != nil) { filterButton.icon = group == nil ? .listFilter : nil }
-        let label = group.map { "Filter threads by project: \($0.label)" } ?? "Filter threads by project"
+        let selected = scopedGroups
+        filterButton.isActive = !selected.isEmpty
+        let label = selected.isEmpty ? "Filter threads by project" : "Filter threads by project: " + selected.map(\.label).joined(separator: ", ")
         filterButton.setAccessibilityLabel(label)
         filterButton.toolTip = label
         let hasProjects = !(snapshot?.projects.isEmpty ?? true)
@@ -863,10 +879,9 @@ public final class SidebarContentView: DSView {
         let view = SidebarProjectScopeView(
             groups: SidebarListBuilder.projectScopeGroups(snapshot: snapshot, primaryEnvironmentId: state.environments.primaryId,
                                                           order: SidebarProjectOrder.sortOrder, preferred: state.projectOrder),
-            selectedKey: state.projectScopeKey, minimumWidth: field.frame.width, environments: state.environments)
+            selectedKey: state.projectScopeKey, minimumWidth: field.frame.width, environments: state.environments, selectedKeys: state.projectScopeKeys)
         view.onSelect = { [weak self] key in
-            self?.setProjectScope(key)
-            self?.closeScopePopup()
+            if let key { self?.toggleProjectScope(key) } else { self?.setProjectScopes([]) }
         }
         view.onSettings = { [weak self] key in
             self?.closeScopePopup()

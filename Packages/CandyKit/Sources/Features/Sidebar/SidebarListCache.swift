@@ -13,7 +13,7 @@ public final class SidebarListCache {
         var projects: [ProjectShell]
         var grouping: SidebarModel.ProjectGrouping
         var primaryId: String?
-        var scopeKey: String?
+        var scopeKeys: [String]
         var scopedProjectIds: Set<ProjectId>?
         var settlement: Bool
         var snooze: Bool
@@ -113,7 +113,7 @@ public final class SidebarListCache {
     /// The context for this snapshot and state, reusing what is unchanged since the last call.
     func context(snapshot: ShellSnapshot, state: SidebarListState, nowMs: Int64) -> SidebarListBuilder.Context {
         let shared = Shared(projects: snapshot.projects, grouping: state.grouping, primaryId: state.environments.primaryId,
-                            scopeKey: state.projectScopeKey, scopedProjectIds: state.scopedProjectIds,
+                            scopeKeys: state.projectScopeKeys, scopedProjectIds: state.scopedProjectIds,
                             settlement: state.capabilities.threadSettlement, snooze: state.capabilities.threadSnooze,
                             environments: state.environments, scratchRoots: state.scratchRoots, folders: state.usesProjectFolders, dither: state.dither,
                             olderCuts: snapshot.olderSettledByEnvironment, olderCut: snapshot.olderSettled)
