@@ -85,7 +85,8 @@ public struct ClientSettings: Equatable, Sendable {
         "showSkillsInSlashMenu": SettingSpec(.bool, .bool(true)),
         "boringSidebarEnabled": SettingSpec(.bool, .bool(false)),
         "legacySidebarEnabled": SettingSpec(.bool, .bool(false)),
-        "sidebarWorkingShelfEnabled": SettingSpec(.bool, .bool(false)),
+        // T3 3814 packages/contracts/src/settings.ts:476: absent preferences use the new default.
+        "sidebarWorkingShelfEnabled": SettingSpec(.bool, .bool(true)),
         "sidebarProjectGroupingMode": SettingSpec(.literals(["repository", "repository_path", "separate"]), .string("repository")),
         "sidebarProjectGroupingOverrides": SettingSpec(.any, .object([:])),
         "sidebarProjectSortOrder": SettingSpec(.literals(["updated_at", "created_at", "manual"]), .string("manual")),  // T3 defaults to updated_at (settings.ts:59); CandyWrapper keeps sections where the user put them
