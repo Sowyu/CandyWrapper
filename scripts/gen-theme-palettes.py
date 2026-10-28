@@ -4,6 +4,7 @@ themes (T3 Chat, Grove, Ocean, Ember, Iris).
 
 Usage: /usr/bin/python3 -I scripts/gen-theme-palettes.py [path to the t3code checkout]
 The checkout defaults to .t3code-src, then ~/CandyWrapper-research/t3code.
+T3_DESIGN_VERSION labels a staged stylesheet update separately from the runtime pin.
 """
 import json, os, re, sys
 
@@ -11,7 +12,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 candidates = sys.argv[1:] or [os.path.join(ROOT, ".t3code-src"), os.path.expanduser("~/CandyWrapper-research/t3code")]
 src_root = next(p for p in candidates if os.path.isdir(p))
 SRC = open(os.path.join(src_root, "packages/shared/src/themePalettes.ts")).read()
-VERSION = open(os.path.join(ROOT, "T3_VERSION")).read().strip()
+VERSION = os.environ.get("T3_DESIGN_VERSION") or open(os.path.join(ROOT, "T3_VERSION")).read().strip()
 
 
 def block(name):

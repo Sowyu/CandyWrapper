@@ -4,10 +4,10 @@ import DesignSystem
 import T3Protocol
 @testable import Features
 
-/// CandyWrapper's Glass theme: a picker card that keeps T3's stock palette and only frosts the window.
+/// CandyWrapper's Glass theme keeps its 3669 colors while T3's defaults move on.
 @MainActor
 struct GlassThemeTests {
-    @Test func glassKeepsTheStockPaletteAndFrostsEachSideItOwns() {
+    @Test func glassKeepsItsPaletteAndFrostsEachSideItOwns() {
         let glass = ThemeDefinition.glass
         #expect(ThemeDefinition.pickerBuiltIns.suffix(2) == [glass, ThemeDefinition.dither])
         #expect(ThemePalette.reservedIds.contains(glass.id))
@@ -20,10 +20,12 @@ struct GlassThemeTests {
         #expect(input.glassLight && input.glassDark)
         #expect(input.light == nil && input.dark == nil)
         #expect(forced == "system")
-        // Glass only moves muted text to stay readable over the frost; the rest is the stock palette.
+        // Glass moves its own muted colors to stay readable over the frost.
         let stock = ThemeRuntime.resolve(ThemeRuntimeInput()), glassy = ThemeRuntime.resolve(input)
-        #expect(glassy.dark.mutedForeground.srgb.x > stock.dark.mutedForeground.srgb.x)
-        #expect(glassy.light.mutedForeground.srgb.x < stock.light.mutedForeground.srgb.x)
+        let darkMuted = ThemeCSSColor.parse(glass.colors(for: .dark)![.mutedForeground]!)!.token
+        let lightMuted = ThemeCSSColor.parse(glass.colors(for: .light)![.mutedForeground]!)!.token
+        #expect(glassy.dark.mutedForeground.srgb.x > darkMuted.srgb.x)
+        #expect(glassy.light.mutedForeground.srgb.x < lightMuted.srgb.x)
         #expect(glassy.dark.foreground == stock.dark.foreground && glassy.light.background == stock.light.background)
 
         // A mix: Ocean in light, Glass in dark frosts only the dark side.
