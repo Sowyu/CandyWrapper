@@ -57,7 +57,7 @@ struct RunOnFidelityTests {
                         composer.joinsContextStrip = true
                         composer.layoutSubtreeIfNeeded()
                         for v in [composer.placeholder, composer.attach, composer.primary] as [NSView] { v.alphaValue = 0 }
-                        let strip = ComposerContextStripView(frame: NSRect(x: 8 + 22, y: 8 + 64 - 16, width: 556, height: ComposerContextStripView.height))
+                        let strip = ComposerContextStripView(frame: NSRect(x: 8, y: 8 + 64, width: 600, height: 32))
                         strip.runOn.options = Self.options
                         strip.runOn.selectedId = selected
                         canvas.addSubview(strip)
@@ -102,7 +102,7 @@ struct RunOnFidelityTests {
         #expect(!c.interactive)
         c.options = Self.options
         c.locked = true
-        #expect(!c.interactive && c.intrinsicContentSize.width < Self.control(selected: "local").intrinsicContentSize.width)
+        #expect(!c.interactive && c.intrinsicContentSize.width == Self.control(selected: "local").intrinsicContentSize.width + 4) // The static glyph keeps its margins; 3824 has no chevron.
         // The hero's project name truncates at 256 (`max-w-64`), short names stay whole.
         #expect(DraftHeroView.truncated("demo-repo", kern: -0.75) == "demo-repo")
         #expect(DraftHeroView.truncated("candywrapper-sandbox/demo-repo", kern: -0.75).hasSuffix("…"))

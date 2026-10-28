@@ -314,7 +314,7 @@ final class ComposerController {
         ClientSettingsStore.shared.observe { [weak self] keys in
             guard let self else { return }
             self.applyClientSettings()
-            if keys.contains("planModeEnabled") || keys.contains("contextWindowMeterEnabled") { self.refresh() }
+            if keys.contains("planModeEnabled") || keys.contains("contextWindowMeterEnabled") || keys.contains("effortDisplay") { self.refresh() }
         }
         composer.restingBlocked = { [weak self] in
             guard let self else { return true }
@@ -1693,7 +1693,15 @@ final class ComposerController {
             planModeEnabled: ClientSettingsStore.shared.current.bool("planModeEnabled"))
         // Shift-click fan-out: a new thread on a server that bootstraps worktrees (ChatView.tsx:11584-11587).
         if case .draft = target { pickers.supportsMultipleModels = serverConfig.capabilities.contains("requiredWorktreeBootstrap") } else { pickers.supportsMultipleModels = false }
+        pickers.permissionsShownInStrip = thread == nil && panel.showsContextStrip
         pickers.update(draftKey: draftKey ?? "", context: context)
+        let strip = panel.contextStrip
+        let modern = !ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark) && !ThemeRuntime.isGlass(dark: composer.effectiveAppearance.isDark)
+        strip.showsPermissions = modern && thread == nil
+        let mode = ComposerPickers.modes[pickers.current.runtimeMode] ?? ComposerPickers.modes[.fullAccess]!
+        strip.permissions.text = mode.label
+        strip.permissions.glyphs = [pickers.current.runtimeMode == .fullAccess ? ComposerPickers.fullAccessGlyph : mode.icon.definition]
+        strip.permissions.action = { [weak self] in self?.pickers.openAccessMode() }
         panel.model.providers = serverConfig.providers
         onModelChange?()
         // No enabled provider (ChatComposer.tsx:2140-2153): sending stays blocked, and once the catalog
@@ -5323,7 +5331,7 @@ extension ComposerController {
         let selection = thread?.modelSelection ?? pickers.current.modelSelection
         // `resolveContextWindowModelDisplayName` (ContextWindowMeter.logic.ts:85-98).
         let modelName = selection.map { s in
-            serverConfig.providers.first { $0.instanceId == s.instanceId }?.models.first { $0.slug == s.model }.map(ModelNames.trigger) ?? s.model
+            serverConfig.providers.first { $0.instanceId == s.instanceId }?.models.first { $0.slug == s.model }.map { ModelNames.trigger($0, driver: serverConfig.providers.first { $0.instanceId == s.instanceId }?.driver, spoken: !ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark) && !ThemeRuntime.isGlass(dark: composer.effectiveAppearance.isDark)) } ?? s.model
         }
         meter.setCompactState(offered: ComposerCompaction.supportsManualCompaction(provider),
                               disabled: gate.disabled || noProvider || composer.isBusy,

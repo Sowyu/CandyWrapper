@@ -8,6 +8,19 @@ import T3Protocol
 /// Send now uses the same action while running or stopped; questions and in-flight commands block editing.
 @MainActor
 struct QueueKeyboardTests {
+    @Test func defaultQueueLivesInTheTimelineFooter() throws {
+        let panel = ComposerFidelityTests.panel(width: 844, dark: false)
+        panel.setProjection(try ThreadPreview.projection(titled: ThreadPreview.markdownThread), projectTitle: "demo-repo", workspaceRoot: nil)
+        panel.queue.state = .init(items: [.init(runId: "queued", messageId: "message", text: "Next message")], canPromoteToSteer: true)
+        panel.layoutSubtreeIfNeeded()
+        #expect(panel.queue.isDescendant(of: panel.timeline))
+        #expect(panel.timeline.layoutProblems().isEmpty)
+        panel.queue.state = .init()
+        panel.layoutSubtreeIfNeeded()
+        #expect(panel.queue.superview == nil && panel.queue.isHidden)
+        #expect(panel.timeline.layoutProblems().isEmpty)
+    }
+
     @Test func openQuestionsBlockEditingAndBusyQueuesWait() {
         #expect(ComposerLogic.queuedEditBlockedReason(openQuestionCount: 0) == nil)
         let reason = ComposerLogic.queuedEditBlockedReason(openQuestionCount: 1)

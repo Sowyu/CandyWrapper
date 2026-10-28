@@ -7,7 +7,7 @@ ComposerContextLabel,EnvironmentMachineIcon}.tsx, chat/{ComposerControl,Composer
 at the tag in T3_VERSION. The surface classes are read from ComposerSurface.tsx so they stay exact.
 Usage: /usr/bin/python3 -I scripts/gen-run-on-spec.py
 """
-import json, os, re
+import json, os, re, subprocess
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 T3 = "/Users/mrm/CandyWrapper-research/t3code/apps/web/src/components"
@@ -28,9 +28,9 @@ def machine(kind, cls):
 
 # ComposerControl.tsx composerControlClassName, size xs, plus the selector's `min-w-0 max-w-full`.
 CONTROL_XS = ("relative inline-flex shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-(--control-radius) border border-transparent text-base outline-none hover:bg-accent data-pressed:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 data-disabled:pointer-events-none data-disabled:opacity-64 pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 [&:active:not([aria-haspopup])]:scale-[0.97] [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:-mx-0.5 [&_svg[data-composer-control-icon]]:mx-0 "
-              "h-7 gap-1 px-1.75 font-normal text-muted-foreground/70 text-sm hover:text-foreground/80 sm:h-6 sm:text-xs [&_svg:not([class*='size-'])]:size-4 sm:[&_svg:not([class*='size-'])]:size-3.5 [&_svg[data-composer-control-chevron]]:ms-0 [&_svg[data-composer-control-chevron]]:-me-1 "
+              "h-7 gap-1 px-1.75 font-normal text-foreground/70 text-sm hover:text-foreground dark:text-muted-foreground sm:h-6 sm:text-xs [&_svg:not([class*='size-'])]:size-4 sm:[&_svg:not([class*='size-'])]:size-3.5 [&_svg[data-composer-control-chevron]]:ms-0 [&_svg[data-composer-control-chevron]]:-me-1 "
               "aria-pressed:bg-accent aria-pressed:text-accent-foreground aria-pressed:hover:bg-accent/80 min-w-0 max-w-full")
-CHEVRON = lucide("chevron-down", "shrink-0 size-3 text-current opacity-50", stroke="2.25", extra=" data-composer-control-chevron")
+CHEVRON = lucide("chevron-down", "shrink-0 size-3 text-current", stroke="2.25", extra=" data-composer-control-chevron")
 
 def context_label(text):  # ComposerContextLabel.tsx, toolbar mode
     return ('<span data-composer-label class="min-w-0 max-w-[240px] group-data-[compact]/composer-context:max-w-0">'
@@ -40,10 +40,10 @@ def context_label(text):  # ComposerContextLabel.tsx, toolbar mode
 def picker(kind, label):
     value = f'<span class="flex-1 truncate data-placeholder:text-placeholder">{label}</span>'
     return (f'<button type="button" role="combobox" aria-haspopup="listbox" aria-label="Run on" class="{CONTROL_XS}">'
-            f'{machine(kind, "size-3 shrink-0")}{context_label(value)}<span aria-hidden="true">{CHEVRON}</span></button>')
+            f'{machine(kind, "size-3 shrink-0")}{context_label(value)}</button>')
 
 def locked(kind, label):
-    return ('<span class="inline-flex h-7 min-w-0 max-w-full items-center gap-1 border border-transparent px-1.75 font-normal text-muted-foreground/70 text-xs sm:h-6">'
+    return ('<span class="inline-flex h-7 min-w-0 max-w-full items-center gap-1 border border-transparent px-1.75 font-normal text-foreground/70 text-xs dark:text-muted-foreground sm:h-6">'
             f'{machine(kind, "size-3 shrink-0")}{context_label(label)}</span>')
 
 # ui/select.tsx SelectPopup (alignItemWithTrigger off), SelectGroupLabel and SelectItem.
@@ -66,16 +66,16 @@ def cn_strings(src, start, end):
     body = src[src.index(start):src.index(end, src.index(start))]
     return " ".join(re.findall(r'"([^"]*)"', body))
 
-surface = open(os.path.join(T3, "chat/ComposerSurface.tsx")).read()
+surface = subprocess.check_output(["git", "-C", os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(T3)))), "show", "v0.1.4-nightly.20261028.3824:apps/web/src/components/chat/ComposerSurface.tsx"], text=True)
 SHELL = cn_strings(surface, '"@container/composer-surface', "className,\n")
 OUTLINE = cn_strings(surface, "const outlineClasses", ";\n")
-SEAM = cn_strings(surface, "const contextSeamClasses", ";\n")
-HOST = cn_strings(surface, '"relative z-10 w-full rounded-3xl', "className,\n") + " " + OUTLINE + " " + SEAM
+SEAM = ""
+HOST = cn_strings(surface, '"relative z-10 w-full rounded-2xl', "className,\n") + " " + OUTLINE + " " + SEAM
 STRIP = cn_strings(surface, '"group/composer-context', "className,\n") + " gap-1 text-xs font-normal text-muted-foreground/70"
 
 def strip(kind, label):
     # The draft composer reduced to its surface: an empty 64px host. BranchToolbar.tsx:791-812 without git controls.
-    return (f'<div data-slot="composer-shell" data-with-context="true" class="{SHELL}" style="width:600px">'
+    return (f'<div data-slot="composer-shell" data-context-row="true" class="{SHELL}" style="width:600px">'
             f'<div data-slot="composer-host" class="{HOST}"><div class="relative z-10" style="height:64px"></div></div>'
             '<div class="min-h-0"><div class="relative z-0"><div class="pointer-events-auto">'
             f'<div data-slot="composer-context-strip" class="{STRIP}">'
@@ -91,7 +91,7 @@ cases = [
     {"name": "popup.remote", "html": popup(ENVS, "env2"), "native": {"kind": "popup", "selected": "env2"}},
     {"name": "strip.remote", "html": strip("server", "sandbox-env2"), "native": {"kind": "strip", "selected": "env2"}},
 ]
-spec = {"component": "run-on", "states": ["rest", "hover"], "themes": ["light", "dark"], "cases": cases}
+spec = {"sourceVersion": "v0.1.4-nightly.20261028.3824", "component": "run-on", "states": ["rest", "hover"], "themes": ["light", "dark"], "cases": cases}
 with open(os.path.join(ROOT, "design/component-reference/run-on.json"), "w") as f:
     json.dump(spec, f, indent=1, ensure_ascii=False)
 print(f"wrote {len(cases)} cases")

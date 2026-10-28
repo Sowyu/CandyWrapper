@@ -1,30 +1,34 @@
 {
   "cluster.access-icon" : {
     "height" : 28,
-    "width" : 188.8828125
+    "width" : 92.8828125
+  },
+  "cluster.bars" : {
+    "height" : 28,
+    "width" : 135.0390625
   },
   "cluster.both-icon" : {
     "height" : 28,
-    "width" : 130
+    "width" : 50
   },
   "cluster.overflow-access" : {
     "height" : 28,
-    "width" : 105
+    "width" : 52
   },
   "cluster.overflow-both" : {
     "height" : 28,
-    "width" : 38
+    "width" : 34
   },
   "files.question" : {
     "height" : 104,
     "width" : 360
   },
   "menu.access" : {
-    "height" : 150,
-    "width" : 160
+    "height" : 132,
+    "width" : 298
   },
   "menu.traits-access" : {
-    "height" : 353,
-    "width" : 160
+    "height" : 335,
+    "width" : 298
   }
 }

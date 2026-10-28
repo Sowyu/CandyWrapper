@@ -121,7 +121,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
                 // ModelPickerSidebar.tsx:161, 196-216: `size-6` box, `h-3` badge only with an accent.
                 let badge = ProviderBadge.make(e, in: catalog, size: ProviderBadge.accent(e) != nil ? .small : .regular,
                                                overhang: 2, ring: Themed.color(\.muted, 0.3))
-                let b = RailButtonView(kind: .instance(e), badge: badge)
+                let b = RailButtonView(kind: .instance(e), badge: ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? nil : badge)
                 b.onPress = { [weak self] in self?.selectRail(.instance(e.id)) }
                 addSubview(b)
                 return b
@@ -136,7 +136,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
                 let rows = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
                                                rail: tab, query: "", expandedLegacy: expandedLegacy,
                                                selectedKeys: selectedKeys, preferences: preferences).rows.count
-                return rows == 0 ? 36 : CGFloat(rows) * Self.rowHeight + CGFloat(rows - 1) * Self.rowGap + 20
+                return rows == 0 ? 36 : CGFloat(rows) * (modern ? rowH : Self.rowHeight) + CGFloat(rows - 1) * Self.rowGap + 20
             }.max() ?? 36
         }
         // ponytail: AppKit tooltips instead of T3's TooltipPopup (left side, 8pt offset, no delay); swap for TooltipView when tooltips get a shared host
@@ -265,7 +265,8 @@ final class ModelPickerView: DSView, PickerPopupBody {
 
     // MARK: Size and layout
 
-    private var rowH: CGFloat { capy ? 32 : Self.rowHeight }
+    private var modern: Bool { ComposerDesign.uses3814(dark: effectiveAppearance.isDark) }
+    private var rowH: CGFloat { capy ? 32 : modern ? 47.75 : Self.rowHeight }
     private var rowGap: CGFloat { capy ? 0 : Self.rowGap }
     private var searchH: CGFloat { capy ? 40 : Self.searchHeight }
     private var railW: CGFloat { capy ? 40 : Self.railWidth }
@@ -342,7 +343,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
             }
         }
         indicator.isHidden = !railShown || selected == nil
-        if let selected { indicator.frame = CGRect(x: Self.railWidth - 3, y: selected.frame.midY - 10, width: 3, height: 20) }
+        if let selected { indicator.frame = CGRect(x: Self.railWidth - (modern ? 7 : 3), y: selected.frame.midY - 10, width: 3, height: 20) }
 
         // Search: `px-3 pt-2.5`, the inner block lifted 1pt, 26pt input with a 20pt start padding.
         let contentX = mainX + (railShown ? 1 : 0) + 12
@@ -357,8 +358,8 @@ final class ModelPickerView: DSView, PickerPopupBody {
         scrollOffset = min(scrollOffset, maxScroll)
         var y = 10 - scrollOffset
         for row in rowViews {
-            row.frame = NSRect(x: 12, y: y, width: list.bounds.width - 12 - 12, height: Self.rowHeight)
-            y += Self.rowHeight + Self.rowGap
+            row.frame = NSRect(x: 12, y: y, width: list.bounds.width - 12 - 12, height: rowH)
+            y += rowH + Self.rowGap
         }
         emptyLabel.frame = NSRect(x: 8, y: 8, width: list.bounds.width - 16, height: 20)
     }
@@ -649,7 +650,7 @@ final class ModelRowView: DSView {
         addSubview(secondary)
         switch row {
         case .model(let item):
-            name.text = ModelNames.display(item.model, preferShortName: true)
+            name.text = ModelNames.display(item.model, preferShortName: !ComposerDesign.uses3814(dark: effectiveAppearance.isDark))
             secondary.text = item.model.subProvider.map { "\(item.entry.displayName) · \($0)" } ?? item.entry.displayName
             if item.model.badge == "new" {
                 let b = NewBadgeView()
@@ -692,6 +693,11 @@ final class ModelRowView: DSView {
                 check = v
             }
         }
+        if ComposerDesign.uses3814(dark: effectiveAppearance.isDark) {
+            name.font = DSFont.ui(14); name.lineHeight = 19.25
+            fill.cornerRadius = 4
+            let indicator = IconView(name: .check, size: 14); addSubview(indicator); check = indicator
+        }
         restyle()
     }
 
@@ -709,23 +715,26 @@ final class ModelRowView: DSView {
         super.layout()
         fill.frame = bounds
         if capy { layoutCapy(); return }
+        let modern = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
+        let checkWidth: CGFloat = modern && star != nil ? 20 : 0
         // The trailing group is `gap-1.5`: the jump `Kbd`, then the star.
         let kbdWidth = kbd.map { $0.intrinsicContentSize.width + 6 } ?? 0
-        let trailing: CGFloat = (star != nil ? 24 - 4 + 6 : 16 + 8) + kbdWidth
+        let trailing: CGFloat = checkWidth + (star != nil ? 24 - 4 + 6 : 16 + 8) + kbdWidth
         let nameW = min(name.textWidth, bounds.width - 16 - trailing - (newBadge.map { 8 + $0.intrinsicContentSize.width } ?? 0))
-        name.frame = NSRect(x: 8, y: 4, width: max(0, nameW), height: 16.5)
+        name.frame = NSRect(x: 8, y: 4, width: max(0, nameW), height: modern ? 19.25 : 16.5)
         if let newBadge {
             let s = newBadge.intrinsicContentSize
             newBadge.frame = NSRect(x: 8 + nameW + 8, y: 4 + (16.5 - s.height) / 2, width: s.width, height: s.height)
         }
         var x: CGFloat = 8
         if let providerIcon {
-            providerIcon.frame = NSRect(x: x, y: 24.5 + (16.5 - 12) / 2, width: 12, height: 12)
+            providerIcon.frame = NSRect(x: x, y: (modern ? 27.25 : 24.5) + (16.5 - 12) / 2, width: 12, height: 12)
             x += 12 + 6
         }
-        secondary.frame = NSRect(x: x, y: 24.5, width: max(0, bounds.width - x - 8 - trailing), height: 16.5)
+        secondary.frame = NSRect(x: x, y: modern ? 27.25 : 24.5, width: max(0, bounds.width - x - 8 - trailing), height: 16.5)
         // `icon-xs` star button with `-mr-1`; the legacy chevron sits at the end of the content box.
-        star?.frame = NSRect(x: bounds.width - 8 + 4 - 24, y: (bounds.height - 24) / 2, width: 24, height: 24)
+        star?.frame = NSRect(x: bounds.width - 8 + 4 - 24 - checkWidth, y: (bounds.height - 24) / 2, width: 24, height: 24)
+        if modern { check?.frame = NSRect(x: bounds.width - 8 - 14, y: (bounds.height - 14) / 2, width: 14, height: 14); check?.isHidden = !isSelected }
         if let kbd, let star {
             let w = kbd.intrinsicContentSize.width
             kbd.frame = NSRect(x: star.frame.minX - 6 - w, y: (bounds.height - 20) / 2, width: w, height: 20)
@@ -798,6 +807,7 @@ final class ModelRowView: DSView {
         let color: NSColor? = highlighted ? Themed.color(\.accent) : (isSelected ? Themed.color(\.contrastForeground, 0.08) : nil)
         fill.backgroundColor = color?.cgColor(in: self)
         name.color = highlighted ? Themed.color(\.contrastAccentForeground) : (isSelected ? Themed.color(\.contrastForeground) : Themed.color(\.contrastPopoverForeground))
+        if ComposerDesign.uses3814(dark: effectiveAppearance.isDark) { star?.alphaValue = highlighted || { if case .model(let item) = row { return item.isFavorite }; return false }() ? 1 : 0 }
         secondary.color = Themed.color(\.contrastMutedForeground, 0.7)
         chevron?.strokeColor = Themed.color(\.contrastMutedForeground)
     }

@@ -49,6 +49,7 @@ public struct ClientSettings: Equatable, Sendable {
         "notificationMode": SettingSpec(.literals(["off", "notifications", "sound", "notifications-and-sound"]), .string("off")),
         "inAppNotificationsEnabled": SettingSpec(.bool, .bool(false)),
         "diffColorScheme": SettingSpec(.literals(["red-green", "blue-orange"]), .string("red-green")),
+        "effortDisplay": SettingSpec(.literals(["label", "bars"]), .string("label")),
         "chatWidth": SettingSpec(.literals(["comfortable", "wide", "full"]), .string("comfortable")),
         "appearanceContrast": SettingSpec(.int(50...200), .number(100)),
         "panelAnimationDurationMs": SettingSpec(.int(0...400), .number(0)),
