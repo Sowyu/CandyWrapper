@@ -390,7 +390,7 @@ class SidebarRowBase: ControlView {
             onBeginDrag(self, r.id, event, p)
             return
         }
-        if let p = pressPoint, case .projectHeader(let h)? = item, !h.isPinned, let onBeginGroupDrag,
+        if let p = pressPoint, case .projectHeader(let h)? = item, !h.isPinned, !h.folder, let onBeginGroupDrag,
            hypot(event.locationInWindow.x - p.x, event.locationInWindow.y - p.y) >= SidebarListView.dragDistance {
             pressPoint = nil
             var released = state
@@ -1050,6 +1050,7 @@ final class SidebarSlimRowView: SidebarRowBase {
         let dim = (!r.isActive || unsettle) && !hovered
         monogram.projectTitle = r.projectTitle ?? r.projectLabel ?? ""
         monogram.source = r.projectIcon
+        monogram.isHidden = r.inProjectSection
         monogram.dimmed = dim
         HoverReveal.fade(monogram, to: dim ? 0.4 : 1) // `transition-opacity` (Sidebar.tsx:1827-1830)
         title.text = r.title
@@ -1079,7 +1080,7 @@ final class SidebarSlimRowView: SidebarRowBase {
             time.font = SB.font(12, .medium)
             wokeIcon.strokeColor = SB.c(\.warningForeground)
         } else {
-            time.text = r.timeLabel
+            time.text = r.inProjectSection ? r.statusLabel ?? r.timeLabel : r.timeLabel
             time.color = unsettle && !hovered ? SB.c(\.secondaryLabel, 0.7) : SB.c(\.secondaryLabel)
             time.font = SB.tabular(12)
         }
@@ -1316,13 +1317,24 @@ final class SidebarProjectHeaderRowView: SidebarRowBase {
     private let label = LabelView("", font: SB.font(12, .medium), color: SB.c(\.sidebarMutedForeground))
     private let count = LabelView("", font: SB.tabular(12), color: SB.c(\.sidebarMutedForeground, 0.6))
     private let chevron = IconView(name: .chevronRight, size: 12)
+    private let dot = CALayer()
+    private let newThread = RowActionButton(icon: .squarePen, size: 14, accessibility: "New thread in project")
+    var onNewThread: ((String) -> Void)?
+    var onProjectMenu: ((String, NSEvent, NSView) -> Void)?
     private var expanded = true
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         label.lineHeight = 16
         count.lineHeight = 16
-        [icon, pinIcon, label, count, chevron].forEach(addSubview)
+        [icon, pinIcon, label, count, chevron, newThread].forEach(addSubview)
+        dot.cornerRadius = 3
+        dot.actions = ["backgroundColor": NSNull(), "hidden": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        layer?.addSublayer(dot)
+        newThread.action = { [weak self] in
+            guard let self, case .projectHeader(let h)? = self.item else { return }
+            self.onNewThread?(h.key)
+        }
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -1342,13 +1354,28 @@ final class SidebarProjectHeaderRowView: SidebarRowBase {
         label.text = h.label
         label.color = SB.c(hovered ? \.sidebarForeground : \.sidebarMutedForeground)
         count.text = "\(h.count)"
+        count.isHidden = h.folder && (h.expanded || hovered || h.count == 0)
+        newThread.isHidden = !h.folder || !hovered
+        dot.isHidden = !h.folder || h.dot == nil
+        switch h.dot {
+        case .attention: dot.backgroundColor = SB.c(\.warningForeground).cgColor(in: self)
+        case .failed: dot.backgroundColor = SB.c(\.errorForeground).cgColor(in: self)
+        case .unread: dot.backgroundColor = SB.c(\.successForeground).cgColor(in: self)
+        case .working: dot.backgroundColor = SB.c(\.infoForeground).cgColor(in: self)
+        case nil: break
+        }
         pinIcon.strokeColor = SB.c(\.sidebarMutedForeground)
         chevron.strokeColor = SB.c(\.sidebarMutedForeground)
         chevron.setRotation(h.expanded ? 90 : 0, motion: window == nil ? .none : .ease(0.15))
-        chevron.alphaValue = hovered || !h.expanded ? 1 : 0
-        setAccessibilityLabel("\(h.label), \(h.count) threads")
+        chevron.alphaValue = h.folder || hovered || !h.expanded ? 1 : 0
+        setAccessibilityLabel("\(h.label), \(h.count) \(h.folder ? "hidden threads" : "threads")" + (h.dot.map { ", \($0.rawValue)" } ?? ""))
         setAccessibilityExpanded(h.expanded)
         needsLayout = true
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        guard case .projectHeader(let h)? = item, h.folder else { return super.rightMouseDown(with: event) }
+        onProjectMenu?(h.key, event, self)
     }
 
     override func layout() {
@@ -1363,5 +1390,12 @@ final class SidebarProjectHeaderRowView: SidebarRowBase {
         let cw = ceil(count.textWidth) + 1
         count.frame = NSRect(x: label.frame.maxX + 5, y: label.frame.minY, width: cw, height: 16)
         chevron.frame = NSRect(x: count.frame.maxX + 4, y: (mid - 6).rounded(), width: 12, height: 12)
+        if case .projectHeader(let h)? = item, h.folder {
+            chevron.frame.origin.x = bounds.width - 22
+            count.frame.origin.x = bounds.width - 30 - cw
+            dot.frame = CGRect(x: bounds.width - 42 - cw, y: mid - 3, width: 6, height: 6)
+            newThread.frame = NSRect(x: bounds.width - 48, y: mid - 12, width: 24, height: 24)
+            label.frame.size.width = max(0, bounds.width - 92)
+        }
     }
 }

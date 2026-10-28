@@ -95,7 +95,7 @@ final class SidebarCommands {
         let dropFiles = sidebar.actions.dropFiles
         sidebar.actions.dropFiles = { [weak self] id, urls in self?.leavingUtilityPage { dropFiles(id, urls) } }
         sidebar.list.canSortThread = { [weak self] id in
-            guard let caps = self?.capabilities(id) else { return false }
+            guard let self, self.sidebar?.state.usesProjectFolders != true, let caps = self.capabilities(id) else { return false }
             return caps.contains("threadPinning") && caps.contains("threadPinReorder")
         }
         sidebar.list.canSortDrop = { [weak self] id, from, target in self?.planSortDrop(id, from: from, target) != nil }
