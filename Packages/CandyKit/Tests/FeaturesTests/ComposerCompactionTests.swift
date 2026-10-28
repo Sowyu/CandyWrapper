@@ -153,7 +153,7 @@ import T3Protocol
                                       runningRunId: "run-c", isWorking: true, activeTurnStartedAt: "2026-10-12T10:00:00Z")
         input.isCompacting = true
         let rows = TimelineRows.derive(input)
-        #expect(rows.contains { $0.kind == .working(compacting: "Compacting after being idle…") })
+        #expect(rows.contains { $0.kind == .working(compacting: "Compacting…") && $0.createdAt == input.activeTurnStartedAt })
         #expect(!rows.contains { if case .contextCompaction = $0.kind { true } else { false } })
         let done = try TurnItem(json: .object(["id": .string("c"), "threadId": .string("t"), "type": .string("compaction"), "runId": .string("run-c"),
                                                "ordinal": .number(1), "status": .string("completed"), "updatedAt": .string("2026-10-12T10:00:02.000Z")]))
@@ -163,7 +163,22 @@ import T3Protocol
         let later = TimelineRows.derive(input)
         // The compaction alone finished: no working row while the run settles.
         #expect(later.map(\.id) == ["c"])
-        #expect(later.first?.kind == .contextCompaction(label: "Context compacted after being idle 12k → 5k tokens", active: false))
+        #expect(later.first?.kind == .contextCompaction(label: "Context compacted before sending 12k → 5k tokens", active: false))
+    }
+
+    @Test func resumedCompactionUsesItsOwnStartInsteadOfTheTurnStart() {
+        let question: JSONValue = .object(["answers": .object([
+            "This session is 1h 5m old and uses 412,000 tokens. Compact it before continuing?": .string("Compact and continue")])])
+        let answer = WorkLogEntry(id: "q", createdAt: "2026-10-12T10:01:00Z", runId: "r", label: "Answered question",
+                                  tone: .info, questionAnswer: question)
+        let compact = WorkLogEntry(id: "c", createdAt: "2026-10-12T10:01:01Z", runId: "r", label: "Compacting context",
+                                   tone: .info, sourceActivityKind: "context-compaction", toolLifecycleStatus: .inProgress)
+        let input = TimelineRowsInput(entries: [.work("q", answer), .work("c", compact)],
+                                      latestRun: TimelineLatestRun(runId: "r", status: .running), runningRunId: "r",
+                                      isWorking: true, activeTurnStartedAt: "2026-10-12T10:00:00Z")
+        let row = TimelineRows.derive(input).first { if case .working = $0.kind { true } else { false } }
+        #expect(row?.createdAt == compact.createdAt)
+        #expect(row?.kind == .working(compacting: "Compacting…"))
     }
 
     @Test func failedCompactionCarriesItsSummaryAndResumeAgeTitles() throws {

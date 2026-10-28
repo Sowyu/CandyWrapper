@@ -710,8 +710,10 @@ public enum TimelineRows {
         // waiting. Any other compaction shows only its live divider, never both.
         let activeCompactionRunId: RunId? = runningCompactionRunId.flatMap { (compactionRuns[$0] ?? nil) == "onReturn" ? $0 : nil }
             ?? activeCompactionEntry.flatMap { resumeAgeByEntryId[$0.id] != nil ? $0.work?.runId : nil }
-        let compactingLabel: String? = activeCompactionRunId == nil ? nil
-            : activeCompactionEntry.flatMap { resumeAgeByEntryId[$0.id] }.map { "Compacting after \($0) idle…" } ?? IdleCompaction.compactingLabels["onReturn"]
+        let compactingLabel: String? = activeCompactionRunId == nil ? nil : "Compacting…"
+        // T3 3814 MessagesTimeline.logic.ts:1581-1604 times an answered resume question from its compaction.
+        let compactionStartedAt = runningCompactionRunId.flatMap { (compactionRuns[$0] ?? nil) == "onReturn" ? $0 : nil } == nil
+            ? activeCompactionEntry.flatMap { resumeAgeByEntryId[$0.id] != nil ? $0.createdAt : nil } : nil
         let hasActiveCompaction = activeCompactionEntry != nil || (activeRunIsCompaction && !compactionRunFinished)
 
         var rows: [TimelineRow] = []
@@ -722,7 +724,7 @@ public enum TimelineRows {
         func appendWorkingRow() {
             if compactionOnlyRunFinished { return }
             if runningCompactionRunId != nil, activeCompactionRunId == nil { return }
-            rows.append(TimelineRow(id: workingRowId, createdAt: input.activeTurnStartedAt, kind: .working(compacting: compactingLabel)))
+            rows.append(TimelineRow(id: workingRowId, createdAt: compactionStartedAt ?? input.activeTurnStartedAt, kind: .working(compacting: compactingLabel)))
         }
 
         var index = 0

@@ -870,8 +870,8 @@ final class WorkingRowView: TimelineRowView {
 
     /// `formatWorkingTimer` (:3477-3490). The text shows whole seconds, so it changes once a second.
     private func tick(animated: Bool = true) {
-        if compacting { LabelClock.shared.cancel(self); return }
         guard let startMs else {
+            compactingLabel.text = "Compacting…"
             label.text = "Working..."
             ticker?.set(prefix: "Working...", value: "", animated: false)
             LabelClock.shared.cancel(self)
@@ -880,7 +880,9 @@ final class WorkingRowView: TimelineRowView {
         let elapsedMs = max(0, Int64(context.now().timeIntervalSince1970 * 1000) - startMs)
         let seconds = elapsedMs / 1000
         let value = seconds < 60 ? "\(seconds)s" : formatDuration(Double(seconds) * 1000)
+        compactingLabel.text = "Compacting for " + value
         label.text = "Working for " + value
+        if compacting { needsLayout = true }
         if let ticker {
             ticker.set(prefix: "Working for ", value: value, animated: animated)
             needsLayout = true

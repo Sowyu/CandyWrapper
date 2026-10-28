@@ -7,12 +7,12 @@ public enum IdleCompaction {
     /// `IDLE_COMPACTING_LABELS` (packages/client-runtime/src/userMessage.ts:10-13): the working row or live divider.
     public static let compactingLabels = [
         "beforeCacheExpires": "Compacting before the cache expires…",
-        "onReturn": "Compacting after being idle…",
+        "onReturn": "Compacting…",
     ]
     /// `IDLE_COMPACTION_TITLES` (userMessage.ts:16-19): leads the finished divider in place of "Context compacted".
     public static let titles = [
         "beforeCacheExpires": "Context automatically compacted before cache expiry",
-        "onReturn": "Context compacted after being idle",
+        "onReturn": "Context compacted before sending",
     ]
 
     /// `isCompactionCommandMessage` (packages/contracts/src/orchestrationV2.ts:492-498).
