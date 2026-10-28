@@ -107,6 +107,7 @@ struct ReferenceScreensFidelityTests {
             let ref = ThreadFidelityTests.crop(full, x: full.pixelsWide - w, width: w, height: h)
             let projection = try #require(try ThreadFidelityTests.projection(ThreadPreview.markdownThread))
             let panel = ThreadPanelView(frame: .zero)
+            panel.appearance = NSAppearance(named: theme == "dark" ? .darkAqua : .aqua)
             panel.bottomInset = ThreadFidelityTests.composerInset
             panel.model.runShellCommand = { _ in } // a thread with a project: shell blocks show "Run in terminal"
             let layout = SidebarLayoutView(mainContent: panel, defaults: UserDefaults(suiteName: "candywrapper.fidelity.reference-screens")!,
@@ -115,7 +116,8 @@ struct ReferenceScreensFidelityTests {
             layout.layoutSubtreeIfNeeded()
             panel.setProjection(projection, projectTitle: "demo-repo", workspaceRoot: nil)
             panel.layoutSubtreeIfNeeded()
-            panel.timeline.scroll(toFraction: 1)
+            // reference-3814/plans/narrow.json records this viewport at 30%.
+            panel.timeline.scroll(toFraction: 0.3)
             let image = Snapshot.image(of: layout, size: window, scale: 2, dark: theme == "dark")
             try record("03n-narrow.\(theme)", ref, ThreadFidelityTests.crop(image, x: image.pixelsWide - w, width: w, height: h))
         }

@@ -2,8 +2,7 @@
 card at its full, compact and essential densities (ThreadDetailsPanel.tsx:100-185, threadDetailsCardLayout.ts:7-14,
 GitActionsControl.tsx:1824, OpenInPicker.tsx:388-460) and the context chips inside a sent user message
 (MessagesTimeline.tsx:4243-4709, ThreadContextChip.tsx, chat/TerminalContextInlineChip.tsx, contextChipParts.tsx,
-ContextChip.tsx): a thread, a terminal excerpt, a file attachment, an image attachment tinted with its picture's
-average color, and a folder mention (MarkdownFileLink).
+ContextChip.tsx): a thread, a terminal excerpt, a file attachment, an image attachment with the theme's blue accent, and a folder mention (MarkdownFileLink).
 
 The card markup reuses gen-git-spec.py's helpers; the chip markup reuses gen-markdown-spec.py's chip and pierre
 helpers and its icon tint hook. The image chip's picture is a solid 4x4 PNG, so `averageImageColor` gives its
@@ -107,15 +106,19 @@ LABEL = '<span class="block min-w-0 self-baseline overflow-x-clip text-ellipsis 
 
 def context_chip(tag, kind, inner, style=""):
     base = BASE.replace("rounded-sm", "") if kind == "image" else BASE
-    cls = f"{base} [--context-chip-accent:{ACCENTS[kind]}] {COMPOUND}" + (" rounded-lg border border-(--context-chip-accent)/30 bg-(--context-chip-accent)/10 px-1.5" if kind == "image" else "") + (" no-underline" if tag == "a" else "")
+    cls = f"{base} {COMPOUND}" + (" rounded-lg border border-(--context-chip-accent)/30 bg-(--context-chip-accent)/10 px-1.5" if kind == "image" else "") + (" no-underline" if tag == "a" else "")
     attrs = ' href="#thread"' if tag == "a" else ' type="button"'
-    st = f' style="{style}"' if style else ""
+    st = f' style="--context-chip-accent:{ACCENTS[kind].replace(chr(95), chr(32))};{style}"'
     return f'<{tag}{attrs} class="{cls}" data-slot="context-chip"{st}>{inner}</{tag}>'
 
 def label(text, extra=""):
     return LABEL.format(text=html.escape(text), extra=extra)
 
 SIZE = '<span class="shrink-0 text-3xs text-current">{}</span>'
+
+def attachment_label(text, size):
+    return ('<span class="block min-w-0 self-baseline overflow-x-clip text-ellipsis whitespace-nowrap underline decoration-transparent decoration-1 underline-offset-[0.2em] flex items-baseline gap-[0.33em]" data-slot="context-chip-label">'
+            + '<span class="min-w-0 max-w-72 overflow-x-clip text-ellipsis whitespace-nowrap">' + html.escape(text) + '</span>' + SIZE.format(size) + '</span>')
 
 def png(rgb, side=4):
     raw = b"".join(b"\x00" + bytes(rgb) * side for _ in range(side))
@@ -130,10 +133,10 @@ CHIPS = {
                "[Fix login redirect](t3-context://v1/thread/thread_demo)"),
     "terminal": (context_chip("button", "terminal", lucide("terminal", "") + label("Terminal 1 lines 4-9")),
                  "[Terminal 1 lines 4-9](t3-context://v1/terminal/terminal_demo)"),
-    "file": (context_chip("button", "file", m["pierre"]("typescript") + label("report.ts", " max-w-72") + SIZE.format("12 KB")),
+    "file": (context_chip("button", "file", m["pierre"]("typescript") + attachment_label("report.ts", "12 KB")),
              "[report.ts](t3-context://v1/file/file_demo)"),
     "image": (context_chip("button", "image", f'<img alt="" class="size-[1em] shrink-0 rounded-sm object-cover" src="{png(IMAGE_RGB)}">'
-                           + label("screenshot.png", " max-w-72") + SIZE.format("48 KB"),
+                           + attachment_label("screenshot.png", "48 KB"),
                            style=""),
               "![screenshot.png](t3-context://v1/image/image_demo)"),
     "folder": (m["chip"]("/tmp/demo-repo", m["FOLDER"], "demo-repo"), "[demo-repo](/tmp/demo-repo)"),
