@@ -6,7 +6,7 @@ import T3Store
 @testable import Features
 
 /// Whole-sidebar comparison: our sidebar at 256x780, 2x, with the reference dataset, against the left 256pt
-/// of design/reference/02-sidebar-populated.{light,dark}.png. Writes ref, ours and diff PNGs plus
+/// of design/reference-3824/02-sidebar-populated.{light,dark}.png. Writes ref, ours and diff PNGs plus
 /// report-sidebar-whole.html to `Fidelity.root`. Text differs where the data differs.
 @MainActor @Suite(.fidelity)
 struct SidebarFidelityTests {
@@ -26,8 +26,8 @@ struct SidebarFidelityTests {
         content.windowedMac = false // the reference is the web client: no traffic lights
         content.stage = .nightly
         content.now = { SidebarPreview.referenceNow }
-        content.state = SidebarListState(activeThreadId: SidebarPreview.referenceActiveThread)
-        content.setSnapshot(SidebarPreview.referenceSnapshot(), animated: false)
+        content.state = SidebarListState(activeThreadId: ThreadId("t9"))
+        content.setSnapshot(Screen3824Fixtures.sidebar(dark: dark), animated: false)
         container.content = content
         return Snapshot.image(of: container, size: NSSize(width: 256, height: 780), scale: 2, dark: dark)
     }
@@ -71,6 +71,42 @@ struct SidebarFidelityTests {
         return (total, perBand, diff)
     }
 
+    /// 3824 screen 31 now actually collapses the sidebar. Compare its full 52pt header.
+    /// The web capture has no macOS traffic lights, so use its 52pt content inset.
+    @Test func collapsedSidebar() throws {
+        try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
+        var cases: [(String, Double)] = []
+        for dark in [false, true] {
+            let theme = dark ? "dark" : "light"
+            let full = try #require(NSBitmapImageRep(data: Data(contentsOf: Self.repo.appendingPathComponent(
+                "design/reference-3824/31-sidebar-collapsed.\(theme).png"))))
+            let ref = Self.crop(full, width: 2200, height: 104)
+            // Snapshot installs a native window. Crop its extra traffic-light inset so the
+            // remaining 1100pt header uses the reference web client's 52pt content start.
+            let inset = SidebarMetrics.titlebarContentLeft(windowedMac: true) - SidebarMetrics.titlebarContentLeft(windowedMac: false)
+            let canvas = GrainSurfaceView(fill: Themed.color(\.background))
+            let header = ThreadHeaderView(frame: NSRect(x: 0, y: 0, width: 1100 + inset, height: 52))
+            header.projectTitle = "demo-repo"
+            header.threadTitle = "Format a Markdown Reply"
+            header.toggles[0].isPressed = true
+            let trigger = SidebarTriggerView(frame: NSRect(x: 12 + inset, y: 12, width: 28, height: 28))
+            trigger.isSidebarOpen = false
+            canvas.addSubview(header)
+            canvas.addSubview(trigger)
+            let rendered = Snapshot.image(of: canvas, size: NSSize(width: 1100 + inset, height: 52), scale: 2, dark: dark)
+            let ours = NSBitmapImageRep(cgImage: rendered.cgImage!.cropping(to: CGRect(x: inset * 2, y: 0, width: 2200, height: 104))!)
+            let (total, _, diff) = Self.compare(ref, ours, bands: [])
+            let base = "31-sidebar-collapsed.\(theme)"
+            try Snapshot.writePNG(ref, to: Self.out.appendingPathComponent("\(base).ref.png"))
+            try Snapshot.writePNG(ours, to: Self.out.appendingPathComponent("\(base).ours.png"))
+            try Snapshot.writePNG(diff, to: Self.out.appendingPathComponent("\(base).diff.png"))
+            print("sidebar-collapsed", base, String(format: "%.2f%%", total * 100))
+            cases.append((base, total))
+            #expect(total < 0.05, "\(base)")
+        }
+        Self.ceilings.check("wholeSidebar", cases)
+    }
+
     @Test func wholeSidebar() throws {
         try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
         // The 80pt header band is CandyWrapper's candy art, not T3's NightlySkyArt, so it differs by design.
@@ -79,7 +115,7 @@ struct SidebarFidelityTests {
         var lines: [String] = [], cases: [(String, Double)] = []
         for theme in ["light", "dark"] {
             let full = try #require(NSBitmapImageRep(data: Data(contentsOf: Self.repo.appendingPathComponent(
-                "design/reference/02-sidebar-populated.\(theme).png"))))
+                "design/reference-3824/02-sidebar-populated.\(theme).png"))))
             let ref = Self.crop(full, width: 512, height: 1560)
             let ours = Self.render(dark: theme == "dark")
             let (total, perBand, diff) = Self.compare(ref, ours, bands: bands)
