@@ -394,6 +394,8 @@ extension SettingsController {
         }
         let plan = makePlan(scope)
         if let reason = plan.unavailableReason {
+            pageContext.serverWriteFailureRevision += 1
+            refreshPages()
             toast("Setting not saved", reason, .warning)
             return
         }
@@ -415,6 +417,8 @@ extension SettingsController {
             }
         }
         guard !failures.isEmpty else { return }
+        pageContext.serverWriteFailureRevision += 1
+        refreshPages()
         toast(saved.isEmpty ? "Setting not saved" : "Setting saved on some environments",
               (failures + (saved.isEmpty ? [] : ["Saved on \(saved.joined(separator: ", "))."])).joined(separator: "\n"), .error)
     }

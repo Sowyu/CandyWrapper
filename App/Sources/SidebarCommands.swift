@@ -368,7 +368,17 @@ final class SidebarCommands {
         }
     }
 
-    private func snooze(_ id: ThreadId, _ preset: SnoozePreset) { snooze(id, until: preset.snoozedUntil) }
+    private func snooze(_ id: ThreadId, _ preset: SnoozePreset) {
+        guard let picked = SnoozePresets.pick(shown: [preset], id: preset.id, now: Date(), presets: snoozeSettings(id)) else {
+            toast("Could not snooze thread", "That snooze time has passed. Choose another time.", .warning)
+            return
+        }
+        snooze(id, until: picked.snoozedUntil)
+    }
+
+    private func snoozeSettings(_ id: ThreadId) -> [SnoozePresetSetting] {
+        SnoozePresetSetting.decode(id.environmentId.flatMap { threads.composer.config($0)?.settings.raw["snoozePresets"] })
+    }
 
     /// A command failure this client words itself, with T3's text.
     struct CommandMessage: LocalizedError { let errorDescription: String? }
@@ -542,7 +552,7 @@ final class SidebarCommands {
 
     private func showSnoozeMenu(_ id: ThreadId, anchor: NSView) {
         // Presets resolve when the menu opens, so "In 1 hour" counts from the click.
-        var items = SnoozePresets.resolve(now: Date()).map { preset in
+        var items = SnoozePresets.resolve(now: Date(), presets: snoozeSettings(id)).map { preset in
             MenuItem(preset.label, shortcut: preset.whenLabel) { [weak self] in self?.snooze(id, preset) }
         }
         items.append(.separator)
@@ -568,7 +578,7 @@ final class SidebarCommands {
             SidebarModel.buildProjectGroups(s.projects, preferredEnvironmentId: sidebar.state.environments.primaryId)
                 .first { $0.memberProjectIds.contains(thread.projectId) }
         }
-        let presets = SnoozePresets.resolve(now: Date())
+        let presets = SnoozePresets.resolve(now: Date(), presets: snoozeSettings(id))
         var state = ThreadActionMenu.State()
         state.canOperate = environments.canOperate(thread.id.environmentId)
         // ponytail: every capability reads as supported; gate per environment from its descriptor when an old server shows up
@@ -771,7 +781,7 @@ final class SidebarCommands {
         let pinned = selected.filter { $0.pinnedAt != nil }
         let settling = selected.filter { $0.settledOverride != .settled }
         let regeneratable = selected.filter { $0.titleRegeneration == nil }
-        let presets = SnoozePresets.resolve(now: Date())
+        let presets = SnoozePresets.resolve(now: Date(), presets: snoozeSettings(id))
         let requests = PendingSubagentRequests.byThread(snapshot?.threads ?? [])
         // ponytail: every environment reads as supporting pins, snooze and title regeneration; gate per descriptor for old servers
         let items = ThreadActionMenu.bulkItems(count: selected.count, pinnedCount: pinned.count, settlingCount: settling.count,

@@ -353,48 +353,74 @@ public struct SnoozePreset: Sendable, Equatable {
 }
 
 public enum SnoozePresets {
-    static let hourMs: TimeInterval = 3600
-    static let eveningHour = 18
-    static let morningHour = 9
-
-    /// `resolveSnoozePresets` with the web's time labels (apps/web/src/components/Sidebar.snooze.ts):
-    /// in 1 hour, in 3 hours, this evening (only while 18:00 is more than an hour away), tomorrow
-    /// 9:00, next Monday 9:00 (dropped when it is tomorrow).
-    public static func resolve(now: Date, calendar: Calendar = .current, locale: Locale = TimestampFormat.t3Locale) -> [SnoozePreset] {
-        let time = DateFormatter()
-        time.locale = locale
-        time.calendar = calendar
-        time.timeZone = calendar.timeZone
-        time.setLocalizedDateFormatFromTemplate("jmm")
-        let weekday = DateFormatter()
-        weekday.locale = locale
-        weekday.calendar = calendar
-        weekday.timeZone = calendar.timeZone
-        weekday.setLocalizedDateFormatFromTemplate("EEE")
-
-        func at(_ hour: Int, _ base: Date) -> Date {
-            calendar.date(bySettingHour: hour, minute: 0, second: 0, of: base) ?? base
+    /// threadSettled.ts:201-329 (3814): sort and deduplicate by wake minute, preserving settings order on ties.
+    public static func resolve(now: Date, calendar: Calendar = .current, locale: Locale = TimestampFormat.t3Locale,
+                               presets: [SnoozePresetSetting] = SnoozePresetSetting.defaults) -> [SnoozePreset] {
+        var seen = Set<Int64>()
+        return presets.enumerated().compactMap { index, setting in
+            resolve(setting, now: now, calendar: calendar, locale: locale).map { (index, $0) }
+        }.sorted {
+            let a = Int64($0.1.snoozedUntil.timeIntervalSince1970 / 60)
+            let b = Int64($1.1.snoozedUntil.timeIntervalSince1970 / 60)
+            return a == b ? $0.0 < $1.0 : a < b
+        }.compactMap { _, preset in
+            seen.insert(Int64(preset.snoozedUntil.timeIntervalSince1970 / 60)).inserted ? preset : nil
         }
-        func preset(_ id: String, _ label: String, _ date: Date, weekdayPrefix: Bool = false) -> SnoozePreset {
-            let when = time.string(from: date).replacingOccurrences(of: "\u{202F}", with: " ") // Chromium's plain space
-            return SnoozePreset(id: id, label: label, whenLabel: weekdayPrefix ? "\(weekday.string(from: date)) \(when)" : when,
-                                snoozedUntil: date)
-        }
-        let inAnHour = now.addingTimeInterval(hourMs)
-        let inThreeHours = now.addingTimeInterval(3 * hourMs)
-        var presets = [preset("hour", "In 1 hour", inAnHour), preset("three-hours", "In 3 hours", inThreeHours)]
-        let evening = at(eveningHour, now)
-        if evening.timeIntervalSince(now) > hourMs { presets.append(preset("evening", "This evening", evening)) }
-        // Calendar days, not 24 h steps, so DST days land right.
-        let tomorrow = at(morningHour, calendar.date(byAdding: .day, value: 1, to: now) ?? now)
-        presets.append(preset("tomorrow", "Tomorrow", tomorrow))
-        // JS `getDay()`: Sunday is 0. Calendar weekdays start at 1 for Sunday.
-        let jsDay = calendar.component(.weekday, from: now) - 1
-        let untilMonday = (1 - jsDay + 7) % 7 == 0 ? 7 : (1 - jsDay + 7) % 7
-        let nextWeek = at(morningHour, calendar.date(byAdding: .day, value: untilMonday, to: now) ?? now)
-        if nextWeek != tomorrow { presets.append(preset("next-week", "Next week", nextWeek, weekdayPrefix: true)) }
-        return presets
     }
+
+    public static func resolve(_ setting: SnoozePresetSetting, now: Date, calendar: Calendar = .current,
+                               locale: Locale = TimestampFormat.t3Locale) -> SnoozePreset? {
+        let wake: Date, label: String
+        var labelNamesDay = false
+        switch setting {
+        case .after(let minutes):
+            guard (1...SnoozePresetSetting.maximumMinutes).contains(minutes) else { return nil }
+            wake = now.addingTimeInterval(Double(minutes) * 60)
+            let unit = minutes % 1440 == 0 ? "day" : minutes % 60 == 0 ? "hour" : "minute"
+            let n = minutes / (unit == "day" ? 1440 : unit == "hour" ? 60 : 1)
+            label = "In \(n) \(unit)" + (n == 1 ? "" : "s")
+        case .at(let day, let time):
+            guard let dayIndex = SnoozePresetSetting.days.firstIndex(of: day),
+                  SnoozePresetSetting(setting.json) != nil else { return nil }
+            let weekdays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+            let days: Int
+            if dayIndex < 2 { days = dayIndex } else {
+                let delta = ((weekdays.firstIndex(of: day) ?? 0) - (calendar.component(.weekday, from: now) - 1) + 7) % 7
+                days = delta == 0 ? 7 : delta
+            }
+            let parts = time.split(separator: ":").compactMap { Int($0) }
+            guard let date = calendar.date(byAdding: .day, value: days, to: now) else { return nil }
+            var components = calendar.dateComponents([.year, .month, .day], from: date)
+            components.hour = parts[0]; components.minute = parts[1]; components.second = 0
+            // JS setHours preserves the minute when a spring clock change skips this local hour.
+            guard let target = calendar.date(from: components), target > now else { return nil }
+            wake = target
+            if days == 0 { label = parts[0] < 12 ? "This morning" : parts[0] < 17 ? "This afternoon" : "This evening" }
+            else if days == 1 { label = "Tomorrow" }
+            else if day == "monday" { label = "Next week" }
+            else { label = (days == 7 ? "Next " : "") + day.capitalized }
+            labelNamesDay = label != "Next week"
+        }
+        let time = DateFormatter()
+        time.locale = locale; time.calendar = calendar; time.timeZone = calendar.timeZone
+        time.setLocalizedDateFormatFromTemplate("jmm")
+        let formatted = time.string(from: wake).replacingOccurrences(of: "\u{202F}", with: " ")
+        time.setLocalizedDateFormatFromTemplate("EEE")
+        let when = labelNamesDay || calendar.isDate(now, inSameDayAs: wake) ? formatted : "\(time.string(from: wake)) \(formatted)"
+        return SnoozePreset(id: setting.id, label: label, whenLabel: when, snoozedUntil: wake)
+    }
+
+    /// Durations start at selection. Absolute choices retain their shown date and reject expired times.
+    public static func pick(shown: [SnoozePreset], id: String, now: Date,
+                            presets: [SnoozePresetSetting] = SnoozePresetSetting.defaults,
+                            calendar: Calendar = .current, locale: Locale = TimestampFormat.t3Locale) -> SnoozePreset? {
+        guard let original = shown.first(where: { $0.id == id }) else { return nil }
+        if let setting = presets.first(where: { $0.id == id }), case .after = setting {
+            return resolve(setting, now: now, calendar: calendar, locale: locale)
+        }
+        return original.snoozedUntil > now ? original : nil
+    }
+
 }
 
 /// The custom snooze dialog's input (`CustomSnoozeInput`, threadSettled.ts:321-354).
