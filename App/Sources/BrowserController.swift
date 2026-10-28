@@ -202,7 +202,7 @@ final class BrowserController {
         }
         checkReveals(state, key: key, surfaces: surfacesBefore)
         if let tab = miniTab[key], state.listLoaded, state.sessions[tab] == nil { miniTab[key] = nil }
-        recordTitles(state)
+        recordTitles(state, since: before)
         render()
     }
 
@@ -792,14 +792,10 @@ final class BrowserController {
     }
 
     /// Agent-driven pages only enrich a URL already in the history.
-    private func recordTitles(_ state: ThreadPreviewState) {
+    private func recordTitles(_ state: ThreadPreviewState, since previous: ThreadPreviewState) {
         guard let key = projectKey, !history.entries(key).isEmpty else { return }
         let before = history
-        for snapshot in state.sessions.values {
-            if case .success(let url, let title) = snapshot.navStatus, !title.isEmpty {
-                history.setTitle(key, url: url, title: title, environmentHost: environmentHost)
-            }
-        }
+        history.recordChangedTitles(key, state: state, since: previous, environmentHost: environmentHost)
         if history != before { saveHistory() }
     }
 

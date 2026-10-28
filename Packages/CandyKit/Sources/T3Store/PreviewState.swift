@@ -257,6 +257,18 @@ public struct BrowserHistory: Codable, Sendable, Equatable {
         byProjectKey[projectKey] = entries
     }
 
+    /// T3 3814 browserHistoryStore.ts:456-469: retained tab snapshots do not overwrite
+    /// another thread's newer title. Only a new load or retitle updates shared history.
+    public mutating func recordChangedTitles(_ projectKey: String, state: ThreadPreviewState, since previous: ThreadPreviewState,
+                                             environmentHost: String? = nil) {
+        for snapshot in state.sessions.values.sorted(by: { $0.updatedAt < $1.updatedAt }) {
+            guard case .success(let url, let title) = snapshot.navStatus, !title.isEmpty else { continue }
+            if case .success(let oldURL, let oldTitle) = previous.sessions[snapshot.tabId]?.navStatus,
+               oldURL == url, oldTitle == title { continue }
+            setTitle(projectKey, url: url, title: title, environmentHost: environmentHost)
+        }
+    }
+
     public mutating func remove(_ projectKey: String, url raw: String) {
         guard let url = Self.normalize(raw), let entries = byProjectKey[projectKey] else { return }
         let next = entries.filter { $0.url != url }
