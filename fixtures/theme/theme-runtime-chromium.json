@@ -690,12 +690,6 @@
           null,
           null
         ],
-        "--chat-composer-context-extension" : [
-          null,
-          null,
-          null,
-          null
-        ],
         "--chat-composer-drawer-inset" : [
           null,
           null,
@@ -9968,12 +9962,6 @@
           null,
           null
         ],
-        "--spacing-composer-seam" : [
-          null,
-          null,
-          null,
-          null
-        ],
         "--stage-art-bottom" : [
           {
             "p3" : [
@@ -13614,12 +13602,6 @@
           null
         ],
         "--chat-composer-attachment-overlap" : [
-          null,
-          null,
-          null,
-          null
-        ],
-        "--chat-composer-context-extension" : [
           null,
           null,
           null,
@@ -22892,12 +22874,6 @@
           }
         ],
         "--spacing" : [
-          null,
-          null,
-          null,
-          null
-        ],
-        "--spacing-composer-seam" : [
           null,
           null,
           null,
