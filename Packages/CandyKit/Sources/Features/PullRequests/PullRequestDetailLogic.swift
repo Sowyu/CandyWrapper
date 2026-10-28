@@ -327,7 +327,9 @@ public enum PullRequestDetailLogic {
         let shown = items.filter { item in
             item.comments.contains { c in
                 let bot = c.author?.isBot == true || c.author?.login.hasSuffix("[bot]") == true
-                return (filter.bots || !bot) && (filter.resolved || !isFinished(c, thread: item.thread))
+                // A bot's approval or change request is a verdict, not chatter (pullRequestDetail.logic.ts:624-641 at 3814).
+                let verdict = ["approved", "changes-requested"].contains(reviewOutcome(c.reviewState) ?? "")
+                return (filter.bots || !bot || verdict) && (filter.resolved || !isFinished(c, thread: item.thread))
             }
         }
         let count: ([ConversationItem]) -> Int = { $0.reduce(0) { $0 + $1.comments.count } }

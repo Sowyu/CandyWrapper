@@ -35,6 +35,12 @@ struct PullRequestPanel3473Tests {
         d.reviewThreads = [thread]
         #expect(PullRequestDetailLogic.filterComments(d, .init()).shown.map(\.id) == ["a", "b"])
         #expect(PullRequestDetailLogic.filterComments(d, .init()).hidden == 1)
+        // A bot's approval is a verdict and stays with bots hidden (#25829 at 3814); its chatter doesn't.
+        var verdicts = d
+        verdicts.reviewThreads = []
+        verdicts.comments = [PullRequestComment(id: "v", kind: "review", author: bot, body: "", createdAt: "2026-10-11T00:00:06Z", reviewState: "APPROVED"),
+                             PullRequestComment(id: "c", kind: "issue-comment", author: bot, body: "chatter", createdAt: "2026-10-11T00:00:07Z")]
+        #expect(PullRequestDetailLogic.filterComments(verdicts, .init()).shown.map(\.id) == ["v"])
         // On the timeline the finding carries its thread and stays out of the folded runs.
         d.reviewThreads = [PullRequestReviewThread(id: "t", path: "a.ts", line: 3, side: "right", isResolved: true, isOutdated: false,
                                                    comments: [PullRequestThreadComment(id: "r1", author: bot, body: "finding", createdAt: "2026-10-11T00:00:01Z"),
