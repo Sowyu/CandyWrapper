@@ -19,7 +19,6 @@ struct ComposerLogicTests {
     @Test func queuedPromotionCanSkipCompactionOnlyOnSupportingRuntimes() throws {
         let projection = try JSONValue.object([
             "thread": .object(["id": .string("t")]),
-            "updatedAt": .string("2026-10-27T00:00:00Z"),
             "runs": .array([.object(["id": .string("r"), "threadId": .string("t"), "ordinal": .number(1),
                                     "userMessageId": .string("m"), "status": .string("running"), "requestedAt": .string("2026-10-27T00:00:00Z")])]),
             "messages": .array([.object(["id": .string("m"), "threadId": .string("t"), "runId": .string("r"),

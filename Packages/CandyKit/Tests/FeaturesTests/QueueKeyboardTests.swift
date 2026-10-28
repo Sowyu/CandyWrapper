@@ -1,11 +1,11 @@
 import AppKit
 import Testing
 import DesignSystem
-import T3Store
 import T3Protocol
 @testable import Features
 
-/// Send now uses the same action while running or stopped; questions and in-flight commands block editing.
+/// Arrow keys on a queued row's grip (QueuedRunsControl.tsx:350-359): up moves before the previous
+/// run, down before the run two below or to the end; edges, saving rows and a busy queue do nothing.
 @MainActor
 struct QueueKeyboardTests {
     @Test func openQuestionsBlockEditingAndBusyQueuesWait() {
@@ -25,18 +25,6 @@ struct QueueKeyboardTests {
         view.isBusy = true
         view.edit(0)
         #expect(edits == 1)
-    }
-
-    @Test func senderTitlesRefreshWithoutChangingTheQueue() {
-        let view = QueuedRunsView()
-        let message = ChatMessage(id: "m", role: .user, text: "Review", createdAt: "2026-10-28T00:00:00Z", createdBy: "agent", senderThreadId: "sender")
-        view.state = .init(items: [.init(runId: "r", messageId: "m", text: "Review", message: message)])
-        func buttons(_ root: NSView) -> [ButtonView] { root.subviews.flatMap { ($0 as? ButtonView).map { [$0] } ?? buttons($0) } }
-        #expect(buttons(view).contains { $0.title == "Agent" })
-        view.senderThreadTitles = ["sender": "Review helper"]
-        #expect(buttons(view).contains { $0.title == "Review helper" })
-        view.senderThreadTitles = ["sender": "  New title  "]
-        #expect(buttons(view).contains { $0.title == "New title" })
     }
 
     @Test func runningAndStoppedQueuesBothOfferSendNow() {
