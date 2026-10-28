@@ -1,4 +1,5 @@
 import Foundation
+import T3Protocol
 
 /// A workspace entry from `projects.listEntries` and `projects.searchEntries`
 /// (`ProjectEntry`, packages/contracts/src/project.ts:265-270).
@@ -28,7 +29,7 @@ public enum FilePreviewKind: Equatable, Sendable {
     /// `WORKSPACE_IMAGE_PREVIEW_EXTENSIONS`.
     public static let imageExtensions = [".avif", ".gif", ".ico", ".jpeg", ".jpg", ".png", ".svg", ".webp"]
     /// `AUDIO_MIME_TYPE_BY_EXTENSION`.
-    static let audioExtensions = [".mp3", ".wav", ".ogg", ".oga", ".flac", ".aac", ".m4a", ".opus", ".aiff"]
+    static let audioExtensions = [".mp3", ".wav", ".ogg", ".oga", ".flac", ".aac", ".m4a", ".opus", ".aiff", ".webm-audio"]
     /// `videoMimeType` (packages/shared/src/video.ts).
     static let videoExtensions = [".mp4", ".m4v", ".webm", ".mov", ".ogv"]
 
@@ -318,5 +319,14 @@ public final class FileSaveCoordinator {
         }
         let remaining = max(0, debounceInterval - Date().timeIntervalSince(lastChangeAt))
         if disposed { await persistLatest() } else { schedule(remaining) }
+    }
+}
+
+/// T3 3814 contracts/assets.ts:25-29 and FilePreviewPanel.tsx:1356-1374. The server sends
+/// no capability for arbitrary media downloads, so older and unknown versions retain their text error.
+public enum FileAssetRules {
+    public static func binaryResource(version: String?, threadId: String, path: String) -> JSONValue? {
+        guard let version, let parsed = T3Version(version), parsed >= T3Version("0.1.4-nightly.20261028.3814")! else { return nil }
+        return .object(["_tag": .string("media-file"), "threadId": .string(threadId), "path": .string(path), "disposition": .string("attachment")])
     }
 }

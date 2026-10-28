@@ -423,8 +423,6 @@ final class FilesController {
     private func showActiveFile(force: Bool) {
         guard case .file(let path, let line, _)? = panel.panelState.active, let ws = workspace else { return }
         let surface = panel.fileSurface
-        surface.attachment = nil
-        attachmentShown = nil
         surface.projectName = ws.projectName
         surface.cwd = ws.cwd
         let k = key(path, in: ws)
@@ -433,6 +431,8 @@ final class FilesController {
         surface.show(path: path, revealLine: line)
         panel.filesPanel.treeView.selectedPath = path.hasPrefix("/") ? nil : path
         if sameFile, !force { return }
+        surface.attachment = nil
+        attachmentShown = nil
         if surface.path == path, !sameFile { surface.setContent(.loading) }
         shownFile = nil
         fileTask?.cancel()
@@ -445,13 +445,28 @@ final class FilesController {
         guard let shell = environments.session(ws.environmentId) else { return }
         let wantsAsset = surface.wantsAsset
         fileTask = Task { [weak self] in
-            let content: FileSurfaceView.Content
+            var content: FileSurfaceView.Content
             if wantsAsset {
                 content = await Self.asset(shell, threadId: ws.threadId, cwd: ws.cwd, path: path)
             } else {
                 content = await Self.read(shell.supervisor, cwd: ws.cwd, path: path)
             }
+            var binaryURL: URL?
+            var binaryResource: JSONValue?
+            if case .failure(let message, _, _) = content, message == filePreviewReadErrorMessage(failure: "binary_file", operation: nil, message: ""),
+               let resource = FileAssetRules.binaryResource(version: await shell.supervisor.serverVersion, threadId: ws.threadId.localId.rawValue,
+                                                           path: FileLinks.isAbsolutePath(path) ? path : ws.cwd + "/" + path),
+               let reply = try? await shell.supervisor.request("assets.createUrl", payload: .object(["resource": resource])),
+               let relative = reply["relativeUrl"]?.stringValue, let url = URL(string: relative, relativeTo: shell.http.baseURL)?.absoluteURL {
+                binaryURL = url
+                binaryResource = resource
+                content = .asset(url)
+            }
             guard !Task.isCancelled, let self, self.activeFilePath == path, let now = self.workspace, self.key(path, in: now) == k else { return }
+            if binaryURL != nil, let binaryResource {
+                surface.attachment = .init(origin: "File", name: (path as NSString).lastPathComponent, sizeBytes: 0, inline: false,
+                                           onSave: { [weak self] in self?.saveHostFile(binaryResource, shell: shell, name: (path as NSString).lastPathComponent) })
+            }
             if case .text = content { self.reads[k] = content }
             if case .failure(_, _, _) = content, Self.isDirectoryFailure(content) {
                 self.panel.fileSurface.setContent(.directory)
@@ -459,6 +474,27 @@ final class FilesController {
             }
             self.panel.fileSurface.setContent(content)
             self.shownFile = k
+        }
+    }
+
+    private func saveHostFile(_ resource: JSONValue, shell: ShellSession, name: String) {
+        guard let window = panel.window else { return }
+        let save = NSSavePanel()
+        save.nameFieldStringValue = name
+        save.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let destination = save.url else { return }
+            Task {
+                do {
+                    let reply = try await shell.supervisor.request("assets.createUrl", payload: .object(["resource": resource]))
+                    guard let relative = reply["relativeUrl"]?.stringValue,
+                          let source = URL(string: relative, relativeTo: shell.http.baseURL)?.absoluteURL else { throw CocoaError(.fileReadUnknown) }
+                    let (temporary, response) = try await URLSession.shared.download(from: source)
+                    defer { try? FileManager.default.removeItem(at: temporary) }
+                    guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw CocoaError(.fileReadUnknown) }
+                    if FileManager.default.fileExists(atPath: destination.path) { _ = try FileManager.default.replaceItemAt(destination, withItemAt: temporary) }
+                    else { try FileManager.default.moveItem(at: temporary, to: destination) }
+                } catch { _ = self?.panel.toasts.show(ToastView(title: "Could not save file", message: error.localizedDescription, kind: .error)) }
+            }
         }
     }
 
@@ -488,7 +524,7 @@ final class FilesController {
 
     /// `assets.createUrl` with a `workspace-file` resource (filePreviewMode.ts `workspaceAssetResource`).
     nonisolated static func asset(_ shell: ShellSession, threadId: ThreadId, cwd: String, path: String) async -> FileSurfaceView.Content {
-        let absolute = path.hasPrefix("/") ? path : cwd + "/" + path
+        let absolute = FileLinks.isAbsolutePath(path) ? path : cwd + "/" + path
         let inside = absolute.hasPrefix(cwd + "/")
         let kind = FilePreviewKind.of(path)
         let tag = inside && kind != .audio && kind != .video ? "workspace-file" : "media-file"

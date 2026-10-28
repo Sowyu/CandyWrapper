@@ -71,6 +71,8 @@ public enum MarkdownImages {
     /// Opens a workspace-relative file in the right panel's file viewer ("Open in file viewer").
     public static var openInFileViewer: ((_ relativePath: String) -> Void)?
 
+    static func audioURL(_ path: String) async -> URL? { await assetURL?(path)?.url }
+
     /// Natural pixel sizes by source key. Posts `didMeasure` when one arrives.
     // ponytail: grows with every image seen this session (a few bytes each); cap it if threads show thousands of images
     private(set) static var sizes: [String: CGSize] = [:]

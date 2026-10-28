@@ -326,10 +326,17 @@ class TimelineRowView: DSView, FocusWithinObserver, HoverSyncPointerClient {
     /// Resets hover when the view is recycled.
     override func prepareForReuse() {
         super.prepareForReuse()
+        setContentVisible(false)
         if hovered || focusWithin { hovered = false; focusWithin = false; hoverChanged() }
     }
 
-    func setContentVisible(_ visible: Bool) {}
+    func setContentVisible(_ visible: Bool) {
+        func visit(_ view: NSView) {
+            if let markdown = view as? MarkdownView { markdown.setMediaVisible(visible); return }
+            for child in view.subviews { visit(child) }
+        }
+        visit(self)
+    }
 
     /// Paints find in thread's matches in this row's Markdown; `occurrence` is the active match's index in the row,
     /// numbered as the server numbers them. Only messages and plans are searchable (`data-thread-find-text`).

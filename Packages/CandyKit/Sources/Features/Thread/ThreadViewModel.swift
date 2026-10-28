@@ -83,6 +83,7 @@ public final class ThreadViewModel {
     public var runShellCommand: ((String) -> Void)?
     /// A sent image at a pixel side (`assets.createUrl` for the attachment, decoded at that size).
     public var onOpenAttachment: ((JSONValue, _ download: Bool) -> Void)?
+    public let audioPlayback = InlineAudioPlayback()
     public var attachmentMediaURL: (@Sendable (_ attachmentId: String) async -> URL?)?
     public var attachmentImage: (@Sendable (_ attachmentId: String, _ side: Int, _ cover: Bool) async -> CGImage?)?
     /// A click on a sent image: the message's images and the one clicked.
@@ -124,7 +125,7 @@ public final class ThreadViewModel {
     /// Opens another thread of this environment by its local id (`onOpenThread`): a created thread's
     /// "Open chat", a subagent card, a fork divider, "Open thread".
     public var onOpenThread: (@MainActor (ThreadId) -> Void)?
-    public var environmentId: String?
+    public var environmentId: String? { didSet { if environmentId != oldValue { audioPlayback.clear() } } }
     /// A live, unarchived thread's title by local id (`threadReadTargetTitle`): `t3_thread_read` rows name it.
     public var threadTitle: (@MainActor (ThreadId) -> String?)?
     /// A thread this machine knows by local id, archived ones included (`useThreadShell`), with its project:
@@ -317,6 +318,7 @@ public final class ThreadViewModel {
         let threadChanged = projection?.thread.id != self.projection?.thread.id
         self.projection = projection
         if threadChanged {
+            audioPlayback.clear()
             pipeline = TimelinePipeline()
             generation += 1
             rowsTask = nil

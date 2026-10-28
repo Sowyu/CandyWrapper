@@ -334,8 +334,10 @@ public final class FileSurfaceView: DSView {
                 pdf.document = document
             }
             return pdf
-        default:
+        case .html:
             return HTMLFileView(url: url)
+        default:
+            return NativeFilePreviewView(source: url, name: path)
         }
     }
 
