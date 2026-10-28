@@ -3,12 +3,16 @@ import DesignSystem
 
 /// The default themes follow Nightly 3814. Glass and Redesign retain their existing geometry.
 enum ThreadDesign {
-    static func uses3814(dark: Bool) -> Bool { !ThemeRuntime.framesPanes(dark: dark) }
+    /// A scoped layout choice lets callers render either design without changing the app's theme.
+    @TaskLocal static var layoutUses3814: Bool?
+    static func uses3814(dark: Bool) -> Bool { layoutUses3814 ?? !ThemeRuntime.framesPanes(dark: dark) }
     static var uses3814: Bool { uses3814(dark: NSAppearance.current.isDark) }
 
-    static func layout(in appearance: NSAppearance, _ make: () -> MarkdownLayout) -> MarkdownLayout {
+    static func layout(in appearance: NSAppearance, design: Bool? = layoutUses3814, _ make: () -> MarkdownLayout) -> MarkdownLayout {
         var result: MarkdownLayout?
-        appearance.performAsCurrentDrawingAppearance { result = make() }
+        $layoutUses3814.withValue(design) {
+            appearance.performAsCurrentDrawingAppearance { result = make() }
+        }
         return result!
     }
 

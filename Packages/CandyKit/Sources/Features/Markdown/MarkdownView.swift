@@ -337,9 +337,10 @@ public final class MarkdownView: DSView {
         jobs += 1
         let token = jobs
         nonisolated(unsafe) let appearance = effectiveAppearance
+        let design = ThreadDesign.uses3814(dark: appearance.isDark)
         running = (width, token)
         DispatchQueue.global(qos: .userInitiated).async {
-            let made = ThreadDesign.layout(in: appearance, make)
+            let made = ThreadDesign.layout(in: appearance, design: design, make)
             DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated {
                     // Whoever drops it last, the layout is freed in the background, even if this view went meanwhile.

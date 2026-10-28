@@ -76,15 +76,41 @@ public enum CodeTokenKind: UInt8, Sendable, CaseIterable {
     /// A color that follows the drawing appearance, so one layout serves both themes.
     public var color: NSColor { Self.colors[Int(rawValue)] }
 
-    private static let colors: [NSColor] = allCases.map { kind in
+    /// Chat code follows 3824's t3-light palette; other code surfaces keep their own styling.
+    var markdownColor: NSColor { Self.markdownColors[Int(rawValue)] }
+
+    private static let markdownColors = allCases.map { makeColor($0, markdown: true) }
+
+    /// readableSyntaxTheme.ts:6-50: preserve hue while meeting 4.5:1 on the darkest light code surface;
+    /// numbers, punctuation and decorators have a 6:1 floor to keep their order against the lighter colors.
+    private static func readableLight(_ value: UInt32) -> UInt32 {
+        var rgb = [Int(value >> 16 & 0xff), Int(value >> 8 & 0xff), Int(value & 0xff)]
+        let minimum: Double = [0x1ca1c7, 0x636363, 0x1a85d4].contains(value) ? 6 : 4.5
+        func channel(_ c: Int) -> Double {
+            let v = Double(c) / 255
+            return v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+        }
+        while 0.74 / (0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2]) + 0.05) < minimum {
+            rgb = rgb.map { Int(floor(Double($0) * 0.96)) }
+        }
+        return UInt32(rgb[0] << 16 | rgb[1] << 8 | rgb[2])
+    }
+
+    private static let colors = allCases.map { makeColor($0, markdown: false) }
+
+    private static func makeColor(_ kind: Self, markdown: Bool) -> NSColor {
         func c(_ v: UInt32) -> NSColor {
             NSColor(srgbRed: CGFloat(v >> 16 & 0xff) / 255, green: CGFloat(v >> 8 & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: 1)
         }
         let light = c(kind.hex.light), dark = c(kind.hex.dark), redesign = c(kind.redesignLight)
-        return NSColor(name: nil) {
-            $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : ThemeRuntime.isDither(dark: false) ? redesign : light
+        let readable = markdown ? c(readableLight(kind.hex.light)) : light
+        return NSColor(name: nil) { appearance in
+            if appearance.isDark { return dark }
+            if ThemeRuntime.isDither(dark: false) { return redesign }
+            return markdown && ThreadDesign.uses3814(dark: false) ? readable : light
         }
     }
+
 }
 
 public struct CodeToken: Sendable, Equatable {

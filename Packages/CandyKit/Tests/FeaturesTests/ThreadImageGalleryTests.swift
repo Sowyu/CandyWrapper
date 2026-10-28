@@ -315,49 +315,53 @@ struct ThreadImageGalleryTests {
 
     @Test func offscreenRenders() async throws {
         guard let dir = ProcessInfo.processInfo.environment["GALLERY_SNAPSHOTS"] else { return }
-        let previous = ThemeRuntime.input
-        defer { ThemeRuntime.apply(previous) }
         var input = ThemeRuntime.input
         input.ditherLight = true; input.ditherDark = true
-        ThemeRuntime.apply(input)
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 560), styleMask: [.borderless], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        window.appearance = NSAppearance(named: .darkAqua)
-        let root = DSView(frame: NSRect(x: 0, y: 0, width: 720, height: 560))
-        root.layer?.backgroundColor = NSColor(white: 0.09, alpha: 1).cgColor
-        window.contentView = root
+        let (window, root, gallery) = withTheme(input) {
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 560), styleMask: [.borderless], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.appearance = NSAppearance(named: .darkAqua)
+            let root = DSView(frame: NSRect(x: 0, y: 0, width: 720, height: 560))
+            root.layer?.backgroundColor = NSColor(white: 0.09, alpha: 1).cgColor
+            window.contentView = root
+
+            // The pill as the thread header fills it: actions, gallery (with its dot), terminal, totals, right panel.
+            let pill = DitherHeaderPillView()
+            pill.toggles = [IconName.ellipsis, .panelBottom, .panelRight].map { ToggleView(nil, icon: $0, variant: .ghost, size: .xs) }
+            for t in pill.toggles { pill.addSubview(t) }
+            pill.galleryCount = 10
+            pill.galleryUnseen = true
+            root.addSubview(pill)
+            pill.frame = NSRect(x: 720 - 16 - pill.intrinsicContentSize.width, y: 12, width: pill.intrinsicContentSize.width, height: pill.intrinsicContentSize.height)
+            root.layoutSubtreeIfNeeded()
+            Self.save(root, "progress-01-button-offscreen.png", dir: dir)
+
+            let gallery = ThreadImageGalleryView()
+            gallery.canReveal = { _ in true }
+            gallery.images = Self.fakeImages()
+            let card = PopoverView(content: gallery, padding: .none)
+            let size = card.intrinsicContentSize
+            card.frame = NSRect(x: pill.frame.maxX - size.width, y: pill.frame.maxY + 6, width: size.width, height: size.height)
+            root.addSubview(card)
+            root.layoutSubtreeIfNeeded()
+            return (window, root, gallery)
+        }
         defer { window.contentView = nil }
-
-        // The pill as the thread header fills it: actions, gallery (with its dot), terminal, totals, right panel.
-        let pill = DitherHeaderPillView()
-        pill.toggles = [IconName.ellipsis, .panelBottom, .panelRight].map { ToggleView(nil, icon: $0, variant: .ghost, size: .xs) }
-        for t in pill.toggles { pill.addSubview(t) }
-        pill.galleryCount = 10
-        pill.galleryUnseen = true
-        root.addSubview(pill)
-        pill.frame = NSRect(x: 720 - 16 - pill.intrinsicContentSize.width, y: 12, width: pill.intrinsicContentSize.width, height: pill.intrinsicContentSize.height)
-        root.layoutSubtreeIfNeeded()
-        Self.save(root, "progress-01-button-offscreen.png", dir: dir)
-
-        let gallery = ThreadImageGalleryView()
-        gallery.canReveal = { _ in true }
-        gallery.images = Self.fakeImages()
-        let card = PopoverView(content: gallery, padding: .none)
-        let size = card.intrinsicContentSize
-        card.frame = NSRect(x: pill.frame.maxX - size.width, y: pill.frame.maxY + 6, width: size.width, height: size.height)
-        root.addSubview(card)
-        root.layoutSubtreeIfNeeded()
         let cells = { gallery.subviews.compactMap { $0 as? ScrollAreaView }.first?.scrollView.documentView?.subviews.compactMap { $0 as? GalleryCellView } ?? [] }
         await Self.pump { !cells().isEmpty && cells().allSatisfy { ($0.subviews.first as? AsyncImageView)?.image != nil } }
-        Self.save(root, "progress-02-grid-offscreen.png", dir: dir)
+        let picture = withTheme(input) {
+            Self.save(root, "progress-02-grid-offscreen.png", dir: dir)
 
-        _ = gallery.handleKey(.right) // nothing: grid mode
-        cells().first { $0.frame.minX > 100 }?.action?()
-        root.layoutSubtreeIfNeeded()
-        let picture = gallery.subviews.compactMap { $0 as? AsyncImageView }.first!
+            _ = gallery.handleKey(.right) // nothing: grid mode
+            cells().first { $0.frame.minX > 100 }?.action?()
+            root.layoutSubtreeIfNeeded()
+            return gallery.subviews.compactMap { $0 as? AsyncImageView }.first!
+        }
         await Self.pump { picture.loadedSide > 0 }
-        Self.save(root, "progress-03-large-offscreen.png", dir: dir)
-        #expect(gallery.handleKey(.escape))
+        withTheme(input) {
+            Self.save(root, "progress-03-large-offscreen.png", dir: dir)
+            #expect(gallery.handleKey(.escape))
+        }
 
     }
 }

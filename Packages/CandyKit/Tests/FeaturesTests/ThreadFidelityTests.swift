@@ -40,7 +40,17 @@ struct ThreadFidelityTests {
         return try ThreadPreview.projections(transcript: "3814-design-threads.jsonl").last { $0.thread.title == expected }
     }
 
+    /// The real 3824 screens use fontSmoothing=true (appearanceFonts.ts:96-100), which means antialiased text.
+    /// Component captures use the harness's heavier smoothing; keep this choice local to the screen fixtures.
+    static func capturedFonts() -> FontRuntimeInput {
+        let previous = FontRuntime.input
+        var captured = previous; captured.smoothing = false
+        FontRuntime.apply(captured)
+        return previous
+    }
+
     static func render(_ title: String, fraction: CGFloat, dark: Bool) throws -> NSBitmapImageRep {
+        let fonts = capturedFonts(); defer { FontRuntime.apply(fonts) }
         let projection = try #require(try Self.projection(title))
         let surface = GrainSurfaceView(fill: Themed.color(\.background))
         let windowSize = NSSize(width: 1100, height: size.height)

@@ -29,28 +29,32 @@ struct ComposerLayoutTransitionTests {
     @Test func externalChromeRestoresTheFrameAfterOnlyTheComposerWasInvalidated() async throws {
         let original = ThemeRuntime.input
         var glass = original; glass.glassLight = true; glass.glassDark = true
-        ThemeRuntime.apply(glass)
-        defer { ThemeRuntime.apply(original) }
-        let panel = try collapsedPanel()
+        let panel = try withTheme(glass) { try collapsedPanel() }
         let composer = panel.composer
         var blocked = false
         composer.restingBlocked = { blocked }
         blocked = true
-        composer.needsLayout = true
-        panel.layoutSubtreeIfNeeded()
+        withTheme(glass) {
+            composer.needsLayout = true
+            panel.layoutSubtreeIfNeeded()
+        }
         // External chrome may change while the parent's layout is already running.
         _ = await eventually {
-            panel.layoutSubtreeIfNeeded()
-            return composer.frame.height == composer.preferredHeight
+            withTheme(glass) {
+                panel.layoutSubtreeIfNeeded()
+                return composer.frame.height == composer.preferredHeight
+            }
         }
-        #expect(!composer.isResting)
-        #expect(composer.frame.height == composer.preferredHeight)
-        #expect(composer.primary.frame.minY >= composer.placeholder.frame.maxY + 8)
-        blocked = false
-        composer.needsLayout = true
-        panel.layoutSubtreeIfNeeded()
-        #expect(!composer.isResting)
-        #expect(composer.frame.height == composer.preferredHeight)
+        withTheme(glass) {
+            #expect(!composer.isResting)
+            #expect(composer.frame.height == composer.preferredHeight)
+            #expect(composer.primary.frame.minY >= composer.placeholder.frame.maxY + 8)
+            blocked = false
+            composer.needsLayout = true
+            panel.layoutSubtreeIfNeeded()
+            #expect(!composer.isResting)
+            #expect(composer.frame.height == composer.preferredHeight)
+        }
     }
 
     private func collapsedPanel() throws -> ThreadPanelView {

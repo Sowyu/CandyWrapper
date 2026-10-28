@@ -110,6 +110,14 @@ struct MarkdownTests {
         #expect(CodeHighlighter.tokens("anything", language: "brainfuck").isEmpty)
     }
 
+    /// index.css:1869-1881 resets the outer alert's margin, leaving its nested paragraph's margin to collapse.
+    @Test(.threadDesign(true)) func trailingAlertKeepsItsParagraphMargin() {
+        let alert = MarkdownLayout(document: MarkdownDocument(parsing: "> [!NOTE]\n> A final note."), width: 680)
+        let paragraph = MarkdownLayout(document: MarkdownDocument(parsing: "A final paragraph."), width: 680)
+        #expect(alert.trailingMargin == MarkdownStyle.blockMargin)
+        #expect(paragraph.trailingMargin == 0)
+    }
+
     /// A blank line between items makes the list loose: each item's `<p>` margin (0.65rem) replaces `li + li`'s 0.25rem.
     @Test func looseListsSpaceItemsLikeParagraphs() {
         func list(_ text: String) -> MarkdownList? {
