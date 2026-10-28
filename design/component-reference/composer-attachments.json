@@ -1,4 +1,5 @@
 {
+ "sourceVersion": "v0.1.4-nightly.20261028.3824",
  "component": "composer-attachments",
  "source": "apps/web/src/components/chat/ChatComposer.tsx, ExpandedImageDialog.tsx, ComposerStashMenu.tsx, ComposerStashBadge.tsx",
  "states": [

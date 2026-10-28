@@ -1,11 +1,16 @@
 import AppKit
 import Testing
+import DesignSystem
 import T3Protocol
 @testable import Features
 
 @MainActor
 struct ComposerLayoutTransitionTests {
     @Test func submissionRestoresTheExpandedFrameBeforeShowingTheFooter() throws {
+        let original = ThemeRuntime.input
+        var glass = original; glass.glassLight = true; glass.glassDark = true
+        ThemeRuntime.apply(glass)
+        defer { ThemeRuntime.apply(original) }
         let panel = try collapsedPanel()
         let composer = panel.composer
         composer.restingBlocked = { [weak composer] in composer?.isBusy == true }
@@ -22,6 +27,10 @@ struct ComposerLayoutTransitionTests {
     }
 
     @Test func externalChromeRestoresTheFrameAfterOnlyTheComposerWasInvalidated() async throws {
+        let original = ThemeRuntime.input
+        var glass = original; glass.glassLight = true; glass.glassDark = true
+        ThemeRuntime.apply(glass)
+        defer { ThemeRuntime.apply(original) }
         let panel = try collapsedPanel()
         let composer = panel.composer
         var blocked = false

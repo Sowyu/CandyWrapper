@@ -90,12 +90,12 @@ public struct ComposerChipLook: Equatable, Sendable {
 
     /// `--context-chip-accent` per kind.
     var accent: NSColor? {
-        if let accentOverride { return accentOverride }
+        if let accentOverride, !ComposerDesign.current { return accentOverride }
         return switch kind {
         case .mention: OKLab.oklch(0.62, 0.11, 215)
         case .citation: OKLab.oklch(0.62, 0.16, 259)
         case .skill: OKLab.oklch(0.62, 0.16, 322)
-        case .image: OKLab.oklch(0.62, 0.16, 16)
+        case .image: ComposerDesign.current ? OKLab.oklch(0.62, 0.136, 237) : OKLab.oklch(0.62, 0.16, 16)
         case .file: OKLab.oklch(0.62, 0.136, 237)
         case .video: OKLab.oklch(0.62, 0.16, 48)
         case .environment: OKLab.oklch(0.62, 0.11, 145)
@@ -149,6 +149,7 @@ public struct ComposerChipLook: Equatable, Sendable {
         if state == .unresolved { return Themed.color(\.foreground) }
         if state == .invalid { return Themed.color(\.destructive) }
         guard let accent else { return Themed.color(\.foreground) }
+        if ComposerDesign.current { return accent }
         return OKLab.mix(accent, 0.22, Themed.color(\.contrastForeground))
     }
 
@@ -204,17 +205,17 @@ final class ComposerChipAttachment: NSTextAttachment {
         let font = chipFont
         func width(_ s: String) -> CGFloat { TextLine(NSAttributedString(string: s, attributes: [.font: font])).width }
         let detailWidth = look.detail.map { 0.33 * FileChipStyle.em(size) + TextLine(NSAttributedString(string: $0, attributes: [.font: detailFont])).width } ?? 0
-        let reserve = FileChipStyle.leading(size) + FileChipStyle.trailing(size) + detailWidth
+        let reserve = ComposerDesign.current ? size + 0.2 * size + (look.kind == .image ? 14 : 0) + detailWidth : FileChipStyle.leading(size) + FileChipStyle.trailing(size) + detailWidth
         var text = look.label
         if width(text) + reserve > maxWidth {
             while !text.isEmpty, width(text + "…") + reserve > maxWidth { text.removeLast() }
             text += "…"
         }
-        return (text, CGSize(width: width(text) + reserve, height: FileChipStyle.height(size)))
+        return (text, CGSize(width: width(text) + reserve, height: ComposerDesign.current ? (look.kind == .image ? 18 : 16) : FileChipStyle.height(size)))
     }
 
     static let size: CGFloat = 14
-    @MainActor static var chipFont: NSFont { FileChipStyle.font(size) }
+    @MainActor static var chipFont: NSFont { ComposerDesign.current ? DSFont.ui(size, weight: .medium) : FileChipStyle.font(size) }
     /// `text-3xs`.
     @MainActor static var detailFont: NSFont { DSFont.ui(10) }
 
@@ -267,6 +268,10 @@ final class ComposerChipAttachment: NSTextAttachment {
     /// picture (`size-[1.17em] rounded-sm object-cover`); `hovered` draws the interactive hover colors.
     @MainActor static func draw(look: ComposerChipLook, label: String, icon: IconDefinition, iconColor: NSColor?, in rect: CGRect, ctx: CGContext,
                                 hovered: Bool = false, thumbnail: CGImage? = nil) {
+        if ComposerDesign.current {
+            draw3814(look: look, label: label, icon: icon, in: rect, ctx: ctx, hovered: hovered, thumbnail: thumbnail)
+            return
+        }
         let em = FileChipStyle.em(size)
         let radius = 0.5 * em
         let box = rect.insetBy(dx: 0.5, dy: 0.5)
@@ -320,6 +325,47 @@ final class ComposerChipAttachment: NSTextAttachment {
         }
         ctx.restoreGState()
     }
+    @MainActor private static func draw3814(look: ComposerChipLook, label: String, icon: IconDefinition,
+                                          in rect: CGRect, ctx: CGContext, hovered: Bool, thumbnail: CGImage?) {
+        let image = look.kind == .image
+        let ink = look.foreground
+        var x = rect.minX
+        if image {
+            let path = CGPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerWidth: 7.5, cornerHeight: 7.5, transform: nil)
+            ctx.addPath(path); ctx.setFillColor(ink.withAlphaComponent(0.1).cgColor); ctx.fillPath()
+            ctx.addPath(path); ctx.setStrokeColor(ink.withAlphaComponent(0.3).cgColor); ctx.setLineWidth(1); ctx.strokePath()
+            x += 7
+        }
+        let iconRect = CGRect(x: x, y: rect.midY - size / 2, width: size, height: size)
+        if let thumbnail {
+            ctx.saveGState()
+            ctx.addPath(CGPath(roundedRect: iconRect, cornerWidth: 4, cornerHeight: 4, transform: nil)); ctx.clip()
+            let scale = max(size / CGFloat(thumbnail.width), size / CGFloat(thumbnail.height))
+            let w = CGFloat(thumbnail.width) * scale, h = CGFloat(thumbnail.height) * scale
+            ctx.translateBy(x: iconRect.midX - w / 2, y: iconRect.midY + h / 2); ctx.scaleBy(x: 1, y: -1)
+            ctx.draw(thumbnail, in: CGRect(x: 0, y: 0, width: w, height: h)); ctx.restoreGState()
+        } else if case .thread = look.kind, let project = look.project {
+            ctx.saveGState(); ctx.translateBy(x: x, y: iconRect.minY); ctx.scaleBy(x: size / 16, y: size / 16)
+            ProjectMonogramView.draw(project, identity: ProjectMonogramView.identity(project), ctx: ctx); ctx.restoreGState()
+        } else {
+            MarkdownView.drawIcon(icon, in: iconRect, color: ink.cgColor, ctx: ctx)
+        }
+        let line = TextLine(NSAttributedString(string: label, attributes: [.font: chipFont, .foregroundColor: ink]))
+        let baseline = line.baseline(top: rect.midY - 8, lineHeight: 16)
+        let labelX = iconRect.maxX + 0.2 * size
+        ctx.saveGState(); ctx.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+        ctx.textPosition = CGPoint(x: labelX, y: baseline); CTLineDraw(line.line, ctx)
+        if hovered {
+            ctx.setStrokeColor(ink.cgColor); ctx.setLineWidth(1)
+            ctx.move(to: CGPoint(x: labelX, y: baseline + 0.2 * size)); ctx.addLine(to: CGPoint(x: labelX + line.width, y: baseline + 0.2 * size)); ctx.strokePath()
+        }
+        if let detail = look.detail {
+            let d = TextLine(NSAttributedString(string: detail, attributes: [.font: detailFont, .foregroundColor: ink]))
+            ctx.textPosition = CGPoint(x: labelX + line.width + 0.33 * size, y: d.baseline(top: rect.midY - 7, lineHeight: 14)); CTLineDraw(d.line, ctx)
+        }
+        ctx.restoreGState()
+    }
+
 }
 
 private final class ChipViewProvider: NSTextAttachmentViewProvider {

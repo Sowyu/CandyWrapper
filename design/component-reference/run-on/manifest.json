@@ -13,10 +13,10 @@
   },
   "trigger.local" : {
     "height" : 24,
-    "width" : 91.1171875
+    "width" : 79.1171875
   },
   "trigger.remote" : {
     "height" : 24,
-    "width" : 120.53125
+    "width" : 108.53125
   }
 }

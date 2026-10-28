@@ -37,7 +37,7 @@ VARIANTS = {
 def surface(variant, placement):
     tint = "" if variant != "default" else " [--chat-composer-attached-tint:transparent]"
     place = ("[--chat-composer-attachment-overlap:calc(1rem+1px)] before:rounded-t-2xl before:mask-t-from-transparent before:mask-t-from-4 before:mask-t-to-black before:mask-t-to-4"
-             if placement == "attached" else "[--chat-composer-attachment-overlap:0px] before:rounded-2xl")
+             if True else "[--chat-composer-attachment-overlap:0px] before:rounded-2xl")
     return (f"{SURFACE_COLORS} relative isolate border-0 bg-transparent shadow-none{tint} {VARIANTS[variant]} {place} "
             "before:pointer-events-none before:absolute before:inset-0 before:-z-1 before:border before:border-(--chat-composer-attached-outline) "
             "before:bg-(--chat-composer-attached-surface)/(--glass-opacity) before:bg-linear-to-b before:from-(--chat-composer-attached-tint) before:to-(--chat-composer-attached-tint) before:backdrop-blur-(--glass-blur) before:backdrop-saturate-(--glass-saturation) "
@@ -79,19 +79,14 @@ PEEK_BORDER = {"default": "border-(--chat-composer-attached-outline)", "error": 
 # ComposerBannerStack.tsx:120-250 and ComposerBanner.tsx:84-145: the notices, then the front attachment,
 # in a `ComposerBanner.Column`.
 def stack(front, stacked, expanded):
-    peek = (f'<button type="button" data-slot="composer-banner-peek" class="{SURFACE_COLORS} {NEUTRAL} absolute inset-x-0 bottom-0 z-0 mx-auto h-3 w-[96%] cursor-pointer rounded-t-2xl border border-b-0 shadow-md '
-            "bg-(--chat-composer-attached-surface)/(--glass-opacity) backdrop-blur-(--glass-blur) backdrop-saturate-(--glass-saturation) transition-opacity duration-150 ease-out "
-            f'{PEEK_BORDER[stacked[0]["variant"]]}' + (" pointer-events-none invisible opacity-0" if expanded else "") + '"></button>')
-    items = "".join(f'<div class="transition-[opacity,translate] duration-220 ease-in opacity-100">{alert(**s, placement="floating")}</div>' for s in stacked)
-    shown = "pointer-events-auto visible translate-y-0 opacity-100" if expanded else "pointer-events-none invisible translate-y-1 opacity-0"
-    notices = (f'<div class="relative z-20 min-h-3{" z-50" if expanded else ""}">{peek}'
-               f'<div role="group" class="grid transition-[grid-template-rows] duration-150 ease-out {"grid-rows-[1fr]" if expanded else "grid-rows-[0fr]"}">'
-               f'<div class="min-h-0 overflow-hidden"><div class="transform-gpu space-y-2 pb-2 transition-[opacity,transform] duration-150 ease-out will-change-[opacity,transform] {shown}">'
-               f'{items}</div></div></div></div>')
-    attachment = ('<div data-slot="composer-banner-attachment" class="mx-auto -mb-[calc(1rem+1px)] w-[calc(100%-2*var(--chat-composer-drawer-inset))] relative z-0">'
-                  f'<div class="relative z-10 transition-[opacity,translate] duration-220 ease-in opacity-100">{alert(**front)}</div></div>')
-    return ('<div class="flex min-w-0 flex-1 flex-col empty:hidden [&>[data-slot=composer-banner-attachment]]:w-full [&>[data-slot=composer-banner-attachment]:last-child]:mb-0">'
-            f'{notices}{attachment}</div>')
+    notices = [*stacked, front]
+    parts = []
+    for i, notice in enumerate(notices):
+        card = alert(**notice, placement="attached")
+        attachment = "mx-auto -mb-[calc(1rem+1px)] w-[calc(100%-2*var(--chat-composer-drawer-inset))] [&+[data-slot=composer-banner-attachment]_[data-composer-banner-surface=attached]]:before:rounded-none [&+[data-slot=composer-banner-attachment]_[data-composer-banner-surface=attached]]:before:border-t-0"
+        parts.append('<div data-slot="composer-banner-attachment" class="' + attachment + '">' + card + '</div>')
+    return '<div class="flex min-w-0 flex-1 flex-col empty:hidden [&>[data-slot=composer-banner-attachment]]:w-full [&>[data-slot=composer-banner-attachment]:last-child]:mb-0">' + ''.join(parts) + '</div>'
+
 
 
 W = "display:block;width:692px"
@@ -107,7 +102,7 @@ cases = [
     {"name": "stack-collapsed-neutral", "html": stack(RECOVERY, [NOTICE], False), "wrapperStyle": W, "native": {"kind": "stack-neutral"}},
     {"name": "stack-expanded", "html": stack(GOAL, [RECOVERY, ENVIRONMENT], True), "wrapperStyle": W, "native": {"kind": "stack-open"}},
 ]
-spec = {"component": "banner-stack", "source": "apps/web/src/components/chat/ComposerBannerStack.tsx, ComposerBanner.tsx, ChatView.tsx",
+spec = {"sourceVersion": "v0.1.4-nightly.20261028.3814", "component": "banner-stack", "source": "apps/web/src/components/chat/ComposerBannerStack.tsx, ComposerBanner.tsx, ChatView.tsx",
         "states": ["rest"], "themes": ["light", "dark"], "cases": cases}
 with open(os.path.join(ROOT, "design/component-reference/banner-stack.json"), "w") as f:
     json.dump(spec, f, indent=1, ensure_ascii=False)

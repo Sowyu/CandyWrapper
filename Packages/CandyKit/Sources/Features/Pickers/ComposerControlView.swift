@@ -12,6 +12,9 @@ public final class ComposerControlView: ControlView {
     public var icon: NSView? {
         didSet { oldValue?.removeFromSuperview(); if let icon { addSubview(icon) }; restyle(); invalidateIntrinsicContentSize() }
     }
+    public var compactIcon: NSView? { didSet { oldValue?.removeFromSuperview(); if let compactIcon { addSubview(compactIcon) }; invalidateIntrinsicContentSize(); needsLayout = true } }
+    public var adornment: NSView? { didSet { oldValue?.removeFromSuperview(); if let adornment { addSubview(adornment) }; invalidateIntrinsicContentSize(); needsLayout = true } }
+    private var visibleIcon: NSView? { showsLabel ? icon : compactIcon ?? icon }
     public var tintsIcon = true { didSet { restyle() } }
     /// A plain lucide icon in `ComposerControl` keeps `[&_svg]:-mx-0.5`: it takes 2 less on each side
     /// in the flow. `ComposerControlIcon` glyphs (`data-composer-control-icon`) reset it to 0.
@@ -26,7 +29,17 @@ public final class ComposerControlView: ControlView {
     /// padding, a small quiet chevron and a faint fill on hover. Other uses of this control keep T3's.
     public var followsCapy = false { didSet { if followsCapy != oldValue { restyle() } } }
     var capy: Bool { followsCapy && ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
-    private var padding: CGFloat { capy ? 8 : Self.padding }
+    public var emphasized = false { didSet { restyle() } }
+    public var iconFollowsLabel = false { didSet { restyle() } }
+    public var textOnly = false { didSet { restyle() } }
+    public var paddingOverride: (CGFloat, CGFloat)? { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
+    public var mutedLabel = false { didSet { restyle() } }
+    private var leadingPadding: CGFloat { paddingOverride?.0 ?? padding }
+    private var trailingPadding: CGFloat { paddingOverride?.1 ?? padding }
+    private var padding: CGFloat { capy || modern ? 8 : Self.padding }
+    private var modern: Bool { ComposerDesign.uses3814(dark: effectiveAppearance.isDark) }
+    private var glyphWidth: CGFloat { if let compactIcon, visibleIcon === compactIcon { return 14 }; return (visibleIcon as? ComposerEffortGlyphView)?.intrinsicContentSize.width ?? 16 }
+    private var visibleIconOverhang: CGFloat { compactIcon != nil && visibleIcon === compactIcon ? 2 : iconOverhang }
     private var chevronSize: CGFloat { capy ? 11 : 14 }
 
     private let label = LabelView()
@@ -71,8 +84,12 @@ public final class ComposerControlView: ControlView {
 
     /// The width with or without the label, for the footer's fit decision.
     public func width(showingLabel: Bool) -> CGFloat {
-        let parts = [icon == nil ? nil : 16 - 2 * iconOverhang, showingLabel ? label.textWidth : nil, showsChevron ? CGFloat(10) : nil].compactMap { $0 }
-        return 2 + 2 * padding + parts.reduce(0, +) + CGFloat(max(0, parts.count - 1)) * Self.gap
+        let measuredIcon = showingLabel ? icon : compactIcon ?? icon
+        let measuredWidth: CGFloat = !showingLabel && compactIcon != nil ? 14 : (measuredIcon as? ComposerEffortGlyphView)?.intrinsicContentSize.width ?? 16
+        let overhang: CGFloat = !showingLabel && compactIcon != nil ? 2 : iconOverhang
+        let adornmentWidth = (adornment as? ComposerTraitsAdornmentView)?.width(showingLabel: showingLabel) ?? adornment?.intrinsicContentSize.width
+        let parts = [measuredIcon == nil ? nil : measuredWidth - 2 * overhang, showingLabel && (!title.isEmpty || !modern) ? label.textWidth : nil, adornmentWidth.flatMap { $0 > 0 ? $0 : nil }, (showsChevron && !modern) ? CGFloat(10) : nil].compactMap { $0 }
+        return 2 + leadingPadding + trailingPadding + parts.reduce(0, +) + CGFloat(max(0, parts.count - 1)) * Self.gap
     }
 
     public override var intrinsicContentSize: NSSize { NSSize(width: (naturalWidth * 2).rounded(.up) / 2, height: 28) }
@@ -81,21 +98,30 @@ public final class ComposerControlView: ControlView {
         super.layout()
         fill.frame = bounds
         ring.frame = bounds.insetBy(dx: -3, dy: -3)
-        var x = 1 + padding
-        if let icon {
-            icon.frame = NSRect(x: x - iconOverhang, y: (bounds.height - 16) / 2, width: 16, height: 16)
-            x += 16 - 2 * iconOverhang + Self.gap
+        var x = 1 + leadingPadding
+        icon?.isHidden = visibleIcon !== icon
+        compactIcon?.isHidden = visibleIcon !== compactIcon
+        if let icon = visibleIcon {
+            let height: CGFloat = icon is ComposerEffortGlyphView || (compactIcon != nil && icon === compactIcon) ? 14 : 16
+            icon.frame = NSRect(x: x - visibleIconOverhang, y: (bounds.height - height) / 2, width: glyphWidth, height: height)
+            x += glyphWidth - 2 * visibleIconOverhang + Self.gap
+        }
+        if let adornment {
+            (adornment as? ComposerTraitsAdornmentView)?.showsLabels = showsLabel
+            let size = adornment.intrinsicContentSize
+            adornment.frame = NSRect(x: bounds.width - 1 - trailingPadding - size.width, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
         }
         guard showsLabel else {
             chevron.frame = NSRect(x: x + 5 - chevronSize / 2, y: (bounds.height - chevronSize) / 2, width: chevronSize, height: chevronSize)
             return
         }
         // The chevron box is 10 wide in flow; the 14px glyph overhangs it by 2 on each side.
-        let chevronBox = bounds.width - 1 - padding - 10
+        let chevronBox = bounds.width - 1 - trailingPadding - 10
         chevron.frame = NSRect(x: chevronBox + 5 - chevronSize / 2, y: (bounds.height - chevronSize) / 2, width: chevronSize, height: chevronSize)
         // Frames snap to device pixels; a label that misses by less than that still fits, as in CSS.
-        let room = showsChevron ? chevronBox - Self.gap - x : bounds.width - 1 - padding - x
-        label.frame = NSRect(x: x, y: (bounds.height - 20) / 2, width: max(0, label.textWidth <= room + 0.5 ? label.textWidth : room), height: 20)
+        let room = showsChevron && !modern ? chevronBox - Self.gap - x : bounds.width - 1 - trailingPadding - x
+        let adornmentRoom = adornment.map { $0.intrinsicContentSize.width + Self.gap } ?? 0
+        label.frame = NSRect(x: x, y: (bounds.height - 20) / 2, width: max(0, label.textWidth <= room - adornmentRoom + 0.5 ? label.textWidth : room - adornmentRoom), height: 20)
     }
 
     public override func stateDidChange(from old: State) {
@@ -109,7 +135,7 @@ public final class ComposerControlView: ControlView {
     }
 
     public override func updateLayer() {
-        fill.backgroundColor = state.hoverOrPressed ? (capy ? Themed.color(\.foreground, 0.07) : Themed.color(\.accent)).cgColor(in: self) : nil
+        fill.backgroundColor = (state.hoverOrPressed || emphasized) && !(modern && textOnly) ? (capy ? Themed.color(\.foreground, 0.07) : Themed.color(\.accent)).cgColor(in: self) : nil
         // `focus-visible:ring-2 ring-ring ring-offset-1`: a 1px offset gap, then a 2px ring.
         ring.isHidden = !state.focusVisible
         ring.borderColor = Themed.color(\.ring).cgColor(in: self)
@@ -118,10 +144,14 @@ public final class ComposerControlView: ControlView {
     private func restyle() {
         let font = capy ? DSFont.ui(13, weight: .medium) : DSFont.ui(14, weight: .medium)
         if label.font != font { label.font = font; invalidateIntrinsicContentSize(); needsLayout = true }
+        chevron.isHidden = !showsChevron || modern
         chevron.alphaValue = capy ? 0.75 : 1
-        label.color = state.hovered ? Themed.color(\.contrastForeground) : Themed.color(\.contrastSecondaryLabel)
+        label.color = state.hoverOrPressed || emphasized ? Themed.color(\.contrastForeground) : (modern ? (mutedLabel ? Themed.color(\.contrastMutedForeground) : Themed.color(\.contrastForeground, 0.8)) : Themed.color(\.contrastSecondaryLabel))
         chevron.strokeColor = Themed.color(\.contrastIconMuted)
-        if tintsIcon, let icon = icon as? IconView { icon.strokeColor = Themed.color(\.contrastMutedForeground) }
+        if tintsIcon, let icon = icon as? IconView { icon.strokeColor = iconFollowsLabel ? label.color : Themed.color(\.contrastMutedForeground) }
+        (icon as? ComposerEffortGlyphView)?.color = label.color
+        (adornment as? ComposerTraitsAdornmentView)?.color = label.color
+        (compactIcon as? IconView)?.strokeColor = label.color
         needsDisplay = true
     }
 }

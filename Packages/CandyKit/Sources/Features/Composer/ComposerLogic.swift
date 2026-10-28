@@ -100,7 +100,7 @@ public enum ComposerLogic {
     }
 
     /// `composerPlaceholder.ts:1-2` and the rule list in I-composer-flow 7.2. The plan follow-up row is skipped (no plan mode yet).
-    public static func placeholder(_ s: PlaceholderInput) -> String {
+    public static func placeholder(_ s: PlaceholderInput, modern: Bool = false) -> String {
         // A send declines the approvals and redirects the agent (ChatComposer.tsx:6175-6177, a93b03c8a5).
         if s.approvalPending {
             return s.approvalFeedback ? "Send feedback to decline this request" : "Send a message to decline and redirect the agent"
@@ -110,6 +110,7 @@ public enum ComposerLogic {
         }
         if s.projectRequired { return "Choose a project above to start a thread" }
         if s.noProvider { return "Enable a provider in Settings to send a message" }
+        if modern { return "Ask anything. @ files, $ skills, / commands" }
         if s.disconnected { return "Ask for changes, send follow-ups, or attach images" }
         return "Ask anything, @tag files/folders, $use skills, or / for commands"
     }
@@ -329,12 +330,13 @@ public enum ComposerLogic {
             public var runId: RunId?
             public var messageId: MessageId?
             public var text: String
-            /// A guest's queued message: the guest's name before its text, and the owner can cancel it but not
-            /// rewrite it (QueuedRunsControl.tsx:122-130 at 3669).
+            /// The original message carries the same attribution as a sent turn.
+            public var message: ChatMessage?
+            /// The owner can cancel a guest's queued message, but cannot rewrite it.
             public var guestName: String?
             public var isEditable: Bool { guestName == nil }
-            public init(runId: RunId?, messageId: MessageId?, text: String, guestName: String? = nil) {
-                self.runId = runId; self.messageId = messageId; self.text = text; self.guestName = guestName
+            public init(runId: RunId?, messageId: MessageId?, text: String, guestName: String? = nil, message: ChatMessage? = nil) {
+                self.runId = runId; self.messageId = messageId; self.text = text; self.guestName = guestName; self.message = message
             }
         }
         public var items: [Item] = []
@@ -342,19 +344,20 @@ public enum ComposerLogic {
         public var activeRunId: RunId?
         public var isHeld = false
         public var canReorder = false
+        public var promoteSkipsCompaction = false
         public var canPromoteToSteer = false
         /// No run is active on a live thread, so a queued message can start its own turn with
         /// `queued-run.start` (threadWorkflows.ts:156-160, 96f09c6558).
         public var canSendNow = false
         public init(items: [Item] = [], activeRunId: RunId? = nil, isHeld: Bool = false, canReorder: Bool = false,
                     canPromoteToSteer: Bool = false, canSendNow: Bool = false) {
-            self.items = items; self.activeRunId = activeRunId; self.isHeld = isHeld
-            self.canReorder = canReorder; self.canPromoteToSteer = canPromoteToSteer; self.canSendNow = canSendNow
+            self.items = items; self.activeRunId = activeRunId; self.isHeld = isHeld; self.canReorder = canReorder
+            self.canPromoteToSteer = canPromoteToSteer; self.canSendNow = canSendNow
         }
 
         /// `optimistic`: sent messages the stream hasn't confirmed; the queued ones show as saving.
         /// `canStartQueuedRun`: the server takes `queued-run.start`, which servers before Nightly 3486 reject.
-        public init(projection: ThreadProjection?, optimistic: [ChatMessage] = [], canStartQueuedRun: Bool = true) {
+        public init(projection: ThreadProjection?, optimistic: [ChatMessage] = [], canStartQueuedRun: Bool = true, canSkipCompaction: Bool = false) {
             let saving = optimistic.filter { $0.inputIntent == .queuedTurn }
             guard let p = projection else {
                 items = saving.map { Item(runId: nil, messageId: $0.id, text: $0.text) }
@@ -374,17 +377,31 @@ public enum ComposerLogic {
                 // A queued guest message shows the guest's words; the agent still gets the attributed text
                 // (threadWorkflows.ts:146-147 at 3669).
                 let guest = GuestMessageAttribution(message?.context?["guest"])
-                return Item(runId: run.id, messageId: run.userMessageId, text: guest?.text ?? message?.text ?? "Queued message", guestName: guest?.name)
+                let original: ChatMessage? = message.map { (message: ConversationMessage) in ChatMessage(id: message.id, role: .user, text: message.text, runId: message.runId,
+                    createdAt: message.createdAt, createdBy: message.createdBy, creationSource: message.creationSource,
+                    senderThreadId: message.senderThreadId, scheduledTaskId: message.scheduledTaskId, context: message.context, attachments: message.attachments ?? []) }
+                return Item(runId: run.id, messageId: run.userMessageId,
+                            text: original.map { UserMessagePresentation.resolve($0).text } ?? "Queued message", guestName: guest?.name, message: original)
             }
             // Optimistic queued sends the projection doesn't list yet go last.
             items += saving.filter { texts[$0.id] == nil }.map { Item(runId: nil, messageId: $0.id, text: $0.text) }
             isHeld = p.runs.contains { $0.status == .queued && $0.queueHeld == true }
             let turns = Self.providerSession(p)?["capabilities"]?["turns"]
-            canReorder = turns?["supportsQueuedMessages"] == .bool(true)
             let steerable = activeRun?.status == .running && activeRun?.activeAttemptId != nil && p.providerTurns.contains {
                 $0["runAttemptId"]?.stringValue == activeRun?.activeAttemptId?.rawValue && $0["status"]?.stringValue == "running"
             }
-            canPromoteToSteer = steerable && (turns?["supportsActiveSteering"] == .bool(true) || turns?["supportsSteeringByInterruptRestart"] == .bool(true))
+            // T3 3814 threadWorkflows.ts:130-142,170-174. Older runtimes silently ignore this command during compaction.
+            promoteSkipsCompaction = canSkipCompaction && activeRun?.userMessageId.flatMap { messages[$0] }.map {
+                ($0.attachments ?? []).isEmpty && $0.role == "user" && $0.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "/compact"
+            } == true
+            canReorder = turns?["supportsQueuedMessages"] == .bool(true)
+            canPromoteToSteer = promoteSkipsCompaction || steerable && (turns?["supportsActiveSteering"] == .bool(true) || turns?["supportsSteeringByInterruptRestart"] == .bool(true))
+        }
+
+        /// CandyWrapper's own themes keep the queue's manual reorder behavior.
+        public static func reorderTarget(_ items: [Item], moving index: Int, to insert: Int) -> RunId?? {
+            guard items.indices.contains(index), insert >= 0, insert <= items.count, insert != index, insert != index + 1 else { return .none }
+            return .some(insert < items.count ? items[insert].runId : nil)
         }
 
         /// `resolveThreadProviderSession` (threadWorkflows.ts:64-88).
@@ -415,12 +432,5 @@ public enum ComposerLogic {
             return !p.runs.isEmpty || p.thread.activeProviderThreadId != nil
         }
 
-        /// The drag and arrow-key rule (QueuedRunsControl.tsx:180-190, 350-359): moving `index` to
-        /// insert position `insert` (0...count) gives the run to go before, or nil for the end.
-        /// Nil result `.none` means no move (dropped on itself or right after itself).
-        public static func reorderTarget(_ items: [Item], moving index: Int, to insert: Int) -> RunId?? {
-            guard items.indices.contains(index), insert >= 0, insert <= items.count, insert != index, insert != index + 1 else { return .none }
-            return .some(insert < items.count ? items[insert].runId : nil)
-        }
     }
 }

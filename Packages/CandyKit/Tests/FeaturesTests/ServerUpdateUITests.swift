@@ -25,7 +25,7 @@ struct ServerUpdateUITests {
 
         let running = ComposerServerUpdateNotice(status: .running(.resuming), dismissible: true)
         #expect(running.title == "Updating server" && running.detail == "Restarting…")
-        #expect(running.content.spinner && running.content.priority == .urgent)
+        #expect(!running.content.spinner && running.content.priority == .urgent) // 3814 uses a static download glyph.
         #expect(!running.content.dismissible && running.content.actions.isEmpty)
 
         let failed = ComposerServerUpdateNotice(status: .failed("The server did not resume on t3@2.0.0."), action: "Retry")

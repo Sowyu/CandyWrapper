@@ -26,7 +26,7 @@ struct SweepPanelsTests {
         blocked = false
         #expect(!composer.isResting)
         composer.recordTimelineScroll(delta: -40, canScroll: true, towardEnd: false)
-        #expect(composer.isResting)
+        #expect(!composer.isResting) // 3824 keeps the default composer expanded while scrolling.
         composer.expandFromScroll()
         #expect(!composer.isResting)
     }

@@ -187,6 +187,25 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         restore(anchor)
         tile()
     }
+    /// Unsent messages live at the end of the timeline in the default design.
+    public func setQueueFooter(_ view: QueuedRunsView?) {
+        let changed = queueFooterView !== view
+        if changed {
+            queueFooterView?.removeFromSuperview()
+            queueFooterView = view
+            if let view { document.addSubview(view) }
+        }
+        let height = view?.height(forWidth: laneFrame.width) ?? 0
+        guard changed || height != queueFooterHeight else { return }
+        let anchor = captureAnchor()
+        queueFooterHeight = height
+        layoutEmptyPlaceholder()
+        recomputeTops()
+        restore(anchor)
+        tile()
+    }
+    private var queueFooterView: QueuedRunsView?
+    private var queueFooterHeight: CGFloat = 0
     private var statusFooterView: NSView?
     private var statusFooterHeight: CGFloat = 0
     private var footerView: NSView?
@@ -214,7 +233,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     private var emptyLabel: LabelView?
     /// No rows, no "Subagent of" link, no setup card and no status line under the list.
     private var showsEmptyPlaceholder: Bool {
-        allowsEmptyPlaceholder && items.isEmpty && header == nil && footerView == nil && statusFooterView == nil && worktreeSetup.isHidden
+        allowsEmptyPlaceholder && items.isEmpty && header == nil && footerView == nil && statusFooterView == nil && queueFooterView == nil && worktreeSetup.isHidden
     }
     /// `flex h-full items-center justify-center`, `text-sm text-muted-foreground/30`.
     private func layoutEmptyPlaceholder() {
@@ -633,7 +652,9 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         }
         footerView?.frame = NSRect(x: TL.snap(laneFrame.x), y: y, width: laneFrame.width, height: footerHeight)
         statusFooterView?.frame = NSRect(x: TL.snap(laneFrame.x), y: y + footerHeight, width: laneFrame.width, height: statusFooterHeight)
-        let height = y + footerHeight + statusFooterHeight + Self.footer + bottomInset
+        queueFooterHeight = queueFooterView?.height(forWidth: laneFrame.width) ?? 0
+        queueFooterView?.frame = NSRect(x: TL.snap(laneFrame.x), y: y + footerHeight + statusFooterHeight, width: laneFrame.width, height: queueFooterHeight)
+        let height = y + footerHeight + statusFooterHeight + queueFooterHeight + Self.footer + bottomInset
         if document.frame.height != height || document.frame.width != scrollView.contentSize.width {
             adjusting = true
             document.setFrameSize(NSSize(width: scrollView.contentSize.width, height: height))
@@ -738,7 +759,11 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     }
 
     private func relayout() {
-        guard !items.isEmpty || tops.isEmpty == false else { return }
+        guard !items.isEmpty || tops.isEmpty == false else {
+            // A smaller composer changes the empty document too, before its first row arrives.
+            recomputeTops()
+            return
+        }
         let anchor = captureAnchor()
         recomputeTops()
         restore(anchor)
@@ -1026,7 +1051,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         var problems: [String] = []
         let lane = laneFrame
         if Set(items.map(\.id)).count != items.count { problems.append("duplicate row ids") }
-        let expectedHeight = topInset + heights.reduce(0, +) + footerHeight + statusFooterHeight + Self.footer + bottomInset
+        let expectedHeight = topInset + heights.reduce(0, +) + footerHeight + statusFooterHeight + queueFooterHeight + Self.footer + bottomInset
         if abs(document.frame.height - expectedHeight) > 0.01 { problems.append("document height \(document.frame.height), rows say \(expectedHeight)") }
         let pooled = Set(pools.values.flatMap { $0 }.map(ObjectIdentifier.init))
         var placed: [(String, NSRect)] = []

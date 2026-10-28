@@ -24,19 +24,20 @@ public final class ComposerView: DSView {
     public var onImplementInNewThread: (() -> Void)?
 
 
-    /// `rounded-3xl`: `calc(var(--radius) + 12px)`.
-    public static let radius: CGFloat = 22
-    /// The card's corner: T3's 22, or Capy's tighter corner under Dither.
-    var cardRadius: CGFloat { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.panelRadius : Self.radius }
+    /// 3824 ComposerSurface.tsx:41: `rounded-2xl`.
+    public static let radius: CGFloat = 16
+    /// CandyWrapper's own themes retain their existing card corners.
+    var cardRadius: CGFloat { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.panelRadius : (modern ? Self.radius : 22) }
     /// Body `px-4 pt-4 pb-2`, footer `px-4 pb-4`, the 1px `p-px` of ComposerSurface.Main.
     static let inset: CGFloat = 1, pad: CGFloat = 16, footerHeight: CGFloat = 32
     /// `min-h-19.5` and `max-h-52` less the `p-1 -m-1` pair.
     static let editorMin: CGFloat = 70, editorMax: CGFloat = 200
     /// Dither: Capy's prompt bar, measured in Capy 2026-10-22. 28pt footer controls 9 from the bottom and right
     /// edges, the attach "+" at the left, one prompt line (79 tall) in a thread and 118 tall on the new-thread page.
+    private var modern: Bool { ComposerDesign.uses3814(dark: effectiveAppearance.isDark) }
     var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
     static let capyEdge: CGFloat = 9, capyRow: CGFloat = 28, capyGap: CGFloat = 2, capyDraftEditorMin: CGFloat = 62
-    private var editorMinimum: CGFloat { capy ? (isDraftRoute ? Self.capyDraftEditorMin : ceil(ComposerEditor.lineHeight)) : Self.editorMin }
+    private var editorMinimum: CGFloat { capy ? (isDraftRoute ? Self.capyDraftEditorMin : ceil(ComposerEditor.lineHeight)) : (modern ? 2 * ComposerEditor.lineHeight : Self.editorMin) }
 
     // MARK: Inputs
 
@@ -64,7 +65,7 @@ public final class ComposerView: DSView {
     /// the open approval or question (the top drawer) keep it expanded.
     public var isResting: Bool {
         // Capy's prompt bar never rests: in a thread it is already one line tall.
-        scrollCollapsed && !capy && !isDraftRoute && pending == .none && !planFollowUp && replacement == nil && !prompt.contains("\n")
+        scrollCollapsed && !modern && !capy && !isDraftRoute && pending == .none && !planFollowUp && replacement == nil && !prompt.contains("\n")
             && !imageAttention && !environmentUnavailable && !editingQueued && dropHighlight.isHidden && restingBlocked?() != true
     }
     /// `hasImageAttachmentAttention`: a failed upload stays actionable in the expanded tray.
@@ -76,7 +77,7 @@ public final class ComposerView: DSView {
     private var promptWraps: Bool { editor.contentHeight > ComposerEditor.lineHeight * 1.5 }
     public func recordTimelineScroll(delta: CGFloat, canScroll: Bool, towardEnd: Bool) {
         if scrollGesture.record(now: ProcessInfo.processInfo.systemUptime, delta: delta,
-            eligible: collapseOnScroll && !capy && !isDraftRoute && pending == .none && !isResting && !promptWraps && restingBlocked?() != true && dropHighlight.isHidden,
+            eligible: collapseOnScroll && !modern && !capy && !isDraftRoute && pending == .none && !isResting && !promptWraps && restingBlocked?() != true && dropHighlight.isHidden,
             canScroll: canScroll, towardEnd: towardEnd) {
             scrollCollapsed = true
             if isResting { window?.makeFirstResponder(nil); needsLayout = true; onHeightChange?() }
@@ -260,10 +261,10 @@ public final class ComposerView: DSView {
         if let replacement { return Self.inset * 2 + max(48, replacement.intrinsicContentSize.height) }
         switch pending {
         // Without the 32px send button the footer row is the 28px controls (`h-7`): 148 empty (reference 06).
-        case .question: return Self.inset * 2 + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + 8 + 8 + 28 + Self.pad
+        case .question: return Self.inset * 2 + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + 8 + 8 + 28 + (modern ? 8 : Self.pad)
         case .none, .approval:
             if capy { return Self.inset + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + Self.capyGap + Self.capyRow + Self.capyEdge }
-            return Self.inset * 2 + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + 8 + Self.footerHeight + Self.pad
+            return Self.inset * 2 + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + 8 + Self.footerHeight + (modern ? 8 : Self.pad)
         }
     }
 
@@ -520,13 +521,13 @@ public final class ComposerView: DSView {
 
     private func updatePlaceholderContrast() {
         let strong = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
-        placeholder.color = Themed.color(\.placeholder, strong ? 1 : 0.75)
+        placeholder.color = Themed.color(\.placeholder, strong || modern ? 1 : 0.75)
     }
 
     func refresh() {
         defer { invalidateHeightIfNeeded() }
         // ChatComposer.tsx:7489-7490.
-        let placeholderText = planFollowUp ? "Add feedback to refine the plan, or leave this blank to implement it" : ComposerLogic.placeholder(placeholderInput)
+        let placeholderText = planFollowUp ? "Add feedback to refine the plan, or leave this blank to implement it" : ComposerLogic.placeholder(placeholderInput, modern: modern)
         if placeholder.text != placeholderText {
             placeholder.text = placeholderText
             editor.setAccessibilityPlaceholderValue(placeholderText)
@@ -815,6 +816,7 @@ public final class ComposerView: DSView {
     public override func updateLayer() {
         let dark = effectiveAppearance.isDark
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        updatePlaceholderContrast()
         blur.cornerRadius = cardRadius
         glass.layer?.cornerRadius = cardRadius
         dropHighlight.cornerRadius = cardRadius
@@ -829,7 +831,9 @@ public final class ComposerView: DSView {
         dropHighlight.borderColor = Themed.color(\.primary, 0.7).cgColor(in: self)
         // Classic Glass: depth from the pane's density and its highlight, not a soft drop shadow.
         let frost = WindowGlass.isActive(for: self)
-        shadowLayer.shadowOpacity = dark || frost ? 0 : 0.4
+        shadowLayer.shadowOpacity = dark || frost ? 0 : (modern ? 0.05 : 0.4)
+        shadowLayer.shadowRadius = modern ? 1 : 14
+        shadowLayer.shadowOffset = CGSize(width: 0, height: modern ? 1 : 12)
         glassEdge = WindowGlass.syncEdge(glassEdge, on: glass.layer, in: self, radius: cardRadius, edge: false)
         CATransaction.commit()
     }
@@ -845,7 +849,8 @@ public final class ComposerView: DSView {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         shadowLayer.frame = box
         // Spread -18: the shadow shape is the box inset by 18.
-        let shadowBox = box.insetBy(dx: 18, dy: 18), shadowRadius = max(0, cardRadius - 18)
+        let spread: CGFloat = modern ? 0 : 18
+        let shadowBox = box.insetBy(dx: spread, dy: spread), shadowRadius = max(0, cardRadius - spread)
         shadowLayer.shadowPath = capy ? SmoothCorners.path(shadowBox, shadowRadius, flipped: false)
             : CGPath(roundedRect: shadowBox, cornerWidth: shadowRadius, cornerHeight: shadowRadius, transform: nil)
         let maskPath = CGMutablePath()
@@ -858,7 +863,7 @@ public final class ComposerView: DSView {
         blur.frame = box
         glass.frame = box
         outline.frame = box
-        if joinsContextStrip {
+        if joinsContextStrip && !modern {
             let mask = outline.layer?.mask as? CAShapeLayer ?? CAShapeLayer()
             let path = CGMutablePath()
             path.addRect(box)
@@ -931,7 +936,7 @@ public final class ComposerView: DSView {
 
         // Footer row: 32 tall, 16 from the bottom.
         let capyFooter = capy && questionFooter == nil
-        let edge = capyFooter ? Self.capyEdge : Self.inset + Self.pad
+        let edge = capyFooter ? Self.capyEdge : Self.inset + (modern ? 8 : Self.pad)
         let rowHeight: CGFloat = capyFooter ? Self.capyRow : questionFooter == nil ? Self.footerHeight : 28
         let rowY = h - edge - rowHeight
         let midY = rowY + rowHeight / 2
@@ -939,7 +944,7 @@ public final class ComposerView: DSView {
         let attachIcon: IconName = capyFooter ? .plus : .paperclip
         if attach.icon != attachIcon { attach.icon = attachIcon }
         footerControls.forEach { $0.isHidden = false }
-        separators.forEach { $0.isHidden = false }
+        separators.forEach { $0.isHidden = modern }
         var actionsLeft: CGFloat
         if let footer = questionFooter {
             // Right to left: the pill, Previous, Stop (28, only while a run can stop); `gap-1.5` compact, else `gap-2`.
@@ -1019,9 +1024,20 @@ public final class ComposerView: DSView {
             contextWindowMeter.frame = NSRect(x: actionsLeft - 8 - 28, y: midY - 14, width: 28, height: 28)
             actionsLeft = contextWindowMeter.frame.minX
         }
+        if modern {
+            attach.frame = NSRect(x: 9, y: midY - 14, width: 28, height: 28)
+            let left: CGFloat = attach.isHidden ? 9 : 45
+            var available = max(0, actionsLeft - 8 - left)
+            for control in footerControls.reversed() {
+                let width = min(control.intrinsicContentSize.width, available)
+                control.frame = NSRect(x: actionsLeft - 8 - width, y: midY - 14, width: width, height: 28)
+                available -= width
+            }
+            return
+        }
         // Left cluster: the first control's own 10px padding puts its icon at x 17 (`-ms-2.5`); gap 4,
         // separators 1x16 with 2px margins. Capy puts its "+" first and the model icon at x 50.
-        var x = Self.inset + Self.pad - 10
+        var x = Self.inset + Self.pad - (modern ? 8 : 10)
         let limit: CGFloat
         if capyFooter {
             attach.frame = NSRect(x: Self.capyEdge, y: midY - 14, width: 28, height: 28)
@@ -1033,7 +1049,7 @@ public final class ComposerView: DSView {
             limit = (attach.isHidden ? actionsLeft : attach.frame.minX) - (compactFooter ? 6 : 0)
         }
         for (i, control) in footerControls.enumerated() {
-            if i > 0 {
+            if i > 0, !modern {
                 let sep = separators[i - 1]
                 x += 4 + 2
                 sep.frame = NSRect(x: x, y: midY - 8, width: 1, height: 16)

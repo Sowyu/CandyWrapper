@@ -131,7 +131,7 @@ cases = [
     {"name": "stash-empty", "html": empty, "native": {"case": "stash-empty"}, "wrapperStyle": "display:block;width:692px"},
     {"name": "stash-badge", "html": badge, "native": {"case": "stash-badge"}, "wrapperStyle": "display:inline-block"},
 ]
-spec = {"component": "composer-attachments", "source": "apps/web/src/components/chat/ChatComposer.tsx, ExpandedImageDialog.tsx, ComposerStashMenu.tsx, ComposerStashBadge.tsx",
+spec = {"sourceVersion": "v0.1.4-nightly.20261028.3824", "component": "composer-attachments", "source": "apps/web/src/components/chat/ChatComposer.tsx, ExpandedImageDialog.tsx, ComposerStashMenu.tsx, ComposerStashBadge.tsx",
         "states": ["rest"], "themes": ["light", "dark"], "cases": cases}
 with open(os.path.join(ROOT, "design/component-reference/composer-attachments.json"), "w") as f:
     json.dump(spec, f, indent=1, ensure_ascii=False)

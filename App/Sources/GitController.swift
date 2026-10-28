@@ -369,7 +369,8 @@ final class GitController {
         // Dither names the draft's machine in its chip over the composer, so the strip keeps to the checkout.
         let indicator = !(target.isDraft && ThemeRuntime.isDither(dark: panel.effectiveAppearance.isDark))
             && (runOnChoices || (env != nil && target.environmentId != environments.primaryId))
-        strip.runContext.glyphs = indicator ? [EnvironmentMachineIcon.definition(env?.machine ?? "server"), folderIcon(target)] : [folderIcon(target)]
+        let modern = !ThemeRuntime.isDither(dark: strip.effectiveAppearance.isDark) && !ThemeRuntime.isGlass(dark: strip.effectiveAppearance.isDark)
+        strip.runContext.glyphs = indicator ? (modern ? [EnvironmentMachineIcon.definition(env?.machine ?? "server")] : [EnvironmentMachineIcon.definition(env?.machine ?? "server"), folderIcon(target)]) : [folderIcon(target)]
         strip.runContext.text = strip.runOn.autoBalanceLabel ?? (indicator ? env?.label ?? "Run on" : label)
         strip.runContext.tooltipText = label
         strip.runContext.interactive = target.isDraft && composer.currentDraft != nil

@@ -11,6 +11,8 @@ final class ComposerCompactPill: ControlView {
     /// The chip is off: the next send keeps full history.
     var keepFullHistory = false { didSet { if keepFullHistory != oldValue { restyle() } } }
 
+    private var modern: Bool { ComposerDesign.uses3814(dark: effectiveAppearance.isDark) }
+
     static let height: CGFloat = 28
     private let icon = IconView(name: .minimize2, size: 14, strokeColor: Themed.color(\.warning))
     private let word = LabelView("", font: SB.tabular(12), color: Themed.color(\.warning))
@@ -37,20 +39,22 @@ final class ComposerCompactPill: ControlView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: 1 + 10 + 14 + 6 + ceil(word.textWidth) + 6 + ceil(count.textWidth) + 10 + 1, height: Self.height)
+        NSSize(width: (modern ? 8 + 16 + 6 + ceil(word.textWidth) + 6 + ceil(count.textWidth) + 8 : 1 + 10 + 14 + 6 + ceil(word.textWidth) + 6 + ceil(count.textWidth) + 10 + 1), height: Self.height)
     }
 
     override func layout() {
         super.layout()
         decoration.frame = bounds
         decoration.layout(boxSize: bounds.size)
-        var x: CGFloat = 11
-        icon.frame = NSRect(x: x, y: ((bounds.height - 14) / 2).rounded(), width: 14, height: 14)
-        x += 14 + 6
+        var x: CGFloat = modern ? 8 : 11
+        let glyph: CGFloat = modern ? 16 : 14
+        icon.frame = NSRect(x: x, y: ((bounds.height - glyph) / 2).rounded(), width: glyph, height: glyph)
+        x += glyph + 6
         let ww = ceil(word.textWidth)
-        word.frame = NSRect(x: x, y: ((bounds.height - 16) / 2).rounded(), width: ww, height: 16)
+        let line: CGFloat = modern ? 20 : 16
+        word.frame = NSRect(x: x, y: ((bounds.height - line) / 2).rounded(), width: ww, height: line)
         x += ww + 6
-        count.frame = NSRect(x: x, y: word.frame.minY, width: ceil(count.textWidth), height: 16)
+        count.frame = NSRect(x: x, y: word.frame.minY, width: ceil(count.textWidth), height: line)
     }
 
     override func stateDidChange(from old: State) {
@@ -60,6 +64,9 @@ final class ComposerCompactPill: ControlView {
 
     private func restyle() {
         // T3 3814 ComposerPrimaryActions.tsx:374-375 keeps the count visible in both modes.
+        word.font = modern ? DSFont.ui(14, weight: .medium) : SB.tabular(12)
+        count.font = modern ? SB.tabular(14, .medium) : SB.tabular(12)
+        word.lineHeight = modern ? 20 : 16; count.lineHeight = modern ? 20 : 16
         word.text = keepFullHistory ? "Keep" : "Compact"
         count.text = tokens
         let hovered = state.hovered && state.enabled
@@ -70,6 +77,12 @@ final class ComposerCompactPill: ControlView {
         box.radius = Self.height / 2
         box.border = keepFullHistory ? Themed.color(\.border) : Themed.color(\.warning, 0.4)
         box.fill = !keepFullHistory && hovered ? Themed.color(\.warning, 0.08) : nil
+        if modern {
+            word.color = Themed.color(\.foreground, hovered || !keepFullHistory ? 1 : 0.8)
+            count.color = Themed.color(\.mutedForeground); icon.strokeColor = Themed.color(\.mutedForeground)
+            box.radius = 8; box.border = nil
+            box.fill = hovered ? Themed.color(\.accent) : !keepFullHistory ? Themed.color(\.accent, 0.6) : nil
+        }
         decoration.boxStyle = box
         // Two lines (ComposerPrimaryActions.tsx:389-396).
         tip.text = keepFullHistory

@@ -18,6 +18,7 @@ struct ComposerFooterFidelityTests {
     /// Lays the cluster out at the widest width that gives the wanted fit.
     static func fitted(_ p: ComposerPickers, iconOnly: Int, hidden: Int) -> PickerControlsView {
         let v = p.controlsView
+        v.hidesPermissions = false // Exercise the non-default permissions chip, including its overflow.
         var w = v.intrinsicContentSize.width + 2
         repeat {
             v.frame = NSRect(x: 0, y: 0, width: w, height: 28)
@@ -42,10 +43,12 @@ struct ComposerFooterFidelityTests {
                 let p = try PickersFidelityTests.pickers()
                 if native["kind"] == "cluster" {
                     let iconOnly = Int(native["iconOnly"]!)!, hidden = Int(native["hidden"]!)!
+                    if native["bars"] == "true" { p.traitsButton.icon = ComposerEffortGlyphView(.init(count: 4, filled: 2, label: "Medium", special: false)); p.traitsButton.title = ""; p.traitsButton.paddingOverride = (2, 4) }
                     let v = Self.fitted(p, iconOnly: iconOnly, hidden: hidden)
                     #expect(v.fit == ComposerFooterLayout.Fit(hiddenCount: hidden, iconOnlyCount: iconOnly))
                     // The reference starts at the first block's separator, one gap after the model.
-                    let start = v.model.frame.maxX + 4
+                    let start = v.model.frame.maxX - 2
+                    v.model.alphaValue = 0 // The reference contains only the controls after the model.
                     v.frame.origin = NSPoint(x: 8 - start, y: 8)
                     canvas.addSubview(v)
                 } else if native["kind"] == "files" {
@@ -57,7 +60,7 @@ struct ComposerFooterFidelityTests {
                     canvas.addSubview(list)
                 } else {
                     _ = Self.fitted(p, iconOnly: 2, hidden: native["traits"] == "true" ? 2 : 1)
-                    let popup = PickerPopupView(PickerMenuView(entries: p.overflowEntries(), style: .menu, minimumWidth: 158))
+                    let popup = PickerPopupView(p.optionsMenu(includingTraits: native["traits"] == "true"))
                     popup.frame = NSRect(origin: NSPoint(x: 8, y: 8), size: popup.popupSize)
                     canvas.addSubview(popup)
                 }
@@ -81,24 +84,21 @@ struct ComposerFooterFidelityTests {
         #expect(mean < 0.05)
     }
 
-    /// Picking access in the overflow menu keeps it open and moves the check; a trait pick closes it.
+    /// 3824 closes the grouped menu after either a permission or effort pick.
     @Test func overflowMenuBehaviour() throws {
         let p = try PickersFidelityTests.pickers()
-        _ = Self.fitted(p, iconOnly: 2, hidden: 1)
-        #expect(p.controlsView.accessInOverflow && !p.controlsView.traitsInOverflow)
-        #expect(p.accessButton.isHidden && !p.traitsButton.isHidden && !p.controlsView.overflow.isHidden && !p.traitsButton.showsLabel)
         var closed = false
-        let menu = PickerMenuView(entries: p.overflowEntries(), style: .menu, minimumWidth: 158)
-        menu.refreshEntries = { p.overflowEntries() }
-        menu.onClose = { closed = true }
-        #expect(menu.selectableIndices.count == 4)
-        menu.pick(menu.selectableIndices[0])
-        #expect(!closed && p.current.runtimeMode == .approvalRequired && menu.entry(menu.selectableIndices[0]).checked)
-        _ = Self.fitted(p, iconOnly: 2, hidden: 2)
-        let both = PickerMenuView(entries: p.overflowEntries(), style: .menu, minimumWidth: 158)
-        both.onClose = { closed = true }
-        #expect(both.selectableIndices.count == 10)
-        both.pick(both.selectableIndices[2]) // High closes the menu
+        let permissions = p.optionsMenu(includingTraits: false)
+        permissions.onClose = { closed = true }
+        permissions.permissions.onPick?(.approvalRequired)
+        #expect(closed && p.current.runtimeMode == .approvalRequired)
+        closed = false
+        let combined = p.optionsMenu(includingTraits: true)
+        combined.onClose = { closed = true }
+        let traits = try #require(combined.traits)
+        #expect(traits.selectableIndices.count == 6)
+        traits.highlightedIndex = traits.selectableIndices[2]
+        #expect(combined.handleKey(.enter))
         #expect(closed && p.traitsButton.title == "High")
     }
 }

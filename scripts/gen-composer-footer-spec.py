@@ -4,7 +4,7 @@ menu (CompactComposerControlsMenu.tsx).
 
 The cluster cases start at the traits block: model trigger fidelity is covered by reference 03c. Class
 strings are copied from apps/web/src/components/chat/{ComposerControl,ChatComposer,TraitsPicker,
-CompactComposerControlsMenu}.tsx and ui/menu.tsx at the tag in T3_VERSION. Traits use Claude Haiku 5.5
+CompactComposerControlsMenu}.tsx and ui/menu.tsx at Nightly 3824. Traits use Claude Haiku 5.5
 from fixtures/transcripts/01-basic.jsonl with Medium (its default) picked, access is Full access.
 Usage: /usr/bin/python3 -I scripts/gen-composer-footer-spec.py
 """
@@ -20,33 +20,34 @@ def icon(name, cls="", stroke="2"):
     return ('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" '
             f'stroke="currentColor" stroke-width="{stroke}" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-{name} {cls}" aria-hidden="true">{inner}</svg>')
 
-# ComposerControl.tsx:17-26, size sm.
+# ComposerControl.tsx:12-43, size sm.
 CONTROL = ("relative inline-flex shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-(--control-radius) border border-transparent text-base outline-none hover:bg-accent data-pressed:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 data-disabled:pointer-events-none data-disabled:opacity-64 [&:active:not([aria-haspopup])]:scale-[0.97] [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:-mx-0.5 [&_svg[data-composer-control-icon]]:mx-0 "
-           "h-7 gap-1.5 px-2.5 font-medium text-secondary-label [&_svg:not([class*='text-'])]:text-muted-foreground hover:text-foreground sm:text-sm [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 "
+           "h-7 gap-1.5 px-2 font-medium text-foreground/80 [&_svg:not([class*='text-'])]:text-muted-foreground hover:text-foreground sm:text-sm [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 "
            "aria-pressed:bg-accent aria-pressed:text-accent-foreground aria-pressed:hover:bg-accent/80")
 SEPARATOR = '<div role="separator" aria-orientation="vertical" data-slot="separator" class="shrink-0 bg-border data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:w-px data-[orientation=vertical]:self-stretch data-[orientation=vertical]:not-[[class^=\'h-\']]:not-[[class*=\'_h-\']]:self-stretch mx-0.5 hidden sm:block h-4" data-orientation="vertical"></div>'
-CHEVRON = icon("chevron-down", "shrink-0 size-3.5 text-icon-muted", stroke="2.25").replace("aria-hidden", "data-composer-control-chevron aria-hidden")
+CHEVRON = ""
 
 def control_icon(name):
     return icon(name, "shrink-0 size-4").replace("aria-hidden", "data-composer-control-icon aria-hidden")
 
-# The icon-only block hides labels out of flow (ChatComposer.tsx:5604).
+# The icon-only block hides labels out of flow (ComposerControlsBar.tsx).
 ICON_ONLY = " [&_[data-composer-control-label]]:pointer-events-none [&_[data-composer-control-label]]:invisible [&_[data-composer-control-label]]:absolute [&_[data-composer-control-label]]:w-max [&_[data-composer-control-label]]:max-w-none"
 
 def block(trigger_icon, label, icon_only):
-    trigger = (f'<button type="button" aria-haspopup="menu" class="{CONTROL} shrink-0 whitespace-nowrap">'
-               f'{control_icon(trigger_icon)}<span data-composer-control-label>{label}</span>{CHEVRON}</button>')
-    cls = "flex w-max min-w-max shrink-0 items-center gap-1" + (ICON_ONLY if icon_only else "")
-    return f'<div data-resting-block class="{cls}">{SEPARATOR}{trigger}</div>'
+    effort = trigger_icon == "gauge"
+    classes = CONTROL + (" ps-0 pe-1 text-muted-foreground hover:bg-transparent data-pressed:bg-transparent" if effort else " ps-1.5")
+    glyph = (icon("gauge", "size-3.5") if effort and icon_only else control_icon(trigger_icon)) if not effort or icon_only else ""
+    word = "" if icon_only else f'<span data-composer-control-label>{label}</span>'
+    return f'<div data-resting-block class="flex w-max min-w-max shrink-0 items-center"><button type="button" aria-haspopup="menu" class="{classes}">{glyph}{word}</button></div>'
 
 OVERFLOW = (f'<div data-resting-controls-overflow class="min-w-0 shrink-0"><button type="button" aria-haspopup="menu" aria-label="More composer controls" class="{CONTROL} shrink-0">'
             f'{control_icon("ellipsis")}</button></div>')
 
 def cluster(icon_only, hidden):
-    blocks = [("brain", "Medium"), ("lock-open", "Full access")]
+    blocks = [("gauge", "Medium"), ("shield-off", "Full access")]
     parts = [block(i, l, n >= len(blocks) - icon_only) for n, (i, l) in enumerate(blocks)][:len(blocks) - hidden]
     if hidden: parts.append(OVERFLOW)
-    return f'<div class="flex items-center gap-1">{"".join(parts)}</div>'
+    return f'<div class="flex items-center gap-0.5">{"".join(parts)}</div>'
 
 # Menu (menu.tsx) with the radio items of CompactComposerControlsMenu.tsx and TraitsPicker.tsx:395-486.
 GLASS_SHADOW = "shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]"
@@ -70,15 +71,22 @@ def traits_content():
                           f'<span class="min-w-0 truncate">{label}{badge}</span></span></span>', v == "medium"))
     return f'<div><div role="group"><div class="px-2 pt-1.5 pb-1 font-medium text-muted-foreground text-xs">Reasoning</div>{"".join(rows)}</div></div>'
 
+def permissions():
+    options = [("lock", "Supervised"), ("pen-line", "Auto-accept edits"), ("sparkles", "Auto"), ("shield-off", "Full access")]
+    choices = ''.join('<button class="flex h-6 flex-1 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none data-checked:bg-input/72 data-checked:text-foreground"' + (' data-checked=""' if label == "Full access" else '') + '>' + icon(glyph, "size-3.5") + '</button>' for glyph, label in options)
+    return ('<div data-composer-permissions class="grid w-72 gap-1.5 px-2 py-1.5"><div class="font-medium text-muted-foreground text-xs">Permissions</div>'
+            '<div class="flex gap-0.5 rounded-lg bg-input/40 p-0.5">' + choices + '</div>'
+            '<div class="grid gap-0.5"><span class="text-foreground text-sm">Full access</span><span class="min-h-8 text-muted-foreground text-xs leading-4">Allow commands and edits without prompts.</span></div></div>')
+
 def overflow_menu(with_traits):
-    access = [radio(l, l == "Full access") for l in ["Supervised", "Auto-accept edits", "Auto", "Full access"]]
-    body = (traits_content() + MENU_SEP if with_traits else "") + \
-        '<div class="px-2 py-1.5 font-medium text-muted-foreground text-xs">Access</div>' + "".join(access)
+    body = (traits_content() + MENU_SEP if with_traits else "") + permissions()
     return f'<div role="menu" class="{MENU_POPUP}" data-slot="menu-popup" data-side="bottom"><div class="max-h-(--available-height) w-full overflow-y-auto p-1">{body}</div></div>'
 
 cases = []
 for icon_only, hidden, name in [(1, 0, "access-icon"), (2, 0, "both-icon"), (2, 1, "overflow-access"), (2, 2, "overflow-both")]:
     cases.append({"name": f"cluster.{name}", "html": cluster(icon_only, hidden), "native": {"kind": "cluster", "iconOnly": str(icon_only), "hidden": str(hidden)}})
+bars = '<svg width="14" height="14" viewBox="0 0 14 14" style="width:14px;height:14px" data-composer-control-icon class="shrink-0 text-current">' + ''.join(f'<rect x="{i*4}" y="{12-h}" width="2" height="{h}" fill="currentColor" opacity="{1 if i<2 else 0.4}"></rect>' for i,h in enumerate([6,8,10,12])) + '</svg>'
+cases.append({"name": "cluster.bars", "html": '<div class="flex items-center gap-0.5"><button class="' + CONTROL + ' ps-0.5 pe-1 hover:bg-transparent">' + bars + '</button>' + block("shield-off", "Full access", False) + '</div>', "native": {"kind":"cluster", "iconOnly":"0", "hidden":"0", "bars":"true"}})
 cases.append({"name": "menu.access", "html": overflow_menu(False), "native": {"kind": "menu", "traits": "false"}})
 cases.append({"name": "menu.traits-access", "html": overflow_menu(True), "native": {"kind": "menu", "traits": "true"}})
 
@@ -103,7 +111,7 @@ FILES = [("notes.txt", "3 KB", False), ("screenshot-2026-10-10-with-a-long-name.
 cases.append({"name": "files.question", "html": '<div class="flex flex-col gap-1" style="width:360px">' + "".join(file_row(*f) for f in FILES) + "</div>",
               "native": {"kind": "files"}})
 
-spec = {"component": "composer-footer", "states": ["rest"], "themes": ["light", "dark"], "cases": cases}
+spec = {"sourceVersion": "v0.1.4-nightly.20261028.3824", "component": "composer-footer", "states": ["rest"], "themes": ["light", "dark"], "cases": cases}
 with open(os.path.join(ROOT, "design/component-reference/composer-footer.json"), "w") as f:
     json.dump(spec, f, indent=1, ensure_ascii=False)
 print(f"wrote {len(cases)} cases")

@@ -223,6 +223,8 @@ public final class ExpandedImagePreviewView: DSView {
     }
 
     public override func updateLayer() {
+        let radius: CGFloat = ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? 8 : 10
+        frameView.layer?.cornerRadius = radius + 1; image.layer?.cornerRadius = radius
         layer?.backgroundColor = NSColor.black.withAlphaComponent(0.75).cgColor
         frameView.layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
         frameView.layer?.borderColor = Themed.color(\.border, 0.7).cgColor(in: self)
@@ -404,6 +406,7 @@ private final class SnapShotDetailsPane: DSView {
     }
 
     override func updateLayer() {
+        layer?.cornerRadius = ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? 8 : 10
         layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
         layer?.borderColor = Themed.color(\.border, 0.7).cgColor(in: self)
     }

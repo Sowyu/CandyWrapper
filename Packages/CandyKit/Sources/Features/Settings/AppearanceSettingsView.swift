@@ -223,8 +223,15 @@ public final class AppearanceSettingsView: SettingsPageBase {
         // AppearanceSettingsPanel.tsx:354-379.
         let math = clientSwitch("math-rendering", "Typeset LaTeX math, such as $x^2$ or \\[x^2\\], in messages and Markdown previews. The composer keeps TeX source editable.",
                                 key: "mathRenderingEnabled", reset: "math rendering", label: "Render math")
-        let s = section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), identification, diff, strip, width, math,
-                                                             appIconRow(), appIconAppearanceRow()])
+        var rows: [NSView & SettingsGroupRow] = [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), identification, diff, strip, width]
+        if ComposerDesign.uses3814(dark: effectiveAppearance.isDark) {
+            let effort = clientSelect("effort-display", "Show reasoning effort in the composer as its name, such as High, or as bars.", key: "effortDisplay",
+                                      options: [("label", "Word (default)"), ("bars", "Bars")], width: 160, reset: "effort display", hideIndicator: false)
+            (effort.control as? SelectView)?.valueLabels = ["Word", "Bars"]
+            rows.append(effort)
+        }
+        rows += [math, appIconRow(), appIconAppearanceRow()]
+        let s = section("appearance-interface", "Interface", rows)
         return s
     }
 
