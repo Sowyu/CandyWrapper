@@ -38,7 +38,7 @@ public enum ComposerPlusMenu {
                               placement: PopupPlacement(side: .top, align: .start, sideOffset: 6, fallbackAxisSide: .none),
                               motion: .popover, swallowsOutsideClick: true)
         menu.onClose = { [weak host, weak popup] in if let popup { host?.close(popup, returnFocus: false) } }
-        if NSApp.currentEvent?.type == .keyDown { menu.highlightedIndex = menu.selectable.first }
+        if NSApp.currentEvent?.type == .keyDown { menu.highlightedIndex = menu.selectableIndices.first }
         open = popup
     }
 }
