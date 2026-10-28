@@ -46,7 +46,9 @@ public final class PullRequestCodeView: DSView {
     private var reviewObserver: NSObjectProtocol?
     isolated deinit { if let reviewObserver { NotificationCenter.default.removeObserver(reviewObserver) } }
     var onCommit: ((String?) -> Void)?
-    var onSetViewed: ((String, Bool) -> Void)?
+    var onSetViewed: (([String], Bool) -> Void)?
+    /// The file last marked viewed or not, where a shift-click's range starts. A new scope forgets it.
+    private var viewedAnchor: String?
     /// The next slice is wanted (`loadNextSlice`), or a failed one again.
     var onLoadMore: (() -> Void)?
     /// The first slice failed and "Try again" was pressed (`diffQuery.refresh`).
@@ -79,7 +81,15 @@ public final class PullRequestCodeView: DSView {
             guard let self else { return }
             CollapseMotion.run(in: self, root: self) { self.orphansOpen.toggle(); self.needsLayout = true }
         }
-        list.onSetViewed = { [weak self] path, viewed in self?.onSetViewed?(path, viewed) }
+        list.onSetViewed = { [weak self] path, viewed in
+            guard let self else { return }
+            let range = PullRequestDetailLogic.viewedRange(self.paths, path: path,
+                                                          anchor: NSEvent.modifierFlags.contains(.shift) ? self.viewedAnchor : nil)
+            self.viewedAnchor = path
+            // The list folds the clicked file itself; the rest of the range folds the same way.
+            for other in range where other != path { if let i = self.paths.firstIndex(of: other) { self.list.setCollapsed(i, viewed) } }
+            self.onSetViewed?(range.isEmpty ? [path] : range, viewed)
+        }
         list.annotationView = { [weak self] a in self?.annotationView(a) }
         list.onNearEnd = { [weak self] in
             guard let self, self.nextCursor != nil, !self.moreLoading, self.moreError == nil else { return }
@@ -91,7 +101,7 @@ public final class PullRequestCodeView: DSView {
     }
 
     func reset() {
-        commit = nil; paths = []; patches = []; nextCursor = nil; draft = nil; threadCards = [:]
+        commit = nil; paths = []; patches = []; nextCursor = nil; draft = nil; threadCards = [:]; viewedAnchor = nil
         list.annotations = []
         list.setDiff(UnifiedDiff(""))
     }
@@ -100,7 +110,7 @@ public final class PullRequestCodeView: DSView {
     func set(patches: [String], loading: Bool, error: String?, nextCursor: String?, moreLoading: Bool, moreError: String?,
              commit: String?, commits: [PullRequestCommit]) {
         self.commits = commits.sorted { (T3Timestamp($0.committedDate).epochMs ?? 0) > (T3Timestamp($1.committedDate).epochMs ?? 0) }
-        if commit != self.commit { draft = nil }
+        if commit != self.commit { draft = nil; viewedAnchor = nil }
         self.commit = commit
         self.nextCursor = nextCursor
         self.moreLoading = moreLoading

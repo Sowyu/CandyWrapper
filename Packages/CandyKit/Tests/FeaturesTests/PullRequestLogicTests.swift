@@ -5,6 +5,16 @@ import Testing
 import T3Store
 
 struct PullRequestSurfaceTests {
+    /// `getFileViewedRange` (pullRequestDiff.logic.test.ts, T3 3824 #26349).
+    @Test func shiftClickMarksTheFilesBetweenTheAnchorAndTheClick() {
+        let paths = ["a", "b", "c", "d"]
+        #expect(PullRequestDetailLogic.viewedRange(paths, path: "c", anchor: nil) == ["c"])
+        #expect(PullRequestDetailLogic.viewedRange(paths, path: "c", anchor: "a") == ["a", "b", "c"])
+        #expect(PullRequestDetailLogic.viewedRange(paths, path: "a", anchor: "c") == ["a", "b", "c"])
+        #expect(PullRequestDetailLogic.viewedRange(paths, path: "b", anchor: "gone") == ["b"])
+        #expect(PullRequestDetailLogic.viewedRange(paths, path: "gone", anchor: "a").isEmpty)
+    }
+
     @Test func opensPullRequestTabs() {
         let target = PullRequestSurfaceTarget(environmentId: "env 1", projectId: "p:1", host: "GitHub.com", repository: "o/r", number: 7)
         // `pullRequestSurfaceId`: URI encoded parts, the host lower case.

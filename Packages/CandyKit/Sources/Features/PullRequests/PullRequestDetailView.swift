@@ -90,7 +90,8 @@ public final class PullRequestDetailView: DSView {
     public var onReact: ((String?, String, Bool, PullRequestReactionBarView) -> Void)?
     /// The Code tab asked for a scope: nil is all commits.
     public var onCommit: ((String?) -> Void)?
-    public var onSetViewed: ((_ path: String, _ viewed: Bool) -> Void)?
+    /// Files marked viewed or not; a shift-click marks a range in one go.
+    public var onSetViewed: ((_ paths: [String], _ viewed: Bool) -> Void)?
 
     // Header.
     private let headerBox = HeaderBox()
@@ -282,7 +283,7 @@ public final class PullRequestDetailView: DSView {
         timeline.onOpenCommit = { [weak self] oid in self?.tab = .code; self?.onTab?(.code); self?.onCommit?(oid) }
         code.onCommit = { [weak self] oid in self?.onCommit?(oid) }
         code.onOpenURL = { [weak self] url in self?.onOpenURL?(url) }
-        code.onSetViewed = { [weak self] path, viewed in self?.onSetViewed?(path, viewed) }
+        code.onSetViewed = { [weak self] paths, viewed in self?.onSetViewed?(paths, viewed) }
         setAccessibilityLabel("Pull request")
         rebuild()
     }
