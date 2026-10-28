@@ -17,7 +17,7 @@ public class ComposerBannerView: DSView {
     public static let drawerInset: CGFloat = 22
     static let radius: CGFloat = 18
     /// Matches the composer's corner, Capy's tighter one under Dither.
-    var cardRadius: CGFloat { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.cardRadius : Self.radius }
+    var cardRadius: CGFloat { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.cardRadius : (ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? 16 : Self.radius) }
 
     var variant: Variant { didSet { if variant != oldValue { needsDisplay = true } } }
     /// Docked under another attachment (the queue strip): no top corners and no top border, so
@@ -85,7 +85,7 @@ public class ComposerBannerView: DSView {
             tint.backgroundColor = Themed.color(\.error, 0.08).cgColor(in: self)
             surface.layer?.borderColor = Themed.color(\.error, 0.32).cgColor(in: self)
         }
-        seam.isHidden = !dark || ditherFloating
+        seam.isHidden = !dark || ditherFloating || (ComposerDesign.uses3814(dark: dark) && joinsAbove)
         seam.colors = [Themed.black(0).cgColor, Themed.black(0.18).cgColor]
         CATransaction.commit()
     }

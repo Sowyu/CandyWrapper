@@ -231,6 +231,16 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
         #expect(rows(entries).map(\.id) == ["res"])
     }
 
+    @Test func stoppedCompactionDoesNotRepeatTheInterruptedDivider() {
+        let prompt = ChatMessage(id: "u", role: .user, text: "/compact", runId: "r", createdAt: "2026-01-01T00:00:00Z")
+        let compact = work("c", WorkLogEntry(id: "c", createdAt: "2026-01-01T00:00:01Z", runId: "r", label: "Context compaction stopped",
+                                             tone: .info, sourceActivityKind: "context-compaction", toolLifecycleStatus: .completed))
+        let result = turnItem(#"{"id":"res","type":"run_interrupt_result","runId":"r","status":"interrupted"}"#)
+        let entries = [TimelineEntry.message("u", prompt), compact] + TimelineEntries.derive(visibleTurnItems: [ProjectedTurnItem(local: result)])
+        #expect(!rows(entries).contains { $0.id == "res" })
+        #expect(rows(entries).contains { $0.id == "c" })
+    }
+
     // LT:3812 (only a superseded attempt's output collapses)
     @Test func collapsesOnlyTheSupersededAttempt() {
         let old = TimelineAttempt(id: "attempt-1", runId: "turn-1", rootNodeId: "root-1", status: "superseded")

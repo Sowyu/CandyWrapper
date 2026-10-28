@@ -23,6 +23,9 @@ public struct RunOnOption: Equatable, Sendable {
 public final class ComposerContextStripView: DSView {
     public static let height: CGFloat = 48, overlap: CGFloat = 16, inset: CGFloat = 22
 
+    public let permissions = ComposerContextControl()
+    public var showsPermissions = false { didSet { permissions.isHidden = !showsPermissions; needsLayout = true } }
+
     public let runOn = RunOnControl().menuTrigger()
     /// `RunContextSelector` in the composer.
     public let runContext = ComposerContextControl().menuTrigger()
@@ -70,6 +73,10 @@ public final class ComposerContextStripView: DSView {
         surface.layer?.addSublayer(seam)
         clip.addSubview(surface)
         addSubview(runOn)
+        addSubview(permissions)
+        permissions.isHidden = true
+        permissions.interactive = true
+        permissions.setAccessibilityLabel("Permissions")
         runContext.setAccessibilityLabel("Workspace")
         runContext.shortcutCommand = "composer.workspace"
         runOn.shortcutCommand = "composer.host"
@@ -89,8 +96,8 @@ public final class ComposerContextStripView: DSView {
         surface.layer?.backgroundColor = Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
         // Dither (after Capy's machine and worktree row): the controls sit plain under the composer, no strip card.
         let capy = ThemeRuntime.isDither(dark: dark)
-        surface.isHidden = capy || floatsAsPills
-        blur.isHidden = capy || floatsAsPills
+        surface.isHidden = capy || floatsAsPills || ComposerDesign.uses3814(dark: dark)
+        blur.isHidden = capy || floatsAsPills || ComposerDesign.uses3814(dark: dark)
         surface.layer?.borderColor = (dark ? Themed.white(0.07) : Themed.black(0.08)).cgColor
         // Dark only: rgb(0 0 0 / 18%) at the seam fading out over 10px, over a 1% white fill.
         seam.isHidden = !dark
@@ -138,6 +145,18 @@ public final class ComposerContextStripView: DSView {
                 defer { x += width + 8 + DitherPill.spacing }
                 return (control, NSRect(x: x, y: ((bounds.height - 24) / 2).rounded(), width: width, height: 24))
             }
+        }
+        if ComposerDesign.uses3814(dark: effectiveAppearance.isDark) {
+            var x: CGFloat = 8
+            var result: [(ComposerContextControl, NSRect)] = []
+            let trailing = showsPermissions ? permissions.intrinsicContentSize.width + 8 : 0
+            for control in showsGitControls ? [runContext, branch] : [runOn] {
+                let width = min(control.intrinsicContentSize.width, max(0, w - 16 - x - trailing))
+                result.append((control, NSRect(x: x, y: 8, width: width, height: 24)))
+                x += width + 8
+            }
+            if showsPermissions { let width = permissions.intrinsicContentSize.width; result.append((permissions, NSRect(x: w - 8 - width, y: 8, width: width, height: 24))) }
+            return result
         }
         guard showsGitControls else {
             let size = runOn.intrinsicContentSize
@@ -295,7 +314,7 @@ open class ComposerContextControl: ControlView {
     }
 
     func update() {
-        chevron.isHidden = !interactive
+        chevron.isHidden = !interactive || ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
         updateTooltip()
         setAccessibilityRole(interactive ? .popUpButton : .staticText)
         restyle()
@@ -323,7 +342,7 @@ open class ComposerContextControl: ControlView {
     private var glyphAdvance: CGFloat {
         switch glyphViews.count {
         case 0: 0
-        case 1: interactive && !pillSized ? 8 : 12
+        case 1: interactive && !pillSized && !(plainChevron && ComposerDesign.uses3814(dark: effectiveAppearance.isDark)) ? 8 : 12
         default: CGFloat(glyphViews.count) * 12 + CGFloat(glyphViews.count - 1) * 2
         }
     }
@@ -332,7 +351,7 @@ open class ComposerContextControl: ControlView {
 
     open override var intrinsicContentSize: NSSize {
         let lead = glyphViews.isEmpty ? 0 : glyphAdvance + glyphGap
-        let w = interactive ? 8 + lead + labelWidth + 4 + 8 + 8 : 8 + lead + labelWidth + 8
+        let w = interactive && !ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? 8 + lead + labelWidth + 4 + 8 + 8 : 8 + lead + labelWidth + 8
         return NSSize(width: w, height: 24)
     }
 
@@ -349,12 +368,12 @@ open class ComposerContextControl: ControlView {
         let midY = bounds.height / 2
         var x: CGFloat = 8
         if glyphViews.count == 1 {
-            glyphViews[0].frame = NSRect(x: interactive && !pillSized ? x - 2 : x, y: midY - 6, width: 12, height: 12)
+            glyphViews[0].frame = NSRect(x: interactive && !pillSized && !(plainChevron && ComposerDesign.uses3814(dark: effectiveAppearance.isDark)) ? x - 2 : x, y: midY - 6, width: 12, height: 12)
         } else {
             for (i, g) in glyphViews.enumerated() { g.frame = NSRect(x: x + CGFloat(i) * 14, y: midY - 6, width: 12, height: 12) }
         }
         if !glyphViews.isEmpty { x += glyphAdvance + glyphGap }
-        let room = max(0, bounds.width - x - (interactive ? 4 + 8 + 8 : 8))
+        let room = max(0, bounds.width - x - (interactive && !ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? 4 + 8 + 8 : 8))
         let frame = NSRect(x: x, y: midY - 8, width: min(labelWidth, room), height: 16)
         // Compact keeps the text at its shown width, so it clips and fades instead of truncating again.
         if !labelsHidden {
@@ -390,7 +409,10 @@ open class ComposerContextControl: ControlView {
     }
 
     private func restyle() {
-        let color = interactive && state.hovered ? Themed.color(\.contrastForeground, 0.8) : Themed.color(\.contrastMutedForeground, 0.7)
+        let modern = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
+        let color = modern ? (effectiveAppearance.isDark ? Themed.color(\.contrastMutedForeground) : interactive && state.hovered ? Themed.color(\.contrastForeground) : Themed.color(\.contrastForeground, 0.7))
+            : interactive && state.hovered ? Themed.color(\.contrastForeground, 0.8) : Themed.color(\.contrastMutedForeground, 0.7)
+        chevron.alphaValue = modern ? 1 : 0.5
         label.color = color
         middle.color = color
         glyphViews.forEach { $0.strokeColor = color }

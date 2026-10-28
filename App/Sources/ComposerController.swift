@@ -242,7 +242,7 @@ final class ComposerController {
     fileprivate var questionFiles: [String: [QuestionFile]] = [:]
     /// Each environment's `questionAttachments` capability and upload limit (`fileAttachmentStagingLimit`),
     /// read from `/.well-known/t3/environment` when its session changes.
-    fileprivate var capabilities: [String: (questionAttachments: Bool, uploadLimit: Int?, threadStop: Bool, queuedRunStart: Bool)] = [:]
+    fileprivate var capabilities: [String: (questionAttachments: Bool, uploadLimit: Int?, threadStop: Bool, queuedRunStart: Bool, compactionSteer: Bool)] = [:]
     /// Redesign's "+" > Threads set it: the bare `@` it inserts lists threads, not files.
     fileprivate var browsingThreads = false
     fileprivate var supportsQuestionAttachments: Bool { targetEnvironmentId.flatMap { capabilities[$0]?.questionAttachments } ?? false }
@@ -314,7 +314,7 @@ final class ComposerController {
         ClientSettingsStore.shared.observe { [weak self] keys in
             guard let self else { return }
             self.applyClientSettings()
-            if keys.contains("planModeEnabled") || keys.contains("contextWindowMeterEnabled") { self.refresh() }
+            if keys.contains("planModeEnabled") || keys.contains("contextWindowMeterEnabled") || keys.contains("effortDisplay") { self.refresh() }
         }
         composer.restingBlocked = { [weak self] in
             guard let self else { return true }
@@ -373,10 +373,13 @@ final class ComposerController {
             self?.onModelChange?()
         }
         let queue = panel.queue
-        queue.onRemove = { [weak self] runId in self?.queueCommand("queued-run.cancel", ["runId": .string(runId.rawValue)]) }
+        queue.threadTitle = { [weak panel] in panel?.model.linkedThread?($0)?.title }
+        queue.onOpenThread = { [weak panel] in panel?.model.onOpenThread?($0) }
+        queue.onOpenScheduledTask = { [weak panel] in panel?.model.onOpenScheduledTask?($0) }
         queue.onReorder = { [weak self] runId, before in
             self?.queueCommand("queued-run.reorder", ["runId": .string(runId.rawValue), "beforeRunId": before.map { .string($0.rawValue) } ?? .null])
         }
+        queue.onRemove = { [weak self] runId in self?.queueCommand("queued-run.cancel", ["runId": .string(runId.rawValue)]) }
         queue.onSteer = { [weak self] runId in self?.sendQueued(runId) }
         queue.onEdit = { [weak self] item in self?.beginEdit(item) }
         queue.onCancelEdit = { [weak self] in self?.endEdit() }
@@ -1505,7 +1508,18 @@ final class ComposerController {
         panel.model.optimisticMessages = optimistic
         panel.queue.state = target == nil || panel.isDraft ? ComposerLogic.QueueState()
             : ComposerLogic.QueueState(projection: projection, optimistic: optimistic,
-                                       canStartQueuedRun: targetEnvironmentId.flatMap { capabilities[$0]?.queuedRunStart } ?? false)
+                                       canStartQueuedRun: targetEnvironmentId.flatMap { capabilities[$0]?.queuedRunStart } ?? false,
+                                       canSkipCompaction: (targetEnvironmentId.flatMap { capabilities[$0]?.compactionSteer } ?? false)
+                                        && !ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark)
+                                        && !ThemeRuntime.isGlass(dark: composer.effectiveAppearance.isDark))
+        var queuedSenderTitles: [String: String] = [:]
+        for item in panel.queue.state.items {
+            if let sender = item.message?.senderThreadId, let title = panel.model.linkedThread?(ThreadId(sender))?.title {
+                queuedSenderTitles[sender] = title
+            }
+        }
+        panel.queue.senderThreadTitles = queuedSenderTitles
+        panel.queue.scheduledTaskTitles = panel.model.scheduledTaskTitles
         panel.queue.editingRunId = queuedEdit?.runId
         panel.queue.editBlockedReason = ComposerLogic.queuedEditBlockedReason(openQuestionCount: requests.userInputs.count)
         panel.queue.isBusy = queueBusy
@@ -1679,7 +1693,15 @@ final class ComposerController {
             planModeEnabled: ClientSettingsStore.shared.current.bool("planModeEnabled"))
         // Shift-click fan-out: a new thread on a server that bootstraps worktrees (ChatView.tsx:11584-11587).
         if case .draft = target { pickers.supportsMultipleModels = serverConfig.capabilities.contains("requiredWorktreeBootstrap") } else { pickers.supportsMultipleModels = false }
+        pickers.permissionsShownInStrip = thread == nil && panel.showsContextStrip
         pickers.update(draftKey: draftKey ?? "", context: context)
+        let strip = panel.contextStrip
+        let modern = !ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark) && !ThemeRuntime.isGlass(dark: composer.effectiveAppearance.isDark)
+        strip.showsPermissions = modern && thread == nil
+        let mode = ComposerPickers.modes[pickers.current.runtimeMode] ?? ComposerPickers.modes[.fullAccess]!
+        strip.permissions.text = mode.label
+        strip.permissions.glyphs = [pickers.current.runtimeMode == .fullAccess ? ComposerPickers.fullAccessGlyph : mode.icon.definition]
+        strip.permissions.action = { [weak self] in self?.pickers.openAccessMode() }
         panel.model.providers = serverConfig.providers
         onModelChange?()
         // No enabled provider (ChatComposer.tsx:2140-2153): sending stays blocked, and once the catalog
@@ -2474,7 +2496,7 @@ final class ComposerController {
 
     // MARK: Queue
 
-    /// One strip command (`queued-run.cancel`, `queued-run.reorder`): the strip is busy until it returns.
+    /// One queue command (`queued-run.cancel`, `queued-run.start`): the strip is busy until it returns.
     private func queueCommand(_ type: String, _ fields: [String: JSONValue]) {
         guard let shell, case .thread(let threadId) = target, !queueBusy else { return }
         var command = fields
@@ -2724,7 +2746,8 @@ extension ComposerController {
             }
             // `queued-run.start` arrived in Nightly 3486 (96f09c6558) with no capability to read, so the version decides.
             let queuedRunStart = !ServerVersionSkewLogic.serverIsBehind(descriptor.serverVersion, client: "0.1.2-nightly.20261021.3486")
-            capabilities[environmentId] = (descriptor.capability("questionAttachments"), limit, descriptor.capability("threadStop"), queuedRunStart)
+            let compactionSteer = !ServerVersionSkewLogic.serverIsBehind(descriptor.serverVersion, client: "0.1.4-nightly.20261027.3766")
+            capabilities[environmentId] = (descriptor.capability("questionAttachments"), limit, descriptor.capability("threadStop"), queuedRunStart, compactionSteer)
             menuState.pullRequestsSupported[environmentId] = descriptor.capability("pullRequests")
             refresh()
         }
@@ -3488,6 +3511,7 @@ extension ComposerController {
         panel.model.attachmentMediaURL = { [weak self] id in
             await self?.mediaAttachmentURL(id)
         }
+        panel.queue.attachmentMediaURL = panel.model.attachmentMediaURL
         panel.model.attachmentImage = { [weak self] id, side, cover in
             guard let source = await self?.attachmentSource(id) else { return nil }
             return await ComposerImageIO.thumbnail(source, side: side, cover: cover, measurementKey: id)
@@ -5307,7 +5331,7 @@ extension ComposerController {
         let selection = thread?.modelSelection ?? pickers.current.modelSelection
         // `resolveContextWindowModelDisplayName` (ContextWindowMeter.logic.ts:85-98).
         let modelName = selection.map { s in
-            serverConfig.providers.first { $0.instanceId == s.instanceId }?.models.first { $0.slug == s.model }.map(ModelNames.trigger) ?? s.model
+            serverConfig.providers.first { $0.instanceId == s.instanceId }?.models.first { $0.slug == s.model }.map { ModelNames.trigger($0, driver: serverConfig.providers.first { $0.instanceId == s.instanceId }?.driver, spoken: !ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark) && !ThemeRuntime.isGlass(dark: composer.effectiveAppearance.isDark)) } ?? s.model
         }
         meter.setCompactState(offered: ComposerCompaction.supportsManualCompaction(provider),
                               disabled: gate.disabled || noProvider || composer.isBusy,

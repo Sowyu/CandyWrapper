@@ -27,10 +27,45 @@ struct QueueFidelityTests {
         panel.queue.state = ComposerLogic.QueueState(items: [
             .init(runId: RunId("q1"), messageId: nil, text: "second queued message"),
             .init(runId: RunId("q2"), messageId: nil, text: "third queued message"),
-        ], activeRunId: RunId("run"), canReorder: true, canPromoteToSteer: true)
+        ], activeRunId: RunId("run"), canPromoteToSteer: true)
         panel.layoutSubtreeIfNeeded()
         panel.timeline.scroll(toFraction: 1)
         return Snapshot.image(of: ThreadFidelityTests.onSurface(panel), size: panel.frame.size, scale: 2, dark: dark)
+    }
+
+    /// 3814 component markup covers the new queue while screen 29 waits for recapture.
+    @Test func queueComponents() throws {
+        let repo = SidebarFidelityTests.repo
+        let spec = try JSONSerialization.jsonObject(with: Data(contentsOf: repo.appendingPathComponent("design/component-reference/queue.json"))) as! [String: Any]
+        let refs = repo.appendingPathComponent("design/component-reference/queue")
+        try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
+        var diffs: [(String, Double)] = []
+        for c in spec["cases"] as! [[String: Any]] {
+            let n = c["native"] as! [String: String], kind = n["kind"]!, text = n["text"]!
+            for dark in [false, true] {
+                let base = "\(kind).rest.\(dark ? "dark" : "light")"
+                let ref = try #require(NSBitmapImageRep(data: Data(contentsOf: refs.appendingPathComponent(base + ".png"))))
+                let queue = QueuedRunsView()
+                queue.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                var message = ChatMessage(id: MessageId("message"), role: .user, text: text, runId: RunId("queued"), createdAt: T3Timestamp("2026-10-28T10:00:00Z"))
+                if kind == "agent" { message.createdBy = "agent"; message.senderThreadId = "helper"; queue.senderThreadTitles = ["helper": "Review helper"] }
+                if kind == "automation" { message.scheduledTaskId = "task"; queue.scheduledTaskTitles = ["task": "Daily review"] }
+                if kind == "server" { message.createdBy = "agent"; message.creationSource = "server" }
+                queue.state = .init(items: [.init(runId: RunId("queued"), messageId: message.id, text: text, guestName: kind == "guest" ? "Guest" : nil, message: message)], canPromoteToSteer: true)
+                if kind == "editing" { queue.editingRunId = RunId("queued") }
+                queue.frame = NSRect(x: 8, y: 8, width: 600, height: queue.height(forWidth: 600))
+                let canvas = SidebarSearchFidelityTests.Canvas(frame: .zero)
+                canvas.addSubview(queue)
+                let ours = Snapshot.image(of: canvas, size: NSSize(width: CGFloat(ref.pixelsWide) / 2, height: CGFloat(ref.pixelsHigh) / 2), scale: 2, dark: dark)
+                let (total, _, diff) = SidebarFidelityTests.compare(ref, ours, bands: [])
+                try Snapshot.writePNG(ours, to: Self.out.appendingPathComponent(base + ".ours.png"))
+                try Snapshot.writePNG(diff, to: Self.out.appendingPathComponent(base + ".diff.png"))
+                print("queue-component", base, String(format: "%.2f%%", total * 100))
+                diffs.append((base, total))
+            }
+        }
+        Self.ceilings.check("queuedMessages", diffs)
+        #expect(diffs.map(\.1).reduce(0, +) / Double(diffs.count) < 0.05)
     }
 
     @Test func queuedMessages() throws {

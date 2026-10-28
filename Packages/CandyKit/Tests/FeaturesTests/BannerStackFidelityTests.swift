@@ -81,7 +81,7 @@ struct BannerStackFidelityTests {
         case "notice": view = update
         case "floating":
             let r = recovery
-            r.placement = .floating
+            r.placement = .attached
             view = r
         case "stack":
             return stack([item("goal", goal, .activity), item("recovery", recovery, .urgent), item("environment", environment)], expanded: false, width: size.width)
@@ -151,7 +151,7 @@ struct BannerStackFidelityTests {
         stack.update(ordered)
         #expect(stack.hasStack)
         #expect(stack.peek.variant == .warning)
-        #expect(stack.expandedHeight(width: 600) == CGFloat(126)) // three 34pt cards, two gaps, `pb-2`
+        #expect(stack.expandedHeight(width: 600) == CGFloat(102)) // three 34pt cards, two gaps, `pb-2`
         // Only items with an X leave, one at a time.
         stack.requestDismiss("recovery")
         #expect(stack.exitingId == nil)

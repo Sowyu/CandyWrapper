@@ -122,6 +122,9 @@ final class ComposerPrimaryButton: ControlView {
 
     override func updateLayer() {
         let enabled = state.enabled
+        let modern = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
+        disabledOpacity = modern && !stageArt ? 1 : 0.64
+        alphaValue = enabled ? 1 : CGFloat(disabledOpacity)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         let shadowColor: NSColor
         if face == .stop {
@@ -133,7 +136,12 @@ final class ComposerPrimaryButton: ControlView {
         } else if stageArt {
             fill.backgroundColor = nil
             shadowColor = .black
+        } else if modern && !enabled {
+            fill.backgroundColor = Themed.color(\.foreground, 0.12).cgColor(in: self)
+            (icon as? IconView)?.strokeColor = Themed.color(\.mutedForeground)
+            shadowColor = Themed.color(\.messageAction)
         } else {
+            (icon as? IconView)?.strokeColor = .white
             fill.backgroundColor = Themed.color(state.hovered ? \.messageActionHover : \.messageAction).cgColor(in: self)
             shadowColor = Themed.color(\.messageAction)
         }

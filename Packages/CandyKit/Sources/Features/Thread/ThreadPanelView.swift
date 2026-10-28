@@ -457,7 +457,8 @@ public final class ThreadPanelView: DSView {
         didSet {
             oldValue?.removeFromSuperview()
             if let b = usageLimitsBanner {
-                addSubview(b, positioned: .above, relativeTo: queue)
+                if queue.superview === self { addSubview(b, positioned: .above, relativeTo: queue) }
+                else { addSubview(b, positioned: .below, relativeTo: composer) }
                 b.dismiss.action = { [weak self, weak b] in
                     guard let self, let b else { return }
                     bannerStack.requestDismiss(Self.usageLimitsId(b))
@@ -1560,8 +1561,9 @@ public final class ThreadPanelView: DSView {
             y = top.rounded()
             // The banner stack sits between the hero and the composer: the front notice and the peek.
             let stack = composerShown && chat > 0 ? ComposerBannerStackItem.ordered(bannerStackItems(docked: false, composerVisible: true)) : []
-            let notice = (stack.first.map { $0.height(width) - ComposerBannerView.overlap } ?? 0)
-                + (stack.count > 1 ? ComposerBannerStackView.peekHeight : 0)
+            let notice = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
+                ? stack.reduce(CGFloat(0)) { $0 + $1.height(width) - ComposerBannerView.overlap }
+                : (stack.first.map { $0.height(width) - ComposerBannerView.overlap } ?? 0) + (stack.count > 1 ? ComposerBannerStackView.peekHeight : 0)
             let heroHeight = hero.height(forWidth: width)
             hero.frame = NSRect(x: x, y: y - (dither ? 6 : 16) - notice - heroHeight, width: width, height: heroHeight)
         } else {
@@ -1572,9 +1574,10 @@ public final class ThreadPanelView: DSView {
         let strip = (isDraft || ClientSettingsStore.shared.current.bool("persistComposerContextStrip")) && showsStrip && !composer.isHidden
         contextStrip.isHidden = !strip
         composer.joinsContextStrip = strip
-        let stripInset = ComposerContextStripView.inset
-        contextStrip.frame = NSRect(x: x + stripInset, y: y + height - ComposerContextStripView.overlap,
-                                    width: max(0, width - 2 * stripInset), height: ComposerContextStripView.height)
+        let plainContext = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
+        let stripInset: CGFloat = plainContext ? 0 : ComposerContextStripView.inset
+        contextStrip.frame = NSRect(x: x + stripInset, y: y + height - (plainContext ? 0 : ComposerContextStripView.overlap),
+                                    width: max(0, width - 2 * stripInset), height: plainContext ? 32 : ComposerContextStripView.height)
         // Attachments, 22pt in from each side, each sliding 17pt under the one below it: the
         // request panel under the composer, the queue under the panel (ComposerBanner.Column).
         // The menu (`ComposerCommandMenuLayer`): its bottom 17 under the composer's top, 22 in from
@@ -1648,7 +1651,9 @@ public final class ThreadPanelView: DSView {
             activityRow.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
             top = activityRow.frame.minY
         }
-        let ordered = ComposerBannerStackItem.ordered(items)
+        let sorted = ComposerBannerStackItem.ordered(items)
+        let ordered = ComposerDesign.uses3814(dark: effectiveAppearance.isDark) && sorted.count > 1
+            ? [sorted.last!] + sorted.dropLast() : sorted
         let candidates: [ComposerBannerView?] = [environmentBanner, lazyNoticeBanner.loaded, lazyServerUpdateBanner.loaded,
                                                  lazyChildInputBanner.loaded, lazyGoalBanner.loaded, lazyBackgroundWorkBanner.loaded, lazyRecoveryBanner.loaded,
                                                  lazyBranchBanner.loaded, usageLimitsBanner]
@@ -1658,7 +1663,9 @@ public final class ThreadPanelView: DSView {
         if let front {
             let view = front.view
             // Back to front: queue, the front item, then the strips and drawers below it.
-            if view.superview !== self || subviews.firstIndex(of: view) != subviews.firstIndex(of: queue).map({ $0 + 1 }) {
+            if ComposerDesign.uses3814(dark: effectiveAppearance.isDark) {
+                if view.superview !== self { addSubview(view, positioned: .below, relativeTo: composer) }
+            } else if view.superview !== self || subviews.firstIndex(of: view) != subviews.firstIndex(of: queue).map({ $0 + 1 }) {
                 addSubview(view, positioned: .above, relativeTo: queue)
             }
             view.placement = .attached
@@ -1667,24 +1674,30 @@ public final class ThreadPanelView: DSView {
             view.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
             top = view.frame.minY
         }
-        let queueHeight = docked ? queue.preferredHeight : 0
-        queue.isHidden = queueHeight == 0
-        queue.frame = NSRect(x: bannerX, y: top + overlap - queueHeight, width: bannerWidth, height: queueHeight)
-        if queueHeight > 0 { top = queue.frame.minY }
+        let modernQueue = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
+        let hasQueuedMessages = docked && !queue.state.items.isEmpty
+        timeline.setQueueFooter(modernQueue && hasQueuedMessages ? queue : nil)
+        let queueHeight = !modernQueue && docked ? queue.preferredHeight : 0
+        queue.isHidden = !hasQueuedMessages
+        if !modernQueue {
+            if queue.superview !== self { addSubview(queue, positioned: .below, relativeTo: composer) }
+            queue.frame = NSRect(x: bannerX, y: top + overlap - queueHeight, width: bannerWidth, height: queueHeight)
+            if queueHeight > 0 { top = queue.frame.minY }
+        }
         // The other notices peek above the whole column, never from between two attachments.
         if bannerStack.hasStack {
             let h = bannerStack.height(width: bannerWidth)
             bannerStack.frame = NSRect(x: bannerX, y: top - h, width: bannerWidth, height: h)
         }
         // Adjacent attachments share their outline (ComposerBanner.tsx `Attachment`).
-        front?.view.joinsAbove = queueHeight > 0
+        front?.view.joinsAbove = queueHeight > 0 || (ComposerDesign.uses3814(dark: effectiveAppearance.isDark) && bannerStack.hasStack)
         let attachedAbove = queueHeight > 0 || front != nil
         if activityShown && !activityInStack { activityRow.joinsAbove = attachedAbove }
         let stripAbove = attachedAbove || (activityShown && !activityInStack)
         approvalPanel.joinsAbove = stripAbove
         lazyQuestionPanel.loaded?.joinsAbove = stripAbove
-        // ponytail: the timeline keeps room for the collapsed stack only; an open stack overlays it, reserve it if T3's inset jump matters
-        let stackCap = bannerStack.hasStack ? ComposerBannerStackView.peekHeight : 0
+        // The default stack reserves all its rows; CandyWrapper's own themes retain the peek.
+        let stackCap = bannerStack.hasStack ? (ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? bannerStack.height(width: bannerWidth) : ComposerBannerStackView.peekHeight) : 0
         let above = max(y - top + stackCap, badgeShown ? stashBadge.preferredHeight - overlap : 0)
         let inset = docked ? 8 + above + height + 20 : 0
         if timeline.bottomInset != inset {
@@ -1711,6 +1724,8 @@ public final class ThreadPanelView: DSView {
     /// panel, tasks, wide notices, the queue). The checkout and branch pills float `DitherPill.gap` below it, from its
     /// left edge, where T3's strip sits. The composer never moves for any of them; they fade in and out.
     private func layoutDitherComposer(chat: CGFloat, chatHeight: CGFloat, x: CGFloat, width: CGFloat, height: CGFloat) {
+        timeline.setQueueFooter(nil)
+        if queue.superview !== self { addSubview(queue, positioned: .below, relativeTo: composer) }
         let gap = DitherPill.gap, pillH = DitherPill.height, spacing = DitherPill.spacing
         let overlap = ComposerBannerView.overlap
         // Pill rows sit inside the composer's corners; cards keep its full width.

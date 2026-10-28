@@ -20,6 +20,7 @@ extension SettingsSearch {
         .item(SettingsSearchItem(id: "setting-glass-opacity", title: "Glass opacity", to: .appearance, searchTerms: ["transparent transparency solid menus dialogs composer"])),
         .item(SettingsSearchItem(id: "diff-color-scheme", title: "Diff colors", to: .diffs, searchTerms: ["red green blue orange additions deletions changes counts palette colorblind"])),
         .item(SettingsSearchItem(id: "chat-width", title: "Chat width", to: .appearance, searchTerms: ["wide full width column layout messages composer monitor"])),
+        .item(SettingsSearchItem(id: "effort-display", title: "Effort display", to: .appearance, searchTerms: ["reasoning effort words label bars composer"])),
         .item(SettingsSearchItem(id: "math-rendering", title: "Render math", to: .appearance, searchTerms: ["latex tex katex equations formulas markdown"])),
         .item(SettingsSearchItem(id: "panel-animations", title: "Panel animations", to: .appearance)),
         .item(SettingsSearchItem(id: "environment-identification", title: "Environment identification", to: .appearance, targetId: "appearance-interface", searchTerms: ["dev nightly latest channel artwork pill label hide none"])),
