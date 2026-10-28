@@ -10,6 +10,11 @@ import T3Store
 @Suite(.serialized)
 @MainActor
 struct MarkdownBackgroundLayoutTests {
+    /// How long a test waits for a background layout. Alone one lands in 0.08 s, but in the full parallel suite the
+    /// shared background queues kept one waiting past 20 s (1.14.9 suite, 2026-10-28), so the wait is generous and the
+    /// checks after it stay strict.
+    static let backgroundWait: TimeInterval = 120
+
     /// Every block kind that takes a counter (code, tables, display math), nested ones too, plus links and chips.
     static let unit = """
     ## Finding
@@ -82,7 +87,7 @@ struct MarkdownBackgroundLayoutTests {
         view.document = document
         #expect(view.height(forWidth: 680) == 1234)
         #expect(view.isPending(forWidth: 680))
-        let deadline = Date().addingTimeInterval(20)
+        let deadline = Date().addingTimeInterval(Self.backgroundWait)
         while view.isPending(forWidth: 680), Date() < deadline { try await Task.sleep(for: .milliseconds(10)) }
         #expect(!view.isPending(forWidth: 680))
         #expect(changes == 1)
@@ -101,7 +106,7 @@ struct MarkdownBackgroundLayoutTests {
         let b = MarkdownDocument(parsing: String(repeating: Self.unit, count: 30) + "Only in answer beta.")
         view.document = b
         func shown() -> [String] { view.layout(forWidth: 680).items.compactMap { if case .text(let box, _) = $0 { box.text } else { nil } } }
-        let deadline = Date().addingTimeInterval(20)
+        let deadline = Date().addingTimeInterval(Self.backgroundWait)
         while Date() < deadline {
             #expect(!shown().contains { $0.contains("alpha") })
             if !view.isPending(forWidth: 680), !shown().isEmpty { break }
@@ -119,7 +124,7 @@ struct MarkdownBackgroundLayoutTests {
         context.onDocumentReady = { ready.append($0) }
         #expect(context.document("a", text, lineBreaks: false, background: true).blocks.isEmpty)
         #expect(context.isParsing("a"))
-        let deadline = Date().addingTimeInterval(20)
+        let deadline = Date().addingTimeInterval(Self.backgroundWait)
         while ready.isEmpty, Date() < deadline { try await Task.sleep(for: .milliseconds(10)) }
         #expect(ready == ["a"])
         let math = ClientSettingsStore.shared.current.bool("mathRenderingEnabled")
