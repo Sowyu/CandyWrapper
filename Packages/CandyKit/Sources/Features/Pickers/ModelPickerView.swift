@@ -62,6 +62,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
     private var scrollOffset: CGFloat = 0
     /// While searching the height stays at what it was when typing started.
     private var frozenHeight: CGFloat?
+    private var tallestTabHeight: CGFloat = 36
     private var tracking: NSTrackingArea?
 
     init(catalog: ProviderCatalog, favorites: [ModelFavorite], active: ProviderInstanceId, activeModel: String, preferences: JSONValue? = nil) {
@@ -128,6 +129,16 @@ final class ModelPickerView: DSView, PickerPopupBody {
         }
         sections = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
                                        rail: rail, query: query, expandedLegacy: expandedLegacy, selectedKeys: selectedKeys, preferences: preferences)
+        if !capy, !searching {
+            // T3 3814 ModelPickerContent.tsx:583-610,832-836 fits the tallest eligible tab.
+            let tabs: [ModelPickerRail] = [.favorites] + sections.rail.filter { !$0.isDisabled }.map { .instance($0.entry.id) }
+            tallestTabHeight = tabs.map { tab in
+                let rows = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
+                                               rail: tab, query: "", expandedLegacy: expandedLegacy,
+                                               selectedKeys: selectedKeys, preferences: preferences).rows.count
+                return rows == 0 ? 36 : CGFloat(rows) * Self.rowHeight + CGFloat(rows - 1) * Self.rowGap + 20
+            }.max() ?? 36
+        }
         // ponytail: AppKit tooltips instead of T3's TooltipPopup (left side, 8pt offset, no delay); swap for TooltipView when tooltips get a shared host
         for (b, r) in zip(railButtons, sections.rail) { b.isDisabled = r.isDisabled; b.toolTip = r.tooltip }
         // Reuse unchanged rows while filtering (T3 74ca17b43, ModelListRow.tsx:18-43).
@@ -273,7 +284,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
         // Redesign fits its content between a floor, so a short list (favorites, a search) isn't squashed, and Capy's
         // 440; the host trims it further when the space above the chip is shorter.
         if capy { return CGSize(width: Self.capyWidth, height: min(max(searchH + list, Self.capyMinHeight), Self.capyHeight) + footerHeight) }
-        return CGSize(width: Self.width, height: min(Self.maxHeight, searchH + list) + footerHeight)
+        return CGSize(width: Self.width, height: min(Self.maxHeight, searchH + max(list, tallestTabHeight)) + footerHeight)
     }
 
     /// `ChatGptSharingControl` (ProviderModelPicker.tsx:317-319): under the picker while the composer's instance
