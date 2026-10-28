@@ -341,15 +341,14 @@ public enum ComposerLogic {
         /// `resolveActiveThreadRun`: the last `preparing`, `starting`, `running` or `waiting` run.
         public var activeRunId: RunId?
         public var isHeld = false
-        public var canReorder = false
         public var canPromoteToSteer = false
         /// No run is active on a live thread, so a queued message can start its own turn with
         /// `queued-run.start` (threadWorkflows.ts:156-160, 96f09c6558).
         public var canSendNow = false
-        public init(items: [Item] = [], activeRunId: RunId? = nil, isHeld: Bool = false, canReorder: Bool = false,
+        public init(items: [Item] = [], activeRunId: RunId? = nil, isHeld: Bool = false,
                     canPromoteToSteer: Bool = false, canSendNow: Bool = false) {
             self.items = items; self.activeRunId = activeRunId; self.isHeld = isHeld
-            self.canReorder = canReorder; self.canPromoteToSteer = canPromoteToSteer; self.canSendNow = canSendNow
+            self.canPromoteToSteer = canPromoteToSteer; self.canSendNow = canSendNow
         }
 
         /// `optimistic`: sent messages the stream hasn't confirmed; the queued ones show as saving.
@@ -380,7 +379,6 @@ public enum ComposerLogic {
             items += saving.filter { texts[$0.id] == nil }.map { Item(runId: nil, messageId: $0.id, text: $0.text) }
             isHeld = p.runs.contains { $0.status == .queued && $0.queueHeld == true }
             let turns = Self.providerSession(p)?["capabilities"]?["turns"]
-            canReorder = turns?["supportsQueuedMessages"] == .bool(true)
             let steerable = activeRun?.status == .running && activeRun?.activeAttemptId != nil && p.providerTurns.contains {
                 $0["runAttemptId"]?.stringValue == activeRun?.activeAttemptId?.rawValue && $0["status"]?.stringValue == "running"
             }
@@ -415,12 +413,5 @@ public enum ComposerLogic {
             return !p.runs.isEmpty || p.thread.activeProviderThreadId != nil
         }
 
-        /// The drag and arrow-key rule (QueuedRunsControl.tsx:180-190, 350-359): moving `index` to
-        /// insert position `insert` (0...count) gives the run to go before, or nil for the end.
-        /// Nil result `.none` means no move (dropped on itself or right after itself).
-        public static func reorderTarget(_ items: [Item], moving index: Int, to insert: Int) -> RunId?? {
-            guard items.indices.contains(index), insert >= 0, insert <= items.count, insert != index, insert != index + 1 else { return .none }
-            return .some(insert < items.count ? items[insert].runId : nil)
-        }
     }
 }

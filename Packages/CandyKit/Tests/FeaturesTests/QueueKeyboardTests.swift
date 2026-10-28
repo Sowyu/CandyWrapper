@@ -1,5 +1,6 @@
 import AppKit
 import Testing
+import DesignSystem
 import T3Protocol
 @testable import Features
 
@@ -7,7 +8,7 @@ import T3Protocol
 /// run, down before the run two below or to the end; edges, saving rows and a busy queue do nothing.
 @MainActor
 struct QueueKeyboardTests {
-    @Test func openQuestionsBlockEditingWithoutBlockingReorder() {
+    @Test func openQuestionsBlockEditingAndBusyQueuesWait() {
         #expect(ComposerLogic.queuedEditBlockedReason(openQuestionCount: 0) == nil)
         let reason = ComposerLogic.queuedEditBlockedReason(openQuestionCount: 1)
         #expect(reason == "Answer the question to edit queued messages")
@@ -26,22 +27,20 @@ struct QueueKeyboardTests {
         #expect(edits == 1)
     }
 
-    @Test func arrowReorder() {
-        let ids = ["a", "b", "c"].map { RunId($0) }
-        let view = QueuedRunsView()
-        view.state = ComposerLogic.QueueState(items: ids.map { .init(runId: $0, messageId: nil, text: $0.rawValue) }
-                                              + [.init(runId: nil, messageId: nil, text: "saving")], canReorder: true)
-        var moves: [(RunId, RunId?)] = []
-        view.onReorder = { moves.append(($0, $1)) }
-        #expect(!view.moveByKey(0, up: true))
-        #expect(view.moveByKey(1, up: true))
-        #expect(view.moveByKey(0, up: false))
-        #expect(view.moveByKey(1, up: false))
-        #expect(!view.moveByKey(2, up: false))
-        #expect(!view.moveByKey(3, up: true)) // the saving row has no run
-        #expect(moves.map(\.0) == [ids[1], ids[0], ids[1]])
-        #expect(moves.map(\.1) == [ids[0], ids[2], nil])
-        view.isBusy = true
-        #expect(!view.moveByKey(1, up: true) && moves.count == 3)
+    @Test func runningAndStoppedQueuesBothOfferSendNow() {
+        for running in [false, true] {
+            let view = QueuedRunsView()
+            view.state = .init(items: [.init(runId: "a", messageId: "m", text: "queued")],
+                               canPromoteToSteer: running, canSendNow: !running)
+            func buttons(_ root: NSView) -> [ButtonView] {
+                root.subviews.flatMap { ($0 as? ButtonView).map { [$0] } ?? buttons($0) }
+            }
+            let send = buttons(view).first { $0.title == "Send now" }
+            #expect(send?.isEnabled == true)
+            var sent: RunId?
+            view.onSteer = { sent = $0 }
+            send?.action?()
+            #expect(sent == "a")
+        }
     }
 }
