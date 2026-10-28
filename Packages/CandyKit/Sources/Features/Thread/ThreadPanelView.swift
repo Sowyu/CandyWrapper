@@ -711,11 +711,11 @@ public final class ThreadPanelView: DSView {
     /// The details card opened or closed, by the toggle or because the column changed width.
     public var onDetailsVisibilityChange: (@MainActor () -> Void)?
     /// `rightPanelState.maximized` (ChatView.tsx:2390 in 2994, 71f6f1db8): the thread's panel asked to fill the
-    /// window. A narrow window shows the panel as a sheet and cannot maximize; widening it again restores the
-    /// maximized panel. It stays with the thread through a close, a thread switch and a relaunch.
+    /// window. A narrow window can maximize too, which leaves the sheet presentation. It stays with the thread through a
+    /// close, a thread switch and a relaunch.
     public var rightPanelMaximized: Bool { panelState.maximized == true && canMaximizeRightPanel }
-    /// `canMaximizeRightPanel = rightPanelOpen && !shouldUsePlanSidebarSheet`.
-    var canMaximizeRightPanel: Bool { rightPanelOpen && viewportWidth > 980 }
+    /// `canMaximizeRightPanel = rightPanelOpen` (ChatView.tsx, 70eccd48e4 #25389 at 3814).
+    var canMaximizeRightPanel: Bool { rightPanelOpen }
     private var summaries: [TurnDiffSummary] = []
     /// Development (`--open-diff`): open the panel on the newest run that changed files once the
     /// thread's checkpoints arrive.
