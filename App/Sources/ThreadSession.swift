@@ -20,6 +20,7 @@ final class ThreadSession {
     private var shell: ShellSession?
     private var subscription: Task<Void, Never>?
     private var historyLoad: Task<Void, Never>?
+    private var citation: (messageId: String, pages: Int)?
     private var familyLease: UUID?
     /// False once another thread took the panel.
     private var active = true
@@ -179,6 +180,7 @@ final class ThreadSession {
         panel.header.projectIcon = project(update.projection).map(ProjectIconSource.init)
         onProjection?(update.projection, onlyStreamingText)
         onStatus?(update.status)
+        advanceCitation(update)
     }
 
     /// Project title and workspace root from the shell (the worktree when the thread has one).
@@ -202,14 +204,37 @@ final class ThreadSession {
         return snapshot?.projects.first { $0.id == projectId }
     }
 
-    private func loadEarlier() {
+    func revealCitation(_ messageId: String) {
+        citation = (messageId, 0)
+        if let shown { advanceCitation(shown) }
+    }
+
+    private func advanceCitation(_ update: ThreadUpdate) {
+        guard active, let citation, let panel else { return }
+        switch CitationHistory.step(messageId: citation.messageId, projection: update.projection,
+                                    history: update.history, status: update.status, pages: citation.pages) {
+        case .waiting: break
+        case .loadEarlier:
+            guard historyLoad == nil, shell != nil else { return }
+            self.citation?.pages += 1
+            loadEarlier(throughEntryId: citation.messageId)
+        case .found(let entryId, let runId):
+            self.citation = nil
+            panel.revealCitation(entryId: entryId, runId: runId)
+        case .failed(let title, let message):
+            self.citation = nil
+            panel.toasts.show(ToastView(title: title, message: message, kind: .error))
+        }
+    }
+
+    private func loadEarlier(throughEntryId: String? = nil) {
         guard historyLoad == nil, let shell else { return }
         var http = shell.http
         // T3's history request timeout (RT/threadHistoryHttp.ts).
         http.timeout = 6
         let store = self.store, token = shell.token
         historyLoad = Task { [weak self] in
-            guard let request = await store.beginLoadEarlier() else {
+            guard let request = await store.beginLoadEarlier(throughEntryId: throughEntryId) else {
                 if self?.store === store { self?.historyLoad = nil }; return
             }
             do {
@@ -838,8 +863,9 @@ final class ThreadController {
             }
         }
         MarkdownView.onOpenCitation = { [weak self] citation in
-            self?.open(ThreadId(rawValue: citation.threadId).scoped(to: citation.environmentId))
-            self?.panel.timeline.revealFindEntry(citation.messageId)
+            guard let self else { return }
+            self.open(ThreadId(rawValue: citation.threadId).scoped(to: citation.environmentId))
+            self.session?.revealCitation(citation.messageId)
         }
         composer.openThread = { [weak self] id in self?.open(id) }
         composer.onNewThread = { [weak self] in self?.newThread() }

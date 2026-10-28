@@ -365,6 +365,13 @@ public final class ThreadPanelView: DSView {
         if timeline.revealFindEntry(match.entryId) { pendingFindMatch = nil }
         else { onLoadEarlier?() }
     }
+    private var pendingCitation: ThreadFindResult.Match?
+    public func revealCitation(entryId: String, runId: String?) {
+        let match = ThreadFindResult.Match(entryId: entryId, runId: runId)
+        pendingCitation = match
+        model.prepareThreadFind(match)
+        if timeline.revealFindEntry(entryId) { pendingCitation = nil }
+    }
     public let timeline = TimelineView()
     public let composer = ComposerView()
     /// The queued messages docked above the composer; it hides itself when empty.
@@ -784,6 +791,7 @@ public final class ThreadPanelView: DSView {
             self.timeline.setItems(self.model.items, change: change)
             if !self.switchingThread, !self.model.threadRowsPending { self.timeline.isInert = false }
             if let match = self.pendingFindMatch { self.revealThreadFind(match) }
+            if let match = self.pendingCitation, self.timeline.revealFindEntry(match.entryId) { self.pendingCitation = nil }
         }
         // Banners overlay the timeline without changing its content height (`z-20`).
         addSubview(errorBanner)
@@ -1425,6 +1433,7 @@ public final class ThreadPanelView: DSView {
             model.setProjection(projection)
             return
         }
+        if switchingThread { pendingCitation = nil }
         switchingThread = false
         applyingProjection = true
         defer { applyingProjection = false; evaluateProactivePanels() }

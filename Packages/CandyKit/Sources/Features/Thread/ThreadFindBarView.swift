@@ -67,6 +67,9 @@ public struct ThreadFindResult: Decodable, Equatable, Sendable {
         public var entryId: String
         public var runId: String?
         public var occurrence: Int
+        public init(entryId: String, runId: String? = nil, occurrence: Int = 0) {
+            self.entryId = entryId; self.runId = runId; self.occurrence = occurrence
+        }
     }
     public var complete: Bool?
     public var snapshotSequence: Int?
