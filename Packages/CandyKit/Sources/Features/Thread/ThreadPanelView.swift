@@ -739,6 +739,7 @@ public final class ThreadPanelView: DSView {
     /// The header's details toggle was clicked.
     public var onDetailsToggle: (@MainActor () -> Void)?
     /// The details card opened or closed, by the toggle or because the column changed width.
+    public var onDetailsServersVisibilityChange: (@MainActor () -> Void)?
     public var onDetailsVisibilityChange: (@MainActor () -> Void)?
     /// `rightPanelState.maximized` (ChatView.tsx:2390 in 2994, 71f6f1db8): the thread's panel asked to fill the
     /// window. A narrow window can maximize too, which leaves the sheet presentation. It stays with the thread through a
@@ -940,6 +941,7 @@ public final class ThreadPanelView: DSView {
         syncDetailsPopoverMonitor()
         needsLayout = true
         onDetailsVisibilityChange?()
+        onDetailsServersVisibilityChange?()
     }
 
     /// Watches for the outside press or Escape that closes the popover, only while it shows.
@@ -980,6 +982,7 @@ public final class ThreadPanelView: DSView {
         if !detailsOpen { lazyDetailsCard.loaded?.isHidden = true }
         syncDetailsPopoverMonitor()
         onDetailsVisibilityChange?()
+        onDetailsServersVisibilityChange?()
     }
 
     /// Redesign's actions menu from the ellipsis in the tab band: Open in editor, scripts, git and Lineage. Lineage opens the

@@ -517,7 +517,7 @@ public final class ThreadDetailsCardView: DSView {
     /// header band's Lineage button. The workspace and git rows live in that band and under the composer instead.
     public var relationsOnly = false { didSet { if relationsOnly != oldValue { updateRows() } } }
     /// Whether `relationsOnly` has anything to show.
-    public var hasRelations: Bool { !pullRequestRows.isEmpty || !automations.isEmpty || !lineage.isEmpty }
+    public var hasRelations: Bool { !pullRequestRows.isEmpty || !automations.isEmpty || !lineage.isEmpty || !servers.isEmpty }
     /// `hasRelations` changed.
     public var onRelationsChange: (@MainActor () -> Void)?
     private var hadRelations = false
@@ -543,6 +543,7 @@ public final class ThreadDetailsCardView: DSView {
     private let blur = BackdropBlurView()
     private let divider = CALayer()
     /// Tasks bound to the thread (`ThreadAutomationsPanel`), separated by `border-t border-border/65`.
+    public let servers = ThreadServersView()
     public let automations = ThreadAutomationsView()
     private let automationsDivider = CALayer()
     /// Related threads and subagents (`ThreadRelationshipsPanel`), the last section; it draws its own rule.
@@ -569,6 +570,8 @@ public final class ThreadDetailsCardView: DSView {
         content.layer?.addSublayer(divider)
         automationsDivider.actions = divider.actions
         content.layer?.addSublayer(automationsDivider)
+        content.addSubview(servers)
+        servers.onHeightChange = { [weak self] in self?.relayout() }
         content.addSubview(automations)
         content.addSubview(lineage)
         lineage.onResize = { [weak self] in self?.relayout() }
@@ -658,7 +661,7 @@ public final class ThreadDetailsCardView: DSView {
     public func preferredHeight(_ density: Density) -> CGFloat {
         if relationsOnly {
             let rows = pullRequestRows.reduce(0) { $0 + rowHeight($1) }
-            return 2 + (rows > 0 ? 8 + rows + 8 : 0) + (automations.isEmpty ? 0 : 1 + automations.preferredHeight) + lineage.preferredHeight
+            return 2 + (rows > 0 ? 8 + rows + 8 : 0) + (automations.isEmpty ? 0 : 1 + automations.preferredHeight) + lineage.preferredHeight + servers.preferredHeight
         }
         var h: CGFloat = 2 + 8 + (density == .full ? 32 : 0) + (showsOpenIn && density != .essential ? 32 : 0) + (scriptsView != nil ? 32 : 0) + 10
         let rows = versionRows(density)
@@ -667,7 +670,7 @@ public final class ThreadDetailsCardView: DSView {
         }
         guard density == .full else { return h }
         if !automations.isEmpty { h += 1 + automations.preferredHeight }
-        h += lineage.preferredHeight
+        h += lineage.preferredHeight + servers.preferredHeight
         return h
     }
 
@@ -686,6 +689,7 @@ public final class ThreadDetailsCardView: DSView {
         content.frame = NSRect(x: 0, y: 0, width: width, height: height)
         let inner = width - 16
         var y: CGFloat = 8
+        servers.isHidden = servers.isEmpty || (!relationsOnly && density != .full)
         if relationsOnly {
             for row in pullRequestRows {
                 row.frame = NSRect(x: 8, y: y, width: inner, height: rowHeight(row))
@@ -701,6 +705,7 @@ public final class ThreadDetailsCardView: DSView {
             automationsDivider.isHidden = automations.isHidden || pullRequestRows.isEmpty
             automationsDivider.frame = CGRect(x: 0, y: ay, width: width, height: 1)
             automations.frame = NSRect(x: 0, y: ay + 1, width: width, height: automations.preferredHeight)
+            servers.frame = NSRect(x: 0, y: ay - servers.preferredHeight, width: width, height: servers.preferredHeight)
             return
         }
         if density == .full {
@@ -736,6 +741,8 @@ public final class ThreadDetailsCardView: DSView {
         automationsDivider.isHidden = automations.isHidden
         automationsDivider.frame = CGRect(x: 0, y: y, width: width, height: 1)
         automations.frame = NSRect(x: 0, y: y + 1, width: width, height: automations.preferredHeight)
+        let serverBottom = height + 1 - lineageHeight - (automations.isHidden ? 0 : 1 + automations.preferredHeight)
+        servers.frame = NSRect(x: 0, y: serverBottom - servers.preferredHeight, width: width, height: servers.preferredHeight)
     }
 
     /// The card grows when the automations change.
