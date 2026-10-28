@@ -387,6 +387,7 @@ final class OptionRow: DSView {
     }
 
     override func updateLayer() {
+        layer?.cornerRadius = ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? 6 : 8
         // Nightly 3754 :253-257: transparent at rest, `muted/30` only on unselected hover.
         let fill: NSColor? = isDither && selected ? Themed.color(\.muted, 0.55)
             : (hovered && (!selected || isDither) && !disabled ? Themed.color(\.muted, 0.3) : nil)

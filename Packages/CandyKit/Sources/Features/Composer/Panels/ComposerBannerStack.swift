@@ -91,6 +91,8 @@ public final class ComposerBannerStackView: DSView {
     public var exitingView: ComposerBannerView? { items.first { $0.id == exitingId }?.view }
 
     /// Whether there is anything behind the front item.
+    private var modern: Bool { ComposerDesign.uses3814(dark: effectiveAppearance.isDark) }
+
     public var hasStack: Bool { items.count > 1 }
 
     /// The ordered items; the first is the front, attached outside this view. Reparents the stacked
@@ -119,8 +121,8 @@ public final class ComposerBannerStackView: DSView {
         if ordered.count < 2, expanded { expanded = false }
         for item in stacked {
             if item.view.superview !== column { column.addSubview(item.view) }
-            item.view.placement = .floating
-            item.view.joinsAbove = false
+            item.view.placement = modern ? .attached : .floating
+            item.view.joinsAbove = modern && item.id != stacked.first?.id
             item.view.isHidden = false
         }
         for view in column.subviews where !stacked.contains(where: { $0.view === view }) {
@@ -128,7 +130,8 @@ public final class ComposerBannerStackView: DSView {
         }
         peek.variant = stacked.first?.view.variant ?? .neutral
         // `showCollapsedStackCap`: no peek while the front item leaves.
-        peek.isHidden = !hasStack || ordered.first?.id == exitingId
+        peek.isHidden = modern || !hasStack || ordered.first?.id == exitingId
+        if modern { clip.isHidden = false; peek.alphaValue = 0 }
         isHidden = !hasStack
         needsLayout = true
     }
@@ -136,17 +139,17 @@ public final class ComposerBannerStackView: DSView {
     /// The stacked notices' height when open: floating cards, `space-y-2`, `pb-2`.
     public func expandedHeight(width: CGFloat) -> CGFloat {
         let cards = stacked.map { $0.height(width) - ComposerBannerView.overlap }
-        return cards.isEmpty ? 0 : cards.reduce(0, +) + 8 * CGFloat(cards.count - 1) + 8
+        return cards.isEmpty ? 0 : cards.reduce(0, +) + (modern ? 0 : 8 * CGFloat(cards.count - 1) + 8)
     }
 
     /// This view's height: the peek collapsed, the open column expanded (`min-h-3`).
     public func height(width: CGFloat) -> CGFloat {
         guard hasStack else { return 0 }
-        return expanded ? max(Self.peekHeight, expandedHeight(width: width)) : Self.peekHeight
+        return modern ? expandedHeight(width: width) : expanded ? max(Self.peekHeight, expandedHeight(width: width)) : Self.peekHeight
     }
 
     public func setExpanded(_ open: Bool) {
-        guard open != expanded, !open || hasStack else { return }
+        guard !modern, open != expanded, !open || hasStack else { return }
         expanded = open
         onLayoutChange?()
         superview?.layoutSubtreeIfNeeded()
@@ -237,8 +240,8 @@ public final class ComposerBannerStackView: DSView {
         var y: CGFloat = 0
         for item in stacked {
             let ch = item.height(w) - ComposerBannerView.overlap
-            item.view.frame = NSRect(x: 0, y: y, width: w, height: ch)
-            y += ch + 8
+            item.view.frame = NSRect(x: 0, y: y, width: w, height: modern ? item.height(w) : ch)
+            y += ch + (modern ? 0 : 8)
         }
     }
 

@@ -56,7 +56,7 @@ public struct ComposerServerUpdateNotice: Equatable {
             // Update progress outranks passive notices. Its only action is "Disconnect server".
             // The stage or the failure is the plain description (ChatView.tsx:2325-2332, a261a71817).
             return .init(variant: .neutral, icon: .download, title: title, description: detail, actions: action.map { [$0] } ?? [],
-                         priority: .urgent, spinner: true, actionTooltip: actionTooltip)
+                         priority: .urgent, spinner: !ComposerDesign.current, actionTooltip: actionTooltip)
         case .failed:
             return .init(variant: .error, icon: .circleAlert, title: title, description: detail, actions: action.map { [$0] } ?? [],
                          dismissLabel: dismiss, priority: .notice, iconIsError: true)

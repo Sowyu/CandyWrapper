@@ -348,6 +348,7 @@ public final class ComposerImageShelfView: DSView {
         }
 
         override func updateLayer() {
+            layer?.cornerRadius = ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? 8 : 10
             layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
             layer?.borderColor = Themed.color(\.border, 0.8).cgColor(in: self)
             progressStrip.layer?.backgroundColor = Themed.color(\.background, 0.85).cgColor(in: self)
