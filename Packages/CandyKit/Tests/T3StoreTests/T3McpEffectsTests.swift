@@ -6,6 +6,20 @@ import Testing
 /// What a T3 MCP tool call leaves in the timeline (WP7.15): who sent a message (userMessage.ts) and
 /// the `t3_thread_read` target (MessagesTimeline.logic.ts:182-209).
 @Suite struct T3McpEffectsTests {
+    @Test func consolidatedActionsKeepTheirLegacyPresentationAndSummary() {
+        for (name, action, legacy) in [("preview_act", "click", "preview_click"), ("t3_queue", "cancel", "t3_queue_cancel"),
+                                      ("t3_pending_request", "respond", "t3_pending_request_respond"),
+                                      ("t3_thread_transfer", "merge_back", "t3_thread_merge_back"),
+                                      ("t3_thread_transfer", "status", "t3_thread_transfers")] {
+            #expect(T3McpTools.definition("mcp__t3-code__\(name)", input: .object(["action": .string(action)])) == T3McpTools.definition(legacy))
+        }
+        #expect(T3McpTools.definition("t3_queue", input: .object(["action": .string("future")]))?.action == "Manage")
+        #expect(T3McpTools.definition("t3_thread_configure", input: .object([:]))?.summaryAction == "thread-configuration")
+        #expect(T3McpTools.definition("t3_thread_configure", input: .object(["modelSelection": .object([:])]))?.summaryAction == "thread-configure")
+        #expect(T3McpTools.definition("schedule_task", input: .object(["scheduledTaskId": .string("task")]))?.summaryAction == "schedule-update")
+        #expect(T3McpTools.definition("schedule_task", input: .object([:]))?.summaryAction == "schedule-create")
+    }
+
     @Test func scheduledTaskMessagesAreAutomation() {
         let p = UserMessagePresentation.resolve(id: "m1", isUser: true, text: "reply hi", createdBy: "agent", scheduledTaskId: "scheduled-task:1")
         #expect(p == UserMessagePresentation(text: "reply hi", attribution: .automation, scheduledTaskId: "scheduled-task:1"))

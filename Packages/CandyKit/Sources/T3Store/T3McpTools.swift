@@ -25,6 +25,10 @@ public struct T3McpToolDefinition: Sendable, Equatable {
 /// (t3McpToolPresentation.ts:86-334, Nightly 3473). Regenerate when T3_VERSION moves.
 public enum T3McpTools {
     static let all: [String: T3McpToolDefinition] = [
+        "preview_act": .init(labels: ("Use", "Using", "Used", "the preview browser"), summaryAction: "browser", icon: "browser"),
+        "t3_queue": .init(labels: ("Manage", "Managing", "Managed", "queued messages"), summaryAction: "queue-edit", icon: "t3-code"),
+        "t3_pending_request": .init(labels: ("Handle", "Handling", "Handled", "pending questions"), summaryAction: "question-respond", icon: "t3-code"),
+        "t3_thread_transfer": .init(labels: ("Use", "Using", "Used", "thread transfers"), summaryAction: "thread-fork", icon: "t3-code"),
         "link_pull_request": .init(labels: ("Link", "Linking", "Linked", "a pull request"), summaryAction: "link-pr", icon: "pull-request"),
         "unlink_pull_request": .init(labels: ("Unlink", "Unlinking", "Unlinked", "a pull request"), summaryAction: "unlink-pr", icon: "pull-request"),
         "write_pull_request_guides": .init(labels: ("Write", "Writing", "Started writing", "review guides"), summaryAction: "write-pr-guides", icon: "pull-request"),
@@ -85,7 +89,7 @@ public enum T3McpTools {
         "t3_pending_request_read": .init(labels: ("Read", "Reading", "Read", "pending questions"), summaryAction: "question-read", icon: "t3-code"),
         "t3_pending_request_respond": .init(labels: ("Answer", "Answering", "Answered", "pending questions"), summaryAction: "question-respond", icon: "t3-code"),
         "t3_thread_configuration": .init(labels: ("Read", "Reading", "Read", "thread configuration"), summaryAction: "thread-configuration", icon: "t3-code"),
-        "t3_thread_configure": .init(labels: ("Set", "Setting", "Set", "thread model"), summaryAction: "thread-configure", icon: "t3-code"),
+        "t3_thread_configure": .init(labels: ("Use", "Using", "Used", "thread model settings"), summaryAction: "thread-configure", icon: "t3-code"),
         "t3_thread_fork": .init(labels: ("Fork", "Forking", "Requested a fork of", "this thread"), summaryAction: "thread-fork", icon: "t3-code"),
         "t3_thread_merge_back": .init(labels: ("Merge", "Merging", "Requested a merge of", "thread context"), summaryAction: "thread-merge", icon: "t3-code"),
         "t3_thread_search": .init(labels: ("Search", "Searching", "Searched", "thread content"), summaryAction: "thread-search", icon: "t3-code"),
@@ -151,9 +155,26 @@ public enum T3McpTools {
     }
 
     /// Port of `resolveT3McpToolDefinition`.
-    public static func definition(_ toolName: String?) -> T3McpToolDefinition? {
+    public static func definition(_ toolName: String?, input: JSONValue? = nil) -> T3McpToolDefinition? {
         guard let toolName, let name = Self.toolName(toolName) else { return nil }
-        return all[name]
+        // Action tools keep the labels of their legacy actions (t3McpToolPresentation.ts:412-456, 3814).
+        let fields = input?.objectValue ?? input?.stringValue.flatMap { try? JSONValue(parsing: Data($0.utf8)).objectValue }
+        var resolved: String?
+        if let action = fields?["action"]?.stringValue {
+            switch name {
+            case "preview_act": resolved = "preview_\(action)"
+            case "t3_queue": resolved = "t3_queue_\(action)"
+            case "t3_pending_request": resolved = "t3_pending_request_\(action)"
+            case "t3_thread_transfer": resolved = ["fork": "t3_thread_fork", "merge_back": "t3_thread_merge_back", "status": "t3_thread_transfers"][action]
+            default: break
+            }
+        }
+        guard var definition = resolved.flatMap({ all[$0] }) ?? all[name] else { return nil }
+        if let fields {
+            if name == "t3_thread_configure", fields["modelSelection"] == nil { definition.summaryAction = "thread-configuration" }
+            if name == "schedule_task", fields["scheduledTaskId"] != nil { definition.summaryAction = "schedule-update" }
+        }
+        return definition
     }
 }
 
