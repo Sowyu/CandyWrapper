@@ -46,6 +46,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case circleDot
     case circleDotDashed
     case circleSlash
+    case circleStop
     case circleX
     case clock
     case clock3
@@ -293,6 +294,7 @@ extension IconName {
         case .circleDashed: return "circle-dashed"
         case .circleDot: return "circle-dot"
         case .circleDotDashed: return "circle-dot-dashed"
+        case .circleStop: return "circle-stop"
         case .circleSlash: return "circle-slash"
         case .circleX: return "circle-x"
         case .clock: return "clock"
@@ -755,6 +757,11 @@ extension IconName {
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.circle(cx: 12, cy: 12, r: 10)),
                 IconElement(.circle(cx: 12, cy: 12, r: 1)),
+            ])
+        case .circleStop:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.circle(cx: 12, cy: 12, r: 10)),
+                IconElement(.rect(x: 9, y: 9, w: 6, h: 6, rx: 1, ry: 1)),
             ])
         case .circleSlash:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
