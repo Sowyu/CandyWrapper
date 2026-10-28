@@ -88,6 +88,10 @@ final class SettingsController {
     var linkPoll: Timer?
     /// Stops that poll while the window is hidden or covered, and restarts it when the window shows again.
     var linkPollVisibility: NSObjectProtocol?
+    /// Linked environments by host environment id, read once per visit (SettingsLinkedEnvironments.swift).
+    var peerLinks: [String: PeerLinkLoad] = [:]
+    /// "host/peer" keys whose Forget is in flight.
+    var forgettingLinks: Set<String> = []
     /// The open Add Environment form, for errors and the Adding state.
     private weak var form: AddEnvironmentFormView?
 
@@ -157,6 +161,8 @@ final class SettingsController {
             }
         }
         actions.updateAll = { [weak self] in self?.serverUpdates?.updateAll() }
+        actions.linkEnvironment = { [weak self] id in self?.presentLinkEnvironment(id) }
+        actions.forgetLink = { [weak self] host, peer in self?.forgetPeerLink(host, peer) }
         connections.actions = actions
         nav.onSignIn = { [weak self] in
             guard let self, let window = self.window else { return }
@@ -258,6 +264,7 @@ final class SettingsController {
         nav.avatar.image = t3.avatar
         nav.avatar.initials = t3.profile?.initials ?? t3.signedIn?.identifier?.first.map { String($0).uppercased() } ?? ""
         loadHosts()
+        loadPeerLinks()
         connections.primaryId = environments.primaryId
         connections.set(model())
         refreshPages()
@@ -337,6 +344,7 @@ final class SettingsController {
         m.cloudEnabled = true
         m.cloud = t3.cloudModel(primaryId: environments.primaryId)
         m.loadBalancing = loadBalancingModel(primaryLabel: m.thisMachine?.label)
+        m.linkedEnvironments = linkedEnvironmentsModel()
         return m
     }
 

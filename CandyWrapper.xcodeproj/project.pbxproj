@@ -49,6 +49,7 @@
 		87959F581610CF381EEC6C11 /* UsageController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35F79E1B4BAC92B09DE28732 /* UsageController.swift */; };
 		8B5000EC121D76409EE8339E /* HiddenTerminal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31C34F45503302E5FDFE2CAD /* HiddenTerminal.swift */; };
 		8EF4E37990764D849AAC2FCA /* ConnectorsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33B41C0351125703267D7257 /* ConnectorsController.swift */; };
+		940F19905C851EDA3FE6A6C9 /* PeerLinkDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DFD350D71DAD207A7E9B05B /* PeerLinkDialog.swift */; };
 		95C9CA154F0B56C69199D763 /* ComposerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56396DA448A1952FDC05BF3E /* ComposerController.swift */; };
 		9609FDB88DD924EBE32D30CA /* PaletteAddProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB4A3C4266BFC2E4F7D1B326 /* PaletteAddProject.swift */; };
 		98518441987B7F297A77A955 /* RuntimeUpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E6841D4497EC3DD03F5BCCA /* RuntimeUpdateController.swift */; };
@@ -56,6 +57,7 @@
 		A35346E84F4C99825C662E3B /* WelcomeOnboardingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA598ADFC895B496C79E89EE /* WelcomeOnboardingController.swift */; };
 		A46F1CC7B194DF1C04596508 /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 2223614E5F50DD4B20DCA9AC /* DesignSystem */; };
 		A7EF5B31A6D5CD4E006AA901 /* RunningThreadKeepAlive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67881179B1757F1808884AA9 /* RunningThreadKeepAlive.swift */; };
+		B0FD8497FA26F3D6AFA57D77 /* SettingsLinkedEnvironments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 918DCEC947F90301FC26C9DA /* SettingsLinkedEnvironments.swift */; };
 		B41DB44EA6F4544C9B9E24BE /* Features in Frameworks */ = {isa = PBXBuildFile; productRef = 54CB6DADB388C03EE21F5713 /* Features */; };
 		B423C6F5B35C38DA8DE052DC /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9180310B966F99CABD99C1F5 /* UpdateController.swift */; };
 		BDA16E87CBD63885B93ACFBC /* AgentConfig in Frameworks */ = {isa = PBXBuildFile; productRef = EC8A3EA1E208175FE308C2B6 /* AgentConfig */; };
@@ -111,7 +113,9 @@
 		7D6B2CDA8C1F9CE6535E0281 /* PaletteCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteCommands.swift; sourceTree = "<group>"; };
 		7FBAA6B0719E3E582513EAF9 /* TerminalController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalController.swift; sourceTree = "<group>"; };
 		8812D0A51D97E799EF04BF25 /* Environments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Environments.swift; sourceTree = "<group>"; };
+		8DFD350D71DAD207A7E9B05B /* PeerLinkDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerLinkDialog.swift; sourceTree = "<group>"; };
 		9180310B966F99CABD99C1F5 /* UpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateController.swift; sourceTree = "<group>"; };
+		918DCEC947F90301FC26C9DA /* SettingsLinkedEnvironments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsLinkedEnvironments.swift; sourceTree = "<group>"; };
 		92A5E63032239ADD1C5F8E1C /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		92B1A20A927434B822A78FBE /* T3ConnectController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = T3ConnectController.swift; sourceTree = "<group>"; };
 		94B3C485C72229F33DBF2C8C /* AddProjectToMachineController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddProjectToMachineController.swift; sourceTree = "<group>"; };
@@ -211,6 +215,7 @@
 				39A95AF911599618460AC6DA /* OrchestratorRemote.swift */,
 				FB4A3C4266BFC2E4F7D1B326 /* PaletteAddProject.swift */,
 				7D6B2CDA8C1F9CE6535E0281 /* PaletteCommands.swift */,
+				8DFD350D71DAD207A7E9B05B /* PeerLinkDialog.swift */,
 				723E79B2CB5A86C35793AE37 /* ProjectCloneController.swift */,
 				C7519E2E8715758466B1D137 /* ProjectScriptsController.swift */,
 				0A70434D88F7894F3A3F93A1 /* PullRequestsController.swift */,
@@ -222,6 +227,7 @@
 				BBA6712E26CB88D0FDFD92EC /* ServerUpdates.swift */,
 				21423E229A8AD862537E9ECA /* SettingsController.swift */,
 				E7E2D8C10B9281F25A01815B /* SettingsHostAccess.swift */,
+				918DCEC947F90301FC26C9DA /* SettingsLinkedEnvironments.swift */,
 				A3AD2B66BFFAE98BD79A1639 /* SettingsPages.swift */,
 				606083DF126114F0273EEEDD /* ShellSession.swift */,
 				527913F33E671EBA3009A953 /* Shortcuts.swift */,
@@ -407,6 +413,7 @@
 				6A8818BE7E957814CDAA7A15 /* OrchestratorRemote.swift in Sources */,
 				9609FDB88DD924EBE32D30CA /* PaletteAddProject.swift in Sources */,
 				27D7A20860C5FC0743F11294 /* PaletteCommands.swift in Sources */,
+				940F19905C851EDA3FE6A6C9 /* PeerLinkDialog.swift in Sources */,
 				1047A050AEFA93C1A6FF1E13 /* ProjectCloneController.swift in Sources */,
 				617A34A7823AE2ED80FCA629 /* ProjectScriptsController.swift in Sources */,
 				7D18F1FD97C5760B0FCDD907 /* PullRequestsController.swift in Sources */,
@@ -418,6 +425,7 @@
 				472C78A43764067DA610C34E /* ServerUpdates.swift in Sources */,
 				50C1EF04F213CB5F99AB6891 /* SettingsController.swift in Sources */,
 				66987F8439508E4A692A5A87 /* SettingsHostAccess.swift in Sources */,
+				B0FD8497FA26F3D6AFA57D77 /* SettingsLinkedEnvironments.swift in Sources */,
 				86490D7A879DABA1B452C9CA /* SettingsPages.swift in Sources */,
 				430141F12B09A7C8C83D92E3 /* ShellSession.swift in Sources */,
 				FD527A8A503C35A242372CD0 /* Shortcuts.swift in Sources */,

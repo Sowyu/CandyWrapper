@@ -170,6 +170,7 @@ final class Environments {
     /// `guestShare.create`'s grant, `access:write` (clientRpcPermissions.ts:53-54 at 3669): a guest link hands thread
     /// access to someone outside, like a pairing link. A session not read yet, or a failed read, denies it, as T3's
     /// `permissionAtom` does (commandPermissions.ts:27-33).
+    /// The same grant answers link requests and creates links (`peerLinks.*`, clientRpcPermissions.ts:64-67 at 3814).
     func canCreateGuestShare(_ environmentId: String) -> Bool {
         authSessions[environmentId]?.grants(AuthScopes.accessWrite) ?? false
     }

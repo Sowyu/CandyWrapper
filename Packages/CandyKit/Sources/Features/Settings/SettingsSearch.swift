@@ -11,6 +11,8 @@ public struct SettingsSearchItem: Sendable, Equatable {
     public enum Flag: Sendable, Equatable {
         case desktopOnly, macOnly, windowsOnly, cloudOnly, environmentOnly, providerSettingsOnly, macProviderSettingsOnly
         case localBackendManagementOnly, localEnvironmentOnly, wslAvailableOnly, managedTunnelOnly, secondary, requiresThreadAutoSettlement
+        /// `peerLinksOnly`: a connected environment offers links (useAvailableSettingsSearchItems.ts at 3814).
+        case peerLinksOnly
     }
 
     public let id: String
@@ -42,6 +44,7 @@ public struct SettingsSearchAvailability: Sendable, Equatable {
     public var isWslSettingsRowVisible = false
     public var hasThreadAutoSettlement = true
     public var managedTunnelActive = false
+    public var hasPeerLinkHost = false
     public init() {}
 }
 
@@ -82,6 +85,7 @@ public enum SettingsSearch {
                 && (!f.contains(.wslAvailableOnly) || a.isWslSettingsRowVisible)
                 && (!f.contains(.requiresThreadAutoSettlement) || a.hasThreadAutoSettlement)
                 && (!f.contains(.managedTunnelOnly) || a.managedTunnelActive)
+                && (!f.contains(.peerLinksOnly) || a.hasPeerLinkHost)
         }
     }
 

@@ -115,6 +115,8 @@ public struct ConnectionsPageModel: Equatable {
     public var cloud: Cloud = .idle
     /// Load balancing, with two or more machines switched on.
     public var loadBalancing: LoadBalancing?
+    /// One "Linked environments" section per connected environment that offers links (3814).
+    public var linkedEnvironments: [LinkedEnvironments] = []
     /// `ServerUpdatesAction` ("Update all") in the Environments header: some machine can take a remote update.
     public var canUpdateAll = false
 
@@ -176,6 +178,9 @@ public struct ConnectionsActions {
     /// Load balancing switched on or off, and one machine's preference weight.
     public var setLoadBalancing: (Bool) -> Void = { _ in }
     public var setLoadPreference: (String, Int) -> Void = { _, _ in }
+    /// A Linked environments section's "Link" (host environment id), and a link's "Forget" (host id, linked id).
+    public var linkEnvironment: (String) -> Void = { _ in }
+    public var forgetLink: (String, String) -> Void = { _, _ in }
     /// A machine's "Update" (`ServerUpdateAction`) by environment id, and "Update all".
     public var updateServer: (String) -> Void = { _ in }
     public var updateAll: () -> Void = {}
@@ -215,6 +220,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         section.onHeightChange = { [weak self] in self?.relayout() }
         return section
     }()
+    private var linkedSections: [String: (section: SettingsSectionView, link: ButtonView, rows: [String: LinkedEnvironmentRowView], note: SettingsRowView)] = [:]
     /// The primary environment's id, for the Icon submenu of This machine.
     public var primaryId: String?
     private var openPermissions: Set<String> = []
@@ -347,6 +353,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
             groupRows.append(empty!.view)
         }
         environmentsSection.group.rows = groupRows
+        applyLinkedEnvironments(model.linkedEnvironments)
         // Load balancing, under the environments list (ConnectionsSettings.tsx:4169).
         if let balancing = model.loadBalancing {
             if loadBalancingSection.superview == nil { addSubview(loadBalancingSection) }
@@ -358,6 +365,54 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         }
         needsLayout = true
         onHeightChange?()
+    }
+
+    /// `LinkedEnvironmentsSettings`, under Environments and above Load balancing (ConnectionsSettings.tsx:1529-1536 at 3814).
+    private func applyLinkedEnvironments(_ sections: [ConnectionsPageModel.LinkedEnvironments]) {
+        var next: [String: (section: SettingsSectionView, link: ButtonView, rows: [String: LinkedEnvironmentRowView], note: SettingsRowView)] = [:]
+        for m in sections {
+            var entry = linkedSections[m.hostId] ?? {
+                let section = SettingsSectionView(title: m.title, rows: [])
+                let link = ButtonView("Link", icon: .plus, variant: .default, size: .xs)
+                link.iconSize = 12
+                addSubview(section)
+                return (section, link, [:], SettingsRowView(title: ""))
+            }()
+            let hostId = m.hostId
+            entry.section.title = m.title
+            entry.link.action = { [weak self] in self?.actions.linkEnvironment(hostId) }
+            entry.section.headerAction = m.canLink ? entry.link : nil
+            var rows: [String: LinkedEnvironmentRowView] = [:]
+            var groupRows: [any SettingsGroupRow] = []
+            switch m.state {
+            case .loading:
+                entry.note.title = "Loading linked environments…"
+                entry.note.detail = nil
+                groupRows = [entry.note]
+            case .failed(let reason):
+                entry.note.title = "Could not load linked environments"
+                entry.note.detail = reason
+                groupRows = [entry.note]
+            case .links(let links) where links.isEmpty:
+                entry.note.title = "No linked environments"
+                entry.note.detail = "Link another machine running T3 Code, such as a VPS, so agents here can launch and drive threads there."
+                groupRows = [entry.note]
+            case .links(let links):
+                for l in links {
+                    let row = entry.rows[l.id] ?? LinkedEnvironmentRowView()
+                    row.configure(l)
+                    let peerId = l.id
+                    row.onForget = { [weak self] in self?.actions.forgetLink(hostId, peerId) }
+                    rows[l.id] = row
+                    groupRows.append(row)
+                }
+            }
+            entry.rows = rows
+            entry.section.group.rows = groupRows
+            next[m.hostId] = entry
+        }
+        for (id, old) in linkedSections where next[id] == nil { old.section.removeFromSuperview() }
+        linkedSections = next
     }
 
     private func configure(_ row: SettingsRowView, _ r: ConnectionsPageModel.HostRow) {
@@ -477,6 +532,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         if let machineSection { h += machineSection.height(forWidth: width) + 32 }
         if accessSection.superview != nil { h += accessSection.height(forWidth: width) + 32 }
         h += environmentsSection.height(forWidth: width)
+        for l in model.linkedEnvironments { if let s = linkedSections[l.hostId]?.section { h += 32 + s.height(forWidth: width) } }
         if loadBalancingSection.superview != nil { h += 32 + loadBalancingSection.height(forWidth: width) }
         return h
     }
@@ -498,8 +554,17 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         }
         let eh = environmentsSection.height(forWidth: bounds.width)
         environmentsSection.frame = NSRect(x: 0, y: y, width: bounds.width, height: eh)
+        y += eh
+        for l in model.linkedEnvironments {
+            guard let s = linkedSections[l.hostId]?.section else { continue }
+            let h = s.height(forWidth: bounds.width)
+            s.frame = NSRect(x: 0, y: y + 32, width: bounds.width, height: h)
+            s.needsLayout = true
+            s.group.needsLayout = true
+            y += 32 + h
+        }
         if loadBalancingSection.superview != nil {
-            loadBalancingSection.frame = NSRect(x: 0, y: y + eh + 32, width: bounds.width, height: loadBalancingSection.height(forWidth: bounds.width))
+            loadBalancingSection.frame = NSRect(x: 0, y: y + 32, width: bounds.width, height: loadBalancingSection.height(forWidth: bounds.width))
         }
     }
 }

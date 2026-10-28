@@ -369,6 +369,7 @@ extension SettingsController {
         a.hasEnvironment = !environments.environmentIds.isEmpty
         a.hasThreadAutoSettlement = environments.environmentIds.contains { composer?.config($0)?.capabilities.contains("threadAutoSettlement") == true }
         a.hasCloudPublicConfig = t3.loaded
+        a.hasPeerLinkHost = !peerLinkHosts().isEmpty
         return a
     }
 

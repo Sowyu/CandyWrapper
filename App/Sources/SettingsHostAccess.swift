@@ -36,6 +36,8 @@ extension SettingsController {
         accessLoaded = false
         accessError = nil
         access = AuthAccessSnapshot()
+        peerLinks = [:]
+        forgettingLinks = []
         loadHosts()
     }
 
@@ -91,6 +93,7 @@ extension SettingsController {
                     if let machine = info.descriptor?.platform?.machine { environments.setDetectedMachine(id, machine) }
                     hostReady()
                 }
+                loadPeerLinks()
                 refreshPage()
             }
         }

@@ -181,6 +181,8 @@ public struct ServerSettingsValues: Equatable, Sendable {
         "compactIdleThreads": SettingSpec(.any, .bool(false)),
         // Settings > Beta's Guest links (settings.ts:1166 at 3669); servers before 3669 don't send it.
         "guestSharingEnabled": SettingSpec(.bool, .bool(false)),
+        // Settings > Beta's Linked environments (settings.ts:1209 at 3814); servers before 3814 don't send it.
+        "linkedEnvironmentsEnabled": SettingSpec(.bool, .bool(false)),
         "backgroundActivity": SettingSpec(.any, BackgroundActivity.defaultSettings),
         "backgroundActivityProfile": SettingSpec(.literals(["balanced", "performance", "battery-saver"]), .string("balanced")),
         "automaticGitFetchInterval": SettingSpec(.any, .number(30_000)),
