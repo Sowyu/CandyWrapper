@@ -15,6 +15,8 @@ enum PeerLinkDialog {
         var machine: LinkableMachine?
         var access: String
         var pairingCode: String
+        /// A link request answered with the machine's existing link.
+        var useExisting = false
     }
 
     /// `linkableMachines` (client-runtime/src/linkRequest.ts:82-170): this machine and the saved ones other than the
@@ -49,10 +51,12 @@ enum PeerLinkDialog {
     @discardableResult
     static func present(in window: NSWindow, environments: Environments, machines: [LinkableMachine],
                         initialChoice: String? = nil, initialAccess: String? = nil, lockMachine: Bool = false, address: String? = nil,
+                        answersRequest: Bool = false, successToast: Bool = true,
                         toast: @escaping @MainActor (String, String?, ToastQueue.Kind) -> Void,
                         failureMessage: @escaping @MainActor (Error) -> String,
                         commit: @escaping @MainActor (Choice) async throws -> String?) -> ModalHost {
         let (dialog, form, cancel, link) = LinkEnvironmentDialog.make(machines: machines)
+        form.answersRequest = answersRequest
         form.preset(choice: initialChoice, access: initialAccess, lockMachine: lockMachine, address: address)
         form.onHeightChange = { [weak dialog] in dialog?.superview?.needsLayout = true }
         let host = ModalHost.present(dialog, in: window)
@@ -60,7 +64,8 @@ enum PeerLinkDialog {
         let submit: @MainActor () -> Void = { [weak form, weak host] in
             guard let form, !form.isBusy, form.ready, let url = form.urls.first, !url.isEmpty else { return }
             form.isBusy = true
-            let machine = form.machine, access = form.access, typed = form.pairingCode, mints = form.mints, urls = form.urls
+            let machine = form.machine, access = form.access, typed = form.pairingCode, urls = form.urls
+            let existing = form.usesExisting, mints = form.mints && !existing
             Task {
                 var code = typed
                 if mints, let machine {
@@ -72,8 +77,9 @@ enum PeerLinkDialog {
                     code = minted
                 }
                 do {
-                    let label = try await commit(Choice(urls: urls, machine: machine, access: access, pairingCode: code))
-                    toast("Linked \(label ?? machine?.label ?? "environment")", nil, .success)
+                    let label = try await commit(Choice(urls: urls, machine: machine, access: access, pairingCode: code, useExisting: existing))
+                    // An answered request shows on its card instead (LinkRequestCard.tsx:300-303).
+                    if successToast { toast("Linked \(label ?? machine?.label ?? "environment")", nil, .success) }
                     host?.close()
                 } catch {
                     form.isBusy = false

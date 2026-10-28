@@ -1626,13 +1626,19 @@ extension ThreadController {
             PeerLinkDialog.present(
                 in: window, environments: environments, machines: addressOnly ? [] : machines,
                 initialChoice: choice, initialAccess: item.string("requestedAccess") ?? "approval-required",
-                lockMachine: named != nil, address: addressOnly ? url : nil,
+                lockMachine: named != nil, address: addressOnly ? url : nil, answersRequest: true, successToast: false,
                 toast: { [weak self] title, message, kind in
                     self?.panel.toasts.show(ToastView(title: title, message: message, kind: kind))
                 },
                 failureMessage: PeerLinkDialog.answerFailure,
                 commit: { [weak self] choice in
-                    guard let self, let answer = LinkRequestAnswer.link(environmentId: choice.machine?.environmentId, label: choice.machine?.label,
+                    guard let self else { return nil }
+                    if choice.useExisting, let id = choice.machine?.environmentId {
+                        let answer: JSONValue = .object(["type": .string("use-existing"), "environmentId": .string(id)])
+                        _ = try await self.environments.request(env, "peerLinks.answerRequest", LinkRequestAnswer.payload(item, answer))
+                        return choice.machine?.label
+                    }
+                    guard let answer = LinkRequestAnswer.link(environmentId: choice.machine?.environmentId, label: choice.machine?.label,
                                                                         urls: choice.urls, access: choice.access, pairingCode: choice.pairingCode)
                     else { throw CancellationError() }
                     _ = try await self.environments.request(env, "peerLinks.answerRequest", LinkRequestAnswer.payload(item, answer))

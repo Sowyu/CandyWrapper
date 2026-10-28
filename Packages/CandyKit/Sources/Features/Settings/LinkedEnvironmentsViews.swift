@@ -174,6 +174,8 @@ public final class LinkEnvironmentFormView: DSView {
     /// Machines whose minting already failed, so the form asks for a code instead.
     public var mintFailed: Set<String> = [] { didSet { apply() } }
     public var isBusy = false { didSet { apply() } }
+    /// Answering an agent's link request: a machine linked already is answered as it is (`use-existing`).
+    public var answersRequest = false { didSet { apply() } }
     var onChange: (() -> Void)?
     public var onHeightChange: (() -> Void)?
 
@@ -239,8 +241,12 @@ public final class LinkEnvironmentFormView: DSView {
     public var mints: Bool { machine.map { $0.canMint && !mintFailed.contains($0.environmentId) } ?? false }
     public var address: String { addressInput.text.trimmingCharacters(in: .whitespacesAndNewlines) }
     public var pairingCode: String { codeInput.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// The request's machine is linked already, so the agent uses that link and nothing else is asked
+    /// (LinkRequestCard.tsx:245-277 at 3814).
+    public var usesExisting: Bool { answersRequest && machine?.linked == true }
     public var ready: Bool {
-        selected != nil && (!needsAddress || !address.isEmpty) && (mints || !pairingCode.isEmpty)
+        if usesExisting { return true }
+        return selected != nil && (!needsAddress || !address.isEmpty) && (mints || !pairingCode.isEmpty)
     }
     /// `[url, ...alternateUrls]`: the typed address, else the machine's.
     public var urls: [String] { machine == nil || needsAddress ? [address] : machine!.urls }
@@ -253,13 +259,16 @@ public final class LinkEnvironmentFormView: DSView {
         if let i = machines.firstIndex(where: { $0.environmentId == selected }) { machineSelect.selectedIndex = i }
         else if selected == Self.anotherAddress, !machines.isEmpty { machineSelect.selectedIndex = machines.count }
         linkedNote.isHidden = m?.linked != true
-        let address = needsAddress
+        linkedNote.text = usesExisting
+            ? "This environment is already linked to \(m?.label ?? "it"). The agent can use that link as it is; change its access in Settings → Connections."
+            : "Already linked. Linking again renews it with the access you pick."
+        let address = needsAddress && !usesExisting
         addressTitle.isHidden = !address
         addressInput.isHidden = !address
         addressInput.isEnabled = !isBusy
         addressHint.text = m.map { "This app has no address for \($0.label) that another machine can reach. Enter its https or Tailscale address." } ?? ""
         addressHint.isHidden = !address || m == nil
-        let code = selected != nil && !mints
+        let code = selected != nil && !mints && !usesExisting
         codeTitle.isHidden = !code
         codeInput.isHidden = !code
         codeInput.isEnabled = !isBusy
@@ -267,6 +276,9 @@ public final class LinkEnvironmentFormView: DSView {
         codeHint.text = m.map { "Create a link on \($0.label): Settings → Connections → Create link, then paste its code here." } ?? ""
         codeHint.isHidden = !code || m == nil
         accessSelect.isEnabled = !isBusy
+        accessTitle.isHidden = usesExisting
+        accessSelect.isHidden = usesExisting
+        accessNote.isHidden = usesExisting
         accessNote.text = LinkAccess.note(access)
         needsLayout = true
         invalidateIntrinsicContentSize()

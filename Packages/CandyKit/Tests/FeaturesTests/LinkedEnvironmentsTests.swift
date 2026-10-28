@@ -51,6 +51,17 @@ struct LinkedEnvironmentsTests {
         #expect(form.urls == ["https://ssh.example.ts.net"])
     }
 
+    /// A link request whose machine is linked already answers `use-existing`, asking for nothing else.
+    @Test func aRequestForALinkedMachineUsesTheLink() {
+        let form = LinkEnvironmentFormView(machines: [Self.box, Self.ssh])
+        form.answersRequest = true
+        form.preset(choice: "s", access: nil, lockMachine: true)
+        #expect(form.usesExisting)
+        #expect(form.ready)
+        form.preset(choice: "b", access: nil, lockMachine: false)
+        #expect(!form.usesExisting)
+    }
+
     @Test func rowsShowAccessStatusAndDot() {
         let now = Date(timeIntervalSince1970: 1_793_188_800)
         let link = PeerLinkSummary(environmentId: "b", label: "Sandbox B", urls: ["http://127.0.0.1:47399"], access: "auto",
