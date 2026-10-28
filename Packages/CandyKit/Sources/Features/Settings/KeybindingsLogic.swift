@@ -87,7 +87,7 @@ public enum KeybindingsLogic {
         case "composer.sendAndNewThread": return "Composer: Send and Start New Thread"
         case "thread.steerQueuedMessage": return "Queue: Send First Queued Message"
         case "thread.editQueuedMessage": return "Queue: Edit Last Queued Message"
-        case "thread.copyReference": return "Pull Request: Copy Link or Thread ID"
+        case "thread.copyReference": return "Pull Request: Copy Link or Thread"
         case "view.reopenClosed": return "Reopen Closed Tab"
         default: break
         }
