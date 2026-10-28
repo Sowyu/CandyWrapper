@@ -5110,6 +5110,19 @@ extension ComposerController {
             self?.openThread?(children[position])
         }
         banner.onAction = { index in if index == 0 { stopWork() } }
+        if !ThemeRuntime.isDither(dark: panel.effectiveAppearance.isDark) {
+            let activity = BackgroundWorkPresentation.activity(presentation, turnItems: projection?.turnItems ?? [])
+            let actions = (activity.childThreadId == nil ? [] : ["Open"]) + [stopping ? "Stopping..." : "Stop"]
+            banner.apply(.init(variant: .neutral, icon: activity.commandsOnly ? .terminal : .circleDashed,
+                               title: activity.title, description: activity.detail, actions: actions,
+                               elapsedStartedAt: activity.startedAt?.date?.timeIntervalSince1970))
+            banner.disabledActions = stopping || !environments.canOperate(thread.id.environmentId) ? [actions.count - 1] : []
+            banner.onAction = { [weak self] index in
+                guard let index else { return }
+                if let child = activity.childThreadId, index == 0 { self?.openThread?(child) }
+                else { stopWork() }
+            }
+        }
         // Redesign's indicator: the short label, and the banner's links and Stop in its menu.
         let canStop = !stopping && environments.canOperate(thread.id.environmentId)
         let menuLinks = items.compactMap { item in

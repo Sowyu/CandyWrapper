@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import T3Store
 
 /// One `ComposerBannerStack` item docked over the composer (ComposerBannerStack.tsx:330-385,
 /// ComposerBanner.tsx:180-330): a 24pt icon column with a 12pt glyph, the title in medium weight,
@@ -19,6 +20,7 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         public var dismissLabel: String?
         /// The item has `onDismiss`: the X shows.
         public var dismissible: Bool
+        public var elapsedStartedAt: TimeInterval?
         public var compact: Bool
         /// The item's `priority` in the banner stack.
         public var priority: ComposerBannerStackItem.Priority?
@@ -50,13 +52,14 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
                     dismissLabel: String? = nil, dismissible: Bool? = nil, compact: Bool = false,
                     priority: ComposerBannerStackItem.Priority? = nil, titlePrefix: String? = nil, titleCode: Bool = false,
                     titleTooltip: String? = nil, spinner: Bool = false, iconIsError: Bool = false, actionTooltip: String? = nil,
-                    dot: Dot? = nil, descriptionParts: [DescriptionPart] = []) {
+                    dot: Dot? = nil, elapsedStartedAt: TimeInterval? = nil, descriptionParts: [DescriptionPart] = []) {
             self.variant = variant; self.icon = icon; self.title = title
             self.description = descriptionParts.isEmpty ? description : descriptionParts.map(\.text).joined()
             self.actions = actions; self.dismissLabel = dismissLabel; self.dismissible = dismissible ?? (dismissLabel != nil)
             self.compact = compact; self.priority = priority
             self.titlePrefix = titlePrefix; self.titleCode = titleCode; self.titleTooltip = titleTooltip
             self.spinner = spinner; self.iconIsError = iconIsError; self.actionTooltip = actionTooltip
+            self.elapsedStartedAt = elapsedStartedAt
             self.dot = dot; self.descriptionParts = descriptionParts
         }
         /// `aria-label={item.dismissLabel ?? "Dismiss warning"}`.
@@ -65,6 +68,7 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
 
     private var iconView = IconView(name: .info, size: 12)
     private var spinnerView: SpinnerView?
+    private let elapsed = glassLabel(font: SB.tabular(12), color: Themed.color(\.mutedForeground), lineHeight: 24)
     private let prefix = glassLabel(font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 24)
     private let title = glassLabel(font: DSFont.ui(12, weight: .medium), color: Themed.color(\.foreground), lineHeight: 24)
     private let detail = glassLabel(font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 24)
@@ -110,7 +114,7 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         titleDetails.content = { [weak self] in NoticeDetailsPopupView(text: self?.content?.title ?? "") }
         titleDetailsButton.action = { [weak titleDetails] in titleDetails?.show(instant: true) }
         prefix.isHidden = true
-        for v in [iconView, prefix, title, detail, detailsButton, titleDetailsButton, dismiss] as [NSView] { addSubview(v) }
+        for v in [iconView, elapsed, prefix, title, detail, detailsButton, titleDetailsButton, dismiss] as [NSView] { addSubview(v) }
         setAccessibilityRole(.group)
         setAccessibilityRoleDescription("alert")
     }
@@ -178,11 +182,27 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
             addSubview(b)
             return b
         }
+        tickElapsed()
         updateActionAvailability()
         dismiss.isHidden = !content.dismissible
         dismiss.setAccessibilityLabel(content.resolvedDismissLabel)
         needsLayout = true
     }
+
+    private func tickElapsed() {
+        guard let start = content?.elapsedStartedAt else {
+            elapsed.isHidden = true
+            LabelClock.shared.cancel(self)
+            return
+        }
+        elapsed.isHidden = false
+        elapsed.text = formatDuration(max(1_000, (Date().timeIntervalSince1970 - start) * 1_000))
+        needsLayout = true
+        if window != nil { LabelClock.shared.schedule(self, in: 1) { [weak self] in self?.tickElapsed() } }
+        else { LabelClock.shared.cancel(self) }
+    }
+    public override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); tickElapsed(); LabelClock.shared.visibilityChanged() }
+    public override func viewDidUnhide() { super.viewDidUnhide(); tickElapsed(); LabelClock.shared.visibilityChanged() }
 
     /// `py-1.25` around the 24pt row, plus the overlap under the composer.
     public static let height: CGFloat = 5 + 24 + 5 + ComposerBannerView.overlap
@@ -211,6 +231,12 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
             right -= s.width
             b.frame = NSRect(x: right, y: rowY + (24 - s.height) / 2, width: s.width, height: s.height)
             right -= 4
+        }
+        if !elapsed.isHidden {
+            let width = ceil(elapsed.textWidth)
+            right -= width
+            elapsed.frame = NSRect(x: right, y: rowY, width: width, height: 24)
+            right -= 8
         }
         var x: CGFloat = 4 + 24 + 4
         if !prefix.isHidden {
