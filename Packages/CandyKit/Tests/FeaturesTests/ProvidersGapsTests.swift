@@ -60,6 +60,15 @@ struct ProvidersGapsTests {
     @Test func badgeInitialsAndVisibility() {
         #expect(ProviderIcon.initials("Codex") == "CO")
         #expect(ProviderIcon.initials("codex_work laptop") == "CW")
+        // providerInstanceDisplay.test.ts:16-26 at 3814.
+        #expect(ProviderIcon.initials("Codex (hub)") == "CH")
+        #expect(ProviderIcon.initials("work_codex") == "WC")
+        #expect(ProviderIcon.initials("Theo's Codex") == "TC")
+        #expect(ProviderIcon.initials("Codex 'hub'") == "CH")
+        #expect(ProviderIcon.initials("\u{2018}hub\u{2019}") == "HU")
+        #expect(ProviderIcon.initials("(hub)") == "HU")
+        #expect(ProviderIcon.initials("😀 Work") == "😀W")
+        #expect(ProviderIcon.initials("😀") == "😀")
         var accented = ServerProvider(instanceId: .init("claudeAgent"), driver: "claudeAgent")
         accented.accentColor = "#2563eb"
         let plain = ServerProvider(instanceId: .init("codex"), driver: "codex")

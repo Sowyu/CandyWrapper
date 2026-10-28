@@ -50,10 +50,16 @@ public struct ProviderBadge: Equatable {
 
 extension ProviderIcon {
     /// `providerInstanceInitials`: the first two characters of one word, or the first character of
-    /// each of the first two words, upper-cased (providerInstanceDisplay.ts:56-63).
+    /// each of the first two words, upper-cased (providerInstanceDisplay.ts:30-46 at 3814). Punctuation separates words,
+    /// so "Codex (hub)" reads CH; an apostrophe inside a word stays ("Theo's Codex" is TC), a quoting one doesn't.
     nonisolated static func initials(_ label: String) -> String {
-        let words = label.replacingOccurrences(of: "_", with: " ").replacingOccurrences(of: "-", with: " ")
-            .split(whereSeparator: \.isWhitespace)
+        let apostrophes: Set<Character> = ["'", "\u{2019}"]
+        let spaced = String(label.map { c -> Character in
+            !apostrophes.contains(c) && c.isPunctuation ? " " : c
+        })
+        let words = spaced.split(whereSeparator: \.isWhitespace)
+            .map { $0.drop(while: { apostrophes.contains($0) }).reversed().drop(while: { apostrophes.contains($0) }).reversed() }
+            .map { String($0) }.filter { !$0.isEmpty }
         guard let first = words.first else { return "" }
         if words.count == 1 { return String(first.prefix(2)).uppercased() }
         return words.prefix(2).compactMap(\.first).map { String($0).uppercased() }.joined()
