@@ -239,6 +239,7 @@ final class MetaRowsItem: DSView, StackItem {
             let a = PullRequestAvatarView()
             a.actor = actor
             if let outcome { a.ring = PullRequestStyle.outcomeRing(outcome, stale: stale) }
+            a.reviewOutcome = outcome; a.reviewStale = stale
             a.toolTip = actor?.login ?? "ghost"
             addSubview(a)
             return a

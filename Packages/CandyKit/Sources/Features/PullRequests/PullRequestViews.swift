@@ -117,6 +117,21 @@ public enum PullRequestStyle {
 // ponytail: avatars load once per URL into a process cache with no eviction; bound it when long sessions show memory growth
 public final class PullRequestAvatarView: DSView {
     private let initial = LabelView()
+    private var verdictGlyph: IconView?
+    public var reviewOutcome: String? { didSet { updateVerdict() } }
+    public var reviewStale = false { didSet { updateVerdict() } }
+    private func updateVerdict() {
+        verdictGlyph?.removeFromSuperview(); verdictGlyph = nil
+        guard let reviewOutcome, ThreadDesign.uses3814(dark: effectiveAppearance.isDark) else { return }
+        let icon: IconName = reviewOutcome == "approved" ? .circleCheck : reviewOutcome == "changes-requested" ? .circleX : .circleMinus
+        let color = reviewOutcome == "approved" ? Themed.base("emerald-500", dark: "emerald-400") : Themed.color(reviewOutcome == "changes-requested" ? \.destructive : \.mutedForeground)
+        let glyph = IconView(name: icon, size: 12, strokeColor: Themed.color(\.background), fillColor: color)
+        glyph.strokeWidth = 3
+        glyph.alphaValue = reviewStale ? 0.5 : 1
+        addSubview(glyph); verdictGlyph = glyph
+        needsLayout = true
+    }
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateVerdict() }
     private let image = CALayer()
     private var loadedURL: String?
     @MainActor static var cache: [String: CGImage] = [:]
@@ -172,6 +187,7 @@ public final class PullRequestAvatarView: DSView {
         initial.font = DSFont.ui(min(10, size), weight: .medium)
         initial.lineHeight = bounds.height
         initial.frame = bounds
+        verdictGlyph?.frame = NSRect(x: bounds.width - 8, y: isFlipped ? bounds.height - 8 : -4, width: 12, height: 12)
     }
 
     public override func updateLayer() {
