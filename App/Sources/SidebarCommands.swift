@@ -789,7 +789,8 @@ final class SidebarCommands {
         let pinned = selected.filter { $0.pinnedAt != nil }
         let settling = selected.filter { $0.settledOverride != .settled }
         let regeneratable = selected.filter { $0.titleRegeneration == nil }
-        let presets = SnoozePresets.resolve(now: Date(), presets: snoozeSettings(id))
+        // ponytail: a selection across machines snoozes with the first one's options; split per environment if users mix them
+        let presets = SnoozePresets.resolve(now: Date(), presets: snoozeSettings(selected[0].id))
         let requests = PendingSubagentRequests.byThread(snapshot?.threads ?? [])
         // ponytail: every environment reads as supporting pins, snooze and title regeneration; gate per descriptor for old servers
         let items = ThreadActionMenu.bulkItems(count: selected.count, pinnedCount: pinned.count, settlingCount: settling.count,
