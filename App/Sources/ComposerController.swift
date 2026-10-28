@@ -2963,18 +2963,15 @@ extension ComposerController {
             let listed = menuState.pullRequests.flatMap { $0.key == key ? $0 : nil }
             let exact = menuState.exactPullRequest.flatMap { $0.key == key && String($0.number) == trigger.query ? $0.entry : nil }
             let listedEntries = listed?.entries ?? []
-            var entries = exact.map { e in [e] + listedEntries.filter { $0.reference.number != e.reference.number } } ?? listedEntries
-            for link in linked where !entries.contains(where: { $0.reference.url == link.url }) {
+            let entries = exact.map { e in [e] + listedEntries.filter { $0.reference.number != e.reference.number } } ?? listedEntries
+            let linkedEntries = linked.map { link -> PullRequestEntry in
                 let snapshot = link.snapshot
                 let pr = PullRequestReference(number: link.number, title: snapshot?.title ?? "#\(link.number)", url: link.url,
                     headBranch: snapshot?.headBranch ?? "", baseBranch: snapshot?.baseBranch ?? "",
                     state: snapshot?.state.rawValue ?? "open", isDraft: snapshot?.isDraft ?? false)
-                let query = trigger.query.lowercased()
-                if query.isEmpty || "#\(pr.number) \(pr.title) \(link.repository) \(pr.headBranch)".lowercased().contains(query) {
-                    entries.append(.init(reference: pr, repository: link.repository, authorLogin: nil, updatedAt: snapshot?.updatedAt?.raw ?? ""))
-                }
+                return .init(reference: pr, repository: link.repository, authorLogin: nil, updatedAt: snapshot?.updatedAt?.raw ?? "")
             }
-            let items = ComposerMenus.pullRequestItems(query: trigger.query, entries: entries, hostSearched: true)
+            let items = ComposerMenus.pullRequestItems(query: trigger.query, entries: entries, linked: linkedEntries, hostSearched: true)
             return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .pullRequest, loading: available && listed == nil, pullRequestsAvailable: available || !linked.isEmpty, pullRequestsFailed: listed?.failed == true,
                                                                            query: trigger.query))
         }

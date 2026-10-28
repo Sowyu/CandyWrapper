@@ -140,6 +140,23 @@ struct ComposerMenusTests {
         #expect(ComposerMenus.pullRequestItems(query: "wizard welcome", entries: entries, hostSearched: true).map(\.label) == ["#112", "#1", "#12"])
     }
 
+    /// composerPullRequestMatches.test.ts:70-110 at 3814: linked pull requests lead a text search, before and after the
+    /// host answers, and one the listing already has keeps one row.
+    @Test func linkedPullRequestsComeFirst() {
+        func entry(_ n: Int, _ title: String, _ updated: String, repo: String = "owner/repo") -> ComposerMenus.PullRequestEntry {
+            .init(reference: PullRequestReference(number: n, title: title, url: "u\(n)", headBranch: "h\(n)", baseBranch: "main", state: "open", isDraft: false),
+                  repository: repo, authorLogin: nil, updatedAt: updated)
+        }
+        let linked = [entry(7, "Fix login", ""), entry(8, "#8", "")]
+        #expect(ComposerMenus.pullRequestItems(query: "fix", entries: [], linked: linked, hostSearched: true).map(\.label) == ["#7"])
+        let searched = [entry(9, "Other", "2026-01-05"), entry(8, "Thing", "2026-01-03")]
+        let items = ComposerMenus.pullRequestItems(query: "fix", entries: searched, linked: linked, hostSearched: true)
+        #expect(items.map(\.label) == ["#7", "#8", "#9"])
+        #expect(items[1].description == "Thing")
+        let once = ComposerMenus.pullRequestItems(query: "", entries: [entry(4, "Four", "2026-01-03")], linked: [entry(4, "Four", "", repo: "Owner/Repo")], hostSearched: true)
+        #expect(once.map(\.label) == ["#4"])
+    }
+
     // MARK: Tokens (composerInlineTokens.test.ts)
 
     @Test func inlineTokens() {

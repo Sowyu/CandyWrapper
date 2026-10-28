@@ -394,16 +394,22 @@ public enum ComposerMenus {
         }
     }
 
-    /// The `#` menu over the project's listed pull requests: a number filters by digits with an
-    /// exact match first (`filterComposerPullRequestMatches`); text ranks by `scorePullRequestMatch`.
-    public static func pullRequestItems(query: String, entries: [PullRequestEntry], hostSearched: Bool) -> [ComposerMenuItem] {
-        let picked: [PullRequestEntry]
+    /// The `#` menu over the project's listed pull requests and the thread's linked ones
+    /// (composerPullRequestMatches.ts at 3814): a number filters by digits, the exact match first, then linked ones,
+    /// then the newest (`filterComposerPullRequestMatches`); text ranks by `scorePullRequestMatch` and puts the linked
+    /// ones that match ahead (`withLinkedComposerPullRequestsFirst`).
+    public static func pullRequestItems(query: String, entries: [PullRequestEntry], linked: [PullRequestEntry] = [], hostSearched: Bool) -> [ComposerMenuItem] {
+        let key: (PullRequestEntry) -> String = { "\($0.repository.trimmingCharacters(in: .whitespaces).lowercased())#\($0.reference.number)" }
+        let linkedKeys = Set(linked.map(key))
+        var picked: [PullRequestEntry]
         if query.allSatisfy(\.isNumber) {
-            var seen = Set<Int>()
-            picked = entries.filter { (query.isEmpty || String($0.reference.number).contains(query)) && seen.insert($0.reference.number).inserted }
+            var seen = Set<String>()
+            picked = (entries + linked).filter { (query.isEmpty || String($0.reference.number).contains(query)) && seen.insert(key($0)).inserted }
                 .sorted { a, b in
                     let ea = String(a.reference.number) == query, eb = String(b.reference.number) == query
-                    return ea != eb ? ea : a.updatedAt > b.updatedAt
+                    if ea != eb { return ea }
+                    let la = linkedKeys.contains(key(a)), lb = linkedKeys.contains(key(b))
+                    return la != lb ? la : a.updatedAt > b.updatedAt
                 }
         } else {
             let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
@@ -415,6 +421,15 @@ public enum ComposerMenus {
                 if sa != sb { return sa > sb }
                 return a.element.updatedAt != b.element.updatedAt ? a.element.updatedAt > b.element.updatedAt : a.offset < b.offset
             }.map(\.element)
+            let matchesByKey = Dictionary(picked.map { (key($0), $0) }, uniquingKeysWith: { first, _ in first })
+            let words = needle.split(whereSeparator: \.isWhitespace).map(String.init)
+            let linkedFirst = linked.compactMap { e -> PullRequestEntry? in
+                if let match = matchesByKey[key(e)] { return match }
+                let text = "#\(e.reference.number) \(e.reference.title) \(e.repository) \(e.headBranch)".lowercased()
+                return words.allSatisfy { text.contains($0) } ? e : nil
+            }
+            let firstKeys = Set(linkedFirst.map(key))
+            picked = linkedFirst + picked.filter { !firstKeys.contains(key($0)) }
         }
         return picked.prefix(pullRequestResultLimit).map { e in
             ComposerMenuItem(id: "pull-request:\(e.reference.number)", kind: .pullRequest(e.reference), label: "#\(e.reference.number)", description: e.reference.title)
