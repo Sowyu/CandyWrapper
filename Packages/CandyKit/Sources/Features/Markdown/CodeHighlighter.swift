@@ -1,4 +1,5 @@
 import AppKit
+import DesignSystem
 
 /// Token classes with pierre-light and pierre-dark colors, the Shiki themes T3 uses for chat code
 /// blocks and diffs (`@pierre/diffs`, read from the installed app's app.asar, research note H section 5).
@@ -48,6 +49,30 @@ public enum CodeTokenKind: UInt8, Sendable, CaseIterable {
         }
     }
 
+    /// Redesign light (CandyWrapper's own): pierre-light darkened in each hue until it keeps 4.5:1 on a code block
+    /// over the art (#f1f1f1). Pierre-light's own reach 2.1 to 4.2 there.
+    var redesignLight: UInt32 {
+        switch self {
+        case .plain: 0x0a0a0a
+        case .comment: 0x6c6c6c
+        case .string: 0x117d33
+        case .constant: 0x117592
+        case .keyword, .emphasis: 0xcc285e
+        case .storage: 0xa631be
+        case .function: 0x693acf
+        case .variable: 0xa2591c
+        case .constantName: 0x936210
+        case .parameter: 0x856806
+        case .parameterPlain, .punctuation: 0x636363
+        case .operator: 0x037593
+        case .decorator: 0x1470b4
+        case .escape: 0x0d7a6a
+        case .regex: 0x0e7880
+        case .tag: 0xbb4628
+        case .attribute: 0x0f7c50
+        }
+    }
+
     /// A color that follows the drawing appearance, so one layout serves both themes.
     public var color: NSColor { Self.colors[Int(rawValue)] }
 
@@ -55,8 +80,10 @@ public enum CodeTokenKind: UInt8, Sendable, CaseIterable {
         func c(_ v: UInt32) -> NSColor {
             NSColor(srgbRed: CGFloat(v >> 16 & 0xff) / 255, green: CGFloat(v >> 8 & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: 1)
         }
-        let light = c(kind.hex.light), dark = c(kind.hex.dark)
-        return NSColor(name: nil) { $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light }
+        let light = c(kind.hex.light), dark = c(kind.hex.dark), redesign = c(kind.redesignLight)
+        return NSColor(name: nil) {
+            $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : ThemeRuntime.isDither(dark: false) ? redesign : light
+        }
     }
 }
 

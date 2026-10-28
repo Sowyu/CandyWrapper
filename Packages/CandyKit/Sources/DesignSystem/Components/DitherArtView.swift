@@ -216,7 +216,7 @@ public final class DitherArtView: NSView {
         let duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.2
         CATransaction.begin()
         CATransaction.setAnimationDuration(duration)
-        scrim.backgroundColor = background.withAlphaComponent(DitherArt.scrim(page, display)).cgColor
+        scrim.backgroundColor = background.withAlphaComponent(DitherArt.scrim(page, display, light: !dark)).cgColor
         CATransaction.commit()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         let band = DitherChrome.bandColor(in: self)
@@ -292,13 +292,26 @@ public enum DitherArt {
     /// The scrim for `page` under the system display options. Reduce Transparency covers the art with the solid
     /// background, so the frosted panes over it read as solid surfaces. Increase Contrast keeps the art as a faint
     /// texture: text on the hero and in a thread then sits on about the background itself.
-    nonisolated static func scrim(_ page: Page, _ display: (reduceTransparency: Bool, increaseContrast: Bool)) -> CGFloat {
+    nonisolated static func scrim(_ page: Page, _ display: (reduceTransparency: Bool, increaseContrast: Bool),
+                                  light: Bool = false) -> CGFloat {
         if display.reduceTransparency { return 1 }
+        let scrim: CGFloat = switch page {
+        case .hero: display.increaseContrast ? 0.6 : 0
+        case .thread: display.increaseContrast ? 0.75 : threadScrim
+        case .settings: display.increaseContrast ? 1 : settingsScrim
+        case .page: display.increaseContrast ? 1 : pageScrim
+        }
+        return light ? max(scrim, lightScrim(page)) : scrim
+    }
+
+    /// Light's floor. Dark text loses more to a dot than light text does, so the art stays within 35% of its reach of
+    /// the background: muted text keeps 4.5:1 over the darkest dot. "Background dim" spends the rest in a thread.
+    nonisolated static func lightScrim(_ page: Page) -> CGFloat {
         switch page {
-        case .hero: return display.increaseContrast ? 0.6 : 0
-        case .thread: return display.increaseContrast ? 0.75 : threadScrim
-        case .settings: return display.increaseContrast ? 1 : settingsScrim
-        case .page: return display.increaseContrast ? 1 : pageScrim
+        case .hero: 0.65
+        case .thread: 0.65 + 0.35 * threadScrim
+        case .settings: 0.88
+        case .page: pageScrim
         }
     }
 

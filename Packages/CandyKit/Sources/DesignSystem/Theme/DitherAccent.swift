@@ -27,7 +27,8 @@ public struct DitherAccent: Equatable, Sendable {
         self.id = id; self.label = label; self.light = light; self.dark = dark
     }
 
-    public func accent(dark: Bool) -> String { dark ? self.dark : light }
+    /// Light draws the accent darkened to `lightAccent`, so white labels on it and the focus ring keep AA.
+    public func accent(dark: Bool) -> String { dark ? self.dark : Self.lightAccent(light) }
 
     /// Text on the accent: white while it reads at 3:1 or better (WCAG's floor for bold text and controls), else near black.
     public func foreground(dark: Bool) -> String {
@@ -43,6 +44,17 @@ public struct DitherAccent: Equatable, Sendable {
     }
 
     public var darkColor: NSColor { Self.color(dark) }
+
+    /// Light's accent: `accent` darkened in its own hue until white on it reads at 4.6:1, which also keeps it 3:1
+    /// over the darkest art dot light allows (#d7d7d7, `DitherArt.lightScrim`) for the focus ring. Teal gives #07837a.
+    static func lightAccent(_ accent: String) -> String {
+        func lin(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
+        func gamma(_ c: Double) -> Double { c <= 0.0031308 ? 12.92 * c : 1.055 * pow(c, 1 / 2.4) - 0.055 }
+        let c = rgb(accent)
+        var scale = 1.0
+        while scale > 0, 1.05 / ((lin(c.0) * 0.2126 + lin(c.1) * 0.7152 + lin(c.2) * 0.0722) * scale + 0.05) < 4.6 { scale -= 0.01 }
+        return hex((gamma(lin(c.0) * scale), gamma(lin(c.1) * scale), gamma(lin(c.2) * scale)))
+    }
 
     // MARK: Color math, sRGB
 

@@ -187,6 +187,13 @@ public enum ThemeRuntime {
             })
         }
         func glass(_ palette: Palette, dark: Bool, sidebar: Bool) -> Palette {
+            // Redesign light: the sidebar's menu icons, which T3 mixes toward the sidebar, take the muted icon color
+            // so they keep 3:1.
+            var palette = palette
+            if !dark, input.ditherLight {
+                let members = palette.members, icon = palette.iconMuted
+                palette = Palette(members: { Palette.memberNames[$0] == "--sidebar-icon-color" ? icon : members[$0] })
+            }
             // Dither: the main panel's cards, bubbles and popovers become frosted panes over its art. The sidebar and
             // the panel's own background stay solid.
             if !sidebar, dark ? input.ditherDark : input.ditherLight {

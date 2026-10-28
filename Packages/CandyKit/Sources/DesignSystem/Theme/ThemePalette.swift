@@ -77,18 +77,21 @@ public struct ThemeDefinition: Equatable, Sendable {
         .sidebarRowSelected: "#ffffff17", .sidebarBorder: "#0a0a0b", .terminalBackground: "#0f0f10",
         .terminalCursor: "#2b948b", .terminalSelection: "#1f3d3a",
     ]) { $1 }
+    /// Light departs from Capy where its grays fail WCAG AA over the art: muted text, placeholders and labels reach
+    /// 4.5:1 over the darkest dot the light scrim allows (`DitherArt.lightScrim`), icons and control edges 3:1, the
+    /// accent dark enough for white labels (`DitherAccent.lightAccent`), and dividers show as a line (docs/research/light-mode-readability-2026-10-28.md).
     static let capyLightColors: [ThemeColorRole: String] = standardLightColors.merging([
-        .canvas: "#f9f9f9", .chrome: "#ececec", .toolbar: "#ececec", .toolbarBorder: "#dadada", .toolbarControl: "#ffffff",
+        .canvas: "#f9f9f9", .chrome: "#ececec", .toolbar: "#ececec", .toolbarBorder: "#c2c2c2", .toolbarControl: "#ffffff",
         .toolbarControlHover: "#0000000d", .surface: "#ffffff", .surfaceRaised: "#ffffff", .surfaceOverlay: "#ffffff",
-        .text: "#1e1e1e", .textMuted: "#6c6c6c", .border: "#dadada", .input: "#d4d4d4", .focus: "#0b9f95",
-        .accent: "#0b9f95", .accentForeground: "#ffffff", .secondary: "#0000000d", .secondaryForeground: "#1e1e1e",
-        .muted: "#e1e1e2", .mutedForeground: "#6c6c6c", .placeholder: "#a2a2a2", .secondaryLabel: "#898989",
-        .iconMuted: "#959595", .accentSurface: "#0000000d", .accentSurfaceForeground: "#1e1e1e",
-        .messageSurface: "#efefef", .messageForeground: "#1e1e1e", .messageAction: "#0b9f95",
-        .messageActionForeground: "#ffffff", .messageActionHover: "#098a81", .codeBackground: "#f4f4f4",
-        .sidebar: "#ececec", .sidebarForeground: "#1e1e1e", .sidebarMutedForeground: "#898989",
+        .text: "#1e1e1e", .textMuted: "#5a5a5a", .border: "#c2c2c2", .input: "#858585", .focus: "#07837a",
+        .accent: "#07837a", .accentForeground: "#ffffff", .secondary: "#0000000d", .secondaryForeground: "#1e1e1e",
+        .muted: "#e1e1e2", .mutedForeground: "#5a5a5a", .placeholder: "#5c5c5c", .secondaryLabel: "#5c5c5c",
+        .iconMuted: "#767676", .accentSurface: "#0000000d", .accentSurfaceForeground: "#1e1e1e",
+        .messageSurface: "#efefef", .messageForeground: "#1e1e1e", .messageAction: "#07837a",
+        .messageActionForeground: "#ffffff", .messageActionHover: "#06736c", .codeBackground: "#f4f4f4",
+        .sidebar: "#ececec", .sidebarForeground: "#1e1e1e", .sidebarMutedForeground: "#5c5c5c",
         .sidebarControlSurface: "#e4e4e4", .sidebarRowHover: "#0000000a", .sidebarRowActive: "#00000012",
-        .sidebarRowSelected: "#00000012", .sidebarBorder: "#ececec",
+        .sidebarRowSelected: "#00000012", .sidebarBorder: "#ececec", .warningForeground: "#983d00", .errorForeground: "#a80005",
     ]) { $1 }
 
     /// The theme picker's fixed cards: T3's built-ins, then Glass and Dither.
