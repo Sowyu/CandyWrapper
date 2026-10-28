@@ -147,7 +147,7 @@ public final class ComposerControlView: ControlView {
         let font = capy ? DSFont.ui(13, weight: .medium) : DSFont.ui(14, weight: .medium)
         guard modern, font.fontName.hasPrefix(".AppleSystemUIFont") else { return font }
         // ComposerControl.tsx:16 asks for CSS 500; AppKit's named medium resolves to SF 510.
-        // ponytail: default SF composer labels use 505; remove compensation when Core Text matches Chromium's CSS 500 coverage.
+        // ponytail: default SF composer labels use 505, remove compensation when Core Text matches Chromium's CSS 500 coverage.
         return DSFont.cached("composer-medium", font.pointSize, .medium) {
             let descriptor = font.fontDescriptor.addingAttributes([
                 .variation: [NSNumber(value: 0x77676874): NSNumber(value: 505)]])

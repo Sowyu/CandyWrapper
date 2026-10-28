@@ -10,7 +10,7 @@ The initial parallel `scripts/test --filter 'Fidelity|RedesignBaselineTests'` re
 
 The Redesign fixture now scopes settings-page construction with `NSAppearance.performAsCurrentDrawingAppearance` in Aqua. That preserves the original construction colors and restores the prior drawing appearance immediately. Theme globals remain pinned and restored synchronously, with no suspension during the test. Production rendering, baseline images and the zero-pixel assertion are unchanged.
 
-The first focused parallel check passes all 80 exact images. Final repeated combined verification follows after the two layout fixes.
+The focused parallel check and all three final combined runs pass all 80 exact images. No standalone-only restriction remains.
 
 ## Source audit
 
@@ -32,7 +32,7 @@ The one-point correction aligns Runtime, Environment and Models with the recorde
 
 The stacked provider card also measured its list at the 272pt desktop-column width even when it rendered at 716pt. That produced 20pt of unused height below the editor. The default layout now measures the list at its actual width; the classic layout keeps its existing measurements.
 
-The focused panel comparison improves from 5.25% to 3.39% light and 5.48% to 3.62% dark, under the unchanged 5% ceiling. Reviewed the offscreen ref/ours/diff artifacts in `/tmp/design-final-misc-footer4/settings-screens/`. The panel crop, scroll offset, image references and comparison tolerance are unchanged.
+The focused panel comparison improves from 5.25% to 3.39% light and 5.48% to 3.62% dark, under the unchanged 5% ceiling. Reviewed the offscreen ref/ours/diff artifacts in `/tmp/design-final-misc-fidelity-3/settings-screens/`. The panel crop, scroll offset, image references and comparison tolerance are unchanged.
 
 ## Footer controls
 
@@ -41,3 +41,31 @@ AppKit's named medium resolves to SF's weight-510 instance. T3 requests CSS 500 
 This applies to the shared default composer control style, not to one fixture or appearance. Glass, Redesign and custom font families retain their previous fonts. The control re-resolves its font when font preferences change; a regression test checks scaling and switching to a custom family. Font instances share the existing DSFont cache, so layout and hover do not create new descriptors and nothing runs while idle.
 
 The unchanged 03c crop is still (841.5, 721, 155.5, 28) CSS points. Its native flow width improves from 155.188659 to 155.052902pt; the existing half-point enclosure remains 155.5pt. No test crop, ceiling, tolerance, reference or exception changed. The real picker check improves from 4.87% to 4.73% light and from 5.18% to 4.87% dark. Final images are in `/tmp/design-final-misc-fidelity-3/pickers/`.
+
+
+## Final validation
+
+All runs use scripts/test in background subprocesses with a 30-minute limit. Parallel testing remains enabled. No --no-parallel argument was used.
+
+The three consecutive final combined runs use `scripts/test --filter 'Fidelity|RedesignBaselineTests'` on the final rendering code (53c0905c). Each passes all 80 exact Redesign captures, both Providers captures, both direct footer assertions, and all other assigned cases. Each also passes the 66 DesignSystem fidelity tests. The combined command exits with the same six issues in the two unrelated suites below. Their renderers are unchanged here and belong to the parallel diff task.
+
+| Case | Before light / dark | Final light / dark | Ceiling |
+|---|---:|---:|---:|
+| 18-settings-providers | 5.25% / 5.48% | 3.39% / 3.62% | 5.00% |
+| 03c-footer-controls | 4.87% / 5.18% | 4.73% / 4.87% | 5.00% |
+
+The unchanged failures in every final combined run are:
+
+| Suite and case | Light | Dark | Ceiling |
+|---|---:|---:|---:|
+| DiffFidelityTests, 09-diff-split | 10.65% | 10.64% | 8.50% |
+| DiffFidelityTests, 10-diff-unified | 9.48% | 9.46% | 8.50% |
+| ChangedFilesFidelityTests, 48-diff-turn-file.chat | 6.94% | 7.05% | 5.00% |
+
+Final combined logs and ref/ours/diff artifacts are `/tmp/design-final-misc-fidelity-{3,4,5}.log` and `/tmp/design-final-misc-fidelity-{3,4,5}/`. The footer reference PNGs before and after are byte-identical, confirming that the existing dynamic crop still encloses exactly the original pixels.
+
+Three final `scripts/test --fast` runs pass with parallel testing enabled, each with 2,224 Swift Testing tests and 19 XCTest tests. The new font-preference regression passes in every run. Logs are `/tmp/design-final-misc-fast-{1,2,3}.log`.
+
+An earlier diagnostic combined run also hit ThreadSweepFidelityTests' existing mean assertion (5.38% against 5%). The unmodified starting code showed the same value. All three final combined runs pass that assertion at 4.30%; no task/toast view, assertion or reference changed here.
+
+Reviewed the final source diff and offscreen Providers and footer images in both appearances. No baseline/reference image, threshold, exception or crop changed. No idle work, timer or observer was added. git diff --check and the commit-range secret scan pass. Disk stayed above 40 GiB free. No native app, real server turn, push or release was performed. The integration owner retains the full release/performance review after merging the parallel diff fixes.
