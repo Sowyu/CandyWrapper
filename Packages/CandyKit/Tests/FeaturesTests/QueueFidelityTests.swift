@@ -27,7 +27,7 @@ struct QueueFidelityTests {
         panel.queue.state = ComposerLogic.QueueState(items: [
             .init(runId: RunId("q1"), messageId: nil, text: "second queued message"),
             .init(runId: RunId("q2"), messageId: nil, text: "third queued message"),
-        ], activeRunId: RunId("run"), canPromoteToSteer: true)
+        ], activeRunId: RunId("run"), canReorder: true, canPromoteToSteer: true)
         panel.layoutSubtreeIfNeeded()
         panel.timeline.scroll(toFraction: 1)
         return Snapshot.image(of: ThreadFidelityTests.onSurface(panel), size: panel.frame.size, scale: 2, dark: dark)

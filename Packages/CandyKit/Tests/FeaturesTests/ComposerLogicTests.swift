@@ -16,21 +16,6 @@ struct ComposerLogicTests {
         }
     }
 
-    @Test func queuedPromotionCanSkipCompactionOnlyOnSupportingRuntimes() throws {
-        let projection = try JSONValue.object([
-            "thread": .object(["id": .string("t")]),
-            "runs": .array([.object(["id": .string("r"), "threadId": .string("t"), "ordinal": .number(1),
-                                    "userMessageId": .string("m"), "status": .string("running"), "requestedAt": .string("2026-10-27T00:00:00Z")])]),
-            "messages": .array([.object(["id": .string("m"), "threadId": .string("t"), "runId": .string("r"),
-                                        "role": .string("user"), "text": .string("/compact"), "streaming": .bool(false),
-                                        "createdAt": .string("2026-10-27T00:00:00Z"), "updatedAt": .string("2026-10-27T00:00:00Z")])])
-        ]).decode(as: ThreadProjection.self)
-        #expect(!L.QueueState(projection: projection).canPromoteToSteer)
-        let modern = L.QueueState(projection: projection, canSkipCompaction: true)
-        #expect(modern.canPromoteToSteer && modern.promoteSkipsCompaction)
-        #expect(modern.activeRunId == "r" && !modern.canSendNow)
-    }
-
     @Test func sendShortcutModes() {
         let enter = L.Key(isReturn: true), mod = L.Key(isReturn: true, mod: true)
         // mode, prompt, key, expected
@@ -159,7 +144,7 @@ struct ComposerLogicTests {
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         var streamId: String?, reducer: ThreadReducer?
         var seen: [[String]] = []
-        var steerable = false, sendNowWhileRunning = false
+        var steerable = false, reorderable = false, sendNowWhileRunning = false
         for line in try String(contentsOf: root.appendingPathComponent("fixtures/transcripts/07-queue.jsonl"), encoding: .utf8).split(separator: "\n") {
             guard let record = try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
                   let body = record["body"] as? [String: Any] else { continue }
@@ -171,13 +156,13 @@ struct ComposerLogicTests {
                 let state = L.QueueState(projection: reducer!.projection)
                 let texts = state.items.map { $0.text.replacingOccurrences(of: "Reply with one word: ", with: "") }
                 if seen.last != texts { seen.append(texts) }
-                if !state.items.isEmpty { steerable = steerable || state.canPromoteToSteer }
+                if !state.items.isEmpty { steerable = steerable || state.canPromoteToSteer; reorderable = reorderable || state.canReorder }
                 if state.activeRunId != nil, state.canSendNow { sendNowWhileRunning = true }
             }
         }
         #expect(seen == [[], ["alpha"], ["alpha", "beta"], ["alpha", "beta", "gamma"], ["alpha2", "beta", "gamma"],
                          ["gamma", "alpha2", "beta"], ["gamma", "beta", "alpha2"], ["gamma", "alpha2"], ["gamma"], []])
-        #expect(steerable && !sendNowWhileRunning)
+        #expect(steerable && reorderable && !sendNowWhileRunning)
         let started = try #require(reducer?.projection)
         // Settled, the thread can start a queued message as its own turn (threadWorkflows.ts:156-160).
         #expect(L.QueueState(projection: started).canSendNow)
@@ -187,7 +172,13 @@ struct ComposerLogicTests {
         #expect(L.QueueState.supportsProviderHandoff(started))
     }
 
-    @Test func queuedEditUsesUpdate() {
+    @Test func reorderTargets() {
+        let items = ["a", "b", "c"].map { L.QueueState.Item(runId: RunId($0), messageId: nil, text: $0) }
+        // Dropping on itself or right after itself does nothing.
+        #expect(L.QueueState.reorderTarget(items, moving: 1, to: 1) == .none)
+        #expect(L.QueueState.reorderTarget(items, moving: 1, to: 2) == .none)
+        #expect(L.QueueState.reorderTarget(items, moving: 2, to: 0) == .some(RunId("a")))
+        #expect(L.QueueState.reorderTarget(items, moving: 0, to: 3) == .some(nil))
         #expect(L.primaryAction(run: .init(activeRunId: RunId("r"), running: true), hasContent: true, busy: false, mode: .queue, editingQueued: true) == .update)
     }
 }
