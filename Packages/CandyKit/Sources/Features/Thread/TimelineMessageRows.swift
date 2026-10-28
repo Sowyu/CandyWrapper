@@ -276,6 +276,7 @@ final class UserMessageRowView: TimelineRowView {
         editButton.isHidden = (m.inputIntent != .turnStart && m.inputIntent != .queuedTurn) || (fold != nil && !item.ui.messageExpanded)
         markdown.inlineSkills = context.model?.inlineSkills ?? []
         markdown.cwd = context.markdownCwd
+        markdown.audioPlayback = context.model?.audioPlayback
         markdown.onOpenFile = context.model?.openFile
         // `renderContextReference` (MessagesTimeline.tsx:2305-2345): context links draw as chips.
         let model = context.model
@@ -320,7 +321,7 @@ final class UserMessageRowView: TimelineRowView {
         return markdown.convert(rect, to: self)
     }
 
-    override func setContentVisible(_ visible: Bool) { attachments.setMediaVisible(visible) }
+    override func setContentVisible(_ visible: Bool) { super.setContentVisible(visible); attachments.setMediaVisible(visible) }
     override func prepareForReuse() { attachments.setMediaVisible(false); super.prepareForReuse() }
 
     /// `text.split(/\r?\n/, 1)[0]`.
@@ -573,7 +574,7 @@ final class WorkflowOpeningRowView: TimelineRowView {
         return markdown.convert(rect, to: self)
     }
 
-    override func setContentVisible(_ visible: Bool) { sections.forEach { $0.members.forEach { $0.contentVisible = visible } } }
+    override func setContentVisible(_ visible: Bool) { super.setContentVisible(visible); sections.forEach { $0.members.forEach { $0.contentVisible = visible } } }
     override func prepareForReuse() {
         super.prepareForReuse()
         plan = WorkflowOpening.Plan()
@@ -713,6 +714,7 @@ final class AssistantMessageRowView: TimelineRowView {
         markdown.isHidden = isEmpty
         markdown.inlineSkills = context.model?.inlineSkills ?? []
         markdown.cwd = context.markdownCwd
+        markdown.audioPlayback = context.model?.audioPlayback
         markdown.onOpenFile = context.model?.openFile
         // A closed fence draws its diagram while the message streams; only the fence still being written waits.
         // ponytail: a diagram that appears mid-stream skips T3's 600ms fade (`.chat-markdown-mermaid`, index.css:2047-2049);
@@ -957,6 +959,7 @@ final class PlanRowView: TimelineRowView {
         let body = collapsed ? ProposedPlanText.collapsedPreview(plan.planMarkdown) : parts.body
         markdown.inlineSkills = context.model?.inlineSkills ?? []
         markdown.cwd = context.markdownCwd
+        markdown.audioPlayback = context.model?.audioPlayback
         markdown.onOpenFile = context.model?.openFile
         markdown.document = context.document(item.id + (collapsed ? ":preview" : ""), body, lineBreaks: false)
         toggle.title = item.ui.planExpanded ? "Collapse plan" : "Expand plan"
@@ -1076,7 +1079,7 @@ final class UserMessageAttachmentsView: DSView {
         for a in m.attachments {
             let type = a["type"]?.stringValue ?? "", id = a["id"]?.stringValue ?? "", name = a["name"]?.stringValue ?? ""
             let mime = a["mimeType"]?.stringValue ?? ""
-            if mime.hasPrefix("video/") || mime.hasPrefix("audio/") { media.append(a) }
+            if mime.hasPrefix("video/") || (a["downloadable"] != .bool(false) && InlineAudioSource.isAudio(name: name, mimeType: mime)) { media.append(a) }
             else if type == "image" {
                 if !name.hasPrefix("preview-annotation-") { images.append(Image(attachmentId: id, name: name, source: a["source"])) }
             } else if !(type == "file" && chipped.contains(id)) {
@@ -1093,7 +1096,9 @@ final class UserMessageAttachmentsView: DSView {
     private func rebuild() {
         mediaViews.forEach { $0.releasePlayer(); $0.removeFromSuperview() }
         mediaViews = media.map { value in
-            let view = ThreadMediaAttachmentView(id: value["id"]?.stringValue ?? "", name: value["name"]?.stringValue ?? "", audio: value["mimeType"]?.stringValue?.hasPrefix("audio/") == true, loader: model?.attachmentMediaURL)
+            let view = ThreadMediaAttachmentView(id: value["id"]?.stringValue ?? "", name: value["name"]?.stringValue ?? "", audio: InlineAudioSource.isAudio(name: value["name"]?.stringValue ?? "", mimeType: value["mimeType"]?.stringValue ?? ""),
+                                                 loader: model?.attachmentMediaURL, playback: model?.audioPlayback,
+                                                 onOpen: { [weak self] in self?.model?.onOpenAttachment?(value, false) })
             addSubview(view); return view
         }
         cells.forEach { $0.removeFromSuperview() }

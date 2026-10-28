@@ -203,19 +203,32 @@ public struct MarkdownContextChips: Equatable {
         }
     }
 
+    /// T3 3814 TimelineUserMessageRow.tsx:387-391: the inline player replaces an audio file's chip.
+    var inlineAudioContextIds: Set<String> {
+        Set(records.compactMap { id, record in
+            guard record["kind"] == .string("file"), let attachmentId = record["attachmentId"]?.stringValue,
+                  let attachment = attachments[attachmentId], attachment["downloadable"] != .bool(false),
+                  InlineAudioSource.isAudio(name: attachment["name"]?.stringValue ?? "", mimeType: attachment["mimeType"]?.stringValue ?? "") else { return nil }
+            return id
+        })
+    }
+
     /// `![label](t3-context://…)` parses as an image; T3 renders it through the same chip (ChatMarkdown.tsx:3180-3199).
-    static func document(_ document: MarkdownDocument) -> MarkdownDocument {
+    static func document(_ document: MarkdownDocument, hiddenContextIds: Set<String> = []) -> MarkdownDocument {
         func isContext(_ url: URL?) -> Bool { url?.scheme == "t3-context" }
         func runs(_ runs: [InlineRun]) -> [InlineRun] {
-            guard runs.contains(where: { isContext($0.image) }) else { return runs }
-            return runs.map { run in
+            guard !hiddenContextIds.isEmpty || runs.contains(where: { isContext($0.image) }) else { return runs }
+            return runs.compactMap { run in
+                if let href = run.link ?? run.image, let ref = ComposerContext.parseHref(href.absoluteString), hiddenContextIds.contains(ref.contextId) { return nil }
                 guard isContext(run.image) else { return run }
                 var r = run; r.link = run.image; r.image = nil; return r
             }
         }
         func block(_ b: MarkdownBlock) -> MarkdownBlock {
             switch b {
-            case .image(let alt, let url) where isContext(url): return .paragraph([InlineRun(text: alt, link: url)])
+            case .image(let alt, let url) where isContext(url):
+                if let ref = ComposerContext.parseHref(url.absoluteString), hiddenContextIds.contains(ref.contextId) { return .paragraph([]) }
+                return .paragraph([InlineRun(text: alt, link: url)])
             case .paragraph(let r): return .paragraph(runs(r))
             case .heading(let level, let r): return .heading(level: level, runs(r))
             case .blockquote(let children): return .blockquote(children.map(block))

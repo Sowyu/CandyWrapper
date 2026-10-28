@@ -808,6 +808,14 @@ private struct Builder {
             let strut = TextLine(NSAttributedString(string: " ", attributes: [.font: MarkdownStyle.font(MarkdownStyle.fontSize)]))
             let below = MarkdownStyle.lineHeight - strut.baseline(top: 0, lineHeight: MarkdownStyle.lineHeight)
             let source = MarkdownImageSource.classify(url.absoluteString, workspaceRoot: cwd)
+            if InlineAudioSource.isAudio(name: url.absoluteString) {
+                return Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin, height: 76 + below,
+                           items: [.remoteImage(url, alt, CGRect(x: 0, y: 0, width: min(576, width), height: 76))])
+            }
+            // T3 3814 ChatMarkdown.tsx:1408-1412: an arbitrary host-file embed is a file chip.
+            if case .workspaceFile = source, ![FilePreviewKind.image, .video, .audio].contains(FilePreviewKind.of(url.path)) {
+                return layout(.paragraph([InlineRun(text: url.lastPathComponent, link: url)]), width: width, context: context, tight: tight)
+            }
             let key = source.key
             if let natural = onMain({ MarkdownImages.failed.contains(key) ? nil : MarkdownImages.sizes[key] }) {
                 let border: CGFloat = source.framed ? 1 : 0

@@ -25,7 +25,7 @@ public struct FileLinkMeta: Sendable, Equatable {
     /// workspace-relative path, or the absolute host path for a non-media file outside the workspace.
     public var panelPath: String? {
         if let workspaceRelativePath { return workspaceRelativePath }
-        return !FileLinks.isMedia(basename) && FileLinks.isAbsolutePath(filePath) ? filePath : nil
+        return FileLinks.isAbsolutePath(filePath) ? filePath : nil
     }
 }
 
