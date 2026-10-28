@@ -20,6 +20,8 @@ public final class SettingsRowView: DSView {
     private var controlWidth: CGFloat = 0
     /// `status`: a line under the description (`pt-0.5 text-xs text-muted-foreground`), destructive for errors.
     public var status: String? { didSet { statusText.text = status ?? ""; statusText.isHidden = status == nil; invalidateIntrinsicContentSize(); needsLayout = true } }
+    /// Mixed inline status content can have a taller baseline-aligned line box.
+    public var statusLineHeight: CGFloat = 16 { didSet { statusText.lineHeight = statusLineHeight; invalidateIntrinsicContentSize(); needsLayout = true } }
     public var statusIsError = false {
         didSet {
             statusText.color = statusIsError ? Themed.color(\.destructive) : Themed.color(\.contrastMutedForeground)

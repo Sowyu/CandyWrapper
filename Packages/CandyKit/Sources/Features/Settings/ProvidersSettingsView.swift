@@ -812,6 +812,12 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             header.group.rows = [nameRow]
         } else {
             let status = SettingsRowView(title: "Status")
+            // RedactedSensitiveText.tsx:47 uses 11pt mono at 1.5 line height. Baseline alignment
+            // with the 12/16 status spans makes the account line 17pt tall.
+            if provider?.auth?["status"]?.stringValue == "authenticated",
+               let email = provider?.auth?["email"]?.stringValue, !email.isEmpty {
+                status.statusLineHeight = 17
+            }
             status.status = statusLine(row, provider)
             header.group.rows = [status, nameRow]
         }
@@ -1170,12 +1176,14 @@ final class ProvidersSectionView: DSView, SettingsGroupRow {
 
     // ProviderSettingsPanel.tsx:1031-1049: divide-y is inside each row's box.
     private var listGap: CGFloat { DesignGeometry.usesClassic(self) ? 1 : 0 }
-    private func listHeight() -> CGFloat { list.reduce(0) { $0 + $1.height(forWidth: 272) + listGap } + 44 }
+    private func listHeight(width: CGFloat) -> CGFloat { list.reduce(0) { $0 + $1.height(forWidth: width) + listGap } + 44 }
 
     func height(forWidth width: CGFloat) -> CGFloat {
         let editorWidth = width >= 768 ? width - 272 - 2 : width - 2
         let editorHeight = (editor?.height(forWidth: editorWidth) ?? 60)
-        let cardHeight = width >= 768 ? max(512, listHeight(), editorHeight) : listHeight() + 1 + editorHeight
+        let listWidth: CGFloat = width >= 768 || DesignGeometry.usesClassic(self) ? 272 : width - 2
+        let listHeight = listHeight(width: listWidth)
+        let cardHeight = width >= 768 ? max(512, listHeight, editorHeight) : listHeight + 1 + editorHeight
         return 28 + 10 + cardHeight + 2
     }
 
@@ -1594,7 +1602,8 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
             }
             count.frame = NSRect(x: x, y: y + 6, width: ceil(count.textWidth) + 1, height: 16)
             let aw = addButton.intrinsicContentSize.width
-            addButton.frame = NSRect(x: width - 16 - aw, y: y + 2, width: aw, height: 24)
+            // ProviderModelsSection.tsx:338 pulls the ghost button's end padding to the column edge.
+            addButton.frame = NSRect(x: width - (DesignGeometry.usesClassic(self) ? 16 : 8) - aw, y: y + 2, width: aw, height: 24)
         }
         y += 28 + 8
         for r in rows {
@@ -1724,15 +1733,17 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
             var ax = toggle.frame.minX - 8
             for b in [remove, edit, down, up] where !b.isHidden { ax -= 20; b.frame = NSRect(x: ax, y: (h - 20) / 2, width: 20, height: 20); ax -= 2 }
             let actionsLeft = min(ax, toggle.frame.minX - 8 - 88)
-            let cw = ceil(caps.textWidth) + (caps.text.isEmpty ? 0 : 1)
+            let classic = DesignGeometry.usesClassic(self)
+            func textWidth(_ label: LabelView) -> CGFloat { classic ? ceil(label.textWidth) + 1 : label.textWidth }
+            let cw = caps.text.isEmpty ? 0 : textWidth(caps)
             caps.frame = NSRect(x: actionsLeft - 8 - cw, y: (h - 14) / 2, width: cw, height: 14)
             let textRight = caps.frame.minX - 8
             var x: CGFloat = 8 + 24 + 8
-            let nw = min(ceil(name.textWidth) + 1, max(0, textRight - x))
+            let nw = min(textWidth(name), max(0, textRight - x))
             name.frame = NSRect(x: x, y: (h - 16) / 2, width: nw, height: 16)
             x += nw + 8
             if !slug.text.isEmpty {
-                let sw = min(ceil(slug.textWidth) + 1, max(0, textRight - x))
+                let sw = min(textWidth(slug), max(0, textRight - x))
                 slug.frame = NSRect(x: x, y: (h - 14) / 2 + 1, width: sw, height: 14)
                 x += sw + 8
             }
