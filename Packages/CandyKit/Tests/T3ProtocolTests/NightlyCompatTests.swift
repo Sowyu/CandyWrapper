@@ -115,6 +115,35 @@ struct NightlyCompatTests {
         #expect(configSeen && shellThreads > 100 && threadSeen)
     }
 
+    /// Read only against sandbox 3824 (T3 3824 packages/contracts/src/server.ts and orchestrationV2.ts): no capability
+    /// changed and the deferred-work fields arrive only when asked for, so the same session decodes.
+    @Test func recorded3824ConfigShellAndThreadDecode() throws {
+        var configSeen = false, shellThreads = 0, threadSeen = false
+        for frame in try WireTests.load("25-nightly-3824") where frame.dir == "recv" && frame.kind == "ws" {
+            let value = try JSONDecoder().decode(JSONValue.self, from: frame.bodyData)
+            if value["requestId"]?.stringValue == "1", let config = value["exit"]?["value"] {
+                let decoded = try config.decode(as: ServerProviderConfig.self)
+                #expect(decoded.capabilities.contains("peerLinks"))
+                configSeen = true
+            }
+            for item in value["values"]?.arrayValue ?? [] {
+                if value["requestId"]?.stringValue == "3", case .snapshot(let shell, _) = try item.decode(as: ShellStreamItem.self) {
+                    shellThreads = max(shellThreads, shell.threads.count)
+                }
+                if value["requestId"]?.stringValue == "4" {
+                    _ = try item.decode(as: ThreadStreamItem.self)
+                    if let projection = item["projection"] {
+                        let decoded = try projection.decode(as: ThreadProjection.self)
+                        #expect(Set(decoded.visibleTurnItems.map(\.item.type.rawValue)).isSuperset(of: ["fork", "compaction", "subagent"]))
+                        #expect(!decoded.visibleTurnItems.contains { $0.item.raw["deferredWork"] != nil })
+                        threadSeen = true
+                    }
+                }
+            }
+        }
+        #expect(configSeen && shellThreads > 100 && threadSeen)
+    }
+
     @Test func futureRecordedConfigAndFramesDecode() throws {
         var unknown = 0, configSeen = false
         for frame in try WireTests.load("21-future-server") where frame.dir == "recv" {
