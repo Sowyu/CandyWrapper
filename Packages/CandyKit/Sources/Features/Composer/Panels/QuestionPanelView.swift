@@ -246,7 +246,7 @@ public final class QuestionPanelView: ComposerBannerView {
         for (i, option) in question.options.enumerated() {
             rows[i].configure(option, shortcut: i < 9 ? i + 1 : nil,
                               selected: !customActive && progress.selectedOptionValues.contains(option.identity),
-                              disabled: isResponding)
+                              disabled: isResponding, multiSelect: question.multiSelect)
         }
         needsLayout = true
         onChange?()
@@ -320,35 +320,42 @@ private final class HeaderButton: ControlView {
 }
 
 /// One option button: `px-2.5 py-2 rounded-md gap-2`, label 14 medium, an optional 11px
-/// description, then the check or the number key in a bare 20px `kbd`.
-private final class OptionRow: DSView {
+/// description, with a radio or checkbox at the left and a number key at the right.
+final class OptionRow: DSView {
     var onClick: (() -> Void)?
     private(set) var value = ""
     private var selected = false, hovered = false, disabled = false
 
     private let label = glassLabel(font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground, 0.85), lineHeight: 20)
     private let detail = glassBlock(font: DSFont.ui(11), color: Themed.color(\.secondaryLabel), lineHeight: 16)
-    private let key = glassLabel(font: SB.tabular(10, .medium), color: Themed.color(\.mutedForeground), lineHeight: 14)
-    private let check = IconView(name: .check, size: 14, strokeColor: Themed.color(\.primary))
+    let key = KbdView()
+    let radio = RadioView()
+    let checkbox = CheckboxView()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         layer?.cornerRadius = 8
-        key.alignment = .center
-        [label, detail, key, check].forEach(addSubview)
+        key.smoothsFont = false
+        radio.setAccessibilityElement(false)
+        checkbox.setAccessibilityElement(false)
+        [label, detail, key, radio, checkbox].forEach(addSubview)
     }
 
-    func configure(_ option: UserInputQuestion.Option, shortcut: Int?, selected: Bool, disabled: Bool) {
+    func configure(_ option: UserInputQuestion.Option, shortcut: Int?, selected: Bool, disabled: Bool, multiSelect: Bool) {
         value = option.identity
         label.text = option.label
         detail.text = option.description
         detail.isHidden = option.description == option.label || option.description.isEmpty
-        key.text = shortcut.map(String.init) ?? ""
-        key.isHidden = selected || shortcut == nil
-        check.isHidden = !selected
+        key.keys = shortcut.map(String.init) ?? ""
+        key.isHidden = shortcut == nil
+        radio.isHidden = multiSelect
+        checkbox.isHidden = !multiSelect
+        radio.isChecked = selected
+        checkbox.value = selected ? .on : .off
         alphaValue = disabled ? 0.5 : 1
         setAccessibilityRole(.button)
         setAccessibilityLabel(option.label)
+        setAccessibilityValue(selected ? 1 : 0)
         if selected != self.selected || disabled != self.disabled {
             self.selected = selected
             self.disabled = disabled
@@ -358,7 +365,7 @@ private final class OptionRow: DSView {
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
-        let textWidth = max(0, width - 20 - 8 - 20)
+        let textWidth = max(0, width - 10 - 16 - 10 - 8 - 20 - 10)
         return 8 + 20 + (detail.isHidden ? 0 : 2 + detail.height(forWidth: textWidth)) + 8
     }
 
@@ -378,11 +385,19 @@ private final class OptionRow: DSView {
     override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
-        let textWidth = max(0, w - 20 - 8 - 20)
-        label.frame = NSRect(x: 10, y: 8, width: textWidth, height: 20)
-        detail.frame = NSRect(x: 10, y: 30, width: textWidth, height: max(0, h - 38))
-        key.frame = NSRect(x: w - 10 - 20, y: (h - 14) / 2, width: 20, height: 14)
-        check.frame = NSRect(x: w - 10 - 14, y: (h - 14) / 2, width: 14, height: 14)
+        let textWidth = max(0, w - 10 - 16 - 10 - 8 - 20 - 10)
+        label.frame = NSRect(x: 36, y: 8, width: textWidth, height: 20)
+        detail.frame = NSRect(x: 36, y: 30, width: textWidth, height: max(0, h - 38))
+        // T3 3814, ComposerPendingUserInputPanel.tsx:260-280: both controls align to the
+        // label's first line. Selection never replaces the number key.
+        key.frame = NSRect(x: w - 10 - 20, y: 8, width: 20, height: 20)
+        radio.frame = NSRect(x: 10, y: 10, width: 16, height: 16)
+        checkbox.frame = radio.frame
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // Indicators are decoration; the row owns selection and single-choice auto-advance.
+        bounds.contains(convert(point, from: superview)) ? self : nil
     }
 
     override func updateTrackingAreas() {
