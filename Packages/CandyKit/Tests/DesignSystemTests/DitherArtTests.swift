@@ -40,6 +40,33 @@ struct DitherArtTests {
         #expect(DitherArt.fade(0.5) == 0.15 && DitherArt.fade(1) < 0.4)
     }
 
+    /// "Use desktop" never leaves the panel blank: a nil desktop URL or a file that won't decode still renders art,
+    /// and a `.madesktop`, which macOS's own wallpapers are, renders its still thumbnail.
+    @Test func unreadableOrMissingPicturesStillRenderArt() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "dither-fallback-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let bg = 10.0 / 255
+        func request(_ url: URL?, fallbacks: [URL] = []) -> DitherArt.Request {
+            .init(url: url, width: 80, height: 60, background: [bg, bg, bg], scale: 2, fallbacks: fallbacks)
+        }
+        func lit(_ image: CGImage?) -> Int { image.map { bytes($0).enumerated().filter { $0.offset % 4 == 0 && $0.element != 10 }.count } ?? 0 }
+        let broken = dir.appending(path: "broken.jpg")
+        try Data("not a picture".utf8).write(to: broken)
+        #expect(lit(DitherArt.render(request(nil))) > 0)
+        #expect(lit(DitherArt.render(request(broken))) > 0)
+        #expect(lit(DitherArt.render(request(dir.appending(path: "missing.png")))) > 0)
+        // A fallback that reads wins over the built-in picture.
+        let bright = try picture(gray: 0.9, in: dir)
+        #expect(DitherArt.render(request(broken, fallbacks: [bright])).map(bytes) == DitherArt.render(request(bright)).map(bytes))
+
+        let madesktop = dir.appending(path: "Wallpaper.madesktop")
+        try PropertyListSerialization.data(fromPropertyList: ["thumbnailPath": bright.path, "isDynamic": false] as [String: Any], format: .xml, options: 0)
+            .write(to: madesktop)
+        #expect(DitherArt.resolved(madesktop) == bright)
+        #expect(DitherArt.render(request(madesktop)).map(bytes) == DitherArt.render(request(bright)).map(bytes))
+    }
+
     /// The new-thread reveal starts empty, grows in Bayer order and ends on the resting art, byte for byte.
     @Test func revealFramesGrowFromTheBackgroundToTheRestingArt() throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: "dither-reveal-\(UUID().uuidString)")

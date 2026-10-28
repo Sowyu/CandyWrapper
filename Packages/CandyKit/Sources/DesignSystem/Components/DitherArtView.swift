@@ -41,9 +41,20 @@ public final class DitherArtView: NSView {
         Self.arts.add(self)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(displayOptionsChanged),
                                                           name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+        // macOS posts nothing when the desktop picture changes or rotates, so the art checks it again whenever the
+        // desktop could have changed under it. A check costs nothing when the picture is the same.
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(desktopMayHaveChanged),
+                                                          name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(desktopMayHaveChanged),
+                                               name: NSApplication.didBecomeActiveNotification, object: nil)
     }
 
-    deinit { NSWorkspace.shared.notificationCenter.removeObserver(self) }
+    @objc private func desktopMayHaveChanged(_ note: Notification) { refresh() }
+
+    deinit {
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        NotificationCenter.default.removeObserver(self)
+    }
 
     @objc private func displayOptionsChanged(_ note: Notification) { updateScrim() }
 
@@ -158,6 +169,15 @@ public final class DitherArtView: NSView {
         refresh()
     }
 
+    /// A window moved to another screen shows that screen's desktop picture.
+    public override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if let window { NotificationCenter.default.removeObserver(self, name: NSWindow.didChangeScreenNotification, object: window) }
+        if let newWindow {
+            NotificationCenter.default.addObserver(self, selector: #selector(desktopMayHaveChanged), name: NSWindow.didChangeScreenNotification, object: newWindow)
+        }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
     /// A move between screens refreshes the art for the new backing scale.
     public override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
@@ -233,14 +253,13 @@ public final class DitherArtView: NSView {
         let rect = artRect
         guard let window, rect.width >= 1, rect.height >= 1 else { return }
         let dark = effectiveAppearance.isDark
-        guard let url = ThemeRuntime.ditherPicture ?? DitherArt.desktopPicture(for: window.screen) else {
-            art.contents = nil; shown = nil; return
-        }
+        let url = ThemeRuntime.ditherPicture ?? DitherArt.desktopPicture(for: window.screen)
         let background = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background
         let scale = window.backingScaleFactor
         let request = DitherArt.Request(url: url, width: Int((rect.width / DitherArt.dot).rounded(.up)),
                                         height: Int((rect.height / DitherArt.dot).rounded(.up)),
-                                        background: [background.srgb.x, background.srgb.y, background.srgb.z], scale: scale)
+                                        background: [background.srgb.x, background.srgb.y, background.srgb.z], scale: scale,
+                                        fallbacks: [DitherArt.desktopPicture(for: window.screen), DitherArt.defaultDesktop].compactMap { $0 }.filter { $0 != url })
         guard request != shown, request != pending else { return }
         pending = request
         debounce?.cancel()
@@ -252,7 +271,8 @@ public final class DitherArtView: NSView {
                     MainActor.assumeIsolated {
                         guard let self, self.pending == request else { return }
                         self.pending = nil
-                        self.shown = request
+                        // A render that failed isn't remembered, so the next refresh tries again.
+                        self.shown = image.image == nil ? nil : request
                         self.art.contents = image.image
                         CATransaction.begin(); CATransaction.setDisableActions(true)
                         self.placeArt()
@@ -316,12 +336,15 @@ public enum DitherArt {
     }
 
     struct Request: Hashable, Sendable {
-        var url: URL
+        /// The chosen or desktop picture, nil when neither is available.
+        var url: URL?
         /// Canvas size in dots.
         var width: Int, height: Int
         /// The panel's background, sRGB 0...1.
         var background: [Double]
         var scale: CGFloat
+        /// Tried in order when `url` won't render.
+        var fallbacks: [URL] = []
     }
 
     nonisolated static func smoothstep(_ a: Double, _ b: Double, _ x: Double) -> Double {
@@ -352,20 +375,60 @@ public enum DitherArt {
         #if DEBUG
         if let override = WallpaperBlur.override { return override.url }
         #endif
-        guard let screen = screen ?? NSScreen.main, let url = NSWorkspace.shared.desktopImageURL(for: screen), url.isFileURL,
-              let path = WallpaperBlur.unguardedPath(url.path, home: NSHomeDirectory()) else { return nil }
+        guard let screen = screen ?? NSScreen.main, let desktop = NSWorkspace.shared.desktopImageURL(for: screen), desktop.isFileURL,
+              case let url = resolved(desktop), let path = WallpaperBlur.unguardedPath(url.path, home: NSHomeDirectory()) else { return nil }
         return URL(filePath: path)
     }
 
     /// The picture covering the canvas, centered, faded into the background and dithered, or nil if it can't be read.
+    /// Tries the request's picture, then each fallback, then the built-in picture, so the panel is never blank: a
+    /// picture that won't decode, a nil desktop URL or a `.madesktop` macOS won't hand over all still show art.
     nonisolated static func render(_ request: Request) -> CGImage? {
         let w = request.width, h = request.height
-        guard w > 0, h > 0, let source = CGImageSourceCreateWithURL(request.url as CFURL, nil) else { return nil }
-        let index = CGImageSourceGetPrimaryImageIndex(source)
+        guard w > 0, h > 0 else { return nil }
+        for url in [request.url].compactMap({ $0 }) + request.fallbacks {
+            if let picture = picture(url, maxPixels: max(w, h) * 2), let art = render(request, picture: picture) { return art }
+        }
+        return builtInPicture().flatMap { render(request, picture: $0) }
+    }
+
+    /// The picture at `url`, decoded to at most `maxPixels` on its long side, or nil if it can't be read.
+    nonisolated static func picture(_ url: URL, maxPixels: Int) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(resolved(url) as CFURL, nil) else { return nil }
         let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
-                                        kCGImageSourceThumbnailMaxPixelSize: max(w, h) * 2]
-        guard let picture = CGImageSourceCreateThumbnailAtIndex(source, index, options as CFDictionary),
-              picture.width > 0, picture.height > 0,
+                                        kCGImageSourceThumbnailMaxPixelSize: maxPixels]
+        guard let picture = CGImageSourceCreateThumbnailAtIndex(source, CGImageSourceGetPrimaryImageIndex(source), options as CFDictionary),
+              picture.width > 0, picture.height > 0 else { return nil }
+        return picture
+    }
+
+    /// A `.madesktop`, which macOS's own wallpapers are, is a small plist naming a still thumbnail of the picture.
+    nonisolated static func resolved(_ url: URL) -> URL {
+        guard url.pathExtension.lowercased() == "madesktop", let data = try? Data(contentsOf: url),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let thumbnail = plist["thumbnailPath"] as? String else { return url }
+        return URL(filePath: thumbnail)
+    }
+
+    /// macOS's default desktop picture, the fallback when neither the chosen nor the desktop picture renders.
+    nonisolated static let defaultDesktop = URL(filePath: "/System/Library/CoreServices/DefaultDesktop.heic")
+
+    /// The last resort when no file renders: a soft violet-to-teal wash, so Redesign always has art.
+    nonisolated static func builtInPicture() -> CGImage? {
+        let w = 64, h = 40
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
+              let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB)!, colors: [
+                  CGColor(srgbRed: 0.42, green: 0.32, blue: 0.86, alpha: 1), CGColor(srgbRed: 0.16, green: 0.58, blue: 0.55, alpha: 1),
+              ] as CFArray, locations: [0, 1]) else { return nil }
+        ctx.drawLinearGradient(gradient, start: CGPoint(x: 0, y: CGFloat(h)), end: CGPoint(x: CGFloat(w), y: 0), options: [])
+        return ctx.makeImage()
+    }
+
+    /// `picture` covering the canvas, centered, faded into the background and dithered.
+    nonisolated static func render(_ request: Request, picture: CGImage) -> CGImage? {
+        let w = request.width, h = request.height
+        guard w > 0, h > 0,
               let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
                                   space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
               let data = ctx.data?.bindMemory(to: UInt8.self, capacity: w * h * 4) else { return nil }
