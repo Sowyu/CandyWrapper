@@ -162,7 +162,7 @@ struct PickersFidelityTests {
         let p = try Self.pickers()
         var changes = 0
         p.onChange = { _ in changes += 1 }
-        #expect(p.modelButton.title == "Haiku 5.5" && p.traitsButton.title == "Medium" && p.accessButton.title == "Full access")
+        #expect(p.modelButton.title == "Claude Haiku 5.5" && p.traitsButton.title == "Medium" && p.accessButton.title == "Full access")
 
         let config = try Self.recordedConfig()
         let view = ModelPickerView(catalog: ProviderCatalog(config.providers), favorites: [], active: "claudeAgent", activeModel: "claude-haiku-5-5")

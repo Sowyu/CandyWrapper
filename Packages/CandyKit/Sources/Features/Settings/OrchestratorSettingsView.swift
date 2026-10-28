@@ -506,7 +506,7 @@ final class OrchestratorModelForm: DSView {
         let picker = ComposerControlView()
         picker.tintsIcon = false
         if let entry = e.entry {
-            picker.title = e.model.map { ModelNames.trigger($0, driver: entry.driver) } ?? e.draft.model
+            picker.title = e.model.map(ModelNames.trigger) ?? e.draft.model
             picker.icon = ProviderIcon.make(driver: entry.driver, displayName: entry.displayName, size: 16, color: Themed.color(\.contrastMutedForeground))
         } else {
             picker.title = e.draft.model.isEmpty ? "Choose a model" : e.draft.model

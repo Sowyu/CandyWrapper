@@ -63,7 +63,7 @@ final class HandoffDividerView: DSView {
         let entry = ProviderCatalog(providers).entry(endpoint.instanceId)
         let model = endpoint.model?.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = entry?.displayName ?? endpoint.instanceId.rawValue
-        let text = model.flatMap { m in entry?.models.first { $0.slug == m }.map { ModelNames.trigger($0, driver: entry?.driver) } }
+        let text = model.flatMap { m in entry?.models.first { $0.slug == m }.map(ModelNames.trigger) }
             ?? (model?.isEmpty == false ? model! : name)
         let driver = provider?.driver ?? endpoint.instanceId.rawValue
         let box = DSView()

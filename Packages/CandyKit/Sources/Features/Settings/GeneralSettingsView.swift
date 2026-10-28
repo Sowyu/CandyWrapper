@@ -687,7 +687,7 @@ final class SettingsModelPickerControl: DSView {
             button.title = "Mixed"
             button.icon = nil
         } else if let (entry, slug) = selection {
-            button.title = entry.models.first { $0.slug == slug }.map { ModelNames.trigger($0, driver: entry.driver) } ?? slug
+            button.title = entry.models.first { $0.slug == slug }.map(ModelNames.trigger) ?? slug
             button.icon = ProviderIcon.make(driver: entry.driver, displayName: entry.displayName, size: 16, color: Themed.color(\.contrastMutedForeground))
         } else {
             button.title = "No providers available"

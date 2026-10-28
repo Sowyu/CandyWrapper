@@ -91,8 +91,8 @@ public struct ResolvedComposerSelection: Sendable {
 
     /// The model trigger's label (`triggerTitle`, ProviderModelPicker.tsx:85-91).
     public var triggerLabel: String {
-        if let model { return ModelNames.trigger(model, driver: entry?.driver) }
-        if let first = entry?.models.first, modelSlug == nil { return ModelNames.trigger(first, driver: entry?.driver) }
+        if let model { return ModelNames.trigger(model) }
+        if let first = entry?.models.first, modelSlug == nil { return ModelNames.trigger(first) }
         return modelSlug ?? "Choose model"
     }
 }

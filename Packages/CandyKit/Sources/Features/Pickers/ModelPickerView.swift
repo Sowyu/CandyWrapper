@@ -649,7 +649,7 @@ final class ModelRowView: DSView {
         addSubview(secondary)
         switch row {
         case .model(let item):
-            name.text = ModelNames.display(item.model)
+            name.text = ModelNames.display(item.model, preferShortName: true)
             secondary.text = item.model.subProvider.map { "\(item.entry.displayName) · \($0)" } ?? item.entry.displayName
             if item.model.badge == "new" {
                 let b = NewBadgeView()

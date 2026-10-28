@@ -446,7 +446,7 @@ final class ThreadController {
             let instance = SidebarModel.shellRuntime(thread) != nil ? thread.providerInstanceId : thread.modelSelection.instanceId
             let history = (thread.providerInstanceHistory ?? []).filter { $0 != instance }.map { catalog.entry($0)?.displayName ?? $0.rawValue }
             guard let entry = catalog.entry(instance) else { return nil }
-            let model = entry.model(thread.modelSelection.model).map { ModelNames.trigger($0, driver: entry.driver) } ?? thread.modelSelection.model
+            let model = entry.model(thread.modelSelection.model).map(ModelNames.trigger) ?? thread.modelSelection.model
             let badge = ProviderBadge.shows(entry, in: catalog)
             return (entry.driver, badge ? "\(model) \u{00B7} \(entry.displayName)" : model, history, badge ? ProviderBadge.accent(entry) : nil)
         }
