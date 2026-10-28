@@ -255,7 +255,7 @@ public final class ThreadHeaderView: TopbarDragView {
         // `pr-24` keeps the title clear of the toggles; with the right panel open only the details
         // toggle is left and it is `pr-10`, plus the title button's hidden 14px chevron and `gap-1`
         // (ChatHeader.tsx:256-345).
-        let reserve: CGFloat = toggles[2].superview === self ? 96 : 40 + 4 + 14
+        let reserve: CGFloat = toggles[2].superview === self ? 96 : (ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 40 : 40 + 4 + 14)
         var titleRight = bounds.width - 38 - reserve
         // The indicator is `shrink-0` at the end of the row, before its `pr-24`/`pr-10`, `gap-3` after the
         // breadcrumb, which then gives up the room, its title chevron included.
@@ -307,6 +307,19 @@ public final class ThreadHeaderView: TopbarDragView {
         layer?.backgroundColor = ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? Themed.color(\.background).cgColor(in: self) : nil
     }
 
+}
+
+/// Keep the default fade in the view order between the scroller and header. A loose layer's
+/// zPosition is ignored by offscreen layer rendering, which painted it behind the scroller.
+private final class ThreadTopFadeView: DSView {
+    let gradient = CAGradientLayer()
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        gradient.actions = ["bounds": NSNull(), "position": NSNull(), "colors": NSNull(), "locations": NSNull()]
+        layer?.addSublayer(gradient)
+    }
+    override func layout() { super.layout(); gradient.frame = bounds }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 /// The read-only thread: header over the timeline, on the panel background, and the right panel
@@ -643,6 +656,7 @@ public final class ThreadPanelView: DSView {
     /// background it is a background-colored overlay, which costs scrolling nothing; Glass's background is see-through,
     /// so there the timeline wears the same curve as an alpha mask.
     private let fade = CAGradientLayer()
+    private let defaultFade = ThreadTopFadeView()
     private let fadeMask = CAGradientLayer()
     /// How far below the header the fade reaches.
     static let fadeOverhang: CGFloat = 16
@@ -773,6 +787,7 @@ public final class ThreadPanelView: DSView {
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         addSubview(timeline)
+        addSubview(defaultFade)
         addSubview(header)
         hero.isHidden = true
         addSubview(hero)
@@ -2042,9 +2057,15 @@ public final class ThreadPanelView: DSView {
     /// No fill of its own: the main panel's grain surface (`bg-background surface-grain`) shows
     /// through. Only the top fade uses the background color.
     public override func updateLayer() {
+        updateFadeColors()
+        needsLayout = true
+    }
+
+    private func updateFadeColors() {
         let bg = TL.c(\.background).cgColor(in: self)
         fade.colors = Self.fadeStops.map { bg.copy(alpha: Self.topFade($0))! }
-        needsLayout = true
+        defaultFade.gradient.locations = [0, 0.10, 0.24, 0.42, 0.62, 0.82, 1].map { NSNumber(value: $0) }
+        defaultFade.gradient.colors = [1, 0.9, 0.7, 0.42, 0.18, 0.04, 0].map { bg.copy(alpha: $0)! }
     }
 
     /// A utility page takes the panel's place and gives it back: the art behind takes the right scrim each time. The
@@ -2225,6 +2246,11 @@ public final class ThreadPanelView: DSView {
         // Above the rows, under the header (zPosition 1). The last 6px column (the scrollbar) stays unfaded.
         let band = chatTop + Self.fadeOverhang
         fade.frame = CGRect(x: 0, y: 0, width: max(0, chat - 6), height: band)
+        let standard = ThreadDesign.uses3814(dark: effectiveAppearance.isDark)
+        // index.css:469-505: the scroller's first 24pt plus the 1px overlap.
+        defaultFade.frame = CGRect(x: 0, y: chatTop, width: max(0, chat - 6), height: 25)
+        defaultFade.isHidden = !standard
+        updateFadeColors()
         fade.zPosition = 1
         header.layer?.zPosition = 2
         // Dither's art runs up to the panel's top edge, so the rows fade out over it as a mask, as over Glass: an overlay
@@ -2232,7 +2258,7 @@ public final class ThreadPanelView: DSView {
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         // ponytail: the mask renders the timeline offscreen while it scrolls, a mask per row if Dither scrolling drops frames
         let masks = glass || dither
-        fade.isHidden = masks
+        fade.isHidden = masks || standard
         if masks {
             fadeMask.frame = timeline.bounds
             let h = max(1, Double(timeline.bounds.height))

@@ -223,6 +223,14 @@ enum MarkdownStyle {
                 out.append(NSAttributedString(string: "\u{00A0}", attributes: [.font: linkFont, .kern: 0.45 * size + 14 - space, .markdownFindText: ""]))
                 favicons.append((NSRange(location: start, length: 1), host))
             }
+            let previousCharacter = out.length > 0 ? out.mutableString.character(at: out.length - 1) : nil
+            if run.code, ThreadDesign.uses3814 {
+                // Keep the leading CSS padding with the code when it wraps to the next line.
+                // Kerning the preceding whitespace loses that padding when TextKit trims it.
+                let codeFont = DSFont.mono(chipFontSize)
+                out.append(NSAttributedString(string: "\u{00A0}", attributes: [
+                    .font: codeFont, .kern: pad - noBreakSpaceWidth(codeFont), .markdownFindText: "", .markdownCopyText: ""]))
+            }
             let textStart = out.length
             var attributes: [NSAttributedString.Key: Any] = [:]
             if run.code {
@@ -230,7 +238,7 @@ enum MarkdownStyle {
                 // space or at the start of a line disappears (` M hello.py` after "showed ").
                 // ponytail: a space after code that ends in one still shows; collapse it too if a reply needs it
                 run.text = run.text.replacing(/[ \t\n]+/, with: " ")
-                let previous = out.length > 0 ? out.mutableString.character(at: out.length - 1) : nil
+                let previous = previousCharacter
                 if previous == nil || previous == 0x20 || previous == 0x2028 { run.text = String(run.text.drop { $0 == " " }) }
                 attributes[.font] = DSFont.mono(chipFontSize)
                 attributes[.foregroundColor] = strong
@@ -254,11 +262,13 @@ enum MarkdownStyle {
             }
             if run.code, out.length > textStart {
                 chips.append(NSRange(location: textStart, length: out.length - textStart))
-                if textStart > 0 {
-                    let previous = (out.attribute(.kern, at: textStart - 1, effectiveRange: nil) as? CGFloat) ?? 0
-                    out.addAttribute(.kern, value: previous + pad, range: NSRange(location: textStart - 1, length: 1))
-                } else {
-                    leadingChip = true
+                if !ThreadDesign.uses3814 {
+                    if textStart > 0 {
+                        let previous = (out.attribute(.kern, at: textStart - 1, effectiveRange: nil) as? CGFloat) ?? 0
+                        out.addAttribute(.kern, value: previous + pad, range: NSRange(location: textStart - 1, length: 1))
+                    } else {
+                        leadingChip = true
+                    }
                 }
                 out.addAttribute(.kern, value: pad, range: NSRange(location: out.length - 1, length: 1))
             }
@@ -893,7 +903,7 @@ private struct Builder {
         var box = Box(height: textBox.height, baseline: textBox.firstBaseline)
         box.items += MarkdownMathStyle.items(inline, in: textBox, parent: parent, color: color)
         for chip in textBox.chips {
-            box.items.append(.box(chip, fill: ThreadDesign.inlineCodeFill, border: ThreadDesign.inlineCodeBorder, radius: MarkdownStyle.chipRadius))
+            box.items.append(.box(chip, fill: ThreadDesign.inlineCodeFill, border: ThreadDesign.uses3814 ? nil : ThreadDesign.inlineCodeBorder, radius: MarkdownStyle.chipRadius))
         }
         box.items += Self.fileChips(inline, in: textBox, size: size, weight: weight)
         box.items += Self.contextChips(inline, in: textBox, size: size, weight: weight)
@@ -1337,7 +1347,7 @@ private struct Builder {
                 var cell = Box(height: textBox.height)
                 cell.items += MarkdownMathStyle.items(inline, in: textBox, parent: cellFont, color: context.color)
                 for chip in textBox.chips {
-                    cell.items.append(.box(chip, fill: ThreadDesign.inlineCodeFill, border: ThreadDesign.inlineCodeBorder, radius: MarkdownStyle.chipRadius))
+                    cell.items.append(.box(chip, fill: ThreadDesign.inlineCodeFill, border: ThreadDesign.uses3814 ? nil : ThreadDesign.inlineCodeBorder, radius: MarkdownStyle.chipRadius))
                 }
                 cell.items += Self.fileChips(inline, in: textBox, size: size, weight: r == 0 ? .semibold : .regular)
                 cell.items += Self.contextChips(inline, in: textBox, size: size, weight: r == 0 ? .semibold : .regular)
