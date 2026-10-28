@@ -7,11 +7,11 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | bbdc13640c | feat(desktop): import cookies from Zen Browser (#22970) | other | yes | skip: requested exclusion |
 | 87d22b00f7 | perf(shared): avoid repeated date parsing when selecting PRs (#22891) | pr/git | no | n/a |
 | 5b35402623 | fix(web): refresh the current branch when opening the picker (#22807) | pr/git | yes | ported (c0172900) |
-| efea68679f | feat(web): attach svg files to messages (#21355) | composer | yes | open |
+| efea68679f | feat(web): attach svg files to messages (#21355) | composer | yes | ported (954f8bab) |
 | 532023a241 | feat(server): send pdf attachments to claude and antigravity as documents (#21358) | wire | server-only | free with runtime |
-| 34e9c56b9b | feat(web): play audio inline and open any file the agent shares in the viewer (#21363) | thread | yes | open |
+| 34e9c56b9b | feat(web): play audio inline and open any file the agent shares in the viewer (#21363) | thread | yes | ported (a4211efb) |
 | 5d9a5c9803 | perf(pull-requests): faster pull request timeline, code tab, summary and search (#22697) | pr/git | yes | ported; 350e8c75; Return/paste submit immediately and detail reads disallow stale answers; remaining changes are serve |
-| d414cb5103 | fix(web): question options show a radio and an aligned shortcut key (#23255) | composer | yes | open |
+| d414cb5103 | fix(web): question options show a radio and an aligned shortcut key (#23255) | composer | yes | ported (b9bd9223) |
 | 557db6cb4e | fix(server): running delegates tell agents to end the turn (#24887) | other | server-only | free with runtime |
 | b3b2c55369 | perf(source-control): pull request previews read only the pull request (#22583) | pr/git | yes | skip: needs preview-specific decoding/cache, older-server fallback and GUI hover checks |
 | 3816296021 | feat(web): UI design overhaul, with the new look behind a Beta toggle (#24865) | other | yes (design) | phase 2 (design) |
@@ -67,7 +67,7 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 122c5f8ffc | fix(web): keep Windows thread notifications clickable until handled (#22520) | other | no | n/a |
 | 3ca62a5644 | refactor(client): terminal sessions keep one driver per mode (#25186) | other | no | n/a |
 | b16728af84 | refactor(web): preview tab sync subscribes to the preview store instead of its own listener sets (#25196) | other | no | n/a |
-| 3de45c6254 | feat(sidebar): working section is on by default (#25190) | sidebar | yes | open |
+| 3de45c6254 | feat(sidebar): working section is on by default (#25190) | sidebar | yes | ported (19964c32) |
 | d69810a97a | feat(web): preview office files, fonts, and mermaid diagrams (#21362) | other | yes | skip: native Office/font/Mermaid file routing and renderers exceed 4h |
 | 73afb57097 | feat(web): virtualize large file previews (#21466) | other | yes | skip: range-based large-text loading and virtual tables exceed 4h |
 | 9d17a02782 | feat(web): preview archives, sqlite databases, and decoded images (#21467) | other | yes | skip: native archive/SQLite renderers plus decoded-image routing exceed 4h |
@@ -146,11 +146,11 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 6838e31b9c | fix(web): screen readers can wrap to the first and last message of a long thread (#23780) | thread | yes | ported (f80dae9d) |
 | 024e593a63 | fix(client-runtime): a slow host no longer shows settings as read-only (#25526) | connections | yes | ported (f48eb038) |
 | 977a18823c | refactor(mobile): pull request list records answers where they land (#25373) | pr/git | no | n/a |
-| 9db433f4ba | refactor(web): settings group by concern, with General split into focused pages (#25651) | settings | yes (design) | phase 2 (design) |
+| 9db433f4ba | refactor(web): settings group by concern, with General split into focused pages (#25651) | settings | yes (design) | ported (4c2b1a04) |
 | d73fd1279a | test(web): attachment preview Word and large-text tests no longer flake on CI (#25664) | other | no | n/a |
 | 0b0417a56b | refactor(web): Cmd+O presses the Open in editor button instead of a per-picker listener (#25667) | other | no | n/a |
 | 08bd2ec09c | test(web): PDF viewer behavior is covered by fast tests (#25699) | other | no | n/a |
-| bd3287b640 | feat(web): thread state lives at the end of the timeline, not stacked on the composer (#25401) | thread | yes (design) | phase 2 (design) |
+| bd3287b640 | feat(web): thread state lives at the end of the timeline, not stacked on the composer (#25401) | thread | yes (design) | ported (bec4b95a): behaviour and placement; the new look is phase 2 |
 | 5432d8e723 | refactor(web): drafts promote from the draft store, not from route effects (#25615) | composer | no | n/a |
 | becf853def | fix(web): PDF search finds phrases that wrap across lines (#25702) | other | yes | skip: verify PDFKit phrase/line-end-hyphen matching and highlights on screen before replacing search |
 | ed44f251d8 | feat(server): cut T3's MCP tool schemas by a third and merge 18 tools into action tools (#25423) | thread | yes | ported (49512488) |
@@ -172,14 +172,14 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 2202787df0 | fix(web): onboarding import no longer hangs when the project never arrives (#25805) | settings | yes | ported; 30213c1f; finish after a ten-second project-arrival timeout, cancel replaced/dismissed waits and ignore late a |
 | 1a4f3c4a3c | fix(mobile): Windows image paths and non-ASCII file links open like desktop (#25802) | thread | yes | ported; 29ab0969; Unicode letters/marks/numbers in native relative file destinations; the separate mobile Windows-pars |
 | f81c4cd79f | fix(web,mobile): markdown previews no longer show YAML frontmatter as a giant heading (#25804) | other | yes | ported (7ba45ab4) |
-| b333c175ba | fix(web): compact toggle shows the token count again (#25818) | composer | yes | open |
+| b333c175ba | fix(web): compact toggle shows the token count again (#25818) | composer | yes | ported (86697cf9) |
 | 1702d55214 | fix(web,mobile): bot approvals are visible on the PR summary (#25829) | pr/git | yes | ported (ed18558a); avatar verdict glyph is phase 2 |
-| f3b058cd6a | fix(web,mobile): stopped runs no longer look like errors (#25830) | thread | yes | open |
+| f3b058cd6a | fix(web,mobile): stopped runs no longer look like errors (#25830) | thread | yes | ported (e59ec113) |
 | e5f2e5dbbc | fix(client-runtime): iOS resume keeps live sockets and drops dead ones 4x faster (#25824) | connections | yes | skip: macOS already preserves/probes sockets (T3Client/ConnectionSupervisor.swift:318,524) |
 | 56695ae3ec | feat: model labels show the name you'd say out loud (#24205) | composer | yes | phase 2: T3 shows the spoken labels only in its new design; ported (189b993e) and reverted (068aa9c3) until phase 2's references |
 | 4cb29a56f6 | fix(web): switching a file between markdown and the editor no longer saves a draft twice (#25768) | other | no | n/a |
-| 92e645032c | fix(web,mobile): queued messages get a simpler Send now row, no reordering (#25846) | composer | yes | open |
-| ad068d7c93 | fix(web): Steer no longer does nothing while a compaction runs (#25837) | composer | yes | open |
+| 92e645032c | fix(web,mobile): queued messages get a simpler Send now row, no reordering (#25846) | composer | yes | phase 2: ported (d9951d0b) and reverted (e08c5c01, b330916b); T3 shows the new queue row only in its new design |
+| ad068d7c93 | fix(web): Steer no longer does nothing while a compaction runs (#25837) | composer | yes | phase 2: ported (7dd0a598) and reverted (e08c5c01, b330916b) with the queue row |
 | 63bc022f64 | fix(web): clicking the device screen no longer draws a focus ring (#25882) | other | no | n/a |
 | 7873f53ada | fix(web): the Add ChatGPT account dialog animates closed once the account connects (#25868) | settings | yes | already so |
 | c39a115a14 | refactor(web): composer clears scroll-collapse in render, not after paint (#25909) | composer | no | n/a |
@@ -203,12 +203,12 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | a6676f9a13 | feat(web,mobile): linked environments in Connections (#16698) | connections | yes | ported (b047c435) |
 | 594f1ce2eb | feat(server): delegate_task to a linked environment (#16719) | thread | yes | free with runtime; delegate navigation open |
 | 8b14660b27 | feat(server,web,mobile): an agent sets up a link to another environment (#17129) | connections | yes | ported (a097e0a4, a4e56409) |
-| 5e9d56416f | feat(server,web,mobile): @-mention a machine, and linked environments become a Labs beta (#17130) | composer | yes | Beta switch ported (b047c435); machine @-mention open |
+| 5e9d56416f | feat(server,web,mobile): @-mention a machine, and linked environments become a Labs beta (#17130) | composer | yes | ported: Beta switch (b047c435) and machine @-mention (8af1f861) |
 | bbd9593973 | feat(web): channel artwork choice on Latest, plus nightly or dev art on any channel (#26138) | settings | yes (design) | phase 2 (design) |
 | 5b70d81b0d | feat(mobile): browse ZIP attachments with the shared archive reader (#19463) | other | no | n/a |
-| a27ec88bfa | feat(server,web): see and stop the dev servers a thread started (#22542) | thread | yes | open |
+| a27ec88bfa | feat(server,web): see and stop the dev servers a thread started (#22542) | thread | yes | ported (d0bd6761) |
 | f08136d42d | fix(web): composer no longer jumps when a second line is added (#26155) | composer | yes (design) | phase 2 (design) |
-| b31de684d2 | feat(web,mobile): queued messages show who sent them (#26159) | composer | yes | open |
+| b31de684d2 | feat(web,mobile): queued messages show who sent them (#26159) | composer | yes | phase 2: ported (e17cf5e6) and reverted (e08c5c01, b330916b) with the queue row |
 | 8f0b729faf | fix(preview): agent and browser panel show the same page after a late desktop attach (#22877) | connections | no | n/a |
 | 1cf14a498f | fix(web): pairing, connect, error, and Clerk sign-in surfaces match the app's dialog style (#25281) | connections | yes (design) | phase 2 (design) |
 | 3b22620a5c | fix(server): parallel worktree launches no longer fail on .git/config lock (#25700) | pr/git | server-only | free with runtime |
@@ -218,35 +218,35 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 4fc9e5f2fc | fix(web): settings avatar no longer hugs the modal corner (#26180) | settings | yes (design) | phase 2 (design) |
 | 294981fa72 | fix(mobile): Windows paths in messages keep their backslashes (#21454) | thread | no | n/a |
 | 7e884b2df6 | feat: triage an issue from the command palette, no terminal needed (#22753) | palette | yes | ported; c46c94ce; triage/permission-gated RPC, scratch draft, empty-only prompt seeding, navigation cancellation, dela |
-| c38b265adc | feat(web): filter the sidebar by several projects at once (#25284) | sidebar | yes | open |
+| c38b265adc | feat(web): filter the sidebar by several projects at once (#25284) | sidebar | yes | ported (5ecd9f1d) |
 | 06d4b57fa6 | fix(web): composer strip drops the folder icon next to the machine icon (#26158) | composer | yes (design) | phase 2 (design) |
-| 7e713926cd | feat(web): background work line shows the newest activity, no dots (#25299) | thread | yes | open |
-| 4ab7084aa7 | feat(web,mobile): the @ picker lists threads on linked machines (#26201) | composer | yes | open |
-| 0affd28db2 | feat(web,mobile): Copy thread copies a chip that works on linked machines (#26202) | thread | yes | open |
-| 2525252c96 | feat(web): F6 moves between workspace areas, and the sidebar is keyboard navigable (#25877) | sidebar | yes | open |
+| 7e713926cd | feat(web): background work line shows the newest activity, no dots (#25299) | thread | yes | ported (0e0985f5) |
+| 4ab7084aa7 | feat(web,mobile): the @ picker lists threads on linked machines (#26201) | composer | yes | ported (8af1f861) |
+| 0affd28db2 | feat(web,mobile): Copy thread copies a chip that works on linked machines (#26202) | thread | yes | ported (81bf2e2f) |
+| 2525252c96 | feat(web): F6 moves between workspace areas, and the sidebar is keyboard navigable (#25877) | sidebar | yes | skipped: F6 workspace areas and a keyboard-navigable sidebar tree is more than 2 hours; open |
 | e2a8ef0174 | feat(dev): test turns in the UI for free with a replay provider (#26207) | other | no | n/a |
-| 93a9e079b1 | feat(threads): choose your own snooze options in settings (#26208) | settings | yes | open |
+| 93a9e079b1 | feat(threads): choose your own snooze options in settings (#26208) | settings | yes | ported (a1885fbf) |
 | 3b2f958603 | fix(server): ACP Registry searches reuse a recently fetched index (#26248) | settings | server-only | free with runtime |
 | 67661cfbb5 | chore: delete 18k lines of code that nothing reaches (#26238) | other | no | n/a |
 | e0b3cfe666 | fix(web): image and file chips underline their name on hover again (#26252) | composer | yes (design) | phase 2 (design) |
-| 91992bd5d4 | fix(web): update dialog shows one row per machine (#26210) | settings | yes | open |
-| 8947f3e353 | fix(web): server rows keep their source visible, cmd-click opens your browser (#26267) | thread | yes | open |
+| 91992bd5d4 | fix(web): update dialog shows one row per machine (#26210) | settings | yes | ported (8fb578a1) |
+| 8947f3e353 | fix(web): server rows keep their source visible, cmd-click opens your browser (#26267) | thread | yes | ported (d0bd6761) |
 | c2fbf0a524 | feat(server,web,mobile): thread links name their environment and never a title (#26239) | thread | yes | ported (7616fc6e) |
 | fe55faf379 | fix(clients): # suggestions put linked pull requests first for text queries (#26269) | composer | yes | ported (4cf7cdc6) |
 | 49a9e80e0b | fix(terminal): keep shared terminal grids in sync (#24352) | wire | yes | ported (40182582) |
 | 0c80751701 | feat: sign in to GitHub through the T3 Code for GitHub app [internal testing only] (#26245) | settings | yes | skip: requested exclusion |
 | 9910c0e874 | perf: reduce remote reconnect and command delays (#25754) | connections | yes | already so (wire audit) |
-| 3ef1610079 | fix(web): compaction row says "Compacting for 12s" instead of "after being idle" (#26299) | thread | yes | open |
+| 3ef1610079 | fix(web): compaction row says "Compacting for 12s" instead of "after being idle" (#26299) | thread | yes | ported (9135f4e7) |
 | 9c6429d74b | fix(web): threads without a project start on the primary environment (#26301) | palette | yes | ported (9a1ab655) |
 | cafdcdaacd | fix(clients): give image attachment chips a blue accent (#26306) | composer | yes (design) | phase 2 (design) |
 | afc233492d | fix(web): prevent image thumbnails from warping during repaints (#26308) | thread | no | n/a |
 | 49582b7b2a | test(web): attachment font and large-text preview tests wait for the real load (#26314) | other | no | n/a |
-| 1f8530ec3c | feat(web): pending approvals show on their timeline row (#26255) | thread | yes | open |
+| 1f8530ec3c | feat(web): pending approvals show on their timeline row (#26255) | thread | yes | ported (4d9ee89d) |
 | 9b052a2d5b | fix(web): show the platform modifier in the send tooltip (#22436) | composer | yes | ported (0319f265) |
 | feb49e78d0 | fix(web): let theme color pickers use popover glass (#22348) | settings | yes (design) | phase 2 (design) |
 | 003ccd336d | fix(client-runtime): pairing links can no longer add routes to a saved environment (#26178) | connections | yes | ported (b089670b) |
 | feb2e32de6 | fix(web): align sidebar button geometry with shared tokens (#22287) | sidebar | yes (design) | phase 2 (design) |
 | 8e76f945d2 | feat(relay): T3 Chat Pro and Premier accounts get more tunnels (#25931) | connections | yes | skip: paid caps arrive from relay, but gated T3 Chat account-link APIs/UI and lifecycle tests are missing (>4h) |
 | 50d3a31ffd | fix: guests see the screenshots the agent shows in its replies (#26323) | thread | server-only | free with runtime |
-| 4e4d4ba395 | feat(web): boring sidebar groups threads into project folders (#21039) | sidebar | yes | open |
+| 4e4d4ba395 | feat(web): boring sidebar groups threads into project folders (#21039) | sidebar | yes | ported (9da9c556) |
 | cadbdafc06 | test(web): attachment preview tests wait long enough for cold workers and fonts (#26342) | other | no | n/a |
