@@ -27,6 +27,7 @@ public class ComposerBannerView: DSView {
     /// 17pt overlap masked off; `floating` is a whole rounded card with no overlap, used for the
     /// notices the banner stack shows above the column when it expands.
     public enum Placement { case attached, floating }
+    public var quietTimelineLine = false { didSet { if quietTimelineLine != oldValue { needsLayout = true; needsDisplay = true } } }
     public var placement = Placement.attached { didSet { if placement != oldValue { needsLayout = true; needsDisplay = true } } }
     /// Redesign floats every attachment as its own card: whole, frosted, with a drop shadow (`DitherPill`).
     /// Redesign: the composer's own corner and no drop shadow in dark, for a panel that reads as part of it.
@@ -91,6 +92,7 @@ public class ComposerBannerView: DSView {
 
     public override func layout() {
         super.layout()
+        clip.isHidden = quietTimelineLine
         let w = bounds.width, h = bounds.height
         let floating = placement == .floating
         clip.frame = NSRect(x: 0, y: 0, width: w, height: max(0, h - (floating ? 0 : 16)))

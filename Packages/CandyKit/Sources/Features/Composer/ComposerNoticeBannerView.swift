@@ -160,6 +160,7 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         }
         prefix.text = content.titlePrefix ?? ""
         prefix.isHidden = content.titlePrefix == nil
+        title.color = quietTimelineLine ? Themed.color(\.mutedForeground) : Themed.color(\.foreground)
         title.text = content.title
         title.font = content.titleCode ? DSFont.mono(12, weight: .medium) : DSFont.ui(12, weight: .medium)
         if let tooltip = content.titleTooltip {

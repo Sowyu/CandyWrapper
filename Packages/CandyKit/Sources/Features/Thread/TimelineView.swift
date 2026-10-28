@@ -170,6 +170,25 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         restore(anchor)
         tile()
     }
+    /// ThreadNow follows lineage and guest rows without sharing their controller-owned footer.
+    public func setStatusFooter(_ view: NSView?, height: CGFloat) {
+        let changed = statusFooterView !== view
+        if changed {
+            statusFooterView?.removeFromSuperview()
+            statusFooterView = view
+            if let view { document.addSubview(view) }
+        }
+        let h = view == nil ? 0 : height
+        guard changed || h != statusFooterHeight else { return }
+        let anchor = captureAnchor()
+        statusFooterHeight = h
+        layoutEmptyPlaceholder()
+        recomputeTops()
+        restore(anchor)
+        tile()
+    }
+    private var statusFooterView: NSView?
+    private var statusFooterHeight: CGFloat = 0
     private var footerView: NSView?
     private var footerHeight: CGFloat = 0
     private func layoutHeader() {
@@ -195,7 +214,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     private var emptyLabel: LabelView?
     /// No rows, no "Subagent of" link, no setup card and no status line under the list.
     private var showsEmptyPlaceholder: Bool {
-        allowsEmptyPlaceholder && items.isEmpty && header == nil && footerView == nil && worktreeSetup.isHidden
+        allowsEmptyPlaceholder && items.isEmpty && header == nil && footerView == nil && statusFooterView == nil && worktreeSetup.isHidden
     }
     /// `flex h-full items-center justify-center`, `text-sm text-muted-foreground/30`.
     private func layoutEmptyPlaceholder() {
@@ -613,7 +632,8 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
             y += h
         }
         footerView?.frame = NSRect(x: TL.snap(laneFrame.x), y: y, width: laneFrame.width, height: footerHeight)
-        let height = y + footerHeight + Self.footer + bottomInset
+        statusFooterView?.frame = NSRect(x: TL.snap(laneFrame.x), y: y + footerHeight, width: laneFrame.width, height: statusFooterHeight)
+        let height = y + footerHeight + statusFooterHeight + Self.footer + bottomInset
         if document.frame.height != height || document.frame.width != scrollView.contentSize.width {
             adjusting = true
             document.setFrameSize(NSSize(width: scrollView.contentSize.width, height: height))
@@ -1006,7 +1026,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         var problems: [String] = []
         let lane = laneFrame
         if Set(items.map(\.id)).count != items.count { problems.append("duplicate row ids") }
-        let expectedHeight = topInset + heights.reduce(0, +) + footerHeight + Self.footer + bottomInset
+        let expectedHeight = topInset + heights.reduce(0, +) + footerHeight + statusFooterHeight + Self.footer + bottomInset
         if abs(document.frame.height - expectedHeight) > 0.01 { problems.append("document height \(document.frame.height), rows say \(expectedHeight)") }
         let pooled = Set(pools.values.flatMap { $0 }.map(ObjectIdentifier.init))
         var placed: [(String, NSRect)] = []

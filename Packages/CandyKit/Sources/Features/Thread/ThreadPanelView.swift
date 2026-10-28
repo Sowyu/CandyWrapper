@@ -500,10 +500,16 @@ public final class ThreadPanelView: DSView {
             items.append(ComposerBannerStackItem(id: "environment-unavailable", view: environmentBanner,
                                                  height: { _ in EnvironmentBannerView.height }))
         }
-        if serverUpdateNotice != nil && composerVisible { items.append(notice("server-version", serverUpdateBanner)) }
-        if docked, let key = childInputKey { items.append(notice("child-input:" + key, childInputBanner)) }
-        if docked && showsGoal { items.append(notice("goal:" + thread, goalBanner)) }
-        if docked && showsBackgroundWork { items.append(notice("background-work:" + thread, backgroundWorkBanner)) }
+        if let update = serverUpdateNotice, composerVisible {
+            // T3 3814 useSystemComposerBanners.tsx: idle offers live in the sidebar update control.
+            if case .available = update.status {
+                if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) { items.append(notice("server-version", serverUpdateBanner)) }
+            } else { items.append(notice("server-version", serverUpdateBanner)) }
+        }
+        let legacyStatus = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        if docked && legacyStatus, let key = childInputKey { items.append(notice("child-input:" + key, childInputBanner)) }
+        if docked && legacyStatus && showsGoal { items.append(notice("goal:" + thread, goalBanner)) }
+        if docked && legacyStatus && showsBackgroundWork { items.append(notice("background-work:" + thread, backgroundWorkBanner)) }
         if docked, let key = branchMismatchKey { items.append(notice("branch-mismatch:" + key, branchBanner)) }
         return items
     }
@@ -548,6 +554,30 @@ public final class ThreadPanelView: DSView {
     public var stashMenuOpen = false { didSet { if stashMenuOpen != oldValue { needsLayout = true } } }
     /// "Loading messages..." over the composer while the thread syncs (`ComposerActivityRow`).
     public let activityRow = ComposerActivityRowView()
+    private let timelineStatus = ThreadNowFooterView()
+    public private(set) var timelineStatusIds: [String] = []
+
+    /// T3 3814 ThreadNow.tsx:83-105 orders attention, work, sync, then goal at the timeline end.
+    private func updateTimelineStatus() {
+        guard !isDraft, !ThemeRuntime.isDither(dark: effectiveAppearance.isDark) else {
+            timelineStatusIds = []
+            timelineStatus.update([])
+            timeline.setStatusFooter(nil, height: 0)
+            return
+        }
+        var lines: [(String, ComposerNoticeBannerView)] = []
+        if childInputKey != nil, let view = lazyChildInputBanner.loaded { lines.append(("attention", view)) }
+        if showsBackgroundWork, let view = lazyBackgroundWorkBanner.loaded { lines.append(("work", view)) }
+        if showsActivity {
+            timelineStatus.sync.apply(.init(variant: .neutral, icon: .refreshCw,
+                title: activityRow.phase == .loading ? "Loading messages..." : "Syncing messages..."))
+            lines.append(("sync", timelineStatus.sync))
+        }
+        if showsGoal, let view = lazyGoalBanner.loaded { lines.append(("goal", view)) }
+        timelineStatusIds = lines.map(\.0)
+        timelineStatus.update(lines)
+        timeline.setStatusFooter(lines.isEmpty ? nil : timelineStatus, height: CGFloat(lines.count) * 28)
+    }
     public var showsActivity = false { didSet { if showsActivity != oldValue { needsLayout = true } } }
     public let hero = DraftHeroView()
     /// The draft's context strip under the composer, with the "Run on" control.
@@ -1597,7 +1627,7 @@ public final class ThreadPanelView: DSView {
         // The banner stack (ChatComposer.tsx:6713-6735): with banner items, the sync row is the stack's
         // activity item and stays attached; without, it is its own strip under the stack.
         var items = bannerStackItems(docked: docked, composerVisible: !composer.isHidden)
-        let activityShown = docked && showsActivity
+        let activityShown = docked && showsActivity && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         let activityInStack = activityShown && !items.isEmpty
         if activityInStack {
             items.insert(ComposerBannerStackItem(id: "composer-activity", view: activityRow, priority: .activity,
@@ -2022,6 +2052,7 @@ public final class ThreadPanelView: DSView {
         rightPanel.isSheet = sheet
         rightPanel.isMaximized = rightPanelMaximized
         let ditherHeader = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        updateTimelineStatus()
         placePanelToggles()
         header.syncPill()
         header.isHidden = chat == 0 || ditherHeader
@@ -2193,3 +2224,31 @@ public final class ThreadPanelView: DSView {
     }
 }
 
+
+/// Existing notice controls as quiet timeline lines; Redesign keeps its own composer attachments.
+private final class ThreadNowFooterView: DSView {
+    let sync = ComposerNoticeBannerView()
+    private var rows: [String: ComposerNoticeBannerView] = [:]
+    private var order: [String] = []
+    func update(_ sources: [(String, ComposerNoticeBannerView)]) {
+        let ids = sources.map(\.0)
+        for id in order where !ids.contains(id) { rows.removeValue(forKey: id)?.removeFromSuperview() }
+        order = ids
+        for (id, source) in sources {
+            guard let content = source.content else { continue }
+            let row = rows[id] ?? ComposerNoticeBannerView()
+            row.quietTimelineLine = true
+            row.placement = .floating
+            row.apply(content)
+            row.disabledActions = source.disabledActions
+            row.onAction = source.onAction
+            row.onLink = source.onLink
+            if rows[id] == nil { rows[id] = row; addSubview(row) }
+        }
+        needsLayout = true
+    }
+    override func layout() {
+        super.layout()
+        for (i, id) in order.enumerated() { rows[id]?.frame = NSRect(x: 0, y: CGFloat(i) * 28, width: bounds.width, height: 28) }
+    }
+}
