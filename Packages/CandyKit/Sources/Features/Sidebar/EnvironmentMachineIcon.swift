@@ -8,6 +8,11 @@ public enum EnvironmentMachineIcon {
         let box = IconViewBox(x: 0, y: 0, width: 24, height: 24)
         switch kind {
         case "mac-mini":
+            if ThreadDesign.uses3814 {
+                return IconDefinition(viewBox: box, elements: [
+                    IconElement(.rect(x: 3, y: 6, w: 18, h: 12, rx: 2.5, ry: 2.5), IconPaint(stroke: .current, strokeWidth: 1.75, lineCap: .round, lineJoin: .round)),
+                    IconElement(.circle(cx: 7.5, cy: 12, r: 1), IconPaint(fill: .current))])
+            }
             return IconDefinition(viewBox: box, elements: [
                 IconElement(.rect(x: 2, y: 8, w: 20, h: 8, rx: 2, ry: 2)), IconElement(.path(d: "M6 12h.01"))])
         case "mac-studio":

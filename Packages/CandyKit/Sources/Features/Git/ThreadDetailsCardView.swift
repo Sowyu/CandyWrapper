@@ -8,7 +8,7 @@ func detailsHoverFill() -> NSColor { Themed.pick(light: Themed.black(0.035), dar
 
 /// A row's corner: T3's 10, or Redesign's control corner, concentric 9 inside the card's 16.
 @MainActor
-func detailsRowRadius(_ view: NSView) -> CGFloat { ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) ? DitherChrome.controlRadius : 10 }
+func detailsRowRadius(_ view: NSView) -> CGFloat { ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) ? DitherChrome.controlRadius : ThreadDesign.uses3814(dark: view.effectiveAppearance.isDark) ? 8 : 10 }
 
 /// `ThreadDetailsControl` in the panel (ThreadDetailsControl.tsx, threadDetailsPanelStyles.ts): a 32pt row,
 /// radius 10, `px-2.5 gap-2.5`, a 16pt muted icon (or two, 2 apart), 13pt medium text in `foreground/80`.
@@ -20,7 +20,12 @@ public final class DetailsRowControl: ControlView {
     public enum Kind: Sendable { case row, select, locked }
     public var kind: Kind { didSet { if kind != oldValue { update() } } }
     public var icons: [IconDefinition] = [] { didSet { if icons != oldValue { rebuildIcons() } } }
-    public var text = "" { didSet { label.text = middleTruncates ? "" : text; middle.value = middleTruncates ? text : ""; needsLayout = true } }
+    public var text = "" { didSet { wrappedLabel.text = text; label.text = middleTruncates ? "" : text; middle.value = middleTruncates ? text : ""; needsLayout = true } }
+    public var wrapsText = false { didSet { needsLayout = true } }
+    public func preferredHeight(forWidth width: CGFloat) -> CGFloat {
+        guard wrapsText, ThreadDesign.uses3814(dark: effectiveAppearance.isDark) else { return 32 }
+        return max(32, wrappedLabel.height(forWidth: max(1, width - 20 - 16 - 10)) + 6)
+    }
     public var middleTruncates = false { didSet { label.isHidden = middleTruncates; middle.isHidden = !middleTruncates; let t = text; text = t } }
     /// A tone for the icons in place of the muted one (a pull request row wears its state's).
     public var iconColor: NSColor? { didSet { restyle() } }
@@ -39,6 +44,7 @@ public final class DetailsRowControl: ControlView {
 
     private var iconViews: [IconView] = []
     private let label = LabelView()
+    private let wrappedLabel = TextBlockView("", font: DSFont.ui(13, weight: .medium), lineHeight: 18)
     private let middle = MiddleTruncateView("", font: DSFont.ui(13, weight: .medium))
     private let chevron = IconView(name: .chevronDown, size: 16)
     private let rule = CALayer()
@@ -66,6 +72,8 @@ public final class DetailsRowControl: ControlView {
         middle.showsTitle = false
         middle.isHidden = true
         addSubview(label)
+        wrappedLabel.maxLines = 2
+        addSubview(wrappedLabel)
         addSubview(middle)
         addSubview(chevron)
         update()
@@ -123,6 +131,11 @@ public final class DetailsRowControl: ControlView {
         }
         let frame = NSRect(x: x, y: midY - 10, width: max(0, right - x), height: 20)
         label.frame = frame
+        let wraps = wrapsText && ThreadDesign.uses3814(dark: effectiveAppearance.isDark)
+        wrappedLabel.isHidden = !wraps
+        label.isHidden = middleTruncates || wraps
+        wrappedLabel.frame = NSRect(x: x, y: 3, width: max(0, right - x), height: max(0, bounds.height - 6))
+        if wraps { iconViews.forEach { $0.frame.origin.y = 5 } }
         middle.frame = frame
     }
 
@@ -174,12 +187,13 @@ public final class DetailsRowControl: ControlView {
         icon.corners = .trailing
         icon.fill = selectHover && chevronHovered ? detailsHoverFill() : nil
         chevronFill.boxStyle = icon
-        rule.backgroundColor = Themed.color(\.contrastBorder, 0.65).cgColor(in: self)
+        rule.backgroundColor = !ThreadDesign.uses3814(dark: effectiveAppearance.isDark) || lit ? Themed.color(\.contrastBorder, 0.65).cgColor(in: self) : nil
     }
 
     private func restyle() {
         label.color = Themed.color(\.contrastForeground, 0.8)
         middle.color = Themed.color(\.contrastForeground, 0.8)
+        wrappedLabel.color = Themed.color(\.contrastForeground, 0.8)
         iconViews.forEach { $0.strokeColor = iconColor ?? Themed.color(\.contrastMutedForeground) }
         chevron.strokeColor = Themed.color(\.contrastMutedForeground)
         needsDisplay = true
@@ -278,7 +292,7 @@ public final class DetailsSplitControl: DSView {
         fill.cornerRadius = detailsRowRadius(self)
         fill.backgroundColor = running ? Themed.pick(light: Themed.black(0.035), dark: Themed.white(0.055)).cgColor(in: self)
             : lit ? detailsHoverFill().cgColor(in: self) : nil
-        rule.backgroundColor = Themed.color(\.contrastBorder, 0.65).cgColor(in: self)
+        rule.backgroundColor = !ThreadDesign.uses3814(dark: effectiveAppearance.isDark) || lit ? Themed.color(\.contrastBorder, 0.65).cgColor(in: self) : nil
         elapsed.color = Themed.color(\.contrastMutedForeground)
     }
 
@@ -440,7 +454,7 @@ public final class DiffTotalsView: DSView {
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        for l in [plus, minus] { l.font = DSFont.mono(11); l.lineHeight = 16; addSubview(l) }
+        for l in [plus, minus] { l.font = DSFont.mono(ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 12 : 11); l.lineHeight = 16; addSubview(l) }
         update()
     }
 
@@ -452,17 +466,26 @@ public final class DiffTotalsView: DSView {
         needsLayout = true
     }
 
-    public override var intrinsicContentSize: NSSize { NSSize(width: ceil(plus.textWidth) + 4 + ceil(minus.textWidth), height: 16) }
+    private var gap: CGFloat { ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 6 : 4 }
+
+    public override var intrinsicContentSize: NSSize { NSSize(width: ceil(plus.textWidth) + gap + ceil(minus.textWidth), height: 16) }
 
     public override func layout() {
         super.layout()
         let y = isFlipped ? glyphOffset : -glyphOffset
         plus.frame = NSRect(x: 0, y: y, width: ceil(plus.textWidth), height: 16)
-        minus.frame = NSRect(x: ceil(plus.textWidth) + 4, y: y, width: ceil(minus.textWidth), height: 16)
+        minus.frame = NSRect(x: ceil(plus.textWidth) + gap, y: y, width: ceil(minus.textWidth), height: 16)
     }
 
     public override func updateLayer() {
-        plus.color = Themed.color(\.diffAddition); minus.color = Themed.color(\.diffDeletion)  // ba1907e8e0, GitActionsControl.tsx
+        let modern = ThreadDesign.uses3814(dark: effectiveAppearance.isDark)
+        let font = DSFont.mono(modern ? 12 : 11)
+        if plus.font != font {
+            for label in [plus, minus] { label.font = font }
+            invalidateIntrinsicContentSize(); superview?.needsLayout = true; needsLayout = true
+        }
+        plus.color = Themed.color(modern ? (insertions == 0 ? \.mutedForeground : \.diffAdditionForeground) : \.diffAddition)
+        minus.color = Themed.color(modern ? (deletions == 0 ? \.mutedForeground : \.diffDeletionForeground) : \.diffDeletion)  // ba1907e8e0, GitActionsControl.tsx
     }
 }
 
@@ -652,7 +675,7 @@ public final class ThreadDetailsCardView: DSView {
     private var versionRows: [NSView] { versionRows(density) }
 
     private func rowHeight(_ row: NSView) -> CGFloat {
-        row === gitActions ? gitActions.preferredHeight : row is ThreadDetailsPrRowView ? ThreadDetailsPrRowView.height : 32
+        row === gitActions ? gitActions.preferredHeight : (row as? ThreadDetailsPrRowView).map { $0.preferredHeight(forWidth: max(1, bounds.width - 18)) } ?? 32
     }
 
     public var preferredHeight: CGFloat { preferredHeight(density) }
@@ -750,7 +773,7 @@ public final class ThreadDetailsCardView: DSView {
 
     public override func updateLayer() {
         var box = BoxStyle()
-        box.radius = 22
+        box.radius = ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 16 : 22
         let dark = effectiveAppearance.isDark
         let frost = ThemeRuntime.isDither(dark: dark)
         box.fill = frost ? Themed.color(dark ? \.surfaceRaised : \.card, 0.62) : PopupSurface.glassFill
@@ -763,7 +786,7 @@ public final class ThreadDetailsCardView: DSView {
         blur.isHidden = !frost || CommandLine.arguments.contains("--no-blur")
         blur.cornerRadius = DitherChrome.radius(box.radius)
         // The rows clip inside the border's curve: 22 less 1, or Redesign's 16 less 1.
-        scrollArea.layer?.cornerRadius = frost ? DitherChrome.nested(in: DitherChrome.radius(box.radius), inset: 1) : Self.innerRadius
+        scrollArea.layer?.cornerRadius = frost ? DitherChrome.nested(in: DitherChrome.radius(box.radius), inset: 1) : ThreadDesign.uses3814(dark: dark) ? 15 : Self.innerRadius
         divider.backgroundColor = Themed.color(\.contrastBorder, 0.65).cgColor(in: self)
         automationsDivider.backgroundColor = Themed.color(\.border, 0.65).cgColor(in: self)
     }

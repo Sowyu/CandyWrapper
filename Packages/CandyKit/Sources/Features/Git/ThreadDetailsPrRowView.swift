@@ -60,7 +60,7 @@ public final class DetailsMetaControl: ControlView {
         var w: CGFloat = 6 + (text.isEmpty ? 0 : ceil(label.textWidth)) + 6
         if icon != nil { w += 14 + (text.isEmpty ? 0 : 4) }
         if suffix != nil { w += 4 + 12 }
-        return NSSize(width: w, height: 24)
+        return NSSize(width: w, height: ThreadDesign.uses3814(dark: effectiveAppearance.isDark) && tone != .muted ? 20 : 24)
     }
 
     public override func layout() {
@@ -74,23 +74,24 @@ public final class DetailsMetaControl: ControlView {
         }
         var x: CGFloat = 6
         if let iconView {
-            iconView.frame = NSRect(x: x, y: 5, width: 14, height: 14)
+            iconView.frame = NSRect(x: x, y: (bounds.height - 14) / 2, width: 14, height: 14)
             hoverIconView?.frame = iconView.frame
             x += 14 + 4
         }
         let w = ceil(label.textWidth)
-        label.frame = NSRect(x: x, y: 4, width: w, height: 16)
+        label.frame = NSRect(x: x, y: (bounds.height - 16) / 2, width: w, height: 16)
         x += w + 4
-        suffixView?.frame = NSRect(x: x, y: 6, width: 12, height: 12)
+        suffixView?.frame = NSRect(x: x, y: (bounds.height - 12) / 2, width: 12, height: 12)
     }
 
     public override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
 
     private func restyle() {
+        let modern = ThreadDesign.uses3814(dark: effectiveAppearance.isDark)
         let color: NSColor = switch tone {
         case .muted: Themed.color(\.mutedForeground)
-        case .primary: Themed.color(\.primary)
+        case .primary: Themed.color(modern ? \.primaryForeground : \.primary)
         case .destructive: Themed.color(\.destructive)
         }
         label.color = color
@@ -102,7 +103,9 @@ public final class DetailsMetaControl: ControlView {
         hoverIconView?.isHidden = !hovered
         var box = BoxStyle()
         box.radius = 6
-        box.fill = hovered ? detailsHoverFill() : nil
+        box.fill = modern && tone == .primary ? Themed.color(\.primary, hovered ? 0.85 : 1)
+            : modern && tone == .destructive ? Themed.color(\.destructive, hovered ? 0.16 : 0.1)
+            : hovered ? detailsHoverFill() : nil
         fill.boxStyle = box
         alphaValue = state.enabled ? 1 : 0.64
     }
@@ -112,7 +115,10 @@ public final class DetailsMetaControl: ControlView {
 /// first row and a second line carries the number, the checks, the watch eye and one action, aligned
 /// with the title text (`-mt-1 h-6 ps-9 pe-1 gap-0.5`); `pb-2` keeps stacked pull requests apart.
 public final class ThreadDetailsPrRowView: DSView {
-    public static let height: CGFloat = 32 - 4 + 24 + 8
+    public static var height: CGFloat { ThreadDesign.uses3814 ? 32 + 20 + 6 : 32 - 4 + 24 + 8 }
+    public func preferredHeight(forWidth width: CGFloat) -> CGFloat {
+        ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? open.preferredHeight(forWidth: width) + 20 + 6 : Self.height
+    }
     public let open = DetailsRowControl(kind: .row)
     private let number = LabelView("", font: TL.tabular(12))
     public let checks = DetailsMetaControl()
@@ -121,6 +127,7 @@ public final class ThreadDetailsPrRowView: DSView {
 
     public init() {
         super.init(frame: .zero)
+        open.wrapsText = true
         number.lineHeight = 16
         watch.isIconPart = true
         watch.icon = IconName.eye.definition
@@ -137,20 +144,24 @@ public final class ThreadDetailsPrRowView: DSView {
 
     public override func layout() {
         super.layout()
-        open.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 32)
-        let y: CGFloat = 32 - 4
+        let modern = ThreadDesign.uses3814(dark: effectiveAppearance.isDark)
+        let titleHeight = open.preferredHeight(forWidth: bounds.width)
+        open.frame = NSRect(x: 0, y: 0, width: bounds.width, height: titleHeight)
+        let y: CGFloat = modern ? titleHeight : 32 - 4
+        let rowHeight: CGFloat = modern ? 20 : 24
         var x: CGFloat = 36
         let nw = ceil(number.textWidth)
-        number.frame = NSRect(x: x, y: y + 4, width: nw, height: 16)
+        number.frame = NSRect(x: x, y: y + (rowHeight - 16) / 2, width: nw, height: 16)
         x += nw + 4 + 2
         for control in [checks, watch] where !control.isHidden {
             let w = control.intrinsicContentSize.width
             control.frame = NSRect(x: x, y: y, width: w, height: 24)
+            control.frame.origin.y = y + (rowHeight - 24) / 2
             x += w + 2
         }
         if !action.isHidden {
             let w = action.intrinsicContentSize.width
-            action.frame = NSRect(x: bounds.width - 4 - w, y: y, width: w, height: 24)
+            action.frame = NSRect(x: bounds.width - (modern ? 10 : 4) - w, y: y, width: w, height: modern ? 20 : 24)
         }
     }
 

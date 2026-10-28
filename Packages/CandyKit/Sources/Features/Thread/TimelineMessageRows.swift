@@ -196,7 +196,7 @@ final class UserMessageRowView: TimelineRowView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         bubble.fill = TL.c(\.messageSurface)
-        bubble.radius = 18
+        bubble.radius = ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 16 : 18
         bubble.pane = true
         attribution.lineHeight = 16
         addSubview(attribution)
@@ -240,6 +240,11 @@ final class UserMessageRowView: TimelineRowView {
             else if let sender = m.senderThreadId { self.context.model?.onOpenThread?(ThreadId(sender)) }
         }
         hoverChanged()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        bubble.radius = ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 16 : 18
     }
 
     override func configure(_ item: TimelineItem) {
@@ -895,7 +900,7 @@ final class PlanRowView: TimelineRowView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        card.radius = 24
+        card.radius = ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 16 : 24
         card.fill = TL.c(\.card, 0.7)
         card.border = TL.c(\.border, 0.8)
         addSubview(card)
@@ -1046,6 +1051,7 @@ final class PlanRowView: TimelineRowView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
+        card.radius = ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 16 : 24
         needsLayout = true
     }
 }

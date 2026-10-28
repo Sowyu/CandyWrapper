@@ -220,7 +220,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     private func layoutEmptyPlaceholder() {
         guard showsEmptyPlaceholder else { emptyLabel?.isHidden = true; return }
         let label = emptyLabel ?? {
-            let l = LabelView("Send a message to start the conversation.", font: DSFont.ui(14), color: Themed.color(\.mutedForeground, 0.3))
+            let l = LabelView("Send a message to start the conversation.", font: DSFont.ui(14), color: NSColor(name: nil) { Themed.color(\.mutedForeground, ThreadDesign.uses3814(dark: $0.isDark) ? 1 : 0.3) })
             l.lineHeight = 20
             addSubview(l)
             emptyLabel = l

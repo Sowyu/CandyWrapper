@@ -210,7 +210,7 @@ final class DiffStatView: DSView {
     }
 
     func set(additions: Int, deletions: Int, style: DiffStatStyle) {
-        let add = Themed.color(\.diffAddition), del = Themed.color(\.diffDeletion)
+        let add = ThreadDesign.diffAddition, del = ThreadDesign.diffDeletion
         switch style {
         case .pierre:
             font = DSFont.mono(11)
@@ -248,7 +248,7 @@ final class DiffStatView: DSView {
         baselineShift = 0
         let plus = "+\(Self.compact(additions))", minus = "-\(Self.compact(deletions))"
         let a = width(plus)
-        parts = [(plus, Themed.color(\.diffAddition), a, 0), (minus, Themed.color(\.diffDeletion), a + 4 + width(minus), 0)]
+        parts = [(plus, ThreadDesign.diffAddition, a, 0), (minus, ThreadDesign.diffDeletion, a + 4 + width(minus), 0)]
         preferredWidth = a + 4 + width(minus)
         needsDisplay = true
     }
@@ -260,8 +260,8 @@ final class DiffStatView: DSView {
         // The grid sits `align-middle` on the row's 16px text line, 1px under the box's center (47).
         baselineShift = 1
         let ch = width("0")
-        parts = [("+\(Self.compact(additions))", Themed.color(\.diffAddition), 4 * ch, 0),
-                 ("-\(Self.compact(deletions))", Themed.color(\.diffDeletion), 8 * ch + 8, 4 * ch + 8)]
+        parts = [("+\(Self.compact(additions))", ThreadDesign.diffAddition, 4 * ch, 0),
+                 ("-\(Self.compact(deletions))", ThreadDesign.diffDeletion, 8 * ch + 8, 4 * ch + 8)]
         preferredWidth = 8 * ch + 8
         needsDisplay = true
     }
@@ -273,7 +273,7 @@ final class DiffStatView: DSView {
         font = DSFont.mono(size)
         let plus = "+\(Self.compact(additions))", minus = "-\(Self.compact(deletions))"
         let a = width(plus)
-        parts = [(plus, Themed.color(\.diffAddition), a, 0), (minus, Themed.color(\.diffDeletion), a + 4 + width(minus), 0)]
+        parts = [(plus, ThreadDesign.diffAddition, a, 0), (minus, ThreadDesign.diffDeletion, a + 4 + width(minus), 0)]
         preferredWidth = a + 4 + width(minus)
     }
 
