@@ -701,6 +701,16 @@ public final class MarkdownView: DSView {
     }
 
     fileprivate func contextChipClicked(_ chip: MarkdownContextChip, view: NSView) {
+        if case .skill(let stored) = chip.action {
+            let skill = inlineSkills.first { $0.name == stored.name } ?? stored
+            let open: (() -> Void)? = skill.path.isEmpty || onOpenFile == nil ? nil : { [weak self] in
+                let path = skill.path
+                self?.onOpenFile?(FileLinkMeta(filePath: path, targetPath: path, workspaceRelativePath: path,
+                    basename: (path as NSString).lastPathComponent, line: nil, column: nil), false)
+            }
+            SkillDetailsView.show(skill: skill, from: view, onViewInstructions: open)
+            return
+        }
         if case .terminal(let record) = chip.action {
             PopoverView(content: TerminalContextDetailsView(record: record), padding: .compact, width: .lg)
                 .show(from: view, placement: PopupPlacement(side: .top, align: .center, sideOffset: 4, fallbackAxisSide: .end))

@@ -30,6 +30,9 @@ struct WP717Tests {
         let skill = ServerProviderSkill(name: "audit", path: "/skills/audit", displayName: "Audit")
         let runs = MarkdownInlineSkills.runs([InlineRun(text: "$audit $20 £audit $unknown $audit,"), InlineRun(text: "$audit", code: true), InlineRun(text: "$audit", link: URL(string: "https://example.com"))], skills: [skill])
         #expect(runs.filter { $0.skillLabel == "Audit" }.count == 2)
+        #expect(runs.filter { $0.skill != nil }.allSatisfy { $0.skill == skill })
+        #expect(SkillDetailsView.description(ServerProviderSkill(name: "audit", description: "  ", path: "", shortDescription: "Short")) == "Short")
+        #expect(SkillDetailsView.description(ServerProviderSkill(name: "audit", path: "")) == "No description is available for this skill.")
         #expect(runs.last?.link != nil)
         #expect(MarkdownShellCommand.visible("\u{001b}[31m\tfoo\nbar\u{007f}") == "␛[31m\tfoo\nbar␡")
     }

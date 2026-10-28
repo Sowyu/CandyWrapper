@@ -1,4 +1,5 @@
 import Foundation
+import T3Protocol
 
 /// A parsed chat message: the block tree T3's ChatMarkdown renders (react-markdown with remark-gfm and
 /// T3's GitHub alert plugin), built from Foundation's Markdown parser with the full syntax.
@@ -548,6 +549,7 @@ public struct InlineRun: Sendable, Equatable {
     public var italic = false
     public var strikethrough = false
     public var skillLabel: String?
+    public var skill: ServerProviderSkill?
     public var code = false
     public var link: URL?
     public var image: URL?

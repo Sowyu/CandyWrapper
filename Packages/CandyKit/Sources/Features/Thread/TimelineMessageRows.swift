@@ -358,7 +358,7 @@ final class UserMessageRowView: TimelineRowView {
         case .openURL(let url):
             guard let u = URL(string: url) else { return }
             if let handler = MarkdownView.linkHandler { handler.openLink(u, from: markdown) } else if SafeExternalURL.isSafe(u) { NSWorkspace.shared.open(u) }
-        case .terminal, .none:
+        case .terminal, .skill, .none:
             break
         }
     }
