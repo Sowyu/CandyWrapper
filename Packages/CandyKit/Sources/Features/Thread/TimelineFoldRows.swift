@@ -258,7 +258,8 @@ final class EventRowView: TimelineRowView {
     private static func describe(_ p: ProjectedTurnItem, summary: Bool) -> (Look, Tone, IconName, String, String?) {
         let item = p.item
         switch item.type {
-        case .runInterruptResult: return (.divider, .danger, .x, "Run interrupted", p.string("message"))
+        // T3 3814 V2LifecycleRow.tsx:75: a deliberate stop uses muted stop styling.
+        case .runInterruptResult: return (.divider, .muted, .circleStop, "Run interrupted", p.string("message"))
         case .fork:
             let fromRun = item["source"]?["type"]?.stringValue == "run"
             return (.divider, .muted, .gitFork, fromRun ? "Forked from conversation" : "Conversation fork", nil)
