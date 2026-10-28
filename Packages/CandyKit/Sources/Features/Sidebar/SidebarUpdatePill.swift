@@ -21,9 +21,14 @@ public final class SidebarUpdatePillView: ControlView {
     public var onOpenURL: ((String) -> Void)?
     /// A server update offers the full update pass, including providers. Providers alone stay in the account menu.
     private(set) var everythingSummary: String? { didSet { if everythingSummary != oldValue { refresh() } } }
-    public var hasServerUpdates: Bool { everythingSummary != nil }
-    public func setEverything(summary: String?, pending: UpdateEverythingLogic.Pending) {
+    private(set) var serverUpdateNotice: String?
+    public var hasServerUpdates: Bool { everythingSummary != nil || serverUpdateNotice != nil }
+    public var onShowServerUpdates: (() -> Void)?
+    public func setEverything(summary: String?, pending: UpdateEverythingLogic.Pending, serverNotice: String? = nil) {
+        let changed = serverUpdateNotice != serverNotice
+        serverUpdateNotice = serverNotice
         everythingSummary = pending.servers > 0 ? summary : nil
+        if changed { refresh() }
     }
     /// A running pass: its tooltip lines (`useUpdateRunTooltip`) and whether this app installs last.
     public var run: (tooltip: String, installsLocal: Bool)? { didSet { if run?.tooltip != oldValue?.tooltip || run?.installsLocal != oldValue?.installsLocal { refresh() } } }
@@ -85,7 +90,8 @@ public final class SidebarUpdatePillView: ControlView {
     var showCheckIcon: Bool { isCheckingForUpdates || update?.status == .checking }
     /// `runsEverything`: remote work waits and this app isn't downloading.
     var showsEverything: Bool { everythingSummary != nil && !isDownloading }
-    var showUpdateDetails: Bool { buttonAction != .none || showsEverything || run != nil || isDownloading }
+    var showsServerNotice: Bool { serverUpdateNotice != nil && !showsEverything && buttonAction == .none && !isDownloading }
+    var showUpdateDetails: Bool { showsServerNotice || buttonAction != .none || showsEverything || run != nil || isDownloading }
     /// `resolveSidebarUpdatePresentation` (SidebarUpdatePill.tsx:87-118 at 3105).
     var iconStatus: IconStatus {
         if showCheckIcon { return .checking }
@@ -93,19 +99,20 @@ public final class SidebarUpdatePillView: ControlView {
         if let run { return run.installsLocal && buttonAction == .install ? .downloaded : .everything }
         if showsEverything { return .everything }
         if buttonAction == .install { return .downloaded }
-        return buttonAction == .download ? .available : .idle
+        return buttonAction == .download ? .available : showsServerNotice ? .everything : .idle
     }
     private var showUpdateIconState: Bool { showUpdateDetails && !showCheckIcon }
     var tooltipText: String {
         if showCheckIcon { return "Checking for updates…" }
         if let run { return run.tooltip }
         if showsEverything, let everythingSummary { return everythingSummary }
+        if showsServerNotice, let serverUpdateNotice { return serverUpdateNotice }
         if showUpdateDetails { return update.map(DesktopUpdateLogic.buttonTooltip) ?? "Update available" }
         return "Check for updates"
     }
     private var disabled: Bool {
         if showCheckIcon { return true }
-        if showsEverything { return false }
+        if showsEverything || showsServerNotice { return false }
         return showUpdateDetails ? DesktopUpdateLogic.isButtonDisabled(update) : onCheck == nil && !DesktopUpdateLogic.canCheck(update)
     }
     var isInteractionDisabled: Bool { disabled || isActionPending || run != nil }
@@ -275,6 +282,7 @@ public final class SidebarUpdatePillView: ControlView {
     public override func performAction() {
         guard !isInteractionDisabled else { return }
         if showsEverything { onEverything?(); return }
+        if showsServerNotice { onShowServerUpdates?(); return }
         guard update != nil else { return }
         switch buttonAction {
         case .download: onDownload?()

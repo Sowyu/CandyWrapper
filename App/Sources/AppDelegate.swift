@@ -363,6 +363,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updates?.checkEnvironmentUpdates = { [weak everything] in await everything?.check() ?? false }
         updateEverything = everything
         everything.account = sidebar.accountRow
+        sidebar.updatePill.onShowServerUpdates = { [weak settings, weak commands] in
+            commands?.closeUtilityPage()
+            settings?.open(.connections)
+        }
         updates?.holdsServerUpdates = { [weak everything] in everything?.holdsServerUpdates ?? false }
         everything.onHoldChange = { [weak self] in self?.updates?.refresh() }
         threads.composer.configObservers.append { [weak everything] _ in everything?.providersChanged() }

@@ -58,6 +58,16 @@ public enum UpdateEverythingLogic {
         return (targets, skipped)
     }
 
+    /// Version availability is broader than the automatic update plan. Manual installs and
+    /// sessions without maintenance permission still need the update guidance in Connections.
+    public static func serverUpdateNotice(_ machines: [Machine], target: String) -> String? {
+        let count = machines.filter { machine in
+            guard machine.connected, !machine.ownServer, let version = machine.serverVersion else { return false }
+            return ServerVersionSkewLogic.serverIsBehind(version, client: target)
+        }.count
+        return count == 0 ? nil : count == 1 ? "Server update available" : "\(count) server updates available"
+    }
+
     /// `describeUpdateEverything`: "Update this app, 2 servers, and 3 providers", and a line per machine.
     public static func describe(localVersion: String?, servers: [Machine], target: String,
                                 providerMachines: [(environmentId: String, label: String, providers: [String])]) -> (summary: String, lines: [String]) {

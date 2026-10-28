@@ -34,6 +34,7 @@ final class UpdateEverything {
         var skipped: [L.Skipped]
         var providerMachines: [(environmentId: String, label: String, candidates: [ServerProvider])]
         var localVersion: String?
+        var serverNotice: String?
     }
 
     init(updater: UpdateController, environments: Environments, serverUpdates: ServerUpdates, pill: SidebarUpdatePillView, window: NSWindow,
@@ -127,7 +128,8 @@ final class UpdateEverything {
     // ponytail: no npm check before a CLI server updates (`useNpmReleasePublished`); the target is the pinned T3 release, already on npm
     private func makePlan() -> Plan {
         let target = ServerVersionSkewLogic.clientVersion
-        let (servers, skipped) = L.serverTargets(machines(), target: target)
+        let machineSnapshot = machines()
+        let (servers, skipped) = L.serverTargets(machineSnapshot, target: target)
         let providerMachines = environments.environmentIds.compactMap { id -> (environmentId: String, label: String, candidates: [ServerProvider])? in
             guard environments.state(id)?.status == .connected else { return nil }
             let all = providers(id)
@@ -137,7 +139,8 @@ final class UpdateEverything {
         let local = action != .none ? DesktopUpdateLogic.downloadedVersion(updater.state) : nil
         let d = L.describe(localVersion: local, servers: servers, target: target,
                            providerMachines: providerMachines.map { ($0.environmentId, $0.label, $0.candidates.map { SidebarProviderUpdatePillModel.displayName($0.driver) }) })
-        return Plan(summary: d.summary, lines: d.lines, servers: servers, skipped: skipped, providerMachines: providerMachines, localVersion: local)
+        return Plan(summary: d.summary, lines: d.lines, servers: servers, skipped: skipped, providerMachines: providerMachines, localVersion: local,
+                    serverNotice: L.serverUpdateNotice(machineSnapshot, target: target))
     }
 
     private func refresh() {
@@ -158,7 +161,7 @@ final class UpdateEverything {
             summary = "Update \(fake) providers"
         }
         #endif
-        pill?.setEverything(summary: held || runtimeOffer ? nil : summary, pending: pending)
+        pill?.setEverything(summary: held || runtimeOffer ? nil : summary, pending: pending, serverNotice: next.serverNotice)
         account?.updateAllCount = L.offered(pending, runningOnThisMac: runningOnThisMac).count
         pill?.run = run.flatMap { r in
             r.localVersion != nil || r.machines.contains(where: \.updatesServer) ? (runTooltip(r), r.localVersion != nil) : nil

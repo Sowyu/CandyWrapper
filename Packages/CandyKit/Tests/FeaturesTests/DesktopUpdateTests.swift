@@ -1,6 +1,7 @@
 import AppKit
 import Testing
 import DesignSystem
+import T3Protocol
 @testable import Features
 
 /// T3's update machine, button logic and release note shaping (updateMachine.test.ts,
@@ -95,6 +96,67 @@ struct DesktopUpdateTests {
         stable.channel = .latest
         pill.update = stable
         #expect(!pill.showsReleaseNotes && pill.tooltipText == "Update 0.1.3 downloaded. Click to restart and install.")
+    }
+
+    @Test func manualServerBannerAlsoLightsTheFooter() {
+        let target = ServerVersionSkewLogic.clientVersion
+        let capabilities = ServerUpdateCapabilities([:])
+        let manual = UpdateEverythingLogic.Machine(environmentId: "sandbox", label: "Sandbox",
+            serverVersion: "0.1.1-nightly.20261017.3234", connected: true, canMaintain: true,
+            updating: false, capabilities: capabilities)
+        let plan = UpdateEverythingLogic.serverTargets([manual], target: target)
+        #expect(plan.targets.isEmpty && plan.skipped.first?.reason == "needs a manual update")
+        if case .manual(let offer) = ServerUpdateOffer(capabilities, targetVersion: target, serverLabel: "Sandbox") {
+            #expect(offer.label == "Copy relaunch command")
+        } else { Issue.record("The same server must offer the banner's manual relaunch action") }
+        let notice = UpdateEverythingLogic.serverUpdateNotice([manual], target: target)
+        #expect(notice == "Server update available")
+        let pill = SidebarUpdatePillView()
+        pill.update = base
+        let pending = UpdateEverythingLogic.Pending(servers: plan.targets.count, providers: 2)
+        pill.setEverything(summary: "Update 2 providers", pending: pending, serverNotice: notice)
+        var guidance = 0, automatic = 0, appDownloads = 0
+        pill.onShowServerUpdates = { guidance += 1 }
+        pill.onEverything = { automatic += 1 }
+        pill.onDownload = { appDownloads += 1 }
+        #expect(!pill.isHidden && pill.iconStatus == .everything && pill.hasServerUpdates)
+        #expect(pill.tooltipText == "Server update available" && !pill.isInteractionDisabled)
+        #expect(pending.count == 2) // Manual servers do not become automatic Update all targets.
+        pill.performAction()
+        #expect(guidance == 1 && automatic == 0)
+        pill.update = base.onUpdateAvailable("0.1.3", at: at)
+        #expect(pill.iconStatus == .available)
+        pill.performAction()
+        #expect(appDownloads == 1 && guidance == 1)
+        pill.update = base
+        pill.setEverything(summary: "Update a server", pending: .init(servers: 1), serverNotice: notice)
+        pill.performAction()
+        #expect(automatic == 1)
+        // A held automatic pass still offers the non-mutating guidance.
+        pill.setEverything(summary: nil, pending: .init(servers: 1), serverNotice: notice)
+        pill.performAction()
+        #expect(guidance == 2 && automatic == 1)
+        pill.setEverything(summary: "Update 2 providers", pending: .init(providers: 2))
+        #expect(pill.iconStatus == .idle && !pill.hasServerUpdates)
+    }
+
+    @Test func serverNoticeTracksVersionsSeparatelyFromUpdatePermission() {
+        let target = ServerVersionSkewLogic.clientVersion
+        var server = UpdateEverythingLogic.Machine(environmentId: "sandbox", label: "Sandbox",
+            serverVersion: "0.1.1-nightly.20261017.3234", connected: true, canMaintain: false,
+            updating: false, capabilities: ServerUpdateCapabilities([:]))
+        #expect(UpdateEverythingLogic.serverTargets([server], target: target).targets.isEmpty)
+        #expect(UpdateEverythingLogic.serverUpdateNotice([server], target: target) != nil)
+        server.serverVersion = target
+        #expect(UpdateEverythingLogic.serverUpdateNotice([server], target: target) == nil)
+        server.serverVersion = nil
+        #expect(UpdateEverythingLogic.serverUpdateNotice([server], target: target) == nil)
+        server.serverVersion = "0.1.1-nightly.20261017.3234"
+        server.connected = false
+        #expect(UpdateEverythingLogic.serverUpdateNotice([server], target: target) == nil)
+        server.connected = true
+        server.ownServer = true
+        #expect(UpdateEverythingLogic.serverUpdateNotice([server], target: target) == nil)
     }
 
     @Test func footerUpdateScope() {
