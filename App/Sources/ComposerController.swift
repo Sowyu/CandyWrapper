@@ -5144,7 +5144,7 @@ extension ComposerController {
         let selection = thread?.modelSelection ?? pickers.current.modelSelection
         // `resolveContextWindowModelDisplayName` (ContextWindowMeter.logic.ts:85-98).
         let modelName = selection.map { s in
-            serverConfig.providers.first { $0.instanceId == s.instanceId }?.models.first { $0.slug == s.model }.map(ModelNames.trigger) ?? s.model
+            serverConfig.providers.first { $0.instanceId == s.instanceId }?.models.first { $0.slug == s.model }.map { ModelNames.trigger($0, driver: serverConfig.providers.first { $0.instanceId == s.instanceId }?.driver) } ?? s.model
         }
         meter.setCompactState(offered: ComposerCompaction.supportsManualCompaction(provider),
                               disabled: gate.disabled || noProvider || composer.isBusy,

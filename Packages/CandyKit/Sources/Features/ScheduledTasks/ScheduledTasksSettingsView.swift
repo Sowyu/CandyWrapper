@@ -954,7 +954,7 @@ final class ScheduledTaskModelPicker: DSView {
     func refresh() {
         guard let editor else { return }
         if let sel = editor.activeSelection, let entry = catalog.entry(ProviderInstanceId(rawValue: sel.instanceId)) {
-            button.title = entry.models.first { $0.slug == sel.model }.map(ModelNames.trigger) ?? sel.model
+            button.title = entry.models.first { $0.slug == sel.model }.map { ModelNames.trigger($0, driver: entry.driver) } ?? sel.model
             button.icon = ProviderIcon.make(driver: entry.driver, displayName: entry.displayName, size: 16, color: Themed.color(\.contrastMutedForeground))
         } else {
             button.title = "No providers available"
