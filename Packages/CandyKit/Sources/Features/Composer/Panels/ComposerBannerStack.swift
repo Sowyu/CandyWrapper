@@ -61,8 +61,8 @@ public final class ComposerBannerStackView: DSView {
     public private(set) var expanded = false
     /// `exitingItemId`: the notice playing its exit.
     public private(set) var exitingId: String?
-    /// The exit's pending `onDismiss`. Cancelled when the item leaves first (a thread switch).
-    private var pendingDismiss: DispatchWorkItem?
+    /// Each accepted dismissal survives removal; its animation only owns this exit generation.
+    private var exitGeneration = UUID()
     /// `onDismiss` ran for `exitingId`; an item still listed after that was kept by its producer.
     private var dismissFired = false
     private var items: [ComposerBannerStackItem] = []
@@ -100,12 +100,10 @@ public final class ComposerBannerStackView: DSView {
         if let exitingId {
             let listed = ordered.contains(where: { $0.id == exitingId })
             if !listed || dismissFired {
-                // Gone: drop its held exit so the view can come back later, and never dismiss what left
-                // before the delay ran out. Still listed after `onDismiss`: the producer kept it, so it
-                // shows again instead of blocking every later dismiss.
+                // Drop the old animation when navigation removes its item. The accepted dismissal
+                // still belongs to its producer (T3 #25238 ComposerBannerStack.tsx:61-72).
                 for item in items + ordered where item.id == exitingId { Self.clearExit(item.view) }
-                pendingDismiss?.cancel()
-                pendingDismiss = nil
+                exitGeneration = UUID()
                 dismissFired = false
                 self.exitingId = nil
             }
@@ -208,15 +206,14 @@ public final class ComposerBannerStackView: DSView {
         } else {
             item.view.alphaValue = 0
         }
+        let generation = UUID()
+        exitGeneration = generation
         let work = DispatchWorkItem { [weak self] in
-            guard let self, self.exitingId == id else { return }
-            self.pendingDismiss = nil
-            self.dismissFired = true
+            if let self, self.exitGeneration == generation, self.exitingId == id { self.dismissFired = true }
             onDismiss()
-            // A producer that drops the item relays out; one that keeps it gets it back on that pass.
-            self.onLayoutChange?()
+            // A stale exit must not change the next thread's animation or layout.
+            if let self, self.exitGeneration == generation { self.onLayoutChange?() }
         }
-        pendingDismiss = work
         DispatchQueue.main.asyncAfter(deadline: .now() + BannerStackMotion.dismiss, execute: work)
     }
 
