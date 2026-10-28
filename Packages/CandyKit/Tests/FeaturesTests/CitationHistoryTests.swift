@@ -8,7 +8,11 @@ struct CitationHistoryTests {
     private func projection(role: String? = nil) throws -> ThreadProjection {
         var p = try JSONDecoder().decode(ThreadProjection.self, from: Data(#"{"thread":{"id":"t","title":"Thread"},"runs":[],"attempts":[],"nodes":[],"subagents":[],"providerSessions":[],"providerThreads":[],"providerTurns":[],"runtimeRequests":[],"messages":[],"plans":[],"turnItems":[],"checkpointScopes":[],"checkpoints":[],"contextHandoffs":[],"contextTransfers":[],"visibleTurnItems":[],"updatedAt":"2026-01-01T00:00:00.000Z"}"#.utf8))
         if let role {
-            let item = try JSONDecoder().decode(TurnItem.self, from: Data("{\"id\":\"item\",\"type\":\"\(role)_message\",\"messageId\":\"quoted\",\"runId\":\"run\",\"text\":\"quote\",\"ordinal\":1}".utf8))
+            let item = try TurnItem(json: .object([
+                "id": .string("item"), "threadId": .string("t"), "type": .string("\(role)_message"),
+                "messageId": .string("quoted"), "runId": .string("run"), "text": .string("quote"),
+                "ordinal": .number(1), "status": .string("completed"), "updatedAt": .string("2026-01-01T00:00:00.000Z")
+            ]))
             p.visibleTurnItems = [ProjectedTurnItem(local: item, position: 0)]
         }
         return p
