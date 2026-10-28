@@ -33,3 +33,11 @@ The one-point correction aligns Runtime, Environment and Models with the recorde
 The stacked provider card also measured its list at the 272pt desktop-column width even when it rendered at 716pt. That produced 20pt of unused height below the editor. The default layout now measures the list at its actual width; the classic layout keeps its existing measurements.
 
 The focused panel comparison improves from 5.25% to 3.39% light and 5.48% to 3.62% dark, under the unchanged 5% ceiling. Reviewed the offscreen ref/ours/diff artifacts in `/tmp/design-final-misc-footer4/settings-screens/`. The panel crop, scroll offset, image references and comparison tolerance are unchanged.
+
+## Footer controls
+
+AppKit's named medium resolves to SF's weight-510 instance. T3 requests CSS 500 (`ComposerControl.tsx:16`). The default SF composer controls now use a cached weight-505 instance, calibrated against the captured glyphs. The exact weight-500 Core Text instance renders farther from the browser capture; 505 improves both coverage and advance widths. The code marks this native-renderer compensation with its scope and removal trigger.
+
+This applies to the shared default composer control style, not to one fixture or appearance. Glass, Redesign and custom font families retain their previous fonts. The control re-resolves its font when font preferences change; a regression test checks scaling and switching to a custom family. Font instances share the existing DSFont cache, so layout and hover do not create new descriptors and nothing runs while idle.
+
+The unchanged 03c crop is still (841.5, 721, 155.5, 28) CSS points. Its native flow width improves from 155.188659 to 155.052902pt; the existing half-point enclosure remains 155.5pt. No test crop, ceiling, tolerance, reference or exception changed. The real picker check improves from 4.87% to 4.73% light and from 5.18% to 4.87% dark. Final images are in `/tmp/design-final-misc-fidelity-3/pickers/`.
