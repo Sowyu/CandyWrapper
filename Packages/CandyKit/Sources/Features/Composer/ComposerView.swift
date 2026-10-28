@@ -588,7 +588,7 @@ public final class ComposerView: DSView {
                 let context = KeybindingContext(["composerFocus": true, "draftThreadRoute": isDraftRoute, "turnRunning": true,
                                                  "composerRequiresModifier": requiresSendModifier])
                 let chord = ActiveKeymap.label(for: "composer.sendAlternate", context: context).map { " or \($0)" } ?? ""
-                primary.tooltip = isCompacting ? "Click to queue" : "Click to \(action), Ctrl/⌘-click\(chord) to \(other)"
+                primary.tooltip = isCompacting ? "Click to queue" : "Click to \(action), ⌘-click\(chord) to \(other)"
                 // The label is `submitLabel`, not the click hint (ComposerPrimaryActions.tsx:280-289, 328).
                 primary.setAccessibilityLabel(face == .queue ? "Queue message" : "Steer message")
             }
