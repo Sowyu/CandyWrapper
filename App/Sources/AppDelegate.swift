@@ -813,6 +813,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         let server = ServerController(environments: environments, window: window)
+        server.recoveryUpdater = updater
         server.onRuntimeRecovery = { [weak self] message in self?.runtimeUpdater?.onNotice?("Server update recovery", message, false) }
         // The first start on a Mac without T3 Code installs CandyWrapper's own runtime; a toast shows how far it got.
         var installToast: (id: Int, view: ToastView)?

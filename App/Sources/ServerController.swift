@@ -9,6 +9,9 @@ import T3Store
 /// session is the primary environment in `Environments`, platform-managed like T3's.
 @MainActor
 final class ServerController {
+    weak var recoveryUpdater: UpdateController?
+    private var lastRecoveryFailure: Date?
+    private var recoveryDismissed = false
     private let home: URL
     private let identity: ClientIdentity
     private let credentials = CredentialStore()
@@ -134,6 +137,7 @@ final class ServerController {
 
     /// The server answered: the backoff resets and the "keeps trying" alert closes by itself.
     private func stopWaiting() {
+        recoveryDismissed = false
         retryTask?.cancel()
         retryTask = nil
         retryDelay = .seconds(2)
@@ -521,15 +525,59 @@ final class ServerController {
 
     @discardableResult
     private func present(_ error: Error) -> NSAlert? {
-        guard let window else { return nil }
+        guard let window, !recoveryDismissed else { return nil }
+        if let waitingAlert { return waitingAlert }
         let alert = NSAlert()
-        alert.messageText = "Couldn't reach T3 Code"
+        alert.messageText = error is LocalServerLaunchError ? "CandyWrapper failed to start" : "CandyWrapper could not load"
+        let detail: String
         switch error {
-        case let e as LocalServerLaunchError: alert.informativeText = e.description
-        case let e as LocalServerDiscoveryError: alert.informativeText = e.description
-        default: alert.informativeText = ConnectionFailure.classify(error).detail
+        case let e as LocalServerLaunchError: detail = e.description
+        case let e as LocalServerDiscoveryError: detail = e.description
+        default: detail = ConnectionFailure.classify(error).detail
         }
-        alert.beginSheetModal(for: window)
+        alert.informativeText = String(StartupRecovery.redacted(detail).prefix(600))
+        alert.addButton(withTitle: "Try again")
+        alert.addButton(withTitle: "Close")
+        let now = Date()
+        let repeated = StartupRecovery.repeats(previous: lastRecoveryFailure, now: now)
+        lastRecoveryFailure = now
+        let runtime = Self.store.active()
+        let installed = LocalServerDiscovery.installedRuntime(home: home)
+        let launcher = runtime?.binary ?? installed?.1
+        let command = StartupRecovery.triageCommand(launcher: launcher?.path, home: home.path,
+                                                    userHome: NSHomeDirectory(), path: Self.userPath)
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+        let report = StartupRecovery.report(error, version: version, runtimeVersion: runtime?.version.raw ?? installed?.0.raw, now: now)
+        let recovery = StartupRecoveryView(command: command, report: report, expanded: repeated)
+        recovery.onResize = { [weak alert] in alert?.layout() }
+        recovery.onUpdate = { [weak self, weak recovery] action in
+            guard let updater = self?.recoveryUpdater else { return }
+            Task { @MainActor in
+                recovery?.setUpdateError(nil)
+                switch action {
+                case .download:
+                    let result = await updater.download()
+                    if !result.completed { recovery?.setUpdateError("The update download failed. Try Download update again.") }
+                case .install:
+                    _ = await updater.install()
+                    recovery?.setUpdateError("The update install failed. Try Restart to update again.")
+                case .downloading: break
+                }
+            }
+        }
+        recoveryUpdater?.observe { [weak recovery, weak updater = recoveryUpdater] in recovery?.setUpdateState(updater?.state) }
+        alert.accessoryView = recovery
+        waitingAlert = alert
+        alert.beginSheetModal(for: window) { [weak self, weak alert] response in
+            guard let self else { return }
+            if self.waitingAlert === alert { self.waitingAlert = nil }
+            // Closing recovery must not reopen it on every automatic connection retry.
+            if response == .alertSecondButtonReturn { self.recoveryDismissed = true }
+            if response == .alertFirstButtonReturn {
+                self.retryTask?.cancel()
+                self.connect()
+            }
+        }
         return alert
     }
 }
