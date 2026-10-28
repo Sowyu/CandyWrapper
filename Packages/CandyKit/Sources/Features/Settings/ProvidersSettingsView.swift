@@ -10,8 +10,13 @@ public enum ProvidersLogic {
     public static let drivers: [(driver: String, label: String, hasDefault: Bool)] = [
         ("codex", "Codex", true), ("claudeAgent", "Claude", true), ("cursor", "Cursor", true), ("grok", "Grok", true),
         ("opencode", "OpenCode", true), ("antigravity", "Antigravity", true), ("muse", "Muse Code", true), ("pi", "Pi", true),
-        ("acpRegistry", "ACP Registry", false),
+        ("fx", "fx", true), ("acpRegistry", "ACP Registry", false),
     ]
+
+    /// T3 3814 provider-fx/src/client.ts:12-16. Older runtimes must never receive an fx mutation.
+    public static func addableDrivers(providers: [ServerProvider]) -> [(driver: String, label: String, hasDefault: Bool)] {
+        drivers.filter { $0.driver != "acpRegistry" && ($0.driver != "fx" || providers.contains { $0.driver == "fx" }) }
+    }
 
     public static func label(_ driver: String) -> String? { drivers.first { $0.driver == driver }?.label }
 
@@ -29,7 +34,10 @@ public enum ProvidersLogic {
     /// other instances, then instances of drivers this build doesn't ship. Cursor shows only when the server has it.
     public static func rows(settings: ServerSettingsValues, providers: [ServerProvider], target: String? = nil) -> [Row] {
         let configured = settings["providerInstances"].objectValue ?? [:]
-        let visible = drivers.filter { $0.driver != "cursor" || providers.contains { $0.instanceId.rawValue == "cursor" } }
+        let visible = drivers.filter { driver in
+            (driver.driver != "cursor" || providers.contains { $0.instanceId.rawValue == "cursor" })
+                && (driver.driver != "fx" || providers.contains { $0.driver == "fx" })
+        }
         var byDriver: [String: [(String, JSONValue)]] = [:]
         for (id, instance) in configured.sorted(by: { $0.key < $1.key }) {
             byDriver[instance["driver"]?.stringValue ?? "", default: []].append((id, instance))
@@ -178,6 +186,7 @@ public enum ProvidersLogic {
     public static func fields(_ driver: String, config: JSONValue? = nil) -> [Field] {
         func binary(_ name: String, _ detail: String) -> Field { Field(key: "binaryPath", title: "Binary path", detail: detail, placeholder: name) }
         switch driver {
+        case "fx": return [binary("fx", "Path to the fx binary. All fx instances on this machine share its fx login.")]
         case "codex": return [binary("codex", "Path to the Codex binary used by this instance."),
                               Field(key: "homePath", title: "CODEX_HOME path", detail: "Custom Codex home and config directory.", placeholder: "~/.codex"),
                               Field(key: "shadowHomePath", title: "Shadow home path",

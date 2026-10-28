@@ -171,6 +171,7 @@ enum ProviderIcon {
         case "codex": return IconView(name: .brandOpenAI, size: size, strokeColor: color)
         case "cursor": return IconView(name: .brandCursor, size: size, strokeColor: color)
         case "grok": return IconView(definition: ProviderPackageIcons.grok, size: size, color: ProviderPackageIcons.grokFill)
+        case "fx": return IconView(definition: ProviderPackageIcons.fx, size: size, color: ProviderPackageIcons.grokFill)
         case "pi": return IconView(definition: ProviderPackageIcons.pi, size: size, color: ProviderPackageIcons.grokFill)
         case "muse": return IconView(definition: ProviderPackageIcons.muse, size: size)
         case "opencode": return ProviderPackageIcons.openCode(size: size)

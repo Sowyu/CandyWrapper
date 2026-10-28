@@ -50,7 +50,7 @@ public final class ProviderAddWizardView: DialogView {
         steps.frame.size.height = 52
         var body: [NSView] = [steps]
         if step == 0 {
-            let choices = ProvidersLogic.drivers.filter { $0.0 != "acpRegistry" }
+            let choices = ProvidersLogic.addableDrivers(providers: context.configs[environment]?.providers ?? [])
             let grid = ProviderAddDriverGrid(choices: choices.map { ($0.0, $0.1) }, selected: driver)
             grid.onSelect = { [weak self] driver in self?.driver = driver; self?.error = nil; self?.rebuild() }
             body.append(grid)
@@ -184,6 +184,9 @@ public final class ProviderAddWizardView: DialogView {
             if (configs[driver]?[key]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 error = local ? "Enter a local ACP executable." : "Select an ACP or configure one manually."; rebuild(); return
             }
+        }
+        guard driver != "fx" || context.configs[environment]?.providers.contains(where: { $0.driver == "fx" }) == true else {
+            error = "This server does not support fx."; rebuild(); return
         }
         let id = id, driver = driver, environment = environment
         let payload = ProviderSetupLogic.create(id: id, driver: driver, label: label, config: configs[driver] ?? [:], accent: accent[driver])
