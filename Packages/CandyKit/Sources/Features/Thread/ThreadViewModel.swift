@@ -114,6 +114,8 @@ public final class ThreadViewModel {
 
     /// Rows changed; the panel re-applies them.
     var onChange: (@MainActor (TimelineChange) -> Void)?
+    /// The inspector asks for its source tool call's recorded diff.
+    public var onOpenToolDiff: (@MainActor (ToolCallDiffTarget) -> Void)?
     /// The changed files card asks for a run's diff, at a file (`onOpenTurnDiff`).
     public var onOpenTurnDiff: (@MainActor (RunId, String?) -> Void)?
     /// A signed URL for an attachment shown inline as HTML (`assets.createUrl`, `disposition: inline`).
@@ -234,7 +236,7 @@ public final class ThreadViewModel {
     /// An inspector button.
     func perform(_ action: WorkDetail.Action) {
         switch action {
-        case .openDiff(let run, let path): onOpenTurnDiff?(run, path)
+        case .openDiff(let target): onOpenToolDiff?(target)
         case .rollBack(let checkpoint, let scope): onRollbackCheckpoint?(checkpoint, scope)
         case .openFork(let id), .openSubagent(let id): onOpenThread?(id)
         }

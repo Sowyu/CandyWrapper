@@ -106,6 +106,7 @@ final class ThreadSession {
             panel?.lazyDiffPanel.set(\.loader, Self.diffLoader(shell.supervisor))
             panel?.lazyDiffPanel.set(\.gitLoader, Self.gitDiffLoader(shell.supervisor))
             panel?.lazyDiffPanel.set(\.refLoader, Self.baseRefLoader(shell.supervisor))
+            panel?.lazyDiffPanel.set(\.toolCallLoader, Self.toolCallDiffLoader(shell.supervisor))
             panel?.model.turnItemLoader = Self.turnItemLoader(shell.supervisor)
             let supervisor = shell.supervisor
             panel?.model.commandOutput = { thread, item, receive in
@@ -314,6 +315,18 @@ final class ThreadSession {
             guard let json = try? await supervisor.request(VcsRPC.listRefs, payload: VcsRPC.baseRefsInput(cwd: cwd, remote: remote)),
                   let result = try? JSONDecoder().decode(VcsListRefsResult.self, from: JSONEncoder().encode(json)) else { return [] }
             return result.refs
+        }
+    }
+
+    /// File-change details retain the recorded patch and contents for the diff panel.
+    nonisolated static func toolCallDiffLoader(_ supervisor: ConnectionSupervisor) -> DiffPanelView.ToolCallLoader {
+        { input in
+            do {
+                let json = try await supervisor.request("orchestration.getTurnItem", payload: encode(input))
+                return try json.decode(as: GetTurnItemResult.self)
+            } catch let error as RPCClientError {
+                throw DiffLoadError(errorDescription: error.description)
+            }
         }
     }
 

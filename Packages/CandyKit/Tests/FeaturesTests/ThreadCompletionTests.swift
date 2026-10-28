@@ -244,7 +244,7 @@ struct ThreadCompletionTests {
         #expect(a != b)
         b = a; b.blocks[0].kind = .link("https://example.com")
         #expect(a != b)
-        b = a; b.blocks[0].action = .openDiff(RunId("r"), "a.swift")
+        b = a; b.blocks[0].action = .openDiff(.init(threadId: ThreadId("t"), itemId: TurnItemId("i"), revision: "1", runId: RunId("r"), filePath: "a.swift"))
         #expect(a != b)
     }
 }

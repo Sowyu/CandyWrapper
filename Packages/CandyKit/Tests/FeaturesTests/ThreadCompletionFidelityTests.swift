@@ -41,7 +41,7 @@ struct ThreadCompletionFidelityTests {
                     let inspector = WorkDetailView()
                     var detail = WorkDetail([("Sources/Chat.swift", .output)])
                     if n["failed"] as? Bool == true { detail.mono("Patch did not apply", .error) }
-                    detail.blocks.append(.init(text: "", kind: .caption, gap: 6, action: .openDiff(RunId("r"), "Sources/Chat.swift")))
+                    detail.blocks.append(.init(text: "", kind: .caption, gap: 6, action: .openDiff(.init(threadId: ThreadId("t"), itemId: TurnItemId("i"), revision: "1", runId: RunId("r"), filePath: "Sources/Chat.swift"))))
                     inspector.detail = detail
                     inspector.frame = NSRect(x: 8, y: 8, width: 320, height: inspector.height(forWidth: 320))
                     view = inspector

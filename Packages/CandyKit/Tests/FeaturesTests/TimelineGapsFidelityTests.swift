@@ -50,7 +50,7 @@ struct TimelineGapsFidelityTests {
         default:
             item = Self.item(["type": .string("fork"), "targetThreadId": .string("t-2")])
         }
-        return WorkDetail.inspector(item, workspaceRoot: "/tmp/demo-repo", output: nil, checkpointStatus: { _ in "ready" })
+        return WorkDetail.inspector(item, row: ProjectedTurnItem(local: item), workspaceRoot: "/tmp/demo-repo", output: nil, checkpointStatus: { _ in "ready" })
     }
 
     static func view(_ native: [String: String], css: [String: Double]) -> NSView {
@@ -172,7 +172,9 @@ struct TimelineGapsFidelityTests {
         let change = Self.detail("file-change")
         #expect(change.blocks.map(\.text) == ["demo-repo/Sources/Login.swift", "update demo-repo/Sources/Login.swift",
                                               "rename Sources/Old.swift → demo-repo/Sources/Session.swift (swift, text/x-swift)"])
-        #expect(change.blocks[0].action == .openDiff(RunId("run-1"), "/tmp/demo-repo/Sources/Login.swift"))
+        guard case .openDiff(let target) = change.blocks[0].action else { Issue.record("Missing tool diff action"); return }
+        #expect(target.runId == RunId("run-1"))
+        #expect(target.filePath == "/tmp/demo-repo/Sources/Login.swift")
         let web = Self.detail("web-search")
         #expect(web.blocks.map(\.kind) == [.mono(.pattern), .link("https://swift.org/concurrency"), .preview, .link(nil)])
         #expect(web.blocks.last?.text == "Search result")
