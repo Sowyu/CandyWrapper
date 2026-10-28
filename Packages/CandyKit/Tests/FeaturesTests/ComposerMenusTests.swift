@@ -1,12 +1,68 @@
 import AppKit
 import Testing
 import T3Protocol
+import T3Store
 @testable import Features
 
 /// The composer menus and chips against T3's own tests: composerSlashCommandSearch.test.ts,
 /// composerInlineTokens.test.ts, composerContextReferences.test.ts and composer-logic.test.ts.
 @MainActor
 struct ComposerMenusTests {
+    @Test func machineMentionsNeedAQueryAndKeepIdentityAcrossDraftClipboardAndQueue() throws {
+        let envs: [ComposerMenus.EnvironmentCandidate] = [
+            .init(id: "here", label: "Laptop", machine: "laptop"),
+            .init(id: "there", label: "Build server", machine: "cloud"),
+        ]
+        #expect(ComposerMenus.environmentItems(query: "", environments: envs, excluding: "here").isEmpty)
+        #expect(ComposerMenus.environmentItems(query: "laptop", environments: envs, excluding: "here").isEmpty)
+        let item = try #require(ComposerMenus.environmentItems(query: " BUILD ", environments: envs, excluding: "here").first)
+        let text = ComposerMenus.replacement(for: item)
+        let record = ComposerContext.environmentRecord(environmentId: "there", label: "Build server")
+        let id = try #require(record["contextId"]?.stringValue)
+        let saved = ComposerContext.persistedIdentityRecords(prompts: [text], records: [id: record, "unused": .null])
+        let restored = try JSONDecoder().decode([String: JSONValue].self, from: JSONEncoder().encode(saved))
+        #expect(restored == [id: record])
+        let html = try #require(ComposerContext.clipboardHTML(text: text, records: [record], environmentId: "here"))
+        #expect(ComposerContext.pastedRecords(html: html, pastedText: text) == restored)
+        #expect(ComposerContext.messageContext(prompt: text, records: restored)?["records"] == .array([record]))
+        let recovery = ThreadPromptAttachmentRestore.restore(text: text, context: .object(["records": .array([record])]), attachments: [], staged: [])
+        #expect(recovery.text == text && recovery.records == [record])
+        let chip = ComposerChipLook.look(for: try #require(ComposerInlineTokens.collect(text).first), skillLabel: { $0 }, record: { restored[$0] },
+                                        environment: { _ in ("Renamed server", "cloud") })
+        #expect(chip.kind == .environment(machine: "cloud") && chip.label == "Renamed server")
+        let thread = ComposerContext.threadRecord(threadId: "remote", title: "Deploy", environmentId: "there")
+        let foreignText = ComposerContext.reference(ComposerContext.threadReference(threadId: "remote", title: "Deploy"))
+        #expect(ComposerContext.threadsOutsideEnvironment(foreignText, records: ["thread_remote": thread], environmentId: "here", linkedEnvironments: ["there"]).isEmpty)
+        #expect(ComposerContext.threadsOutsideEnvironment(foreignText, records: ["thread_remote": thread], environmentId: "here") == [thread])
+    }
+
+    @Test func sentIdentityChipsResolveTheRecordedMachine() throws {
+        let thread = ComposerContext.threadRecord(threadId: "same-id", title: "Remote title", environmentId: "there")
+        let machine = ComposerContext.environmentRecord(environmentId: "there", label: "Old name")
+        var lookedUp: [String] = []
+        let chips = MarkdownContextChips.message(context: .object(["records": .array([thread, machine])]), attachments: [], environmentId: "here",
+            environment: { _ in .init(label: "Build server", machine: "cloud") }, thread: { key in
+                lookedUp.append(key)
+                return .init(title: "Live remote title", destination: key)
+            })
+        #expect(lookedUp == ["t3-thread://v2/there/same-id"])
+        let remote = chips.chip(kind: "thread", contextId: "thread_same-id", label: "Remote title")
+        #expect(remote.look.label == "Live remote title" && remote.action == .openThread("t3-thread://v2/there/same-id"))
+        let environment = chips.chip(kind: "environment", contextId: "environment_there", label: "Old name")
+        #expect(environment.look.label == "Build server" && environment.look.kind == .environment(machine: "cloud"))
+    }
+
+    @Test func linkedThreadChoicesKeepMachineAndExcludeSubagents() {
+        let threads: [ComposerMenus.ThreadCandidate] = [
+            .init(id: "here:a", title: "Deploy locally", updatedAt: "1", archived: false),
+            .init(id: "there:b", title: "Deploy server", updatedAt: "2", archived: false, machine: "Build server"),
+            .init(id: "there:c", title: "Deploy helper", updatedAt: "3", archived: false, machine: "Build server", isSubagent: true),
+        ]
+        let items = ComposerMenus.threadItems(query: "deploy", threads: threads, excluding: "here:a")
+        #expect(items.count == 1 && items.first?.description == "Thread on Build server")
+        #expect(items.first.map(ComposerMenus.replacement)?.contains("thread_b") == true)
+    }
+
     // MARK: Triggers
 
     @Test func triggers() {

@@ -1,5 +1,6 @@
 import Foundation
 import T3Protocol
+import T3Store
 
 // The composer's `/`, `@`, `$` and `#` menus and the inline tokens behind its chips, ported from
 // T3: composer-logic.ts (triggers), composerInlineTokens.ts and composerContextReferences.ts
@@ -261,6 +262,7 @@ public struct ComposerMenuItem: Equatable, Sendable {
         case pullRequest(PullRequestReference)
         /// A thread to attach: its scoped id and title.
         case thread(id: String, title: String)
+        case environment(id: String, label: String, machine: String)
     }
     public var id: String
     public var kind: Kind
@@ -354,8 +356,11 @@ public enum ComposerMenus {
 
     public struct ThreadCandidate: Sendable {
         public var id: String, title: String, updatedAt: String, archived: Bool
-        public init(id: String, title: String, updatedAt: String, archived: Bool) {
+        public var machine: String?
+        public var isSubagent: Bool
+        public init(id: String, title: String, updatedAt: String, archived: Bool, machine: String? = nil, isSubagent: Bool = false) {
             self.id = id; self.title = title; self.updatedAt = updatedAt; self.archived = archived
+            self.machine = machine; self.isSubagent = isSubagent
         }
     }
 
@@ -365,10 +370,26 @@ public enum ComposerMenus {
     public static func threadItems(query: String, threads: [ThreadCandidate], excluding: String?, browse: Bool = false) -> [ComposerMenuItem] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !q.isEmpty || browse else { return [] }
-        return threads.filter { $0.id != excluding && !$0.archived && (q.isEmpty || $0.title.lowercased().contains(q)) }
+        return threads.filter { $0.id != excluding && !$0.archived && !$0.isSubagent && (q.isEmpty || $0.title.lowercased().contains(q)) }
             .sorted { $0.updatedAt > $1.updatedAt }
             .prefix(threadResultLimit)
-            .map { ComposerMenuItem(id: "thread:\($0.id)", kind: .thread(id: $0.id, title: $0.title), label: $0.title, description: "Thread") }
+            .map { ComposerMenuItem(id: "thread:\($0.id)", kind: .thread(id: $0.id, title: $0.title), label: $0.title, description: $0.machine.map { "Thread on \($0)" } ?? "Thread") }
+    }
+
+    public struct EnvironmentCandidate: Sendable {
+        public var id: String, label: String, machine: String
+        public init(id: String, label: String, machine: String = "server") {
+            self.id = id; self.label = label; self.machine = machine
+        }
+    }
+
+    /// T3 3814, client-runtime/src/composerThreadItems.ts:93-123. A bare @ stays a file picker.
+    public static func environmentItems(query: String, environments: [EnvironmentCandidate], excluding: String) -> [ComposerMenuItem] {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return [] }
+        return environments.filter { $0.id != excluding && $0.label.lowercased().contains(query) }.map {
+            .init(id: "environment:\($0.id)", kind: .environment(id: $0.id, label: $0.label, machine: $0.machine), label: $0.label, description: "Machine")
+        }
     }
 
     /// Workspace entries from `projects.searchEntries`: the basename and the parent folder.
@@ -487,7 +508,8 @@ public enum ComposerMenus {
         case .providerCommand(let name): return "/\(name) "
         case .skill(let name, _, _): return "$\(name) "
         case .pullRequest(let pr): return ComposerContext.reference(ComposerContext.pullRequestReference(pr)) + " "
-        case .thread(let id, let title): return ComposerContext.reference(ComposerContext.threadReference(threadId: id, title: title)) + " "
+        case .environment(let id, let label, _): return ComposerContext.reference(ComposerContext.environmentReference(environmentId: id, label: label)) + " "
+        case .thread(let id, let title): return ComposerContext.reference(ComposerContext.threadReference(threadId: EnvironmentScope.localId(of: id), title: title)) + " "
         }
     }
 }
@@ -698,6 +720,24 @@ public enum ComposerContext {
                         "label": .string(label), "environmentId": .string(environmentId), "threadId": .string(threadId), "title": .string(label)])
     }
 
+    /// T3 3814, lib/composerContextRecords.ts:167-177 and contracts/composerContext.ts:221-224.
+    /// Only identity travels with the chip, never addresses or credentials.
+    public static func environmentReference(environmentId: String, label: String) -> Reference {
+        Reference(kind: "environment", contextId: kindScopedId("environment", environmentId), label: sanitizeLabel(label, kind: "environment"))
+    }
+
+    public static func environmentRecord(environmentId: String, label: String) -> JSONValue {
+        let reference = environmentReference(environmentId: environmentId, label: label)
+        return .object(["version": .number(1), "kind": .string("environment"), "contextId": .string(reference.contextId),
+                        "label": .string(reference.label), "environmentId": .string(environmentId)])
+    }
+
+    /// The referenced identity records survive a draft save, paste, queue edit and retry.
+    public static func persistedIdentityRecords(prompts: [String], records: [String: JSONValue]) -> [String: JSONValue] {
+        let ids = Set(prompts.flatMap(referencedIds))
+        return records.filter { ids.contains($0.key) && ["environment", "thread"].contains($0.value["kind"]?.stringValue ?? "") }
+    }
+
     /// A terminal selection (`TerminalContextSelection`, lib/terminalContext.ts:5-11).
     public struct TerminalSelection: Equatable, Sendable {
         public var terminalId: String, terminalLabel: String, lineStart: Int, lineEnd: Int, text: String
@@ -787,10 +827,11 @@ public enum ComposerContext {
 
     /// `threadContextsOutsideEnvironment` (shared composerContextReferences.ts:326-341): thread records the
     /// prompt references that live on another environment, whose agent can't read them.
-    public static func threadsOutsideEnvironment(_ prompt: String, records: [String: JSONValue], environmentId: String) -> [JSONValue] {
+    public static func threadsOutsideEnvironment(_ prompt: String, records: [String: JSONValue], environmentId: String, linkedEnvironments: Set<String> = []) -> [JSONValue] {
         referencedIds(prompt).compactMap { id in
             guard let record = records[id], record["kind"]?.stringValue == "thread", record["threadId"] != nil,
-                  record["environmentId"]?.stringValue != environmentId else { return nil }
+                  record["environmentId"]?.stringValue != environmentId,
+                  !linkedEnvironments.contains(record["environmentId"]?.stringValue ?? "") else { return nil }
             return record
         }
     }

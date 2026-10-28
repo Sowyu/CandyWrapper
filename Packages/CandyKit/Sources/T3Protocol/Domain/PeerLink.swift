@@ -70,6 +70,13 @@ public enum PeerLinks {
         capabilities.contains("peerLinks") && settings["linkedEnvironmentsEnabled"] == .bool(true)
     }
 
+    /// T3 3814, client-runtime/src/linkRequest.ts:29-46. An unreachable link still names a
+    /// machine the agent can try; an expired link cannot authorize a foreign thread reference.
+    public static func names(_ links: [PeerLinkSummary], labels: [String: String]) -> [String: String] {
+        Dictionary(links.filter { $0.status != .expired }.map { ($0.environmentId, labels[$0.environmentId] ?? $0.label) },
+                   uniquingKeysWith: { _, latest in latest })
+    }
+
     /// `mcpClientScopes` (contracts/src/auth.ts:412-422): the scopes a pairing code for `access` must carry.
     public static func scopes(for access: String) -> [String] {
         switch access {

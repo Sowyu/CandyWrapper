@@ -580,6 +580,10 @@ final class ThreadController {
             let title = shell.title.trimmingCharacters(in: .whitespacesAndNewlines)
             return title.isEmpty ? nil : title
         }
+        panel.model.linkedEnvironment = { [weak self] id in
+            guard let self, let label = environments.label(id) else { return nil }
+            return .init(label: label, machine: environments.machine(id) ?? "server")
+        }
         panel.model.linkedThread = { [weak self, weak sidebar] local in
             guard let env = self?.openThreadId?.environmentId, let snapshot = sidebar?.snapshot else { return nil }
             guard let link = ThreadLink(href: local.rawValue) ?? ThreadLink(href: "t3-thread://v1/\(local.rawValue)"),
