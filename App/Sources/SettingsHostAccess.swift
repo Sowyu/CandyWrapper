@@ -9,6 +9,7 @@ import T3Protocol
 struct HostInfo {
     var descriptor: EnvironmentDescriptor?
     var session: AuthSessionState?
+    var sessionError: String?
 }
 
 /// The host side of Settings > Connections: "This machine" rows, the T3 Connect preferences, the Icon
@@ -78,14 +79,16 @@ extension SettingsController {
     func loadHosts() {
         guard isOpen else { return }
         let ids = ([environments.primaryId].compactMap { $0 } + environments.saved.map(\.environmentId))
-        for id in ids where hosts[id]?.session == nil && !hostLoads.contains(id) && environments.state(id)?.status == .connected {
+        for id in ids where hosts[id] == nil && !hostLoads.contains(id) && environments.state(id)?.status == .connected {
             guard let shell = environments.session(id) else { continue }
             hostLoads.insert(id)
             let http = shell.http, token = shell.token
             Task {
                 async let d = try? http.descriptor()
-                async let s = try? http.session(token: token)
-                let info = HostInfo(descriptor: await d, session: await s)
+                var info = HostInfo()
+                do { info.session = try await http.session(token: token) }
+                catch { info.sessionError = "Could not read this environment's permissions. \(error)" }
+                info.descriptor = await d
                 hostLoads.remove(id)
                 guard isOpen else { return }
                 hosts[id] = info
@@ -310,6 +313,8 @@ extension SettingsController {
         let detected = d?.platform?.machine ?? environments.detectedMachine(id) ?? "server"
         let lock: String? = !connected || d == nil ? "Connect to this environment to change its icon."
             : !d!.capability("environmentIcon") ? "This environment's server is too old to keep an icon. Update it to choose one."
+            : hosts[id]?.sessionError != nil ? hosts[id]?.sessionError
+            : session(id) == nil ? "Loading this environment's permissions..."
             : !grants(id, AuthScopes.settingsWrite) ? "Your session on this environment cannot change its settings." : nil
         return .init(resolved: environments.machine(id) ?? detected, detected: detected,
                      detectedTag: d?.platform?.machine != nil ? "detected" : "default", lock: lock)

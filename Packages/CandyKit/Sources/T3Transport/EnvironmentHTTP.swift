@@ -122,7 +122,17 @@ public struct EnvironmentHTTP: Sendable {
 
     /// `GET /api/auth/session`. Never 401; unauthenticated callers get `authenticated: false`.
     public func session(token: String?) async throws -> AuthSessionState {
-        try await send("GET", "api/auth/session", token: token, as: AuthSessionState.self)
+        // A timeout says nothing about grants (client-runtime/src/state/session.ts:39-75, 3814).
+        var request = self
+        request.timeout = max(0.001, min(timeout, 60))
+        while true {
+            try Task.checkCancellation()
+            do {
+                return try await request.send("GET", "api/auth/session", token: token, as: AuthSessionState.self)
+            } catch EnvironmentHTTPError.timedOut where request.timeout < 60 {
+                request.timeout = min(request.timeout * 2, 60)
+            }
+        }
     }
 
     /// `POST /api/auth/websocket-ticket`. Mint a fresh one for every connection attempt.
