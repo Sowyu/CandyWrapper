@@ -51,39 +51,50 @@ The 22 commits that touch apps/web/src, packages/client-runtime, packages/contra
 
 | Commit | PR | Change | CW |
 |---|---|---|---|
-| 990e9e06e5 | #26333 | Handoffs stay out of superseded attempt folds | ported |
-| 441a4ebd65 | #26304 | Tool call diffs open in the diff panel | ported |
+| 990e9e06e5 | #26333 | Handoffs stay out of superseded attempt folds | ported (3097a414) |
+| 441a4ebd65 | #26304 | Tool call diffs open in the diff panel | ported (4c0e9800) |
 | cfc8be97d7 | #26343 | CI download retry | n/a |
 | c3f5e363e5 | #26331 | Server stops replaying stale Codex usage limits | free with runtime |
-| ff424802ed | #26349 | Shift-click marks a range of PR files viewed | ported |
+| ff424802ed | #26349 | Shift-click marks a range of PR files viewed | ported (5217188e) |
 | 9bc4138923 | #26350 | Refactor, flattened call chains | n/a |
-| 10e709c337 | #26355 | No duplicate queued message entries | ported |
+| 10e709c337 | #26355 | No duplicate queued message entries | ported (3097a414) |
 | f17c9d202b | #26358 | New Claude threads default to Opus 5.5 | free with runtime (wire 7) |
 | a4e1986585 | #26366 | Docs, tunnel limits | n/a |
 | dac58fa7a6 | #22778 | Neutral source control indicators | phase 2 |
 | cb4fe60a4b | #24864 | Thread details tooltip shows | already so: the toggle has its tooltip (Features/Thread/ThreadPanelView.swift:150) |
-| 975b3dc568 | #26367 | Subagent questions stay off parent threads | ported |
+| 975b3dc568 | #26367 | Subagent questions stay off parent threads | ported (a71d76ea) |
 | be2ea30d2b | #26371 | Build, public-config bootstrap | n/a |
 | 4c9c7d0bb6 | | Mobile 2.2.0 | n/a |
 | c677d5fc45 | #26375 | Scroll-to-end button stops jumping | n/a: a React list ref that re-attached on every render; CW's timeline scroll view attaches once |
 | 07f7f97609 | #26362 | Release CI | n/a |
-| 001d16e969 | #26387 | Boring sidebar hides empty project folders | ported |
+| 001d16e969 | #26387 | Boring sidebar hides empty project folders | ported (a71d76ea) |
 | 9f33a1c836 | #26369 | T3 Connect tunnel usage, T3 Chat accounts | skipped (section 2.12) |
 | 40d335a7ba | #26392 | Settling a thread doesn't scroll the sidebar | already so: CW scrolls the sidebar only to reveal a new route, for keyboard focus, rename and search (Features/Sidebar/SidebarView.swift:552-580, SidebarListView.swift:633-637) |
-| 80fcb7f58f | #26391 | Boring folders put your latest message on top | ported |
+| 80fcb7f58f | #26391 | Boring folders put your latest message on top | ported (a71d76ea) |
 | 2a738273e7 | #26395 | Threads settle when a watched PR merges | free with runtime (wire 8) |
 | d2429f733c | #26240 | Long thread history in bounded pages, deferred work | open task: opt-in (wire 3), and CW gets complete items without it |
-| c3858bf1f7 | #26427 | Snooze options order, width and link | ported |
+| c3858bf1f7 | #26427 | Snooze options order, width and link | ported (3cb2301a); rows sort when the pointer leaves the list, where T3 waits for focus to leave |
 | 48a292364a | #26432 | File preview wrap buttons stay local | already so: the toggle changes only that surface (Features/Files/FileSurfaceView.swift:111-121) |
 | bd84b1781a | #25869 | Simpler composer | phase 2 |
-| 96a330c957 | #26434 | Remote delegates' icon, parent row, settings refresh | refresh ported; the rest waits (section 2.11) |
+| 96a330c957 | #26434 | Remote delegates' icon, parent row, settings refresh | refresh ported (fb3147e2); the rest waits (section 2.11) |
 | 1abf368532 | #26440 | Build, license templates | n/a |
 | 0160c448f6 | #26442 | Agents list snoozed threads across projects | n/a (wire 5) |
 | c280e640c1 | #26448 | Delegate model search by provider name | free with runtime |
 | eb751fa073 | #26449 | Chat tables open at the right size | phase 2 |
 
-Found while auditing: ec43786140 (#17761, 2994 range), section 2.1, ported now.
+Found while auditing: ec43786140 (#17761, 2994 range), section 2.1, ported in 3097a414.
 
 ## 4. Method and validation
 
-The main session read every client commit's diff and checked each against CW's code.
+The main session read every client commit's diff and checked each against CW's code, and ported everything except #26304. A GPT-6 Astra delegate (medium effort) ported #26304 in its own worktree. The main session reviewed that port and restored the size-limit notice as a `LabelView`, with the omitted-files notice in a second bar, as DiffPanel.tsx:1043-1054 stacks them.
+
+- The affected suites passed: 123 tests, including `NightlyCompatTests.recorded3824ConfigShellAndThreadDecode` on a session recorded read-only from sandbox 3824 (fixtures/transcripts/25-nightly-3824.jsonl), plus the delegate's 67 diff tests.
+- With CW's own subscription flags (`acceptBoundedSnapshot`, `acceptCompactTurnItems`), the 3814 and 3824 sandboxes return the same bounded snapshot of the forked, compacted thread: 69 items with the same tail and history cursor.
+- The test app renders that thread the same from both servers in both themes, with offscreen `--snapshot` renders. A Keychain prompt that ignores synthetic input (PROGRESS.md, Waiting on the user) kept clicks from reaching the app, so no turn was sent from it.
+- The 3824 server marks `claude-opus-5-5` as the Claude default in `server.getConfig`, which confirms wire item 7.
+- The first renders showed a stale thread from the thread cache, which every build shares (an open task in PROGRESS.md). With `CANDY_THREAD_CACHE=off` they match.
+- The full suite on 4c0e9800 ran 2,441 tests, and 6 failed.
+  - Two of them were mine: the snooze editor's row order and the diff panel's notice test, both fixed in 35b7e505.
+  - `ServerUpdaterTests` and `MarkdownBackgroundLayoutTests` passed when run alone.
+  - `RedesignBaselineTests.exactPixels` differs at one status dot in Settings > Models (124 to 132 pixels) when it runs beside other suites. It passes alone at HEAD and at 0bcf5db0, so another suite's shared state leaks into it.
+  - `ThreadStressTests.fullSnapshotsWithOutOfOrderDeliveries` (seed 10, step 22) also fails at 0bcf5db0, before this catch-up. An open task in PROGRESS.md tracks it.
