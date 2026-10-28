@@ -2964,7 +2964,7 @@ extension ComposerController {
             let exact = menuState.exactPullRequest.flatMap { $0.key == key && String($0.number) == trigger.query ? $0.entry : nil }
             let listedEntries = listed?.entries ?? []
             let entries = exact.map { e in [e] + listedEntries.filter { $0.reference.number != e.reference.number } } ?? listedEntries
-            let linkedEntries = linked.map { link -> PullRequestEntry in
+            let linkedEntries = linked.map { link -> ComposerMenus.PullRequestEntry in
                 let snapshot = link.snapshot
                 let pr = PullRequestReference(number: link.number, title: snapshot?.title ?? "#\(link.number)", url: link.url,
                     headBranch: snapshot?.headBranch ?? "", baseBranch: snapshot?.baseBranch ?? "",
