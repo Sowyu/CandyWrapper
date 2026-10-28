@@ -1,0 +1,266 @@
+{
+  "base": "http://127.0.0.1:47402",
+  "width": 1100,
+  "height": 780,
+  "scale": 2,
+  "themes": [
+    "dark"
+  ],
+  "states": [
+    {
+      "name": "seed-md",
+      "path": "/",
+      "actions": [
+        {
+          "js": "localStorage.removeItem('t3code:composer-drafts:v1')"
+        },
+        {
+          "path": "/"
+        },
+        {
+          "key": "m",
+          "meta": true,
+          "shift": true
+        },
+        {
+          "type": "haiku"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "click": "text=Claude Haiku 5.5"
+        },
+        {
+          "click": "[aria-label=\"Runtime mode\"]"
+        },
+        {
+          "click": "text=Full access"
+        },
+        {
+          "click": ".composer-tiptap"
+        },
+        {
+          "type": "Reply with markdown only, no tools: H1, H2, a 3-row table, checked and unchecked tasks, python/typescript/bash code blocks, > [!NOTE], and bullets. About 180 words."
+        },
+        {
+          "key": "Enter"
+        },
+        {
+          "wait": 28000
+        },
+        {
+          "js": "location.pathname",
+          "log": true
+        },
+        {
+          "dump": "/Users/mrm/CandyWrapper-research/sandbox-3814-ref/seed-md.dom"
+        }
+      ]
+    },
+    {
+      "name": "seed-cmds",
+      "path": "/",
+      "actions": [
+        {
+          "js": "localStorage.removeItem('t3code:composer-drafts:v1')"
+        },
+        {
+          "path": "/"
+        },
+        {
+          "key": "m",
+          "meta": true,
+          "shift": true
+        },
+        {
+          "type": "haiku"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "click": "text=Claude Haiku 5.5"
+        },
+        {
+          "click": "[aria-label=\"Runtime mode\"]"
+        },
+        {
+          "click": "text=Full access"
+        },
+        {
+          "click": ".composer-tiptap"
+        },
+        {
+          "type": "Run ls, git status --short, and ls /nonexistent-dir. Give one short sentence."
+        },
+        {
+          "key": "Enter"
+        },
+        {
+          "wait": 28000
+        },
+        {
+          "js": "location.pathname",
+          "log": true
+        },
+        {
+          "dump": "/Users/mrm/CandyWrapper-research/sandbox-3814-ref/seed-cmds.dom"
+        }
+      ]
+    },
+    {
+      "name": "seed-input",
+      "path": "/",
+      "actions": [
+        {
+          "js": "localStorage.removeItem('t3code:composer-drafts:v1')"
+        },
+        {
+          "path": "/"
+        },
+        {
+          "key": "m",
+          "meta": true,
+          "shift": true
+        },
+        {
+          "type": "haiku"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "click": "text=Claude Haiku 5.5"
+        },
+        {
+          "click": "[aria-label=\"Runtime mode\"]"
+        },
+        {
+          "click": "text=Full access"
+        },
+        {
+          "click": ".composer-tiptap"
+        },
+        {
+          "type": "Use AskUserQuestion to ask Purpose with options Learning, Automation, Integration, General use; then ask Language. Wait for my answers."
+        },
+        {
+          "key": "Enter"
+        },
+        {
+          "wait": 28000
+        },
+        {
+          "js": "location.pathname",
+          "log": true
+        },
+        {
+          "dump": "/Users/mrm/CandyWrapper-research/sandbox-3814-ref/seed-input.dom"
+        }
+      ]
+    },
+    {
+      "name": "seed-approval",
+      "path": "/",
+      "actions": [
+        {
+          "js": "localStorage.removeItem('t3code:composer-drafts:v1')"
+        },
+        {
+          "path": "/"
+        },
+        {
+          "key": "m",
+          "meta": true,
+          "shift": true
+        },
+        {
+          "type": "haiku"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "click": "text=Claude Haiku 5.5"
+        },
+        {
+          "click": "[aria-label=\"Runtime mode\"]"
+        },
+        {
+          "click": "text=Supervised"
+        },
+        {
+          "click": ".composer-tiptap"
+        },
+        {
+          "type": "Create approval-demo.txt containing hello."
+        },
+        {
+          "key": "Enter"
+        },
+        {
+          "wait": 28000
+        },
+        {
+          "js": "location.pathname",
+          "log": true
+        },
+        {
+          "dump": "/Users/mrm/CandyWrapper-research/sandbox-3814-ref/seed-approval.dom"
+        }
+      ]
+    },
+    {
+      "name": "seed-notes",
+      "path": "/",
+      "actions": [
+        {
+          "js": "localStorage.removeItem('t3code:composer-drafts:v1')"
+        },
+        {
+          "path": "/"
+        },
+        {
+          "key": "m",
+          "meta": true,
+          "shift": true
+        },
+        {
+          "type": "haiku"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "click": "text=Claude Haiku 5.5"
+        },
+        {
+          "click": "[aria-label=\"Runtime mode\"]"
+        },
+        {
+          "click": "text=Full access"
+        },
+        {
+          "click": ".composer-tiptap"
+        },
+        {
+          "type": "Add a short docstring to hello.py and create notes.md with three bullet points about this demo. No other changes."
+        },
+        {
+          "key": "Enter"
+        },
+        {
+          "wait": 28000
+        },
+        {
+          "js": "location.pathname",
+          "log": true
+        },
+        {
+          "dump": "/Users/mrm/CandyWrapper-research/sandbox-3814-ref/seed-notes.dom"
+        }
+      ]
+    }
+  ]
+}

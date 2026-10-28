@@ -1,0 +1,60 @@
+{
+  "base": "http://127.0.0.1:47402",
+  "width": 1100,
+  "height": 780,
+  "scale": 2,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "states": [
+    {
+      "name": "05-approval-request",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/7feb68ab-4029-4fb4-a371-b50c7781807b",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/7feb68ab-4029-4fb4-a371-b50c7781807b"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "06-user-input-request",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/f4dd517f-bc10-4b13-9400-4b1715f3b6f2",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/f4dd517f-bc10-4b13-9400-4b1715f3b6f2"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        }
+      ]
+    }
+  ]
+}
