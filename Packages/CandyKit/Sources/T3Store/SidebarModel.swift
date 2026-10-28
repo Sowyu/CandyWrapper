@@ -507,17 +507,22 @@ public enum SidebarModel {
     /// `sortWorkingThreadsBySend`: newest message the user sent first; servers without the authored stamp
     /// fall back to the latest run's request.
     public static func sortWorkingThreadsBySend(_ threads: [SidebarThread]) -> [SidebarThread] {
-        sortNewestFirst(threads) { t in
-            max(sortableMs(t.shell.createdAt), sortableMs(t.shell.latestUserAuthoredMessageAt ?? t.latestRun?.requestedAt))
-        }
+        sortNewestFirst(threads, sendSortMs)
+    }
+
+    /// The key `sortWorkingThreadsBySend` orders by.
+    public static func sendSortMs(_ t: SidebarThread) -> Int64 {
+        max(sortableMs(t.shell.createdAt), sortableMs(t.shell.latestUserAuthoredMessageAt ?? t.latestRun?.requestedAt))
     }
 
     /// The shelf split and per-shelf order from the sidebar's memo (Sidebar.tsx:2780-2881), without
     /// drag previews. Shelves render in the order pinned, active, working, snoozed, settled. With the
     /// Working shelf on, inbox threads that are working fold into it and the inbox orders by return.
+    /// `sortActiveBySend` is the boring sidebar's: its folders list threads by your latest message
+    /// (T3 3824 #26391, Sidebar.tsx:463, :657-661).
     public static func buildShelves(
         _ threads: [SidebarThread], scopedProjectIds: Set<ProjectId>? = nil, capabilities: Capabilities,
-        nowMs: Int64, workingShelf: Bool = false, returnedAt: (ThreadId) -> Int64? = { _ in nil },
+        nowMs: Int64, workingShelf: Bool = false, sortActiveBySend: Bool = false, returnedAt: (ThreadId) -> Int64? = { _ in nil },
         isWorking: (SidebarThread) -> Bool = SidebarModel.isThreadWorking
     ) -> Shelves {
         var shelves = Shelves()
@@ -535,7 +540,8 @@ public enum SidebarModel {
             }
         }
         shelves.pinned = sortPinnedThreadsByOrderKey(shelves.pinned)
-        shelves.active = workingShelf ? sortInboxThreadsByReturn(shelves.active, returnedAt: returnedAt) : sortActiveThreadsByOrderKey(shelves.active)
+        shelves.active = sortActiveBySend ? sortWorkingThreadsBySend(shelves.active)
+            : workingShelf ? sortInboxThreadsByReturn(shelves.active, returnedAt: returnedAt) : sortActiveThreadsByOrderKey(shelves.active)
         shelves.working = sortWorkingThreadsBySend(shelves.working)
         // Soonest wake first (Sidebar.tsx:2874-2879).
         shelves.snoozed = sortSnoozedThreads(shelves.snoozed)

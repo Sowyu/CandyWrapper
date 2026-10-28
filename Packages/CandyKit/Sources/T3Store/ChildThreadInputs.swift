@@ -63,13 +63,13 @@ public enum PendingSubagentRequests {
     }
 
     /// `pendingSubagentRequestsByThread` (threadShell.ts:64-89): the threads above a subagent that waits on the user,
-    /// by what it waits on. Every thread up to the visible one carries it, because subagent rows are hidden. An
-    /// approval outranks a question.
+    /// by what it waits on. Every thread up to the visible one carries it, because subagent rows are hidden. Only
+    /// approvals go up: the coordinator answers its children's questions (T3 3824 #26367, threadShell.ts:96-98).
     public static func byThread(_ threads: [ThreadShell]) -> [ThreadId: PendingSubagentRequest] {
         var requests: [ThreadId: PendingSubagentRequest] = [:]
         var byId: [ThreadId: ThreadShell]?
         for child in threads {
-            guard let request = request(child) else { continue }
+            guard let request = request(child), request != .userInput else { continue }
             if byId == nil { byId = Dictionary(threads.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }) }
             var seen: Set<ThreadId> = [child.id]
             var current: ThreadShell? = child

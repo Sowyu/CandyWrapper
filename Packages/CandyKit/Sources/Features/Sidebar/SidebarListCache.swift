@@ -190,7 +190,7 @@ public final class SidebarListCache {
             guard let entry = entries[i], entry.visible else { continue }
             if entry.placement != nil, !entry.snoozed, !changed.contains(i) { continue }
             guard let thread = threads[i] else { continue }
-            let p = Self.placement(thread, capabilities: state.capabilities, nowMs: nowMs)
+            let p = Self.placement(thread, capabilities: state.capabilities, nowMs: nowMs, bySend: state.usesProjectFolders)
             if p != entry.placement {
                 entries[i]?.placement = p
                 resort.insert(p.section)
@@ -238,7 +238,7 @@ public final class SidebarListCache {
         for shell in shells {
             guard var e = Self.entry(shell, scopedIds: ctx.scopedIds) else { entries.append(nil); threads.append(nil); continue }
             let thread = SidebarThread(shell, pendingSubagentRequest: subagentRequests[shell.id])
-            if e.visible { e.placement = Self.placement(thread, capabilities: state.capabilities, nowMs: nowMs) }
+            if e.visible { e.placement = Self.placement(thread, capabilities: state.capabilities, nowMs: nowMs, bySend: state.usesProjectFolders) }
             entries.append(e)
             threads.append(thread)
         }
@@ -265,20 +265,22 @@ public final class SidebarListCache {
         let members = entries.indices.compactMap { i in entries[i]?.placement?.section == section ? threads[i] : nil }
         switch section {
         case .pinned: return SidebarModel.sortPinnedThreadsByOrderKey(members)
-        case .active, .working: return SidebarModel.sortActiveThreadsByOrderKey(members)
+        case .active, .working:
+            return shared?.folders == true ? SidebarModel.sortWorkingThreadsBySend(members) : SidebarModel.sortActiveThreadsByOrderKey(members)
         case .snoozed: return SidebarModel.sortSnoozedThreads(members)
         case .settled: return SidebarModel.sortSettledThreads(members)
         }
     }
 
-    /// The shelf `buildShelves` puts the thread on, and the key that shelf's sort reads.
-    static func placement(_ t: SidebarThread, capabilities: SidebarModel.Capabilities, nowMs: Int64) -> Placement {
-        var p = shelfPlacement(t, capabilities: capabilities, nowMs: nowMs)
+    /// The shelf `buildShelves` puts the thread on, and the key that shelf's sort reads. `bySend` is the boring
+    /// sidebar's order by your latest message (T3 3824 #26391).
+    static func placement(_ t: SidebarThread, capabilities: SidebarModel.Capabilities, nowMs: Int64, bySend: Bool = false) -> Placement {
+        var p = shelfPlacement(t, capabilities: capabilities, nowMs: nowMs, bySend: bySend)
         p.project = t.shell.projectId
         return p
     }
 
-    private static func shelfPlacement(_ t: SidebarThread, capabilities: SidebarModel.Capabilities, nowMs: Int64) -> Placement {
+    private static func shelfPlacement(_ t: SidebarThread, capabilities: SidebarModel.Capabilities, nowMs: Int64, bySend: Bool) -> Placement {
         let section = SidebarModel.resolveSidebarThreadSection(
             snoozed: capabilities.threadSnooze && SidebarModel.effectiveSnoozed(t, nowMs: nowMs),
             settled: capabilities.threadSettlement && t.shell.settledOverride == .settled,
@@ -286,6 +288,7 @@ public final class SidebarListCache {
         switch section {
         case .pinned: return Placement(section: section, text: t.shell.pinOrderKey, ms: t.shell.createdAt.epochMs ?? 0)
         case .active, .working:
+            if bySend { return Placement(section: .active, text: nil, ms: SidebarModel.sendSortMs(t)) }
             return Placement(section: .active, text: t.shell.activeOrderKey, ms: SidebarModel.activeThreadAnchorTimestampMs(t.shell))
         case .snoozed: return Placement(section: section, text: nil, ms: SidebarModel.firstValidTimestampMs(t.shell.snoozedUntil))
         case .settled: return Placement(section: section, text: nil, ms: SidebarModel.resolveSettledThreadTimestamp(t)?.epochMs ?? 0)

@@ -392,7 +392,8 @@ public enum SidebarListBuilder {
                 .map { SidebarThread($0, pendingSubagentRequest: requests[$0.id]) }
             let returns = state.inboxReturns
             shelves = SidebarModel.buildShelves(threads, scopedProjectIds: scopedIds, capabilities: state.capabilities, nowMs: nowMs,
-                                                workingShelf: state.workingShelfEnabled && !state.usesProjectFolders, returnedAt: { returns?.returnedAt($0) },
+                                                workingShelf: state.workingShelfEnabled && !state.usesProjectFolders,
+                                                sortActiveBySend: state.usesProjectFolders, returnedAt: { returns?.returnedAt($0) },
                                                 isWorking: { returns?.isWorking($0) ?? SidebarModel.isThreadWorking($0) })
         }
     }
@@ -539,7 +540,8 @@ public enum SidebarListBuilder {
         return items
     }
 
-    /// Sidebar.logic.ts:878-958 and Sidebar.tsx:495-514 (3814). Empty folders can start a thread.
+    /// Sidebar.logic.ts:878-958 and Sidebar.tsx:495-514 (3814). A project with no active threads gets a folder only
+    /// while you filter to it, so it can start one (T3 3824 #26387, Sidebar.logic.ts:920-948, Sidebar.tsx:1283).
     static func folderSections(_ threads: [SidebarThread], ctx: Context, state: SidebarListState,
                                row: (SidebarThread) -> SidebarItem) -> [SidebarItem] {
         let groups = SidebarModel.sortProjectGroups(ctx.groups, projects: ctx.projects, threads: ctx.threadShells,
@@ -547,6 +549,7 @@ public enum SidebarListBuilder {
         let byGroup = Dictionary(grouping: threads, by: { ctx.groupByProject[$0.shell.projectId]?.key ?? "" })
         return groups.filter { group in ctx.scopedIds.map { !$0.isDisjoint(with: group.memberProjectIds) } ?? true }.flatMap { group -> [SidebarItem] in
             let list = byGroup[group.key] ?? []
+            if list.isEmpty, ctx.scopedIds == nil { return [] }
             let expanded = !state.collapsedProjects.contains(group.key)
             let hidden = expanded ? [] : list.filter { $0.id != state.activeThreadId }
             var header = SidebarProjectHeaderModel(key: group.key, label: group.label,
