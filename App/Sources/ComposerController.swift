@@ -62,6 +62,8 @@ final class ComposerController {
     private var threadFindResult: ThreadFindResult?
     private var threadFindGeneration = 0
     private var threadFindTarget: ThreadId?
+    private var threadFindSessions = ThreadFindSessions()
+    private var threadFindNeedsReveal = false
     /// Where the next find starts: the message a palette match came from (`PendingFind.start`).
     private var threadFindStartEntryId: String?
 
@@ -1427,7 +1429,7 @@ final class ComposerController {
     private func refreshThreadState() {
         panel.model.commandOutputEnabled = targetEnvironmentId.flatMap { serverConfigs[$0] }?.capabilities.contains("commandOutputStreaming") == true
         panel.model.inlineSkills = menuProvider?.skills(cwd: menuCwd) ?? []
-        if threadFindTarget != openThreadId { closeThreadFind() }
+        restoreThreadFindForRoute()
 
         syncWorktreeSetup()
         panel.tasksView.steps = ThreadTaskStep.derive(projection)
@@ -4565,6 +4567,7 @@ extension ComposerController {
         }
         threadFindTarget = id
         panel.findOpen = true
+        panel.timeline.releaseFollowForNavigation()
         panel.layoutSubtreeIfNeeded()
         panel.findBar.focus()
         return true
@@ -4580,7 +4583,33 @@ extension ComposerController {
         searchThread()
     }
 
-    private func closeThreadFind() {
+    private func restoreThreadFindForRoute() {
+        if threadFindTarget != openThreadId {
+            if let previous = threadFindTarget, panel.findOpen {
+                threadFindSessions[previous] = .init(query: panel.findBar.input.text, result: threadFindResult)
+            }
+            closeThreadFind(preserveSession: true, focus: false)
+            if let id = openThreadId, let saved = threadFindSessions[id] {
+                threadFindTarget = id
+                panel.findOpen = true
+                panel.findBar.input.text = saved.query
+                threadFindResult = saved.result
+                panel.timeline.threadFindQuery = saved.query
+                panel.findBar.present(query: saved.query, index: saved.result?.activeIndex ?? 0, total: saved.result?.totalMatches ?? 0)
+                panel.timeline.releaseFollowForNavigation()
+                threadFindNeedsReveal = true
+            }
+        }
+        if threadFindNeedsReveal, let id = openThreadId, projection?.thread.id == id.localId {
+            threadFindNeedsReveal = false
+            if let match = threadFindResult?.match { panel.revealThreadFind(match) }
+            searchThread(preserveSelection: true)
+        }
+    }
+
+    private func closeThreadFind(preserveSession: Bool = false, focus: Bool = true) {
+        if !preserveSession, let id = threadFindTarget { threadFindSessions[id] = nil }
+        threadFindNeedsReveal = false
         threadFindStartEntryId = nil
         let wasOpen = panel.findOpen
         threadFindGeneration += 1
@@ -4591,7 +4620,7 @@ extension ComposerController {
         panel.findOpen = false
         panel.timeline.threadFindQuery = ""
         if let bar = panel.lazyFindBar.loaded, !bar.input.text.isEmpty { bar.input.text = "" }
-        if wasOpen { focusComposer() }
+        if wasOpen && focus { focusComposer() }
     }
 
     private func scheduleThreadFindRefresh() {

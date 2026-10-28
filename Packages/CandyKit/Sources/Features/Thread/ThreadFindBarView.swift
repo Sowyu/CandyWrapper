@@ -89,3 +89,18 @@ public enum ThreadChatWidth {
         switch setting { case "wide": 1152; case "full": .greatestFiniteMagnitude; default: dither ? 864 : 736 }
     }
 }
+
+/// T3 3814 threadFindStore.ts:74-104. Returning to an open find reveals its selection again.
+public struct ThreadFindSessions {
+    public struct State: Equatable {
+        public var query: String
+        public var result: ThreadFindResult?
+        public init(query: String, result: ThreadFindResult?) { self.query = query; self.result = result }
+    }
+    private var states: [ThreadId: State] = [:]
+    public init() {}
+    public subscript(_ id: ThreadId) -> State? {
+        get { states[id] }
+        set { states[id] = newValue }
+    }
+}
