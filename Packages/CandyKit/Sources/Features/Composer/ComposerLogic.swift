@@ -329,12 +329,13 @@ public enum ComposerLogic {
             public var runId: RunId?
             public var messageId: MessageId?
             public var text: String
-            /// A guest's queued message: the guest's name before its text, and the owner can cancel it but not
-            /// rewrite it (QueuedRunsControl.tsx:122-130 at 3669).
+            /// The original message carries the same attribution as a sent turn.
+            public var message: ChatMessage?
+            /// The owner can cancel a guest's queued message, but cannot rewrite it.
             public var guestName: String?
             public var isEditable: Bool { guestName == nil }
-            public init(runId: RunId?, messageId: MessageId?, text: String, guestName: String? = nil) {
-                self.runId = runId; self.messageId = messageId; self.text = text; self.guestName = guestName
+            public init(runId: RunId?, messageId: MessageId?, text: String, guestName: String? = nil, message: ChatMessage? = nil) {
+                self.runId = runId; self.messageId = messageId; self.text = text; self.guestName = guestName; self.message = message
             }
         }
         public var items: [Item] = []
@@ -374,7 +375,11 @@ public enum ComposerLogic {
                 // A queued guest message shows the guest's words; the agent still gets the attributed text
                 // (threadWorkflows.ts:146-147 at 3669).
                 let guest = GuestMessageAttribution(message?.context?["guest"])
-                return Item(runId: run.id, messageId: run.userMessageId, text: guest?.text ?? message?.text ?? "Queued message", guestName: guest?.name)
+                let original = message.map { ChatMessage(id: $0.id, role: .user, text: $0.text, runId: $0.runId,
+                    createdAt: $0.createdAt, createdBy: $0.createdBy, creationSource: $0.creationSource,
+                    senderThreadId: $0.senderThreadId, scheduledTaskId: $0.scheduledTaskId, context: $0.context, attachments: $0.attachments ?? []) }
+                return Item(runId: run.id, messageId: run.userMessageId,
+                            text: original.map { UserMessagePresentation.resolve($0).text } ?? "Queued message", guestName: guest?.name, message: original)
             }
             // Optimistic queued sends the projection doesn't list yet go last.
             items += saving.filter { texts[$0.id] == nil }.map { Item(runId: nil, messageId: $0.id, text: $0.text) }
@@ -385,7 +390,7 @@ public enum ComposerLogic {
             }
             // T3 3814 threadWorkflows.ts:130-142,170-174. Older runtimes silently ignore this command during compaction.
             promoteSkipsCompaction = canSkipCompaction && activeRun?.userMessageId.flatMap { messages[$0] }.map {
-                $0.role == "user" && $0.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "/compact"
+                ($0.attachments ?? []).isEmpty && $0.role == "user" && $0.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "/compact"
             } == true
             canPromoteToSteer = promoteSkipsCompaction || steerable && (turns?["supportsActiveSteering"] == .bool(true) || turns?["supportsSteeringByInterruptRestart"] == .bool(true))
         }
