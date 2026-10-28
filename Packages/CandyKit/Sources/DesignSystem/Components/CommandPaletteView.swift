@@ -104,6 +104,7 @@ public final class CommandPaletteView: DSView {
     public let input = InputView(placeholder: CommandPaletteView.rootPlaceholder, size: .lg)
     private let decoration = BoxDecorationLayer()
     private let footerLayer = BoxDecorationLayer()
+    private let footerRule = CALayer()
     private var searchIcon = IconView(name: .search)
     /// The input's start addon at the root: the search glass, or Add project's folder while a path is typed
     /// (`isBrowsing ? { startAddon: <FolderPlusIcon /> }`, CommandPalette.tsx:3494-3500).
@@ -150,6 +151,8 @@ public final class CommandPaletteView: DSView {
         footerLayer.host = self
         layer?.addSublayer(decoration)
         layer?.addSublayer(footerLayer)
+        footerRule.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        layer?.addSublayer(footerRule)
         layer?.masksToBounds = false
         input.unstyled = true
         input.paddingOverride = (32, 11) // `ps-[calc(var(--command-shell-inset)+1.5rem)]`, size lg `pe-[calc(--spacing(3)-1px)]`
@@ -279,7 +282,7 @@ public final class CommandPaletteView: DSView {
 
     private static let inputRow: CGFloat = 6 + 36 + 6
     /// `py-2.5` around the hints (20) or a taller footer action (`Open in Finder` keeps the xs button's 24).
-    private var footerHeight: CGFloat { 20 + max(20, footerTrailing?.intrinsicContentSize.height ?? 0) }
+    private var footerHeight: CGFloat { 20 + max(20, footerTrailing?.intrinsicContentSize.height ?? 0) + (DesignGeometry.usesClassic(self) ? 0 : 1) }
 
     private var panelContentHeight: CGFloat {
         switch content {
@@ -373,7 +376,7 @@ public final class CommandPaletteView: DSView {
         // `dialog-glass`, radius 18px (same box as DialogView).
         // ponytail: solid --background instead of 80% plus backdrop blur; identical over T3's dialog backdrop tint
         var box = BoxStyle()
-        box.radius = 18
+        box.radius = DesignGeometry.radius(18, in: self)
         box.fill = WindowGlass.floating(stock: Themed.color(\.background))
         box.border = Themed.pick(light: Themed.color(\.contrastForeground, 0.1), dark: Themed.white(0.08))
         box.shadows = [
@@ -385,9 +388,11 @@ public final class CommandPaletteView: DSView {
         // Footer fill `bg-foreground/[0.025]`, bottom corners 17px, inside the 1px border.
         var footer = BoxStyle()
         footer.fill = Themed.color(\.contrastForeground, 0.025)
-        footer.radius = 17
+        footer.radius = DesignGeometry.radius(17, in: self)
         footer.corners = .bottom
         footerLayer.boxStyle = footer
+        footerRule.backgroundColor = Themed.color(\.contrastForeground, 0.07).cgColor(in: self)
+        footerRule.isHidden = DesignGeometry.usesClassic(self)
         footerLayer.frame = .zero
         searchIcon.strokeColor = Themed.color(\.contrastIconMuted)
         backIcon.strokeColor = Themed.color(\.contrastForeground)
@@ -400,6 +405,7 @@ public final class CommandPaletteView: DSView {
         let inner = bounds.insetBy(dx: 1, dy: 1)
         footerLayer.layout(boxSize: CGSize(width: inner.width, height: footerHeight))
         footerLayer.frame.origin = CGPoint(x: inner.minX - footerLayer.outset, y: inner.maxY - footerHeight - footerLayer.outset)
+        footerRule.frame = CGRect(x: inner.minX, y: inner.maxY - footerHeight, width: inner.width, height: 1)
     }
 
     /// Creates the row views near the visible part of the list and drops the rest.
@@ -534,7 +540,7 @@ final class CommandRowView: DSView {
         }
         if item.noteIsWarning {
             noteLabel.wantsLayer = true
-            noteLabel.layer?.cornerRadius = 6
+            noteLabel.layer?.cornerRadius = DesignGeometry.radius(6, in: self)
             noteLabel.layer?.borderWidth = 1
             noteLabel.alignment = .center
             noteLabel.font = DSFont.ui(11, weight: .medium)
@@ -621,7 +627,7 @@ final class CommandRowView: DSView {
     }
 
     override func updateLayer() {
-        layer?.cornerRadius = 6
+        layer?.cornerRadius = DesignGeometry.radius(6, in: self)
         layer?.backgroundColor = isHighlighted ? Themed.color(\.accent).cgColor(in: self) : nil
     }
 

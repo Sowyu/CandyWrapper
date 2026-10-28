@@ -19,8 +19,8 @@ MB_BASE = "peer/menu-button flex w-full cursor-pointer items-center gap-[var(--s
 MB_SIZE = {
     "default": "h-8 rounded-[var(--control-radius)] px-[var(--sidebar-row-content-inset)] py-1.5 text-sm",
     "icon": "size-8 justify-center rounded-[var(--control-radius)] p-0",
-    "lg": "h-12 rounded-lg p-2 text-sm group-data-[collapsible=icon]:p-0!",
-    "sm": "h-7 rounded-lg p-2 text-xs",
+    "lg": "h-12 rounded-[var(--control-radius)] px-[var(--sidebar-row-content-inset)] py-2 text-sm group-data-[collapsible=icon]:p-0!",
+    "sm": "h-7 rounded-[var(--control-radius)] px-[var(--sidebar-row-content-inset)] py-2 text-xs",
 }
 MB_VARIANT = {"default": "font-medium text-sidebar-muted-foreground/80", "outline": "bg-sidebar-control-surface ring-1 ring-sidebar-border"}
 SIDEBAR_BOX = '<div data-app-sidebar="" class="bg-sidebar text-sidebar-foreground" style="width:240px;padding:8px">{}</div>'
@@ -72,7 +72,7 @@ for active in (False, True):
 specs["command-item"] = {"source": "apps/web/src/components/ui/command.tsx", "states": ["rest"], "cases": cases}
 
 # color-picker.tsx:203-220
-HUE = ('<div role="slider" tabindex="0" class="relative flex h-6 cursor-pointer touch-none items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover">'
+HUE = ('<div role="slider" tabindex="0" class="relative flex h-6 cursor-pointer touch-none items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover">'
        '<div class="h-2.5 w-full rounded-full bg-[linear-gradient(to_right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)] shadow-[inset_0_0_0_1px_rgb(0_0_0_/_12%)]"></div>'
        '<div class="pointer-events-none absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgb(0_0_0/0.4)]" style="left:calc({h}/360 * (100% - 1rem) + 0.5rem);background-color:hsl({h} 100% 50%)"></div></div>')
 specs["hue-slider"] = {"source": "apps/web/src/components/ui/color-picker.tsx", "states": ["rest", "focus-visible"],

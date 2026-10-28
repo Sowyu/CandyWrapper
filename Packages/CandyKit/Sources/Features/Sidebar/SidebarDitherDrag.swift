@@ -64,7 +64,7 @@ enum SidebarDitherDropPlanner {
               case .row(let model) = items[from], model.section != .working else { return nil }
         let pinned = shown(items, .pinned), active = shown(items, .active)
         // The Settled header settles.
-        if let settled = items.firstIndex(where: { if case .shelfHeader(.settled, _, _) = $0 { true } else { false } }),
+        if let settled = items.firstIndex(where: { if case .shelfHeader(.settled, _, _, _) = $0 { true } else { false } }),
            y >= tops[settled], y < bottom(settled, items, tops) {
             guard model.section != .settled else { return nil }
             return SidebarDitherDrop(lineY: nil, action: .thread(SidebarDropTarget(section: .settled, pinnedOrder: pinned, activeOrder: active)))
@@ -207,7 +207,7 @@ extension SidebarListView {
         }
         let settling: Bool = if case .thread(let t)? = drop?.action { t.section == .settled } else { false }
         for view in visible.values {
-            if let shelf = view as? SidebarShelfRowView, case .shelfHeader(.settled, _, _)? = shelf.item {
+            if let shelf = view as? SidebarShelfRowView, case .shelfHeader(.settled, _, _, _)? = shelf.item {
                 shelf.dragTone = settling ? .accent : nil
             }
         }

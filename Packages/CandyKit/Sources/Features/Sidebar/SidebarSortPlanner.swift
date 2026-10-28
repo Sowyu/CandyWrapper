@@ -88,7 +88,7 @@ enum SidebarSortPlanner {
             case .row(let r):
                 if r.section != .pinned { divider() }
                 add(.thread(r.id, r.section), i)
-            case .shelfHeader(let shelf, _, _):
+            case .shelfHeader(let shelf, _, _, _):
                 divider()
                 switch shelf {
                 case .working: add(.marker(.workingHeader), i)

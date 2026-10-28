@@ -72,7 +72,7 @@ public final class ToggleView: ControlView {
 
     // MARK: Layout
 
-    private var radius: CGFloat { variant == .pill ? 9999 : size.metrics.radius }
+    private var radius: CGFloat { variant == .pill ? 9999 : DesignGeometry.radius(size.metrics.radius, in: self) }
     private var padding: CGFloat { variant == .pill ? 12 : size.metrics.padding }
     private var hasTitle: Bool { !(title?.isEmpty ?? true) }
 
@@ -123,6 +123,7 @@ public final class ToggleView: ControlView {
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         decoration.setNeedsDisplay()
+        restyle()
     }
 
     private func restyle() {
@@ -282,7 +283,7 @@ public final class ToggleGroupView: DSView {
     public override func updateLayer() {
         var box = BoxStyle()
         if variant == .segmented {
-            box.radius = 10
+            box.radius = DesignGeometry.radius(10, in: self)
             box.fill = Themed.color(\.contrastInput, 0.4)
         }
         track.boxStyle = box

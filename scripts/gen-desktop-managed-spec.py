@@ -1,3 +1,4 @@
+# Reference stylesheet and component primitives: T3 Nightly 3814.
 """WP7.18 fidelity spec: SshPasswordPromptDialog.tsx:178-220 and RelayClientInstallDialog.tsx:87-127.
 The input markup comes from scripts/gen-forms-spec.py. Capture with scripts/component-reference."""
 import json, os
@@ -9,7 +10,8 @@ cases=[]
 for expired in [False,True]:
     inp=ns['input_html']().replace('type="text"','type="password"'+(' disabled' if expired else ''))
     color='text-destructive' if expired else 'text-muted-foreground'
-    html='<div class="space-y-3"><div class="space-y-2"><div class="flex items-center justify-between gap-3"><p class="text-sm font-medium text-foreground">Enter the SSH password for fixture.</p><span class="shrink-0 text-xs '+color+'">'+('Expired' if expired else '3:00')+'</span></div>'+inp+'</div><p class="text-sm '+color+'">'+('This SSH password prompt expired. Try connecting again.' if expired else 'Use SSH keys to avoid repeated password prompts on new SSH sessions.')+'</p></div>'
+    countdown_color=color+(' font-medium' if expired else '')
+    html='<div class="space-y-3"><div class="space-y-2"><div class="flex items-center justify-between gap-3"><p class="text-sm font-medium text-foreground">Enter the SSH password or verification code for fixture.</p><span class="shrink-0 text-xs '+countdown_color+'">'+('Expired' if expired else '3:00')+'</span></div>'+inp+'</div><p class="text-sm '+color+'">'+('This SSH verification prompt expired. Try connecting again.' if expired else 'SSH keys may replace a password, but your server can still require a verification code.')+'</p></div>'
     cases.append({'name':'ssh-expired' if expired else 'ssh','html':html,'wrapperStyle':'display:block;width:398px','native':{'kind':'ssh','expired':str(expired)}})
 html='<div class="rounded-xl border border-border/70 bg-muted/35 p-3"><p class="text-sm font-medium text-foreground">Managed relay client</p><p class="mt-1 text-sm leading-relaxed text-muted-foreground">T3 Code will download and install version 2026.10.9 locally.</p></div>'
 cases.append({'name':'relay-confirm','html':html,'wrapperStyle':'display:block;width:398px','native':{'kind':'relay'}})

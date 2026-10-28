@@ -646,7 +646,7 @@ public final class SidebarListView: DSView {
     private func open(_ item: SidebarItem) {
         switch item {
         case .row(let r): onOpen?(r.id)
-        case .shelfHeader(let shelf, _, _): onToggleShelf?(shelf)
+        case .shelfHeader(let shelf, _, _, _): onToggleShelf?(shelf)
         case .projectHeader(let h):
             // A fold tucks its rows up into the header rather than dropping them like removed rows.
             foldingUp = true

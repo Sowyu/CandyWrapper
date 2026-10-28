@@ -229,7 +229,7 @@ open class DialogView: DSView {
             let b = borders
             fillContent.frame = NSRect(x: b.left, y: b.top, width: bounds.width - b.left - b.right, height: bounds.height - b.top - b.bottom)
             fillContent.wantsLayer = true
-            fillContent.layer?.cornerRadius = 17
+            fillContent.layer?.cornerRadius = DesignGeometry.radius(17, in: self)
             fillContent.layer?.masksToBounds = true
         }
         // `DialogPanel` is a ScrollArea: when the host caps the dialog below its natural height, the panel scrolls
@@ -281,12 +281,13 @@ open class DialogView: DSView {
         decoration.setNeedsDisplay()
         footerLayer.setNeedsDisplay()
         wizardTint.setNeedsDisplay()
+        restyle()
     }
 
     private func restyle() {
         var box = BoxStyle()
         let rounded = !isSheet || isInset
-        box.radius = rounded ? 18 : 0
+        box.radius = rounded ? DesignGeometry.radius(18, in: self) : 0
         if isSheet {
             // `bg-popover not-dark:bg-clip-padding shadow-lg/5` with the 1px `::before` highlight.
             box.fill = Themed.color(\.popover)
@@ -319,7 +320,7 @@ open class DialogView: DSView {
         if footerVariant == .default {
             footer.fill = Themed.color(\.muted, 0.72)
             footer.border = Themed.color(\.contrastBorder)
-            footer.radius = rounded ? 17 : 0
+            footer.radius = rounded ? DesignGeometry.radius(17, in: self) : 0
             footer.corners = .bottom
             footer.borderEdges = .init(top: 1)
         }

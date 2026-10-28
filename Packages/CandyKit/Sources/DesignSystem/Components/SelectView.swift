@@ -105,7 +105,7 @@ public final class SelectView: ControlView {
         }
         guard fitsContent else { return NSSize(width: NSView.noIntrinsicMetric, height: m.height) }
         let lead = leading.map { $0.frame.width + m.gap } ?? 0
-        return NSSize(width: ceil(2 + 2 * m.padding + lead + ceil(label.textWidth) + m.gap + 12 - 4), height: m.height)
+        return NSSize(width: ceil(2 + 2 * m.padding + lead + ceil(label.textWidth) + m.gap + (DesignGeometry.usesClassic(self) ? 12 : 14) - 4), height: m.height)
     }
 
     public override func layout() {
@@ -124,8 +124,9 @@ public final class SelectView: ControlView {
             label.frame = NSRect(x: x, y: (bounds.height - m.line) / 2, width: max(0, chevronX + 4 - d.gap - x), height: m.line)
             return
         }
-        let chevronX = bounds.width - 1 - m.padding + 4 - 12
-        chevron.frame = NSRect(x: chevronX, y: (bounds.height - 12) / 2, width: 12, height: 12)
+        let glyph: CGFloat = DesignGeometry.usesClassic(self) ? 12 : 14
+        let chevronX = bounds.width - 1 - m.padding + 4 - glyph
+        chevron.frame = NSRect(x: chevronX, y: (bounds.height - glyph) / 2, width: glyph, height: glyph)
         var x = 1 + m.padding
         if let leading {
             leading.frame.origin = NSPoint(x: x, y: ((bounds.height - leading.frame.height) / 2).rounded())
@@ -150,7 +151,7 @@ public final class SelectView: ControlView {
         label.font = DSFont.ui(m.font)
         label.lineHeight = m.line
         var box = BoxStyle()
-        box.radius = m.radius
+        box.radius = size == .xs || size == .compact ? m.radius : DesignGeometry.radius(m.radius, in: self)
         let placeholderShown = selectedIndex == nil
         switch variant {
         case .default:
@@ -178,7 +179,7 @@ public final class SelectView: ControlView {
             if placeholderShown { label.color = Themed.color(\.contrastPlaceholder) }
             chevron.strokeColor = label.color
         }
-        chevron.alphaValue = 0.5
+        chevron.alphaValue = DesignGeometry.usesClassic(self) ? 0.5 : 0.7
         if ditherStyled {
             // Measured on Capy in dark: the fill #292929 on a #222 card, a #3e3e3e 1pt rim, #ececec text.
             box.fill = Themed.color(light: \.foreground, 0.03, dark: \.foreground, 0.035)

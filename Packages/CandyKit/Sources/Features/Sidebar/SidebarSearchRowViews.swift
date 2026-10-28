@@ -21,7 +21,7 @@ final class SidebarDraftRowView: SidebarRowBase {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         surface.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "borderColor": NSNull()]
-        surface.cornerRadius = 8
+        surface.cornerRadius = DesignGeometry.radius(8, in: self)
         layer?.addSublayer(surface)
         for v in [pen, monogram, project, preview, discardButton] as [NSView] { addSubview(v) }
         project.font = SB.font(12, .medium); project.lineHeight = 16
@@ -35,6 +35,7 @@ final class SidebarDraftRowView: SidebarRowBase {
 
     override func refresh() {
         guard let d = draft else { return }
+        surface.cornerRadius = DesignGeometry.radius(8, in: self)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         surface.backgroundColor = (d.isActive ? SB.c(\.sidebarRowActive) : SB.c(\.warning, state.hovered ? 0.08 : 0.04)).cgColor(in: self)
@@ -207,7 +208,7 @@ final class SidebarSearchResultRowView: SidebarRowBase {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         surface.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
-        surface.cornerRadius = 8
+        surface.cornerRadius = DesignGeometry.radius(8, in: self)
         layer?.addSublayer(surface)
         for v in [monogram, title, time, excerpt] as [NSView] { addSubview(v) }
         title.font = SB.font(14); title.lineHeight = 20
@@ -219,6 +220,7 @@ final class SidebarSearchResultRowView: SidebarRowBase {
 
     override func refresh() {
         guard let r = result else { return }
+        surface.cornerRadius = DesignGeometry.radius(8, in: self)
         let lit = r.isHighlighted || r.isActive
         CATransaction.begin()
         CATransaction.setDisableActions(true)

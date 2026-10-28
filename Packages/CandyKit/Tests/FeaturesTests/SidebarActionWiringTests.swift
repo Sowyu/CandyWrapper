@@ -95,6 +95,18 @@ struct SidebarActionWiringTests {
         try Fidelity.capture(capture, name: "sidebar-undo-overlay", size: content.frame.size, sidebar: true)
     }
 
+    @Test func branchLabelKeepsTheRowClickable() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        ThemeRuntime.apply(.init())
+        let items = SidebarListBuilder.items(snapshot: SidebarPreview.richSnapshot(), state: SidebarListState(), nowMs: 0)
+        let model = try #require(items.compactMap { if case .row(let row) = $0, row.variant == .card, row.branch != nil { row } else { nil } }.first)
+        let row = SidebarCardRowView(frame: NSRect(x: 0, y: 0, width: 240, height: 82))
+        row.configure(.row(model))
+        row.layoutSubtreeIfNeeded()
+        #expect(row.hitTest(NSPoint(x: 64, y: 65)) === row)
+    }
+
     @Test func undoNoticeAndUtilityFooter() {
         let content = SidebarContentView()
         let window = host(content)
@@ -103,7 +115,7 @@ struct SidebarActionWiringTests {
         content.undoNoticeText = "Settled 1 thread,"
         content.layoutSubtreeIfNeeded()
         #expect(!content.undoNotice.isHidden)
-        #expect(content.undoNotice.frame.height == 30)
+        #expect(content.undoNotice.frame.height == 24) // SidebarThreadUndoNotice.tsx:35: leading-6 without the old alert border.
         #expect(content.undoNotice.frame.maxY == content.settingsButton.frame.minY - 8)
         #expect(content.scrollArea.frame.maxY <= content.undoNotice.frame.minY)
         content.undoNotice.button.performAction()

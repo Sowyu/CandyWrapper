@@ -122,7 +122,7 @@ public final class InputGroupView: DSView {
             return icon
         case .kbd(let keys)?:
             let kbd = KbdView(keys)
-            kbd.radius = 5  // `[&>kbd]:rounded-[calc(var(--radius)-5px)]`
+            kbd.radius = DesignGeometry.radius(5, in: self)  // `[&>kbd]:rounded-[calc(var(--radius)-5px)]`
             return kbd
         case nil:
             return nil
@@ -160,6 +160,7 @@ public final class InputGroupView: DSView {
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         decoration.setNeedsDisplay()
+        restyle()
     }
 
     // MARK: Styling
@@ -170,10 +171,10 @@ public final class InputGroupView: DSView {
         var box: BoxStyle
         switch variant {
         case .default:
-            box = FieldStyles.frame(state: s, radius: 8)
+            box = FieldStyles.frame(state: s, radius: DesignGeometry.radius(8, in: self))
         case .ghost:
             box = BoxStyle()
-            box.radius = 8
+            box.radius = DesignGeometry.radius(8, in: self)
             box.border = s.focused ? (s.invalid ? Themed.color(\.destructive, 0.64) : Themed.color(\.ring))
                 : (s.invalid ? Themed.color(\.destructive, 0.36) : .clear)
             if s.focused {

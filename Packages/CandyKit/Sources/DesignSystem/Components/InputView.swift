@@ -84,7 +84,7 @@ public final class InputView: FieldView {
     }
 
     override func restyle() {
-        decoration.boxStyle = unstyled ? BoxStyle() : FieldStyles.frame(state: state, radius: size.metrics.radius)
+        decoration.boxStyle = unstyled ? BoxStyle() : FieldStyles.frame(state: state, radius: size == .find || size == .inline ? size.metrics.radius : DesignGeometry.radius(size.metrics.radius, in: self))
         placeholderLabel.color = Themed.color(\.contrastPlaceholder)  // `placeholder:text-placeholder`
     }
 }

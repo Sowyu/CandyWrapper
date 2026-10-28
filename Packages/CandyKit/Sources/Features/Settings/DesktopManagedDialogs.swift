@@ -68,6 +68,7 @@ public final class SshPasswordPromptBody: DSView {
         set(remaining: remaining, expired: expired)
     }
     public func set(remaining: String, expired: Bool) {
+        countdown.font = DSFont.ui(12, weight: expired && !DesignGeometry.usesClassic(self) ? .medium : .regular)
         countdown.text = remaining; countdown.color = Themed.color(expired ? \.destructive : \.mutedForeground)
         hint.text = expired ? "This SSH verification prompt expired. Try connecting again." : "SSH keys may replace a password, but your server can still require a verification code."
         hint.color = Themed.color(expired ? \.destructive : \.mutedForeground)
@@ -109,7 +110,7 @@ public final class RelayClientInstallBody: DSView {
         restyle()
     }
     private func restyle() {
-        var b = BoxStyle(); b.radius = 14; b.border = Themed.color(\.border, 0.7); b.fill = Themed.color(\.muted, 0.35)
+        var b = BoxStyle(); b.radius = DesignGeometry.radius(14, in: self); b.border = Themed.color(\.border, 0.7); b.fill = Themed.color(\.muted, 0.35)
         box.boxStyle = b; box.isHidden = stage != nil
         track.backgroundColor = Themed.color(\.muted).cgColor(in: self); fill.backgroundColor = Themed.color(\.primary).cgColor(in: self)
         track.cornerRadius = 4; fill.cornerRadius = 4; track.isHidden = stage == nil; fill.isHidden = stage == nil
@@ -149,7 +150,7 @@ private final class RelayClientInstallIcon: DSView {
     private let icon = IconView(name: .download, size: 18)
     override init(frame: NSRect = .zero) {
         super.init(frame: frame); box.host = self; layer?.addSublayer(box); addSubview(icon)
-        var style = BoxStyle(); style.radius = 10; style.border = Themed.color(\.border, 0.7); style.fill = Themed.color(\.muted, 0.6)
+        var style = BoxStyle(); style.radius = DesignGeometry.radius(10, in: self); style.border = Themed.color(\.border, 0.7); style.fill = Themed.color(\.muted, 0.6)
         box.boxStyle = style; icon.strokeColor = Themed.color(\.mutedForeground)
     }
     override var intrinsicContentSize: NSSize { NSSize(width: 36, height: 36) }

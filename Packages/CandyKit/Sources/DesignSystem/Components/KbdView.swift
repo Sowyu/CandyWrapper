@@ -1,6 +1,6 @@
 import AppKit
 
-/// T3's `Kbd` (`apps/web/src/components/ui/kbd.tsx`): a 20px key cap on `--muted`.
+/// T3's `Kbd` (`apps/web/src/components/ui/kbd.tsx`): a 20px key cap on `foreground/7`.
 /// Spec: docs/research/recovered/ui-components-a.md section 8.
 public final class KbdView: DSView {
     public var keys: String { didSet { label.text = keys; invalidateIntrinsicContentSize() } }
@@ -52,7 +52,7 @@ public final class KbdView: DSView {
     }
 
     public override func updateLayer() {
-        layer?.backgroundColor = (fillOverride ?? Themed.color(\.muted)).cgColor(in: self)
+        layer?.backgroundColor = (fillOverride ?? (DesignGeometry.usesClassic(self) ? Themed.color(\.muted) : Themed.color(\.contrastForeground, 0.07))).cgColor(in: self)
         layer?.cornerRadius = radius
     }
 

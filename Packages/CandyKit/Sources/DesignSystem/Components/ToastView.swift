@@ -274,11 +274,12 @@ public final class ToastView: DSView {
         super.viewDidChangeEffectiveAppearance()
         syncPaneBlur()
         decoration.setNeedsDisplay()
+        restyle()
     }
 
     private func restyle() {
         var box = BoxStyle()
-        box.radius = 10
+        box.radius = DesignGeometry.radius(10, in: self)
         // ponytail: `dropdown-glass` is popover at 83.6% blurred over whatever is behind; drawn as that alpha over
         // --background, which is what it gives over a plain window. Real blur if toasts sit over busy content.
         box.fill = WindowGlass.floating(stock: Themed.color(\.popover).blended(over: Themed.color(\.background), alpha: PopupSurface.dropdownGlassAlpha))
@@ -415,7 +416,7 @@ final class ToastCloseOrb: ControlView {
 
     private func restyle() {
         var box = BoxStyle()
-        box.radius = 12
+        box.radius = 12 // rounded-full on the 24px dismiss button
         box.border = Themed.color(\.border, 0.6)
         box.fill = Themed.color(\.popover, state.hovered ? 1 : 0.92)
         box.shadows = [BoxShadow(y: 1, blur: 3, color: Themed.black(0.1)), BoxShadow(y: 1, blur: 2, spread: -1, color: Themed.black(0.1))]

@@ -31,16 +31,19 @@ final class SidebarUndoNoticeView: DSView {
     }
 
     /// `px-2 py-1.5` inside a 1px border, one 16px line.
-    func height(forWidth width: CGFloat) -> CGFloat { 16 + 2 * (6 + 1) }
+    func height(forWidth width: CGFloat) -> CGFloat { DesignGeometry.usesClassic(self) ? 30 : 24 }
 
     override func layout() {
         super.layout()
         surface.frame = bounds
-        let x: CGFloat = 9, y = (bounds.height - 16) / 2
+        let classic = DesignGeometry.usesClassic(self)
+        surface.isHidden = !classic
+        label.text = classic ? text : (text.hasSuffix(",") ? text : text + ",")
+        let x: CGFloat = classic ? 9 : 8, y = (bounds.height - 16) / 2
         let lw = ceil(label.textWidth)
         label.frame = NSRect(x: x, y: y, width: min(lw + 1, bounds.width - 2 * x), height: 16)
         // The space between the sentence and the button.
-        let space = ceil(NSAttributedString(string: " ", attributes: [.font: label.font]).size().width)
+        let space = classic ? ceil(NSAttributedString(string: " ", attributes: [.font: label.font]).size().width) : 4
         let bx = x + lw + space
         button.frame = NSRect(x: bx, y: y, width: max(0, min(button.preferredWidth, bounds.width - x - bx)), height: 16)
     }

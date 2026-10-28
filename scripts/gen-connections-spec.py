@@ -1,3 +1,4 @@
+# Reference stylesheet and component primitives: T3 Nightly 3814.
 """Writes design/component-reference/connections.json for scripts/component-reference: the settings shell
 (settings nav, Back footer, breadcrumb header), Settings > Connections ("This machine", the Environments
 list with rows, routes and the empty state) and the Add Environment dialog.

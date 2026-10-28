@@ -20,7 +20,7 @@ struct LazyShellSidebarTests {
         #expect(context.shelves.settled.count == 2)
         #expect(context.hiddenSettledCount == 98)
         let items = SidebarListBuilder.items(snapshot: snapshot, state: SidebarListState(), nowMs: 1_800_000_000_000)
-        #expect(items.contains { if case .shelfHeader(.settled, let label, _) = $0 { label == "Settled (100)" } else { false } })
+        #expect(items.contains { if case .shelfHeader(.settled, let label, _, _) = $0 { label == "Settled (100)" } else { false } })
     }
 
     @Test func omittedOnlyShelfHasPagingAndCountOnlyUpdatesInvalidateCache() {
@@ -30,10 +30,10 @@ struct LazyShellSidebarTests {
         let cache = SidebarListCache()
         let state = SidebarListState()
         let first = SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: 1_800_000_000_000, cache: cache)
-        #expect(first.contains { if case .shelfHeader(.settled, let label, _) = $0 { label == "Settled (100)" } else { false } })
+        #expect(first.contains { if case .shelfHeader(.settled, let label, _, _) = $0 { label == "Settled (100)" } else { false } })
         snapshot.olderSettled?.counts[0].count = 99
         let changed = SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: 1_800_000_000_000, cache: cache)
-        #expect(changed.contains { if case .shelfHeader(.settled, let label, _) = $0 { label == "Settled (99)" } else { false } })
+        #expect(changed.contains { if case .shelfHeader(.settled, let label, _, _) = $0 { label == "Settled (99)" } else { false } })
         var expanded = state
         expanded.settledExpanded = true
         let paged = SidebarListBuilder.items(snapshot: snapshot, state: expanded, nowMs: 1_800_000_000_000, cache: cache)
