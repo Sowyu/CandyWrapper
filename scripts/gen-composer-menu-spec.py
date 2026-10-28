@@ -68,15 +68,13 @@ PR_OPEN = lucide("git-pull-request-arrow", "size-4 shrink-0 text-emerald-600 dar
 PR_MERGED = lucide("git-merge", "size-4 shrink-0 text-violet-600 dark:text-violet-300/90")
 
 # ContextChip.tsx with a kind's accent, inside the editor's node view wrapper (ComposerPromptEditorTiptap.tsx:233).
-CHIP = ("inline-flex h-[1.41em] max-w-full items-center gap-[0.33em] rounded-[0.5em] border px-[0.5em] align-middle font-medium text-[0.86em] leading-none "
-        "[&_svg]:block [&_svg]:size-[1.17em] [&_svg]:shrink-0 [&_svg]:self-center "
-        "[--context-chip-border:color-mix(in_oklab,var(--context-chip-accent)_34%,var(--contrast-border))] "
-        "[--context-chip-foreground:color-mix(in_oklab,var(--context-chip-accent)_22%,var(--contrast-foreground))] "
-        "border-(--context-chip-border) bg-(--context-chip-accent)/11 text-(--context-chip-foreground)")
+CHIP = ("inline-flex max-w-full items-center gap-[0.2em] font-medium leading-[normal] text-(--context-chip-ink) "
+        "[--context-chip-ink:var(--context-chip-accent)] [--document-icon-stroke:var(--context-chip-ink)] "
+        "[&_svg]:block [&_svg]:size-[1em] [&_svg]:shrink-0 [&_svg]:self-center rounded-sm")
 WRAP = "relative inline-flex select-none items-center align-middle leading-none"
 def chip(accent, icon, label):
-    return (f'<span class="{WRAP}"><span class="{CHIP} [--context-chip-accent:{accent}]" data-slot="context-chip">{icon}'
-            f'<span class="block min-w-0 self-center truncate leading-tight" data-slot="context-chip-label">{html.escape(label)}</span></span></span>')
+    return (f'<span class="{WRAP}"><span class="{CHIP}" style="--context-chip-accent:{accent.replace(chr(95), chr(32))}" data-slot="context-chip">{icon}'
+            f'<span class="block min-w-0 self-baseline overflow-x-clip text-ellipsis whitespace-nowrap underline decoration-transparent decoration-1 underline-offset-[0.2em]" data-slot="context-chip-label">{html.escape(label)}</span></span></span>')
 SKILL_ICON = lucide("package", "", stroke="1.85")
 chips = (f'<p class="text-sm leading-relaxed text-foreground">Use {chip("oklch(0.62_0.16_322)", SKILL_ICON, "Pdf Tools")} on '
          f'{chip("oklch(0.62_0.11_215)", pierre("typescript", ""), "api.ts")} and '
@@ -108,7 +106,7 @@ cases = [
     {"name": "chips", "html": chips, "native": {"case": "chips"}, "wrapperStyle": "display:block;width:560px"},
 ]
 PREPARE = "(document.querySelectorAll('svg[data-light]').forEach(s => s.style.color = document.documentElement.classList.contains('dark') ? s.dataset.dark : s.dataset.light), 'ok')"
-spec = {"component": "composer-menu", "source": "apps/web/src/components/chat/ComposerCommandMenu.tsx, ContextChip.tsx",
+spec = {"sourceVersion": "v0.1.4-nightly.20261028.3824", "component": "composer-menu", "source": "apps/web/src/components/chat/ComposerCommandMenu.tsx, ContextChip.tsx",
         "states": ["rest"], "themes": ["light", "dark"], "prepare": PREPARE,
         "cases": [dict({"wrapperStyle": "display:block;width:692px"}, **c) for c in cases]}
 with open(os.path.join(ROOT, "design/component-reference/composer-menu.json"), "w") as f:
