@@ -1493,7 +1493,8 @@ final class ThreadController {
             if state.activeThreadId?.rawValue.hasPrefix(prefix) == true { state.activeThreadId = nil }
             sidebar.state = state
             // A `separate` mode group key is a physical key, `environmentId:path`.
-            if state.projectScopeKey?.hasPrefix(prefix) == true { sidebar.setProjectScope(nil) }
+            let remaining = state.projectScopeKeys.filter { !$0.hasPrefix(prefix) }
+            if remaining != state.projectScopeKeys { sidebar.setProjectScopes(remaining) }
         }
         guard session?.environmentId == environmentId else { return }
         landOnIndex()
