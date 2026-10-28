@@ -97,6 +97,8 @@ public final class TextBlockView: DSView {
     /// CSS line-height in points. Defaults to the font's natural height.
     public var lineHeight: CGFloat? { didSet { invalidate() } }
     public var alignment: NSTextAlignment = .left { didSet { needsDisplay = true } }
+    /// CSS letter-spacing, in points, applied before wrapping.
+    public var tracking: CGFloat = 0 { didSet { if tracking != oldValue { invalidate() } } }
     /// `line-clamp`; 0 means unlimited.
     public var maxLines = 0 { didSet { invalidate() } }
     /// `text-wrap: balance`.
@@ -138,6 +140,7 @@ public final class TextBlockView: DSView {
         // Color comes from the context at draw time, so one cached layout serves both themes.
         let attributes: [NSAttributedString.Key: Any] = [.font: font, NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true]
         let string = NSMutableAttributedString(string: text, attributes: attributes)
+        if tracking != 0 { string.addAttribute(.kern, value: tracking, range: NSRange(location: 0, length: string.length)) }
         if let boldPrefix, text.hasPrefix(boldPrefix), !boldPrefix.isEmpty {
             let range = NSRange(location: 0, length: (boldPrefix as NSString).length)
             let bold = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)

@@ -1168,7 +1168,9 @@ final class ProvidersSectionView: DSView, SettingsGroupRow {
 
     private var twoColumns: Bool { bounds.width >= 768 }
 
-    private func listHeight() -> CGFloat { list.reduce(0) { $0 + $1.height(forWidth: 272) + 1 } + 44 }
+    // ProviderSettingsPanel.tsx:1031-1049: divide-y is inside each row's box.
+    private var listGap: CGFloat { DesignGeometry.usesClassic(self) ? 1 : 0 }
+    private func listHeight() -> CGFloat { list.reduce(0) { $0 + $1.height(forWidth: 272) + listGap } + 44 }
 
     func height(forWidth width: CGFloat) -> CGFloat {
         let editorWidth = width >= 768 ? width - 272 - 2 : width - 2
@@ -1193,7 +1195,7 @@ final class ProvidersSectionView: DSView, SettingsGroupRow {
         for row in list {
             let h = row.height(forWidth: listWidth)
             row.frame = NSRect(x: inner.minX, y: y, width: listWidth, height: h)
-            y += h + 1
+            y += h + listGap
         }
         addRow.frame = NSRect(x: inner.minX, y: y, width: listWidth, height: 44)
         CATransaction.begin(); CATransaction.setDisableActions(true)

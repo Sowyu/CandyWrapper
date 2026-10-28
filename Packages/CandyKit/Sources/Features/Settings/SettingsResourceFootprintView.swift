@@ -167,6 +167,7 @@ final class SettingsResourceFootprintView: BoxView, SettingsGroupRow {
     private final class Aggregate: DSView {
         let title = TextBlockView()
         let count: LabelView
+        let countBadge = BoxView()
         let accent: NSColor
         let stripe = CALayer()
         var pairs: [(LabelView, LabelView)] = []
@@ -178,9 +179,15 @@ final class SettingsResourceFootprintView: BoxView, SettingsGroupRow {
             title.text = name.uppercased()
             title.font = DSFont.ui(10, weight: .semibold)
             title.lineHeight = 14
+            title.tracking = 1
             title.color = Themed.color(\.mutedForeground, 0.75)
             addSubview(title)
-            addSubview(count)
+            var badgeStyle = BoxStyle()
+            badgeStyle.radius = 6
+            badgeStyle.fill = Themed.color(\.muted, 0.55)
+            countBadge.boxStyle = badgeStyle
+            addSubview(countBadge)
+            countBadge.addSubview(count)
             stripe.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull(), "cornerRadius": NSNull()]
             layer?.addSublayer(stripe)
             for (label, key) in [("CPU", "currentCpuPercent"), ("Memory", "currentRssBytes"), ("Read", "ioReadBytesPerSecond"), ("Write", "ioWriteBytesPerSecond")] {
@@ -199,11 +206,15 @@ final class SettingsResourceFootprintView: BoxView, SettingsGroupRow {
             stripe.backgroundColor = accent.cgColor(in: self)
             stripe.frame = NSRect(x: 20, y: 0, width: max(0, bounds.width - 40), height: 2)
             stripe.cornerRadius = 1
-            title.frame = NSRect(x: 20, y: 16, width: max(0, bounds.width - 122), height: 28)
-            count.frame = NSRect(x: bounds.width - 88, y: 16, width: 68, height: 28)
+            let countWidth = ceil(count.textWidth) + 12
+            let titleWidth = max(0, bounds.width - 40 - 12 - countWidth)
+            let headerHeight = max(18, title.height(forWidth: titleWidth))
+            title.frame = NSRect(x: 20, y: 16 + (headerHeight - title.height(forWidth: titleWidth)) / 2, width: titleWidth, height: title.height(forWidth: titleWidth))
+            countBadge.frame = NSRect(x: bounds.width - 20 - countWidth, y: 16 + (headerHeight - 18) / 2, width: countWidth, height: 18)
+            count.frame = NSRect(x: 6, y: 2, width: countWidth - 12, height: 14)
             let w = max(0, (bounds.width - 56) / 2)
             for (i, pair) in pairs.enumerated() {
-                let x = 20 + CGFloat(i % 2) * (w + 16), y = 58 + CGFloat(i / 2) * 40
+                let x = 20 + CGFloat(i % 2) * (w + 16), y = 16 + headerHeight + 14 + CGFloat(i / 2) * 40
                 pair.0.frame = NSRect(x: x, y: y, width: w, height: 14)
                 pair.1.frame = NSRect(x: x, y: y + 14, width: w, height: 16)
             }

@@ -7,6 +7,21 @@ import T3Store
 
 @MainActor
 struct SettingsScopeLifetimeTests {
+    @Test func closingBrowserSettingsReleasesItsProfilesAndContext() {
+        weak var releasedContext: SettingsPageContext?
+        weak var releasedProfiles: NSView?
+        autoreleasepool {
+            let context = SettingsPageContext()
+            let page = BrowserSettingsPage(context: context)
+            page.refresh()
+            releasedContext = context
+            releasedProfiles = (page.anchor("browser-profiles") as? SettingsRowView)?.footer
+            #expect(releasedProfiles != nil)
+        }
+        #expect(releasedProfiles == nil)
+        #expect(releasedContext == nil)
+    }
+
     @MainActor final class Gate {
         var continuation: CheckedContinuation<JSONValue, Never>?
         func wait() async -> JSONValue { await withCheckedContinuation { continuation = $0 } }

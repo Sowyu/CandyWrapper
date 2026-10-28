@@ -74,7 +74,7 @@ final class BrowserSettingsPage: ScopedSettingsPage {
 
     private final class BrowserProfileList: BoxView, SettingsGroupRow {
         private let context: SettingsPageContext
-        private let bindings: IntegrationsSettingsView
+        private weak var bindings: IntegrationsSettingsView?
         private var rows: [NSView] = []
         init(context: SettingsPageContext, bindings: IntegrationsSettingsView) {
             self.context = context
@@ -105,20 +105,19 @@ final class BrowserSettingsPage: ScopedSettingsPage {
                 let menu = ButtonView(nil, icon: .moreVertical, variant: .ghostMuted, size: .iconXs).menuTrigger()
                 menu.isEnabled = context.desktopAvailable
                 menu.setAccessibilityLabel(name + " options")
-                menu.autoresizingMask = [.minXMargin]
                 menu.frame = NSRect(x: max(0, bounds.width - 36), y: 10, width: 24, height: 24)
                 menu.action = { [weak self, weak menu] in
                     guard let self, let menu else { return }
                     var makeDefault = MenuItem("Use as default")
                     makeDefault.action = { [weak self] in self?.context.writeClient?(["browserDefaultProfileId": profile["id"] ?? .string("default")]) }
                     var clear = MenuItem("Clear browsing data")
-                    clear.action = { [weak self] in self?.bindings.clearBrowserProfile(profile, remove: false) }
+                    clear.action = { [weak self] in self?.bindings?.clearBrowserProfile(profile, remove: false) }
                     var choices = [makeDefault, clear]
                     if profile["id"]?.stringValue != "default" {
                         var rename = MenuItem("Rename")
-                        rename.action = { [weak self] in self?.bindings.editBrowserProfile(profile) }
+                        rename.action = { [weak self] in self?.bindings?.editBrowserProfile(profile) }
                         var remove = MenuItem("Remove")
-                        remove.action = { [weak self] in self?.bindings.clearBrowserProfile(profile, remove: true) }
+                        remove.action = { [weak self] in self?.bindings?.clearBrowserProfile(profile, remove: true) }
                         choices += [rename, remove]
                     }
                     MenuPopupView.show(choices, from: menu, placement: .dropdown)
@@ -132,7 +131,10 @@ final class BrowserSettingsPage: ScopedSettingsPage {
         func height(forWidth width: CGFloat) -> CGFloat { 2 + CGFloat(rows.count) * 44 + 8 }
         override func layout() {
             super.layout()
-            for (i, row) in rows.enumerated() { row.frame = NSRect(x: 1, y: 1 + CGFloat(i) * 44, width: bounds.width - 2, height: 44) }
+            for (i, row) in rows.enumerated() {
+                row.frame = NSRect(x: 1, y: 1 + CGFloat(i) * 44, width: bounds.width - 2, height: 44)
+                row.subviews.compactMap { $0 as? ButtonView }.first?.frame.origin.x = max(0, row.bounds.width - 36)
+            }
         }
     }
 }
