@@ -35,6 +35,7 @@ final class DiffFileHeaderView: DiffRowView {
     let title = DiffTitleView()
     let copy = ButtonView(nil, icon: .copy, variant: .ghostMuted, size: .iconMicro)
     let stat = DiffStatView()
+    var fileHovered = false { didSet { if fileHovered != oldValue { updateCopyVisibility() } } }
     private let hoverBar = CALayer()
     private var tracking: NSTrackingArea?
     private(set) var file = -1
@@ -84,7 +85,7 @@ final class DiffFileHeaderView: DiffRowView {
         let sameFile = path == file.path
         path = file.path
         chevron.setIconRotation(collapsed ? 0 : 90, motion: sameFile ? .morph : .none)
-        chevron.iconColor = DiffStyle.iconColor(file.change)
+        chevron.iconColor = DesignGeometry.usesClassic(self) ? DiffStyle.iconColor(file.change) : Themed.color(\.mutedForeground, 0.8)
         icon.change = file.change
         title.text = file.path
         stat.set(additions: file.additions, deletions: file.deletions, style: statStyle)
@@ -118,7 +119,19 @@ final class DiffFileHeaderView: DiffRowView {
 
     override func updateLayer() {
         super.updateLayer()
+        chevron.iconColor = DesignGeometry.usesClassic(self) ? DiffStyle.iconColor(icon.change) : Themed.color(\.mutedForeground, 0.8)
         hoverBar.backgroundColor = DiffStyle.headerHoverBar.cgColor(in: self)
+        updateCopyVisibility()
+    }
+
+    func updateCopyVisibility() {
+        let visible = DesignGeometry.usesClassic(self) || fileHovered || !hoverBar.isHidden || window?.firstResponder === copy
+        // Opacity keeps the button in the key loop and leaves its hit target intact.
+        let opacity: Float = visible ? 1 : 0
+        guard copy.layer?.opacity != opacity else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        copy.layer?.opacity = opacity
+        CATransaction.commit()
     }
 
     override func updateTrackingAreas() {
@@ -128,8 +141,8 @@ final class DiffFileHeaderView: DiffRowView {
         addTrackingArea(tracking!)
     }
 
-    override func mouseEntered(with event: NSEvent) { hoverBar.isHidden = false }
-    override func mouseExited(with event: NSEvent) { hoverBar.isHidden = true; title.hovered = false }
+    override func mouseEntered(with event: NSEvent) { hoverBar.isHidden = false; needsDisplay = true }
+    override func mouseExited(with event: NSEvent) { hoverBar.isHidden = true; title.hovered = false; needsDisplay = true }
     override func mouseMoved(with event: NSEvent) {
         title.hovered = title.frame.contains(convert(event.locationInWindow, from: nil))
     }
@@ -209,8 +222,20 @@ final class DiffStatView: DSView {
         layer?.isOpaque = false
     }
 
+    private static let addition = statColor(\.diffAddition, \.diffAdditionForeground)
+    private static let deletion = statColor(\.diffDeletion, \.diffDeletionForeground)
+    private static func statColor(_ previous: KeyPath<Palette, TokenColor>, _ current: KeyPath<Palette, TokenColor>) -> NSColor {
+        NSColor(name: nil) { appearance in
+            var result = NSColor.black
+            appearance.performAsCurrentDrawingAppearance {
+                result = Themed.color(ThemeRuntime.framesPanes(dark: appearance.isDark) ? previous : current).usingColorSpace(.sRGB) ?? .black
+            }
+            return result
+        }
+    }
+
     func set(additions: Int, deletions: Int, style: DiffStatStyle) {
-        let add = Themed.color(\.diffAddition), del = Themed.color(\.diffDeletion)
+        let add = Self.addition, del = Self.deletion
         switch style {
         case .pierre:
             font = DSFont.mono(11)
@@ -248,7 +273,7 @@ final class DiffStatView: DSView {
         baselineShift = 0
         let plus = "+\(Self.compact(additions))", minus = "-\(Self.compact(deletions))"
         let a = width(plus)
-        parts = [(plus, Themed.color(\.diffAddition), a, 0), (minus, Themed.color(\.diffDeletion), a + 4 + width(minus), 0)]
+        parts = [(plus, Self.addition, a, 0), (minus, Self.deletion, a + 4 + width(minus), 0)]
         preferredWidth = a + 4 + width(minus)
         needsDisplay = true
     }
@@ -260,8 +285,8 @@ final class DiffStatView: DSView {
         // The grid sits `align-middle` on the row's 16px text line, 1px under the box's center (47).
         baselineShift = 1
         let ch = width("0")
-        parts = [("+\(Self.compact(additions))", Themed.color(\.diffAddition), 4 * ch, 0),
-                 ("-\(Self.compact(deletions))", Themed.color(\.diffDeletion), 8 * ch + 8, 4 * ch + 8)]
+        parts = [("+\(Self.compact(additions))", Self.addition, 4 * ch, 0),
+                 ("-\(Self.compact(deletions))", Self.deletion, 8 * ch + 8, 4 * ch + 8)]
         preferredWidth = 8 * ch + 8
         needsDisplay = true
     }
@@ -273,7 +298,7 @@ final class DiffStatView: DSView {
         font = DSFont.mono(size)
         let plus = "+\(Self.compact(additions))", minus = "-\(Self.compact(deletions))"
         let a = width(plus)
-        parts = [(plus, Themed.color(\.diffAddition), a, 0), (minus, Themed.color(\.diffDeletion), a + 4 + width(minus), 0)]
+        parts = [(plus, Self.addition, a, 0), (minus, Self.deletion, a + 4 + width(minus), 0)]
         preferredWidth = a + 4 + width(minus)
     }
 
@@ -481,7 +506,7 @@ final class DiffCodeTextView: DSView {
             for span in context.highlighter.spans(file: Int(row.file), line: Int(index)) {
                 let start = Int(span.start), end = min(length, start + Int(span.length))
                 guard start < end else { continue }
-                attributed.addAttribute(.foregroundColor, value: span.kind.color, range: NSRange(location: start, length: end - start))
+                attributed.addAttribute(.foregroundColor, value: DiffStyle.syntaxColor(span.kind), range: NSRange(location: start, length: end - start))
                 if span.kind == .emphasis {
                     attributed.addAttribute(.font, value: DiffStyle.codeItalicFont, range: NSRange(location: start, length: end - start))
                 }

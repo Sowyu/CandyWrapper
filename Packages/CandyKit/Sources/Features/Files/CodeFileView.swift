@@ -135,7 +135,7 @@ public final class CodeFileView: DSView, NSTextViewDelegate {
             storage.beginEditing()
             storage.addAttribute(.foregroundColor, value: DiffStyle.codeText, range: all)
             for token in tokens where NSMaxRange(token.range) <= storage.length {
-                storage.addAttribute(.foregroundColor, value: token.kind.color, range: token.range)
+                storage.addAttribute(.foregroundColor, value: DiffStyle.syntaxColor(token.kind), range: token.range)
             }
             storage.endEditing()
         }

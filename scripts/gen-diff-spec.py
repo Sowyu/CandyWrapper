@@ -12,11 +12,18 @@ Deviations: the file's `collapsed` state is set per case; copy buttons use the r
 Usage: /usr/bin/python3 -I scripts/gen-diff-spec.py
 Needs the client assets extracted by scripts/gen-markdown-spec.py and lucide-static for icon markup.
 """
-import glob, html, json, os, re
+import glob, html, json, os, re, subprocess
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RESEARCH = os.path.join(os.path.dirname(ROOT), "CandyWrapper-research")
-T3 = os.path.join(RESEARCH, "t3code/apps/web/src")
+RESEARCH = os.environ.get("CANDY_RESEARCH") or os.path.expanduser("~/CandyWrapper-research")
+T3 = os.environ.get("CANDY_T3_SOURCE") or os.path.join(RESEARCH, "t3code/apps/web/src")
+
+def source_file(relative):
+    """Read the design tag without changing the shared checkout."""
+    if os.environ.get("CANDY_T3_SOURCE"):
+        return open(os.path.join(os.environ["CANDY_T3_SOURCE"], relative)).read()
+    return subprocess.check_output(["git", "-C", os.path.expanduser("~/CandyWrapper-research/t3code"), "show",
+        "v0.1.4-nightly.20261028.3824:apps/web/src/" + relative], text=True)
 LUCIDE = os.path.join(RESEARCH, "downloads/lucide-static-0.564.0/package/icons")
 ASSETS = os.path.join(RESEARCH, "t3-client-assets")
 
@@ -35,7 +42,7 @@ def button(variant, size, inner, extra=""):
 
 def template(path, name):
     """The body of `const NAME = `...`;` in a T3 source file."""
-    text = open(os.path.join(T3, path)).read()
+    text = source_file(path)
     start = text.index(f"const {name} = `") + len(f"const {name} = `")
     return text[start:text.index("`;", start)]
 
@@ -43,13 +50,10 @@ surface = template("lib/diffRendering.ts", "DIFF_SURFACE_THEME_UNSAFE_CSS")
 unsafe = template("components/diffs/StyledDiffCodeView.tsx", "DIFF_VIEW_UNSAFE_CSS").replace("${DIFF_SURFACE_THEME_UNSAFE_CSS}", surface)
 
 # Header slot markup (DiffPanel.tsx DiffFileCollapseToggle, DiffFilePathCopyButton).
-ICON_CLASS = {"new": "text-[var(--diffs-addition-base)]", "deleted": "text-[var(--diffs-deletion-base)]",
-              "change": "text-[var(--diffs-modified-base)]", "rename-pure": "text-[var(--diffs-modified-base)]",
-              "rename-changed": "text-[var(--diffs-modified-base)]"}
-ICON_CLASS["other"] = "text-muted-foreground/80"
+ICON_CLASS = {kind: "text-muted-foreground/80" for kind in ["new", "deleted", "change", "rename-pure", "rename-changed", "other"]}
 PREFIX = {f"{k}.{icon}": button("ghost", "icon-micro", lucide(icon, f"size-4 {v}"), "-ms-0.5")
           for k, v in ICON_CLASS.items() for icon in ["chevron-right", "chevron-down"]}
-COPY = button("ghost-muted", "icon-micro", lucide("copy", "size-3"))
+COPY = '<span data-diff-copy-path class="inline-flex">' + button("ghost-muted", "icon-micro", lucide("copy", "size-3")) + "</span>"
 
 PATCHES = {
 "modified": """diff --git a/src/greet.ts b/src/greet.ts
@@ -126,12 +130,31 @@ diff_rendering = glob.glob(os.path.join(ASSETS, "diffRendering-*.js"))[0]
 # diffRendering `c` is T3's getRenderablePatch (parsePatchFiles plus T3's fallbacks).
 PREPARE = """(async () => { try {
   // Importing the client chunks runs T3's theme bootstrap, which rewrites the root class.
+  const failures = [];
+  window.addEventListener('unhandledrejection', e => failures.push(String(e.reason?.stack ?? e.reason)));
   const rootClass = document.documentElement.className;
   const dark = rootClass.includes('dark');
   const fd = await import('file://DIFF_CHILDREN');
   const dr = await import('file://DIFF_RENDERING');
   await new Promise(r => setTimeout(r, 300));
   document.documentElement.className = rootClass;
+  // Nightly 3824 readableSyntaxTheme.ts: darken syntax, preserving the editor palette.
+  const readable = color => {
+    if (!/^#[0-9a-f]{6}$/i.test(color)) return color;
+    let rgb = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16));
+    const minimum = ['#1ca1c7', '#636363', '#1a85d4'].includes(color.toLowerCase()) ? 6 : 4.5;
+    const contrast = () => {
+      const c = rgb.map(v => v / 255).map(v => v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4);
+      return .74 / (.2126 * c[0] + .7152 * c[1] + .0722 * c[2] + .05);
+    };
+    while (contrast() < minimum) rgb = rgb.map(v => Math.floor(v * .96));
+    return '#' + rgb.map(v => v.toString(16).padStart(2, '0')).join('');
+  };
+  await dr.g({themes: ['pierre-light', 'pierre-dark'], langs: []});
+  const baseTheme = dr.S.getResolvedTheme('pierre-light');
+  dr.S.registerThemeIfAbsent('t3-light', async () => ({...baseTheme, name: 't3-light',
+    settings: baseTheme.settings.map(t => ({...t, settings: {...t.settings,
+      ...(t.settings.foreground ? {foreground: readable(t.settings.foreground)} : {})}}))}));
   const prefix = PREFIX_JSON, copy = COPY_JSON, unsafe = UNSAFE_JSON;
   const el = h => { const t = document.createElement('template'); t.innerHTML = h.trim(); return t.content.firstChild; };
   const known = new Set(['new', 'deleted', 'change', 'rename-pure', 'rename-changed']);
@@ -141,7 +164,7 @@ PREPARE = """(async () => { try {
     for (const fileDiff of patch.files) {
       const collapsed = host.dataset.collapsed === '1';
       const view = new fd.r({
-        theme: { light: 'pierre-light', dark: 'pierre-dark' }, themeType: dark ? 'dark' : 'light',
+        theme: { light: 't3-light', dark: 'pierre-dark' }, themeType: dark ? 'dark' : 'light',
         diffStyle: host.dataset.style, lineDiffType: 'none', overflow: 'wrap', stickyHeaders: true,
         collapsed, unsafeCSS: unsafe,
         renderHeaderPrefix: f => el(prefix[(known.has(f.type) ? f.type : 'other') + (collapsed ? '.chevron-right' : '.chevron-down')]),
@@ -156,9 +179,14 @@ PREPARE = """(async () => { try {
       count++;
     }
   }
-  await new Promise(r => setTimeout(r, 800));
+  for (let tries = 0; tries < 300; tries++) {
+    if ([...document.querySelectorAll('[data-patch]')].every(h => h.clientHeight > 0)) break;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  if ([...document.querySelectorAll('[data-patch]')].some(h => h.clientHeight === 0))
+    throw new Error('Empty diff render: ' + failures.join('; ') + ' ' + document.querySelector('[data-patch]').innerHTML.slice(0, 1200));
   return count + ' files rendered';
-} catch (e) { return 'error ' + e + ' ' + e.stack; } })()"""
+} catch (e) { throw e; } })()"""
 PREPARE = (PREPARE.replace("DIFF_CHILDREN", diff_children).replace("DIFF_RENDERING", diff_rendering)
            .replace("PREFIX_JSON", json.dumps(PREFIX)).replace("COPY_JSON", json.dumps(COPY)).replace("UNSAFE_JSON", json.dumps(unsafe)))
 

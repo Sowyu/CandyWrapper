@@ -56,6 +56,7 @@ struct DiffFidelityTests {
             let native = c["native"] as! [String: Any]
             for theme in ["light", "dark"] {
                 let ref = try #require(NSBitmapImageRep(data: Data(contentsOf: refDir.appendingPathComponent("\(name).rest.\(theme).png"))))
+                try #require(ref.pixelsHigh > 32, "Diff reference must contain the rendered file, not just the 8px capture padding")
                 let size = NSSize(width: CGFloat(ref.pixelsWide) / 2, height: CGFloat(ref.pixelsHigh) / 2)
                 let list = DiffListView()
                 list.style = native["style"] as? String == "split" ? .split : .unified
