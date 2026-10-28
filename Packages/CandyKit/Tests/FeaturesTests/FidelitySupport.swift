@@ -14,6 +14,20 @@ enum Fidelity {
         return FileManager.default.temporaryDirectory.appendingPathComponent("candywrapper-fidelity-\(getpid())")
     }()
 
+    @MainActor static func capture(_ view: NSView, name: String, size: NSSize, sidebar: Bool = false) throws {
+        pin()
+        let folder = root.appendingPathComponent("nightly-a3")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for dark in [false, true] {
+            let canvas: DSView = sidebar ? SidebarSearchFidelityTests.SidebarBox() : SidebarSearchFidelityTests.Canvas()
+            view.frame = NSRect(origin: .zero, size: size)
+            canvas.addSubview(view)
+            let image = Snapshot.image(of: canvas, size: size, scale: 2, dark: dark)
+            try Snapshot.writePNG(image, to: folder.appendingPathComponent("\(name).\(dark ? "dark" : "light").png"))
+            view.removeFromSuperview()
+        }
+    }
+
     /// Renders depend on these globals. Reset them so the machine's Reduce Motion setting or a test that left a
     /// theme or font behind can't change the pixels.
     @MainActor static func pin() {
