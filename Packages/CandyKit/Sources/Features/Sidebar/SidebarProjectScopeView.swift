@@ -209,6 +209,8 @@ final class ScopeRowView: ControlView {
     let item: SidebarProjectScopeView.Item
     let selected: Bool
     private let fill = CALayer()
+    private let selectedMark = IconView(name: .check, size: 8, strokeColor: Themed.color(\.primaryForeground))
+    private let selectedCircle = CALayer()
     private let folder: IconView
     private let monogram = ProjectMonogramView()
     private let label = LabelView()
@@ -229,6 +231,8 @@ final class ScopeRowView: ControlView {
         fill.cornerRadius = 6
         fill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
         layer?.addSublayer(fill)
+        selectedCircle.actions = ["backgroundColor": NSNull(), "borderColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        selectedMark.strokeWidth = 4
         if item.key == nil { addSubview(folder) } else { addSubview(monogram); monogram.projectTitle = item.projectTitle ?? item.label; monogram.source = item.projectIcon }
         label.text = item.label
         label.font = DSFont.ui(14)
@@ -249,6 +253,8 @@ final class ScopeRowView: ControlView {
             settings.action = { [weak self] in self?.onSettings?(key) }
             addSubview(settings)
         }
+        layer?.addSublayer(selectedCircle)
+        addSubview(selectedMark)
         setAccessibilityRole(.menuItem)
         setAccessibilityLabel(item.label)
         restyle()
@@ -277,8 +283,16 @@ final class ScopeRowView: ControlView {
         let lit = isHighlighted()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        fill.backgroundColor = lit ? Themed.color(\.accent).cgColor(in: self)
-            : selected ? Themed.color(\.contrastForeground, 0.08).cgColor(in: self) : nil
+        let classic = DesignGeometry.usesClassic(self)
+        fill.cornerRadius = DesignGeometry.radius(6, in: self)
+        fill.backgroundColor = lit ? (classic ? Themed.color(\.accent) : Themed.color(\.contrastForeground, 0.09)).cgColor(in: self)
+            : selected ? Themed.color(\.contrastForeground, classic ? 0.08 : 0.06).cgColor(in: self) : nil
+        selectedCircle.isHidden = classic || !selected
+        selectedMark.isHidden = classic || !selected
+        selectedCircle.backgroundColor = Themed.color(\.primary).cgColor(in: self)
+        selectedCircle.borderColor = Themed.color(\.popover).cgColor(in: self)
+        selectedCircle.borderWidth = 2
+        selectedCircle.cornerRadius = 8
         CATransaction.commit()
         label.color = lit ? Themed.color(\.contrastAccentForeground) : Themed.color(\.contrastForeground)
         folder.strokeColor = Themed.color(\.contrastMutedForeground)
@@ -292,6 +306,8 @@ final class ScopeRowView: ControlView {
         fill.frame = bounds
         folder.frame = NSRect(x: 8, y: (h - 16) / 2, width: 16, height: 16)
         monogram.frame = folder.frame
+        selectedCircle.frame = CGRect(x: 14, y: (h - 16) / 2 + 6, width: 16, height: 16)
+        selectedMark.frame = CGRect(x: 18, y: (h - 16) / 2 + 10, width: 8, height: 8)
         var right = bounds.width - 8
         if let settings { settings.frame = NSRect(x: right - 24, y: (h - 24) / 2, width: 24, height: 24); right -= 24 + 8 }
         if let badge { badge.frame = NSRect(x: right - 14, y: (h - 14) / 2, width: 14, height: 14); right -= 14 + 8 }

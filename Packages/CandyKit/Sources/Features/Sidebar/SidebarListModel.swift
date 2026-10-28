@@ -69,6 +69,11 @@ public struct SidebarRowModel: Equatable, Sendable {
     var timeAnchorMs: Int64?
     var snoozeWakeMs: Int64?
 
+    /// SidebarThreadRow.tsx:1308-1314: omit an otherwise empty metadata line.
+    var hasMetaLine: Bool {
+        branch != nil || scratchMachineLabel != nil || pullRequestBadge != nil || environmentMachine != nil || terminalProcessCount > 0
+    }
+
     /// The status slot text as T3 renders it, for tests and accessibility.
     public var statusLabel: String? {
         switch topStatus {
@@ -188,7 +193,7 @@ public struct SidebarSearchResultModel: Equatable, Sendable {
 public enum SidebarItem: Equatable, Sendable {
     case row(SidebarRowModel)
     /// "Settled (N)" collapsed, "Settled" expanded (Sidebar.tsx:5457-5499).
-    case shelfHeader(SidebarShelf, label: String, expanded: Bool)
+    case shelfHeader(SidebarShelf, label: String, expanded: Bool, count: Int = 0)
     /// "Show N more" under an expanded settled shelf (Sidebar.tsx:5531-5542).
     case showMore(count: Int)
     case draft(SidebarDraftRowModel)
@@ -206,7 +211,7 @@ public enum SidebarItem: Equatable, Sendable {
     public var key: String {
         switch self {
         case .row(let r): "thread:\(r.id.rawValue)"
-        case .shelfHeader(let shelf, _, _): "shelf:\(shelf.rawValue)"
+        case .shelfHeader(let shelf, _, _, _): "shelf:\(shelf.rawValue)"
         case .showMore: "show-more"
         case .draft(let d): "draft:\(d.id)"
         case .draftDivider: "draft-divider"
@@ -240,7 +245,7 @@ public enum SidebarItem: Equatable, Sendable {
     var height: CGFloat {
         switch self {
         // Dither (after Capy): a two-line card, title then a small meta line.
-        case .row(let r): r.variant == .card ? (r.dither ? 48 : 82) : 36
+        case .row(let r): r.variant == .card ? (r.dither ? 48 : (!r.hasMetaLine && !ThemeRuntime.isGlass(dark: false) && !ThemeRuntime.isGlass(dark: true) ? 64 : 82)) : 36
         case .draft: 82 // `li py-0.5` around `h-[4.875rem]`
         case .showMore: 36
         case .shelfHeader: 32
@@ -510,19 +515,19 @@ public enum SidebarListBuilder {
         }
         if !shelves.working.isEmpty {
             let expanded = state.workingExpanded
-            items.append(.shelfHeader(.working, label: expanded ? "Working" : "Working (\(shelves.working.count))", expanded: expanded))
+            items.append(.shelfHeader(.working, label: expanded ? "Working" : "Working (\(shelves.working.count))", expanded: expanded, count: shelves.working.count))
             // Sending folds the open thread into the shelf; its row stays (Sidebar.tsx:3040-3055).
             items += shelves.working.filter { expanded || $0.id == state.activeThreadId }.map { row($0, .working) }
         }
         if !shelves.snoozed.isEmpty {
             let expanded = state.snoozedExpanded
-            items.append(.shelfHeader(.snoozed, label: expanded ? "Snoozed" : "Snoozed (\(shelves.snoozed.count))", expanded: expanded))
+            items.append(.shelfHeader(.snoozed, label: expanded ? "Snoozed" : "Snoozed (\(shelves.snoozed.count))", expanded: expanded, count: shelves.snoozed.count))
             // A collapsed shelf still renders the open thread (Sidebar.tsx:3027-3032).
             items += shelves.snoozed.filter { expanded || $0.id == state.activeThreadId }.map { row($0, .snoozed) }
         }
         if !items.isEmpty || !shelves.settled.isEmpty || ctx.hiddenSettledCount > 0 {
             let expanded = state.settledExpanded
-            items.append(.shelfHeader(.settled, label: expanded ? "Settled" : "Settled (\(shelves.settled.count + ctx.hiddenSettledCount))", expanded: expanded))
+            items.append(.shelfHeader(.settled, label: expanded ? "Settled" : "Settled (\(shelves.settled.count + ctx.hiddenSettledCount))", expanded: expanded, count: shelves.settled.count + ctx.hiddenSettledCount))
             if expanded {
                 var shown = Array(shelves.settled.prefix(state.settledVisibleCount))
                 if let active = state.activeThreadId, !shown.contains(where: { $0.id == active }),

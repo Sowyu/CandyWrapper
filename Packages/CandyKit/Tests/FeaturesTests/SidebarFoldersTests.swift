@@ -30,7 +30,7 @@ struct SidebarFoldersTests {
         #expect(items.first?.key == "thread:pin")
         let open = try #require(items.compactMap { if case .row(let r) = $0, r.id.rawValue == "open" { r } else { nil } }.first)
         #expect(open.variant == .slim && open.inProjectSection)
-        #expect(!items.contains { if case .shelfHeader(.working, _, _) = $0 { true } else { false } })
+        #expect(!items.contains { if case .shelfHeader(.working, _, _, _) = $0 { true } else { false } })
         // A hidden status change must rebuild the folder's dot, even though it has no visible row.
         #expect(cache.patch(snapshot: snapshot, state: state, nowMs: now) == nil)
     }

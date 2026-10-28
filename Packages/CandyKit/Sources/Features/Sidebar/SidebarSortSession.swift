@@ -407,7 +407,7 @@ extension SidebarListView: NSDraggingSource {
                 view.frame.origin.y = y
                 if animate { sortSlide(view, from: from) }
             }
-            if let shelf = view as? SidebarShelfRowView, case .shelfHeader(.settled, _, _)? = shelf.item {
+            if let shelf = view as? SidebarShelfRowView, case .shelfHeader(.settled, _, _, _)? = shelf.item {
                 // `dragging={from !== null}`, accent while it is the target.
                 shelf.dragTone = s.outside ? nil : s.targetSection == .settled ? .accent : .emphasized
             }

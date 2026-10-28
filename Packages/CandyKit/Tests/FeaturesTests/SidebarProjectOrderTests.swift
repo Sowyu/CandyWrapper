@@ -124,7 +124,7 @@ struct SidebarProjectOrderTests {
         guard case .thread(let u) = unpin.action else { Issue.record("not a thread drop"); return }
         #expect(u.section == .active && u.pinnedOrder.isEmpty && Array(u.activeOrder.prefix(3)) == [a1, pin, a2])
         // The Settled header settles.
-        let settled = items.firstIndex { if case .shelfHeader(.settled, _, _) = $0 { true } else { false } }!
+        let settled = items.firstIndex { if case .shelfHeader(.settled, _, _, _) = $0 { true } else { false } }!
         let settle = SidebarDitherDropPlanner.threadDrop(items: items, tops: t, dragged: a1, ownSection: alphaKey, y: t[settled] + 4)
         #expect(settle?.lineY == nil)
         if case .thread(let s)? = settle?.action { #expect(s.section == .settled) } else { Issue.record("no settle") }

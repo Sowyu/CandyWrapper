@@ -96,7 +96,7 @@ struct SidebarLeftoverTests {
         c.state.inboxReturns = SidebarInboxReturnTracker()
         c.state.workingShelfEnabled = true
         // r1 works too, but pins stay where the user put them.
-        #expect(c.list.items.contains(.shelfHeader(.working, label: "Working (1)", expanded: false)))
+        #expect(c.list.items.contains(.shelfHeader(.working, label: "Working (1)", expanded: false, count: 1)))
         #expect(!rows(c).contains { $0.section == .working })
         c.state.workingExpanded = true
         let working = rows(c).filter { $0.section == .working }

@@ -19,7 +19,7 @@ struct SidebarModelTests {
         #expect(rows[4].isActive && rows[3].recedes && !rows[0].recedes)
         #expect(rows.allSatisfy { $0.projectLabel == "demo-repo" && $0.variant == .card })
         // The settled header is always there, collapsed and counted.
-        #expect(items.last == .shelfHeader(.settled, label: "Settled (0)", expanded: false))
+        #expect(items.last == .shelfHeader(.settled, label: "Settled (0)", expanded: false, count: 0))
     }
 
     @Test func richShelvesAndLabels() {
@@ -28,13 +28,13 @@ struct SidebarModelTests {
         var items = SidebarListBuilder.items(snapshot: snap, state: state, nowMs: nowMs)
         let keys = items.map(\.key)
         #expect(keys.prefix(2) == ["thread:r1", "thread:r2"]) // pinned first
-        #expect(items.contains(.shelfHeader(.snoozed, label: "Snoozed (1)", expanded: false)))
-        #expect(items.contains(.shelfHeader(.settled, label: "Settled (2)", expanded: false)))
+        #expect(items.contains(.shelfHeader(.snoozed, label: "Snoozed (1)", expanded: false, count: 1)))
+        #expect(items.contains(.shelfHeader(.settled, label: "Settled (2)", expanded: false, count: 2)))
         #expect(!keys.contains("thread:r10"))
         state.settledExpanded = true
         state.snoozedExpanded = true
         items = SidebarListBuilder.items(snapshot: snap, state: state, nowMs: nowMs)
-        #expect(items.contains(.shelfHeader(.settled, label: "Settled", expanded: true)))
+        #expect(items.contains(.shelfHeader(.settled, label: "Settled", expanded: true, count: 2)))
         let snoozed = items.compactMap { if case .row(let r) = $0, r.section == .snoozed { r } else { nil } }
         #expect(snoozed.first?.snoozeLabel == "2h" && snoozed.first?.variant == .slim)
     }

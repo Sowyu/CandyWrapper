@@ -23,14 +23,26 @@ enum SB {
     /// `topStatus.className` (Sidebar.tsx:1293-1346).
     static func status(_ s: SidebarTopStatus) -> NSColor {
         switch s {
-        case .working: c(\.info)
+        case .working: workingColor
         case .waiting: c(\.mutedForeground)
         case .approval: c(\.warningForeground)
         case .input: base("indigo-600", "indigo-300")
         case .request: GuestColors.foreground
-        case .limited, .woke: c(\.warning)
-        case .failed: c(\.error)
-        case .done: c(\.success)
+        case .limited, .woke: warningColor
+        case .failed: errorColor
+        case .done: successColor
+        }
+    }
+
+    private static let workingColor = designColor(\.info, \.infoForeground)
+    private static let warningColor = designColor(\.warning, \.warningForeground)
+    private static let errorColor = designColor(\.error, \.errorForeground)
+    private static let successColor = designColor(\.success, \.successForeground)
+
+    private static func designColor(_ old: KeyPath<Palette, TokenColor>, _ next: KeyPath<Palette, TokenColor>) -> NSColor {
+        let oldColor = c(old), newColor = c(next)
+        return NSColor(name: nil) { appearance in
+            ThemeRuntime.framesPanes(dark: appearance.isDark) ? oldColor : newColor
         }
     }
 
@@ -293,7 +305,7 @@ final class WokeDismissButton: ControlView {
 /// Base for recycled list rows: hover and press from ControlView, a reusable `configure`.
 class SidebarRowBase: ControlView {
     /// T3's 8, or Capy's 6 under Dither.
-    var rowRadius: CGFloat { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.controlRadius : 8 }
+    var rowRadius: CGFloat { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.controlRadius : DesignGeometry.radius(8, in: self) }
     final var onOpen: (@MainActor () -> Void)? // final: see PROGRESS.md gotchas (Swift 6.4 link bug)
     var isKeyboardFocused = false { didSet { if isKeyboardFocused != oldValue { needsDisplay = true; refresh() } } }
     var item: SidebarItem?
@@ -455,8 +467,11 @@ class SidebarRowBase: ControlView {
 
     /// The surface's ring: the keyboard focus ring (2px), else the file drag ring (`ring-1 ring-primary/70`).
     func applyRing(_ surface: CALayer) {
-        surface.borderWidth = isKeyboardFocused ? 2 : isFileDragOver ? 1 : 0
-        surface.borderColor = (isKeyboardFocused ? SB.c(\.ring) : SB.c(\.primary, 0.7)).cgColor(in: self)
+        let selected: Bool
+        if case .row(let row)? = item { selected = row.isActive || row.isSelected } else { selected = false }
+        let selectedRim = selected && !effectiveAppearance.isDark && !DesignGeometry.usesClassic(self)
+        surface.borderWidth = isKeyboardFocused ? 2 : isFileDragOver || selectedRim ? 1 : 0
+        surface.borderColor = (isKeyboardFocused ? SB.c(\.ring) : isFileDragOver ? SB.c(\.primary, 0.7) : SB.c(\.sidebarBorder, 0.7)).cgColor(in: self)
     }
     // The list owns keyboard focus; rows never take it from a click.
     override var acceptsFirstResponder: Bool { false }
@@ -575,6 +590,7 @@ final class SidebarCardRowView: SidebarRowBase {
     private let title = LabelView()
     private let branchIcon = IconView(name: .folderGit2, size: 12)
     private let branch = LabelView()
+    private let middleBranch = MiddleTruncateView("", font: DSFont.ui(12))
     /// A scratch thread's machine on line 3 (`size-3 text-muted-foreground/40`).
     private let scratchMachine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 12, height: 12))
     private let provider = ProviderStackView()
@@ -611,6 +627,10 @@ final class SidebarCardRowView: SidebarRowBase {
         duration.font = SB.tabular(12, .medium); duration.lineHeight = 16
         title.lineHeight = 20
         branch.font = SB.font(12); branch.lineHeight = 16
+        middleBranch.lineHeight = 16
+        middleBranch.showsTitle = false
+        middleBranch.isHidden = true
+        addSubview(middleBranch)
         settleButton.padding = 6
         addSubview(snoozeButton)
         addSubview(settleButton)
@@ -708,7 +728,11 @@ final class SidebarCardRowView: SidebarRowBase {
         if !woke { statusLabel.isUnderlined = false }
         // The status label and the actions cross-fade over 150 ms (`transition-opacity`, Sidebar.tsx:2027,2094);
         // the slot's width follows `showsActions` at once, as `absolute` and `static` flip without a transition.
-        HoverReveal.fade([statusIcon, statusLabel, duration] + [rollingDuration].compactMap { $0 }, visible: !showActions || woke)
+        if DesignGeometry.usesClassic(self) {
+            HoverReveal.fade([statusIcon, statusLabel, duration] + [rollingDuration].compactMap { $0 }, visible: !showActions || woke)
+        } else {
+            HoverReveal.snap([statusIcon, statusLabel, duration], visible: !showActions || woke)
+        }
         let snoozes = r.action == .settle && r.canSnooze
         if capyRow {
             HoverReveal.snap([settleButton, snoozeButton], visible: false, hides: true)
@@ -733,6 +757,10 @@ final class SidebarCardRowView: SidebarRowBase {
         title.color = r.recedes ? SB.c(\.secondaryLabel)
             : r.isUnread || r.isWoke || r.status == .input || r.status == .request ? SB.c(\.foreground)
             : r.status == .failed ? SB.c(\.foreground, 0.95) : SB.c(\.foreground, 0.9)
+        if !DesignGeometry.usesClassic(self) {
+            title.color = r.recedes ? (hovered ? SB.c(\.foreground) : SB.c(\.foreground, 0.75))
+                : r.status == .failed && !r.isUnread && !r.isWoke ? SB.c(\.foreground, 0.95) : SB.c(\.foreground)
+        }
         title.alphaValue = r.isRegeneratingTitle ? 0.55 : 1
         let showsScratch = r.branch == nil && r.scratchMachineLabel != nil
         branch.text = r.branch ?? (showsScratch ? r.scratchMachineLabel ?? "" : "")
@@ -741,13 +769,15 @@ final class SidebarCardRowView: SidebarRowBase {
             branch.text = [branch.text, r.timeLabel].filter { !$0.isEmpty }.joined(separator: " · ")
             if r.topStatus == nil { duration.text = "" }
         }
-        branch.color = capyRow ? SB.c(\.secondaryLabel) : SB.c(\.mutedForeground, 0.4)
+        branch.color = capyRow || !DesignGeometry.usesClassic(self) ? SB.c(\.secondaryLabel) : SB.c(\.mutedForeground, 0.4)
         branch.font = SB.font(capyRow ? 11 : 12)
+        middleBranch.value = branch.text
+        middleBranch.color = branch.color
         branchIcon.isHidden = !(r.branch != nil && r.hasWorktree)
-        branchIcon.strokeColor = SB.c(\.mutedForeground, 0.4)
+        branchIcon.strokeColor = DesignGeometry.usesClassic(self) ? SB.c(\.mutedForeground, 0.4) : SB.c(\.iconMuted)
         scratchMachine.kind = showsScratch ? r.scratchMachine : nil
         scratchMachine.isHidden = !showsScratch
-        scratchMachine.color = SB.c(\.mutedForeground, 0.4)
+        scratchMachine.color = DesignGeometry.usesClassic(self) ? SB.c(\.mutedForeground, 0.4) : SB.c(\.secondaryLabel)
         provider.set(r.providers, dither: capyRow)
         machine.kind = r.environmentMachine
         // Dither drops the trailing machine glyph.
@@ -873,6 +903,19 @@ final class SidebarCardRowView: SidebarRowBase {
             placeRenameField(row?.isRenaming == true ? renameField : nil, over: title,
                              frame: NSRect(x: left, y: top + 23, width: right - left, height: 22))
         }
+        if !DesignGeometry.usesClassic(self), row?.hasMetaLine == false {
+            let stackWidth = provider.preferredWidth
+            provider.frame = NSRect(x: right - stackWidth, y: top + 27, width: stackWidth, height: 14)
+            title.frame.size.width = max(0, right - left - stackWidth - (stackWidth > 0 ? 6 : 0))
+            branch.isHidden = true
+            middleBranch.isHidden = true
+            branchIcon.isHidden = true
+            scratchMachine.isHidden = true
+            machine.isHidden = true
+            return
+        }
+        branch.isHidden = !DesignGeometry.usesClassic(self)
+        middleBranch.isHidden = !branch.isHidden
         // Line 3: branch and provider, `mt-0.5`, text-xs. Dither: the meta line under the title.
         let y3 = capy ? top + 21 : top + 46
         let stackWidth = provider.preferredWidth
@@ -898,9 +941,14 @@ final class SidebarCardRowView: SidebarRowBase {
             project.frame = NSRect(x: bx, y: y3, width: pw, height: 16)
             if pw > 0 { bx += pw + 8 }
         }
-        if !branchIcon.isHidden { branchIcon.frame = NSRect(x: bx, y: y3 + 2, width: 12, height: 12); bx += 18 }
+        if !branchIcon.isHidden {
+            let glyph: CGFloat = DesignGeometry.usesClassic(self) ? 12 : 14
+            branchIcon.frame = NSRect(x: bx, y: y3 + (16 - glyph) / 2, width: glyph, height: glyph)
+            bx += glyph + 6
+        }
         if !scratchMachine.isHidden { scratchMachine.frame = NSRect(x: bx, y: y3 + 2, width: 12, height: 12); bx += 18 }
         branch.frame = NSRect(x: bx, y: y3, width: max(0, trailing - 6 - bx), height: 16)
+        middleBranch.frame = branch.frame
     }
 }
 
@@ -1058,7 +1106,7 @@ final class SidebarSlimRowView: SidebarRowBase {
         if hovered {
             title.color = SB.c(\.foreground)
         } else if unsettle {
-            title.color = SB.c(\.secondaryLabel, 0.7) // `[&:not(:hover)_*]:text-secondary-label/70`
+            title.color = SB.c(\.secondaryLabel, DesignGeometry.usesClassic(self) ? 0.7 : 1)
         } else {
             title.color = r.recedes ? SB.c(\.secondaryLabel, 0.7)
                 : r.isActive || r.isWoke || r.status == .input || r.status == .request ? SB.c(\.foreground)
@@ -1073,6 +1121,7 @@ final class SidebarSlimRowView: SidebarRowBase {
             time.text = snooze
             time.color = SB.c(\.infoForeground)
             time.font = SB.tabular(12)
+            wokeIcon.strokeColor = SB.c(\.infoForeground)
         } else if woke {
             // A wake can land straight in the settled tail, so the pill shows there too (Sidebar.tsx:1871-1873).
             time.text = "Woke"
@@ -1081,10 +1130,10 @@ final class SidebarSlimRowView: SidebarRowBase {
             wokeIcon.strokeColor = SB.c(\.warningForeground)
         } else {
             time.text = r.inProjectSection ? r.statusLabel ?? r.timeLabel : r.timeLabel
-            time.color = unsettle && !hovered ? SB.c(\.secondaryLabel, 0.7) : SB.c(\.secondaryLabel)
+            time.color = unsettle && !hovered && DesignGeometry.usesClassic(self) ? SB.c(\.secondaryLabel, 0.7) : SB.c(\.secondaryLabel)
             time.font = SB.tabular(12)
         }
-        wokeIcon.isHidden = !woke || lift != nil
+        wokeIcon.isHidden = !(woke || (!DesignGeometry.usesClassic(self) && r.snoozeLabel != nil)) || lift != nil
         wokeButton.isHidden = wokeIcon.isHidden
         if !woke { time.isUnderlined = false }
         HoverReveal.fade([time, wokeIcon], visible: !hovered || r.isWoke) // Sidebar.tsx:1857-1860
@@ -1179,17 +1228,23 @@ final class SidebarShelfRowView: SidebarRowBase {
         dragTone = nil
     }
 
+    private let countLabel = LabelView("", font: SB.tabular(12), color: SB.c(\.sidebarMutedForeground))
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         addSubview(header)
         header.onToggle = { [weak self] _ in
-            if case .shelfHeader(let shelf, _, _)? = self?.item { self?.onToggle?(shelf) }
+            if case .shelfHeader(let shelf, _, _, _)? = self?.item { self?.onToggle?(shelf) }
         }
     }
 
     override func refresh() {
-        guard case .shelfHeader(let shelf, let label, let expanded)? = item else { return }
-        header.title = label
+        guard case .shelfHeader(let shelf, let label, let expanded, let count)? = item else { return }
+        let classic = DesignGeometry.usesClassic(self)
+        header.title = classic ? label : shelf.rawValue.capitalized
+        countLabel.text = String(count)
+        countLabel.lineHeight = 16
+        header.accessory = classic ? nil : countLabel
         header.tone = dragTone ?? (shelf == .snoozed ? .info : .muted)
         if header.isExpanded != expanded { header.isExpanded = expanded }
         var st = header.state; st.focusVisible = isKeyboardFocused; header.previewState(st)
@@ -1207,7 +1262,7 @@ final class SidebarShelfRowView: SidebarRowBase {
 /// "Show N more" (Sidebar.tsx:5531-5542): `h-9 px-2.5 gap-2.5 text-sm text-sidebar-muted-foreground/55`, plus icon.
 final class SidebarShowMoreRowView: SidebarRowBase {
     private let surface = CALayer()
-    private let icon = IconView(name: .plus, size: 16)
+    private var icon = IconView(name: .plus, size: 16)
     private let label = LabelView()
 
     override init(frame frameRect: NSRect) {
@@ -1225,7 +1280,15 @@ final class SidebarShowMoreRowView: SidebarRowBase {
         guard case .showMore(let count)? = item else { return }
         label.text = "Show \(count) more"
         let hovered = state.hovered || isKeyboardFocused
-        let color = hovered ? SB.c(\.sidebarForeground) : SB.c(\.sidebarMutedForeground, 0.55)
+        let color = hovered ? SB.c(\.sidebarForeground) : SB.c(\.sidebarMutedForeground, DesignGeometry.usesClassic(self) ? 0.55 : 1)
+        let glyph: IconName = DesignGeometry.usesClassic(self) ? .plus : .chevronDown
+        if icon.name != glyph {
+            let next = IconView(name: glyph, size: 16)
+            next.frame = icon.frame
+            icon.removeFromSuperview()
+            icon = next
+            addSubview(next)
+        }
         label.color = color
         icon.strokeColor = color
         CATransaction.begin()
@@ -1352,16 +1415,24 @@ final class SidebarProjectHeaderRowView: SidebarRowBase {
         if !h.isPinned { icon.projectTitle = h.projectTitle; icon.source = h.projectIcon }
         let hovered = state.hovered || isKeyboardFocused
         label.text = h.label
-        label.color = SB.c(hovered ? \.sidebarForeground : \.sidebarMutedForeground)
+        let folderStyle = h.folder && !DesignGeometry.usesClassic(self)
+        label.font = SB.font(folderStyle ? 14 : 12, .medium)
+        label.lineHeight = folderStyle ? 20 : 16
+        label.color = folderStyle ? SB.c(\.sidebarForeground, 0.9) : SB.c(hovered ? \.sidebarForeground : \.sidebarMutedForeground)
+        count.color = SB.c(\.sidebarMutedForeground, folderStyle ? 1 : 0.6)
+        layer?.cornerRadius = folderStyle ? 8 : 0
+        layer?.backgroundColor = folderStyle && hovered ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
+        layer?.borderWidth = folderStyle && isKeyboardFocused ? 2 : 0
+        layer?.borderColor = SB.c(\.ring).cgColor(in: self)
         count.text = "\(h.count)"
         count.isHidden = h.folder && (h.expanded || hovered || h.count == 0)
         newThread.isHidden = !h.folder || !hovered
         dot.isHidden = !h.folder || h.dot == nil
         switch h.dot {
-        case .attention: dot.backgroundColor = SB.c(\.warningForeground).cgColor(in: self)
-        case .failed: dot.backgroundColor = SB.c(\.errorForeground).cgColor(in: self)
-        case .unread: dot.backgroundColor = SB.c(\.successForeground).cgColor(in: self)
-        case .working: dot.backgroundColor = SB.c(\.infoForeground).cgColor(in: self)
+        case .attention: dot.backgroundColor = SB.c(folderStyle ? \.warning : \.warningForeground).cgColor(in: self)
+        case .failed: dot.backgroundColor = SB.c(folderStyle ? \.error : \.errorForeground).cgColor(in: self)
+        case .unread: dot.backgroundColor = SB.c(folderStyle ? \.success : \.successForeground).cgColor(in: self)
+        case .working: dot.backgroundColor = SB.c(folderStyle ? \.info : \.infoForeground).cgColor(in: self)
         case nil: break
         }
         pinIcon.strokeColor = SB.c(\.sidebarMutedForeground)
@@ -1380,6 +1451,19 @@ final class SidebarProjectHeaderRowView: SidebarRowBase {
 
     override func layout() {
         super.layout()
+        if case .projectHeader(let h)? = item, h.folder, !DesignGeometry.usesClassic(self) {
+            let mid = bounds.midY
+            icon.frame = NSRect(x: 10, y: mid - 8, width: 16, height: 16)
+            let cw = ceil(count.textWidth)
+            chevron.frame = NSRect(x: bounds.width - 22, y: mid - 6, width: 12, height: 12)
+            count.frame = NSRect(x: bounds.width - 32 - cw, y: mid - 8, width: cw, height: 16)
+            let dotRight = count.isHidden ? chevron.frame.minX - 10 : count.frame.minX - 10
+            dot.frame = CGRect(x: dotRight - 6, y: mid - 3, width: 6, height: 6)
+            newThread.frame = NSRect(x: bounds.width - 48, y: mid - 12, width: 24, height: 24)
+            let right = !dot.isHidden ? dot.frame.minX - 10 : !count.isHidden ? count.frame.minX - 10 : chevron.frame.minX - 10
+            label.frame = NSRect(x: 36, y: mid - 10, width: max(0, right - 36), height: 20)
+            return
+        }
         // The content row is the bottom 22pt.
         let mid = bounds.height - 11
         // 16pt, flush with the rows' left edge (8) and centered on the name's line.

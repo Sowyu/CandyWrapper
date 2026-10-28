@@ -134,7 +134,7 @@ public final class SidebarProviderUpdatePillView: DSView {
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        layer?.cornerRadius = 10
+        layer?.cornerRadius = DesignGeometry.radius(10, in: self)
         layer?.masksToBounds = true
         progress.anchorPoint = CGPoint(x: 0, y: 0.5)
         progress.actions = ["bounds": NSNull(), "position": NSNull()]
@@ -290,6 +290,7 @@ public final class SidebarProviderUpdatePillView: DSView {
     public override func updateLayer() { restyle() }
 
     private func restyle() {
+        layer?.cornerRadius = DesignGeometry.radius(10, in: self)
         guard let tone = shown?.tone, let layer else { return }
         let hot = main.state.hovered
         let fill: NSColor, ink: NSColor

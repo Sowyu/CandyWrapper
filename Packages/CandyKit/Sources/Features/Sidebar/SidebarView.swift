@@ -960,6 +960,8 @@ public final class SidebarContentView: DSView {
     /// Dither's rows and project sections follow the sidebar's own appearance; a change rebuilds the list.
     private func syncDither() {
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        let pullRequestsLabel = DesignGeometry.usesClassic(self) ? "Pull Requests" : "Pull requests"
+        if pullRequestsButton.title != pullRequestsLabel { pullRequestsButton.title = pullRequestsLabel }
         if state.dither != dither { state.dither = dither }
     }
 
