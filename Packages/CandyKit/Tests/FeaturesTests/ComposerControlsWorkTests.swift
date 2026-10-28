@@ -1,6 +1,7 @@
 import AppKit
 import Testing
 import T3Store
+import DesignSystem
 @testable import Features
 
 @MainActor
@@ -17,6 +18,21 @@ struct ComposerControlsWorkTests {
             if pickers.accessButton.icon !== access { replacements += 1 }
         }
         #expect(replacements == 0)
+    }
+
+    @Test func fontSettingsRefreshTheComposerControlWithoutDoubleScaling() throws {
+        let previousTheme = ThemeRuntime.input, previousFonts = FontRuntime.input
+        defer { ThemeRuntime.apply(previousTheme); FontRuntime.apply(previousFonts) }
+        ThemeRuntime.apply(.init()); FontRuntime.apply(.init())
+        let control = ComposerControlView(title: "Medium")
+        let label = try #require(control.subviews.compactMap { $0 as? LabelView }.first)
+        var input = FontRuntimeInput(); input.interfaceSize = 20
+        FontRuntime.apply(input); control.fontRuntimeDidChange(); label.fontRuntimeDidChange()
+        #expect(label.font.pointSize == 17.5)
+        input.interfaceFamily = "Menlo"
+        FontRuntime.apply(input); control.fontRuntimeDidChange(); label.fontRuntimeDidChange()
+        #expect(label.font.familyName == "Menlo")
+        #expect(label.font.pointSize == 17.5)
     }
 
     @Test func changedModelStillUpdatesControlsAndNotifies() throws {

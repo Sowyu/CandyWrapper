@@ -141,8 +141,22 @@ public final class ComposerControlView: ControlView {
         ring.borderColor = Themed.color(\.ring).cgColor(in: self)
     }
 
-    private func restyle() {
+    public override func fontRuntimeDidChange() { super.fontRuntimeDidChange(); restyle() }
+
+    private var controlFont: NSFont {
         let font = capy ? DSFont.ui(13, weight: .medium) : DSFont.ui(14, weight: .medium)
+        guard modern, font.fontName.hasPrefix(".AppleSystemUIFont") else { return font }
+        // ComposerControl.tsx:16 asks for CSS 500; AppKit's named medium resolves to SF 510.
+        // ponytail: default SF composer labels use 505, remove compensation when Core Text matches Chromium's CSS 500 coverage.
+        return DSFont.cached("composer-medium", font.pointSize, .medium) {
+            let descriptor = font.fontDescriptor.addingAttributes([
+                .variation: [NSNumber(value: 0x77676874): NSNumber(value: 505)]])
+            return NSFont(descriptor: descriptor, size: font.pointSize) ?? font
+        }
+    }
+
+    private func restyle() {
+        let font = controlFont
         if label.font != font { label.font = font; invalidateIntrinsicContentSize(); needsLayout = true }
         chevron.isHidden = !showsChevron || modern
         chevron.alphaValue = capy ? 0.75 : 1

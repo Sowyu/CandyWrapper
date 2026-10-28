@@ -80,7 +80,8 @@ struct SettingsScreensFidelityTests {
         }
         var claude = ServerProvider(instanceId: "claudeAgent", driver: "claudeAgent", models: models)
         claude.version = "2.1.312"
-        claude.auth = .object(["status": .string("authenticated"), "label": .string("Claude Max Subscription")])
+        claude.auth = .object(["status": .string("authenticated"), "label": .string("Claude Max Subscription"),
+                               "email": .string("account@example.invalid")])
         var codex = ServerProvider(instanceId: "codex", driver: "codex")
         codex.version = "0.164.0"
         codex.auth = .object(["status": .string("authenticated"), "label": .string("ChatGPT Pro 100 Subscription")])
