@@ -15,7 +15,7 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 557db6cb4e | fix(server): running delegates tell agents to end the turn (#24887) | other | server-only | free with runtime |
 | b3b2c55369 | perf(source-control): pull request previews read only the pull request (#22583) | pr/git | yes | open |
 | 3816296021 | feat(web): UI design overhaul, with the new look behind a Beta toggle (#24865) | other | yes (design) | phase 2 (design) |
-| abd9d9f970 | perf: opening a thread loads 85% less data (#24899) | wire | yes | open |
+| abd9d9f970 | perf: opening a thread loads 85% less data (#24899) | wire | yes | ported (3471d72d) |
 | a960f5602f | fix(observability): every app reports its own environment and release channel (#24340) | other | no | n/a |
 | 01fe8d9188 | fix(observability): every exported resource names its service instance (#23973) | other | no | n/a |
 | 5f1f604733 | feat(mobile): on-demand chrome e2e runner across simulators | other | no | n/a |
@@ -86,12 +86,12 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 1de64942be | chore(lint): enforce react/purity (#25038) | sidebar | yes | open |
 | 8a4ad9452a | refactor(web): root notification and toast coordinators start with the app (#25233) | other | no | n/a |
 | 6a3a460b09 | refactor(web): sidebar thread lists derive state instead of syncing it in effects (#25234) | sidebar | no | n/a |
-| 9d6a2e57fc | fix(web): new thread shortcut focuses palette search, not the Back button (#25315) | palette | yes | open |
+| 9d6a2e57fc | fix(web): new thread shortcut focuses palette search, not the Back button (#25315) | palette | yes | already so |
 | 72d4dc9b1e | fix(web): composer corners and context strip no longer show double edges (#25316) | composer | yes (design) | phase 2 (design) |
 | f1b8758316 | fix(web): VS Code icon in thread details no longer has a box around it (#25321) | thread | yes (design) | phase 2 (design) |
 | 7df7cb9999 | fix(web): sent messages stand out on the black canvas in the new design (#25323) | thread | yes (design) | phase 2 (design) |
 | f40c7c6435 | feat(web): new design is on by default (#25324) | settings | yes (design) | phase 2 (design) |
-| 70b0abceda | fix(web): short branch names no longer get clipped in thread details (#25328) | pr/git | yes | open |
+| 70b0abceda | fix(web): short branch names no longer get clipped in thread details (#25328) | pr/git | yes | already so |
 | c66f13ce97 | refactor(mobile): stream and MCP webviews tie their work to the view's lifetime (#25226) | other | no | n/a |
 | aa2c80b9e3 | fix(web): stacked notices above the composer no longer cast a dark band (#25329) | composer | yes (design) | phase 2 (design) |
 | 1549046fd2 | fix(web): thread undo notice sits above the bottom shelves instead of pushing the list (#25270) | sidebar | yes | open |
@@ -108,18 +108,18 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | fb8fc1ffd3 | refactor(web): disconnect and reconnect delays read a shared deadline instead of effect timers (#25363) | connections | no | n/a |
 | 72dde22b6f | chore(lint): enforce effectFnOpportunity (#25099) | other | no | n/a |
 | e1c750e7bd | fix(web): composer body ref stops re-attaching on every render (#25409) | composer | no | n/a |
-| 0a20d7ea73 | fix(web): switching threads no longer delays the next thread's visit by up to 10s (#25368) | thread | yes | open |
+| 0a20d7ea73 | fix(web): switching threads no longer delays the next thread's visit by up to 10s (#25368) | thread | yes | ported (3b91c48d) |
 | cc93cc564b | revert(web): composer body ref goes back to the #25079 ref callback (#25412) | composer | no | n/a |
 | a240408242 | refactor(web): file breadcrumb menus refetch on a new workspace change, not on every open (#25377) | other | yes | open |
-| 1316d48b0c | fix(web): citations to older responses load their history instead of failing (#25371) | thread | yes | open |
+| 1316d48b0c | fix(web): citations to older responses load their history instead of failing (#25371) | thread | yes | ported (fc007033) |
 | 6ea34149bb | refactor(client): composers share one workspace snapshot refresh per provider and cwd (#25370) | composer | yes | open |
 | cc0b86ddf1 | fix(server): goals stop the running turn, clear while working, no echoes (#25426) | composer | yes | open |
 | 071239804e | refactor(web): pull request list remembers each answer for the next start (#25364) | pr/git | yes | open |
 | 3f3c1b9bcf | refactor(web): HTML previews handle frame messages in one listener (#25456) | other | no | n/a |
 | 2acc7b55cf | refactor(web): review guide runs are watched from their answers, not from mounted components (#25459) | pr/git | yes | open |
 | 9d7997afc5 | refactor(web): resize drags, panel shells and the browser host own their listeners (#25464) | other | no | n/a |
-| 3cb16cf165 | fix(web): find shows its match after a thread switch, and the timeline hears scrolling through one viewport signal (#25463) | thread | yes | open |
-| d5a791b940 | fix(client): drafts for answered questions are cleared even when their thread is not open (#25457) | composer | yes | open |
+| 3cb16cf165 | fix(web): find shows its match after a thread switch, and the timeline hears scrolling through one viewport signal (#25463) | thread | yes | ported (4859bd12) |
+| d5a791b940 | fix(client): drafts for answered questions are cleared even when their thread is not open (#25457) | composer | yes | ported (0c5b1475) |
 | 28df7a246f | refactor(web): terminal output no longer re-renders the drawer, theme search runs from handlers (#25458) | settings | yes | open |
 | f0dd86f164 | fix(web): stable callbacks refresh before layout effects read them (#25489) | other | no | n/a |
 | 7d3208cbea | test(web): say why the useStableCallback test renders without a router (#25493) | other | no | n/a |
@@ -134,17 +134,17 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 374e57d90b | refactor(web): provider settings and Codex setup run as explicit flows (#25524) | settings | yes | open |
 | 8e1bb0376c | test(web): attachment preview omission cases check the prepared document instead of rendering each one (#25562) | other | no | n/a |
 | b6994c5499 | fix(shared): pin T3 Connect cloudflared to 2026.10.4, which drops the compromised eMudhra intermediates (#25572) | connections | server-only | free with runtime |
-| 278588a61a | fix(web): skill chips in chat open the same details popover as the composer (#25432) | thread | yes | open |
+| 278588a61a | fix(web): skill chips in chat open the same details popover as the composer (#25432) | thread | yes | ported (48da3112) |
 | dd5b5401e1 | refactor(web): chat route shortcuts register once instead of rebuilding on every store change (#25366) | palette | no | n/a |
-| fe507c5a1e | fix(clients): queued messages can't be edited while a question is open (#25593) | composer | yes | open |
-| 560ddb14d9 | feat(web): warn before adding a second Claude or Codex account (#25475) | settings | yes | open |
+| fe507c5a1e | fix(clients): queued messages can't be edited while a question is open (#25593) | composer | yes | ported (0c2ed9a3) |
+| 560ddb14d9 | feat(web): warn before adding a second Claude or Codex account (#25475) | settings | yes | ported |
 | 451bb459f1 | refactor(web): running timers share one clock instead of an interval each (#25616) | thread | no | n/a |
 | 4034b5f6b5 | fix(web): simplify the created pull request success row (#25613) | pr/git | yes | open |
-| 5effca10b3 | fix(web): thread jump hints wait for their delay on every hold (#25636) | sidebar | yes | open |
+| 5effca10b3 | fix(web): thread jump hints wait for their delay on every hold (#25636) | sidebar | yes | n/a: no held-modifier timer in CW |
 | a54ba53a5c | fix(mobile): open threads from the local cache instead of "Thread unavailable" (#25627) | thread | no | n/a |
 | 0c901edf57 | refactor(web): video previews attach listeners on their element and share one visibility observer (#25630) | thread | no | n/a |
 | 6838e31b9c | fix(web): screen readers can wrap to the first and last message of a long thread (#23780) | thread | yes | open |
-| 024e593a63 | fix(client-runtime): a slow host no longer shows settings as read-only (#25526) | connections | yes | open |
+| 024e593a63 | fix(client-runtime): a slow host no longer shows settings as read-only (#25526) | connections | yes | ported (f48eb038) |
 | 977a18823c | refactor(mobile): pull request list records answers where they land (#25373) | pr/git | no | n/a |
 | 9db433f4ba | refactor(web): settings group by concern, with General split into focused pages (#25651) | settings | yes (design) | phase 2 (design) |
 | d73fd1279a | test(web): attachment preview Word and large-text tests no longer flake on CI (#25664) | other | no | n/a |
@@ -153,7 +153,7 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | bd3287b640 | feat(web): thread state lives at the end of the timeline, not stacked on the composer (#25401) | thread | yes (design) | phase 2 (design) |
 | 5432d8e723 | refactor(web): drafts promote from the draft store, not from route effects (#25615) | composer | no | n/a |
 | becf853def | fix(web): PDF search finds phrases that wrap across lines (#25702) | other | yes | open |
-| ed44f251d8 | feat(server): cut T3's MCP tool schemas by a third and merge 18 tools into action tools (#25423) | thread | yes | open |
+| ed44f251d8 | feat(server): cut T3's MCP tool schemas by a third and merge 18 tools into action tools (#25423) | thread | yes | ported (49512488) |
 | daa720a986 | fix(workflows): keep completed workflows reachable (#24587) | thread | yes | open |
 | 10a82e86ed | fix(web): devices agents open in background threads now show up (#25714) | other | yes | open |
 | 71ba6b374c | refactor(web): optimistic chat messages leave without a timer (#25710) | composer | no | n/a |
@@ -161,7 +161,7 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 65b4a69407 | fix(web): thread details popover closes when the card moves inline (#25731) | thread | yes | open |
 | f6a9315d19 | refactor(web): diff and file reveals are requests, and workspace edits refetch by construction (#25732) | pr/git | yes | open |
 | 3425671a95 | feat(web): Add provider leads with first-class providers (#25753) | settings | yes (design) | phase 2 (design) |
-| 8e86eb2b4d | fix(client-runtime): searches and refreshes no longer wait on an unreachable environment (#25703) | connections | yes | open |
+| 8e86eb2b4d | fix(client-runtime): searches and refreshes no longer wait on an unreachable environment (#25703) | connections | yes | ported (938aa3f8) |
 | 5d91ab1117 | refactor(web): command palette state lives in a store, git and branch pickers drop timer and sync effects (#25733) | palette | no | n/a |
 | 83838af7ba | fix(mobile): finished subagents stay reachable from the Agents pill (#25759) | thread | yes | open |
 | b1619f3a74 | fix(web): cancelling update everything no longer flashes the update button's focus ring and tooltip (#25774) | sidebar | no | n/a |
@@ -231,11 +231,11 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | e0b3cfe666 | fix(web): image and file chips underline their name on hover again (#26252) | composer | yes (design) | phase 2 (design) |
 | 91992bd5d4 | fix(web): update dialog shows one row per machine (#26210) | settings | yes | open |
 | 8947f3e353 | fix(web): server rows keep their source visible, cmd-click opens your browser (#26267) | thread | yes | open |
-| c2fbf0a524 | feat(server,web,mobile): thread links name their environment and never a title (#26239) | thread | yes | open |
+| c2fbf0a524 | feat(server,web,mobile): thread links name their environment and never a title (#26239) | thread | yes | ported (7616fc6e) |
 | fe55faf379 | fix(clients): # suggestions put linked pull requests first for text queries (#26269) | composer | yes | open |
-| 49a9e80e0b | fix(terminal): keep shared terminal grids in sync (#24352) | wire | yes | open |
+| 49a9e80e0b | fix(terminal): keep shared terminal grids in sync (#24352) | wire | yes | ported (40182582) |
 | 0c80751701 | feat: sign in to GitHub through the T3 Code for GitHub app [internal testing only] (#26245) | settings | yes | open |
-| 9910c0e874 | perf: reduce remote reconnect and command delays (#25754) | connections | yes | open |
+| 9910c0e874 | perf: reduce remote reconnect and command delays (#25754) | connections | yes | already so (wire audit) |
 | 3ef1610079 | fix(web): compaction row says "Compacting for 12s" instead of "after being idle" (#26299) | thread | yes | open |
 | 9c6429d74b | fix(web): threads without a project start on the primary environment (#26301) | palette | yes | open |
 | cafdcdaacd | fix(clients): give image attachment chips a blue accent (#26306) | composer | yes (design) | phase 2 (design) |
@@ -244,7 +244,7 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 1f8530ec3c | feat(web): pending approvals show on their timeline row (#26255) | thread | yes | open |
 | 9b052a2d5b | fix(web): show the platform modifier in the send tooltip (#22436) | composer | yes | open |
 | feb49e78d0 | fix(web): let theme color pickers use popover glass (#22348) | settings | yes (design) | phase 2 (design) |
-| 003ccd336d | fix(client-runtime): pairing links can no longer add routes to a saved environment (#26178) | connections | yes | open |
+| 003ccd336d | fix(client-runtime): pairing links can no longer add routes to a saved environment (#26178) | connections | yes | ported (b089670b) |
 | feb2e32de6 | fix(web): align sidebar button geometry with shared tokens (#22287) | sidebar | yes (design) | phase 2 (design) |
 | 8e76f945d2 | feat(relay): T3 Chat Pro and Premier accounts get more tunnels (#25931) | connections | yes | open |
 | 50d3a31ffd | fix: guests see the screenshots the agent shows in its replies (#26323) | thread | server-only | free with runtime |

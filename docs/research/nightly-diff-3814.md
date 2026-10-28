@@ -35,7 +35,24 @@ Checked end to end on 2026-10-28 between the two 3814 sandboxes: B's switch on o
 
 ## 2. Wire changes
 
-Filled in from group B's pass over the contracts diff and a recorded 3814 session (section 5).
+The contracts diff is mostly additive, but 3814 removed RPCs and HTTP routes CW still called. The full table, with each removal and what CW does now, is in [the wire audit](nightly-3814-wire.md).
+
+Breaks a 3669-era CW has against 3814:
+
+1. `scheduledTasks.list` is gone (rpc.ts:1828 keeps only `scheduledTasks.subscribe`). The Orchestrator listed tasks with it in four places. CW now reads the subscription's first snapshot and stops it, which 3473 and 3669 also serve (01b18e67).
+2. `GET /api/auth/clients` is gone. The helper's uninstall read it to find its sessions. CW now reads one `subscribeAuthAccess` snapshot first (01b18e67).
+3. T3 merged 18 MCP tools into action tools (ed44f251d8): `t3_thread_configure`, `t3_schedule` and others take an `action`. CW's work rows named such calls by tool name only; they now read the action from the input and keep the old names for older threads (49512488).
+
+Degrades and additions now handled:
+
+4. `providerWorkspaceSnapshotsOnDemand` (abd9d9f970): opening a thread loads 85% less data when the client asks for provider workspace snapshots on demand. CW opts in only where the server advertises it (3471d72d).
+5. `t3-thread://v2/<environment>/<thread>` links name their environment and never a title (c2fbf0a524 #26239); CW resolves them in their environment only (7616fc6e).
+6. Terminal snapshots carry the shared PTY's `cols` and `rows` (49a9e80e0b #24352); CW renders that grid and keeps its own size for resize reports (40182582).
+7. A pairing link can no longer add a route to a saved environment it doesn't belong to (003ccd336d #26178), checked before the code is spent (b089670b).
+8. A slow host no longer shows settings as read-only: session reads retry on timeout with doubled deadlines up to 60 s (024e593a63 #25526, f48eb038). Searches and pull request refreshes keep their results through an unreachable environment and refresh after reconnect (8e86eb2b4d #25703, 938aa3f8).
+9. Peer links and `link_request` (section 1).
+
+A session recorded from the 3814 sandbox (fixtures/transcripts/24-nightly-3814.jsonl: config, 129 shell threads, a forked and compacted thread with subagents) decodes without changes (`NightlyCompatTests.recorded3814ConfigShellAndThreadDecode`, a6adbcdb), next to the 3473 and 3669 recordings.
 
 ## 3. The user's item list
 
@@ -43,27 +60,27 @@ From the user's catch-up brief, Phase 1 and Phase 2 lists, mapped to commits in 
 
 | # | Item | Upstream | Status |
 |---|---|---|---|
-| 1 | Queued messages can't be edited while a question is open | fe507c5a1e #25593 | group A1 |
-| 2 | Drafts for answered questions cleared off-thread | d5a791b940 #25457 | group A1 |
-| 3 | Thread switches don't hold `thread.visit` up to 10 s; `opened`/`searchQuery` | 0a20d7ea73 #25368 | group A1 (opened/searchQuery already sent to servers with `opens`) |
-| 4 | Skill chips in chat open the composer's details popover | 278588a61a #25432 | group A1 |
-| 5 | Citations to older responses load their history | 1316d48b0c #25371 | group A1 |
-| 6 | Warn before a second Claude or Codex account | 560ddb14d9 #25475 | group A2 |
+| 1 | Queued messages can't be edited while a question is open | fe507c5a1e #25593 | ported (0c2ed9a3) |
+| 2 | Drafts for answered questions cleared off-thread | d5a791b940 #25457 | ported (0c5b1475) |
+| 3 | Thread switches don't hold `thread.visit` up to 10 s; `opened`/`searchQuery` | 0a20d7ea73 #25368 | ported (3b91c48d); `opened` and `searchQuery` already go to servers whose shells carry `opens` |
+| 4 | Skill chips in chat open the composer's details popover | 278588a61a #25432 | ported (48da3112) |
+| 5 | Citations to older responses load their history | 1316d48b0c #25371 | ported (fc007033) |
+| 6 | Warn before a second Claude or Codex account | 560ddb14d9 #25475 | ported (see appendix) |
 | 7 | "Failed to start" and "could not load" recovery screens | 433837752c #25345, 6f3f0d46ea #25317 | group A2 |
-| 8a | Find keeps its match after a thread switch | 3cb16cf165 #25463 | group A1 |
-| 8b | Thread jump hints wait for their delay | 5effca10b3 #25636 | group A2 |
+| 8a | Find keeps its match after a thread switch | 3cb16cf165 #25463 | ported (4859bd12) |
+| 8b | Thread jump hints wait for their delay | 5effca10b3 #25636 | n/a: fixes a held-modifier timer CW doesn't have |
 | 8c | Screen readers jump to the first and last message | 6838e31b9c #23780 | group A1 |
 | 8d | Simpler "pull request created" row, armed PR confirm | 4034b5f6b5 #25613, b424c6e429 #25530 | group A2 |
-| 8e | Short branch names aren't clipped | 70b0abceda #25328 | group A2 |
+| 8e | Short branch names aren't clipped | 70b0abceda #25328 | already so: CW recomputes truncation on layout |
 | 8f | Undo notice placement | 1549046fd2 #25270 | group A1 |
 | 8g | Usage tabs don't jump | 32507803da #25336 | phase 2 (Usage modal) |
 | 8h | Model picker doesn't jump | 5a38e6b859 #25358 | group A1 |
 | 8i | Large thread counts don't shrink labels | 03851b8e7b #25355 | group A1 |
-| 8j | New-thread shortcut focuses palette search | 9d6a2e57fc #25315 | group A2 |
+| 8j | New-thread shortcut focuses palette search | 9d6a2e57fc #25315 | already so: the shortcut focuses palette search |
 | 8k | Switching back doesn't restore an old tab title | 3f9448747b #25521 | group A2 |
 | 8l | SSH password prompts wait for their dialog | 02f4ba75a2 #25239 | group A2 |
 | 8m | The picker refreshes the branch | 5b35402623 #22807 | group A2 |
-| 9 | cloudflared 2026.10.4 | #25572 | group A2 checks whether CW launches it |
+| 9 | cloudflared 2026.10.4 | #25572 | free with runtime: CW neither bundles nor launches cloudflared (no match in App, Packages, scripts or project.yml); the T3 runtime installs and runs it |
 | 10 | Thread status moves to the end of the timeline | bd3287b640 #25401 (in 3814) | open, wave 2 |
 | 11 | Settings grouped by concern, General split | 9db433f4ba #25651 (in 3814) | open, wave 2 (page assignment only; the modal is phase 2) |
 | P3 | New design | 3816296021, c3888da8b4, f40c7c6435, 96fc7b9551, 72d4dc9b1e, 7df7cb9999, aa2c80b9e3, 62245d8e3a | phase 2 |
