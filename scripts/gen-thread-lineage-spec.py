@@ -63,11 +63,12 @@ def rows(items, hidden=0):
 
 def previous(count, failed, expanded=False):
     accessory = f'<span class="shrink-0 text-3xs leading-none text-destructive-foreground">{failed} failed</span>' if failed else ""
-    label = "Previous agents" + ("" if expanded else f" ({count})")
-    return (f'<div><button type="button" aria-expanded="{str(expanded).lower()}" class="flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 '
-            f'text-left text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70 '
-            f'text-sidebar-muted-foreground/60"><span class="shrink-0">{label}</span><span aria-hidden="true" class="h-px min-w-2 flex-1 bg-sidebar-border/60"></span>'
-            f'{accessory}{lucide("chevron-down", "size-3 shrink-0 transition-transform")}</button></div>')
+    total = f'<span class="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">{count}</span>' if not expanded else ""
+    return (f'<div><button type="button" aria-expanded="{str(expanded).lower()}" class="{CTRL} {S["THREAD_DETAILS_PANEL_ROW_CLASS"]}">'
+            + lucide("bot", S["THREAD_DETAILS_PANEL_ICON_CLASS"])
+            + f'<span class="{S["THREAD_DETAILS_PANEL_LABEL_CLASS"]} min-w-0 flex-1 truncate">Previous agents</span>'
+            + accessory + total + lucide("chevron-down", S["THREAD_DETAILS_PANEL_CHEVRON_CLASS"] + (" -rotate-90" if not expanded else ""))
+            + '</button></div>')
 
 def section(title, body, menu):
     actions = ""
@@ -75,7 +76,7 @@ def section(title, body, menu):
         actions = (f'<div class="flex shrink-0 items-center gap-1"><button type="button" aria-label="More thread actions" '
                    f'class="{CTRL} {S["THREAD_DETAILS_PANEL_ICON_ACTION_CLASS"]}">{lucide("ellipsis", "size-3.5")}</button></div>')
     return (f'<section data-thread-relationships-panel class="px-2 pt-2 pb-2.5 border-t border-border/65">'
-            f'<div class="mb-1 flex min-h-8 min-w-0 items-center justify-between gap-2 px-1.5">'
+            f'<div class="mb-1 flex min-h-8 min-w-0 items-center justify-between gap-2 px-2.5">'
             f'<h3 class="min-w-0 truncate text-2xs font-medium text-muted-foreground select-none">{title}</h3>{actions}</div>{body}</section>')
 
 # Each case: html, and the native description the test builds `ThreadRelationships.Lineage` from.
@@ -117,7 +118,7 @@ def bar(model, effort, status, parent):
     if effort:
         cluster += f'<span class="shrink-0 text-muted-foreground">{effort}</span>'
     open_parent = btn("ghost", "sm", lucide("arrow-up-left", "") + "Open parent") if parent else ""
-    return (f'<div class="flex min-h-12 items-center gap-3 rounded-3xl py-2 ps-5 pe-2 text-sm">'
+    return (f'<div class="flex min-h-12 items-center gap-3 rounded-2xl py-2 ps-5 pe-2 text-sm">'
             f'<span class="flex min-w-0 items-center gap-2">{cluster}</span>'
             f'<span aria-hidden="true" class="min-w-0 truncate text-muted-foreground tabular-nums">{status}</span>'
             f'<span class="ms-auto shrink-0 text-muted-foreground max-sm:hidden">Runs on its own</span>{open_parent}</div>')

@@ -20,7 +20,7 @@
   },
   {
    "name": "find",
-   "html": "<div class=\"chat-markdown w-full min-w-0 text-sm leading-relaxed text-foreground/[calc(80%+var(--appearance-contrast-boost)/5)] [overflow-wrap:anywhere] [word-break:break-word]\" data-find-query=\"markdown\" data-find-active=\"0\"><p>Draft the markdown before the checks.</p><p>This reply is markdown only. No tools ran.</p></div>",
+   "html": "<div class=\"chat-markdown w-full min-w-0 text-sm leading-relaxed text-foreground/[calc(90%+var(--appearance-contrast-boost)/10)] [overflow-wrap:anywhere] [word-break:break-word]\" data-find-query=\"markdown\" data-find-active=\"0\"><p>Draft the markdown before the checks.</p><p>This reply is markdown only. No tools ran.</p></div>",
    "wrapperStyle": "display:block;width:480px;--font-size-code:13px",
    "native": {
     "case": "find",

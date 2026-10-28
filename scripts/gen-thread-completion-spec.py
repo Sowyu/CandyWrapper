@@ -13,7 +13,7 @@ cases=[]
 for current in [0,2]:
     strips=''
     for i in range(6):
-        strips+='<span style="position:absolute;left:0;top:'+str(i*8)+'px;height:2px;width:8px;border-radius:1px;background:color-mix(in oklab,var(--'+('foreground' if current==i else 'muted-foreground')+') '+('90' if current==i else '35')+'%,transparent)"></span>'
+        strips+='<span style="position:absolute;left:0;top:'+str(i*8)+'px;height:2px;width:8px;border-radius:1px;background:color-mix(in oklab,var(--'+('foreground' if current==i else 'muted-foreground')+') '+('55' if current==i else '25')+'%,transparent)"></span>'
     cases.append({'name':'minimap-'+str(current),'html':'<div style="position:relative;width:40px;height:42px">'+strips+'</div>','native':{'kind':'minimap','current':current}})
 for count,complete in [(3,1),(3,3),(11,2)]:
     segments=''

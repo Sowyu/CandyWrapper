@@ -1,4 +1,16 @@
 {
+  "avatar.approved" : {
+    "height" : 24,
+    "width" : 24
+  },
+  "avatar.approved.stale" : {
+    "height" : 24,
+    "width" : 24
+  },
+  "avatar.changes-requested" : {
+    "height" : 24,
+    "width" : 24
+  },
   "card.compact" : {
     "height" : 134,
     "width" : 264
@@ -32,7 +44,7 @@
     "width" : 360
   },
   "pr.merge" : {
-    "height" : 64,
+    "height" : 58,
     "width" : 246
   }
 }

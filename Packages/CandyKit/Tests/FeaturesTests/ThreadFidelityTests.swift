@@ -34,9 +34,16 @@ struct ThreadFidelityTests {
         return surface
     }
 
+    /// The two seeded replies captured in the 3814/3824 screen references. Redesign keeps ThreadPreview's old data.
+    static func projection(_ title: String) throws -> ThreadProjection? {
+        let expected = title == ThreadPreview.markdownThread ? "Format a Markdown Reply" : "Run Basic Shell Commands"
+        return try ThreadPreview.projections(transcript: "3814-design-threads.jsonl").last { $0.thread.title == expected }
+    }
+
     static func render(_ title: String, fraction: CGFloat, dark: Bool) throws -> NSBitmapImageRep {
-        let projection = try #require(try ThreadPreview.projection(titled: title))
+        let projection = try #require(try Self.projection(title))
         let panel = ThreadPanelView(frame: NSRect(origin: .zero, size: size))
+        panel.referenceViewportWidth = 1100 // The reference includes the 256pt sidebar outside this crop.
         panel.bottomInset = composerInset
         panel.model.runShellCommand = { _ in } // a thread with a project: shell blocks show "Run in terminal"
         panel.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
@@ -54,7 +61,7 @@ struct ThreadFidelityTests {
     /// this writes them for eyeballing: the commands thread with its fold, group and first command open.
     @Test func expandedRowsRender() throws {
         try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
-        let projection = try #require(try ThreadPreview.projection(titled: ThreadPreview.commandsThread))
+        let projection = try #require(try Self.projection(ThreadPreview.commandsThread))
         for theme in ["light", "dark"] {
             let panel = ThreadPanelView(frame: NSRect(origin: .zero, size: Self.size))
             panel.setProjection(projection, projectTitle: "demo-repo", workspaceRoot: nil)
@@ -89,7 +96,7 @@ struct ThreadFidelityTests {
         for (reference, title, fraction) in cases {
             for theme in ["light", "dark"] {
                 let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
-                    "design/reference/\(reference).\(theme).png"))))
+                    "design/reference-3814/\(reference).\(theme).png"))))
                 let ref = Self.crop(full, x: full.pixelsWide - w, width: w, height: h)
                 let ours = Self.crop(try Self.render(title, fraction: fraction, dark: theme == "dark"), x: 0, width: w, height: h)
                 let bands = [("header", 0, 52), ("timeline", 52, Int(Self.compared))]
