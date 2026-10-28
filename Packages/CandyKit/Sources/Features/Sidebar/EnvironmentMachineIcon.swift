@@ -8,11 +8,18 @@ public enum EnvironmentMachineIcon {
         let box = IconViewBox(x: 0, y: 0, width: 24, height: 24)
         switch kind {
         case "mac-mini":
+            if ThreadDesign.uses3814 {
+                return IconDefinition(viewBox: box, elements: [
+                    IconElement(.rect(x: 3, y: 6, w: 18, h: 12, rx: 2.5, ry: 2.5), IconPaint(stroke: .current, strokeWidth: 1.75, lineCap: .round, lineJoin: .round)),
+                    IconElement(.circle(cx: 7.5, cy: 12, r: 1), IconPaint(fill: .current))])
+            }
             return IconDefinition(viewBox: box, elements: [
                 IconElement(.rect(x: 2, y: 8, w: 20, h: 8, rx: 2, ry: 2)), IconElement(.path(d: "M6 12h.01"))])
         case "mac-studio":
+            var paint = IconPaint.lucide
+            if ThreadDesign.uses3814 { paint.strokeWidth = 1.75 }
             return IconDefinition(viewBox: box, elements: [
-                IconElement(.rect(x: 3, y: 5, w: 18, h: 14, rx: 2, ry: 2)), IconElement(.path(d: "M7 15h.01M11 15h.01M15 15h.01"))])
+                IconElement(.rect(x: 3, y: 5, w: 18, h: 14, rx: 2, ry: 2), paint), IconElement(.path(d: "M7 15h.01M11 15h.01M15 15h.01"), paint)])
         case "cloud": return IconName.cloud.definition
         case "desktop": return IconName.monitor.definition
         case "laptop": return IconName.laptop.definition

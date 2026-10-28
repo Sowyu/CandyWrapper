@@ -44,6 +44,36 @@ final class ThreadLineageCountView: DSView {
     }
 }
 
+
+/// ThreadLineageGroup at 3814 uses a regular details row for the previous agents disclosure.
+private final class ThreadLineagePreviousView: ControlView {
+    let counts = ThreadLineageCountView()
+    private let icon = IconView(name: .bot, size: 16, strokeColor: Themed.color(\.mutedForeground))
+    private let label = LabelView("Previous agents", font: DSFont.ui(13, weight: .medium), color: Themed.color(\.foreground, 0.8))
+    private let chevron = IconView(name: .chevronDown, size: 16, strokeColor: Themed.color(\.mutedForeground))
+    private let fill = BoxDecorationLayer()
+    var expanded = false { didSet { chevron.setRotation(expanded ? 0 : -90); needsLayout = true } }
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        fill.host = self; layer?.addSublayer(fill)
+        label.lineHeight = 20
+        for view in [icon, label, counts, chevron] as [NSView] { addSubview(view) }
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    override func layout() {
+        super.layout(); fill.layout(boxSize: bounds.size)
+        icon.frame = NSRect(x: 10, y: 8, width: 16, height: 16)
+        chevron.frame = NSRect(x: bounds.width - 26, y: 8, width: 16, height: 16)
+        let width = counts.intrinsicContentSize.width
+        counts.frame = NSRect(x: chevron.frame.minX - 10 - width, y: 8, width: width, height: 16)
+        label.frame = NSRect(x: 36, y: 6, width: max(0, counts.frame.minX - 10 - 36), height: 20)
+    }
+    override func stateDidChange(from old: State) { super.stateDidChange(from: old); needsDisplay = true }
+    override func updateLayer() {
+        var box = BoxStyle(); box.radius = 8; box.fill = state.hoverOrPressed ? detailsHoverFill() : nil; fill.boxStyle = box
+    }
+}
+
 /// The relationship icon (ThreadRelationshipIcon.tsx:46-89): a 16pt provider glyph for a subagent child, else
 /// the fallback (corner-left-up for a parent, bot for a subagent, git-fork for a fork), with an 8pt status dot
 /// at `-bottom-1 -right-1` ringed 2pt in `card`.
@@ -123,7 +153,7 @@ final class ThreadLineageRowView: ControlView {
         self.row = row
         super.init(frame: .zero)
         fill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
-        fill.cornerRadius = 10
+        fill.cornerRadius = ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 8 : 10
         layer?.addSublayer(fill)
         let fallback: IconName = row.isParent ? .cornerLeftUp : row.isSubagent ? .bot : .gitFork
         icon.configure(driver: row.isSubagent && !row.isParent ? driver : nil, displayName: providerName, fallback: fallback, status: row.status)
@@ -342,6 +372,7 @@ public final class ThreadLineageSectionView: DSView {
     private let divider = CALayer()
     private let previousHeader = CollapsibleSectionHeaderView("Previous agents", tone: .muted, expanded: false)
     private let counts = ThreadLineageCountView()
+    private let previousRow = ThreadLineagePreviousView(frame: .zero)
     /// "Previous agents" is open (`ThreadLineageGroup`'s own state, folded at first).
     var previousExpanded = false {
         didSet { if previousExpanded != oldValue { previousHeader.isExpanded = previousExpanded; rebuild() } }
@@ -375,7 +406,8 @@ public final class ThreadLineageSectionView: DSView {
         more.setAccessibilityLabel("More thread actions")
         more.action = { [weak self] in self?.openMenu() }
         previousHeader.onToggle = { [weak self] on in self?.previousExpanded = on }
-        for v in [heading, more, previousHeader] as [NSView] { addSubview(v) }
+        previousRow.action = { [weak self] in self?.previousExpanded.toggle() }
+        for v in [heading, more, previousHeader, previousRow] as [NSView] { addSubview(v) }
         setAccessibilityRole(.group)
         setAccessibilityLabel("Lineage")
         rebuild()
@@ -463,10 +495,12 @@ public final class ThreadLineageSectionView: DSView {
         }
         add("related", lineage.related)
         add("active", lineage.active)
-        previousHeader.isHidden = lineage.previous.isEmpty
+        let modern = ThreadDesign.uses3814(dark: effectiveAppearance.isDark)
+        previousHeader.isHidden = lineage.previous.isEmpty || modern
+        previousRow.isHidden = lineage.previous.isEmpty || !modern
         if !lineage.previous.isEmpty {
             updatePreviousHeader()
-            layoutItems.append((previousHeader, 32, 0))
+            layoutItems.append((modern ? previousRow : previousHeader, 32, 0))
             if previousExpanded { add("previous", lineage.previous) }
         }
         for (group, rowList) in lists where !shownLists.contains(group) {
@@ -484,6 +518,10 @@ public final class ThreadLineageSectionView: DSView {
         let ownLayout = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         previousHeader.title = ownLayout && !previousExpanded ? "Previous agents (\(lineage.previous.count))" : "Previous agents"
         let failed = lineage.previous.filter(\.failed).count
+        previousRow.expanded = previousExpanded
+        previousRow.counts.configure(total: lineage.previous.count, failures: failed, expanded: previousExpanded)
+        previousRow.setAccessibilityLabel("Previous agents, \(lineage.previous.count)")
+        previousRow.setAccessibilityExpanded(previousExpanded)
         counts.configure(total: lineage.previous.count, failures: failed, expanded: previousExpanded || ownLayout)
         let accessory: NSView? = failed > 0 || (!previousExpanded && !ownLayout) ? counts : nil
         if previousHeader.accessory !== accessory { previousHeader.accessory = accessory }
@@ -559,7 +597,7 @@ public final class ThreadLineageSectionView: DSView {
         super.layout()
         divider.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 1)
         let inner = bounds.width - 16
-        heading.frame = NSRect(x: 8 + 6, y: 1 + 8 + 8, width: max(0, inner - 12 - 28), height: 16)
+        heading.frame = NSRect(x: 8 + (ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 10 : 6), y: 1 + 8 + 8, width: max(0, inner - 12 - 28), height: 16)
         more.frame = NSRect(x: bounds.width - 8 - 6 - 24, y: 1 + 8 + 4, width: 24, height: 24)
         var y: CGFloat = 1 + 8 + 32 + 4
         for (v, h, indent) in layoutItems {

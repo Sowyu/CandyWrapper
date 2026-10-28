@@ -82,7 +82,16 @@ struct ThreadViewFidelityTests {
                 let ref = try #require(NSBitmapImageRep(data: Data(contentsOf: refDir.appendingPathComponent("\(base).png"))))
                 let size = NSSize(width: CGFloat(ref.pixelsWide) / 2, height: CGFloat(ref.pixelsHigh) / 2)
                 let canvas = SidebarSearchFidelityTests.Canvas(frame: NSRect(origin: .zero, size: size))
-                if native["kind"] == "pr" {
+                if native["kind"] == "avatar" {
+                    let avatar = PullRequestAvatarView(frame: NSRect(x: 8, y: 8, width: 24, height: 24))
+                    let url = "https://example.invalid/sandbox-avatar"
+                    PullRequestAvatarView.cache[url] = Self.solid([46, 139, 87])
+                    avatar.actor = try JSONDecoder().decode(PullRequestActor.self, from: Data(#"{"login":"sandbox","avatarUrl":"https://example.invalid/sandbox-avatar"}"#.utf8))
+                    let stale = native["stale"] == "true"
+                    avatar.ring = PullRequestStyle.outcomeRing(native["outcome"]!, stale: stale)
+                    avatar.reviewOutcome = native["outcome"]; avatar.reviewStale = stale
+                    canvas.addSubview(avatar)
+                } else if native["kind"] == "pr" {
                     let row = ThreadDetailsPrRowView()
                     row.open.icons = [IconName.gitPullRequestArrow.definition]
                     row.open.iconColor = PullRequestStyle.color(.open)

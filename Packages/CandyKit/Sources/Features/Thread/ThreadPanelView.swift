@@ -302,6 +302,11 @@ public final class ThreadHeaderView: TopbarDragView {
             frost.layer?.borderColor = DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor
         }
     }
+    public override func updateLayer() {
+        // ChatView's bg-background header covers the scrolled rows in the default themes.
+        layer?.backgroundColor = ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? Themed.color(\.background).cgColor(in: self) : nil
+    }
+
 }
 
 /// The read-only thread: header over the timeline, on the panel background, and the right panel
@@ -2120,10 +2125,15 @@ public final class ThreadPanelView: DSView {
             }
         }
         panelResize.isHidden = !rightPanelOpen || rightPanelMaximized || sheet
-        // The sheet has no maximize control (ChatView.tsx:11211-11232). It fades with the slide, `transition-opacity`
+        // Nightly 3814 keeps maximize beside the sheet controls (ChatView.tsx:3795-3804). It fades with the slide, `transition-opacity`
         // over the same duration and curve (ChatView.tsx:11213-11224).
-        maximize.isHidden = sheet || (!rightPanelOpen && panelGhost == nil)
+        maximize.isHidden = (sheet && !ThreadDesign.uses3814(dark: effectiveAppearance.isDark)) || (!rightPanelOpen && panelGhost == nil)
         maximize.alphaValue = panelSlide.isRunning ? panelSlide.value : 1
+        // The sheet covers the canvas at z=21, including its title bar.
+        let controlsAboveSheet = sheet && ThreadDesign.uses3814(dark: effectiveAppearance.isDark)
+        for control in [header.toggles[2], header.toggles[1], maximize] {
+            control.layer?.zPosition = controlsAboveSheet ? 22 : 0
+        }
         panelResize.frame = NSRect(x: chat - 4, y: panelTop, width: 8, height: max(0, bounds.height - panelTop))
         if rightPanelOpen || panelGhost != nil {
             // The window's panel controls: `mr-px` and 12px from the right, `gap-1`.

@@ -250,9 +250,9 @@ public final class ThreadMinimapView: DSView {
         // The strip redraws whenever the current turn changes while scrolling. With 2,500 turns, a themed color and an
         // NSBezierPath per mark took 18% of the main thread in a long scroll; resolve the three colors once and fill
         // each mark straight into the context, in the same order, so overlapping marks blend as before.
-        let current = Themed.color(\.foreground, 0.9).cgColor
-        let near = Themed.color(\.mutedForeground, 0.75).cgColor
-        let base = Themed.color(\.mutedForeground, 0.35).cgColor
+        let current = Themed.color(\.foreground, ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 0.55 : 0.9).cgColor
+        let near = Themed.color(\.mutedForeground, ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 0.6 : 0.75).cgColor
+        let base = Themed.color(\.mutedForeground, ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 0.25 : 0.35).cgColor
         let span = max(0, bounds.height - 2), last = CGFloat(max(1, items.count - 1))
         for i in items.indices {
             let distance = hovered.map { abs(i - $0) }

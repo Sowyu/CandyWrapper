@@ -1,13 +1,12 @@
 """Writes design/component-reference/small-areas.json for scripts/component-reference: the visual states the
 small areas sweep added. NoActiveThreadState (NoActiveThreadState.tsx:6-33 with ui/empty.tsx and
 WorkspacePageHeader.tsx), the hover card's branch mismatch line (Sidebar.tsx:488-505) and the publish wizard's
-Bitbucket and Azure DevOps provider cards (GitActionsControl.tsx:784-801, Icons.tsx:162-354).
+Bitbucket and Azure DevOps provider cards (GitActionsControl.tsx:784-801, packages/source-control-{bitbucket,azure-devops}/src/shared/icon.ts).
 Usage: /usr/bin/python3 -I scripts/gen-small-areas-spec.py, then scripts/component-reference design/component-reference/small-areas.json
 """
-import json, os, re
+import json, os, re, subprocess, html
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-T3 = "/Users/mrm/CandyWrapper-research/t3code/apps/web/src"
 
 # The hover card helpers of the sidebar leftovers spec.
 ns = {"__file__": os.path.join(ROOT, "scripts/gen-sidebar-leftovers-spec.py")}
@@ -16,17 +15,32 @@ exec(src[:src.index("cases = []")], ns)
 lucide, favicon, card_row, hover_card = ns["lucide"], ns["favicon"], ns["card_row"], ns["hover_card"]
 
 def brand_svg(name, gid, cls):
-    """Icons.tsx markup as plain SVG, the way SourceControlBrandGlyph.swift embeds it."""
-    tsx = open(os.path.join(T3, "components/Icons.tsx")).read()
-    body = tsx[tsx.index(f"export const {name}: Icon"):]
-    svg = body[body.index("<svg"):body.index("</svg>") + len("</svg>")]
-    svg = svg.replace("{...props} ", f'class="{cls}" ')
-    svg = re.sub(r"\{`\$\{gradientId\}(-?[a-z]*)`\}", lambda m: f'"{gid}{m.group(1)}"', svg)
-    svg = re.sub(r"\{`url\(#\$\{gradientId\}(-?[a-z]*)\)`\}", lambda m: f'"url(#{gid}{m.group(1)})"', svg)
-    svg = svg.replace("id={gradientId}", f'id="{gid}"')
-    for a, b in [("stopColor", "stop-color"), ("stopOpacity", "stop-opacity"), ("fillOpacity", "fill-opacity")]:
-        svg = svg.replace(a + "=", b + "=")
-    return re.sub(r"\s+", " ", svg)
+    """3814 SourceControlIcon data moved from Icons.tsx into provider definitions (#23998)."""
+    kind = "bitbucket" if name == "BitbucketIcon" else "azure-devops"
+    source = subprocess.check_output(["git", "-C", "/Users/mrm/CandyWrapper-research/t3code", "show",
+        f"v0.1.4-nightly.20261028.3814:packages/source-control-{kind}/src/shared/icon.ts"], text=True)
+    obj = source[source.index("{", source.index("export const icon")):source.rindex("}") + 1]
+    obj = re.sub(r'([,{]\s*)([A-Za-z][A-Za-z0-9]*):', r'\1"\2":', obj)
+    obj = re.sub(r",(\s*[}\]])", r"\1", obj)
+    data = json.loads(obj)
+    def attr(key, value): return f' {key}="{html.escape(str(value), quote=True)}"'
+    defs = ""
+    for gradient in data.get("gradients", []):
+        attrs = attr("id", gid + gradient["id"]) + attr("gradientUnits", "userSpaceOnUse")
+        for key in ["x1", "x2", "y1", "y2"]: attrs += attr(key, gradient[key])
+        if "transform" in gradient: attrs += attr("gradientTransform", gradient["transform"])
+        stops = "".join('<stop' + attr("offset", stop["offset"]) + attr("stop-color", stop["color"])
+                        + (attr("stop-opacity", stop["opacity"]) if "opacity" in stop else "") + '/>' for stop in gradient["stops"])
+        defs += f'<linearGradient{attrs}>{stops}</linearGradient>'
+    paths = ""
+    for path in data["paths"]:
+        fill = path["fill"]
+        fill = f'url(#{gid}{fill["gradient"]})' if isinstance(fill, dict) else fill
+        attrs = attr("d", path["d"]) + attr("fill", fill)
+        for key in ["opacity", "fillOpacity", "fillRule"]:
+            if key in path: attrs += attr(re.sub(r"([A-Z])", lambda m: "-" + m[1].lower(), key), path[key])
+        paths += f'<path{attrs}/>'
+    return f'<svg class="{cls}" viewBox="{data["viewBox"]}"><defs>{defs}</defs>{paths}</svg>'
 
 cases = []
 

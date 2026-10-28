@@ -9,7 +9,7 @@ threadDetailsPanelStyles.ts so they stay exact. Helpers (lucide, composer contro
 parts, menu rows, textarea) are reused from the run-on, overlays, popups and forms generators.
 Usage: /usr/bin/python3 -I scripts/gen-git-spec.py
 """
-import json, os, re
+import json, os, re, subprocess
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 T3 = "/Users/mrm/CandyWrapper-research/t3code/apps/web/src/components"
@@ -34,8 +34,18 @@ btn, POPUP, CLOSE = o["btn"], o["POPUP"], o["CLOSE"]
 MENU_POPUP, MENU_ITEM = p["MENU_POPUP"], p["MENU_ITEM"]
 textarea_html = f["textarea_html"]
 
+# EnvironmentMachineIcon.tsx:8-29 at 3814, independent of the composer's generator.
+old_machine = machine
+def machine(kind, cls):
+    if kind == "mac-studio": return old_machine(kind, cls).replace('stroke-width="2"', 'stroke-width="1.75"')
+    if kind != "mac-mini": return old_machine(kind, cls)
+    return (f'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" '
+            f'stroke-linecap="round" stroke-linejoin="round" class="{cls}">'
+            '<rect width="18" height="12" x="3" y="6" rx="2.5"/><circle cx="7.5" cy="12" r="1" fill="currentColor" stroke="none"/></svg>')
+
 # threadDetailsPanelStyles.ts: resolve the template strings.
-styles_src = open(os.path.join(T3, "chat/threadDetailsPanelStyles.ts")).read()
+styles_src = subprocess.check_output(["git", "-C", os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(T3)))), "show",
+    "v0.1.4-nightly.20261028.3814:apps/web/src/components/chat/threadDetailsPanelStyles.ts"], text=True)
 S = {}
 for name, value in re.findall(r"const (THREAD_DETAILS_\w+) =\s*([`\"].*?[`\"]);", styles_src, re.S):
     S[name] = re.sub(r"\$\{(\w+)\}", lambda m: S[m.group(1)], value[1:-1])

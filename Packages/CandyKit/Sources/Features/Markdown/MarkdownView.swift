@@ -336,9 +336,10 @@ public final class MarkdownView: DSView {
         let started = generation, startedIdentity = identity, startedInputs = inputs
         jobs += 1
         let token = jobs
+        nonisolated(unsafe) let appearance = effectiveAppearance
         running = (width, token)
         DispatchQueue.global(qos: .userInitiated).async {
-            let made = make()
+            let made = ThreadDesign.layout(in: appearance, make)
             DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated {
                     // Whoever drops it last, the layout is freed in the background, even if this view went meanwhile.
@@ -379,6 +380,10 @@ public final class MarkdownView: DSView {
     }
 
     public func layout(forWidth width: CGFloat) -> MarkdownLayout {
+        ThreadDesign.layout(in: effectiveAppearance) { layoutWithCurrentAppearance(forWidth: width) }
+    }
+
+    private func layoutWithCurrentAppearance(forWidth width: CGFloat) -> MarkdownLayout {
         if let hit = cache[width] {
             if cachedWidths.last != width {
                 cachedWidths.removeAll { $0 == width }
@@ -1362,9 +1367,14 @@ public final class MarkdownView: DSView {
             case .fileChip(let chip):
                 chipIndex += 1
                 let hovered = hoveredChip == chipIndex
-                drawBox(chip.frame, fill: hovered ? FileChipStyle.hoverFill : FileChipStyle.fill,
-                        border: hovered ? FileChipStyle.hoverBorder : FileChipStyle.border, radius: chip.frame.height / 1.41 * 0.5,
+                drawBox(chip.frame, fill: ThreadDesign.uses3814(dark: dark) ? nil : hovered ? FileChipStyle.hoverFill : FileChipStyle.fill,
+                        border: ThreadDesign.uses3814(dark: dark) ? nil : hovered ? FileChipStyle.hoverBorder : FileChipStyle.border, radius: chip.frame.height / 1.41 * 0.5,
                         fillUnderBorder: true, in: ctx)
+                if hovered, ThreadDesign.uses3814(dark: dark) {
+                    ctx.setStrokeColor(FileChipStyle.foreground.cgColor(in: self)); ctx.setLineWidth(0.5)
+                    ctx.move(to: CGPoint(x: chip.icon.maxX + chip.icon.width * 0.2, y: chip.frame.maxY - 1))
+                    ctx.addLine(to: CGPoint(x: chip.frame.maxX, y: chip.frame.maxY - 1)); ctx.strokePath()
+                }
                 let (icon, color) = FileChipStyle.icon(for: chip.meta)
                 Self.drawIcon(icon, in: chip.icon, color: color.cgColor(in: self), ctx: ctx)
             case .contextChip(let chip):
