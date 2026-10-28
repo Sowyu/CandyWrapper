@@ -14,6 +14,16 @@ public final class SidebarListView: DSView {
 
     public private(set) var items: [SidebarItem] = []
     private(set) var tops: [CGFloat] = []
+    private(set) var firstShelfIndex: Int?
+    var undoNoticeOverlay: SidebarUndoNoticeView? {
+        didSet {
+            guard oldValue !== undoNoticeOverlay else { return }
+            oldValue?.overlaysList = false
+            if oldValue?.superview === self { oldValue?.removeFromSuperview() }
+            if let undoNoticeOverlay { undoNoticeOverlay.overlaysList = true; addSubview(undoNoticeOverlay) }
+            needsLayout = true
+        }
+    }
     private(set) var indexByKey: [String: Int] = [:]
     private(set) var visible: [String: SidebarRowBase] = [:]
     private var pools: [SidebarItem.Kind: [SidebarRowBase]] = [:]
@@ -164,6 +174,7 @@ public final class SidebarListView: DSView {
         indexByKey = [:]
         var y: CGFloat = 0
         let firstShelf = items.firstIndex { if case .shelfHeader = $0 { true } else { false } }
+        firstShelfIndex = firstShelf
         let natural = items.reduce(0) { $0 + $1.height } + CGFloat(max(0, items.count - 1)) * Self.gap + Self.padding
         let room = max(0, viewportHeight - natural)
         for (i, item) in items.enumerated() {
@@ -279,6 +290,15 @@ public final class SidebarListView: DSView {
         }
         if changed, sort?.sortable == true { placeSorted(animated: false) }
         if changed || oldTops != nil { onVisibleRowsChange?() }
+        layoutUndoNotice()
+    }
+
+    private func layoutUndoNotice() {
+        guard let notice = undoNoticeOverlay, let index = firstShelfIndex, tops.indices.contains(index) else { return }
+        let width = max(0, bounds.width - 16)
+        let height = notice.height(forWidth: width)
+        notice.frame = NSRect(x: 8, y: tops[index] - height, width: width, height: height)
+        if subviews.last !== notice { addSubview(notice, positioned: .above, relativeTo: nil) }
     }
 
     private func dequeue(_ kind: SidebarItem.Kind) -> SidebarRowBase {

@@ -8,6 +8,7 @@ final class SidebarUndoNoticeView: DSView {
     private let surface = AlertView(nil, variant: .sidebar)
     private let label = LabelView()
     let button = UndoLinkButton()
+    var overlaysList = false { didSet { if overlaysList != oldValue { needsDisplay = true } } }
     var onUndo: (@MainActor () -> Void)? { didSet { button.action = onUndo } }
     var text = "" { didSet { label.text = text; needsLayout = true } }
     var shortcut: String? { didSet { button.label.text = shortcut.map { "\($0) to undo" } ?? "Undo"; needsLayout = true } }
@@ -22,6 +23,11 @@ final class SidebarUndoNoticeView: DSView {
         label.color = Themed.color(\.contrastSidebarMutedForeground)
         setAccessibilityRole(.group)
         setAccessibilityRoleDescription("status")
+    }
+
+    override func updateLayer() {
+        // T3 3814 sidebar/SidebarListMarkers.tsx:130-132 uses bg-sidebar over the list rows.
+        layer?.backgroundColor = overlaysList ? Themed.color(\.sidebar, sidebar: true).cgColor(in: self) : nil
     }
 
     /// `px-2 py-1.5` inside a 1px border, one 16px line.
