@@ -59,7 +59,6 @@ struct ComposerFooterFidelityTests {
                     list.hidesIconsForTests = true
                     canvas.addSubview(list)
                 } else {
-                    _ = Self.fitted(p, iconOnly: 2, hidden: native["traits"] == "true" ? 2 : 1)
                     let popup = PickerPopupView(p.optionsMenu(includingTraits: native["traits"] == "true"))
                     popup.frame = NSRect(origin: NSPoint(x: 8, y: 8), size: popup.popupSize)
                     canvas.addSubview(popup)
@@ -82,6 +81,26 @@ struct ComposerFooterFidelityTests {
         let html = "<!doctype html><meta charset=utf-8><title>Composer footer</title><body style='font:13px -apple-system'>" + images
         try html.write(to: Self.out.deletingLastPathComponent().appendingPathComponent("report-composer-footer.html"), atomically: true, encoding: .utf8)
         #expect(mean < 0.05)
+    }
+
+    /// 3824 ComposerFooterControls.tsx:111-116 and composerFooterLayout.ts:53-75,109-117.
+    /// Replacing compact permissions with overflow costs 2px, so the old overflow-access
+    /// screenshot state cannot fit at any width. Keep a geometry check beside the reachable cases.
+    @Test func overflowSkipsPermissionsOnlyState() throws {
+        for dark in [false, true] {
+            let p = try PickersFidelityTests.pickers()
+            let v = p.controlsView
+            v.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            v.hidesPermissions = false
+            let m = v.measurement
+            let before = ComposerFooterLayout.width(m, hidden: 0, fixed: m.naturalFixedWidth, iconOnly: 2)
+            let intermediate = ComposerFooterLayout.width(m, hidden: 1, fixed: m.naturalFixedWidth, iconOnly: 2)
+            #expect(intermediate >= before)
+            v.frame = NSRect(x: 0, y: 0, width: before - 0.5, height: 28)
+            v.layoutSubtreeIfNeeded()
+            #expect(v.fit.hiddenCount == 2 && v.fit.iconOnlyCount == 2)
+            print("composer-overflow", dark ? "dark" : "light", "both icons", before, "permissions only hidden", intermediate, "overflow at", v.frame.width)
+        }
     }
 
     /// 3824 closes the grouped menu after either a permission or effort pick.

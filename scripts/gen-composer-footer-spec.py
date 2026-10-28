@@ -83,7 +83,10 @@ def overflow_menu(with_traits):
     return f'<div role="menu" class="{MENU_POPUP}" data-slot="menu-popup" data-side="bottom"><div class="max-h-(--available-height) w-full overflow-y-auto p-1">{body}</div></div>'
 
 cases = []
-for icon_only, hidden, name in [(1, 0, "access-icon"), (2, 0, "both-icon"), (2, 1, "overflow-access"), (2, 2, "overflow-both")]:
+# 3824 ComposerFooterControls.tsx:111-116 and composerFooterLayout.ts:53-75,109-117:
+# the 32px compact permissions chip is narrower than the 34px overflow button. Hiding only
+# permissions never saves space, so overflow-access cannot occur at any host width.
+for icon_only, hidden, name in [(1, 0, "access-icon"), (2, 0, "both-icon"), (2, 2, "overflow-both")]:
     cases.append({"name": f"cluster.{name}", "html": cluster(icon_only, hidden), "native": {"kind": "cluster", "iconOnly": str(icon_only), "hidden": str(hidden)}})
 bars = '<svg width="14" height="14" viewBox="0 0 14 14" style="width:14px;height:14px" data-composer-control-icon class="shrink-0 text-current">' + ''.join(f'<rect x="{i*4}" y="{12-h}" width="2" height="{h}" fill="currentColor" opacity="{1 if i<2 else 0.4}"></rect>' for i,h in enumerate([6,8,10,12])) + '</svg>'
 cases.append({"name": "cluster.bars", "html": '<div class="flex items-center gap-0.5"><button class="' + CONTROL + ' ps-0.5 pe-1 hover:bg-transparent">' + bars + '</button>' + block("shield-off", "Full access", False) + '</div>', "native": {"kind":"cluster", "iconOnly":"0", "hidden":"0", "bars":"true"}})
