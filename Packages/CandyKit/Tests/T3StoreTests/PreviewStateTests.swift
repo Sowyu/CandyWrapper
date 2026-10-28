@@ -92,6 +92,30 @@ struct PreviewStateTests {
         #expect(LocalServerDiscovery.forThread([withTerminal, servers[1]], threadId: "t").count == 1)
     }
 
+    @Test func unchangedBrowserTabsCannotRestoreAnotherThreadsOlderTitle() {
+        let url = "https://example.com/"
+        var history = BrowserHistory()
+        history.recordVisit("project", url: url, at: 1)
+        var old = ThreadPreviewState()
+        old.sessions["tab"] = PreviewSessionSnapshot(threadId: "old-thread", tabId: "tab", navStatus: .success(url: url, title: "Old"), updatedAt: "1")
+        history.recordChangedTitles("project", state: old, since: ThreadPreviewState())
+        #expect(history.entries("project").first?.title == "Old")
+        var other = ThreadPreviewState()
+        other.sessions["tab"] = PreviewSessionSnapshot(threadId: "new-thread", tabId: "tab", navStatus: .success(url: url, title: "New"), updatedAt: "2")
+        history.recordChangedTitles("project", state: other, since: ThreadPreviewState())
+        var resized = old
+        resized.sessions["tab"]?.updatedAt = "3"
+        history.recordChangedTitles("project", state: resized, since: old)
+        #expect(history.entries("project").first?.title == "New")
+        var retitled = resized
+        retitled.sessions["tab"]?.navStatus = .success(url: url, title: "Newest")
+        history.recordChangedTitles("project", state: retitled, since: resized)
+        #expect(history.entries("project").first?.title == "Newest")
+        retitled.sessions["unknown"] = PreviewSessionSnapshot(threadId: "old-thread", tabId: "unknown", navStatus: .success(url: "https://unvisited.example/", title: "Unvisited"), updatedAt: "4")
+        history.recordChangedTitles("project", state: retitled, since: resized)
+        #expect(history.entries("project").count == 1)
+    }
+
     @Test func history() {
         var h = BrowserHistory()
         h.recordVisit("p", url: "http://localhost:3000/a", at: 1)
