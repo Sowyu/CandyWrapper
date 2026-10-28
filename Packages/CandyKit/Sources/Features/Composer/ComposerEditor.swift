@@ -148,17 +148,22 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     /// Replaces the text with the editor's style (programmatic sets skip the typing attributes).
     /// `text` is the expanded prompt; its tokens come back as chips. One editor serves every thread, so a draft set in
     /// code starts a fresh undo history: the old one holds offsets into the text it replaces, and Cmd+Z would replay
-    /// another draft's typing onto this one.
-    func setText(_ text: String) {
-        breakUndoCoalescing()
-        undoManager?.removeAllActions()
+    /// another draft's typing onto this one. `restyle` redraws the same text for new colors and keeps its history.
+    func setText(_ text: String, restyle: Bool = false) {
+        let selection = selectedRange()
+        if !restyle {
+            breakUndoCoalescing()
+            undoManager?.removeAllActions()
+        }
         isChipifying = true
         textStorage?.setAttributedString(NSAttributedString(string: text, attributes: baseAttributes))
         applyStyle()
         styleRichText(registerUndo: false)
         chipify(registerUndo: false)
         isChipifying = false
-        setSelectedRange(NSRange(location: (string as NSString).length, length: 0))
+        let length = (string as NSString).length
+        setSelectedRange(restyle ? NSRange(location: min(selection.location, length), length: min(selection.length, length - min(selection.location, length)))
+                                 : NSRange(location: length, length: 0))
         highlightCodeBlocks()
         onTextChange?()
     }
@@ -706,7 +711,8 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        if richTextEnabled { setText(expandedText) } else { refreshChips() }
+        // A theme or light and dark switch while typing keeps the caret and Cmd+Z.
+        if richTextEnabled { setText(expandedText, restyle: true) } else { refreshChips() }
     }
 
     // MARK: Clipboard

@@ -17,6 +17,7 @@ public final class DiffPanelView: DSView {
     public var threadId: ThreadId? {
         didSet {
             guard threadId != oldValue else { return }
+            closeToolCall()
             loadTask?.cancel()
             summaries = []
             selectedRunId = nil
@@ -37,6 +38,107 @@ public final class DiffPanelView: DSView {
         }
     }
     public var loader: Loader?
+    public typealias ToolCallLoader = @Sendable (GetTurnItemInput) async throws -> GetTurnItemResult
+    public var toolCallLoader: ToolCallLoader?
+    private(set) var toolCallTarget: ToolCallDiffTarget?
+    private let recordedText = NSTextView()
+    private let recordedScroll = NSScrollView()
+
+    public func openToolCall(_ target: ToolCallDiffTarget) {
+        toolCallTarget = target
+        gitScope = nil; gitSource = nil; pendingFile = nil; requestedRunId = nil
+        updateScopeLabel()
+        reload()
+    }
+
+    public func refreshToolCall(_ items: [ProjectedTurnItem]) {
+        guard var target = toolCallTarget,
+              let row = items.first(where: { $0.sourceThreadId == target.threadId && $0.sourceItemId == target.itemId }), row.item.type == .fileChange else { return }
+        let revision = TurnItemDetail.revision(row.item)
+        guard revision != target.revision else { return }
+        target.revision = revision
+        openToolCall(target)
+    }
+
+    /// Stop the request and release recorded content when its surface closes or hides.
+    public func closeToolCall() {
+        guard toolCallTarget != nil else { return }
+        loadTask?.cancel(); loadTask = nil
+        toolCallTarget = nil
+        showMessage("No patch available for this selection.")
+        list.annotations = []; reviewDraft = nil; reviewStart = nil; reviewDraftAnchor = nil; editingReviewId = nil
+        shownSection = nil
+    }
+
+    private func reloadToolCall(_ target: ToolCallDiffTarget) {
+        showMessage("Loading tool call diff...")
+        guard let toolCallLoader else { showMessage("No patch available for this selection."); return }
+        let whitespace = ignoreWhitespace
+        let request = GetTurnItemInput(threadId: target.threadId, itemId: target.itemId, revision: target.revision)
+        loadTask = Task { [weak self] in
+            guard !Task.isCancelled else { return }
+            do {
+                let reply = try await toolCallLoader(request)
+                guard !Task.isCancelled, let item = reply.item, item.type == .fileChange else {
+                    if !Task.isCancelled { self?.loadTask = nil; self?.showMessage("No patch available for this selection.") }
+                    return
+                }
+                if !ToolCallDiff.hasRecordedContent(item) {
+                    guard let self, !Task.isCancelled else { return }
+                    self.open(runId: target.runId, filePath: target.filePath)
+                    return
+                }
+                let (preview, parsed) = await Task.detached(priority: .userInitiated) {
+                    let preview = ToolCallDiff(item)
+                    return (preview, ToolCallDiff.render(preview.patch ?? "", ignoringWhitespace: whitespace))
+                }.value
+                guard !Task.isCancelled, let self, self.toolCallTarget == target else { return }
+                self.loadTask = nil
+                if !parsed.files.isEmpty {
+                    self.show(parsed, collapsed: ClientSettingsStore.shared.current.bool("diffFilesCollapsed"))
+                } else if let patch = preview.patch, !patch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    self.showRecorded([.init(label: "", text: patch)], introduction: "Unsupported diff format. Showing raw patch.")
+                } else if !preview.content.isEmpty {
+                    self.showRecorded(preview.content)
+                } else {
+                    self.showMessage(preview.patch?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true
+                        ? "No net changes in this selection." : "No patch available for this selection.")
+                }
+                // Two bars, as DiffPanel.tsx:1043-1054 stacks them: the size limit, then the files the patch left out.
+                self.truncatedNotice.text = "This preview exceeds the size limit. Changes shown are incomplete."
+                self.truncatedNotice.isHidden = !preview.truncated
+                self.truncatedBar.isHidden = !preview.truncated
+                let count = item["changes"]?.arrayValue?.count ?? 0
+                let omitted = parsed.files.isEmpty ? 0 : max(0, count - parsed.files.count)
+                self.omittedNotice.text = "This tool call changed \(count) files. The recorded patch omits \(omitted) of them."
+                self.omittedNotice.isHidden = omitted == 0
+                self.omittedBar.isHidden = omitted == 0
+                self.needsLayout = true
+            } catch {
+                guard !Task.isCancelled, let self else { return }
+                self.loadTask = nil
+                self.showMessage("No patch available for this selection.", error: error.localizedDescription)
+            }
+        }
+    }
+
+    private func showRecorded(_ content: [ToolCallDiff.Content], introduction: String = "The provider recorded file content without a diff.") {
+        showMessage("")
+        message.isHidden = true
+        let text = NSMutableAttributedString(string: introduction + "\n\n",
+            attributes: [.font: DSFont.ui(12), .foregroundColor: Themed.color(\.mutedForeground)])
+        for entry in content {
+            text.append(NSAttributedString(string: entry.label + "\n",
+                attributes: [.font: DSFont.ui(12), .foregroundColor: Themed.color(\.mutedForeground)]))
+            text.append(NSAttributedString(string: (entry.text.isEmpty ? "Empty content." : entry.text) + "\n\n",
+                attributes: [.font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular), .foregroundColor: Themed.color(\.foreground)]))
+        }
+        if wrapLines { recordedText.frame.size.width = max(1, bounds.width) }
+        recordedText.textStorage?.setAttributedString(text)
+        recordedScroll.isHidden = false
+        needsLayout = true
+    }
+
 
     // MARK: Git scopes
 
@@ -75,6 +177,9 @@ public final class DiffPanelView: DSView {
     private let baseRefButton = ButtonView("", variant: .ghostMuted, size: .xs).menuTrigger()
     private let truncatedNotice = LabelView("", font: DSFont.ui(11), color: Themed.color(\.mutedForeground))
     private let truncatedBar = CALayer(), truncatedBottom = CALayer()
+    /// A tool call's "the recorded patch omits" notice, a second bar under the size-limit one.
+    private let omittedNotice = LabelView("", font: DSFont.ui(11), color: Themed.color(\.mutedForeground))
+    private let omittedBar = CALayer(), omittedBottom = CALayer()
     private var focusObserver: NSObjectProtocol?
     private var refreshedSummary: RunId?
     private static let baseRefsKey = "t3code.diffBranchBaseRefs"
@@ -93,7 +198,8 @@ public final class DiffPanelView: DSView {
     /// `selectGitScope`: generic openings and proactive panels show Changes.
     public func selectGitScope(_ scope: GitScope) {
         guard gitLoader != nil else { return }
-        let changed = gitScope != scope
+        let changed = gitScope != scope || toolCallTarget != nil
+        closeToolCall()
         gitScope = scope
         pendingFile = nil; requestedRunId = nil
         updateScopeLabel()
@@ -102,7 +208,8 @@ public final class DiffPanelView: DSView {
 
     /// The review section and its title (DiffPanel.tsx:313-325): `turn:<id>` and "Turn n", or the git scope.
     private var reviewSection: (id: String, title: String) {
-        switch gitScope {
+        if let target = toolCallTarget { return ("tool-call:\(target.threadId.rawValue):\(target.itemId.rawValue)", "Tool call") }
+        return switch gitScope {
         case .branch: ("branch", "Changes")
         case .unstaged: ("unstaged", "Uncommitted")
         case nil:
@@ -113,7 +220,14 @@ public final class DiffPanelView: DSView {
     /// T3's `diffLayout` setting: stacked (unified, the default) or split.
     public var layoutStyle: DiffViewStyle = .unified { didSet { list.style = layoutStyle; layoutToggle.selectedIndex = layoutStyle == .unified ? 0 : 1 } }
     /// `diffWordWrap`, default on.
-    public var wrapLines = true { didSet { list.wrap = wrapLines; wrapToggle.isPressed = wrapLines } }
+    public var wrapLines = true { didSet {
+        list.wrap = wrapLines; wrapToggle.isPressed = wrapLines
+        recordedText.isHorizontallyResizable = !wrapLines
+        recordedText.autoresizingMask = wrapLines ? [.width] : []
+        recordedText.textContainer?.widthTracksTextView = wrapLines
+        recordedText.textContainer?.containerSize = NSSize(width: wrapLines ? recordedScroll.contentSize.width : CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        recordedScroll.hasHorizontalScroller = !wrapLines
+    } }
     /// `diffIgnoreWhitespace`, default on; changing it asks the server again.
     public var ignoreWhitespace = true { didSet { whitespaceToggle.isPressed = ignoreWhitespace; if ignoreWhitespace != oldValue { reload() } } }
     /// The right panel's tab mode (`data-preview-panel-mode="inline"`): a 28px header row with 12px
@@ -305,11 +419,23 @@ public final class DiffPanelView: DSView {
         }
         headerBorder.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]
         layer?.addSublayer(headerBorder)
+        recordedText.isEditable = false
+        recordedText.drawsBackground = false
+        recordedText.textContainerInset = NSSize(width: 12, height: 12)
+        recordedText.isVerticallyResizable = true
+        recordedText.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        recordedText.autoresizingMask = [.width]
+        recordedText.textContainer?.widthTracksTextView = true
+        recordedScroll.drawsBackground = false
+        recordedScroll.hasVerticalScroller = true
+        recordedScroll.documentView = recordedText
+        recordedScroll.isHidden = true
+        addSubview(recordedScroll)
         message.alignment = .center
         message.lineHeight = 16
         errorLine.lineHeight = 16.5
         [treeTitle, treeCount, treeExpansion, treeScroll, scroll, scopeButton, totals, refreshButton, collapseButton, layoutToggle, wrapToggle, whitespaceToggle, treeToggle, message, errorLine,
-         compareHead, compareArrow, baseRefButton, truncatedNotice, findWidget].forEach(addSubview)
+         compareHead, compareArrow, baseRefButton, truncatedNotice, omittedNotice, findWidget].forEach(addSubview)
         baseRefButton.trailingIcon = .chevronDown
         baseRefButton.iconSize = 14
         baseRefButton.scalesWhenPressed = false
@@ -319,9 +445,13 @@ public final class DiffPanelView: DSView {
         truncatedBar.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]
         layer?.addSublayer(truncatedBar); truncatedBar.addSublayer(truncatedBottom)
         truncatedBottom.actions = truncatedBar.actions
+        omittedBar.actions = truncatedBar.actions; omittedBottom.actions = truncatedBar.actions
+        layer?.addSublayer(omittedBar); omittedBar.addSublayer(omittedBottom)
         truncatedNotice.lineHeight = 16.5
-        [compareHead, compareArrow, baseRefButton, truncatedNotice].forEach { $0.isHidden = true }
+        omittedNotice.lineHeight = 16.5
+        [compareHead, compareArrow, baseRefButton, truncatedNotice, omittedNotice].forEach { $0.isHidden = true }
         truncatedBar.isHidden = true
+        omittedBar.isHidden = true
         message.isHidden = true
         errorLine.isHidden = true
         totals.isHidden = true
@@ -353,6 +483,7 @@ public final class DiffPanelView: DSView {
     /// The thread's checkpoint summaries (`TurnDiffs.summaries(projection)`), any order.
     public func setSummaries(_ summaries: [TurnDiffSummary]) {
         self.summaries = TurnDiffs.sortedForPanel(summaries)
+        if toolCallTarget != nil { return }
         if gitScope != nil {
             // A finished turn changed the checkout: the git scope reads it again (`useWorkspaceMutationRefresh`).
             let latest = self.summaries.first?.runId
@@ -375,6 +506,7 @@ public final class DiffPanelView: DSView {
     /// (`revealDiffFile`, DiffPanel.tsx:551-580). This is what the changed files card's "Open diff" and
     /// file rows call (`onOpenTurnDiff`).
     public func open(runId: RunId?, filePath: String?) {
+        closeToolCall()
         let known = runId.flatMap { id in summaries.first { $0.runId == id }?.runId }
         if let runId, known == nil { requestedRunId = runId } // its summary is still on the way
         let target = known ?? summaries.first?.runId
@@ -410,6 +542,7 @@ public final class DiffPanelView: DSView {
     private func reload() {
         loadTask?.cancel()
         loadTask = nil
+        if let target = toolCallTarget { reloadToolCall(target); return }
         if let gitScope { reloadGit(gitScope); return }
         guard let summary = selectedSummary, let threadId, let loader else {
             if summaries.isEmpty, threadId != nil { showMessage("No completed turns yet.") }
@@ -489,6 +622,7 @@ public final class DiffPanelView: DSView {
     }
 
     private func show(_ diff: UnifiedDiff, collapsed: Bool) {
+        recordedScroll.isHidden = true; recordedText.string = ""
         hasDiff = true
         message.isHidden = true
         errorLine.isHidden = true
@@ -499,6 +633,8 @@ public final class DiffPanelView: DSView {
             + (gitSource?.files != nil ? " Totals include all changes." : "")
         truncatedNotice.isHidden = !truncated
         truncatedBar.isHidden = !truncated
+        omittedNotice.isHidden = true
+        omittedBar.isHidden = true
         // An unsent comment stays when the same section reloads (a refresh), else it goes.
         let section = reviewSection.id
         let keepDraft = section == shownSection && reviewDraft != nil
@@ -535,6 +671,7 @@ public final class DiffPanelView: DSView {
     }
 
     private func showMessage(_ text: String, error: String? = nil) {
+        recordedScroll.isHidden = true; recordedText.string = ""
         hasDiff = false
         list.setDiff(UnifiedDiff(""))
         fileTree.model = FileTreeModel(); fileTree.changes = [:]
@@ -547,6 +684,8 @@ public final class DiffPanelView: DSView {
         totals.isHidden = true
         truncatedNotice.isHidden = true
         truncatedBar.isHidden = true
+        omittedNotice.isHidden = true
+        omittedBar.isHidden = true
         needsLayout = true
     }
 
@@ -562,6 +701,7 @@ public final class DiffPanelView: DSView {
         baseRefButton.setAccessibilityLabel(compare.map { "Change comparison target. Currently \($0.1)" } ?? "")
         [compareHead, compareArrow, baseRefButton].forEach { $0.isHidden = compare == nil }
         needsLayout = true
+        if toolCallTarget != nil { scopeButton.title = "Tool call"; return }
         switch gitScope {
         case .branch: scopeButton.title = "Changes"; return
         case .unstaged: scopeButton.title = "Uncommitted"; return
@@ -628,7 +768,7 @@ public final class DiffPanelView: DSView {
     private func showScopeMenu() {
         guard gitLoader != nil || !summaries.isEmpty else { return }
         let latest = summaries.first?.runId
-        let turnShown = gitScope == nil
+        let turnShown = gitScope == nil && toolCallTarget == nil
         var turns: [MenuItem] = []
         for summary in summaries {
             var item = MenuItem("Turn \(summary.checkpointTurnCount)", kind: .radio(turnShown && summary.runId == selectedRunId))
@@ -656,7 +796,7 @@ public final class DiffPanelView: DSView {
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if let focusObserver { NotificationCenter.default.removeObserver(focusObserver); self.focusObserver = nil }
-        guard let window else { return }
+        guard let window else { closeToolCall(); return }
         focusObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, self.gitScope != nil, self.gitResultShown, self.loadTask == nil, !self.isHiddenOrHasHiddenAncestor else { return }
@@ -749,6 +889,7 @@ public final class DiffPanelView: DSView {
         }
         headerBorder.frame = CGRect(x: 0, y: h - 1, width: bounds.width, height: 1)
         headerBorder.isHidden = inlineHeader
+        treeScroll.isHidden = !treeToggle.isPressed || !recordedScroll.isHidden
         let treeWidth: CGFloat = treeScroll.isHidden ? 0 : min(220, bounds.width * 0.35)
         for view in [treeTitle, treeCount, treeExpansion] { view.isHidden = treeScroll.isHidden }
         treeTitle.frame = NSRect(x: 12, y: bodyTop + 6, width: 60, height: 16)
@@ -761,11 +902,20 @@ public final class DiffPanelView: DSView {
         treeExpansion.isHidden = treeScroll.isHidden || fileTree.model.directoryPaths.isEmpty
         treeScroll.frame = NSRect(x: 0, y: bodyTop + 40, width: treeWidth, height: max(0, bounds.height - bodyTop - 40))
         // The size-limit notice: `border-b border-border/70 bg-muted/40 px-3 py-1.5 text-2xs` over the files.
-        let notice: CGFloat = truncatedNotice.isHidden ? 0 : 6 + 16.5 + 6 + 1
-        truncatedBar.frame = CGRect(x: treeWidth, y: bodyTop, width: bounds.width - treeWidth, height: notice)
-        truncatedBottom.frame = CGRect(x: 0, y: notice - 1, width: bounds.width - treeWidth, height: 1)
+        let bar: CGFloat = 6 + 16.5 + 6 + 1
+        let sizeBar: CGFloat = truncatedNotice.isHidden ? 0 : bar, omittedHeight: CGFloat = omittedNotice.isHidden ? 0 : bar
+        let notice = sizeBar + omittedHeight
+        truncatedBar.frame = CGRect(x: treeWidth, y: bodyTop, width: bounds.width - treeWidth, height: sizeBar)
+        truncatedBottom.frame = CGRect(x: 0, y: sizeBar - 1, width: bounds.width - treeWidth, height: 1)
         truncatedNotice.frame = NSRect(x: treeWidth + 12, y: bodyTop + 6, width: max(0, bounds.width - treeWidth - 24), height: 16.5)
+        omittedBar.frame = CGRect(x: treeWidth, y: bodyTop + sizeBar, width: bounds.width - treeWidth, height: omittedHeight)
+        omittedBottom.frame = CGRect(x: 0, y: omittedHeight - 1, width: bounds.width - treeWidth, height: 1)
+        omittedNotice.frame = NSRect(x: treeWidth + 12, y: bodyTop + sizeBar + 6, width: max(0, bounds.width - treeWidth - 24), height: 16.5)
         scroll.frame = NSRect(x: treeWidth, y: bodyTop + notice, width: bounds.width - treeWidth, height: max(0, bounds.height - bodyTop - notice))
+        recordedScroll.frame = NSRect(x: 0, y: bodyTop + notice, width: bounds.width, height: max(0, bounds.height - bodyTop - notice))
+        if !recordedScroll.isHidden, wrapLines {
+            recordedText.setFrameSize(NSSize(width: recordedScroll.contentSize.width, height: max(recordedScroll.contentSize.height, recordedText.frame.height)))
+        }
         // `[data-search-panel]`: sticky 32pt down the scroller plus `top: 8px`, 16pt in from its end plus `right: 16px`.
         let widget = findWidget.preferredSize
         findWidget.frame = NSRect(x: scroll.frame.maxX - 32 - widget.width + DiffFindWidget.overhang,
@@ -782,5 +932,7 @@ public final class DiffPanelView: DSView {
         // `bg-muted/40` with the 1px `border-border/70` along its bottom.
         truncatedBar.backgroundColor = Themed.color(\.muted, 0.4).cgColor(in: self)
         truncatedBottom.backgroundColor = Themed.color(\.border, 0.7).cgColor(in: self)
+        omittedBar.backgroundColor = truncatedBar.backgroundColor
+        omittedBottom.backgroundColor = truncatedBottom.backgroundColor
     }
 }

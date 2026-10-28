@@ -55,7 +55,7 @@ struct WorkDetail: Hashable {
     enum Tone: Hashable { case command, pattern, output, error, note, json }
 
     enum Action: Hashable {
-        case openDiff(RunId, String?)
+        case openDiff(ToolCallDiffTarget)
         case rollBack(checkpointId: String, scopeId: String)
         case openFork(ThreadId)
         case openSubagent(ThreadId)
@@ -239,7 +239,7 @@ struct WorkDetail: Hashable {
             toolCall(command: nil, args: item.input, exitCode: nil)
         case .fileChange:
             let file = item["fileName"]?.stringValue ?? ""
-            let action = item.runId.map { Action.openDiff($0, item["fileName"]?.stringValue) }
+            let action = row.map { Action.openDiff(ToolCallDiffTarget($0)) }
             d.blocks.append(Block(text: formatWorkspaceRelativePath(file, workspaceRoot: workspaceRoot),
                                   kind: .fileHeader(additions: item["additions"]?.intValue, deletions: item["deletions"]?.intValue), action: action))
             if item.status == .failed, let diff = item["diffStr"]?.stringValue, !diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

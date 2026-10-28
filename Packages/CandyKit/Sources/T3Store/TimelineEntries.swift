@@ -64,13 +64,16 @@ public struct TimelineAttempt: Sendable, Hashable {
     public var attemptOrdinal: Int
     public var rootNodeId: NodeId
     public var status: String
+    /// When a steer superseded the attempt (T3 2994 ec43786140, session-logic.ts `completedAt`).
+    public var completedAt: T3Timestamp?
 
-    public init(id: RunAttemptId, runId: RunId, attemptOrdinal: Int = 1, rootNodeId: NodeId, status: String) {
+    public init(id: RunAttemptId, runId: RunId, attemptOrdinal: Int = 1, rootNodeId: NodeId, status: String, completedAt: T3Timestamp? = nil) {
         self.id = id
         self.runId = runId
         self.attemptOrdinal = attemptOrdinal
         self.rootNodeId = rootNodeId
         self.status = status
+        self.completedAt = completedAt
     }
 }
 
@@ -281,7 +284,8 @@ public enum TimelineEntries {
         }
 
         static func timelineAttempt(_ a: RunAttempt) -> TimelineAttempt {
-            TimelineAttempt(id: a.id, runId: a.runId, attemptOrdinal: a.attemptOrdinal, rootNodeId: a.rootNodeId, status: a.status)
+            TimelineAttempt(id: a.id, runId: a.runId, attemptOrdinal: a.attemptOrdinal, rootNodeId: a.rootNodeId, status: a.status,
+                            completedAt: a.completedAt)
         }
     }
 
@@ -307,6 +311,8 @@ public enum TimelineEntries {
         // Task progress belongs in the composer; checkpoints become diff summaries.
         if item.type == .todoList || item.type == .checkpoint { return nil }
         if item.type == .userMessage, let messageId = item.messageId, folded.contains(messageId.rawValue) { return nil }
+        // A queued message that hasn't started shows only in the composer's queue (T3 3824 #26355, session-logic.ts:606-611).
+        if item.type == .userMessage, item.inputIntent == .queuedTurn, item.status == .pending { return nil }
         let createdAt = item.startedAt ?? item.updatedAt
         switch item.type {
         case .notification:

@@ -3022,6 +3022,12 @@ extension ComposerController {
         return PeerLinks.names(menuState.peerLinks[env]?.links ?? [], labels: labels)
     }
 
+    /// After an answered link request, the machine @-mentions read the links again.
+    func peerLinksChanged(_ env: String) {
+        menuState.peerLinks[env] = nil
+        if targetEnvironmentId == env { loadComposerPeerLinks() }
+    }
+
     private func loadComposerPeerLinks() {
         guard composerOffersLinks, let env = targetEnvironmentId, let session = environments.session(env),
               menuState.peerLinkTasks[env] == nil,

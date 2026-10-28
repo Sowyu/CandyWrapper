@@ -109,6 +109,35 @@ struct ComposerDitherPillsTests {
         }
     }
 
+    @Test func deviceRowShowsAnIndicatorOnlyWhileDisconnected() throws {
+        let row = DitherDeviceRowView()
+        // Exercise reconnects on the same control and check both natural and constrained widths.
+        for width: CGFloat? in [nil, 140] {
+            var connectedWidth: CGFloat = 0
+            for online: Bool? in [true, false, true, nil] {
+                row.configure(machine: "Sandbox MacBook Pro", kind: "laptop", workspace: nil, online: online)
+                let size = row.intrinsicContentSize
+                row.frame = NSRect(x: 0, y: 0, width: width ?? size.width, height: size.height)
+                row.layoutSubtreeIfNeeded()
+                let dot = try #require(row.layer?.sublayers?.first { $0.cornerRadius == 3 })
+                let label = try #require(row.subviews.compactMap { $0 as? LabelView }.first)
+                let chevron = try #require(row.subviews.compactMap { $0 as? IconView }.first { $0.frame.width == 12 })
+                if online == false {
+                    #expect(!dot.isHidden)
+                    #expect(dot.frame.width == 6 && dot.frame.height == 6)
+                    #expect(dot.frame.minX == label.frame.maxX + 6)
+                    #expect(chevron.frame.minX == dot.frame.maxX + 6)
+                    #expect(size.width == connectedWidth + 12)
+                } else {
+                    #expect(dot.isHidden)
+                    #expect(chevron.frame.minX == label.frame.maxX + 6)
+                    connectedWidth = size.width
+                }
+                #expect(chevron.frame.maxX == row.bounds.maxX - 8)
+            }
+        }
+    }
+
     @Test func composerStaysPutAsPillsComeAndGo() throws {
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous) }

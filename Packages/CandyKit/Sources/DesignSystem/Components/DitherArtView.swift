@@ -1,5 +1,6 @@
 import AppKit
 import ImageIO
+import os
 
 /// The Dither theme's art (CandyWrapper's own, after Capy's desktop app): the chosen picture, or the desktop picture,
 /// filling the main panel in its own colors at 2pt ordered-dither dots of brightness, held within a reach of the
@@ -21,6 +22,9 @@ public final class DitherArtView: NSView {
     private var debounce: DispatchWorkItem?
     /// A new thread opened before the art had rendered: the first render resolves in.
     private var revealsWhenShown = false
+    private var loggedScrim: CGFloat?
+    /// macOS's Reduce Transparency, replaceable in tests.
+    var systemReducesTransparency: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -41,6 +45,8 @@ public final class DitherArtView: NSView {
         Self.arts.add(self)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(displayOptionsChanged),
                                                           name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+        // "Ignore Reduce Transparency" and the other theme settings take effect at once.
+        NotificationCenter.default.addObserver(self, selector: #selector(displayOptionsChanged), name: ThemeRuntime.didChange, object: nil)
         // macOS posts nothing when the desktop picture changes or rotates, so the art checks it again whenever the
         // desktop could have changed under it. A check costs nothing when the picture is the same.
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(desktopMayHaveChanged),
@@ -230,13 +236,18 @@ public final class DitherArtView: NSView {
     func updateScrim() {
         let dark = effectiveAppearance.isDark
         let background = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background.nsColor
-        let display = (reduceTransparency: NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency,
+        let display = (reduceTransparency: ThemeRuntime.reducesTransparency(system: systemReducesTransparency()),
                        increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast)
         let page = self.page
         let duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.2
         CATransaction.begin()
         CATransaction.setAnimationDuration(duration)
-        scrim.backgroundColor = background.withAlphaComponent(DitherArt.scrim(page, display, light: !dark)).cgColor
+        let alpha = DitherArt.scrim(page, display, light: !dark)
+        if loggedScrim != alpha {
+            DitherArt.log.notice("scrim \(alpha) on \(String(describing: page), privacy: .public): reduce transparency \(display.reduceTransparency), increase contrast \(display.increaseContrast), dark \(dark)")
+        }
+        loggedScrim = alpha
+        scrim.backgroundColor = background.withAlphaComponent(alpha).cgColor
         CATransaction.commit()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         let band = DitherChrome.bandColor(in: self)
@@ -251,7 +262,10 @@ public final class DitherArtView: NSView {
     func refresh() {
         updateScrim()
         let rect = artRect
-        guard let window, rect.width >= 1, rect.height >= 1 else { return }
+        guard let window, rect.width >= 1, rect.height >= 1 else {
+            if window != nil { DitherArt.log.notice("no art yet: the panel is \(Int(rect.width)) x \(Int(rect.height)) pt") }
+            return
+        }
         let dark = effectiveAppearance.isDark
         let url = ThemeRuntime.ditherPicture ?? DitherArt.desktopPicture(for: window.screen)
         let background = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background
@@ -309,12 +323,16 @@ public enum DitherArt {
 
     enum Page: Sendable { case hero, thread, settings, page }
 
-    /// The scrim for `page` under the system display options. Reduce Transparency covers the art with the solid
-    /// background, so the frosted panes over it read as solid surfaces. Increase Contrast keeps the art as a faint
-    /// texture: text on the hero and in a thread then sits on about the background itself.
+    /// The scrim for `page` under the system display options. Increase Contrast keeps the art as a faint texture: text
+    /// on the hero and in a thread then sits on about the background itself. Reduce Transparency takes at least those
+    /// scrims but never covers the art: full cover made Redesign a plain panel with any picture and no sign why (the
+    /// user's MacBook, 2026-10-28). "Ignore Reduce Transparency" turns it off here (`ThemeRuntime.reducesTransparency`).
     nonisolated static func scrim(_ page: Page, _ display: (reduceTransparency: Bool, increaseContrast: Bool),
                                   light: Bool = false) -> CGFloat {
-        if display.reduceTransparency { return 1 }
+        if display.reduceTransparency {
+            let standard = scrim(page, (false, display.increaseContrast), light: light), strong = scrim(page, (false, true), light: light)
+            return min(max(standard, strong), pageScrim)
+        }
         let scrim: CGFloat = switch page {
         case .hero: display.increaseContrast ? 0.6 : 0
         case .thread: display.increaseContrast ? 0.75 : threadScrim
@@ -385,20 +403,35 @@ public enum DitherArt {
     /// picture that won't decode, a nil desktop URL or a `.madesktop` macOS won't hand over all still show art.
     nonisolated static func render(_ request: Request) -> CGImage? {
         let w = request.width, h = request.height
-        guard w > 0, h > 0 else { return nil }
+        guard w > 0, h > 0 else { log.error("no art: the canvas is \(w) x \(h) dots"); return nil }
+        if request.url == nil { log.notice("no chosen or desktop picture") }
         for url in [request.url].compactMap({ $0 }) + request.fallbacks {
-            if let picture = picture(url, maxPixels: max(w, h) * 2), let art = render(request, picture: picture) { return art }
+            let t0 = Date()
+            guard let picture = picture(url, maxPixels: max(w, h) * 2) else { continue }
+            if let art = render(request, picture: picture) { return art }
+            log.error("can't dither \(url.path, privacy: .private): \(picture.width) x \(picture.height), \(picture.bitsPerComponent) bits")
         }
-        return builtInPicture().flatMap { render(request, picture: $0) }
+        log.notice("showing the built-in art")
+        guard let art = builtInPicture().flatMap({ render(request, picture: $0) }) else { log.fault("the built-in art failed"); return nil }
+        return art
     }
+
+    nonisolated static let log = Logger(subsystem: "CandyWrapper", category: "dither-art")
 
     /// The picture at `url`, decoded to at most `maxPixels` on its long side, or nil if it can't be read.
     nonisolated static func picture(_ url: URL, maxPixels: Int) -> CGImage? {
-        guard let source = CGImageSourceCreateWithURL(resolved(url) as CFURL, nil) else { return nil }
+        let file = resolved(url)
+        guard let source = CGImageSourceCreateWithURL(file as CFURL, nil) else {
+            log.error("can't open \(file.path, privacy: .private): \(FileManager.default.isReadableFile(atPath: file.path) ? "not an image" : "missing or unreadable")")
+            return nil
+        }
         let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
                                         kCGImageSourceThumbnailMaxPixelSize: maxPixels]
         guard let picture = CGImageSourceCreateThumbnailAtIndex(source, CGImageSourceGetPrimaryImageIndex(source), options as CFDictionary),
-              picture.width > 0, picture.height > 0 else { return nil }
+              picture.width > 0, picture.height > 0 else {
+            log.error("can't decode \(file.path, privacy: .private): \(CGImageSourceGetType(source) as String? ?? "unknown type"), status \(CGImageSourceGetStatus(source).rawValue)")
+            return nil
+        }
         return picture
     }
 

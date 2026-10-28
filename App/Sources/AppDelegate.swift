@@ -291,6 +291,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let commands = SidebarCommands(sidebar: sidebar, window: window, layout: layout, environments: environments, threads: threads)
         self.sidebarCommands = commands
         commands.closeSettings = { [weak settings] in settings?.close(record: false) }
+        threads.onPeerLinksChanged = { [weak settings, weak threads] env in
+            settings?.peerLinksChanged(env)
+            threads?.composer.peerLinksChanged(env)
+        }
+        commands.openSettingsItem = { [weak commands, weak settings] item in
+            commands?.closeUtilityPage()
+            settings?.open()
+            settings?.jump(to: item)
+        }
         settings.onThreadViewReturn = { [weak threads] in threads?.focusComposerOnReturn() }
         threads.panel.header.onNewThreadInProject = { [weak threads] in threads?.newThread() }
         threads.panel.header.onThreadMenu = { [weak commands, weak threads] event, view in

@@ -15,10 +15,21 @@ public enum DitherPill {
     public static let gap: CGFloat = 8
     public static let spacing: CGFloat = 6
 
+    /// 62% over the backdrop blur. Without the blur, a timeline card scrolled under a panel would read through it,
+    /// so the fill goes opaque, as system materials do (the user's 1.14.10 subagent panel over the changed-files card, 2026-10-28).
     @MainActor public static func fill(in view: NSView) -> CGColor {
         let dark = view.effectiveAppearance.isDark
-        return Themed.color(dark ? \.surfaceRaised : \.card).cgColor(in: view).copy(alpha: 0.62)!
+        return Themed.color(dark ? \.surfaceRaised : \.card).cgColor(in: view).copy(alpha: blurs ? 0.62 : 1)!
     }
+
+    /// Reduce Transparency turns the system backdrop off, so `BackdropBlurView` draws nothing. "Ignore Reduce
+    /// Transparency" brings the 62% fill back, as the user asked (2026-10-28).
+    // ponytail: assumes the blur returns with it; if macOS still flattens the effect view under Reduce Transparency, check BackdropBlurView's backdrop here
+    @MainActor public static var blurs: Bool {
+        !ThemeRuntime.reducesTransparency(system: reduceTransparencyOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency)
+    }
+    /// Tests pin the setting here.
+    @MainActor public static var reduceTransparencyOverride: Bool?
 
     /// Under the product shadow ceiling in light; a little deeper in dark, where a lighter shadow vanishes.
     @MainActor public static func shadow(_ layer: CALayer, path: CGRect, radius: CGFloat, dark: Bool) {
@@ -64,9 +75,13 @@ public final class DitherPillSurface: DSView {
         face.layer?.masksToBounds = true
         for v in [shade, blur, face] { addSubview(v) }
         setAccessibilityElement(false)
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(displayOptionsChanged),
+                                                          name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
     }
 
     public override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    @objc private func displayOptionsChanged(_ note: Notification) { needsDisplay = true }
 
     public override func updateLayer() {
         CATransaction.begin(); CATransaction.setDisableActions(true)

@@ -70,7 +70,7 @@ final class AttemptFoldRowView: TimelineRowView {
     /// `MorphIcon` chevron-right to chevron-down (:2735-2738), a quarter turn on a spring.
     private let chevron = IconView(name: .chevronRight, size: 14, strokeColor: TL.c(\.mutedForeground))
     private let label = LabelView("", font: TL.font(12, .medium), color: TL.c(\.foreground, 0.8))
-    private let note = LabelView("Partial output retained", font: TL.font(11), color: TL.c(\.mutedForeground))
+    private let note = LabelView("Cut off by a steer", font: TL.font(11), color: TL.c(\.mutedForeground))
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)

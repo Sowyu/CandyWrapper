@@ -107,6 +107,7 @@ final class ThreadSession {
             panel?.lazyDiffPanel.set(\.gitLoader, Self.gitDiffLoader(shell.supervisor))
             panel?.lazyDiffPanel.set(\.fileContentsLoader, Self.diffFileContentsLoader(shell.supervisor))
             panel?.lazyDiffPanel.set(\.refLoader, Self.baseRefLoader(shell.supervisor))
+            panel?.lazyDiffPanel.set(\.toolCallLoader, Self.toolCallDiffLoader(shell.supervisor))
             panel?.model.turnItemLoader = Self.turnItemLoader(shell.supervisor)
             let supervisor = shell.supervisor
             panel?.model.commandOutput = { thread, item, receive in
@@ -329,6 +330,18 @@ final class ThreadSession {
             guard let json = try? await supervisor.request(VcsRPC.listRefs, payload: VcsRPC.baseRefsInput(cwd: cwd, remote: remote)),
                   let result = try? JSONDecoder().decode(VcsListRefsResult.self, from: JSONEncoder().encode(json)) else { return [] }
             return result.refs
+        }
+    }
+
+    /// File-change details retain the recorded patch and contents for the diff panel.
+    nonisolated static func toolCallDiffLoader(_ supervisor: ConnectionSupervisor) -> DiffPanelView.ToolCallLoader {
+        { input in
+            do {
+                let json = try await supervisor.request("orchestration.getTurnItem", payload: encode(input))
+                return try json.decode(as: GetTurnItemResult.self)
+            } catch let error as RPCClientError {
+                throw DiffLoadError(errorDescription: error.description)
+            }
         }
     }
 
@@ -652,6 +665,7 @@ final class ThreadController {
             guard let self, let env = self.openThreadId?.environmentId else { return PeerLinkDialog.answerFailure(CancellationError()) }
             do {
                 _ = try await self.environments.request(env, "peerLinks.answerRequest", LinkRequestAnswer.payload(item, .object(["type": .string("decline")])))
+                self.onPeerLinksChanged?(env)
                 return nil
             } catch {
                 return PeerLinkDialog.answerFailure(error)
@@ -1545,6 +1559,9 @@ final class ThreadController {
     var offersScratch: () -> Bool = { false }
     /// The panel moved to another thread or draft (route history).
     var onRouteChange: (() -> Void)?
+    /// An answered link request may have added a link, so lists of the environment's links reload
+    /// (T3 3824 #26434: `peerLinkEnvironment.answerRequest` refreshes `peerLinks.list`).
+    var onPeerLinksChanged: ((String) -> Void)?
 
     private func updateNoProjectsHero(_ snapshot: ShellSnapshot) {
         let show = snapshot.projects.isEmpty
@@ -1694,12 +1711,14 @@ extension ThreadController {
                     if choice.useExisting, let id = choice.machine?.environmentId {
                         let answer: JSONValue = .object(["type": .string("use-existing"), "environmentId": .string(id)])
                         _ = try await self.environments.request(env, "peerLinks.answerRequest", LinkRequestAnswer.payload(item, answer))
+                        self.onPeerLinksChanged?(env)
                         return choice.machine?.label
                     }
                     guard let answer = LinkRequestAnswer.link(environmentId: choice.machine?.environmentId, label: choice.machine?.label,
                                                                         urls: choice.urls, access: choice.access, pairingCode: choice.pairingCode)
                     else { throw CancellationError() }
                     _ = try await self.environments.request(env, "peerLinks.answerRequest", LinkRequestAnswer.payload(item, answer))
+                    self.onPeerLinksChanged?(env)
                     return choice.machine?.label
                 })
         }

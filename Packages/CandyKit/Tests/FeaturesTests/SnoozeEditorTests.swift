@@ -1,5 +1,6 @@
 import Testing
 import T3Protocol
+import T3Store
 @testable import Features
 
 @MainActor
@@ -23,10 +24,11 @@ struct SnoozeEditorTests {
         let editor = SnoozePresetsEditor()
         editor.refresh(SnoozePresetSetting.defaults, sourceKey: "one")
         editor.save([])
+        // The rows show the saved options soonest first (T3 3824 #26427), so the order may differ.
         editor.refresh(SnoozePresetSetting.defaults, sourceKey: "one", failureRevision: 1)
-        #expect(editor.presets == SnoozePresetSetting.defaults)
+        #expect(SnoozePresets.same(editor.presets, SnoozePresetSetting.defaults))
         editor.save([])
         editor.refresh(SnoozePresetSetting.defaults, sourceKey: "two", failureRevision: 1)
-        #expect(editor.presets == SnoozePresetSetting.defaults)
+        #expect(SnoozePresets.same(editor.presets, SnoozePresetSetting.defaults))
     }
 }

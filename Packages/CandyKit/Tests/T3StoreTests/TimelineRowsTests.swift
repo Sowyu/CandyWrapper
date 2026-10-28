@@ -262,6 +262,65 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
         #expect(TimelineRows.derive(input).map(\.id).contains("old-work"))
     }
 
+    // T3 2994 ec43786140 (MessagesTimeline.logic.ts:722-800): a reply that finished before the steer stays in the
+    // timeline, so its attempt doesn't fold; one the steer cut off still folds.
+    @Test func keepsAReplyThatFinishedBeforeTheSteer() {
+        func result(replyCompletedAt: String) -> [String] {
+            let old = TimelineAttempt(id: "attempt-1", runId: "turn-1", rootNodeId: "root-1", status: "superseded",
+                                      completedAt: "2026-01-01T00:00:03Z")
+            let current = TimelineAttempt(id: "attempt-2", runId: "turn-1", attemptOrdinal: 2, rootNodeId: "root-2", status: "running")
+            let item = turnItem(#"{"id":"old-reply","type":"assistant_message","runId":"turn-1","messageId":"old","text":"done","completedAt":"\#(replyCompletedAt)"}"#)
+            let message = ChatMessage(id: MessageId("old"), role: .assistant, text: "done", runId: "turn-1", streaming: false,
+                                      createdAt: "2026-01-01T00:00:01Z", updatedAt: "2026-01-01T00:00:02Z")
+            let reply = TimelineEntry(id: "old-reply", createdAt: "2026-01-01T00:00:01Z",
+                                      kind: .message(message, projectedItem: ProjectedTurnItem(local: item)), attempt: old)
+            var input = TimelineRowsInput(entries: [
+                user("user-entry", "user-1", at: "2026-01-01T00:00:00Z"),
+                work("old-work", WorkLogEntry(id: "old-work", createdAt: "2026-01-01T00:00:01Z", runId: "turn-1", label: "Ran command",
+                                              tone: .tool, toolLifecycleStatus: .completed), attempt: old),
+                reply,
+                user("steer-entry", "user-2", at: "2026-01-01T00:00:03Z", intent: .steer),
+                assistant("answer-entry", "answer", run: "turn-1", at: "2026-01-01T00:00:04Z", updated: "2026-01-01T00:00:05Z"),
+            ])
+            input.entries[4].attempt = current
+            input.latestRun = TimelineLatestRun(runId: "turn-1", status: .running, startedAt: "2026-01-01T00:00:00Z")
+            input.isWorking = true
+            input.runningRunId = "turn-1"
+            return TimelineRows.derive(input).map(\.id)
+        }
+        let whole = result(replyCompletedAt: "2026-01-01T00:00:02Z")
+        #expect(whole.contains("old-reply") && whole.contains("old-work") && !whole.contains("attempt-fold:attempt-1"))
+        let cut = result(replyCompletedAt: "2026-01-01T00:00:04Z")
+        #expect(cut.contains("attempt-fold:attempt-1") && !cut.contains("old-reply") && !cut.contains("old-work"))
+    }
+
+    // T3 3824 #26333 (MessagesTimeline.logic.ts:788): a handoff stays visible when its superseded attempt folds.
+    @Test func keepsAHandoffOutOfTheSupersededFold() {
+        let old = TimelineAttempt(id: "attempt-1", runId: "turn-1", rootNodeId: "root-1", status: "superseded")
+        let handoff = TimelineEntry(id: "handoff", createdAt: "2026-01-01T00:00:02Z",
+                                    kind: .event(ProjectedTurnItem(local: turnItem(#"{"id":"handoff","type":"handoff","runId":"turn-1"}"#))),
+                                    attempt: old)
+        var input = TimelineRowsInput(entries: [
+            user("user-entry", "user-1", at: "2026-01-01T00:00:00Z"),
+            work("old-work", WorkLogEntry(id: "old-work", createdAt: "2026-01-01T00:00:01Z", runId: "turn-1", label: "Ran command",
+                                          tone: .tool, toolLifecycleStatus: .completed), attempt: old),
+            handoff,
+        ])
+        input.latestRun = TimelineLatestRun(runId: "turn-1", status: .running, startedAt: "2026-01-01T00:00:00Z")
+        input.isWorking = true
+        input.runningRunId = "turn-1"
+        let ids = TimelineRows.derive(input).map(\.id)
+        #expect(ids.contains("attempt-fold:attempt-1") && ids.contains("handoff") && !ids.contains("old-work"))
+    }
+
+    // T3 3824 #26355 (session-logic.ts:606-611): a queued message that hasn't started shows only in the queue.
+    @Test func leavesPendingQueuedMessagesToTheQueue() {
+        for (intent, count) in [("queued_turn", 0), ("turn_start", 1), ("steer", 1), ("promoted_queued_to_steer", 1)] {
+            let item = turnItem(#"{"id":"m","type":"user_message","messageId":"m","text":"hi","inputIntent":"\#(intent)","status":"pending"}"#)
+            #expect(TimelineEntries.derive(visibleTurnItems: [ProjectedTurnItem(local: item)]).count == count, "\(intent)")
+        }
+    }
+
     @Test func movesTheFooterBelowToolRowsThatTrailTheAnswer() {
         let entries = [
             user("u", "u", at: "2026-01-01T00:00:00Z"),

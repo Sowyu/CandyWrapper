@@ -926,6 +926,13 @@ public final class ThreadPanelView: DSView {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(path, forType: .string)
         }
+        model.onOpenToolDiff = { [weak self] target in
+            guard let self else { return }
+            explicitDiffOpen = true
+            diffPanel.openToolCall(target)
+            mutatePanel { $0.open(.diff); return [] }
+            explicitDiffOpen = false
+        }
         model.onOpenTurnDiff = { [weak self] run, path in
             guard let self else { return }
             explicitDiffOpen = true
@@ -1190,6 +1197,10 @@ public final class ThreadPanelView: DSView {
         panelState = state
         updateMaximizeControl()
         rightPanel.isHidden = !open
+        if (!open || state.active?.kind != .diff), lazyDiffPanel.loaded?.toolCallTarget != nil {
+            lazyDiffPanel.loaded?.closeToolCall()
+            lazyDiffPanel.release()
+        }
         rightPanel.apply(state)
         header.toggles[2].isPressed = open
         placePanelToggles()
@@ -1517,6 +1528,9 @@ public final class ThreadPanelView: DSView {
             diffPanel.open(runId: changed.runId, filePath: nil)
         }
         if rightPanelOpen, panelState.active?.kind == .diff { diffPanel.setSummaries(summaries) }
+        if rightPanelOpen, panelState.active?.kind == .diff {
+            diffPanel.refreshToolCall(projection?.visibleTurnItems ?? [])
+        }
         model.setProjection(projection)
         // A large thread derives its rows in the background. Until they apply, the shown rows are the last
         // thread's and take no input (audit TH-2, T3's `paintOnly`, ChatView.tsx:6654-6692).

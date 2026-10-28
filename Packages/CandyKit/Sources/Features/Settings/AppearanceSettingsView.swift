@@ -242,7 +242,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
             let advanced = SettingsAdvancedRows(rows: rows + [identification, strip])
             advanced.onHeightChange = { [weak self] in self?.onHeightChange?() }
             advancedInterface = advanced
-            var interface: [NSView & SettingsGroupRow] = [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), width]
+            var interface: [NSView & SettingsGroupRow] = [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), ignoreReduceTransparencyRow(), width]
             if ComposerDesign.uses3814(dark: effectiveAppearance.isDark) {
                 // AppearanceSettingsPanel.tsx:275-306 at 3824: the effort row sits between chat width and math.
                 let effort = clientSelect("effort-display", "Show reasoning effort in the composer as its name, such as High, or as bars.", key: "effortDisplay",
@@ -253,7 +253,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
             interface += [math, appIconRow(), appIconAppearanceRow(), advanced]
             return section("appearance-interface", "Interface", interface)
         }
-        return section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), identification, diff, strip, width, math,
+        return section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), ignoreReduceTransparencyRow(), identification, diff, strip, width, math,
                                                               appIconRow(), appIconAppearanceRow()])
     }
 
@@ -312,6 +312,13 @@ public final class AppearanceSettingsView: SettingsPageBase {
             slot.isShown = !self.client.isDefault(key)
         }
         return r
+    }
+
+    /// CandyWrapper's own (the user, 2026-10-28): with macOS's Reduce Transparency on, Redesign's picture shows under a
+    /// heavier scrim and Glass goes flat. This draws them as if it were off.
+    private func ignoreReduceTransparencyRow() -> SettingsRowView {
+        clientSwitch("ignore-reduce-transparency", "Show the Redesign picture, Glass and blur as if Reduce Transparency were off in macOS.",
+                     key: "ignoreReduceTransparency", reset: "ignore reduce transparency", title: "Ignore Reduce Transparency")
     }
 
     private func chooseDitherPicture() {

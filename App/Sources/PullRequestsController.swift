@@ -98,7 +98,7 @@ final class PullRequestDetailBinding {
             view.onComment = { [weak self] body in self?.comment(body) }
             view.onReview = { [weak self] verdict, body, comments in self?.review(verdict, body: body, comments: comments) }
             view.onCommit = { [weak self] oid in self?.commit = oid; self?.patchKey = nil; self?.loadCode() }
-            view.onSetViewed = { [weak self] path, viewed in self?.setViewed(path, viewed) }
+            view.onSetViewed = { [weak self] paths, viewed in self?.setViewed(paths, viewed) }
             view.onCheckout = { [weak self] _ in self?.toast("Check out is not in CandyWrapper yet", "Use the copied command from the header.", .info) }
             view.onCommentAction = { [weak self] body, action in self?.commentAction(body, action) }
             view.onSaveTitle = { [weak self] title in self?.update(title: title) }
@@ -327,20 +327,22 @@ final class PullRequestDetailBinding {
     }
 
     /// `pullRequests.setFilesViewed`: the press shows at once and is taken back if the host refuses.
-    private func setViewed(_ path: String, _ viewed: Bool) {
-        guard let shell, let ref = reference, let store = detail?.capabilities.viewedFiles else { return }
-        overlay[path] = viewed
-        pendingViewed.insert(path)
+    /// One `pullRequests.setFilesViewed` for every file a press marked, as T3 batches them (filesViewedStore.ts:107-130).
+    private func setViewed(_ paths: [String], _ viewed: Bool) {
+        guard let shell, let ref = reference, let store = detail?.capabilities.viewedFiles, !paths.isEmpty else { return }
+        let batch = paths.map { (path: $0, viewed: viewed) }
+        for path in paths { overlay[path] = viewed }
+        pendingViewed.formUnion(paths)
         view.setViewed(states: viewedStates, overlay: overlay, store: store)
         Task { [weak self] in
             do {
-                _ = try await shell.supervisor.request("pullRequests.setFilesViewed", payload: PullRequestPayloads.setFilesViewed(ref, files: [(path, viewed)]))
-                self?.pendingViewed.remove(path)
+                _ = try await shell.supervisor.request("pullRequests.setFilesViewed", payload: PullRequestPayloads.setFilesViewed(ref, files: batch))
+                self?.pendingViewed.subtract(paths)
                 self?.loadViewed()
             } catch {
                 guard let self else { return }
-                self.pendingViewed.remove(path)
-                self.overlay = PullRequestDetailLogic.revertOverlay(self.overlay, batch: [(path, viewed)], owned: [path])
+                self.pendingViewed.subtract(paths)
+                self.overlay = PullRequestDetailLogic.revertOverlay(self.overlay, batch: batch, owned: Set(paths))
                 self.view.setViewed(states: self.viewedStates, overlay: self.overlay, store: store)
                 self.toast("Could not save the viewed mark", Self.failure(error, number: ref.number).1, .error)
             }

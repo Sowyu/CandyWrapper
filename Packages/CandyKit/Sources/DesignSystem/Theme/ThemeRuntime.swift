@@ -54,6 +54,8 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var ditherDim = 35
     /// Redesign's accent, a `DitherAccent` id.
     public var ditherAccent = DitherAccent.teal.id
+    /// "Ignore Reduce Transparency": Redesign and Glass draw as if macOS's Reduce Transparency were off.
+    public var ignoreReduceTransparency = false
 
     public init(light: ThemeRuntimeHalf? = nil, dark: ThemeRuntimeHalf? = nil, contrast: Int = 100, glassOpacity: Int = 80) {
         self.light = light; self.dark = dark; self.contrast = contrast; self.glassOpacity = glassOpacity
@@ -80,6 +82,12 @@ public enum ThemeRuntime {
     public private(set) static var input = ThemeRuntimeInput()
     /// Whether the Glass theme frosts the window in each appearance.
     nonisolated(unsafe) public private(set) static var glass = (light: false, dark: false)
+
+    /// macOS's Reduce Transparency as CandyWrapper's Redesign art and Glass backdrop follow it: off while the user's
+    /// "Ignore Reduce Transparency" is on.
+    public static func reducesTransparency(system: Bool = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency) -> Bool {
+        system && !input.ignoreReduceTransparency
+    }
 
     public nonisolated static func isGlass(dark: Bool) -> Bool { dark ? glass.dark : glass.light }
     /// Whether the main panel shows the Dither theme's picture in each appearance (`DitherArtView`).
@@ -122,6 +130,7 @@ public enum ThemeRuntime {
             ditherAccent = DitherAccent.named(next.ditherAccent)
             changed = true
         }
+        if next.ignoreReduceTransparency != old.ignoreReduceTransparency { changed = true }
         if next.glassLight != old.glassLight || next.glassDark != old.glassDark {
             glass = (next.glassLight, next.glassDark)
             changed = true

@@ -3,7 +3,9 @@ import DesignSystem
 import T3Protocol
 import T3Store
 
-/// SnoozePresetsSettings.tsx:164-299 (3814), using the existing native settings rows.
+/// SnoozePresetsSettings.tsx:122-300 (3824), using the existing native settings rows. Rows sort soonest first like
+/// the menu. T3 sorts when focus leaves the list (#26427, :264-276); here an edit's rows sort once the pointer is
+/// outside the list and no field in it is editing, so a row never moves under the pointer.
 final class SnoozePresetsEditor: DSView, SettingsGroupRow {
     private(set) var presets: [SnoozePresetSetting] = []
     private var source: [SnoozePresetSetting]?
@@ -15,9 +17,17 @@ final class SnoozePresetsEditor: DSView, SettingsGroupRow {
     private let preview = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     var onChange: (([SnoozePresetSetting]) -> Void)?
     var onHeightChange: (() -> Void)?
+    /// An edit since the rows last sorted.
+    private var unsettled = false
+    /// Read from the window, since a list scrolled under a still pointer gets no entered event.
+    private var pointerInside: Bool {
+        guard let window else { return false }
+        return bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil))
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
         addSubview(add); addSubview(preview)
         preview.lineHeight = 16
         add.action = { [weak self] in
@@ -42,7 +52,8 @@ final class SnoozePresetsEditor: DSView, SettingsGroupRow {
             pending.removeFirst(ack + 1)
             if !pending.isEmpty { return }
         } else { pending = [] }
-        presets = saved
+        presets = SnoozePresets.soonestFirst(saved, now: Date()).map { saved[$0] }
+        unsettled = false
         rebuild()
     }
 
@@ -50,8 +61,24 @@ final class SnoozePresetsEditor: DSView, SettingsGroupRow {
         guard next.count <= SnoozePresetSetting.maximumCount else { return }
         presets = next
         pending.append(next)
+        unsettled = true
         rebuild()
         onChange?(next)
+        // A field commits before the next one takes focus, so look once focus has moved.
+        if !pointerInside { DispatchQueue.main.async { [weak self] in self?.settle() } }
+    }
+
+    override func mouseExited(with event: NSEvent) { settle() }
+
+    /// Sorts the rows once nothing in the list is being edited.
+    private func settle() {
+        guard unsettled, !pointerInside else { return }
+        if let editing = window?.firstResponder as? NSView, editing.isDescendant(of: self) { return }
+        unsettled = false
+        let order = SnoozePresets.soonestFirst(presets, now: Date())
+        guard order != Array(presets.indices) else { return }
+        presets = order.map { presets[$0] }
+        rebuild()
     }
 
     private func rebuild() {
@@ -75,10 +102,12 @@ final class SnoozePresetsEditor: DSView, SettingsGroupRow {
         onHeightChange?()
     }
 
-    func height(forWidth width: CGFloat) -> CGFloat { CGFloat(rows.count) * (width < 510 ? 68 : 36) + 52 }
+    /// Below this the preview wraps under the fields.
+    static let wideWidth: CGFloat = 534
+    func height(forWidth width: CGFloat) -> CGFloat { CGFloat(rows.count) * (width < Self.wideWidth ? 68 : 36) + 52 }
     override func layout() {
         super.layout()
-        let height: CGFloat = bounds.width < 510 ? 68 : 36
+        let height: CGFloat = bounds.width < Self.wideWidth ? 68 : 36
         for (i, row) in rows.enumerated() { row.frame = NSRect(x: 0, y: CGFloat(i) * height, width: bounds.width, height: height) }
         let end = CGFloat(rows.count) * height
         preview.frame = NSRect(x: 0, y: end + 4, width: bounds.width, height: 16)
@@ -154,11 +183,12 @@ private final class SnoozePresetFields: DSView {
     override func layout() {
         super.layout()
         when.frame = NSRect(x: 0, y: 2, width: 120, height: 28)
-        amount.frame = NSRect(x: 128, y: 2, width: 104, height: 28)
-        units.frame = NSRect(x: 240, y: 2, width: 90, height: 28)
+        // `w-32`, so two digits fit beside the steppers (T3 3824 #26427, SnoozePresetsSettings.tsx:416).
+        amount.frame = NSRect(x: 128, y: 2, width: 128, height: 28)
+        units.frame = NSRect(x: 264, y: 2, width: 90, height: 28)
         time.frame = NSRect(x: 128, y: 2, width: 104, height: 28)
         remove.frame = NSRect(x: bounds.width - 28, y: 2, width: 28, height: 28)
-        let x: CGFloat = bounds.width < 510 ? 0 : 338
-        preview.frame = NSRect(x: x, y: bounds.width < 510 ? 38 : 8, width: max(0, bounds.width - x - 32), height: 16)
+        let x: CGFloat = bounds.width < SnoozePresetsEditor.wideWidth ? 0 : 362
+        preview.frame = NSRect(x: x, y: bounds.width < SnoozePresetsEditor.wideWidth ? 38 : 8, width: max(0, bounds.width - x - 32), height: 16)
     }
 }

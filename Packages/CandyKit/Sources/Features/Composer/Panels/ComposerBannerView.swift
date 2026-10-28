@@ -64,7 +64,12 @@ public class ComposerBannerView: DSView {
         surface.layer?.addSublayer(tint)
         surface.layer?.addSublayer(seam)
         clip.addSubview(surface)
+        // Redesign's fill follows Reduce Transparency (DitherPill.fill).
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(displayOptionsChanged),
+                                                          name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
     }
+
+    @objc private func displayOptionsChanged(_ note: Notification) { needsDisplay = true }
 
     public override func updateLayer() {
         blur.cornerRadius = cardRadius

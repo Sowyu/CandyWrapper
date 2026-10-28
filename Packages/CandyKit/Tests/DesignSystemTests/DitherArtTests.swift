@@ -67,6 +67,67 @@ struct DitherArtTests {
         #expect(DitherArt.render(request(madesktop)).map(bytes) == DitherArt.render(request(bright)).map(bytes))
     }
 
+    /// The pictures a MacBook really has: each renders as its own art, never the built-in fallback.
+    enum Kind: String, CaseIterable, Sendable { case iPhoneHEIC, jpeg6K, screenshotPNG, displayP3PNG, hdrEXR, sixteenBitPNG }
+
+    func write(_ kind: Kind, in dir: URL) throws -> URL {
+        let (w, h, type, ext): (Int, Int, String, String) = switch kind {
+        case .iPhoneHEIC: (4032, 3024, "public.heic", "HEIC")
+        case .jpeg6K: (6016, 3384, "public.jpeg", "jpg")
+        case .screenshotPNG: (3024, 1964, "public.png", "png")
+        case .displayP3PNG: (1200, 800, "public.png", "png")
+        case .hdrEXR: (1600, 1000, "com.ilm.openexr-image", "exr")
+        case .sixteenBitPNG: (1200, 800, "public.png", "png")
+        }
+        let name: CFString = switch kind {
+        case .iPhoneHEIC, .displayP3PNG: CGColorSpace.displayP3
+        case .hdrEXR: CGColorSpace.extendedLinearDisplayP3
+        default: CGColorSpace.sRGB
+        }
+        let space = CGColorSpace(name: name)!
+        let ctx: CGContext = switch kind {
+        case .hdrEXR:
+            CGContext(data: nil, width: w, height: h, bitsPerComponent: 16, bytesPerRow: w * 8, space: space,
+                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.floatComponents.rawValue | CGBitmapInfo.byteOrder16Little.rawValue)!
+        case .sixteenBitPNG:
+            CGContext(data: nil, width: w, height: h, bitsPerComponent: 16, bytesPerRow: w * 8, space: space,
+                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder16Little.rawValue)!
+        case .screenshotPNG:
+            CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: space,
+                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        default:
+            CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: space,
+                      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        }
+        // Brighter than SDR white in the HDR picture, so its values run past 1.
+        let peak: CGFloat = kind == .hdrEXR ? 3 : 1
+        ctx.setFillColor(CGColor(colorSpace: space, components: [0.9 * peak, 0.45 * peak, 0.2 * peak, 1])!)
+        ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        let url = dir.appending(path: "\(kind.rawValue).\(ext)")
+        let dest = try #require(CGImageDestinationCreateWithURL(url as CFURL, type as CFString, 1, nil))
+        // iPhone photos are stored sideways with an orientation tag.
+        let properties: [CFString: Any] = kind == .iPhoneHEIC ? [kCGImagePropertyOrientation: 6] : [:]
+        CGImageDestinationAddImage(dest, try #require(ctx.makeImage()), properties as CFDictionary)
+        try #require(CGImageDestinationFinalize(dest))
+        return url
+    }
+
+    @Test(arguments: Kind.allCases) func everyKindOfPictureRendersAsItself(_ kind: Kind) throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "dither-kind-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let bg = 10.0 / 255
+        // A 1512 x 945 pt panel at 2pt dots: a 14" MacBook Pro's window at 2x.
+        func request(_ url: URL?) -> DitherArt.Request { .init(url: url, width: 756, height: 473, background: [bg, bg, bg], scale: 2) }
+        let art = try #require(DitherArt.render(request(try write(kind, in: dir))))
+        let builtIn = try #require(DitherArt.render(request(nil)))
+        #expect(bytes(art) != bytes(builtIn))
+        // The top row is the picture's own warm color: red over blue, never the built-in's violet and teal.
+        let b = bytes(art)
+        let red = (0..<756).map { Int(b[$0 * 4]) }.reduce(0, +), blue = (0..<756).map { Int(b[$0 * 4 + 2]) }.reduce(0, +)
+        #expect(red > blue + 756 * 20)
+    }
+
     /// The new-thread reveal starts empty, grows in Bayer order and ends on the resting art, byte for byte.
     @Test func revealFramesGrowFromTheBackgroundToTheRestingArt() throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: "dither-reveal-\(UUID().uuidString)")
@@ -100,11 +161,19 @@ struct DitherArtDisplayOptionTests {
         #expect(DitherArt.scrim(.settings, standard) < DitherArt.pageScrim)
     }
 
-    @Test func reduceTransparencyHidesTheArt() {
+    /// Reduce Transparency once covered the art with the solid background, so Redesign showed a plain panel with any
+    /// picture. It takes a heavier scrim now, never full cover.
+    @Test func reduceTransparencyThickensTheScrimWithoutCoveringTheArt() {
         for page in [DitherArt.Page.hero, .thread, .settings, .page] {
-            #expect(DitherArt.scrim(page, (true, false)) == 1)
-            #expect(DitherArt.scrim(page, (true, true)) == 1)
+            for contrast in [false, true] {
+                for light in [false, true] {
+                    let reduced = DitherArt.scrim(page, (true, contrast), light: light)
+                    #expect(reduced < 1)
+                    #expect(reduced >= min(DitherArt.scrim(page, (false, contrast), light: light), DitherArt.pageScrim))
+                }
+            }
         }
+        #expect(DitherArt.scrim(.hero, (true, false)) > DitherArt.scrim(.hero, (false, false)))
     }
 
     @Test func increaseContrastThickensEveryScrim() {

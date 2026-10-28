@@ -33,6 +33,14 @@ struct ChildThreadInputsTests {
         #expect(ChildThreadInputs.pending(for: "root", in: threads).map(\.id.rawValue) == ["live", "old", "deep"])
     }
 
+    /// T3 3824 #26367 (threadShell.ts:96-98): the coordinator answers its children's questions, so a question
+    /// flags no thread above it, while the child's own banner still counts it.
+    @Test func aSubagentQuestionStaysOffItsParents() {
+        let threads = [thread("root"), Self.child("ask", of: "root", Self.live(.waiting))]
+        #expect(PendingSubagentRequests.byThread(threads).isEmpty)
+        #expect(ChildThreadInputs.pending(for: "root", in: threads).map(\.id.rawValue) == ["ask"])
+    }
+
     /// `pendingSubagentRequestsByThread` and the snooze it ends (threadShell.test.ts, threadSnoozed.test.ts, T3 f4df794777).
     @Test func aSubagentRequestReachesEveryThreadAboveIt() {
         let approval = { (t: inout ThreadShell) in

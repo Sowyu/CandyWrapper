@@ -545,6 +545,14 @@ public enum PullRequestDetailLogic {
         }
     }
 
+    /// `getFileViewedRange` (pullRequestDiff.logic.ts:43-53, T3 3824 #26349): a shift-click marks every file from the
+    /// last one toggled to this one; without that anchor in the list, only this file.
+    public static func viewedRange(_ paths: [String], path: String, anchor: String?) -> [String] {
+        guard let index = paths.firstIndex(of: path) else { return [] }
+        guard let anchor, let anchorIndex = paths.firstIndex(of: anchor) else { return [path] }
+        return Array(paths[min(index, anchorIndex)...max(index, anchorIndex)])
+    }
+
     /// `revertFileViewedOverlay`: a failed request takes back only its own presses.
     public static func revertOverlay(_ overlay: [String: Bool], batch: [(path: String, viewed: Bool)], owned: Set<String>) -> [String: Bool] {
         var next = overlay

@@ -202,7 +202,13 @@ public final class GeneralSettingsView: SettingsPageBase {
         let r = row("snooze-options", title: "Snooze options",
             detail: "Choices in every snooze menu, listed soonest first. Weekdays mean the next one after today.")
         r.footer = editor
-        _ = bindServerRow(r, keys: ["snoozePresets"], reset: "snooze options")
+        // Reset shows only when the options differ, not their order, and writes them soonest first (T3 3824 #26427).
+        _ = bindServerRow(r, keys: ["snoozePresets"], reset: "snooze options", isDefault: { [weak self] in
+            SnoozePresets.same(SnoozePresetSetting.decode(self?.server["snoozePresets"]), SnoozePresetSetting.defaults)
+        }, resetPatch: {
+            let defaults = SnoozePresetSetting.defaults
+            return ["snoozePresets": .array(SnoozePresets.soonestFirst(defaults, now: Date()).map { defaults[$0].json })]
+        })
         editor.onChange = { [weak self] values in
             guard let self, self.context.scope.allStore("snoozePresets"), self.context.scope.canWrite else { return }
             self.context.patchServer(["snoozePresets": .array(values.map(\.json))])
