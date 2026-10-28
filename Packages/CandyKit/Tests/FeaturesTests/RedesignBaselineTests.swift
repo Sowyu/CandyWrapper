@@ -5,7 +5,7 @@ import T3Protocol
 import T3Store
 @testable import Features
 
-/// Run alone: theme globals belong to the entire test process. No suspension between pinning and drawing.
+/// No suspension between pinning and drawing. Scope constructor colors independently of AppKit's ambient drawing appearance.
 @MainActor
 struct RedesignBaselineTests {
     static let now = ISO8601DateFormatter().date(from: "2026-10-28T12:00:00Z")!
@@ -148,7 +148,12 @@ struct RedesignBaselineTests {
             let context = SettingsPagesFidelityTests.context()
             context.configs = ["a": try PickersFidelityTests.recordedConfig()]
             for section in DitherSettingsSection.allCases {
-                let pages = section.slices.map { Self.page($0.page, context: context) as NSView & SettingsGroupRow }
+                // The original fixtures constructed fixed layer colors in Aqua, even for a dark canvas.
+                // An earlier snapshot can leave a different ambient drawing appearance on this thread.
+                var pages: [NSView & SettingsGroupRow] = []
+                NSAppearance(named: .aqua)!.performAsCurrentDrawingAppearance {
+                    pages = section.slices.map { Self.page($0.page, context: context) as NSView & SettingsGroupRow }
+                }
                 let page = DitherSettingsSectionView(section: section, pages: pages)
                 try capture("settings-" + section.rawValue, page, NSSize(width: 800, height: min(1800, max(100, page.height(forWidth: 800)))))
             }
