@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import Testing
 @testable import T3Protocol
 @testable import Features
@@ -53,6 +53,37 @@ struct InlineActionConfirmTests {
         let d = try #require(PullRequestsGallery.sample)
         #expect(d.state == "open" && d.comments.count == 5)
         #expect(PullRequestDetailLogic.filterComments(d, .init()).shown.map(\.id) == ["IC_2", "RT_2"])
+    }
+
+    @Test func removingAControlCancelsItsConfirmationWithoutRelabelingIt() {
+        let confirm = InlineActionConfirm()
+        var timeout: DispatchWorkItem?
+        confirm.schedule = { _, work in timeout = work }
+        var relabeled = false
+        #expect(!confirm.press("merge", slot: "header", contains: { _ in true }, onDisarm: { relabeled = true }))
+        confirm.detached(slot: "menu:merge")
+        #expect(confirm.isArmed("merge", slot: "header"))
+        confirm.detached(slot: "header")
+        #expect(!confirm.isArmed("merge", slot: "header"))
+        #expect(timeout?.isCancelled == true)
+        #expect(!relabeled)
+        #expect(!confirm.press("merge", slot: "header", contains: { _ in true }, onDisarm: {}))
+        confirm.detached()
+    }
+
+    @Test func rebuildingTheHeaderAndLeavingThePanelDisarmIt() throws {
+        let panel = PullRequestDetailView()
+        panel.show(try PullRequestFixtures.detail())
+        panel.inlineConfirm.schedule = { _, _ in }
+        #expect(!panel.inlineConfirm.press("merge", slot: "header", contains: { _ in true }, onDisarm: {}))
+        panel.currentMergeMethod = "squash"
+        #expect(!panel.inlineConfirm.isArmed("merge", slot: "header"))
+        #expect(!panel.inlineConfirm.press("merge", slot: "header", contains: { _ in true }, onDisarm: {}))
+        panel.showFailure(title: "Could not load", message: "Try again")
+        #expect(!panel.inlineConfirm.isArmed("merge", slot: "header"))
+        #expect(!panel.inlineConfirm.press("merge", slot: "header", contains: { _ in true }, onDisarm: {}))
+        panel.viewWillMove(toWindow: nil)
+        #expect(!panel.inlineConfirm.isArmed("merge", slot: "header"))
     }
 
     @Test func armsThenConfirms() throws {

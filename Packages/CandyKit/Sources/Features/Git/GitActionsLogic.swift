@@ -213,6 +213,11 @@ public enum GitActionsLogic {
             : ("Already up to date", "\(r.refName) is already synchronized.")
     }
 
+    /// T3 3814 GitActionsControl.tsx:1228-1234 omits the repeated PR title after creation.
+    public static func inlineSuccess(_ result: GitRunStackedActionResult, terminology: ChangeRequestTerminology = .default) -> (title: String, description: String?) {
+        result.pr?.status == "created" ? ("Created \(terminology.shortLabel)", nil) : (result.toast.title, result.toast.description)
+    }
+
     /// `resolveThreadBranchUpdate` (logic.ts:460-470): the branch a `featureBranch` run created.
     public static func createdBranch(_ result: GitRunStackedActionResult) -> String? {
         result.branch.status == "created" ? result.branch.name : nil
