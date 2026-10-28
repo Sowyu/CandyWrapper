@@ -129,6 +129,7 @@ public final class ThreadViewModel {
     public var threadTitle: (@MainActor (ThreadId) -> String?)?
     /// A thread this machine knows by local id, archived ones included (`useThreadShell`), with its project:
     /// thread chips and `t3-thread://` links show its title and project icon (ThreadContextChip.tsx:17-19).
+    public var linkedEnvironment: (@MainActor (String) -> MarkdownContextChips.LinkedEnvironment?)?
     public var linkedThread: (@MainActor (ThreadId) -> MarkdownContextChips.LinkedThread?)?
     /// Folded agent rows' sender titles for one `apply` pass, since `linkedThread` searches every shell.
     private var foldTitles: [String: String?] = [:]

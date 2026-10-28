@@ -12,6 +12,11 @@ public struct MarkdownContextChips: Equatable {
     /// The threads the message names that this machine knows (`useThreadShell`), by local id.
     public var threads: [String: LinkedThread]
     public var environmentId: String?
+    public struct LinkedEnvironment: Equatable, Sendable {
+        public var label: String, machine: String
+        public init(label: String, machine: String = "server") { self.label = label; self.machine = machine }
+    }
+    public var environments: [String: LinkedEnvironment] = [:]
 
     /// A known thread's shell title and its project's icon, nil when the project is unknown.
     public struct LinkedThread: Equatable, Sendable {
@@ -30,15 +35,19 @@ public struct MarkdownContextChips: Equatable {
     /// The message's records by context id and its attachments by id; `thread` looks up live threads
     /// by local id, nil once a thread is gone. `document` adds the threads its `t3-thread://` links name.
     public static func message(context: JSONValue?, attachments: [JSONValue], document: MarkdownDocument = MarkdownDocument(blocks: []),
-                               environmentId: String? = nil, thread: (String) -> LinkedThread?) -> MarkdownContextChips {
+                               environmentId: String? = nil, environment: (String) -> LinkedEnvironment? = { _ in nil }, thread: (String) -> LinkedThread?) -> MarkdownContextChips {
         var out = links(in: document, environmentId: environmentId, thread: thread) ?? MarkdownContextChips()
         out.environmentId = environmentId
         if case .array(let records)? = context?["records"] {
             for record in records {
                 guard let id = record["contextId"]?.stringValue else { continue }
                 out.records[id] = record
-                if record["kind"]?.stringValue == "thread", let threadId = record["threadId"]?.stringValue, let live = thread(threadId) {
-                    out.threads[threadId] = live
+                if record["kind"]?.stringValue == "thread", let threadId = record["threadId"]?.stringValue {
+                    let key = out.threadKey(threadId, owner: record["environmentId"]?.stringValue)
+                    if let live = thread(key) { out.threads[key] = live }
+                }
+                if record["kind"]?.stringValue == "environment", let id = record["environmentId"]?.stringValue {
+                    out.environments[id] = environment(id)
                 }
             }
         }
@@ -114,6 +123,11 @@ public struct MarkdownContextChips: Equatable {
         return threadChip(threadId: id, recordTitle: title)
     }
 
+    func threadKey(_ threadId: String, owner: String?) -> String {
+        guard let environmentId, let owner, owner != environmentId else { return threadId }
+        return "t3-thread://v2/\(owner)/\(threadId)"
+    }
+
     /// `ThreadContextChip` (ThreadContextChip.tsx:11-50): the live title, else the recorded one; the project's
     /// favicon once the shell names a known project. Since 15dc7b0130 the chip keeps its own colors inside
     /// markdown (`.chat-markdown a:not(:has([data-slot="context-chip-label"]))`, index.css:1958-1979).
@@ -143,8 +157,15 @@ public struct MarkdownContextChips: Equatable {
             let name = record["name"]?.stringValue ?? ""
             let text = recordLabel.isEmpty ? name : recordLabel
             return MarkdownContextChip(look: ComposerChipLook(kind: .skill, label: text), action: .skill(ServerProviderSkill(name: name, description: record["description"]?.stringValue, path: record["path"]?.stringValue ?? "", displayName: text, shortDescription: record["shortDescription"]?.stringValue)), tooltip: "$\(name)", accessibility: "Skill, \(text)")
+        case "environment":
+            let live = environments[record["environmentId"]?.stringValue ?? ""]
+            let label = live?.label ?? recordLabel
+            return MarkdownContextChip(look: ComposerChipLook(kind: .environment(machine: live?.machine ?? "server"), label: label),
+                                       action: .none, tooltip: live == nil ? "Machine not in this app" : "T3 Code environment",
+                                       accessibility: "Machine, \(label)")
         case "thread":
-            return threadChip(threadId: record["threadId"]?.stringValue ?? "", recordTitle: record["title"]?.stringValue ?? recordLabel)
+            let key = threadKey(record["threadId"]?.stringValue ?? "", owner: record["environmentId"]?.stringValue)
+            return threadChip(threadId: key, recordTitle: record["title"]?.stringValue ?? recordLabel)
         case "image":
             guard let id = record["attachmentId"]?.stringValue, let attachment = attachments[id], attachment["type"]?.stringValue == "image" else { return unavailable }
             let name = record["name"]?.stringValue ?? recordLabel

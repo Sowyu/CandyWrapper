@@ -283,6 +283,10 @@ final class ComposerController {
         }
         sessions = decode(Self.sessionsKey) ?? Self.scopeV1(decode(Self.sessionsKeyV1) ?? [:])
         restoreDraftAttachments(defaults)
+        if let data = defaults.data(forKey: "composer.identities.v1"),
+           let records = try? JSONDecoder().decode([String: JSONValue].self, from: data) {
+            menuState.records.merge(ComposerContext.persistedIdentityRecords(prompts: Array(prompts.values), records: records)) { current, _ in current }
+        }
         if let data = defaults.data(forKey: "composer.reviewComments.v1"),
            let records = try? JSONDecoder().decode([String: JSONValue].self, from: data) {
             menuState.records.merge(records.filter { $0.value["kind"]?.stringValue == "review-comment" }) { current, _ in current }
@@ -448,6 +452,8 @@ final class ComposerController {
     func sessionChanged(_ environmentId: String) {
         let shell = environments.session(environmentId)
         if shell !== configSubscriptions[environmentId]?.shell {
+            menuState.peerLinkTasks.removeValue(forKey: environmentId)?.cancel()
+            menuState.peerLinks[environmentId] = nil
             configSubscriptions[environmentId]?.task.cancel()
             configSubscriptions[environmentId] = shell.map { ($0, subscribeConfig($0)) }
             readCapabilities(shell, environmentId: environmentId)
@@ -711,6 +717,8 @@ final class ComposerController {
     func environmentRemoved(_ environmentId: String) {
         let prefix = environmentId + ":"
         configSubscriptions.removeValue(forKey: environmentId)?.task.cancel()
+        menuState.peerLinks[environmentId] = nil
+        menuState.peerLinkTasks.removeValue(forKey: environmentId)?.cancel()
         capabilityTasks.removeValue(forKey: environmentId)?.cancel()
         serverConfigs[environmentId] = nil
         workspaceSnapshots[environmentId] = nil
@@ -1289,6 +1297,7 @@ final class ComposerController {
         composer.resetPromptHistory()
         composer.text = draftKey.flatMap { prompts[$0] } ?? ""
         pickers.prompt = composer.text
+        loadComposerPeerLinks()
         refresh()
         DispatchQueue.main.async { [weak self] in self?.composer.focus() }
     }
@@ -1349,6 +1358,8 @@ final class ComposerController {
         let referenced = Set(prompts.values.flatMap { ComposerContext.referencedIds($0) })
         let reviews = menuState.records.filter { referenced.contains($0.key) && $0.value["kind"]?.stringValue == "review-comment" }
         UserDefaults.standard.set(try? JSONEncoder().encode(reviews), forKey: "composer.reviewComments.v1")
+        let identities = ComposerContext.persistedIdentityRecords(prompts: Array(prompts.values), records: menuState.records)
+        UserDefaults.standard.set(try? JSONEncoder().encode(identities), forKey: "composer.identities.v1")
         syncSidebarDrafts()
     }
 
@@ -1738,9 +1749,28 @@ final class ComposerController {
             toastEnvironmentUnavailable()
             return
         }
+        let identityRecords = contextRecords(for: text)
+        let machines = identityRecords.values.filter { $0["kind"]?.stringValue == "environment" }
+        let foreignThreads = identityRecords.values.contains { $0["kind"]?.stringValue == "thread" && $0["environmentId"]?.stringValue != targetEnvironmentId }
+        if composerOffersLinks, (!machines.isEmpty || foreignThreads), let env = targetEnvironmentId, menuState.peerLinks[env] == nil {
+            loadComposerPeerLinks()
+            if let loading = menuState.peerLinkTasks[env] {
+                let key = draftKey
+                Task { [weak self] in
+                    await loading.value
+                    guard let self, draftKey == key, targetEnvironmentId == env, composer.text == text else { return }
+                    send(text, mode: mode, background: background, redirecting: redirecting, compactConfirmed: compactConfirmed)
+                }
+                return
+            }
+        }
+        if machines.contains(where: { !composerOffersLinks || composerLinkedNames[$0["environmentId"]?.stringValue ?? ""] == nil }) {
+            toast(.warning, "Machine is not linked", "Link this machine in Settings or remove it from the message.")
+            return
+        }
         // ChatView.tsx:4780-4796 (c1377176b1): this machine's agent can't read a thread from another one.
         if let env = targetEnvironmentId,
-           let stranded = ComposerContext.threadsOutsideEnvironment(text, records: menuState.records, environmentId: env).first {
+           let stranded = ComposerContext.threadsOutsideEnvironment(text, records: contextRecords(for: text), environmentId: env, linkedEnvironments: Set(composerLinkedNames.keys)).first {
             let owner = stranded["environmentId"]?.stringValue.flatMap { sidebarEnvironments.labels[$0] } ?? "its machine"
             let title = stranded["title"]?.stringValue ?? ""
             toast(.warning, "Attached thread is on another machine",
@@ -2478,6 +2508,11 @@ final class ComposerController {
               ComposerLogic.queuedEditBlockedReason(openQuestionCount: requests.userInputs.count) == nil else { return }
         flushPrompt()
         queuedEdit = QueuedEdit(runId: runId, threadId: threadId, originalText: item.text)
+        if let message = projection?.messages.first(where: { $0.id == item.messageId }) {
+            for record in message.context?["records"]?.arrayValue ?? [] {
+                if let id = record["contextId"]?.stringValue { menuState.records[id] = record }
+            }
+        }
         composer.resetPromptHistory()
         composer.text = item.text
         pickers.prompt = item.text
@@ -2495,10 +2530,12 @@ final class ComposerController {
     /// Enter while editing saves with `queued-run.edit` and keeps the edit open on failure.
     private func saveEdit(_ edit: QueuedEdit, text: String) {
         guard let shell, !queueBusy else { return }
-        let command: JSONValue = .object([
+        var fields: [String: JSONValue] = [
             "type": .string("queued-run.edit"), "commandId": .string(UUID().uuidString.lowercased()),
             "threadId": .string(edit.threadId.localId.rawValue), "runId": .string(edit.runId.rawValue), "text": .string(text),
-        ])
+        ]
+        if let context = ComposerContext.messageContext(prompt: text, records: contextRecords(for: text)) { fields["context"] = context }
+        let command = JSONValue.object(fields)
         queueBusy = true
         refresh()
         let supervisor = shell.supervisor
@@ -2819,8 +2856,9 @@ extension ComposerController {
     struct MenuState {
         /// Context records by id, from picks and pastes. Thread records are also rebuilt from the
         /// shell, so a restored draft keeps its thread chips.
-        // ponytail: kept in memory only; a restart turns a pull request chip unavailable. Persist them with the drafts if that bites
         var records: [String: JSONValue] = [:]
+        var peerLinks: [String: (links: [PeerLinkSummary], loadedAt: Date)] = [:]
+        var peerLinkTasks: [String: Task<Void, Never>] = [:]
         var paths: (key: String, entries: [(path: String, isDirectory: Bool)])?
         var pathTask: Task<Void, Never>?
         var threadMatches: (environment: String, key: String, threads: [ThreadShell])?
@@ -2887,21 +2925,56 @@ extension ComposerController {
         return nil
     }
 
-    /// The environment's threads for `@` (the agent can only read threads on its own server).
+    /// T3 3814, client-runtime/src/composerThreadItems.ts:39-75 and state/peerLinks.ts:35-57.
+    /// Read the list on demand; no idle timer probes linked machines.
+    private var composerOffersLinks: Bool {
+        guard let env = targetEnvironmentId, let config = serverConfigs[env] else { return false }
+        return PeerLinks.offered(capabilities: config.capabilities, settings: config.settings.raw)
+    }
+
+    private var composerLinkedNames: [String: String] {
+        guard composerOffersLinks, let env = targetEnvironmentId else { return [:] }
+        let labels = Dictionary(environments.environmentIds.compactMap { id in environments.label(id).map { (id, $0) } }, uniquingKeysWith: { _, b in b })
+        return PeerLinks.names(menuState.peerLinks[env]?.links ?? [], labels: labels)
+    }
+
+    private func loadComposerPeerLinks() {
+        guard composerOffersLinks, let env = targetEnvironmentId, let session = environments.session(env),
+              menuState.peerLinkTasks[env] == nil,
+              menuState.peerLinks[env].map({ Date().timeIntervalSince($0.loadedAt) >= 30 }) ?? true else { return }
+        menuState.peerLinkTasks[env] = Task { [weak self] in
+            let links = (try? PeerLinkSummary.list(try await session.supervisor.request("peerLinks.list", payload: .object([:])))) ?? []
+            guard !Task.isCancelled, let self, environments.session(env) === session else { return }
+            menuState.peerLinkTasks[env] = nil
+            menuState.peerLinks[env] = (links, Date())
+            if targetEnvironmentId == env {
+                if panel.menus.isOpen { panel.menus.reload() }
+                composer.refreshChips()
+            }
+        }
+    }
+
     private var menuThreads: [ComposerMenus.ThreadCandidate] {
         guard let env = targetEnvironmentId else { return [] }
+        let linked = composerLinkedNames
         var candidates = (sidebar?.snapshot?.threads ?? []).compactMap { t -> ComposerMenus.ThreadCandidate? in
-            guard EnvironmentScope.environmentId(of: t.id.rawValue) == env else { return nil }
-            return ComposerMenus.ThreadCandidate(id: EnvironmentScope.localId(of: t.id.rawValue), title: t.title,
-                                                 updatedAt: t.updatedAt.raw, archived: t.archivedAt != nil)
+            guard let owner = t.id.environmentId, owner == env || linked[owner] != nil else { return nil }
+            return .init(id: t.id.rawValue, title: t.title, updatedAt: t.updatedAt.raw, archived: t.archivedAt != nil,
+                         machine: owner == env ? nil : linked[owner], isSubagent: t.lineage.relationshipToParent == .subagent)
         }
         let known = Set(candidates.map(\.id))
         if let matches = menuState.threadMatches, matches.environment == env {
-            candidates += matches.threads.filter { !known.contains($0.id.rawValue) }.map {
-                .init(id: $0.id.rawValue, title: $0.title, updatedAt: $0.updatedAt.raw, archived: $0.archivedAt != nil)
+            candidates += matches.threads.filter { !known.contains($0.id.scoped(to: env).rawValue) }.map {
+                .init(id: $0.id.scoped(to: env).rawValue, title: $0.title, updatedAt: $0.updatedAt.raw, archived: $0.archivedAt != nil,
+                      isSubagent: $0.lineage.relationshipToParent == .subagent)
             }
         }
         return candidates
+    }
+
+    private var currentThreadScopedId: String? {
+        guard case .thread(let id) = target else { return nil }
+        return id.rawValue
     }
 
     private var currentThreadLocalId: String? {
@@ -2946,7 +3019,8 @@ extension ComposerController {
             let items = ComposerMenus.skillItems(query: trigger.query, provider: providerKey, skills: provider?.skills(cwd: cwd) ?? [])
             return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .skill, loading: false))
         case .path:
-            let threads = ComposerMenus.threadItems(query: trigger.query, threads: menuThreads, excluding: currentThreadLocalId, browse: browsingThreads)
+            let threads = ComposerMenus.threadItems(query: trigger.query, threads: menuThreads,
+                                                    excluding: currentThreadScopedId, browse: browsingThreads)
             // "+" > Threads: a bare `@` lists the newest threads alone, until the token changes.
             if browsingThreads, trigger.query.isEmpty {
                 return .init(items: threads, emptyText: "No threads found.")
@@ -2954,7 +3028,11 @@ extension ComposerController {
             let key = pathKey(trigger.query)
             let entries = menuState.paths.flatMap { $0.key == key ? $0.entries : nil } ?? []
             let loading = !trigger.query.isEmpty && key != nil && menuState.paths?.key != key
-            return .init(items: threads + ComposerMenus.pathItems(entries), emptyText: ComposerMenus.emptyText(kind: .path, loading: loading))
+            let machines = ComposerMenus.environmentItems(query: trigger.query,
+                environments: composerLinkedNames.sorted { $0.key < $1.key }.map {
+                    .init(id: $0.key, label: $0.value, machine: environments.machine($0.key) ?? "server")
+                }, excluding: targetEnvironmentId ?? "")
+            return .init(items: machines + threads + ComposerMenus.pathItems(entries), emptyText: ComposerMenus.emptyText(kind: .path, loading: loading))
         case .pullRequest:
             let env = targetEnvironmentId ?? ""
             let linked = ThreadPullRequests.visible(shellThread?.pullRequests ?? [])
@@ -2993,6 +3071,7 @@ extension ComposerController {
         let supervisor = shell.supervisor
         switch trigger.kind {
         case .path:
+            loadComposerPeerLinks()
             menuState.pathTask?.cancel()
             let query = trigger.query.trimmingCharacters(in: .whitespacesAndNewlines)
             searchMenuThreads(query, shell: shell)
@@ -3179,9 +3258,13 @@ extension ComposerController {
         case .builtIn(let mode):
             if let key = draftKey { pickers.store.setInteractionMode(key, mode == "plan" ? .plan : .default) }
             updatePickers()
+        case .environment(let id, let label, _):
+            guard composerOffersLinks, composerLinkedNames[id] != nil else { return }
+            let record = ComposerContext.environmentRecord(environmentId: id, label: label)
+            if let contextId = record["contextId"]?.stringValue { menuState.records[contextId] = record }
         case .thread(let id, let title):
-            guard let env = targetEnvironmentId else { return }
-            let record = ComposerContext.threadRecord(threadId: id, title: title, environmentId: env)
+            guard let env = EnvironmentScope.environmentId(of: id) ?? targetEnvironmentId else { return }
+            let record = ComposerContext.threadRecord(threadId: EnvironmentScope.localId(of: id), title: title, environmentId: env)
             if let contextId = record["contextId"]?.stringValue { menuState.records[contextId] = record }
         case .pullRequest(let pr):
             menuState.records[ComposerContext.pullRequestReference(pr).contextId] = ComposerContext.pullRequestRecord(pr)
@@ -3208,8 +3291,10 @@ extension ComposerController {
     private func rebuiltThreadRecord(_ contextId: String) -> JSONValue? {
         guard contextId.hasPrefix("thread_"), let env = targetEnvironmentId else { return nil }
         let local = String(contextId.dropFirst("thread_".count))
-        guard let thread = sidebar?.snapshot?.threads.first(where: { $0.id.rawValue == EnvironmentScope.key(env, local) }) else { return nil }
-        return ComposerContext.threadRecord(threadId: local, title: thread.title, environmentId: env)
+        guard let thread = sidebar?.snapshot?.threads.first(where: {
+            $0.id.localId.rawValue == local && ($0.id.environmentId == env || composerLinkedNames[$0.id.environmentId ?? ""] != nil)
+        }), let owner = thread.id.environmentId else { return nil }
+        return ComposerContext.threadRecord(threadId: local, title: thread.title, environmentId: owner)
     }
 
     private func chipLook(_ token: ComposerInlineToken) -> ComposerChipLook {
@@ -3223,14 +3308,14 @@ extension ComposerController {
         }, record: { id in menuState.records[id] ?? rebuiltThreadRecord(id) }, threadTitle: { record in
             // `ThreadContextChip` prefers the live title.
             guard let local = record["threadId"]?.stringValue else { return nil }
-            return threads.first { $0.id.rawValue == EnvironmentScope.key(env, local) }?.title
+            return threads.first { $0.id.rawValue == EnvironmentScope.key(record["environmentId"]?.stringValue ?? env, local) }?.title
         }, threadProject: { record in
             // `ThreadContextChip` shows the thread's project icon (ThreadContextChip.tsx:18, 32-36).
             guard let local = record["threadId"]?.stringValue,
-                  let shell = threads.first(where: { $0.id.rawValue == EnvironmentScope.key(env, local) }),
+                  let shell = threads.first(where: { $0.id.rawValue == EnvironmentScope.key(record["environmentId"]?.stringValue ?? env, local) }),
                   let project = projects.first(where: { $0.id == shell.projectId }) else { return nil }
             return ProjectIconSource(project)
-        })
+        }, environment: { id in (environments.label(id), environments.machine(id)) })
     }
 }
 
@@ -3646,9 +3731,9 @@ extension ComposerController {
     /// environment are refused; the rest become thread context references at the caret, once each.
     func dropThreads(_ ids: [ThreadId]) -> Bool {
         guard let env = targetEnvironmentId, !ids.isEmpty else { return false }
-        if ids.contains(where: { $0.environmentId != env }) {
+        if ids.contains(where: { $0.environmentId != env && composerLinkedNames[$0.environmentId ?? ""] == nil }) {
             _ = panel.toasts.show(ToastView(title: "Use threads from this environment",
-                                            message: "The agent can only read threads on its own server.", kind: .error))
+                                            message: "The agent can read threads on its own server and linked machines.", kind: .error))
             return true
         }
         var known = Set(ComposerContext.referencedIds(composer.text))
@@ -3656,7 +3741,7 @@ extension ComposerController {
         for id in ids {
             guard let shell = sidebar?.snapshot?.threads.first(where: { $0.id == id }) else { continue }
             let local = id.localId.rawValue
-            let record = ComposerContext.threadRecord(threadId: local, title: shell.title, environmentId: env)
+            let record = ComposerContext.threadRecord(threadId: local, title: shell.title, environmentId: id.environmentId ?? env)
             guard let contextId = record["contextId"]?.stringValue, known.insert(contextId).inserted else { continue }
             menuState.records[contextId] = record
             references.append(ComposerContext.reference(ComposerContext.threadReference(threadId: local, title: shell.title)))
