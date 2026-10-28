@@ -5,11 +5,11 @@ import T3Protocol
 import T3Store
 @testable import Features
 
-/// The changed files card and the diff panel opened from it, against design/reference 47 and 48
-/// (the "Add notes and docstring" thread, scrolled so the card sits where T3 put it). 47 compares
+/// The changed files card and the diff panel opened from it, against design/reference-3824 47 and 48
+/// (the "Document Hello Demo" thread, scrolled so the card sits where T3 put it). 47 compares
 /// the main panel above the composer; 48 compares the chat column above the composer and the whole
 /// right panel, after clicking notes.md in the card. The diff comes from the recorded
-/// `getFullThreadDiff` reply in fixtures/transcripts/03-turn2.jsonl. Writes ref, ours and diff PNGs
+/// sandbox snapshot and fixtures/3824-panel.patch. Writes ref, ours and diff PNGs
 /// plus report-changed-files.html to `Fidelity.root`.
 @MainActor @Suite(.fidelity)
 struct ChangedFilesFidelityTests {
@@ -23,18 +23,18 @@ struct ChangedFilesFidelityTests {
 
     /// The panel with the card's top edge at `cardTop` (window points, from the capture plan's log).
     static func render(dark: Bool, openDiff: Bool, cardTop: CGFloat) async throws -> (ThreadPanelView, NSBitmapImageRep) {
-        let projection = try #require(try ThreadPreview.projection(titled: thread))
+        let projection = try #require(try ThreadPreview.projections(transcript: "3824-panel-threads.jsonl").first { $0.thread.title == "Document Hello Demo" })
         let panel = ThreadPanelView(frame: NSRect(origin: .zero, size: size))
         // The reference is a 1100pt window, including its 256pt sidebar.
         panel.referenceViewportWidth = size.width + 256
         panel.bottomInset = ThreadFidelityTests.composerInset
         panel.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-        let patch = try DiffTests.recordedPatch()
+        let patch = try String(contentsOf: SidebarFidelityTests.repo.appendingPathComponent("fixtures/3824-panel.patch"), encoding: .utf8)
         panel.diffPanel.loader = { request in
             let json = try JSONSerialization.data(withJSONObject: ["threadId": projection.thread.id.rawValue, "fromTurnCount": 0, "toTurnCount": 1, "diff": patch])
             return try JSONDecoder().decode(ThreadTurnDiff.self, from: json)
         }
-        // The 3473 recapture ran in a fresh browser profile, so the diff uses the default unified layout.
+        // 3824 opens the turn diff in its default stacked layout.
         panel.diffPanel.layoutStyle = .unified
         panel.setProjection(projection, projectTitle: "demo-repo", workspaceRoot: nil)
         panel.layoutSubtreeIfNeeded()
@@ -52,7 +52,12 @@ struct ChangedFilesFidelityTests {
             panel.timeline.scroll(by: y - cardTop)
             panel.layoutSubtreeIfNeeded()
         }
-        return (panel, Snapshot.image(of: ThreadFidelityTests.onSurface(panel), size: size, scale: 2, dark: dark))
+        let surface = GrainSurfaceView(fill: Themed.color(\.background))
+        surface.frame = NSRect(x: 0, y: 0, width: 1100, height: size.height)
+        panel.frame.origin.x = 256
+        surface.addSubview(panel)
+        let image = Snapshot.image(of: surface, size: surface.frame.size, scale: 2, dark: dark)
+        return (panel, ThreadFidelityTests.crop(image, x: 512, width: Int(size.width * 2), height: Int(size.height * 2)))
     }
 
     static func cardView(in view: NSView) -> ChangedFilesCardView? {
@@ -62,21 +67,22 @@ struct ChangedFilesFidelityTests {
     }
 
     @Test func cardAndDiff() async throws {
+        var fonts = FontRuntimeInput()
+        fonts.smoothing = false
+        FontRuntime.apply(fonts)
+        defer { Fidelity.pin() }
         try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
         let W = Int(Self.size.width * 2), compared = Int(ThreadFidelityTests.compared * 2)
         // Chat column width beside the open panel: 844 - 484.
         let chat = 360 * 2
         var lines: [String] = [], cases: [(String, Double)] = [], images = ""
         for theme in ["light", "dark"] {
-            for (reference, openDiff, cardTop) in [("47-changed-files-card", false, 317.5), ("48-diff-turn-file", true, 476.75)] {
+            for (reference, openDiff, cardTop) in [("47-changed-files-card", false, 351.5), ("48-diff-turn-file", true, 464)] {
                 let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
-                    "design/reference/\(reference).\(theme).png"))))
+                    "design/reference-3824/\(reference).\(theme).png"))))
                 let (panel, image) = try await Self.render(dark: theme == "dark", openDiff: openDiff, cardTop: cardTop)
                 let x0 = full.pixelsWide - W
-                // Since 3473 a file opened from the card expands in the panel (DiffPanel.tsx:551-580), so the panel
-                // compares with a 3473 capture of the same state. The chat column keeps the 2861 capture.
-                let panelRef = openDiff ? try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
-                    "design/reference/\(reference)-3473.\(theme).png")))) : full
+                let panelRef = full
                 let regions: [(String, Int, Int, Int)] = openDiff
                     ? [("chat", 0, chat, compared), ("panel", chat, W - chat, Int(Self.size.height * 2))]
                     : [("main", 0, W, compared)]

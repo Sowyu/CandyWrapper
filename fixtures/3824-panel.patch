@@ -1,0 +1,18 @@
+diff --git a/hello.py b/hello.py
+index 097a41c..dbe57a6 100644
+--- a/hello.py
++++ b/hello.py
+@@ -1,2 +1,5 @@
++"""Small demo module with a greeting helper."""
++
++
+ def greet(name):
+     return f"Hello, {name}!"
+diff --git a/notes.md b/notes.md
+new file mode 100644
+--- /dev/null
++++ b/notes.md
+@@ -0,0 +1,3 @@
++- This repo is a throwaway demo for protocol recordings.
++- `hello.py` holds a single `greet(name)` helper that returns a greeting string.
++- `src/answer.ts` exports a constant, `answer = 42`, and nothing else uses it.
