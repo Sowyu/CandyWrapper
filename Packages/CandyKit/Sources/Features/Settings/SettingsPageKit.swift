@@ -37,6 +37,8 @@ public final class SettingsPageContext {
     public var chooseNotificationMode: ((ThreadNotificationMode) async -> String?)?
     /// A server patch for the scope's targets (`planScopedSettingsPatch`).
     public var writeServer: (([String: JSONValue]) -> Void)?
+    /// Invalidates optimistic editors when a server save fails without changing the saved value.
+    public var serverWriteFailureRevision = 0
     public var setAppearanceMode: ((String) -> Void)?
     public var selectScope: ((SettingsScopeSelection) -> Void)?
     public var saveKeybinding: ((KeybindingTarget, KeybindingTarget?) -> Void)?

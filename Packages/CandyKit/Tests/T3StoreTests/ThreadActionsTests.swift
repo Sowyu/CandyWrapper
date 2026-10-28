@@ -231,7 +231,7 @@ struct SnoozeTests {
     @Test func weekdayMorningOffersEveryPreset() {
         // Wednesday 10:00.
         let presets = SnoozePresets.resolve(now: Date(timeIntervalSince1970: 1_791_367_200), calendar: calendar, locale: locale)
-        #expect(presets.map(\.id) == ["hour", "three-hours", "evening", "tomorrow", "next-week"])
+        #expect(presets.map(\.id) == ["after:60", "after:180", "at:today:18:00", "at:tomorrow:09:00", "at:monday:09:00"])
         #expect(presets.map(\.label) == ["In 1 hour", "In 3 hours", "This evening", "Tomorrow", "Next week"])
         #expect(presets.map(\.iso) == ["2026-10-07T11:00:00.000Z", "2026-10-07T13:00:00.000Z", "2026-10-07T18:00:00.000Z",
                                        "2026-10-08T09:00:00.000Z", "2026-10-12T09:00:00.000Z"])
@@ -239,16 +239,16 @@ struct SnoozeTests {
         #expect(presets.map(\.whenLabel) == ["11:00 AM", "1:00 PM", "6:00 PM", "9:00 AM", "Mon 9:00 AM"])
     }
 
-    @Test func lateAfternoonDropsThisEvening() {
-        // Wednesday 17:30: 18:00 is less than an hour away.
+    @Test func lateAfternoonKeepsThisEveningUntilItPasses() {
+        // Wednesday 17:30: the configured 18:00 choice is still ahead.
         let presets = SnoozePresets.resolve(now: Date(timeIntervalSince1970: 1_791_394_200), calendar: calendar, locale: locale)
-        #expect(!presets.contains { $0.id == "evening" })
+        #expect(presets.contains { $0.id == "at:today:18:00" })
     }
 
     @Test func sundayHasNoSeparateNextWeek() {
         // Sunday 10:00: tomorrow and next week are both Monday 9:00.
         let presets = SnoozePresets.resolve(now: Date(timeIntervalSince1970: 1_791_712_800), calendar: calendar, locale: locale)
-        #expect(presets.map(\.id) == ["hour", "three-hours", "evening", "tomorrow"])
+        #expect(presets.map(\.id) == ["after:60", "after:180", "at:today:18:00", "at:tomorrow:09:00"])
     }
 
     @Test func blockedOrQueuedThreadsCannotSnooze() {

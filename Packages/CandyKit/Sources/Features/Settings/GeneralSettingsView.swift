@@ -154,6 +154,7 @@ public final class GeneralSettingsView: SettingsPageBase {
         let order = clientSelect("project-order", "Order of projects in the sidebar project picker and command palette.", key: "sidebarProjectSortOrder",
                                  options: [("updated_at", "Last user message"), ("created_at", "Created at"), ("manual", "Manual")], width: 176,
                                  reset: "project order")
+        let options = snoozeOptionsRow()
         let resume = serverSwitch("auto-resume-limited-threads",
                                   "Resume usage-limit stops at the reported reset time. Each thread can cancel its scheduled continuation.",
                                   key: "autoResumeLimitedThreads", reset: nil)
@@ -201,13 +202,34 @@ public final class GeneralSettingsView: SettingsPageBase {
             daysRow?.isHidden = !supported || self.server["sidebarAutoSettleAfterDays"] == .null
             if let days, !days.state.focused { days.text = self.server["sidebarAutoSettleAfterDays"].intValue.map(String.init) ?? "" }
         }
-        let s = section("organization", "Organization", [grouping, order, resume, snooze, compact, merged, inactive, daysRow, keep])
+        let s = section("organization", "Organization", [grouping, order, options, resume, snooze, compact, merged, inactive, daysRow, keep])
         binder.add { [weak s] in
             guard let s else { return }
             // Hidden rows leave the card, like T3's conditional rendering.
             s.group.rows = s.group.rows
         }
         return s
+    }
+
+    private func snoozeOptionsRow() -> SettingsRowView {
+        let editor = SnoozePresetsEditor()
+        let r = row("snooze-options", title: "Snooze options",
+            detail: "Choices in every snooze menu, listed soonest first. Weekdays mean the next one after today.")
+        r.footer = editor
+        _ = bindServerRow(r, keys: ["snoozePresets"], reset: "snooze options")
+        editor.onChange = { [weak self] values in
+            guard let self, self.context.scope.allStore("snoozePresets"), self.context.scope.canWrite else { return }
+            self.context.patchServer(["snoozePresets": .array(values.map(\.json))])
+        }
+        editor.onHeightChange = { [weak self] in self?.onHeightChange?() }
+        binder.add { [weak self, weak editor, weak r] in
+            guard let self else { return }
+            r?.isHidden = !self.context.scope.allStore("snoozePresets")
+            editor?.refresh(SnoozePresetSetting.decode(self.server["snoozePresets"]),
+                sourceKey: self.context.scope.targets.map { $0.environmentId + ":" + ($0.projectId ?? "") }.joined(separator: "\n"),
+                failureRevision: self.context.serverWriteFailureRevision)
+        }
+        return r
     }
 
     // MARK: Behavior (SettingsPanels.tsx:2484-3043)

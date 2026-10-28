@@ -32,6 +32,7 @@ extension SettingsSearch {
         .item(SettingsSearchItem(id: "composer-context", title: "Composer context", to: .appearance)),
         .item(SettingsSearchItem(id: "project-grouping", title: "Project grouping", to: .general, searchTerms: ["combine matching repositories environments sidebar"])),
         .item(SettingsSearchItem(id: "project-order", title: "Project order", to: .general, searchTerms: ["sort projects sidebar manual created recent"])),
+        .item(SettingsSearchItem(id: "snooze-options", title: "Snooze options", to: .general, scope: .environmentDefaults, searchTerms: ["snooze presets wake duration time options tomorrow week"])),
         .item(SettingsSearchItem(id: "snooze-limited-threads", title: "Snooze limited threads", to: .general, searchTerms: ["usage quota rate limit reset wake recover continue"])),
         .item(SettingsSearchItem(id: "auto-resume-limited-threads", title: "Auto-resume limited threads", to: .general, searchTerms: ["usage quota rate limit reset recover continue"])),
         .item(SettingsSearchItem(id: "boring-sidebar", title: "Boring sidebar (group by project)", to: .beta, searchTerms: ["folders project grouping sidebar beta legacy"])),

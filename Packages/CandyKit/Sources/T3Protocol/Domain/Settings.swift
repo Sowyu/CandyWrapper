@@ -174,6 +174,7 @@ public struct ServerSettingsValues: Equatable, Sendable {
         "enableProviderUpdateChecks": SettingSpec(.bool, .bool(true)),
         "continueThreadsAfterServerUpdate": SettingSpec(.bool, .bool(true)),
         "sidebarAutoSettleAfterDays": SettingSpec(.nullableNumber(1...90), .number(3)),
+        "snoozePresets": SettingSpec(.any, .array(SnoozePresetSetting.defaults.map(\.json))),
         "snoozeLimitedThreads": SettingSpec(.bool, .bool(false)),
         "autoResumeLimitedThreads": SettingSpec(.bool, .bool(false)),
         "sidebarAutoSettleKeepPullRequests": SettingSpec(.bool, .bool(false)),
