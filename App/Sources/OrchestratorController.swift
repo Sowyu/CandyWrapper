@@ -788,7 +788,7 @@ final class OrchestratorController {
     /// The thread's "while closed" task as the server has it now; nil when there is none or the server can't say.
     private func scheduledTask(_ env: String, thread: String) async -> ScheduledTask? {
         guard let session = environments.session(env),
-              let json = try? await session.supervisor.request("scheduledTasks.list", payload: .object([:])) else { return nil }
+              let json = try? await session.supervisor.firstSnapshot("scheduledTasks.subscribe", payload: .object([:])) else { return nil }
         return OrchestratorCheckTask.canonical(ScheduledTask.list(json), thread: thread)
     }
 
@@ -817,7 +817,7 @@ final class OrchestratorController {
     /// Mac's, with its check task. The next message you send carries this Mac's brief.
     private func adopt(_ env: String) async -> Bool {
         guard let session = environments.session(env),
-              let listed = try? await session.supervisor.request("scheduledTasks.list", payload: .object([:])) else { return false }
+              let listed = try? await session.supervisor.firstSnapshot("scheduledTasks.subscribe", payload: .object([:])) else { return false }
         let tasks = ScheduledTask.list(listed)
         var matches: [ThreadSearchMatch] = []
         for query in OrchestratorHandoff.searchQueries {
@@ -998,7 +998,7 @@ final class OrchestratorController {
     /// Merges the machine's settings documents with this Mac's, then writes the result back when it differs.
     private func pushSettings(_ env: String) async {
         guard active, let session = environments.session(env),
-              let json = try? await session.supervisor.request("scheduledTasks.list", payload: .object([:]), timeout: .seconds(30)), active else { return }
+              let json = try? await session.supervisor.firstSnapshot("scheduledTasks.subscribe", payload: .object([:]), timeout: .seconds(30)), active else { return }
         // Two devices may each have made one; every side keeps the smallest id and deletes the rest.
         let found = ScheduledTask.list(json).filter { $0.title == OrchestratorSettingsSync.title }.sorted { $0.id < $1.id }
         let merge = OrchestratorSettingsSync.merge(config: config, stamps: store.stamps, documents: found.compactMap { .parse($0.prompt) },
@@ -1045,7 +1045,7 @@ final class OrchestratorController {
     /// and writes it on or off. It makes a task only when the thread has none, and never after a failed read.
     private func syncSchedule(_ env: String, _ machine: OrchestratorMachine, enabled: Bool) async {
         guard let session = environments.session(env),
-              let json = try? await session.supervisor.request("scheduledTasks.list", payload: .object([:])) else {
+              let json = try? await session.supervisor.firstSnapshot("scheduledTasks.subscribe", payload: .object([:])) else {
             scheduleSynced.remove(env)
             return
         }
