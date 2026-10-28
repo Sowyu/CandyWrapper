@@ -29,9 +29,14 @@ public final class AppearanceSettingsView: SettingsPageBase {
     private lazy var wordWrap = clientSwitch("word-wrap", "Wrap long lines in code blocks, tables, diffs, and file previews by default.",
                                              key: "wordWrap", reset: "word wrapping", label: "Wrap code, tables, diffs, and file previews by default")
 
-    public override init(context: SettingsPageContext) {
+    public init(context: SettingsPageContext, groups: Set<String>? = nil) {
         super.init(context: context)
-        items = [colorsSection(), interfaceSection(), motionSection(), typographySection()]
+        var body: [NSView & SettingsGroupRow] = []
+        if groups?.contains("appearance") != false { body.append(colorsSection()) }
+        if groups?.contains("appearance-interface") != false { body.append(interfaceSection()) }
+        if groups?.contains("motion") != false { body.append(motionSection()) }
+        if groups?.contains("typography") != false { body.append(typographySection()) }
+        items = body
     }
 
     /// Diff colors moved to Diffs & pull requests in 3814; keep the row factory for that page.

@@ -7,9 +7,10 @@ import T3Protocol
 public final class IntegrationsSettingsView: ScopedSettingsPage {
     private var deviceInventoryTask: Task<Void, Never>?
     private var deviceHostEditor: DeviceHostEditor?
-    public init(context: SettingsPageContext) {
+    public init(context: SettingsPageContext, groups: Set<String>? = nil) {
         super.init(context: context)
-        body = [browserSection(), devicesSection()]
+        if groups?.contains("browser") != false { body.append(browserSection()) }
+        if groups?.contains("devices") != false { body.append(devicesSection()) }
     }
 
     private func pullRequestRow() -> SettingsRowView {

@@ -95,6 +95,7 @@ public struct SourceControlDiscoveryItem: Equatable, Sendable {
 /// Settings > Source Control (SourceControlSettings.tsx, ProjectDefaultsSettings.tsx with
 /// `category="source-control"`, BranchNamingSettings.tsx, SourceControlWritingSettings.tsx, GitHubTokenSettings.tsx).
 public final class SourceControlSettingsView: ScopedSettingsPage {
+    private let discoveryEnabled: Bool
     private var discovery: (vcs: [SourceControlDiscoveryItem], providers: [SourceControlDiscoveryItem])?
     private var discoveryError: String?
     private var scanning = false
@@ -106,27 +107,30 @@ public final class SourceControlSettingsView: ScopedSettingsPage {
     private var expanded: Set<String> = []
     private var branchRows: [SettingsRowView] = []
 
-    public init(context: SettingsPageContext) {
+    public init(context: SettingsPageContext, discoveryEnabled: Bool = true) {
+        self.discoveryEnabled = discoveryEnabled
         super.init(context: context)
         scanButton.setAccessibilityLabel("Rescan server environment")
         _ = TooltipController.attach(to: scanButton, text: "Rescan Git and hosting integrations")
         scanButton.action = { [weak self] in self?.scan() }
         anchors["source-control"] = vcsSection
-        body = [repositoriesSection(), emptySection, vcsSection, providersSection, textGenerationSection()]
-        binder.add { [weak self] in self?.updateDiscovery() }
+        if discoveryEnabled {
+            body = [repositoriesSection(), emptySection, vcsSection, providersSection, textGenerationSection()]
+            binder.add { [weak self] in self?.updateDiscovery() }
+        } else { body = [textGenerationSection()] }
     }
 
     /// The environment discovery inspects (the representative, `environment`).
     private var environmentId: String? { context.scope.representative?.id }
 
     public override func refresh() {
-        if environmentId != scannedEnvironment { discovery = nil; discoveryError = nil; scannedEnvironment = environmentId; scan() }
+        if discoveryEnabled, environmentId != scannedEnvironment { discovery = nil; discoveryError = nil; scannedEnvironment = environmentId; scan() }
         super.refresh()
     }
 
     /// `server.discoverSourceControl` on the representative environment.
     func scan() {
-        guard let env = environmentId, !scanning, let request = context.request else { return }
+        guard discoveryEnabled, let env = environmentId, !scanning, let request = context.request else { return }
         scanning = true
         updateDiscovery()
         Task { [weak self] in

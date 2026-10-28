@@ -22,7 +22,7 @@ struct Nightly3814GroupDSnapshots {
                 let name = "\(redesign ? "redesign" : "default")-\(dark ? "dark" : "light")"
                 let context = SettingsPageContext()
                 context.scope = SettingsScopeState(environments: [.init(id: "sandbox", label: "Sandbox", settings:
-                    ServerSettingsValues(.object(["snoozePresets": .array(SnoozePresetSetting.defaults.map(\.json))])),
+                    ServerSettingsValues(.object(["guestSharingEnabled": .bool(false), "linkedEnvironmentsEnabled": .bool(false), "snoozePresets": .array(SnoozePresetSetting.defaults.map(\.json))])),
                     capabilities: ["threadAutoSettlement", "threadAutoSettlementScope", "threadRestartContinuation", "storageCleanup", "storageCleanupRun", "worktreesDirectory"])], primaryId: "sandbox")
                 for section in [SettingsSection.general, .chat, .diffs, .threads, .worktrees, .maintenance, .about] {
                     let view = ConcernSettingsView(context: context, section: section)
