@@ -12,7 +12,7 @@
  "cases": [
   {
    "name": "h0",
-   "html": "<div role=\"slider\" tabindex=\"0\" class=\"relative flex h-6 cursor-pointer touch-none items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover\"><div class=\"h-2.5 w-full rounded-full bg-[linear-gradient(to_right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)] shadow-[inset_0_0_0_1px_rgb(0_0_0_/_12%)]\"></div><div class=\"pointer-events-none absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgb(0_0_0/0.4)]\" style=\"left:calc(0/360 * (100% - 1rem) + 0.5rem);background-color:hsl(0 100% 50%)\"></div></div>",
+   "html": "<div role=\"slider\" tabindex=\"0\" class=\"relative flex h-6 cursor-pointer touch-none items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover\"><div class=\"h-2.5 w-full rounded-full bg-[linear-gradient(to_right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)] shadow-[inset_0_0_0_1px_rgb(0_0_0_/_12%)]\"></div><div class=\"pointer-events-none absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgb(0_0_0/0.4)]\" style=\"left:calc(0/360 * (100% - 1rem) + 0.5rem);background-color:hsl(0 100% 50%)\"></div></div>",
    "wrapperStyle": "display:block;width:224px",
    "native": {
     "hue": "0"
@@ -20,7 +20,7 @@
   },
   {
    "name": "h210",
-   "html": "<div role=\"slider\" tabindex=\"0\" class=\"relative flex h-6 cursor-pointer touch-none items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover\"><div class=\"h-2.5 w-full rounded-full bg-[linear-gradient(to_right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)] shadow-[inset_0_0_0_1px_rgb(0_0_0_/_12%)]\"></div><div class=\"pointer-events-none absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgb(0_0_0/0.4)]\" style=\"left:calc(210/360 * (100% - 1rem) + 0.5rem);background-color:hsl(210 100% 50%)\"></div></div>",
+   "html": "<div role=\"slider\" tabindex=\"0\" class=\"relative flex h-6 cursor-pointer touch-none items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover\"><div class=\"h-2.5 w-full rounded-full bg-[linear-gradient(to_right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)] shadow-[inset_0_0_0_1px_rgb(0_0_0_/_12%)]\"></div><div class=\"pointer-events-none absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgb(0_0_0/0.4)]\" style=\"left:calc(210/360 * (100% - 1rem) + 0.5rem);background-color:hsl(210 100% 50%)\"></div></div>",
    "wrapperStyle": "display:block;width:224px",
    "native": {
     "hue": "210"

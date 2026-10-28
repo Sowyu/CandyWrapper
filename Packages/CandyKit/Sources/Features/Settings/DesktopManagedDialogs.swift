@@ -68,6 +68,7 @@ public final class SshPasswordPromptBody: DSView {
         set(remaining: remaining, expired: expired)
     }
     public func set(remaining: String, expired: Bool) {
+        countdown.font = DSFont.ui(12, weight: expired && !DesignGeometry.usesClassic(self) ? .medium : .regular)
         countdown.text = remaining; countdown.color = Themed.color(expired ? \.destructive : \.mutedForeground)
         hint.text = expired ? "This SSH verification prompt expired. Try connecting again." : "SSH keys may replace a password, but your server can still require a verification code."
         hint.color = Themed.color(expired ? \.destructive : \.mutedForeground)

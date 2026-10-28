@@ -416,7 +416,7 @@ final class ToastCloseOrb: ControlView {
 
     private func restyle() {
         var box = BoxStyle()
-        box.radius = DesignGeometry.radius(12, in: self)
+        box.radius = 12 // rounded-full on the 24px dismiss button
         box.border = Themed.color(\.border, 0.6)
         box.fill = Themed.color(\.popover, state.hovered ? 1 : 0.92)
         box.shadows = [BoxShadow(y: 1, blur: 3, color: Themed.black(0.1)), BoxShadow(y: 1, blur: 2, spread: -1, color: Themed.black(0.1))]

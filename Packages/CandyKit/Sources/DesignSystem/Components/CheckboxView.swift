@@ -16,6 +16,7 @@ public class ChoiceView: ControlView {
     let round: Bool
     private let decoration = BoxDecorationLayer()
     private let mark = CAShapeLayer()
+    private let focusDecoration = BoxDecorationLayer()
 
     init(round: Bool) {
         self.round = round
@@ -25,6 +26,8 @@ public class ChoiceView: ControlView {
         decoration.transition = [.shadow] // transition-shadow (checkbox.tsx:11, radio-group.tsx:22)
         layer?.addSublayer(decoration)
         layer?.addSublayer(mark)
+        focusDecoration.host = self
+        layer?.addSublayer(focusDecoration)
         layer?.masksToBounds = false
         mark.actions = ["path": NSNull(), "fillColor": NSNull(), "strokeColor": NSNull(), "hidden": NSNull(),
                         "position": NSNull(), "bounds": NSNull()]
@@ -38,6 +41,7 @@ public class ChoiceView: ControlView {
     public override func layout() {
         super.layout()
         decoration.layout(boxSize: bounds.size)
+        focusDecoration.layout(boxSize: bounds.size)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         mark.frame = bounds
@@ -93,19 +97,29 @@ public class ChoiceView: ControlView {
                 box.beforeShadows.append(BoxShadow(y: -1, color: Themed.pick(light: .clear, dark: Themed.white(0.06))))
             }
         }
+        var focusBox = BoxStyle()
         if state.focusVisible {
             let ring = isInvalid ? Themed.color(light: \.destructive, 0.48, dark: \.destructive, 0.24) : Themed.color(\.ring)
-            if !round && !DesignGeometry.usesClassic(self) {
+            if !DesignGeometry.usesClassic(self) {
                 // checkbox.tsx:7-10: the outline sits inside, with a 1px background gap on the indicator.
                 box.border = ring
                 box.borderWidth = 2
                 box.shadows = checked || value == .mixed
                     ? [BoxShadow(spread: 1, color: Themed.color(\.background), inset: true)] : []
+                if isInvalid && !checked {
+                    // A translucent outline paints over the invalid border, rather than replacing it.
+                    box.border = Themed.color(\.destructive, 0.64)
+                    box.borderWidth = 1
+                    focusBox.radius = round ? 9999 : 4
+                    focusBox.border = ring
+                    focusBox.borderWidth = 2
+                }
             } else {
                 box.shadows = BoxShadow.focusRing(ring: ring, offset: Themed.color(\.background)) + box.shadows
             }
         }
         decoration.boxStyle = box
+        focusDecoration.boxStyle = focusBox
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)

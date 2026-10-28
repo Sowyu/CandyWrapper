@@ -26,6 +26,11 @@ public final class WizardStepsView: BoxView {
         setAccessibilityLabel("Setup progress")
     }
 
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        boxStyle.radius = DesignGeometry.radius(14, in: self)
+    }
+
     public override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 44) }
 
     public override func layout() {
@@ -86,6 +91,11 @@ public final class WizardStepView: ControlView {
         owner.onStepChange?(index)
     }
 
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        restyle()
+    }
+
     func restyle() {
         let current = owner.currentStep
         var box = BoxStyle()
@@ -99,7 +109,7 @@ public final class WizardStepView: ControlView {
         decoration.boxStyle = box
 
         var d = BoxStyle()
-        d.radius = DesignGeometry.radius(10, in: self)
+        d.radius = 10 // rounded-full on a 20px disc
         if index < current {
             d.fill = Themed.color(\.primary)
             d.shadows = [BoxShadow(spread: 1, color: Themed.color(\.primary))]

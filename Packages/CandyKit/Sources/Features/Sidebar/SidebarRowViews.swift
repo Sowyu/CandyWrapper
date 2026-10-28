@@ -312,7 +312,12 @@ class SidebarRowBase: ControlView {
     /// Fading out after leaving the list: a click there reaches the row now in its place, not the thread that left.
     var isLeaving = false
 
-    override func hitTest(_ point: NSPoint) -> NSView? { isLeaving ? nil : super.hitTest(point) }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !isLeaving else { return nil }
+        let hit = super.hitTest(point)
+        // The branch span bubbles clicks to SidebarThreadRow's outer button in T3.
+        return hit is MiddleTruncateView ? self : hit
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -590,7 +595,7 @@ final class SidebarCardRowView: SidebarRowBase {
     private let title = LabelView()
     private let branchIcon = IconView(name: .folderGit2, size: 12)
     private let branch = LabelView()
-    private let middleBranch = MiddleTruncateView("", font: DSFont.ui(12))
+    private var middleBranch: MiddleTruncateView?
     /// A scratch thread's machine on line 3 (`size-3 text-muted-foreground/40`).
     private let scratchMachine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 12, height: 12))
     private let provider = ProviderStackView()
@@ -627,10 +632,6 @@ final class SidebarCardRowView: SidebarRowBase {
         duration.font = SB.tabular(12, .medium); duration.lineHeight = 16
         title.lineHeight = 20
         branch.font = SB.font(12); branch.lineHeight = 16
-        middleBranch.lineHeight = 16
-        middleBranch.showsTitle = false
-        middleBranch.isHidden = true
-        addSubview(middleBranch)
         settleButton.padding = 6
         addSubview(snoozeButton)
         addSubview(settleButton)
@@ -771,8 +772,21 @@ final class SidebarCardRowView: SidebarRowBase {
         }
         branch.color = capyRow || !DesignGeometry.usesClassic(self) ? SB.c(\.secondaryLabel) : SB.c(\.mutedForeground, 0.4)
         branch.font = SB.font(capyRow ? 11 : 12)
-        middleBranch.value = branch.text
-        middleBranch.color = branch.color
+        if !DesignGeometry.usesClassic(self), r.branch != nil {
+            let middle = middleBranch ?? {
+                let view = MiddleTruncateView("", font: DSFont.ui(12))
+                view.lineHeight = 16
+                view.showsTitle = false
+                addSubview(view)
+                middleBranch = view
+                return view
+            }()
+            middle.value = branch.text
+            middle.color = branch.color
+        } else {
+            middleBranch?.removeFromSuperview()
+            middleBranch = nil
+        }
         branchIcon.isHidden = !(r.branch != nil && r.hasWorktree)
         branchIcon.strokeColor = DesignGeometry.usesClassic(self) ? SB.c(\.mutedForeground, 0.4) : SB.c(\.iconMuted)
         scratchMachine.kind = showsScratch ? r.scratchMachine : nil
@@ -908,14 +922,14 @@ final class SidebarCardRowView: SidebarRowBase {
             provider.frame = NSRect(x: right - stackWidth, y: top + 27, width: stackWidth, height: 14)
             title.frame.size.width = max(0, right - left - stackWidth - (stackWidth > 0 ? 6 : 0))
             branch.isHidden = true
-            middleBranch.isHidden = true
+            middleBranch?.isHidden = true
             branchIcon.isHidden = true
             scratchMachine.isHidden = true
             machine.isHidden = true
             return
         }
-        branch.isHidden = !DesignGeometry.usesClassic(self)
-        middleBranch.isHidden = !branch.isHidden
+        branch.isHidden = middleBranch != nil
+        middleBranch?.isHidden = false
         // Line 3: branch and provider, `mt-0.5`, text-xs. Dither: the meta line under the title.
         let y3 = capy ? top + 21 : top + 46
         let stackWidth = provider.preferredWidth
@@ -948,7 +962,7 @@ final class SidebarCardRowView: SidebarRowBase {
         }
         if !scratchMachine.isHidden { scratchMachine.frame = NSRect(x: bx, y: y3 + 2, width: 12, height: 12); bx += 18 }
         branch.frame = NSRect(x: bx, y: y3, width: max(0, trailing - 6 - bx), height: 16)
-        middleBranch.frame = branch.frame
+        middleBranch?.frame = branch.frame
     }
 }
 
@@ -1134,7 +1148,7 @@ final class SidebarSlimRowView: SidebarRowBase {
             time.font = SB.tabular(12)
         }
         wokeIcon.isHidden = !(woke || (!DesignGeometry.usesClassic(self) && r.snoozeLabel != nil)) || lift != nil
-        wokeButton.isHidden = wokeIcon.isHidden
+        wokeButton.isHidden = !woke || lift != nil
         if !woke { time.isUnderlined = false }
         HoverReveal.fade([time, wokeIcon], visible: !hovered || r.isWoke) // Sidebar.tsx:1857-1860
         if actionKind != r.action {

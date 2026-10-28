@@ -1,10 +1,7 @@
 import AppKit
 
-/// T3's `StandalonePage` (`apps/web/src/components/ui/standalone-page.tsx`): an entry page outside the app
-/// shell with a centered 576px card (eyebrow, title, text, then caller content).
-/// T3's tone backdrops (radial emerald, red or blue glows) sit under an opaque 145deg overlay in the same
-/// layer, so only the overlay shows; we paint that overlay at the layer's 80% opacity and nothing else.
-/// Spec: docs/research/recovered/ui-components-b.md section 20.
+/// T3's `StandalonePage` (ui/standalone-page.tsx:8-35): a centered dialog surface with an entry header.
+/// CandyWrapper uses its own wordmark. Its custom themes retain the former card and backdrop.
 public final class StandalonePageView: DSView {
     public enum Tone: String, Sendable { case pairing, error, brand }
     public let tone: Tone

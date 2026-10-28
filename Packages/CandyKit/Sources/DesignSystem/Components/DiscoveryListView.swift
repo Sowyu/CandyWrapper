@@ -45,6 +45,8 @@ public final class DiscoveryListView: BoxView {
     }
 
     public override func updateLayer() {
+        boxStyle.radius = DesignGeometry.radius(14, in: self)
+        layer?.cornerRadius = boxStyle.radius
         let color = Themed.color(\.contrastBorder, 0.6).cgColor(in: self)
         dividers.forEach { $0.backgroundColor = color }
     }

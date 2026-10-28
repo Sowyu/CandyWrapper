@@ -39,6 +39,11 @@ public final class PanelTabCloseButton: ControlView {
         restyle()
     }
 
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        restyle()
+    }
+
     private func restyle() {
         var box = BoxStyle()
         box.radius = DesignGeometry.radius(6, in: self) // rounded-sm
