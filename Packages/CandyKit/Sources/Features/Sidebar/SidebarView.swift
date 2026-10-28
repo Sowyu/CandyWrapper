@@ -571,6 +571,7 @@ public final class SidebarContentView: DSView {
     func setSearchQuery(_ query: String) {
         actions.clearShellSearch()
         searchQuery = query
+        needsLayout = true
         searchHighlight = 0
         searchTask?.cancel()
         searchMatches = []
@@ -985,7 +986,12 @@ public final class SidebarContentView: DSView {
             stackTop = providerUpdatePill.frame.minY
             footerTop = stackTop - 4
         }
-        if !undoNotice.isHidden {
+        // T3 3814 Sidebar.tsx:3373 and sidebar/SidebarListMarkers.tsx:127-132: overlay
+        // above the first shelf, with the footer hosting search and empty-list notices.
+        let overlaysShelf = !ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !isSearching && list.firstShelfIndex != nil
+        list.undoNoticeOverlay = overlaysShelf && !undoNotice.isHidden ? undoNotice : nil
+        if list.undoNoticeOverlay == nil, undoNotice.superview !== self { addSubview(undoNotice) }
+        if !undoNotice.isHidden, !overlaysShelf {
             let nh = undoNotice.height(forWidth: w - 16)
             undoNotice.frame = NSRect(x: 8, y: stackTop - 8 - nh, width: w - 16, height: nh)
             footerTop = undoNotice.frame.minY - 4

@@ -60,6 +60,41 @@ struct SidebarActionWiringTests {
         window.contentView = nil
     }
 
+    @Test func undoNoticeOverlaysTheFirstShelfWithoutShrinkingTheList() throws {
+        let content = SidebarContentView()
+        content.now = { SidebarPreview.referenceNow }
+        let window = host(content)
+        defer { window.contentView = nil }
+        content.setSnapshot(SidebarPreview.richSnapshot(), animated: false)
+        content.layoutSubtreeIfNeeded()
+        let viewport = content.scrollArea.frame
+        let tops = content.list.tops
+        content.undoNoticeText = "Settled 1 thread,"
+        content.layoutSubtreeIfNeeded()
+        #expect(content.scrollArea.frame == viewport)
+        #expect(content.list.tops == tops)
+        #expect(content.undoNotice.superview === content.list)
+        let shelf = try #require(content.list.firstShelfIndex)
+        #expect(content.undoNotice.frame.maxY == content.list.tops[shelf])
+        #expect(content.list.subviews.last === content.undoNotice)
+        content.setSearchText("greeting")
+        content.layoutSubtreeIfNeeded()
+        #expect(content.undoNotice.superview === content)
+        #expect(content.scrollArea.frame.maxY <= content.undoNotice.frame.minY)
+        content.setSearchText("")
+        content.undoNoticeText = nil
+        content.layoutSubtreeIfNeeded()
+        #expect(content.list.undoNoticeOverlay == nil)
+        #expect(content.undoNotice.isHidden)
+        let capture = SidebarContentView(frame: content.frame)
+        capture.now = { SidebarPreview.referenceNow }
+        capture.setSnapshot(SidebarPreview.richSnapshot(), animated: false)
+        capture.undoNoticeText = "Settled 1 thread,"
+        capture.layoutSubtreeIfNeeded()
+        ThreadDetailsScrollTests.scrollToEnd(capture.scrollArea)
+        try Fidelity.capture(capture, name: "sidebar-undo-overlay", size: content.frame.size, sidebar: true)
+    }
+
     @Test func undoNoticeAndUtilityFooter() {
         let content = SidebarContentView()
         let window = host(content)
