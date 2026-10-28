@@ -15,6 +15,10 @@
     "height" : 312,
     "width" : 796
   },
+  "source-control.unauthenticated" : {
+    "height" : 84,
+    "width" : 796
+  },
   "source-control.vcs" : {
     "height" : 173,
     "width" : 796

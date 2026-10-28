@@ -5,7 +5,7 @@ Version Control discovery rows) and Settings > Providers (the instance list).
 Class strings are copied from apps/web/src/components/settings/{ProjectSettingsPanel.tsx, ProjectActionsSettings.tsx,
 ProjectActionsList.tsx, ProjectDefaultsSettings.tsx, SourceControlSettings.tsx, ProviderSettingsPanel.tsx,
 ProviderInstanceCard.tsx, settingsLayout.tsx}, components/chat/ProviderInstanceIcon.tsx and components/Icons.tsx at the
-tag in T3_VERSION. Rows, sections, switches and selects come from gen-settings-spec.py and gen-connections-spec.py.
+3814 design tag. Rows, sections, switches and selects come from gen-settings-spec.py and gen-connections-spec.py.
 Usage: /usr/bin/python3 -I scripts/gen-settings-pages2-spec.py [t3code checkout]
 """
 import json, os, re, sys
@@ -19,7 +19,9 @@ exec(src[:src.index("behavior = section(")], ns)
 lucide, button, merge, conn, pop = ns["lucide"], ns["button"], ns["merge"], ns["conn"], ns["pop"]
 switch, row, select, SPAN, LAYERS, GROUP, ROW = ns["switch"], ns["row"], ns["select"], ns["SPAN"], ns["LAYERS"], ns["GROUP"], ns["ROW"]
 form_ns = conn["form_ns"]
-section = conn["section"]
+def section(title, children, icon="", action=""):
+    return conn["section"](title, children, icon, action).replace(
+        "text-sm font-normal text-foreground/70", "text-base font-semibold text-foreground")
 exec(open(os.path.join(ROOT, "scripts/gen-forms-spec.py")).read().split("cases = [{\"name\": f\"{v}.default\"")[0].split("def svg(")[0], form_ns)
 fsrc = open(os.path.join(ROOT, "scripts/gen-forms-spec.py")).read()
 exec(fsrc[fsrc.index("BADGE = "):fsrc.index("cases = [{\"name\": f\"{v}.default\"")], form_ns)
@@ -47,13 +49,16 @@ def badge(text, variant="warning"):
     return f'<span class="{b["BADGE_BASE_NO_RADIUS"]} {b["BADGE_SIZES"]["sm"]} {b["BADGE_VARIANTS"][variant]}" data-slot="badge">{text}</span>'
 
 
+REST_LAYERS = SPAN.format(LAYERS).replace('class="', 'class="opacity-0 ', 1)
+
+
 def server_row(title, desc, control, reset=""):
     """SettingsRow with the inheritance indicator and a reset span."""
     return (f'<div data-slot="settings-row" class="{ROW}"><div class="flex flex-col gap-3 @min-[32rem]/settings-row:grid '
             '@min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">'
             f'<div class="min-w-0 flex-1 space-y-1"><div class="flex min-h-5 items-center gap-1.5"><h3 class="text-sm font-medium text-foreground">{title}</h3>'
-            f'{SPAN.format(LAYERS)}{SPAN.format(reset)}</div>'
-            f'<p class="max-w-xl text-xs leading-normal text-muted-foreground/80">{desc}</p></div>'
+            f'{REST_LAYERS}{SPAN.format(reset)}</div>'
+            f'<p class="max-w-2xl text-balance text-xs leading-normal text-muted-foreground">{desc}</p></div>'
             f'<div class="flex w-full min-w-0 shrink-0 items-center gap-2 @min-[32rem]/settings-row:w-auto @min-[32rem]/settings-row:justify-end">{control}</div></div></div>')
 
 
@@ -77,7 +82,7 @@ action_title = (f'<span class="flex min-w-0 items-center gap-2">{lucide("list-ch
 action_control = ('<span class="text-xs text-muted-foreground">⇧⌘L</span><span class="flex shrink-0 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">'
                   + button("ghost-muted", "icon-xs", lucide("settings", "size-3.5")) + "</span>")
 action_row = row("", "", action_control, title_html=action_title,
-                 desc_html='<p class="max-w-xl text-xs leading-normal text-muted-foreground/80"><code class="block max-w-full truncate font-mono">bun run lint</code></p>')
+                 desc_html='<p class="max-w-2xl text-balance text-xs leading-normal text-muted-foreground"><code class="block max-w-full truncate font-mono">bun run lint</code></p>')
 action_row = action_row.replace(f'class="{ROW}"', f'class="{ROW.replace(" py-3", "")} group py-2"', 1)
 actions = section("Actions", server_row("Actions", "Commands that run in this project's checkout or its worktree, with optional shortcuts.",
                                         f'<div class="flex flex-wrap items-center gap-1.5">{ADD_ACTION}</div>') + action_row)
@@ -144,11 +149,21 @@ providers = ('<div class="border-b border-border/60 bg-muted/10"><div class="div
                             "Authenticated · Claude Max Subscription", selected=True)
              + ADD_ROW + "</div></div>")
 
+# sourceControlPresentation.tsx uses the provider's filled artwork, not lucide's Github glyph.
+github_source = open(os.path.join(T3, "packages/source-control-github/src/shared/icon.ts")).read()
+github_path = re.search(r'd: "([^"]+)"', github_source).group(1)
+github_icon = f'<svg viewBox="0 0 16 16" fill="currentColor" class="size-4.5 text-foreground/80" aria-hidden="true"><path d="{github_path}" fill-rule="evenodd" clip-rule="evenodd"/></svg>'
+not_authenticated = discovery_row("GitHub", None,
+    "GitHub is not authenticated on this server. Sign in or configure credentials using the gh tool on the server host to enable change request features.",
+    github_icon, "bg-muted-foreground/35", True, False)
+not_authenticated = not_authenticated.replace('GitHub</span>', 'GitHub</span>' + badge("Not authenticated", "secondary"))
+
 W796 = "display:block;width:796px"
 cases = [
     {"name": "project.overview", "html": overview, "wrapperStyle": W796, "native": {"kind": "overview"}},
     {"name": "project.actions", "html": actions, "wrapperStyle": W796, "native": {"kind": "actions"}},
     {"name": "source-control.repositories", "html": repositories, "wrapperStyle": W796, "native": {"kind": "repositories"}},
+    {"name": "source-control.unauthenticated", "html": not_authenticated, "wrapperStyle": W796, "native": {"kind": "unauthenticated"}},
     {"name": "source-control.vcs", "html": vcs, "wrapperStyle": W796, "native": {"kind": "vcs"}},
     {"name": "providers.list", "html": providers, "wrapperStyle": "display:block;width:272px", "native": {"kind": "providers"}},
 ]
