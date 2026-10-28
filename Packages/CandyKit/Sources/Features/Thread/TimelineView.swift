@@ -24,7 +24,7 @@ enum TimelineChange: Equatable, Sendable {
 /// measured height is cached by id, width and content; rows never measured use an estimate. When
 /// heights or rows above the viewport change, the first visible row keeps its place on screen.
 /// While the viewport touches the end, it follows the end as content grows (`maintainScrollAtEnd`).
-public final class TimelineView: DSView {
+public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRotorItemSearchDelegate, @preconcurrency NSAccessibilityElementLoading {
     /// Paint only: while another thread opens, the rows still on screen belong to the old thread and take
     /// no clicks, scrolls or hovers (T3 renders them inert, ChatView.tsx:3964-3974).
     public var isInert = false
@@ -259,6 +259,11 @@ public final class TimelineView: DSView {
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.verticalScrollElasticity = .allowed
         scrollView.documentView = document
+        setAccessibilityRole(.group)
+        setAccessibilityLabel("Messages")
+        let headings = NSAccessibilityCustomRotor(rotorType: .heading, itemSearchDelegate: self)
+        headings.itemLoadingDelegate = self
+        setAccessibilityCustomRotors([headings])
         scrollView.onGesture = { [weak self] delta, canScroll, towardEnd in
             self?.onComposerScrollGesture?(delta, canScroll, towardEnd)
             // An upward wheel still asks for history when a small folded window fits.
@@ -497,6 +502,29 @@ public final class TimelineView: DSView {
             return false
         }
         return item.map { revealFindEntry($0.id) } ?? false
+    }
+
+    // T3 3814 MessagesTimeline.tsx:794-802 keeps endpoint headings mounted. A native rotor
+    // can reach every loaded message without creating offscreen row views.
+    public func rotor(_ rotor: NSAccessibilityCustomRotor, resultFor searchParameters: NSAccessibilityCustomRotor.SearchParameters) -> NSAccessibilityCustomRotor.ItemResult? {
+        guard !isInert else { return nil }
+        let current = searchParameters.currentItem?.itemLoadingToken as? String
+        let start = current.flatMap { indexById[$0] }
+        let forward = searchParameters.searchDirection == .next
+        let step = forward ? 1 : -1
+        let first = start.map { $0 + step } ?? (forward ? 0 : items.count - 1)
+        for i in stride(from: first, to: forward ? items.count : -1, by: step) {
+            guard let author = items[i].messageAuthor,
+                  searchParameters.filterString.isEmpty || author.localizedCaseInsensitiveContains(searchParameters.filterString) else { continue }
+            return NSAccessibilityCustomRotor.ItemResult(itemLoadingToken: items[i].id as NSString, customLabel: author)
+        }
+        return nil
+    }
+
+    public func accessibilityElement(withToken token: NSAccessibilityLoadingToken) -> (any NSAccessibilityElementProtocol)? {
+        guard !isInert, let id = token as? String, let i = indexById[id], items[i].messageAuthor != nil,
+              revealFindEntry(id) else { return nil }
+        return visible[id]
     }
 
     // MARK: Geometry

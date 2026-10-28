@@ -33,6 +33,49 @@ struct ThreadTimelineTests {
 
     static func viewport(_ t: TimelineView) -> NSRect { t.scrollView.contentView.bounds }
 
+    @Test func messageRotorReachesVirtualizedEndpoints() throws {
+        let items = try Self.manyItems()
+        let t = Self.timeline(items)
+        t.scroll(toFraction: 0.5)
+        let live = t.liveViewCount
+        let rotor = try #require(t.accessibilityCustomRotors().first)
+        let search = NSAccessibilityCustomRotor.SearchParameters()
+        search.searchDirection = .next
+        let first = try #require(t.rotor(rotor, resultFor: search))
+        #expect(first.itemLoadingToken as? String == items.first { $0.messageAuthor != nil }?.id)
+        search.searchDirection = .previous
+        let last = try #require(t.rotor(rotor, resultFor: search))
+        #expect(last.itemLoadingToken as? String == items.last { $0.messageAuthor != nil }?.id)
+        #expect(t.liveViewCount == live, "Searching headings must not mount offscreen rows")
+        let token = try #require(first.itemLoadingToken)
+        #expect(t.accessibilityElement(withToken: token) != nil)
+        let row = try #require(t.view(forRow: token as! String))
+        #expect(row.isAccessibilityElement())
+        #expect(row.accessibilityLabel() == first.customLabel)
+        search.currentItem = first
+        #expect(t.rotor(rotor, resultFor: search) == nil)
+        search.searchDirection = .next
+        #expect(t.rotor(rotor, resultFor: search)?.itemLoadingToken as? String != token as? String)
+        t.setItems([])
+        #expect(t.accessibilityElement(withToken: token) == nil)
+        #expect(t.rotor(rotor, resultFor: search) == nil)
+    }
+
+    @Test func foldedMessagesKeepTheirAuthorInTheRotor() throws {
+        let items = try Self.manyItems()
+        var item = try #require(items.first { $0.row.message?.role == .user })
+        var message = try #require(item.row.message)
+        message.createdBy = "agent"
+        message.scheduledTaskId = "schedule"
+        item.row.kind = .message(message, projectedItem: nil, showAssistantMeta: false,
+                                 showAssistantCopyButton: false, assistantCopyStreaming: false, turnDiffSummary: nil)
+        #expect(item.messageAuthor == "Automation")
+        message.scheduledTaskId = nil
+        item.row.kind = .message(message, projectedItem: nil, showAssistantMeta: false,
+                                 showAssistantCopyButton: false, assistantCopyStreaming: false, turnDiffSummary: nil)
+        #expect(item.messageAuthor == "Agent")
+    }
+
     @Test func onlyRowsNearTheViewportHaveViews() throws {
         let items = try Self.manyItems()
         #expect(items.count > 100)
