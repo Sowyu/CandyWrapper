@@ -7,8 +7,8 @@ import T3Protocol
 /// Working section moved here from General; Guest links is new. Signed out of T3 Connect, Guest links offers
 /// Sign in in place of its switch (`GuestLinksRowWithSignIn`), but only once the account has loaded.
 public final class BetaSettingsView: SettingsPageBase {
-    static let guestDetail = "Share a thread with a guest who watches it live in their browser and sends messages you approve. Needs T3 Connect: sign in and link this machine in Connections. While it is off, every guest link stops working."
-    static let linkedDetail = "Let agents here work on your other machines, and theirs here. Turn it on for each machine, then link them in Connections. While it is off, nothing new starts over a link; tasks already running finish."
+    static let guestDetail = "Share a thread with a guest who watches it live in their browser and sends messages you approve. Needs T3 Connect: sign in and link this machine in Environments. While it is off, every guest link stops working."
+    static let linkedDetail = "Let agents here work on your other machines, and theirs here. Turn it on for each machine, then link them in Environments. While it is off, nothing new starts over a link; tasks already running finish."
     static let guestSignedOutDetail = "Share a thread with a guest who watches it live in their browser and sends messages you approve. Sign in to T3 Connect to use guest links."
 
     public override init(context: SettingsPageContext) {
@@ -45,7 +45,9 @@ public final class BetaSettingsView: SettingsPageBase {
             // Servers before Nightly 3814 can't link (settings.ts:1209, environment.ts:139-142).
             linked.isHidden = !self.context.scope.allStore("linkedEnvironmentsEnabled")
         }
-        items = [section("beta", "Beta", [folders, guest, linked])]
+        let plan = clientSwitch("legacy-plan-mode", "Restore Build/Plan, /plan, /default, and Shift+Tab. Off uses build mode.", key: "planModeEnabled", title: "Plan mode (legacy)")
+        let meter = clientSwitch("legacy-context-window-indicator", "Shows context window usage as a circular indicator in the composer.", key: "contextWindowMeterEnabled", title: "Context window indicator (legacy)")
+        items = [section("beta", "Beta", [folders, guest, linked]), section("legacy-features", "Legacy features", [plan, meter])]
         binder.refresh()
     }
 }

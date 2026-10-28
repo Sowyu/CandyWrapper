@@ -192,6 +192,10 @@ public struct ConnectionsActions {
 public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     public var actions = ConnectionsActions()
     public private(set) var model = ConnectionsPageModel()
+    /// ConnectionsSettings.tsx:155,1468-1476 (3814). Nil keeps the combined preview used by older captures.
+    public var showsAccess: Bool? { didSet { relayout() } }
+    private let thisAppSection = SettingsSectionView(title: "This app", rows: [])
+    private let localSettingRow = SettingsRowView(title: "Local environment")
     private(set) var machineSection: SettingsSectionView?
     private var hostRows: [String: SettingsRowView] = [:]
     private lazy var machineMore: ButtonView = {
@@ -286,6 +290,15 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
                 rows.append(machinePermissions)
             }
             section.group.rows = rows
+            section.group.rowFilter = { [weak self] row in
+                guard let self else { return true }
+                return self.showsAccess == nil || row !== self.hostRows["local-environment"]
+            }
+            if let local = m.rows.first(where: { $0.id == "local-environment" }) {
+                configure(localSettingRow, local)
+                thisAppSection.group.rows = [localSettingRow]
+                if thisAppSection.superview == nil { addSubview(thisAppSection) }
+            }
         } else {
             machineSection?.removeFromSuperview()
             machineSection = nil
@@ -527,46 +540,52 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         if access { accessSection.isOpen = true }
     }
 
+    private var visibleSections: [NSView & SettingsGroupRow] {
+        var parts: [NSView & SettingsGroupRow] = []
+        if showsAccess != false {
+            if let machineSection { parts.append(machineSection) }
+            if accessSection.superview != nil { parts.append(accessSection) }
+        }
+        if showsAccess != true {
+            if showsAccess == false, thisAppSection.superview != nil { parts.append(thisAppSection) }
+            parts.append(environmentsSection)
+            parts += model.linkedEnvironments.compactMap { linkedSections[$0.hostId]?.section }
+            if loadBalancingSection.superview != nil { parts.append(loadBalancingSection) }
+        }
+        return parts
+    }
+
+    public func searchAnchor(_ id: String) -> NSView? {
+        switch id {
+        case "remote-environments": environmentsSection
+        case "linked-environments": model.linkedEnvironments.first.flatMap { linkedSections[$0.hostId]?.section }
+        case "load-balancing": loadBalancingSection
+        case "connections-environment": machineSection
+        default: hostRows[id]
+        }
+    }
+
     public func height(forWidth width: CGFloat) -> CGFloat {
-        var h: CGFloat = 0
-        if let machineSection { h += machineSection.height(forWidth: width) + 32 }
-        if accessSection.superview != nil { h += accessSection.height(forWidth: width) + 32 }
-        h += environmentsSection.height(forWidth: width)
-        for l in model.linkedEnvironments { if let s = linkedSections[l.hostId]?.section { h += 32 + s.height(forWidth: width) } }
-        if loadBalancingSection.superview != nil { h += 32 + loadBalancingSection.height(forWidth: width) }
-        return h
+        let parts = visibleSections
+        return parts.reduce(0) { $0 + $1.height(forWidth: width) } + CGFloat(max(0, parts.count - 1)) * 32
     }
 
     public override func layout() {
         super.layout()
+        let shown = visibleSections
+        let all: [NSView] = [thisAppSection, environmentsSection, accessSection, loadBalancingSection]
+            + (machineSection.map { [$0] } ?? []) + linkedSections.values.map(\.section)
+        for part in all { part.isHidden = !shown.contains(where: { $0 === part }) }
         var y: CGFloat = 0
-        if let machineSection {
-            let h = machineSection.height(forWidth: bounds.width)
-            machineSection.frame = NSRect(x: 0, y: y, width: bounds.width, height: h)
-            machineSection.needsLayout = true
-            machineSection.group.needsLayout = true
+        for part in shown {
+            let h = part.height(forWidth: bounds.width)
+            part.frame = NSRect(x: 0, y: y, width: bounds.width, height: h)
+            part.needsLayout = true
+            (part as? SettingsSectionView)?.group.needsLayout = true
             y += h + 32
-        }
-        if accessSection.superview != nil {
-            let h = accessSection.height(forWidth: bounds.width)
-            accessSection.frame = NSRect(x: 0, y: y, width: bounds.width, height: h)
-            y += h + 32
-        }
-        let eh = environmentsSection.height(forWidth: bounds.width)
-        environmentsSection.frame = NSRect(x: 0, y: y, width: bounds.width, height: eh)
-        y += eh
-        for l in model.linkedEnvironments {
-            guard let s = linkedSections[l.hostId]?.section else { continue }
-            let h = s.height(forWidth: bounds.width)
-            s.frame = NSRect(x: 0, y: y + 32, width: bounds.width, height: h)
-            s.needsLayout = true
-            s.group.needsLayout = true
-            y += 32 + h
-        }
-        if loadBalancingSection.superview != nil {
-            loadBalancingSection.frame = NSRect(x: 0, y: y + 32, width: bounds.width, height: loadBalancingSection.height(forWidth: bounds.width))
         }
     }
+
 }
 
 extension EmptyView: SettingsGroupRow {}

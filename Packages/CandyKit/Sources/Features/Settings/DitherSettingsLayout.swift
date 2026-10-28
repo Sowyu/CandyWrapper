@@ -111,7 +111,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
             .init(.providers),
         ]
         case .threads: return [
-            .init(.general, scope: true, [G("organization", "Sidebar", rows: ["project-grouping", "project-order",
+            .init(.general, scope: true, [G("organization", "Sidebar", rows: ["project-grouping", "project-order", "working-shelf",
                                                                               "auto-settle-merged-threads", "auto-settle-inactive-threads",
                                                                               "days-before-auto-settle", "auto-settle-keep-pull-requests"])]),
             .init(.general, [G("organization", "Usage limits", rows: ["auto-resume-limited-threads", "snooze-limited-threads",
@@ -151,6 +151,13 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
     public static func home(of page: SettingsSection) -> DitherSettingsSection? {
         switch page {
         case .projects: .project
+        case .chat, .diffs: .general
+        case .threads: .threads
+        case .browser, .devices: .tools
+        case .worktrees: .projects
+        case .access: .machines
+        case .maintenance: .advanced
+        case .about: .about
         case .general: .general
         case .appearance: .appearance
         case .keybindings: .keyboard

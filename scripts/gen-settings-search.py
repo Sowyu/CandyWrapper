@@ -87,8 +87,11 @@ TITLES = {"Open pull requests in T3 Code": "Open pull requests in CandyWrapper"}
 STRING = r'"(?:[^"\\]|\\.)*"'
 FLAGS = ["desktopOnly", "macOnly", "windowsOnly", "cloudOnly", "environmentOnly", "providerSettingsOnly",
          "macProviderSettingsOnly", "localBackendManagementOnly", "localEnvironmentOnly", "wslAvailableOnly",
-         "managedTunnelOnly", "secondary", "requiresThreadAutoSettlement"]
-PATHS = {"/settings/projects": "projects", "/settings/general": "general", "/settings/diagnostics": "diagnostics",
+         "managedTunnelOnly", "secondary", "requiresThreadAutoSettlement", "peerLinksOnly"]
+PATHS = {"/settings/chat": "chat", "/settings/diffs": "diffs", "/settings/threads": "threads",
+         "/settings/browser": "browser", "/settings/devices": "devices", "/settings/worktrees": "worktrees",
+         "/settings/access": "access", "/settings/maintenance": "maintenance", "/settings/labs": "beta", "/settings/about": "about",
+         "/settings/projects": "projects", "/settings/general": "general", "/settings/diagnostics": "diagnostics",
          "/settings/appearance": "appearance",
          "/settings/keybindings": "keybindings", "/settings/snap-shot": "snapShots", "/settings/providers": "providers",
          "/settings/integrations": "integrations", "/settings/scheduled-tasks": "scheduledTasks",
