@@ -3,6 +3,21 @@ import Testing
 @testable import T3Client
 
 struct EnvironmentCatalogTests {
+    @Test func untargetedPairingCannotAppendAnUnfamiliarRouteOrSaveItsCredential() throws {
+        let (catalog, dir) = makeCatalog()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let saved = EnvironmentRegistration(environmentId: "env", label: "Studio", httpBaseURL: URL(string: "https://saved.example")!)
+        try catalog.add(saved, token: "saved-token")
+        let unknown = EnvironmentRegistration(environmentId: "env", label: "Studio", httpBaseURL: URL(string: "https://unknown.example")!)
+        #expect(throws: PairingError.self) { try catalog.add(unknown, token: "unknown-token", knownAddressOnly: true) }
+        #expect(catalog.load().first?.routes == saved.routes)
+        #expect(try catalog.token(environmentId: "env", route: unknown.httpBaseURL) == nil)
+        try Pairing.assertKnownAddress(environmentId: "env", route: URL(string: "https://saved.example/")!, saved: [saved])
+        try Pairing.assertKnownAddress(environmentId: "new", route: unknown.httpBaseURL, saved: [saved])
+        try catalog.add(unknown, token: "targeted-token")
+        #expect(catalog.load().first?.routes.count == 2)
+    }
+
     private func makeCatalog() -> (EnvironmentCatalog, URL) {
         let dir = FileManager.default.temporaryDirectory.appending(path: "cw-catalog-\(UUID().uuidString)")
         let catalog = EnvironmentCatalog(file: dir.appending(path: "environments.json"),
