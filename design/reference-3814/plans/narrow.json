@@ -1,0 +1,96 @@
+{
+  "base": "http://127.0.0.1:47402",
+  "width": 800,
+  "height": 780,
+  "scale": 2,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "states": [
+    {
+      "name": "04n-new-thread-narrow",
+      "path": "/",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "03n-kitchen-sink-narrow",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "js": "(()=>{const e=[...(document.querySelector('[data-app-modal]')||document).querySelectorAll('*')].filter(e=>e.scrollHeight>e.clientHeight+30&&['auto','scroll'].includes(getComputedStyle(e).overflowY)&&e.clientWidth>350).sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(e)e.scrollTop=(e.scrollHeight-e.clientHeight)*0.3;return e?.scrollTop})()",
+          "log": true
+        }
+      ]
+    },
+    {
+      "name": "11n-right-panel-narrow",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+        },
+        {
+          "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018"
+        },
+        {
+          "wait": 600
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "wait": 800
+        },
+        {
+          "key": "b",
+          "meta": true,
+          "alt": true
+        },
+        {
+          "wait": 1200
+        }
+      ]
+    }
+  ]
+}

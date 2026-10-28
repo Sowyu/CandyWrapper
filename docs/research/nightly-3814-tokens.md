@@ -155,3 +155,7 @@ Tailwind inlines or drops unused theme declarations. These source changes theref
 `scripts/extract-tokens --version v0.1.4-nightly.20261028.3814 --load <resolved dump>` reproduces all four generated artifacts byte for byte. Reviewed the diff and verified that `T3_VERSION`, `ServerVersionSkewLogic`, component sources, references and fidelity thresholds remain unchanged.
 
 Default-theme fidelity failures are expected because references and components still target the older design. The black canvas alone crosses the 8/255 pixel tolerance against the previous neutral-950 background. References, ceilings and components stay unchanged.
+
+## 3814 to 3824
+
+The port follows 3824 where 3824 changed a design piece. 3824's stylesheet (`main-Bph4ghsZ.css`) changes no color, radius, shadow or type token. Two composer lengths are gone with the old composer seam (#25869): `--spacing-composer-seam` (`calc(.25rem * 4 - 1px)`) and `--chat-composer-context-extension`. The chat table rules changed with #26449 (no `min-width: max-content`, cells wrap up to 24rem).
