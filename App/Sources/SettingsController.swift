@@ -33,7 +33,7 @@ final class SettingsController {
     /// Server setting saves, one at a time (audit SU1).
     let settingsWrites = SettingsWriteQueue()
     var scopeSelection = SettingsScopeSelection()
-    var general: GeneralSettingsView?
+    var general: ConcernSettingsView?
     var appearance: AppearanceSettingsView?
     var keybindingsPage: KeybindingsSettingsView?
     /// Project, Providers, Integrations, Source Control, Storage, Archive, Diagnostics and SnapShots (WP7.7b), built on first open.
@@ -114,7 +114,6 @@ final class SettingsController {
         built = true
         page.onEscape = { [weak self] in self?.escape() }
         nav.onSelect = { [weak self] section in self?.show(section) }
-        nav.onSelectDither = { [weak self] section in self?.show(dither: section) }
         nav.onSearchResult = { [weak self] item in self?.jump(to: item) }
         page.header.restore.action = { [weak self] in self?.confirmRestoreDefaults() }
         setUpPageContext()

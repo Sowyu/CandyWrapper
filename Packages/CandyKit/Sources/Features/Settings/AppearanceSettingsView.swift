@@ -34,6 +34,12 @@ public final class AppearanceSettingsView: SettingsPageBase {
         items = [colorsSection(), interfaceSection(), motionSection(), typographySection()]
     }
 
+    /// Diff colors moved to Diffs & pull requests in 3814; keep the row factory for that page.
+    public func splitDiffsPage() {
+        guard let section = anchors["appearance-interface"] as? SettingsSectionView, let diff = anchors["diff-color-scheme"] else { return }
+        section.group.rowFilter = { $0 !== diff }
+    }
+
     /// A search jump to an advanced font row turns Advanced on first (`ADVANCED_TYPOGRAPHY_TARGET_IDS`).
     public override func anchor(_ id: String) -> NSView? {
         if ["prompt-font", "terminal-font", "font-smoothing"].contains(id), !isAdvanced { setAdvanced(true) }

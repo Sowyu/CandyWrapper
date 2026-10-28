@@ -103,9 +103,11 @@ public final class StorageSettingsView: ScopedSettingsPage {
     private var supported: [SettingsScopeEnvironment] { context.scope.connected.filter { $0.capabilities.contains("storageCleanupRun") } }
 
     /// Follows each supported environment's report stream while the page shows; drops the rest.
+    var reportsEnabled = true
+
     private func syncReports() {
         syncDatabases()
-        let want = window == nil || isProject ? [] : Set(supported.map(\.id))
+        let want = window == nil || isProject || !reportsEnabled ? [] : Set(supported.map(\.id))
         for (id, task) in reportTasks where !want.contains(id) {
             task.cancel()
             reportTasks[id] = nil
@@ -122,7 +124,7 @@ public final class StorageSettingsView: ScopedSettingsPage {
 
     private func syncDatabases() {
         let dismissed = Set(UserDefaults.standard.stringArray(forKey: Self.dismissedKey) ?? [])
-        let environments = window == nil || isProject ? [] : context.scope.connected.filter {
+        let environments = window == nil || isProject || !reportsEnabled ? [] : context.scope.connected.filter {
             $0.capabilities.contains("databaseStorage") && !dismissed.contains($0.id)
         }
         databaseOrder = environments.map(\.id)
@@ -308,6 +310,7 @@ public final class StorageSettingsView: ScopedSettingsPage {
         let modeSelect = settingsSelect(["Inherit", "Off", "Custom"], width: nil)
         modeSelect.setAccessibilityLabel("Automatic worktree cleanup")
         modeRow = row(nil, title: "Automatic worktree cleanup", detail: "", control: modeSelect)
+        anchors["storage-worktree-mode"] = modeRow
         _ = bindServerRow(modeRow, keys: ["worktreeCleanup"], reset: nil)
         modeSelect.onChange = { [weak self] i in
             guard let self else { return }
