@@ -14,17 +14,21 @@ public final class ConcernSettingsView: SettingsPageBase {
         self.section = section
         let slices = Self.slices(section)
         sources = slices.map { slice in
-            switch slice.page {
-            case .appearance: AppearanceSettingsView(context: context)
-            case .integrations: IntegrationsSettingsView(context: context)
+            let groups = slice.groups.map { Set($0.map(\.key)) }
+            return switch slice.page {
+            case .appearance: AppearanceSettingsView(context: context, groups: groups)
+            case .integrations: IntegrationsSettingsView(context: context, groups: groups)
             case .storage: StorageSettingsView(context: context)
-            case .sourceControl: SourceControlSettingsView(context: context)
+            case .sourceControl: SourceControlSettingsView(context: context, discoveryEnabled: section == .sourceControl)
             case .providers: ProvidersSettingsView(context: context)
-            default: GeneralSettingsView(context: context)
+            default: GeneralSettingsView(context: context, groups: groups)
             }
         }
         super.init(context: context)
+        let clientOnly = [.general, .chat, .diffs, .about].contains(section)
         for (slice, source) in zip(slices, sources) {
+            (source as? GeneralSettingsView)?.usesBoundary = !clientOnly
+            (source as? ScopedSettingsPage)?.usesBoundary = !clientOnly
             if section == .general { (source as? GeneralSettingsView)?.addWorkingShelfRow() }
             if let storage = source as? StorageSettingsView { storage.reportsEnabled = section == .maintenance }
             DitherSettingsSectionView.apply(slice, to: source)
