@@ -1,4 +1,5 @@
 import Foundation
+import T3Protocol
 
 /// A parsed chat message: the block tree T3's ChatMarkdown renders (react-markdown with remark-gfm and
 /// T3's GitHub alert plugin), built from Foundation's Markdown parser with the full syntax.
@@ -465,7 +466,7 @@ public struct MarkdownDocument: Sendable, Equatable {
 extension MarkdownBlock {
     /// What a screen reader reads: the text without markup, one line per block.
     var plainText: String {
-        func runs(_ r: [InlineRun]) -> String { r.map { $0.image != nil && $0.text.isEmpty ? "image" : $0.text }.joined() }
+        func runs(_ r: [InlineRun]) -> String { r.map { $0.image != nil && $0.text.isEmpty ? "image" : $0.threadLinkText() }.joined() }
         switch self {
         case .paragraph(let r), .heading(_, let r): return runs(r)
         case .list(let list):
@@ -543,6 +544,12 @@ public enum MarkdownAlertKind: String, Sendable, CaseIterable {
 
 /// A run of text with one inline style.
 public struct InlineRun: Sendable, Equatable {
+    /// Autolinks carry ids, never a stale title (shared/src/threadLinks.ts:110-150, 3814).
+    func threadLinkText(title: (String) -> String? = { _ in nil }) -> String {
+        guard let link, let ref = ThreadLink(href: link.absoluteString) else { return text }
+        if let live = title(ref.lookupKey), !live.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return live }
+        return text.hasPrefix("t3-thread://") ? "Thread no longer available" : text
+    }
     public var text: String
     public var bold = false
     public var italic = false

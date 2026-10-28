@@ -124,6 +124,7 @@ public final class ThreadViewModel {
     /// Opens another thread of this environment by its local id (`onOpenThread`): a created thread's
     /// "Open chat", a subagent card, a fork divider, "Open thread".
     public var onOpenThread: (@MainActor (ThreadId) -> Void)?
+    public var environmentId: String?
     /// A live, unarchived thread's title by local id (`threadReadTargetTitle`): `t3_thread_read` rows name it.
     public var threadTitle: (@MainActor (ThreadId) -> String?)?
     /// A thread this machine knows by local id, archived ones included (`useThreadShell`), with its project:

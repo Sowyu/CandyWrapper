@@ -543,7 +543,11 @@ final class ThreadController {
         }
         panel.model.onOpenThread = { [weak self] local in
             guard let self, let env = self.openThreadId?.environmentId else { return }
-            self.open(local.scoped(to: env))
+            if let link = ThreadLink(href: local.rawValue), let environment = link.environmentId {
+                self.open(ThreadId(link.threadId).scoped(to: environment))
+            } else {
+                self.open(local.scoped(to: env))
+            }
         }
         panel.model.threadTitle = { [weak self, weak sidebar] local in
             guard let env = self?.openThreadId?.environmentId,
@@ -553,10 +557,11 @@ final class ThreadController {
         }
         panel.model.linkedThread = { [weak self, weak sidebar] local in
             guard let env = self?.openThreadId?.environmentId, let snapshot = sidebar?.snapshot else { return nil }
-            let id = local.scoped(to: env)
-            guard let shell = snapshot.threads.first(where: { $0.id == id }) ?? snapshot.archivedThreads.first(where: { $0.id == id }) else { return nil }
+            guard let link = ThreadLink(href: local.rawValue) ?? ThreadLink(href: "t3-thread://v1/\(local.rawValue)"),
+                  let shell = ThreadLinkResolution.resolve(link, messageEnvironmentId: env, threads: snapshot.threads + snapshot.archivedThreads) else { return nil }
             let project = snapshot.projects.first { $0.id == shell.projectId }
-            return MarkdownContextChips.LinkedThread(title: shell.title, project: project.map(ProjectIconSource.init))
+            let destination = "t3-thread://v2/\(shell.id.environmentId ?? env)/\(shell.id.localId.rawValue)"
+            return MarkdownContextChips.LinkedThread(title: shell.title, project: project.map(ProjectIconSource.init), destination: destination)
         }
         panel.model.onOpenScheduledTask = { [weak self] taskId in
             guard let self, let env = self.openThreadId?.environmentId else { return }
@@ -953,6 +958,7 @@ final class ThreadController {
     var opensElsewhere: ((ThreadId) -> Bool)?
 
     func open(_ id: ThreadId, force: Bool = false) {
+        panel.model.environmentId = id.environmentId
         // A forced open reloads the thread already showing, as after a reconnect.
         if !force, opensElsewhere?(id) == true { return }
         sidebar?.state.activeThreadId = id

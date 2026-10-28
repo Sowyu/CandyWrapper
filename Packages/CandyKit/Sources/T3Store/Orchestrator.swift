@@ -315,7 +315,7 @@ public enum OrchestratorBrief {
     - When an event brings nothing new for the user, reply with exactly "—" and nothing else besides any call or note. The app hides it.
     - Choices go through the question tool as tap options.
     - Keep your digest and plan up to date as notes in orchestrator-memory blocks (note: digest, note: plan). The app saves blocks and never shows them as text, so never write a note's contents into your reply.
-    - Link a thread by its title, like [Release notes](t3-thread://v1/<threadId>).
+    - Link a thread with its environment and id, like <t3-thread://v2/environmentId/threadId>. Keep its title out of the link.
     """
 
     /// Added to every brief, so prompts edited before these existed still get them.

@@ -31,17 +31,22 @@ public struct ThreadMinimapItem: Equatable, Sendable {
     /// read as plain text from its first 1,500 characters, so the tooltip never shows markdown source.
     // ponytail: inline HTML stays as its source text; strip tags like `markdownNodeText` (:67-79) if replies with HTML show it.
     var resolvedPreview: (user: String?, assistant: String?) {
+        resolvePreview()
+    }
+
+    func resolvePreview(threadTitle: (String) -> String? = { _ in nil }) -> (user: String?, assistant: String?) {
         func compact(_ text: String?) -> String? {
             let c = text?.split(whereSeparator: \.isWhitespace).joined(separator: " ") ?? ""
             return c.isEmpty ? nil : c
         }
-        let answer = assistantText.map { MarkdownDocument(parsing: String($0.prefix(1_500)), preservesLineBreaks: false).blocks.map(Self.text).joined(separator: " ") }
+        let answer = assistantText.map { MarkdownDocument(parsing: String($0.prefix(1_500)), preservesLineBreaks: false).blocks.map { Self.text($0, threadTitle: threadTitle) }.joined(separator: " ") }
         return (compact(userText), compact(answer))
     }
 
     /// `markdownNodeText` (:60-86): inline content joins as is, blocks with a space; images give their alt.
-    static func text(_ block: MarkdownBlock) -> String {
-        func runs(_ r: [InlineRun]) -> String { r.map(\.text).joined() }
+    static func text(_ block: MarkdownBlock, threadTitle: (String) -> String? = { _ in nil }) -> String {
+        func text(_ block: MarkdownBlock) -> String { Self.text(block, threadTitle: threadTitle) }
+        func runs(_ r: [InlineRun]) -> String { r.map { $0.threadLinkText(title: threadTitle) }.joined() }
         switch block {
         case .paragraph(let r), .heading(_, let r): return runs(r)
         case .list(let list): return list.items.map { $0.blocks.map(text).joined(separator: " ") }.joined(separator: " ")
@@ -57,6 +62,7 @@ public struct ThreadMinimapItem: Equatable, Sendable {
 
 /// MessagesTimeline.tsx:1785-1934. The strip redraws only after a scroll, content or hover change.
 public final class ThreadMinimapView: DSView {
+    public var threadTitle: ((String) -> String?)?
     public var items: [ThreadMinimapItem] = [] { didSet {
         guard !updatingPreview else { return }
         if let hovered, !items.indices.contains(hovered) { self.hovered = nil }
@@ -187,7 +193,7 @@ public final class ThreadMinimapView: DSView {
     private func showPreview() {
         if let previewPopup { popupHost?.close(previewPopup, returnFocus: false) }
         guard let hovered, items.indices.contains(hovered), let host = popupHost else { return }
-        let content = ThreadMinimapPreviewView(item: items[hovered])
+        let content = ThreadMinimapPreviewView(item: items[hovered], threadTitle: threadTitle ?? { _ in nil })
         let popover = PopoverView(content: content, padding: .compact, width: .md)
         let y = dither ? tickY(hovered) : CGFloat(hovered) / CGFloat(max(1, items.count - 1)) * bounds.height
         previewPopup = host.open(popover, trigger: self, anchorRect: NSRect(x: 24 + padding, y: y, width: 1, height: 2),
@@ -301,8 +307,8 @@ extension ThreadMinimapView {
 private final class ThreadMinimapPreviewView: DSView {
     private let user: LabelView
     private let assistant: TextBlockView
-    init(item: ThreadMinimapItem) {
-        let texts = item.resolvedPreview
+    init(item: ThreadMinimapItem, threadTitle: (String) -> String?) {
+        let texts = item.resolvePreview(threadTitle: threadTitle)
         user = LabelView(texts.user ?? "", font: DSFont.ui(14, weight: .medium))
         user.lineHeight = 20
         assistant = TextBlockView(texts.assistant ?? "", font: DSFont.ui(14), lineHeight: 20, color: Themed.color(\.mutedForeground))

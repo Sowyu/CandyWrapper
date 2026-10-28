@@ -237,6 +237,7 @@ public final class TimelineView: DSView {
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        minimap.threadTitle = { [weak self] key in self?.context.model?.linkedThread?(ThreadId(key))?.title }
         context.onMarkdownHeightChange = { [weak self] id in
             self?.remeasure { $0.id == id }
             self?.revealPendingFindMatch()

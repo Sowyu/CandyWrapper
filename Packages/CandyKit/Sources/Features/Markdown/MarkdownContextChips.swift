@@ -11,12 +11,16 @@ public struct MarkdownContextChips: Equatable {
     public var attachments: [String: JSONValue]
     /// The threads the message names that this machine knows (`useThreadShell`), by local id.
     public var threads: [String: LinkedThread]
+    public var environmentId: String?
 
     /// A known thread's shell title and its project's icon, nil when the project is unknown.
     public struct LinkedThread: Equatable, Sendable {
         public var title: String
         public var project: ProjectIconSource?
-        public init(title: String, project: ProjectIconSource? = nil) { self.title = title; self.project = project }
+        public var destination: String?
+        public init(title: String, project: ProjectIconSource? = nil, destination: String? = nil) {
+            self.title = title; self.project = project; self.destination = destination
+        }
     }
 
     public init(records: [String: JSONValue] = [:], attachments: [String: JSONValue] = [:], threads: [String: LinkedThread] = [:]) {
@@ -26,8 +30,9 @@ public struct MarkdownContextChips: Equatable {
     /// The message's records by context id and its attachments by id; `thread` looks up live threads
     /// by local id, nil once a thread is gone. `document` adds the threads its `t3-thread://` links name.
     public static func message(context: JSONValue?, attachments: [JSONValue], document: MarkdownDocument = MarkdownDocument(blocks: []),
-                               thread: (String) -> LinkedThread?) -> MarkdownContextChips {
-        var out = links(in: document, thread: thread) ?? MarkdownContextChips()
+                               environmentId: String? = nil, thread: (String) -> LinkedThread?) -> MarkdownContextChips {
+        var out = links(in: document, environmentId: environmentId, thread: thread) ?? MarkdownContextChips()
+        out.environmentId = environmentId
         if case .array(let records)? = context?["records"] {
             for record in records {
                 guard let id = record["contextId"]?.stringValue else { continue }
@@ -49,13 +54,12 @@ public struct MarkdownContextChips: Equatable {
 
     /// `parseThreadLinkHref` (packages/shared/src/threadLinks.ts:14-17): the id as written, not decoded.
     static func threadLinkId(_ href: String) -> String? {
-        guard href.hasPrefix(threadLinkPrefix) else { return nil }
-        let id = String(href.dropFirst(threadLinkPrefix.count))
-        return id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : id
+        ThreadLink(href: href)?.lookupKey
     }
 
     /// `percentDecodedThreadLinkId` (threadLinks.ts:19-26): nil when decoding changes nothing or fails.
     static func percentDecoded(_ id: String) -> String? {
+        if let link = ThreadLink(href: id), link.environmentId != nil { return link.percentDecoded?.lookupKey }
         guard let decoded = id.removingPercentEncoding, decoded != id,
               !decoded.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return decoded
@@ -64,7 +68,7 @@ public struct MarkdownContextChips: Equatable {
     /// The threads a reply's `t3-thread://v1/<id>` links name, written and percent-decoded, or nil when it has
     /// none (`hasThreadLinks`, threadLinks.ts:60-62), so plain replies carry no chips. It reads the parsed links,
     /// as T3 dispatches on the parsed href (ChatMarkdown.tsx:1067), so titled and reference-style links resolve too.
-    public static func links(in document: MarkdownDocument, thread: (String) -> LinkedThread?) -> MarkdownContextChips? {
+    public static func links(in document: MarkdownDocument, environmentId: String? = nil, thread: (String) -> LinkedThread?) -> MarkdownContextChips? {
         var out: MarkdownContextChips?
         // Remember misses too: repeated links to an unavailable or encoded id need one lookup.
         // This stays local to the pass, so a later shell update can resolve a missing thread.
@@ -90,17 +94,24 @@ public struct MarkdownContextChips: Equatable {
             }
         }
         visit(document.blocks)
+        out?.environmentId = environmentId
         return out
     }
 
     /// `MarkdownThreadLink` (MarkdownThreadLink.tsx:12-39): the thread as written, else its percent-decoded
     /// id, drawn as `ThreadContextChip` with the link text as its recorded title.
-    // ponytail: same machine only; T3 also finds a thread with that id on exactly one other machine
-    // (`resolveThreadLinkRef`, threadLinks.ts:28-50). Add it with a scoped open action if links cross machines.
     @MainActor
     func threadLinkChip(threadId written: String, label: String) -> MarkdownContextChip {
         let decoded = threads[written] == nil ? Self.percentDecoded(written).flatMap { threads[$0] != nil ? $0 : nil } : nil
-        return threadChip(threadId: decoded ?? written, recordTitle: label)
+        let id = decoded ?? written
+        let link = ThreadLink(href: written)
+        let neutral = link?.environmentId != nil && link?.environmentId != environmentId ? "Thread on another machine" : "Thread no longer available"
+        let title = label.isEmpty || label.hasPrefix("t3-thread://") ? neutral : label
+        guard threads[id] != nil else {
+            return MarkdownContextChip(look: ComposerChipLook(kind: .unresolved, label: title), action: .none,
+                                       tooltip: neutral, accessibility: "Unavailable thread, \(title)")
+        }
+        return threadChip(threadId: id, recordTitle: title)
     }
 
     /// `ThreadContextChip` (ThreadContextChip.tsx:11-50): the live title, else the recorded one; the project's
@@ -111,7 +122,7 @@ public struct MarkdownContextChips: Equatable {
         let live = threads[threadId]
         let trimmed = live?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let title = trimmed.isEmpty ? recordTitle : trimmed
-        return MarkdownContextChip(look: ComposerChipLook(kind: .thread, label: title, project: live?.project), action: .openThread(threadId),
+        return MarkdownContextChip(look: ComposerChipLook(kind: .thread, label: title, project: live?.project), action: .openThread(live?.destination ?? threadId),
                                    tooltip: live != nil ? "Open thread" : "Thread no longer available", accessibility: "Thread, \(title)")
     }
 
