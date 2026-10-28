@@ -22,10 +22,11 @@ public enum DitherPill {
         return Themed.color(dark ? \.surfaceRaised : \.card).cgColor(in: view).copy(alpha: blurs ? 0.62 : 1)!
     }
 
-    /// Reduce Transparency turns the system backdrop off, so `BackdropBlurView` draws nothing.
-    // ponytail: reads the system setting only, AND in the Appearance "Ignore Reduce Transparency" toggle once it lands
+    /// Reduce Transparency turns the system backdrop off, so `BackdropBlurView` draws nothing. "Ignore Reduce
+    /// Transparency" brings the 62% fill back, as the user asked (2026-10-28).
+    // ponytail: assumes the blur returns with it; if macOS still flattens the effect view under Reduce Transparency, check BackdropBlurView's backdrop here
     @MainActor public static var blurs: Bool {
-        !(reduceTransparencyOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency)
+        !ThemeRuntime.reducesTransparency(system: reduceTransparencyOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency)
     }
     /// Tests pin the setting here.
     @MainActor public static var reduceTransparencyOverride: Bool?

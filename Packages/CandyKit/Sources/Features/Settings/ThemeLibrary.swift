@@ -57,7 +57,7 @@ public final class ThemeLibrary {
     /// Applies the saved choice and follows the contrast and glass settings from then on.
     public func start() {
         ClientSettingsStore.shared.observe { [weak self] keys in
-            if keys.contains("appearanceContrast") || keys.contains("glassOpacity") || keys.contains("ditherBackgroundDim") || keys.contains("ditherAccent") || keys.contains("diffColorScheme") || keys.contains("hydration") || keys.contains("panelAnimationDurationMs") { self?.apply() }
+            if keys.contains("appearanceContrast") || keys.contains("glassOpacity") || keys.contains("ditherBackgroundDim") || keys.contains("ditherAccent") || keys.contains("ignoreReduceTransparency") || keys.contains("diffColorScheme") || keys.contains("hydration") || keys.contains("panelAnimationDurationMs") { self?.apply() }
         }
         SettingsFontRuntime.start()
         apply()
@@ -357,6 +357,7 @@ public final class ThemeLibrary {
         var input = ThemeRuntimeInput(contrast: client.int("appearanceContrast"), glassOpacity: client.int("glassOpacity"))
         input.blueOrangeDiff = client.string("diffColorScheme") == "blue-orange"
         input.ditherDim = client.int("ditherBackgroundDim")
+        input.ignoreReduceTransparency = client.bool("ignoreReduceTransparency")
         let accent = DitherAccent.named(client.string("ditherAccent"))
         input.ditherAccent = accent.id
         if let preview {

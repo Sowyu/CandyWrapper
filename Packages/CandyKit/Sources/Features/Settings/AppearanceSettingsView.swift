@@ -223,7 +223,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
         // AppearanceSettingsPanel.tsx:354-379.
         let math = clientSwitch("math-rendering", "Typeset LaTeX math, such as $x^2$ or \\[x^2\\], in messages and Markdown previews. The composer keeps TeX source editable.",
                                 key: "mathRenderingEnabled", reset: "math rendering", label: "Render math")
-        let s = section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), identification, diff, strip, width, math,
+        let s = section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), ignoreReduceTransparencyRow(), identification, diff, strip, width, math,
                                                              appIconRow(), appIconAppearanceRow()])
         return s
     }
@@ -283,6 +283,13 @@ public final class AppearanceSettingsView: SettingsPageBase {
             slot.isShown = !self.client.isDefault(key)
         }
         return r
+    }
+
+    /// CandyWrapper's own (the user, 2026-10-28): with macOS's Reduce Transparency on, Redesign's picture shows under a
+    /// heavier scrim and Glass goes flat. This draws them as if it were off.
+    private func ignoreReduceTransparencyRow() -> SettingsRowView {
+        clientSwitch("ignore-reduce-transparency", "Show the Redesign picture, Glass and blur as if Reduce Transparency were off in macOS.",
+                     key: "ignoreReduceTransparency", reset: "ignore reduce transparency", title: "Ignore Reduce Transparency")
     }
 
     private func chooseDitherPicture() {

@@ -346,7 +346,7 @@ public final class WallpaperBackdropView: NSView {
     /// What makes the picture worth checking again: the screen set or scale, the Space, Reduce Transparency, and
     /// coming back to the app, which is when a wallpaper changed in System Settings shows up. Notifications only.
     static let appTriggers: [Notification.Name] = [NSApplication.didChangeScreenParametersNotification,
-                                                   NSApplication.didBecomeActiveNotification, WallpaperStore.ready]
+                                                   NSApplication.didBecomeActiveNotification, WallpaperStore.ready, ThemeRuntime.didChange]
     static let workspaceTriggers: [Notification.Name] = [NSWorkspace.activeSpaceDidChangeNotification,
                                                          NSWorkspace.accessibilityDisplayOptionsDidChangeNotification]
     static let windowTriggers: [Notification.Name] = [NSWindow.didChangeScreenNotification, NSWindow.didChangeBackingPropertiesNotification,
@@ -410,7 +410,7 @@ public final class WallpaperBackdropView: NSView {
         guard let window else { return }
         refreshes += 1
         let dark = effectiveAppearance.isDark
-        let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        let reduce = ThemeRuntime.reducesTransparency()
         let flat = reduce || !(window.isMainWindow || window.isKeyWindow)
         let list = reduce ? [] : screens(dark)
         store.keep(Set(list.map(\.display)))

@@ -13,6 +13,22 @@ import T3Protocol
 struct SubagentPanelOverlapTests {
     static let out = FileManager.default.temporaryDirectory.appendingPathComponent("subagent-panel-overlap")
 
+    /// With Reduce Transparency forced on, the pill fill is opaque, and "Ignore Reduce Transparency" brings back 62% live.
+    @Test func ignoreReduceTransparencyBringsBackTheGlassFill() {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous); DitherPill.reduceTransparencyOverride = nil }
+        DitherPill.reduceTransparencyOverride = true
+        let probe = NSView(frame: NSRect(x: 0, y: 0, width: 10, height: 10))
+        probe.appearance = NSAppearance(named: .darkAqua)
+        var input = previous
+        for ignore in [false, true, false] {
+            input.ignoreReduceTransparency = ignore
+            ThemeRuntime.apply(input)
+            #expect(DitherPill.blurs == ignore)
+            #expect(DitherPill.fill(in: probe).alpha == (ignore ? 0.62 : 1))
+        }
+    }
+
     @Test(arguments: [true, false]) func panelHidesTheChangedFilesCardUnderIt(reduceTransparency: Bool) throws {
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous); DitherPill.reduceTransparencyOverride = nil }

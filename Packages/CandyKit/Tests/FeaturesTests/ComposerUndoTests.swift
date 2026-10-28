@@ -89,6 +89,21 @@ import Testing
         window.contentView = nil
     }
 
+    /// A theme change redraws the rich text mid-typing: the caret stays and Cmd+Z still undoes the typing. It used to
+    /// clear the history, which also made this suite fail whenever a parallel test applied a theme.
+    @Test func themeChangeKeepsTheCaretAndUndo() {
+        let (window, editor) = host(rich: true)
+        editor.setText("")
+        type("one", into: editor)
+        editor.setSelectedRange(NSRange(location: 1, length: 0))
+        editor.viewDidChangeEffectiveAppearance()
+        #expect(editor.selectedRange() == NSRange(location: 1, length: 0))
+        #expect(window.undoManager?.canUndo == true)
+        undo(editor)
+        #expect(editor.expandedText == "")
+        window.contentView = nil
+    }
+
     @Test func richTextMarksUndoWithTheirTyping() {
         let (window, editor) = host(rich: true)
         editor.setText("")

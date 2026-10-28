@@ -17,6 +17,39 @@ struct DitherArtScrimTests {
         return (window, main)
     }
 
+    /// With macOS's Reduce Transparency forced on, the new-thread page shows the art under the heavier scrim, and
+    /// "Ignore Reduce Transparency" brings back its own clear scrim at once, then the heavier one when switched off.
+    @Test func ignoreReduceTransparencyRedrawsTheArtLive() {
+        let saved = ThemeRuntime.input
+        defer { ThemeRuntime.apply(saved) }
+        var input = saved
+        input.ignoreReduceTransparency = false
+        ThemeRuntime.apply(input)
+        let (window, main) = host()
+        let art = DitherArtView(frame: main.bounds)
+        art.systemReducesTransparency = { true }
+        main.addSubview(art)
+        let page = NSView(frame: main.bounds)
+        main.addSubview(page)
+        DitherArtView.setEmphasis(.hero, from: page)
+        defer { DitherArtView.setEmphasis(nil, from: page) }
+        let contrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        let reduced = DitherArt.scrim(.hero, (true, contrast)), clear = DitherArt.scrim(.hero, (false, contrast))
+        #expect(art.scrimAlphaForTesting == reduced)
+        #expect(reduced < 1 && reduced > clear)
+
+        input.ignoreReduceTransparency = true
+        ThemeRuntime.apply(input)
+        #expect(ThemeRuntime.reducesTransparency(system: true) == false)
+        #expect(art.scrimAlphaForTesting == clear)
+
+        input.ignoreReduceTransparency = false
+        ThemeRuntime.apply(input)
+        #expect(ThemeRuntime.reducesTransparency(system: true))
+        #expect(art.scrimAlphaForTesting == reduced)
+        _ = window
+    }
+
     /// Thread, the Orchestrator pane in its place, then the thread again, as the sidebar, tabs and a notification do.
     @Test func scrimFollowsThePanelAndTheOrchestratorPane() {
         let (window, main) = host()

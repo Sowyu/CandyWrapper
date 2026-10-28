@@ -60,7 +60,8 @@ struct ServerUpdaterTests {
         // The launcher stops the old process before the stream's exit arrives.
         #expect(await eventually { stages.all.last == .resuming })
         first.close()
-        #expect(await eventually { h.attemptCount == 2 })
+        // The harness counts the attempt before it adds the socket, so wait for the new socket itself.
+        #expect(await eventually { h.attemptCount == 2 && h.lastSocket !== first })
         let second = h.lastSocket!
         let lifecycle = try #require(await request(second, "subscribeServerLifecycle"))
         second.deliver(.chunk(requestId: lifecycle.id, values: [ready(new, outcome: ["id": .string("u1"), "fromVersion": .string(old),
@@ -83,7 +84,8 @@ struct ServerUpdaterTests {
         let result: JSONValue = .object(["targetVersion": .string(new), "method": .string("boot-service"), "updateId": .string("u2")])
         first.deliver(.chunk(requestId: call.id, values: [.object(["type": .string("complete"), "result": result])]))
         first.close()
-        #expect(await eventually { h.attemptCount == 2 })
+        // The harness counts the attempt before it adds the socket, so wait for the new socket itself.
+        #expect(await eventually { h.attemptCount == 2 && h.lastSocket !== first })
         let second = h.lastSocket!
         let lifecycle = try #require(await request(second, "subscribeServerLifecycle"))
         // The old version's replayed ready event does not match the update id and is skipped.
@@ -117,7 +119,8 @@ struct ServerUpdaterTests {
         let first = h.lastSocket!
         _ = try #require(await request(first, "server.updateServer"))
         first.close()
-        #expect(await eventually { h.attemptCount == 2 })
+        // The harness counts the attempt before it adds the socket, so wait for the new socket itself.
+        #expect(await eventually { h.attemptCount == 2 && h.lastSocket !== first })
         let second = h.lastSocket!
         let lifecycle = try #require(await request(second, "subscribeServerLifecycle"))
         second.deliver(.chunk(requestId: lifecycle.id, values: [ready(new)]))
@@ -143,7 +146,8 @@ struct ServerUpdaterTests {
         #expect(commit.payload == .object(["requestId": .string("tok")]))
         // The commit never answers: the app quits and takes the socket with it.
         first.close()
-        #expect(await eventually { h.attemptCount == 2 })
+        // The harness counts the attempt before it adds the socket, so wait for the new socket itself.
+        #expect(await eventually { h.attemptCount == 2 && h.lastSocket !== first })
         let second = h.lastSocket!
         let lifecycle = try #require(await request(second, "subscribeServerLifecycle"))
         second.deliver(.chunk(requestId: lifecycle.id, values: [ready("0.0.47")]))
