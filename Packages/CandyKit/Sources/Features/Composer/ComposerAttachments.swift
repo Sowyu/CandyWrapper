@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import ImageIO
 import UniformTypeIdentifiers
 import T3Protocol
@@ -45,10 +45,22 @@ public enum ComposerAttachmentRules {
         return name.lowercased().hasSuffix(".dng") || ["image/dng", "image/x-dng", "image/x-adobe-dng"].contains(mime)
     }
 
+    /// T3 3814, shared/image.ts and composerAttachmentFiles.ts:77-86: SVG bytes stay files.
+    public static func isSvg(name: String, mimeType: String) -> Bool {
+        name.lowercased().hasSuffix(".svg") || mimeType.split(separator: ";", maxSplits: 1).first?
+            .trimmingCharacters(in: .whitespaces).lowercased() == "image/svg+xml"
+    }
+
+    public static func fileMimeType(name: String, mimeType: String) -> String {
+        if isSvg(name: name, mimeType: mimeType) { return "image/svg+xml" }
+        if isDng(name: name, mimeType: mimeType) { return "image/x-adobe-dng" }
+        return mimeType.isEmpty ? "application/octet-stream" : mimeType
+    }
+
     /// `classifyComposerAttachmentFile`. An empty or generic type falls back to the extension.
     public static func classify(name: String, mimeType: String) -> Kind {
         let mime = mimeType.lowercased()
-        if isDng(name: name, mimeType: mime) { return .file }
+        if isSvg(name: name, mimeType: mime) || isDng(name: name, mimeType: mime) { return .file }
         if isHeic(name: name, mimeType: mime) { return .image }
         if (mime.isEmpty || mime == "application/octet-stream"), inferImageMimeType(name: name) != nil { return .image }
         guard mime.hasPrefix("image/") else { return .file }
@@ -58,6 +70,7 @@ public enum ComposerAttachmentRules {
     /// The MIME type a local file goes up with: its UTType's, else T3's extension guess, else octet-stream.
     public static func mimeType(for url: URL) -> String {
         // `composerFileAttachmentMimeType`: a DNG goes up as `image/x-adobe-dng` (composerAttachmentFiles.ts:72-75).
+        if isSvg(name: url.lastPathComponent, mimeType: "") { return "image/svg+xml" }
         if isDng(name: url.lastPathComponent, mimeType: "") { return "image/x-adobe-dng" }
         let ext = url.pathExtension
         if let mime = UTType(filenameExtension: ext)?.preferredMIMEType { return mime.lowercased() }
@@ -134,6 +147,7 @@ public enum ComposerAttachmentRules {
         guard marker.name == name, marker.sizeBytes == sizeBytes else { return false }
         if marker.mimeType == mimeType { return true }
         // DNGs match by their normalized type (composerDraftStore.ts:784-793).
+        if isSvg(name: marker.name, mimeType: marker.mimeType), isSvg(name: name, mimeType: mimeType) { return true }
         if isDng(name: marker.name, mimeType: marker.mimeType), isDng(name: name, mimeType: mimeType) { return true }
         let markerType = marker.mimeType.lowercased()
         func isVideo(_ name: String, _ type: String) -> Bool {
@@ -166,7 +180,7 @@ public enum ComposerAttachmentRules {
 
     /// `shouldHandleComposerAttachmentPaste`: images always win; other files only when the paste has no text.
     public static func shouldHandlePaste(files: [(name: String, mimeType: String)], plainText: String) -> Bool {
-        if files.contains(where: { isDng(name: $0.name, mimeType: $0.mimeType) || classify(name: $0.name, mimeType: $0.mimeType) != .file }) { return true }
+        if files.contains(where: { isDng(name: $0.name, mimeType: $0.mimeType) || isSvg(name: $0.name, mimeType: $0.mimeType) || classify(name: $0.name, mimeType: $0.mimeType) != .file }) { return true }
         if !plainText.isEmpty { return false }
         return !files.isEmpty
     }
@@ -295,7 +309,24 @@ public enum ComposerImageIO {
             ImageTiming.mark("decode", "\(url.lastPathComponent) \(maxPixel) took \(ContinuousClock.now - start)")
             return (image, natural)
         }
-        guard !Task.isCancelled, let decoded else { return nil }
+        guard !Task.isCancelled else { return nil }
+        guard let decoded else {
+            // NSImage renders SVG natively; ImageIO has no SVG source decoder. Keep the ordinary
+            // file icon when the SVG is invalid (FileContextChip at 3814).
+            let data = await ImageDecodeWorker.shared.run { try? Data(contentsOf: url, options: .mappedIfSafe) }
+            guard !Task.isCancelled, let data, data.count <= ComposerAttachmentRules.maxFileBytes else { return nil }
+            return await MainActor.run {
+                guard let image = NSImage(data: data), image.isValid else { return nil }
+                let size = image.size
+                guard size.width > 0, size.height > 0 else { return nil }
+                let scale = CGFloat(min(4096, max(1, side))) / (cover ? min(size.width, size.height) : max(size.width, size.height))
+                let output = NSImage(size: CGSize(width: min(4096, size.width * scale), height: min(4096, size.height * scale)))
+                output.lockFocus()
+                image.draw(in: NSRect(origin: .zero, size: output.size))
+                output.unlockFocus()
+                return output.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            }
+        }
         // Keep the source's exact aspect ratio across differently rounded thumbnail sizes.
         if let measurementKey { await MarkdownImages.record(decoded.natural, for: measurementKey) }
         return decoded.image

@@ -161,7 +161,8 @@ public struct MarkdownContextChips: Equatable {
             let disabled: Bool = if case .bool(false)? = attachment["downloadable"] { !video } else { false }
             return MarkdownContextChip(look: ComposerChipLook(kind: video ? .video : .file(name: name), label: ComposerAttachmentRules.middleTruncate(name), detail: size),
                                        action: disabled ? .none : .openAttachment(id), tooltip: "\(name)\n\(size)",
-                                       accessibility: "\(video ? "Video" : "File") attachment, \(name), \(size)")
+                                       accessibility: "\(video ? "Video" : "File") attachment, \(name), \(size)",
+                                       imageAttachmentId: ComposerAttachmentRules.isSvg(name: name, mimeType: mime) ? id : nil)
         case "terminal":
             let text = record["text"]?.stringValue ?? ""
             let look = ComposerChipLook(kind: .terminal, label: recordLabel)
