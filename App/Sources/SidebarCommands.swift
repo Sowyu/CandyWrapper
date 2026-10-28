@@ -41,6 +41,8 @@ final class SidebarCommands {
     var onRouteChange: (() -> Void)?
     /// Leaves Settings before a utility page shows (both replace the main area; T3 routes between them).
     var closeSettings: () -> Void = {}
+    /// Opens Settings at a search item's row, as the palette does.
+    var openSettingsItem: (@MainActor (SettingsSearchItem) -> Void)?
     /// Share with guest, for the thread menu.
     var guestShare: GuestShareController?
     /// `useEscapeToGoBack` on Usage and Pull Requests: the previous route, false when there is none.
@@ -686,7 +688,9 @@ final class SidebarCommands {
     /// `requestCustomSnooze`: the custom snooze dialog; `then` runs with the chosen wake time.
     private func requestCustomSnooze(then: @escaping @MainActor (Date) -> Void) {
         guard let window else { return }
-        SidebarCustomSnoozeDialog.present(in: window) { wake in if let wake { then(wake) } }
+        var edit: (@MainActor () -> Void)?
+        if let item = SettingsSearch.item("snooze-options"), let open = openSettingsItem { edit = { open(item) } }
+        SidebarCustomSnoozeDialog.present(in: window, editOptions: edit) { wake in if let wake { then(wake) } }
     }
 
     /// "New thread on <branch>": the thread's worktree when it has one, else its branch on the local

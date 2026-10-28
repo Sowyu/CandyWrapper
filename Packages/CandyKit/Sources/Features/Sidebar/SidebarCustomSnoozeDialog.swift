@@ -6,16 +6,21 @@ import T3Store
 /// validated with `resolveCustomSnooze`, opened from the thread menu's and the snooze button's Custom….
 @MainActor
 public enum SidebarCustomSnoozeDialog {
-    /// Shows the dialog over `window`; `done` gets the wake time, or nil on Cancel and Escape.
+    /// Shows the dialog over `window`; `done` gets the wake time, or nil on Cancel and Escape. With `editOptions`, the
+    /// footer starts with "Edit snooze options", which closes the dialog and opens them (T3 3824 #26427,
+    /// CustomSnoozeDialog.tsx:229-244).
     @discardableResult
-    public static func present(in window: NSWindow, now: Date = Date(), done: @escaping @MainActor (Date?) -> Void) -> ModalHost {
+    public static func present(in window: NSWindow, now: Date = Date(), editOptions: (@MainActor () -> Void)? = nil,
+                               done: @escaping @MainActor (Date?) -> Void) -> ModalHost {
         let dialog = DialogView(title: "Custom snooze", message: "Choose when snoozed threads return to your inbox.")
         dialog.maxWidth = 384 // `sm:max-w-sm`
         let form = SidebarCustomSnoozeForm(initial: now.addingTimeInterval(3600))
         dialog.panelContent = [form]
         let cancel = ButtonView("Cancel", variant: .outline)
         let snooze = ButtonView("Snooze")
-        dialog.footerButtons = [cancel, snooze]
+        let edit = editOptions.map { _ in ButtonView("Edit snooze options", icon: .settings2, variant: .ghostMuted) }
+        dialog.footerButtons = (edit.map { [$0] } ?? []) + [cancel, snooze]
+        dialog.footerLeadingCount = edit == nil ? 0 : 1
         let host = ModalHost.present(dialog, in: window)
         var finished = false
         let finish: @MainActor (Date?) -> Void = { [weak host] wake in
@@ -27,6 +32,10 @@ public enum SidebarCustomSnoozeDialog {
         host.onDismiss = { finish(nil) }
         dialog.onClose = { finish(nil) }
         cancel.action = { finish(nil) }
+        edit?.action = {
+            finish(nil)
+            editOptions?()
+        }
         let submit: @MainActor () -> Void = { [weak form, weak dialog] in
             guard let form else { return }
             if let wake = form.input.resolve(now: Date()) { finish(wake); return }

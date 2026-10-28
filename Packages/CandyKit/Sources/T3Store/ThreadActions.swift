@@ -353,6 +353,25 @@ public struct SnoozePreset: Sendable, Equatable {
 }
 
 public enum SnoozePresets {
+    /// `sortSnoozeRows` (SnoozePresetsSettings.logic.ts:19-40, T3 3824 #26427): the editor's row order, soonest wake
+    /// first, options with no wake right now (a passed "Today") last, ties in their current order.
+    public static func soonestFirst(_ presets: [SnoozePresetSetting], now: Date, calendar: Calendar = .current) -> [Int] {
+        let wakes = presets.map { resolve($0, now: now, calendar: calendar)?.snoozedUntil }
+        return presets.indices.sorted { a, b in
+            switch (wakes[a], wakes[b]) {
+            case let (x?, y?): x != y ? x < y : a < b
+            case (_?, nil): true
+            case (nil, _?): false
+            case (nil, nil): a < b
+            }
+        }
+    }
+
+    /// `sameSnoozePresets` (SnoozePresetsSettings.tsx:93-101): row order is only display order.
+    public static func same(_ a: [SnoozePresetSetting], _ b: [SnoozePresetSetting]) -> Bool {
+        a.map(\.id).sorted() == b.map(\.id).sorted()
+    }
+
     /// threadSettled.ts:201-329 (3814): sort and deduplicate by wake minute, preserving settings order on ties.
     public static func resolve(now: Date, calendar: Calendar = .current, locale: Locale = TimestampFormat.t3Locale,
                                presets: [SnoozePresetSetting] = SnoozePresetSetting.defaults) -> [SnoozePreset] {

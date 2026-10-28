@@ -19,6 +19,15 @@ struct SnoozePresetSettingsTests {
         #expect(rows.map(\.id) == ["after:15", "at:today:11:00", "after:180"])
         #expect(SnoozePresets.resolve(now: now, presets: []).isEmpty)
     }
+    /// `sortSnoozeRows` and `sameSnoozePresets` (SnoozePresetsSettings.logic.ts:19-40, SnoozePresetsSettings.tsx:93-101,
+    /// T3 3824 #26427): editor rows go soonest first with a passed "Today" last, and order alone isn't a change.
+    @Test func editorRowsSortSoonestFirstAndOrderIsNotAChange() {
+        let values: [SnoozePresetSetting] = [.after(minutes: 180), .at(day: "today", time: "09:00"), .after(minutes: 60),
+                                             .at(day: "tomorrow", time: "08:00"), .after(minutes: 60)]
+        #expect(SnoozePresets.soonestFirst(values, now: now, calendar: calendar) == [2, 4, 0, 3, 1])
+        #expect(SnoozePresets.same(values.reversed(), values))
+        #expect(!SnoozePresets.same(Array(values.dropLast()), values))
+    }
     @Test func pickingRecomputesDurationsButNeverMovesAnAbsoluteDate() throws {
         let settings: [SnoozePresetSetting] = [.after(minutes: 60), .at(day: "today", time: "11:00")]
         let shown = SnoozePresets.resolve(now: now, calendar: calendar, presets: settings)
