@@ -30,6 +30,7 @@ struct ComposerEffort: Equatable {
 }
 
 final class ComposerEffortGlyphView: DSView {
+    override var wantsUpdateLayer: Bool { false }
     let effort: ComposerEffort
     var color = Themed.color(\.mutedForeground) { didSet { needsDisplay = true } }
     init(_ effort: ComposerEffort) { self.effort = effort; super.init(frame: .zero) }
@@ -46,6 +47,7 @@ final class ComposerEffortGlyphView: DSView {
 
 /// 3824 TraitsPicker.tsx:514-535. Ultrafast echoes an outlined bolt behind the filled one.
 final class ComposerFastGlyphView: DSView {
+    override var wantsUpdateLayer: Bool { false }
     let ultra: Bool
     var color = Themed.color(\.mutedForeground) { didSet { needsDisplay = true } }
     init(ultra: Bool) { self.ultra = ultra; super.init(frame: .zero) }

@@ -109,7 +109,7 @@ struct RedesignBaselineTests {
             sidebar.state = SidebarListState(activeThreadId: SidebarPreview.referenceActiveThread)
             sidebar.setSnapshot(SidebarPreview.referenceSnapshot(), animated: false)
             try capture("sidebar-many-threads", sidebar, NSSize(width: 280, height: 900))
-            for c in PickersFidelityTests.cases {
+            for c in PickersFidelityTests.redesignCases {
                 let (view, size) = c.make(try PickersFidelityTests.pickers())
                 try capture(c.reference, view, size)
             }

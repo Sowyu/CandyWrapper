@@ -135,8 +135,9 @@ final class ModelPickerView: DSView, PickerPopupBody {
             tallestTabHeight = tabs.map { tab in
                 let rows = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
                                                rail: tab, query: "", expandedLegacy: expandedLegacy,
-                                               selectedKeys: selectedKeys, preferences: preferences).rows.count
-                return rows == 0 ? 36 : CGFloat(rows) * (modern ? rowH : Self.rowHeight) + CGFloat(rows - 1) * Self.rowGap + 20
+                                               selectedKeys: selectedKeys, preferences: preferences).rows
+                if modern { return contentHeight(rows, mixed: tab == .favorites) }
+                return rows.isEmpty ? 36 : CGFloat(rows.count) * Self.rowHeight + CGFloat(rows.count - 1) * Self.rowGap + 20
             }.max() ?? 36
         }
         // ponytail: AppKit tooltips instead of T3's TooltipPopup (left side, 8pt offset, no delay); swap for TooltipView when tooltips get a shared host
@@ -266,7 +267,20 @@ final class ModelPickerView: DSView, PickerPopupBody {
     // MARK: Size and layout
 
     private var modern: Bool { ComposerDesign.uses3814(dark: effectiveAppearance.isDark) }
-    private var rowH: CGFloat { capy ? 32 : modern ? 47.75 : Self.rowHeight }
+    private var rowH: CGFloat { capy ? 32 : Self.rowHeight }
+    var mixesProviders: Bool { searching || rail == .favorites }
+
+    // 3824 ModelPickerContent.tsx:165-169,578-605: provider tabs omit the repeated provider line.
+    private func height(_ row: ModelPickerRow, mixed: Bool) -> CGFloat {
+        guard modern else { return rowH }
+        if case .model(let item) = row, !mixed, item.model.subProvider == nil { return 32 }
+        return 48
+    }
+
+    private func contentHeight(_ rows: [ModelPickerRow], mixed: Bool) -> CGFloat {
+        guard !rows.isEmpty else { return 36 }
+        return rows.map { height($0, mixed: mixed) }.reduce(0, +) + CGFloat(rows.count - 1) * rowGap + 20
+    }
     private var rowGap: CGFloat { capy ? 0 : Self.rowGap }
     private var searchH: CGFloat { capy ? 40 : Self.searchHeight }
     private var railW: CGFloat { capy ? 40 : Self.railWidth }
@@ -275,7 +289,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
     private var listBottom: CGFloat { capy ? 6 : 10 }
 
     private var listContentHeight: CGFloat {
-        sections.rows.isEmpty ? 0 : CGFloat(sections.rows.count) * rowH + CGFloat(sections.rows.count - 1) * rowGap
+        sections.rows.isEmpty ? 0 : sections.rows.map { height($0, mixed: mixesProviders) }.reduce(0, +) + CGFloat(sections.rows.count - 1) * rowGap
     }
 
     /// Search block plus the list (rows + 20) or the empty text (`p-2`, 36), then the ChatGPT footer.
@@ -358,8 +372,8 @@ final class ModelPickerView: DSView, PickerPopupBody {
         scrollOffset = min(scrollOffset, maxScroll)
         var y = 10 - scrollOffset
         for row in rowViews {
-            row.frame = NSRect(x: 12, y: y, width: list.bounds.width - 12 - 12, height: rowH)
-            y += rowH + Self.rowGap
+            row.frame = NSRect(x: 12, y: y, width: list.bounds.width - 12 - 12, height: height(row.row, mixed: mixesProviders))
+            y += row.frame.height + Self.rowGap
         }
         emptyLabel.frame = NSRect(x: 8, y: 8, width: list.bounds.width - 16, height: 20)
     }
@@ -404,7 +418,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
 
     private func scrollToHighlight() {
         guard let i = highlightedRow, list.bounds.height > 0 else { return }
-        let top = listTop + CGFloat(i) * (rowH + rowGap), bottom = top + rowH
+        let top = listTop + sections.rows.prefix(i).map { height($0, mixed: mixesProviders) + rowGap }.reduce(0, +), bottom = top + height(sections.rows[i], mixed: mixesProviders)
         // The first row brings the whole top back, Redesign's card included.
         if i == 0 { scrollOffset = 0 } else if top - listBottom < scrollOffset { scrollOffset = top - listBottom }
         else if bottom + listBottom > scrollOffset + list.bounds.height { scrollOffset = bottom + listBottom - list.bounds.height }
@@ -716,12 +730,17 @@ final class ModelRowView: DSView {
         fill.frame = bounds
         if capy { layoutCapy(); return }
         let modern = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
+        if modern, case .model(let item) = row {
+            let hidden = !picker.mixesProviders && item.model.subProvider == nil
+            secondary.isHidden = hidden
+            providerIcon?.isHidden = hidden
+        }
         let checkWidth: CGFloat = modern && star != nil ? 20 : 0
         // The trailing group is `gap-1.5`: the jump `Kbd`, then the star.
         let kbdWidth = kbd.map { $0.intrinsicContentSize.width + 6 } ?? 0
         let trailing: CGFloat = checkWidth + (star != nil ? 24 - 4 + 6 : 16 + 8) + kbdWidth
         let nameW = min(name.textWidth, bounds.width - 16 - trailing - (newBadge.map { 8 + $0.intrinsicContentSize.width } ?? 0))
-        name.frame = NSRect(x: 8, y: 4, width: max(0, nameW), height: modern ? 19.25 : 16.5)
+        name.frame = NSRect(x: 8, y: modern && secondary.isHidden ? (bounds.height - 19.25) / 2 : 4, width: max(0, nameW), height: modern ? 19.25 : 16.5)
         if let newBadge {
             let s = newBadge.intrinsicContentSize
             newBadge.frame = NSRect(x: 8 + nameW + 8, y: 4 + (16.5 - s.height) / 2, width: s.width, height: s.height)
@@ -803,8 +822,8 @@ final class ModelRowView: DSView {
             kbd?.isHidden = !highlighted
             return
         }
-        // `data-selected` foreground/8%; highlighted (alone or with selected) `accent`.
-        let color: NSColor? = highlighted ? Themed.color(\.accent) : (isSelected ? Themed.color(\.contrastForeground, 0.08) : nil)
+        // 3824 combobox.tsx:195 selects with foreground/6%; Glass retains its previous fill.
+        let color: NSColor? = highlighted ? Themed.color(\.accent) : (isSelected ? Themed.color(\.contrastForeground, ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? 0.06 : 0.08) : nil)
         fill.backgroundColor = color?.cgColor(in: self)
         name.color = highlighted ? Themed.color(\.contrastAccentForeground) : (isSelected ? Themed.color(\.contrastForeground) : Themed.color(\.contrastPopoverForeground))
         if ComposerDesign.uses3814(dark: effectiveAppearance.isDark) { star?.alphaValue = highlighted || { if case .model(let item) = row { return item.isFavorite }; return false }() ? 1 : 0 }

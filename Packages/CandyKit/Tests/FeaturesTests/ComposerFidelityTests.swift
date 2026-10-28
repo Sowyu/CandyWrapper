@@ -5,10 +5,8 @@ import T3Protocol
 import T3Store
 @testable import Features
 
-/// The composer against design/reference: 03a (at rest over the markdown thread), 01 (running,
+/// The composer against design/reference-3824: 03a (at rest over the markdown thread), 01 (running,
 /// Stop), 04 and 04n (the new-thread page). Compared at 2x in the main panel's coordinates.
-/// The footer's model, traits and access pickers belong to another work package, so the test
-/// fills the slots with stand-ins drawn like `ComposerControl` (icon, label, chevron).
 /// Writes ref, ours and diff PNGs plus report-composer.html to `Fidelity.root`.
 @MainActor @Suite(.fidelity)
 struct ComposerFidelityTests {
@@ -58,22 +56,31 @@ struct ComposerFidelityTests {
     }
 
     static func render(_ reference: String, dark: Bool, width: CGFloat) throws -> NSBitmapImageRep {
+        let savedEffort = ClientSettingsStore.shared.current["effortDisplay"]
+        defer { ClientSettingsStore.shared.update(["effortDisplay": savedEffort]) }
+        ClientSettingsStore.shared.update(["effortDisplay": .string(reference == "54-composer-effort-bars" ? "bars" : "label")])
         let panel = panel(width: width, dark: dark)
+        let draft = reference.hasPrefix("04")
+        let pickers = try Screen3824Fixtures.pickers(draft: draft)
+        panel.composer.footerControls = [pickers.controlsView]
+        if reference == "54-composer-effort-bars" {
+            let glyph = try #require(pickers.traitsButton.icon as? ComposerEffortGlyphView)
+            #expect(glyph.effort.count == 4 && glyph.effort.filled == 2 && pickers.traitsButton.title.isEmpty)
+            #expect(!glyph.wantsUpdateLayer) // Its four bars come from draw(_:), not updateLayer().
+        }
         switch reference {
-        case "03a-kitchen-sink-top":
-            let projection = try #require(try ThreadPreview.projection(titled: ThreadPreview.markdownThread))
+        case "03a-kitchen-sink-top", "54-composer-effort-bars":
+            let projection = try Screen3824Fixtures.markdown()
             panel.setProjection(projection, projectTitle: "demo-repo", workspaceRoot: nil)
-            fill(panel.composer, model: "Claude Haiku 5.5")
         case "01-running-turn":
             // Only the composer band is compared; scrolled to the end, nothing sits behind it.
-            let projection = try #require(try ThreadPreview.projection(titled: ThreadPreview.markdownThread))
+            let projection = try Screen3824Fixtures.markdown()
             panel.setProjection(projection, projectTitle: "demo-repo", workspaceRoot: nil)
-            fill(panel.composer, model: "Claude Haiku 5.5")
             panel.composer.runState = ComposerLogic.RunState(activeRunId: RunId("run"), running: true)
         default:
             panel.setDraft(projectTitle: "demo-repo")
             panel.composer.placeholderInput.disconnected = true
-            fill(panel.composer, model: "Claude Fable 5.1", accessLabel: width > 600)
+            Screen3824Fixtures.contextStrip(panel.contextStrip)
         }
         panel.layoutSubtreeIfNeeded()
         panel.timeline.scroll(toFraction: reference == "01-running-turn" ? 1 : 0)
@@ -88,12 +95,13 @@ struct ComposerFidelityTests {
             ("01-running-turn", 844, 600, 780),
             ("04-new-thread-draft", 844, 0, 780),
             ("04n-new-thread-narrow", 592, 0, 780),
+            ("54-composer-effort-bars", 844, 600, 780),
         ]
         var lines: [String] = [], diffs: [(String, Double)] = [], images = ""
         for (reference, width, top, bottom) in cases {
             for theme in ["light", "dark"] {
                 let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
-                    "design/reference/\(reference).\(theme).png"))))
+                    "design/reference-3824/\(reference).\(theme).png"))))
                 let w = Int(width * 2)
                 let crop = CGRect(x: full.pixelsWide - w, y: top * 2, width: w, height: (bottom - top) * 2)
                 let ref = NSBitmapImageRep(cgImage: full.cgImage!.cropping(to: crop)!)

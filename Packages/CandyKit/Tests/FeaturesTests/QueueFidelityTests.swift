@@ -25,15 +25,15 @@ struct QueueFidelityTests {
         panel.composer.footerControls = [pickers.controlsView]
         panel.composer.runState = ComposerLogic.RunState(activeRunId: RunId("run"), running: true)
         panel.queue.state = ComposerLogic.QueueState(items: [
-            .init(runId: RunId("q1"), messageId: nil, text: "second queued message"),
-            .init(runId: RunId("q2"), messageId: nil, text: "third queued message"),
+            .init(runId: RunId("q1"), messageId: nil, text: "First queued note."),
+            .init(runId: RunId("q2"), messageId: nil, text: "Second queued note."),
         ], activeRunId: RunId("run"), canPromoteToSteer: true)
         panel.layoutSubtreeIfNeeded()
         panel.timeline.scroll(toFraction: 1)
         return Snapshot.image(of: ThreadFidelityTests.onSurface(panel), size: panel.frame.size, scale: 2, dark: dark)
     }
 
-    /// 3814 component markup covers the new queue while screen 29 waits for recapture.
+    /// Component markup also covers sender attribution, editing and multiline queues.
     @Test func queueComponents() throws {
         let repo = SidebarFidelityTests.repo
         let spec = try JSONSerialization.jsonObject(with: Data(contentsOf: repo.appendingPathComponent("design/component-reference/queue.json"))) as! [String: Any]
@@ -74,11 +74,11 @@ struct QueueFidelityTests {
         var lines: [String] = [], cases: [(String, Double)] = [], images = ""
         for theme in ["light", "dark"] {
             let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
-                "design/reference/29-queued-messages.\(theme).png"))))
+                "design/reference-3824/29-queued-messages.\(theme).png"))))
             let w = Int(width * 2)
             let crop = CGRect(x: full.pixelsWide - w, y: top * 2, width: w, height: (bottom - top) * 2)
             let ref = NSBitmapImageRep(cgImage: full.cgImage!.cropping(to: crop)!)
-            let rendered = try Self.render(dark: theme == "dark", width: width, pickers: PickersPreview.pickers())
+            let rendered = try Self.render(dark: theme == "dark", width: width, pickers: try Screen3824Fixtures.pickers())
             let ours = NSBitmapImageRep(cgImage: rendered.cgImage!.cropping(to: CGRect(x: 0, y: top * 2, width: w, height: (bottom - top) * 2))!)
             let (total, _, diff) = SidebarFidelityTests.compare(ref, ours, bands: [("all", 0, bottom - top)])
             let base = "29-queued-messages.\(theme)"
@@ -90,6 +90,27 @@ struct QueueFidelityTests {
             lines.append(line)
             cases.append((base, total))
             images += "<p>\(line)<br>" + ["ref", "ours", "diff"].map { "<img style='zoom:.4' src='queue/\(base).\($0).png'>" }.joined() + "</p>"
+            // 3824 ChatView.tsx:2948-2963 puts the queue in the timeline. Keep the old
+            // 520...780 composer crop and also compare the bubbles at their new screen position.
+            let queue = QueuedRunsView()
+            queue.state = .init(items: [
+                .init(runId: "q1", messageId: nil, text: "First queued note."),
+                .init(runId: "q2", messageId: nil, text: "Second queued note."),
+            ], activeRunId: "run", canPromoteToSteer: true)
+            queue.frame = NSRect(x: 54, y: 0, width: 736, height: queue.height(forWidth: 736))
+            let canvas = GrainSurfaceView(fill: Themed.color(\.background))
+            canvas.addSubview(queue)
+            let bubbles = Snapshot.image(of: canvas, size: NSSize(width: width, height: 160), scale: 2, dark: theme == "dark")
+            let bubblesRef = PickersFidelityTests.crop(full, CGRect(x: 256, y: 266, width: width, height: 160))
+            let (bubbleDiff, _, bubbleImage) = SidebarFidelityTests.compare(bubblesRef, bubbles, bands: [])
+            let bubbleBase = "29-queued-bubbles.\(theme)"
+            try Snapshot.writePNG(bubblesRef, to: Self.out.appendingPathComponent("\(bubbleBase).ref.png"))
+            try Snapshot.writePNG(bubbles, to: Self.out.appendingPathComponent("\(bubbleBase).ours.png"))
+            try Snapshot.writePNG(bubbleImage, to: Self.out.appendingPathComponent("\(bubbleBase).diff.png"))
+            print("queue", bubbleBase, String(format: "%.2f%%", bubbleDiff * 100))
+            cases.append((bubbleBase, bubbleDiff))
+            images += "<p>\(bubbleBase): \(String(format: "%.2f", bubbleDiff * 100))%<br>" + ["ref", "ours", "diff"].map { "<img style='zoom:.4' src='queue/\(bubbleBase).\($0).png'>" }.joined() + "</p>"
+            #expect(bubbleDiff < 0.05)
             #expect(total < 0.05, "\(line)")
         }
         Self.ceilings.check("queuedMessages", cases)

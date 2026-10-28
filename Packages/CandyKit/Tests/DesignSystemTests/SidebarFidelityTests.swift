@@ -4,7 +4,7 @@ import Testing
 
 /// Sidebar batch fidelity: SidebarMenuButton, SidebarMenuSub, CommandItem and the hue slider against T3's
 /// markup in Chromium (specs from scripts/gen-sidebar-spec.py), plus the sidebar background and grain
-/// against the real app's capture (design/reference/02-sidebar-populated.*.png, 2x of 1100x780).
+/// against the real app's capture (design/reference-3824/02-sidebar-populated.*.png, 2x of 1100x780).
 @MainActor @Suite(.fidelity)
 struct SidebarFidelityTests {
     /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
@@ -50,7 +50,8 @@ struct SidebarFidelityTests {
         for theme in ["light", "dark"] {
             let ref = try Self.reference(theme)
             // 2x pixels: a 300x20 strip between thread rows, no text.
-            let crop = (x: 20, y: 640, w: 300, h: 20)
+            // The 3824 rows moved this text-free gutter; retain the 300x20 sample.
+            let crop = (x: 20, y: 716, w: 300, h: 20)
             let surface = GrainSurfaceView(fill: Themed.color(\.sidebar, sidebar: true))
             let ours = Snapshot.image(of: surface, size: NSSize(width: 256, height: 128), scale: 2, dark: theme == "dark")
             let r = Self.stats(ref, crop), o = Self.stats(ours, (x: 0, y: 0, w: 512, h: 256))
@@ -69,7 +70,8 @@ struct SidebarFidelityTests {
     @Test func selectedRowFillAgainstCapture() throws {
         for theme in ["light", "dark"] {
             let ref = try Self.reference(theme)
-            let crop = (x: 60, y: 985, w: 320, h: 24) // inside the selected row, below the title
+            // 3824 selects the last row. Dark was captured before the additional story thread.
+            let crop = (x: 60, y: theme == "dark" ? 1244 : 1376, w: 320, h: 24)
             let button = SidebarMenuButtonView("", size: .default)
             let box = GrainSurfaceView(fill: Themed.color(\.sidebar, sidebar: true))
             box.addSubview(button)
@@ -83,7 +85,7 @@ struct SidebarFidelityTests {
     }
 
     static func reference(_ theme: String) throws -> NSBitmapImageRep {
-        let url = FidelityTests.repo.appendingPathComponent("design/reference/02-sidebar-populated.\(theme).png")
+        let url = FidelityTests.repo.appendingPathComponent("design/reference-3824/02-sidebar-populated.\(theme).png")
         return NSBitmapImageRep(data: try Data(contentsOf: url))!
     }
 
