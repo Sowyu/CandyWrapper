@@ -142,7 +142,7 @@ public struct MarkdownContextChips: Equatable {
         case "skill":
             let name = record["name"]?.stringValue ?? ""
             let text = recordLabel.isEmpty ? name : recordLabel
-            return MarkdownContextChip(look: ComposerChipLook(kind: .skill, label: text), action: .none, tooltip: "$\(name)", accessibility: "Skill, \(text)")
+            return MarkdownContextChip(look: ComposerChipLook(kind: .skill, label: text), action: .skill(ServerProviderSkill(name: name, description: record["description"]?.stringValue, path: record["path"]?.stringValue ?? "", displayName: text, shortDescription: record["shortDescription"]?.stringValue)), tooltip: "$\(name)", accessibility: "Skill, \(text)")
         case "thread":
             return threadChip(threadId: record["threadId"]?.stringValue ?? "", recordTitle: record["title"]?.stringValue ?? recordLabel)
         case "image":
@@ -257,6 +257,7 @@ public struct MarkdownContextChip {
         case openURL(String)
         /// A terminal excerpt's popover (TerminalContextInlineChip.tsx:19-47).
         case terminal(JSONValue)
+        case skill(ServerProviderSkill)
     }
     public var look: ComposerChipLook
     public var action: Action

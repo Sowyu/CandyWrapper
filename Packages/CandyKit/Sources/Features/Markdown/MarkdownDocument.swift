@@ -555,6 +555,7 @@ public struct InlineRun: Sendable, Equatable {
     public var italic = false
     public var strikethrough = false
     public var skillLabel: String?
+    public var skill: ServerProviderSkill?
     public var code = false
     public var link: URL?
     public var image: URL?

@@ -204,12 +204,10 @@ enum MarkdownStyle {
             }
             let index = i
             i += 1
-            if let label = run.skillLabel {
-                let source = run.text
-                let attachment = onMain { ComposerChipAttachment(look: ComposerChipLook(kind: .skill, label: label), source: source, maxWidth: maxChipWidth) }
-                let chip = NSMutableAttributedString(attachment: attachment)
-                chip.addAttribute(.markdownFindText, value: label, range: NSRange(location: 0, length: chip.length))
-                out.append(chip)
+            if let skill = run.skill {
+                appendContextChip(onMain { MarkdownContextChip(look: ComposerChipLook(kind: .skill, label: ProviderSkills.displayName(skill)),
+                    action: .skill(skill), tooltip: "$" + skill.name, accessibility: "Skill, " + ProviderSkills.displayName(skill)) })
+                out.addAttribute(.markdownFindText, value: ProviderSkills.displayName(skill), range: NSRange(location: out.length - 1, length: 1))
                 continue
             }
             // An image's alt text is not page text; a hard break ends the find segment (threadFindText.ts).

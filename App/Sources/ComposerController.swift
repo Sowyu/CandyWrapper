@@ -3319,8 +3319,22 @@ extension ComposerController {
         composer.imageShelf.onRemove = { [weak self] id in self?.removeImage(id) }
         composer.imageShelf.onRetry = { [weak self] id in self?.retryAttachment(id) }
         composer.onOpenChip = { [weak self] source in
-            guard let self, let token = ComposerInlineTokens.collect(source + " ").first,
-                  case .context(_, let contextId, _) = token.kind,
+            guard let self, let token = ComposerInlineTokens.collect(source + " ").first else { return false }
+            let skillName: String? = switch token.kind {
+            case .skill(let name): name
+            case .context("skill", let id, _): self.menuState.records[id]?["name"]?.stringValue
+            default: nil
+            }
+            if let name = skillName, let skill = self.menuProvider?.skills(cwd: self.menuCwd).first(where: { $0.name == name }) {
+                let open: (() -> Void)? = self.openThreadId == nil || skill.path.isEmpty ? nil : { [weak self] in
+                    let path = skill.path
+                    self?.panel.model.openFile?(FileLinkMeta(filePath: path, targetPath: path, workspaceRelativePath: path,
+                        basename: (path as NSString).lastPathComponent, line: nil, column: nil), false)
+                }
+                SkillDetailsView.show(skill: skill, from: self.composer, onViewInstructions: open)
+                return true
+            }
+            guard case .context(_, let contextId, _) = token.kind,
                   let attachment = self.currentAttachments.first(where: { $0.contextId == contextId }) else { return false }
             // A file to attach again has nothing to open (composerContextPresentation.tsx:237-242).
             if attachment.needsReattach { return true }
