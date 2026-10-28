@@ -4,6 +4,19 @@ import Testing
 import T3Protocol
 
 struct ServerConfigFeedTests {
+    @Test func onDemandOptInRequiresTheCurrentDescriptorsCapability() async throws {
+        let harness = Harness([.succeed], serverCapabilities: ["providerWorkspaceSnapshotsOnDemand"])
+        let supervisor = ConnectionSupervisor(dependencies: harness.dependencies)
+        let feed = ServerConfigFeed(supervisor: supervisor)
+        await feed.start()
+        await supervisor.connect()
+        #expect(await eventually { harness.lastSocket?.sent.isEmpty == false })
+        let socket = try #require(harness.lastSocket)
+        #expect(requests(socket).first?.payload["workspaceSnapshotsOnDemand"] == .bool(true))
+        await feed.stop()
+        await supervisor.disconnect()
+    }
+
     private func snapshot(_ name: String, providers: JSONValue = .array([])) -> JSONValue {
         .object([
             "version": .number(1), "type": .string("snapshot"),

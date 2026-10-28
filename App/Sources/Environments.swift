@@ -597,7 +597,8 @@ final class Environments {
     /// One unary call on the environment's own socket.
     func request(_ environmentId: String, _ method: String, _ payload: JSONValue) async throws -> JSONValue {
         guard let session = session(environmentId) else { throw CommandError.notConnected }
-        let reply = try await session.supervisor.request(method, payload: payload)
+        let input = method == "server.refreshProviders" ? ProviderWorkspaceSnapshots.refreshInput(payload, capabilities: await session.supervisor.serverCapabilities) : payload
+        let reply = try await session.supervisor.request(method, payload: input)
         acceptProviderUpdateReply(reply, method: method, environmentId: environmentId, session: session)
         return reply
     }
@@ -605,7 +606,8 @@ final class Environments {
     /// One unary call that gives up after `timeout`, for calls queued behind each other.
     func request(_ environmentId: String, _ method: String, _ payload: JSONValue, timeout: Duration) async throws -> JSONValue {
         guard let session = session(environmentId) else { throw CommandError.notConnected }
-        let reply = try await session.supervisor.request(method, payload: payload, timeout: timeout)
+        let input = method == "server.refreshProviders" ? ProviderWorkspaceSnapshots.refreshInput(payload, capabilities: await session.supervisor.serverCapabilities) : payload
+        let reply = try await session.supervisor.request(method, payload: input, timeout: timeout)
         acceptProviderUpdateReply(reply, method: method, environmentId: environmentId, session: session)
         return reply
     }

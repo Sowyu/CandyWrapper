@@ -12,6 +12,8 @@ public struct T3ConnectToken: Sendable, Equatable {
     public var expiresAt: Date
     public var accountId: String?
     public var thumbprint: String
+    public var serverVersion: String? = nil
+    public var serverCapabilities: Set<String> = []
 
     /// DPOP_ACCESS_TOKEN_REFRESH_SKEW_MS (client-runtime/src/connection/model.ts:108).
     public static let refreshSkew: TimeInterval = 60
@@ -164,7 +166,8 @@ public actor T3ConnectAuthorizer {
         return T3ConnectToken(environmentId: descriptor.environmentId, label: descriptor.label, endpoint: bootstrap.endpoint,
                               accessToken: access.accessToken,
                               expiresAt: issuedAt.addingTimeInterval(TimeInterval(access.expiresIn)),
-                              accountId: account, thumbprint: relay.key.thumbprint)
+                              accountId: account, thumbprint: relay.key.thumbprint, serverVersion: descriptor.serverVersion,
+                              serverCapabilities: Set(descriptor.capabilities.compactMap { $0.value.boolValue == true ? $0.key : nil }))
     }
 
     /// Drops the token for one environment (removed, or signed out of it).
@@ -276,7 +279,8 @@ public actor T3ConnectAuthorizer {
         return { [self] in
             do {
                 let socket = try await authorizeSocket(environmentId: environmentId, directEndpoint: directEndpoint)
-                let connection = RPCConnection(socket: try await URLSessionRPCSocket.open(url: socket.url))
+                let connection = RPCConnection(socket: try await URLSessionRPCSocket.open(url: socket.url),
+                                               serverVersion: socket.token.serverVersion, serverCapabilities: socket.token.serverCapabilities)
                 await connection.start()
                 return connection
             } catch is CancellationError {

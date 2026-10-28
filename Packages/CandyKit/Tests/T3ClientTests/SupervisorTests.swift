@@ -29,8 +29,11 @@ final class Harness: @unchecked Sendable {
     private(set) var sockets: [FakeSocket] = []
     private(set) var attempts = 0
     let base = ContinuousClock.now
+    let serverCapabilities: Set<String>
 
-    init(_ outcomes: [Outcome]) { self.outcomes = outcomes }
+    init(_ outcomes: [Outcome], serverCapabilities: Set<String> = []) {
+        self.outcomes = outcomes; self.serverCapabilities = serverCapabilities
+    }
 
     func advance(_ d: Duration) { lock.withLock { offset += d } }
     var recordedSleeps: [Duration] { lock.withLock { sleeps } }
@@ -49,7 +52,7 @@ final class Harness: @unchecked Sendable {
                 case .succeed:
                     let socket = FakeSocket()
                     lock.withLock { sockets.append(socket) }
-                    let c = RPCConnection(socket: socket)
+                    let c = RPCConnection(socket: socket, serverCapabilities: serverCapabilities)
                     await c.start()
                     return c
                 }

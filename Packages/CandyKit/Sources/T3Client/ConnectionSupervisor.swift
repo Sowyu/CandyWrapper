@@ -239,7 +239,8 @@ public actor ConnectionSupervisor {
             }
             let ticket = try await http.webSocketTicket(token: try await token())
             let socket = try await URLSessionRPCSocket.open(url: http.webSocketURL(ticket: ticket.ticket, identity: identity))
-            let connection = RPCConnection(socket: socket, serverVersion: descriptor.serverVersion)
+            let connection = RPCConnection(socket: socket, serverVersion: descriptor.serverVersion,
+                                           serverCapabilities: Set(descriptor.capabilities.compactMap { $0.value.boolValue == true ? $0.key : nil }))
             await connection.start()
             return connection
         }
@@ -403,6 +404,7 @@ public actor ConnectionSupervisor {
 
     /// Fresh descriptor metadata from this socket's connector. Unknown routes negotiate anew.
     public var serverVersion: String? { connection?.serverVersion }
+    public var serverCapabilities: Set<String> { connection?.serverCapabilities ?? [] }
 
     // MARK: State machine
 
