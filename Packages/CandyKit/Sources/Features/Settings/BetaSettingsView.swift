@@ -7,8 +7,8 @@ import T3Protocol
 /// Working section moved here from General; Guest links is new. Signed out of T3 Connect, Guest links offers
 /// Sign in in place of its switch (`GuestLinksRowWithSignIn`), but only once the account has loaded.
 public final class BetaSettingsView: SettingsPageBase {
-    static let guestDetail = "Share a thread with a guest who watches it live in their browser and sends messages you approve. Needs T3 Connect: sign in and link this machine in Environments. While it is off, every guest link stops working."
-    static let linkedDetail = "Let agents here work on your other machines, and theirs here. Turn it on for each machine, then link them in Environments. While it is off, nothing new starts over a link; tasks already running finish."
+    static let guestDetail = "Share a thread with a guest who watches it live in their browser and sends messages you approve. Needs T3 Connect: sign in and link this machine in Sharing & access. While it is off, every guest link stops working."
+    static let linkedDetail = "Let agents here work on your other machines, and theirs here. Turn it on for each machine, then link them in Connections. While it is off, nothing new starts over a link; tasks already running finish."
     static let guestSignedOutDetail = "Share a thread with a guest who watches it live in their browser and sends messages you approve. Sign in to T3 Connect to use guest links."
 
     public override init(context: SettingsPageContext) {
@@ -21,7 +21,9 @@ public final class BetaSettingsView: SettingsPageBase {
             write: { ["boringSidebarEnabled": .bool($0), "legacySidebarEnabled": .bool(false)] })
         let guest = serverSwitch("guest-links", Self.guestDetail, key: "guestSharingEnabled", reset: nil, label: "Guest links")
         guest.title = "Guest links"
+        // T3's copy names the Connections group for links and its Sharing & access page for guests (LabsSettingsPanel.tsx at 3814).
         let connections: (title: String, action: @MainActor () -> Void) = ("Connections", { [weak self] in self?.context.openSection?(.connections) })
+        let access: (title: String, action: @MainActor () -> Void) = ("Sharing & access", { [weak self] in self?.context.openSection?(.access) })
         // Kept aside, so the row can swap between the switch and Sign in.
         let toggle = guest.control
         let signIn = ButtonView("Sign in", variant: .outline, size: .sm)
@@ -32,7 +34,7 @@ public final class BetaSettingsView: SettingsPageBase {
             guest.isHidden = !self.context.scope.allStore("guestSharingEnabled")
             let signedOut = self.context.connectSignedOut
             guest.detail = signedOut ? Self.guestSignedOutDetail : Self.guestDetail
-            guest.detailLink = signedOut ? nil : connections
+            guest.detailLink = signedOut ? nil : access
             let control = signedOut ? signIn : toggle
             if guest.control !== control { guest.control = control }
         }
