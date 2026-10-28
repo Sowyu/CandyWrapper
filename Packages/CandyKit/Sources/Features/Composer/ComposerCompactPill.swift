@@ -2,7 +2,7 @@ import AppKit
 import DesignSystem
 
 /// The Compact chip left of the send button (ComposerPrimaryActions.tsx:357-397): `h-7 rounded-full border
-/// px-2.5 gap-1.5 text-xs tabular-nums`, the minimize icon at 14, "Compact" or "Full" and the token count.
+/// px-2.5 gap-1.5 text-xs tabular-nums`, the minimize icon at 14, "Compact" or "Keep" and the token count.
 /// On it is `border-warning/40 text-warning` with a `warning/8` hover fill; off it is `border-border
 /// text-muted-foreground` that turns `foreground` on hover. Colors fade over 150ms (`transition-colors`).
 final class ComposerCompactPill: ControlView {
@@ -59,7 +59,8 @@ final class ComposerCompactPill: ControlView {
     }
 
     private func restyle() {
-        word.text = keepFullHistory ? "Full" : "Compact"
+        // T3 3814 ComposerPrimaryActions.tsx:374-375 keeps the count visible in both modes.
+        word.text = keepFullHistory ? "Keep" : "Compact"
         count.text = tokens
         let hovered = state.hovered && state.enabled
         let ink = keepFullHistory ? Themed.color(hovered ? \.foreground : \.mutedForeground) : Themed.color(\.warning)
