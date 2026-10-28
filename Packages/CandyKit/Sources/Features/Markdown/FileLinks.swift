@@ -334,8 +334,9 @@ public enum FileLinks {
 
     nonisolated(unsafe) static let relativePrefix = regex(#"^(~/|\.{1,2}/)"#)
     /// The last segment is optional, so a folder link may end in `/` (`patches/`); a bare name still fails (6de7da548d).
-    nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*/)+(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*(?::\d+){0,2})?$"#)
-    nonisolated(unsafe) static let relativeFileName = regex(#"^[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\.[A-Za-z0-9_-]+(?::\d+){0,2}$"#)
+    /// T3 3814 packages/shared/src/markdownLinks.ts:17-25 accepts names in every script.
+    nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[\p{L}\p{M}\p{N}._-]+(?: +[\p{L}\p{M}\p{N}._-]+)*/)+(?:[\p{L}\p{M}\p{N}._-]+(?: +[\p{L}\p{M}\p{N}._-]+)*(?::\d+){0,2})?$"#)
+    nonisolated(unsafe) static let relativeFileName = regex(#"^[\p{L}\p{M}\p{N}._-]+(?: +[\p{L}\p{M}\p{N}._-]+)*\.[\p{L}\p{M}\p{N}_-]+(?::\d+){0,2}$"#)
     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
     nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
     nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
