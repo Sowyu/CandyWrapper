@@ -168,8 +168,7 @@ struct BannerStackFidelityTests {
         #expect(!stack.hasStack && !stack.expanded && stack.isHidden)
     }
 
-    /// A producer that keeps a dismissed notice gets it back, and a notice that leaves before the exit
-    /// ends (a thread switch) is never dismissed.
+    /// Accepted dismissals settle even when a thread switch removes the old animation.
     @Test func dismissKeptOrLeft() async throws {
         let notice = Self.update, goal = Self.goal
         var dismissed = 0
@@ -188,13 +187,14 @@ struct BannerStackFidelityTests {
         // The next dismiss is not refused.
         stack.requestDismiss("notice:a")
         #expect(stack.exitingId == "notice:a")
-        // The thread switches: the item has another id now, and the pending dismiss never runs.
+        // The thread switches while the old accepted dismissal still waits.
         var other = kept
         other[1] = ComposerBannerStackItem(id: "notice:b", view: notice, priority: .notice, height: { _ in 51 }, onDismiss: { dismissed += 10 })
         stack.update(other)
         #expect(stack.exitingId == nil)
+        stack.requestDismiss("notice:b")
         try await Task.sleep(nanoseconds: 300_000_000)
-        #expect(dismissed == 1)
+        #expect(dismissed == 12)
     }
 
     /// `resolveContextStripLabelsCompact` with its 16pt hysteresis.
