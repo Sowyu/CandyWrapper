@@ -380,7 +380,7 @@ final class ComposerController {
         composer.onQuestionPrevious = { [weak self] in self?.panel.lazyQuestionPanel.loaded?.previous() }
         panel.lazyGoalBanner.configure { [weak self] banner in banner.onAction = { [weak self] index in
             guard let self, let goal = self.shellThread?.goal, let index else { return }
-            let resume = index == 0 && ThreadGoalPresentation.canResume(goal)
+            let resume = index == 0 && ThreadGoalPresentation.canResume(goal) && !self.composer.runState.canInterrupt
             // ChatView.tsx:7526, 7534.
             self.sendThreadStandalone(resume ? "/goal resume" : "/goal clear", failure: resume ? "Failed to resume goal." : "Failed to clear goal.")
         } }
@@ -4974,7 +4974,9 @@ extension ComposerController {
         let thread = shellThread
         panel.showsGoal = thread?.goal != nil
         if let goal = thread?.goal {
-            let actions = composer.runState.canInterrupt ? [] : ThreadGoalPresentation.canResume(goal) ? ["Resume", "Clear"] : ["Clear"]
+            // Clear stops goal work, so it shows while working; Resume would stop unrelated work, so it waits
+            // (ThreadNow goal row, cc0b86ddf1 #25426 at 3814).
+            let actions = ThreadGoalPresentation.canResume(goal) && !composer.runState.canInterrupt ? ["Resume", "Clear"] : ["Clear"]
             panel.goalBanner.apply(.init(variant: .neutral, icon: .target, title: ThreadGoalPresentation.title(goal, working: composer.runState.canInterrupt), description: goal.objective, actions: actions))
         }
         updateBackgroundWorkBanner(thread)
