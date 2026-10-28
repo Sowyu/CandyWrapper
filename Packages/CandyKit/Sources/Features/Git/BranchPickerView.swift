@@ -27,7 +27,12 @@ public final class BranchPickerView: DSView, PickerPopupBody {
     static let listTop: CGFloat = 12, listBottom: CGFloat = 12, rowLeft: CGFloat = 8, rowRight: CGFloat = 10
 
     public var rows: [Row] = [] { didSet { reload() } }
-    public var selectedValue: String?
+    public var selectedValue: String? {
+        didSet {
+            guard selectedValue != oldValue else { return }
+            for row in rowViews { row.selected = row.row.value == selectedValue }
+        }
+    }
     public var statusText: String? { didSet { status.text = statusText ?? ""; status.isHidden = statusText == nil; resizePopup() } }
     /// "Start from remote": nil hides the row.
     public var startFromOrigin: Bool? { didSet { originRow.isHidden = startFromOrigin == nil; originSwitch.isOn = startFromOrigin ?? false; resizePopup() } }
@@ -236,7 +241,7 @@ public final class BranchPickerView: DSView, PickerPopupBody {
 /// the name middle-truncated, the badge in `text-3xs text-muted-foreground/45`.
 final class BranchPickerRowView: ControlView {
     let row: BranchPickerView.Row
-    let selected: Bool
+    var selected: Bool { didSet { if selected != oldValue { restyle() } } }
     private let fill = CALayer()
     private let title = MiddleTruncateView("", font: DSFont.ui(14))
     private let plain = LabelView()
