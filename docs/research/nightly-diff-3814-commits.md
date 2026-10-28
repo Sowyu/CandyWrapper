@@ -20,8 +20,8 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 01fe8d9188 | fix(observability): every exported resource names its service instance (#23973) | other | no | n/a |
 | 5f1f604733 | feat(mobile): on-demand chrome e2e runner across simulators | other | no | n/a |
 | 2ed92618e6 | fix: restore files reverted by 5f1f604 | other | no | n/a |
-| 2fd28bf938 | fix(client-runtime): "Codex (hub)" badges read CH instead of C( (#22918) | composer | yes | open |
-| a27b246162 | fix(web): usage-limit banner reset time follows the Time format setting (#22915) | composer | yes | open |
+| 2fd28bf938 | fix(client-runtime): "Codex (hub)" badges read CH instead of C( (#22918) | composer | yes | ported (4d56c379) |
+| a27b246162 | fix(web): usage-limit banner reset time follows the Time format setting (#22915) | composer | yes | ported (e28c8b5f) |
 | 313ca2715f | fix(web): terminal drag selection scrolls faster the farther past the edge (#22872) | other | yes | open |
 | 20ee805de9 | fix(observability): resources add OTel semconv runtime and browser keys (#23972) | other | no | n/a |
 | b2baf75337 | fix(web): asset URLs re-mint per revision and before expiry without effects (#24970) | thread | yes | open |
@@ -45,7 +45,7 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | b0f5d44475 | chore(lint): enforce eslint/no-unneeded-ternary (#25105) | other | no | n/a |
 | f9956434fa | fix(web): preview favicons resolve their project without ChatView syncing it (#25068) | other | yes | open |
 | 65822d8e17 | refactor(web): composer editor stops mirroring props into refs with effects (#25079) | composer | no | n/a |
-| 03df289735 | fix(client): usage-limit Snooze disables at reset even weeks away, via a shared deadline clock (#25005) | composer | yes | open |
+| 03df289735 | fix(client): usage-limit Snooze disables at reset even weeks away, via a shared deadline clock (#25005) | composer | yes | ported (e28c8b5f) |
 | 0ad399c6c5 | test(web): the diff boundary observer counter lives in its fixture (#25170) | other | no | n/a |
 | 07066c0406 | fix(client): a queued-edit save keeps its claim until it finishes (#25169) | composer | yes | open |
 | 5fee09a2c1 | refactor(web): terminal focus requests name the terminal they focus (#25009) | other | no | n/a |
@@ -113,7 +113,7 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | a240408242 | refactor(web): file breadcrumb menus refetch on a new workspace change, not on every open (#25377) | other | yes | open |
 | 1316d48b0c | fix(web): citations to older responses load their history instead of failing (#25371) | thread | yes | ported (fc007033) |
 | 6ea34149bb | refactor(client): composers share one workspace snapshot refresh per provider and cwd (#25370) | composer | yes | open |
-| cc0b86ddf1 | fix(server): goals stop the running turn, clear while working, no echoes (#25426) | composer | yes | open |
+| cc0b86ddf1 | fix(server): goals stop the running turn, clear while working, no echoes (#25426) | composer | yes | ported (fbc03278) |
 | 071239804e | refactor(web): pull request list remembers each answer for the next start (#25364) | pr/git | yes | open |
 | 3f3c1b9bcf | refactor(web): HTML previews handle frame messages in one listener (#25456) | other | no | n/a |
 | 2acc7b55cf | refactor(web): review guide runs are watched from their answers, not from mounted components (#25459) | pr/git | yes | open |
@@ -168,12 +168,12 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 6f6c6c14b7 | refactor(web): drop the unreachable paint-only thread timeline path (#25787) | thread | no | n/a |
 | 401b01747c | chore(release): prepare v0.1.3 | other | no | n/a |
 | 96fc7b9551 | refactor(web): the new design is the only design, with no toggle (#25778) | settings | yes (design) | phase 2 (design) |
-| 70eccd48e4 | fix(web): keep right panel maximize available in narrow windows (#25389) | thread | yes | open |
+| 70eccd48e4 | fix(web): keep right panel maximize available in narrow windows (#25389) | thread | yes | ported (3bc3509d); the sheet still has no maximize button |
 | 2202787df0 | fix(web): onboarding import no longer hangs when the project never arrives (#25805) | settings | yes | open |
 | 1a4f3c4a3c | fix(mobile): Windows image paths and non-ASCII file links open like desktop (#25802) | thread | yes | open |
-| f81c4cd79f | fix(web,mobile): markdown previews no longer show YAML frontmatter as a giant heading (#25804) | other | yes | open |
+| f81c4cd79f | fix(web,mobile): markdown previews no longer show YAML frontmatter as a giant heading (#25804) | other | yes | ported (7ba45ab4) |
 | b333c175ba | fix(web): compact toggle shows the token count again (#25818) | composer | yes | open |
-| 1702d55214 | fix(web,mobile): bot approvals are visible on the PR summary (#25829) | pr/git | yes | open |
+| 1702d55214 | fix(web,mobile): bot approvals are visible on the PR summary (#25829) | pr/git | yes | ported (ed18558a); avatar verdict glyph is phase 2 |
 | f3b058cd6a | fix(web,mobile): stopped runs no longer look like errors (#25830) | thread | yes | open |
 | e5f2e5dbbc | fix(client-runtime): iOS resume keeps live sockets and drops dead ones 4x faster (#25824) | connections | yes | open |
 | 56695ae3ec | feat: model labels show the name you'd say out loud (#24205) | composer | yes | open |
@@ -186,13 +186,13 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | a4fe62ecfb | refactor(web): composer overlay re-measures from one layout effect (#25915) | composer | no | n/a |
 | 3e61886a24 | refactor(web): file browser records the right-click position on its own panel (#25908) | other | no | n/a |
 | 067db24e00 | refactor(web): preview element picker drops its unmount guard (#25920) | other | no | n/a |
-| 2083a22919 | fix(web): PR Code tab no longer requests the diff of a commit the PR dropped (#25916) | pr/git | yes | open |
+| 2083a22919 | fix(web): PR Code tab no longer requests the diff of a commit the PR dropped (#25916) | pr/git | yes | ported (5c30b9b8) |
 | 6dc4842523 | refactor(web): file tree drag mentions use React drag handlers (#25913) | other | no | n/a |
-| d0b81ceb6e | fix(web): closing the last Browser tab hides the right panel again (#26058) | other | yes | open |
+| d0b81ceb6e | fix(web): closing the last Browser tab hides the right panel again (#26058) | other | yes | already so (RightPanelState closes on the last surface) |
 | 21762b5d4d | refactor(web): pull requests Cmd+F focuses the topbar search directly (#26045) | pr/git | no | n/a |
 | 6369e284d7 | refactor(web): install draft model reconciliation at app start (#26046) | composer | no | n/a |
 | 7b4c4b423c | refactor(web): the upload queue alone records finished file uploads on drafts (#26050) | composer | no | n/a |
-| 02329327c6 | fix(clients): prompt links find projects cloned from git.cafe (#26042) | pr/git | yes | open |
+| 02329327c6 | fix(clients): prompt links find projects cloned from git.cafe (#26042) | pr/git | yes | ported (42571e33) |
 | 4914cdd98f | fix(web): chips drop their pill and stay readable on every theme (#25066) | composer | yes (design) | phase 2 (design) |
 | 570d4b03ee | feat(mobile): report crashes to Axiom with symbolicated stacks (#19093) | other | no | n/a |
 | 5808469018 | fix(web): chip palette test follows the single design (#26131) | other | no (design) | n/a |
@@ -213,7 +213,7 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 1cf14a498f | fix(web): pairing, connect, error, and Clerk sign-in surfaces match the app's dialog style (#25281) | connections | yes (design) | phase 2 (design) |
 | 3b22620a5c | fix(server): parallel worktree launches no longer fail on .git/config lock (#25700) | pr/git | server-only | free with runtime |
 | 33d0c9637b | chore(lint): every React effect states its reason at the call site (#26161) | other | no | n/a |
-| e66ffccf49 | perf(web): stop measuring table cells while replies stream (#26152) | thread | yes | open |
+| e66ffccf49 | perf(web): stop measuring table cells while replies stream (#26152) | thread | yes | ported (0880487e) |
 | dde3fdb5a6 | feat(desktop): add a remote server by clicking its t3code://pair link (#24111) | connections | yes | open |
 | 4fc9e5f2fc | fix(web): settings avatar no longer hugs the modal corner (#26180) | settings | yes (design) | phase 2 (design) |
 | 294981fa72 | fix(mobile): Windows paths in messages keep their backslashes (#21454) | thread | no | n/a |
@@ -232,17 +232,17 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 91992bd5d4 | fix(web): update dialog shows one row per machine (#26210) | settings | yes | open |
 | 8947f3e353 | fix(web): server rows keep their source visible, cmd-click opens your browser (#26267) | thread | yes | open |
 | c2fbf0a524 | feat(server,web,mobile): thread links name their environment and never a title (#26239) | thread | yes | ported (7616fc6e) |
-| fe55faf379 | fix(clients): # suggestions put linked pull requests first for text queries (#26269) | composer | yes | open |
+| fe55faf379 | fix(clients): # suggestions put linked pull requests first for text queries (#26269) | composer | yes | ported (4cf7cdc6) |
 | 49a9e80e0b | fix(terminal): keep shared terminal grids in sync (#24352) | wire | yes | ported (40182582) |
 | 0c80751701 | feat: sign in to GitHub through the T3 Code for GitHub app [internal testing only] (#26245) | settings | yes | open |
 | 9910c0e874 | perf: reduce remote reconnect and command delays (#25754) | connections | yes | already so (wire audit) |
 | 3ef1610079 | fix(web): compaction row says "Compacting for 12s" instead of "after being idle" (#26299) | thread | yes | open |
-| 9c6429d74b | fix(web): threads without a project start on the primary environment (#26301) | palette | yes | open |
+| 9c6429d74b | fix(web): threads without a project start on the primary environment (#26301) | palette | yes | ported (9a1ab655) |
 | cafdcdaacd | fix(clients): give image attachment chips a blue accent (#26306) | composer | yes (design) | phase 2 (design) |
 | afc233492d | fix(web): prevent image thumbnails from warping during repaints (#26308) | thread | no | n/a |
 | 49582b7b2a | test(web): attachment font and large-text preview tests wait for the real load (#26314) | other | no | n/a |
 | 1f8530ec3c | feat(web): pending approvals show on their timeline row (#26255) | thread | yes | open |
-| 9b052a2d5b | fix(web): show the platform modifier in the send tooltip (#22436) | composer | yes | open |
+| 9b052a2d5b | fix(web): show the platform modifier in the send tooltip (#22436) | composer | yes | ported (0319f265) |
 | feb49e78d0 | fix(web): let theme color pickers use popover glass (#22348) | settings | yes (design) | phase 2 (design) |
 | 003ccd336d | fix(client-runtime): pairing links can no longer add routes to a saved environment (#26178) | connections | yes | ported (b089670b) |
 | feb2e32de6 | fix(web): align sidebar button geometry with shared tokens (#22287) | sidebar | yes (design) | phase 2 (design) |
