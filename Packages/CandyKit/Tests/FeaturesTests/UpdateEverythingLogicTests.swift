@@ -67,3 +67,22 @@ struct UpdateEverythingLogicTests {
         #expect(L.offered(L.Pending(servers: 1), runningOnThisMac: true).count == 0)
     }
 }
+
+extension UpdateEverythingLogicTests {
+    /// updateEverything.logic.test.ts:142-178 (3814).
+    @Test func oneRowPerMachineMergesAppServerProvidersAndSkippedReasons() {
+        let server = Self.machine("npm", "1.0.0", .bootService)
+        let d = L.describe(localVersion: "1.1.0", servers: [server], target: "1.1.0",
+            providerMachines: [("npm", "Remote", ["Codex", "Claude"]), ("local", "Mainbook", ["Codex"]), ("manual", "Manual", ["Claude"])],
+            localMachines: [("local", "Mainbook"), ("wsl", "Mainbook WSL")],
+            skipped: [.init(environmentId: "manual", label: "Manual", reason: "needs a manual update"),
+                      .init(environmentId: "offline", label: "Offline", reason: "not connected")])
+        #expect(d.rows.map(\.environmentId) == ["local", "wsl", "npm", "manual", "offline"])
+        #expect(d.rows.map(\.app) == [.thisApp, .thisApp, .server, nil, nil])
+        #expect(d.rows.map(\.providers) == [["Codex"], [], ["Codex", "Claude"], ["Claude"], []])
+        #expect(d.rows.map(\.skipped) == [nil, nil, nil, "needs a manual update", "not connected"])
+        #expect(d.updatingRows.count == 4 && d.providerCount == 4 && d.version == "1.1.0")
+        #expect(L.describe(localVersion: "2", servers: [], target: "x", providerMachines: []).rows.first?.environmentId == nil)
+        #expect(L.describe(localVersion: nil, servers: [Self.machine("desktop", "1", .desktopManaged)], target: "2", providerMachines: []).version == nil)
+    }
+}
