@@ -14,6 +14,8 @@ final class UpdateUI {
     private weak var settings: SettingsController?
     private let toasts: () -> ToastViewport?
     private let showWindow: () -> Void
+    private let footerCheck = SidebarUpdateCheck()
+    var checkEnvironmentUpdates: @MainActor @Sendable () async -> Bool = { true }
     /// Dither holds CandyWrapper's runtime update while a thread runs on this Mac (`UpdateEverything.holdsServerUpdates`).
     var holdsServerUpdates: () -> Bool = { false }
 
@@ -26,6 +28,7 @@ final class UpdateUI {
         self.settings = settings
         self.toasts = toasts
         self.showWindow = showWindow
+        footerCheck.onChange = { [weak pill] state in pill?.isCheckingForUpdates = state == .checking }
         pill.onCheck = { [weak self] in self?.pillCheck() }
         pill.onDownload = { [weak self] in self?.pillDownload() }
         pill.onInstall = { [weak self] in self?.pillInstall() }
@@ -79,14 +82,22 @@ final class UpdateUI {
     // MARK: Pill
 
     private func pillCheck() {
-        if showsRuntime { runtime.request(); return }
-        pill?.isActionPending = true
         Task {
-            let result = await updater.check()
-            if !result.checked {
-                toast("Could not check for updates", result.state.message ?? "Automatic updates are not available in this build.")
+            await footerCheck.run(checks: [
+                { [updater] in
+                    let result = await updater.check(background: true)
+                    return result.checked && result.state.errorContext != .check
+                },
+                checkEnvironmentUpdates
+            ], hasUpdates: { [updater, runtime] in
+                DesktopUpdateLogic.buttonAction(updater.state) != .none ||
+                    DesktopUpdateLogic.buttonAction(runtime.state) != .none || pill?.hasServerUpdates == true
+            })
+            switch footerCheck.state {
+            case .upToDate: toast("Up to date", nil, .success)
+            case .failed: toast("Could not check all updates", "Try again when all update sources are available.")
+            default: break
             }
-            pill?.isActionPending = false
         }
     }
 

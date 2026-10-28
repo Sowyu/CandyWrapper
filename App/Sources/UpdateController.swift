@@ -38,6 +38,7 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
     private var downloadWaiter: ((Bool) -> Void)?
     private var installWaiter: (() -> Void)?
     private var checkAfterSession = false
+    private var checkInBackgroundAfterSession = false
     private var appcastItems: [SUAppcastItem] = []
     private var expectedLength: UInt64 = 0
     private var receivedLength: UInt64 = 0
@@ -101,7 +102,7 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
     // MARK: Bridge (ipc.ts:1236-1241)
 
     /// `check(reason)`: false when updates are off, as `{checked: false}`; the state after the check otherwise.
-    func check() async -> (checked: Bool, state: DesktopUpdateState) {
+    func check(background: Bool = false) async -> (checked: Bool, state: DesktopUpdateState) {
         guard state.enabled, let updater = startedUpdater() else { return (false, state) }
         // DesktopUpdates.ts:419-428: no check while downloading. A held download stays as it is: T3's check
         // keeps `downloaded` whatever it finds (updateMachine.ts:61-143).
@@ -110,7 +111,11 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
         let result = await withCheckedContinuation { (c: CheckedContinuation<DesktopUpdateState, Never>) in
             checkWaiters.append { c.resume(returning: $0) }
             if state.status == .checking, updater.sessionInProgress { return } // a background check is under way
-            if updater.sessionInProgress { checkAfterSession = true } else { updater.checkForUpdates() }
+            if updater.sessionInProgress {
+                checkAfterSession = true
+                checkInBackgroundAfterSession = background
+            } else if background { updater.checkForUpdatesInBackground() }
+            else { updater.checkForUpdates() }
         }
         return (true, result)
     }
@@ -375,7 +380,10 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.checkAfterSession else { return }
             self.checkAfterSession = false
-            self.updater?.checkForUpdates()
+            let background = self.checkInBackgroundAfterSession && !self.wantsDownload && !self.wantsInstall
+            self.checkInBackgroundAfterSession = false
+            if background { self.updater?.checkForUpdatesInBackground() }
+            else { self.updater?.checkForUpdates() }
         }
     }
 

@@ -61,6 +61,31 @@ final class UpdateEverything {
     /// A provider list changed somewhere (the composer's config observers).
     func providersChanged() { refresh() }
 
+    /// T3 3669 ws.ts:2310-2380: refreshModels invalidates the latest-version cache before discovery.
+    func check() async -> Bool {
+        async let servers = serverUpdates.check()
+        async let runtime = serverUpdates.runtimeUpdater?.check() ?? true
+        let providers = await withTaskGroup(of: Bool.self) { group in
+            for id in environments.environmentIds where environments.state(id)?.status == .connected {
+                group.addTask { [weak self] in await self?.checkProviders(id) ?? false }
+            }
+            var succeeded = true
+            for await result in group { if !result { succeeded = false } }
+            return succeeded
+        }
+        let (serverResult, runtimeResult) = await (servers, runtime)
+        refresh()
+        return providers && serverResult && runtimeResult
+    }
+
+    private func checkProviders(_ id: String) async -> Bool {
+        do {
+            _ = try await environments.request(id, "server.refreshProviders",
+                .object(["refreshModels": .bool(true)]), timeout: .seconds(60))
+            return true
+        } catch { return false }
+    }
+
     private var action: DesktopUpdateLogic.ButtonAction { DesktopUpdateLogic.buttonAction(updater.state) }
 
     /// A thread runs on this Mac: in the local environment, the one CandyWrapper starts or was pointed at first.

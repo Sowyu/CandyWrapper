@@ -360,6 +360,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                           pill: sidebar.updatePill, window: window,
                                           toasts: { [weak settings, weak threads] in settings?.visibleToasts ?? threads?.panel.toasts },
                                           providers: { [weak threads] env in threads?.composer.config(env)?.providers ?? [] })
+        updates?.checkEnvironmentUpdates = { [weak everything] in await everything?.check() ?? false }
         updateEverything = everything
         everything.account = sidebar.accountRow
         updates?.holdsServerUpdates = { [weak everything] in everything?.holdsServerUpdates ?? false }

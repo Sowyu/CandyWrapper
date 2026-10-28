@@ -1,0 +1,120 @@
+{
+  "created": "2026-10-28T09:23:11",
+  "app": "same Release binary as ac5e613-dirty full review",
+  "method": "scripts/perf-review App, probe(window), and timing; three launch-only repeats on its private workload 1 server",
+  "quiet": {
+    "max_load": 3.0,
+    "noisy": false,
+    "waits": [
+      {
+        "before": "footer-launch-recheck-0",
+        "waited_s": 0,
+        "load_before": 1.39,
+        "load": 1.39,
+        "quiet": true
+      },
+      {
+        "before": "footer-launch-recheck-1",
+        "waited_s": 0,
+        "load_before": 1.39,
+        "load": 1.39,
+        "quiet": true
+      },
+      {
+        "before": "footer-launch-recheck-2",
+        "waited_s": 0,
+        "load_before": 1.39,
+        "load": 1.39,
+        "quiet": true
+      }
+    ]
+  },
+  "raw": {
+    "launch.window_ms": [
+      341,
+      268,
+      261
+    ],
+    "launch.live_sidebar_ms": [
+      444.0,
+      362.0,
+      326.0
+    ],
+    "launch.cached_sidebar_ms": [
+      370.0,
+      283.0,
+      274.0
+    ]
+  },
+  "metrics": {
+    "launch.window_ms": {
+      "median": 268,
+      "min": 261,
+      "max": 341,
+      "values": [
+        341,
+        268,
+        261
+      ]
+    },
+    "launch.live_sidebar_ms": {
+      "median": 362.0,
+      "min": 326.0,
+      "max": 444.0,
+      "values": [
+        444.0,
+        362.0,
+        326.0
+      ]
+    },
+    "launch.cached_sidebar_ms": {
+      "median": 283.0,
+      "min": 274.0,
+      "max": 370.0,
+      "values": [
+        370.0,
+        283.0,
+        274.0
+      ]
+    }
+  },
+  "baseline": "same median of three saved runs as the full review",
+  "baseline_metrics": {
+    "launch.window_ms": {
+      "median": 230,
+      "min": 226,
+      "max": 1040,
+      "values": [
+        1040,
+        226,
+        230
+      ]
+    },
+    "launch.live_sidebar_ms": {
+      "median": 311.0,
+      "min": 294.0,
+      "max": 1405.0,
+      "values": [
+        1405.0,
+        311.0,
+        294.0
+      ]
+    },
+    "launch.cached_sidebar_ms": {
+      "median": 253.0,
+      "min": 237.0,
+      "max": 1115.0,
+      "values": [
+        1115.0,
+        237.0,
+        253.0
+      ]
+    }
+  },
+  "verdicts": {
+    "launch.window_ms": "same",
+    "launch.live_sidebar_ms": "same (ranges overlap)",
+    "launch.cached_sidebar_ms": "same"
+  },
+  "binary_sha256": "4480c8553bada71a4baa9c592632a55e319f516bbcc8f603dfb19f23c6606473"
+}

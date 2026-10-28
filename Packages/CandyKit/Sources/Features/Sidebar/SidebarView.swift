@@ -274,7 +274,6 @@ public final class SidebarContentView: DSView {
                   backButton, undoNotice, providerUpdatePill, updatePill] as [NSView] {
             addSubview(v)
         }
-        updatePill.isHidden = true
         providerUpdatePill.onVisibilityChange = { [weak self] in self?.needsLayout = true }
         list.registerForDraggedTypes([.fileURL, .sidebarThreads])
         list.onVisibleRowsChange = { [weak self] in self?.scheduleLabelTimer() }
@@ -1029,8 +1028,11 @@ public final class SidebarContentView: DSView {
             b.frame = NSRect(x: fx, y: menuTop, width: 32, height: 32)
             fx += 36
         }
-        // Keep the account row above the list even when the update button is hidden.
-        if accountRow.superview == nil { addSubview(accountRow, positioned: .above, relativeTo: scrollArea) }
+        // The account surface covers the list; its update button stays above that surface.
+        if accountRow.superview == nil {
+            addSubview(accountRow, positioned: .above, relativeTo: scrollArea)
+            addSubview(updatePill, positioned: .above, relativeTo: accountRow)
+        }
         accountRow.isHidden = !accountFooter
         if accountFooter {
             for b in [settingsButton, pullRequestsButton, usageButton] { b.isHidden = true }

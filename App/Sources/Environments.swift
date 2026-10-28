@@ -588,7 +588,7 @@ final class Environments {
     var onProviderUpdateReply: ((String, [ServerProvider]) -> Void)?
 
     private func acceptProviderUpdateReply(_ reply: JSONValue, method: String, environmentId: String, session: ShellSession) {
-        guard method == "server.updateProvider", self.session(environmentId) === session,
+        guard ["server.updateProvider", "server.refreshProviders"].contains(method), self.session(environmentId) === session,
               let providers = try? reply["providers"]?.decode(as: [ServerProvider].self) else { return }
         onProviderUpdateReply?(environmentId, providers)
     }

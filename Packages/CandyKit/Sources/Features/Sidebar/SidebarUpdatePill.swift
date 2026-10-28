@@ -21,6 +21,7 @@ public final class SidebarUpdatePillView: ControlView {
     public var onOpenURL: ((String) -> Void)?
     /// A server update offers the full update pass, including providers. Providers alone stay in the account menu.
     private(set) var everythingSummary: String? { didSet { if everythingSummary != oldValue { refresh() } } }
+    public var hasServerUpdates: Bool { everythingSummary != nil }
     public func setEverything(summary: String?, pending: UpdateEverythingLogic.Pending) {
         everythingSummary = pending.servers > 0 ? summary : nil
     }
@@ -28,15 +29,13 @@ public final class SidebarUpdatePillView: ControlView {
     public var run: (tooltip: String, installsLocal: Bool)? { didSet { if run?.tooltip != oldValue?.tooltip || run?.installsLocal != oldValue?.installsLocal { refresh() } } }
     public var onEverything: (() -> Void)?
 
-    /// `isCheckAnimationLatched`: the spin finishes its turn after the check ends (:126-132, 291-298).
-    private(set) var checkLatched = false
-    private var spinning = false
-    private var finishing = false
-    private var spinGeneration = 0
+    /// Covers the app, server and provider checks together.
+    public var isCheckingForUpdates = false { didSet { if isCheckingForUpdates != oldValue { refresh() } } }
     private var shownIcon: IconStatus?
     private let decoration = BoxDecorationLayer()
     private let iconBox = DSView()
     private var glyph: IconView?
+    private var spinner: SpinnerView?
     private let ringTrack = CAShapeLayer()
     private let ringArc = CAShapeLayer()
     private let dotRing = CALayer()
@@ -83,7 +82,7 @@ public final class SidebarUpdatePillView: ControlView {
     var buttonAction: DesktopUpdateLogic.ButtonAction { update.map(DesktopUpdateLogic.buttonAction) ?? .none }
     private var isDownloading: Bool { update?.status == .downloading }
     /// `shouldShowDesktopUpdateCheckIcon` (DesktopUpdateStatusIcon.tsx:20-30).
-    var showCheckIcon: Bool { update?.status == .checking || (checkLatched && !Motion.reduced) }
+    var showCheckIcon: Bool { isCheckingForUpdates || update?.status == .checking }
     /// `runsEverything`: remote work waits and this app isn't downloading.
     var showsEverything: Bool { everythingSummary != nil && !isDownloading }
     var showUpdateDetails: Bool { buttonAction != .none || showsEverything || run != nil || isDownloading }
@@ -98,37 +97,29 @@ public final class SidebarUpdatePillView: ControlView {
     }
     private var showUpdateIconState: Bool { showUpdateDetails && !showCheckIcon }
     var tooltipText: String {
+        if showCheckIcon { return "Checking for updates…" }
         if let run { return run.tooltip }
         if showsEverything, let everythingSummary { return everythingSummary }
         if showUpdateDetails { return update.map(DesktopUpdateLogic.buttonTooltip) ?? "Update available" }
-        return showCheckIcon ? "Checking for updates…" : "Check for updates"
+        return "Check for updates"
     }
     private var disabled: Bool {
         if showCheckIcon { return true }
         if showsEverything { return false }
-        return showUpdateDetails ? DesktopUpdateLogic.isButtonDisabled(update) : !DesktopUpdateLogic.canCheck(update)
+        return showUpdateDetails ? DesktopUpdateLogic.isButtonDisabled(update) : onCheck == nil && !DesktopUpdateLogic.canCheck(update)
     }
     var isInteractionDisabled: Bool { disabled || isActionPending || run != nil }
     /// During a run the tooltip shows its progress instead of release notes.
-    var showsReleaseNotes: Bool { run == nil && DesktopUpdateLogic.showsReleaseNotesPopover(showUpdateDetails: showUpdateDetails, update) }
+    var showsReleaseNotes: Bool { !showCheckIcon && run == nil && DesktopUpdateLogic.showsReleaseNotesPopover(showUpdateDetails: showUpdateDetails, update) }
 
     private func stateChanged(from old: DesktopUpdateState?) {
-        // :126-132: a check that starts latches the spin.
-        if update?.status == .checking, !Motion.reduced, window != nil { checkLatched = true } // nothing spins off screen
         refresh()
     }
 
     private func refresh() {
-        // The footer offers only app and server updates; manual checks remain in the app menu and Settings.
-        let hidden = !showUpdateDetails
-        if isHidden != hidden {
-            isHidden = hidden
-            superview?.needsLayout = true
-        }
         let status = iconStatus
         if status != shownIcon { rebuildIcon(status) }
         updateProgress(animated: true)
-        updateSpin()
         let text = tooltipText
         // `<Tooltip disabled={showReleaseNotesPopover}>`: an empty text never opens.
         tooltip.text = showsReleaseNotes ? "" : text
@@ -186,6 +177,7 @@ public final class SidebarUpdatePillView: ControlView {
         decoration.boxStyle = box
         alphaValue = disabled && !showUpdateIconState ? 0.6 : 1
         glyph?.strokeColor = color
+        spinner?.color = color
         let cg = color.cgColor(in: self)
         ringTrack.strokeColor = cg.copy(alpha: cg.alpha * 0.22)
         ringArc.strokeColor = cg
@@ -201,6 +193,7 @@ public final class SidebarUpdatePillView: ControlView {
         decoration.layout(boxSize: bounds.size)
         iconBox.frame = NSRect(x: (bounds.width - 16) / 2, y: (bounds.height - 16) / 2, width: 16, height: 16)
         glyph?.frame = iconBox.bounds
+        spinner?.frame = iconBox.bounds
         // The ring: a 32px SVG, r 14, turned -90deg so it starts at the top and runs clockwise.
         let ring = CGMutablePath()
         ring.addArc(center: CGPoint(x: bounds.midX, y: bounds.midY), radius: 14, startAngle: .pi / 2, endAngle: .pi / 2 - 2 * .pi, clockwise: true)
@@ -215,9 +208,11 @@ public final class SidebarUpdatePillView: ControlView {
 
     /// `DesktopUpdateStatusIcon` (DesktopUpdateStatusIcon.tsx:102-126). T3 remounts it on a status change.
     private func rebuildIcon(_ status: IconStatus) {
-        stopSpin()
         shownIcon = status
         glyph?.removeFromSuperview()
+        glyph = nil
+        spinner?.removeFromSuperview()
+        spinner = nil
         let name: IconName = switch status {
         case .idle, .checking: .refreshCw
         case .available, .downloading: .download
@@ -225,9 +220,15 @@ public final class SidebarUpdatePillView: ControlView {
         // Matches the server update icon in Connections; the download arrow stays for this app's own file.
         case .everything: .circleArrowUp
         }
-        let g = IconView(name: name, size: 16)
-        iconBox.addSubview(g, positioned: .below, relativeTo: nil)
-        glyph = g
+        if status == .checking {
+            let s = SpinnerView(size: .md)
+            iconBox.addSubview(s, positioned: .below, relativeTo: nil)
+            spinner = s
+        } else {
+            let g = IconView(name: name, size: 16)
+            iconBox.addSubview(g, positioned: .below, relativeTo: nil)
+            glyph = g
+        }
         dotRing.isHidden = status != .available
         dot.isHidden = status != .available
         badge.isHidden = status != .downloaded
@@ -264,83 +265,10 @@ public final class SidebarUpdatePillView: ControlView {
         ringArc.strokeEnd = end
     }
 
-    // MARK: Check spin (`RefreshIcon refreshing`, animate-spin: one turn a second)
-
-    private var spinLayers: [CALayer] { glyph?.shapeLayers ?? [] }
-
-    private func updateSpin() {
-        guard iconStatus == .checking, !Motion.reduced else { return stopSpin() }
-        if update?.status == .checking { startSpin(restart: false) }
-        else if spinning { finishTurn() }
-        else { releaseLatch() }
-    }
-
-    private func startSpin(restart: Bool) {
-        // While a turn is finishing, `turnFinished` spins on if a check started again.
-        if spinning, !restart { return }
-        spinning = true
-        finishing = false
-        spinGeneration += 1
-        for l in spinLayers {
-            let spin = CABasicAnimation(keyPath: "transform.rotation.z")
-            spin.fromValue = 0
-            spin.toValue = -2 * Double.pi // layer space is y up: negative turns clockwise
-            spin.duration = 1
-            spin.repeatCount = .infinity
-            spin.preferredFrameRateRange = Motion.loopFrameRate
-            l.add(spin, forKey: "spin")
-        }
-    }
-
-    /// `onAnimationIteration` re-reads the state: the turn in progress completes, then the latch lets go.
-    private func finishTurn() {
-        guard !finishing else { return }
-        guard let first = spinLayers.first, first.animation(forKey: "spin") != nil else { stopSpin(); return releaseLatch() }
-        finishing = true
-        let generation = spinGeneration
-        let angle = (first.presentation()?.value(forKeyPath: "transform.rotation.z") as? Double) ?? 0
-        // `angle` runs 0 to -2pi (pi to -pi as read back); what is left of this turn takes the rest of the second.
-        var progress = -angle / (2 * .pi)
-        if progress < 0 { progress += 1 }
-        let remaining = max(0.01, 1 - progress)
-        CATransaction.begin()
-        CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated { self?.turnFinished(generation) } }
-        for l in spinLayers {
-            let rest = CABasicAnimation(keyPath: "transform.rotation.z")
-            rest.fromValue = -progress * 2 * .pi
-            rest.toValue = -2 * Double.pi
-            rest.duration = remaining
-            l.add(rest, forKey: "spin")
-        }
-        CATransaction.commit()
-    }
-
-    private func turnFinished(_ generation: Int) {
-        guard generation == spinGeneration, finishing else { return }
-        if update?.status == .checking, !Motion.reduced { return startSpin(restart: true) } // checking again: keep turning
-        stopSpin()
-        releaseLatch()
-    }
-
-    private func releaseLatch() {
-        guard checkLatched else { return }
-        checkLatched = false
-        refresh()
-    }
-
-    private func stopSpin() {
-        spinning = false
-        finishing = false
-        spinGeneration += 1
-        for l in spinLayers { l.removeAnimation(forKey: "spin") }
-    }
-
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { stopSpin(); releaseLatchSilently(); closeNotes() } else { refresh() }
+        if window == nil { closeNotes() } else { refresh() }
     }
-
-    private func releaseLatchSilently() { checkLatched = false }
 
     // MARK: Action (SidebarUpdatePill.tsx:176-289)
 
@@ -352,10 +280,6 @@ public final class SidebarUpdatePillView: ControlView {
         case .download: onDownload?()
         case .install: onInstall?()
         case .none:
-            if !Motion.reduced, window != nil {
-                checkLatched = true
-                startSpin(restart: true)
-            }
             onCheck?()
         }
     }

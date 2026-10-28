@@ -102,6 +102,14 @@ final class RuntimeUpdateController {
             }
         }
     }
+    /// Join an active check, or bypass the launch/activation throttle for the footer.
+    func check() async -> Bool {
+        guard current() != nil else { return true }
+        if state.status != .checking { checkIfDue(manual: true) }
+        if let task, state.status == .checking { await task.value }
+        return state.errorContext != .check
+    }
+
     func request() {
         guard !busy, current()?.environmentId == environmentId else { return }
         switch DesktopUpdateLogic.buttonAction(state) {

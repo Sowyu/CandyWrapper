@@ -79,10 +79,13 @@ struct DesktopUpdateTests {
         #expect(pill.tooltipText == "Check for updates" && pill.isInteractionDisabled)
         pill.update = base
         #expect(!pill.isInteractionDisabled && pill.iconStatus == .idle)
+        pill.update = base.onNoUpdate(at: at)
+        #expect(pill.iconStatus == .idle && !pill.isInteractionDisabled && !pill.isHidden)
+        #expect(pill.tooltipText == "Check for updates")
         pill.update = base.onCheckStart(at)
         #expect(pill.iconStatus == .checking && pill.isInteractionDisabled && pill.tooltipText == "Checking for updates…")
         pill.update = base.onUpdateAvailable("0.1.3", at: at, releaseNotes: [.init(version: "0.1.3", items: ["a"], totalItems: 1)])
-        // Off screen nothing spins, so the latch lets go at once.
+        // Completing the check restores the update glyph.
         #expect(pill.iconStatus == .available && pill.showsReleaseNotes)
         pill.update = pill.update?.onDownloadStart()
         #expect(pill.iconStatus == .downloading && pill.isInteractionDisabled)
@@ -109,13 +112,13 @@ struct DesktopUpdateTests {
                 let account = SidebarAccountRowView()
                 host.addSubview(account)
                 let cases: [(UpdateEverythingLogic.Pending, Bool, SidebarUpdatePillView.IconStatus)] = [
-                    (.init(providers: 1), true, .idle),
+                    (.init(providers: 1), false, .idle),
                     (.init(app: true), false, .available),
                     (.init(servers: 1), false, .everything),
                     (.init(app: true, servers: 1), false, .everything),
                     (.init(runtime: true), false, .available),
                     (.init(app: true, runtime: true, servers: 2, providers: 3), false, .everything),
-                    (.init(), true, .idle),
+                    (.init(), false, .idle),
                 ]
                 for (pending, hidden, icon) in cases {
                     pill.update = pending.app || pending.runtime ? base.onUpdateAvailable("0.1.3", at: at) : base
@@ -131,7 +134,7 @@ struct DesktopUpdateTests {
         }
     }
 
-    @Test func hiddenUpdateButtonKeepsAccountRowVisible() throws {
+    @Test func refreshButtonKeepsAccountRowVisible() throws {
         var theme = ThemeRuntimeInput()
         theme.ditherDark = true
         theme.ditherLight = true
@@ -142,7 +145,7 @@ struct DesktopUpdateTests {
             let sidebar = SidebarContentView()
             container.content = sidebar
             let image = Snapshot.image(of: container, size: NSSize(width: 256, height: 780), dark: dark)
-            #expect(sidebar.updatePill.isHidden)
+            #expect(!sidebar.updatePill.isHidden)
             #expect(!sidebar.accountRow.isHidden)
             // The avatar must actually reach the bitmap, rather than sit behind the sidebar surface.
             let avatar = try #require(image.colorAt(x: 36, y: 1500)?.usingColorSpace(.sRGB))

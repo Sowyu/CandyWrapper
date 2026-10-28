@@ -40,6 +40,7 @@ final class ServerUpdates {
     /// Hosts that refused this client's protocol, by environment id: their HTTP descriptor, read once per refusal.
     private var outdated: [String: EnvironmentDescriptor] = [:]
     private var outdatedReads: Set<String> = []
+    private var checkedDescriptors: [String: EnvironmentDescriptor] = [:]
 
     init(environments: Environments) {
         self.environments = environments
@@ -57,11 +58,12 @@ final class ServerUpdates {
 
     /// A new session for the environment: follow its lifecycle so a restarted server's version shows.
     func sessionChanged(_ environmentId: String) {
+        checkedDescriptors[environmentId] = nil
         if let old = lifecycle.removeValue(forKey: environmentId) { old.shell.lifecycleObservers[old.observer] = nil }
         if let shell = environments.session(environmentId) {
             let id = UUID()
             shell.lifecycleObservers[id] = { [weak self] json in
-                if json["type"]?.stringValue == "welcome" { self?.changed() }
+                if json["type"]?.stringValue == "welcome" { self?.checkedDescriptors[environmentId] = nil; self?.changed() }
             }
             lifecycle[environmentId] = (shell, id)
         }
@@ -72,7 +74,32 @@ final class ServerUpdates {
 
     /// The environment the server describes in its last `welcome`.
     func descriptor(_ environmentId: String) -> EnvironmentDescriptor? {
-        try? environments.session(environmentId)?.welcome?["environment"]?.decode(as: EnvironmentDescriptor.self)
+        checkedDescriptors[environmentId] ?? (try? environments.session(environmentId)?.welcome?["environment"]?.decode(as: EnvironmentDescriptor.self))
+    }
+
+    /// Re-read connected servers without reconnecting their sockets or interrupting turns.
+    func check() async -> Bool {
+        await withTaskGroup(of: Bool.self) { group in
+            for id in environments.environmentIds where environments.state(id)?.status == .connected {
+                group.addTask { [weak self] in await self?.checkDescriptor(id) ?? false }
+            }
+            var succeeded = true
+            for await result in group { if !result { succeeded = false } }
+            return succeeded
+        }
+    }
+
+    private func checkDescriptor(_ id: String) async -> Bool {
+        guard let shell = environments.session(id) else { return false }
+        let welcome = shell.welcome
+        do {
+            let descriptor = try await shell.http.descriptor()
+            guard environments.session(id) === shell, shell.welcome == welcome,
+                  descriptor.environmentId == id else { return false }
+            checkedDescriptors[id] = descriptor
+            changed()
+            return true
+        } catch { return false }
     }
 
     func capabilities(_ environmentId: String) -> ServerUpdateCapabilities {
