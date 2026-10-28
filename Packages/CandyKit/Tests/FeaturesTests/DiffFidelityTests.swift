@@ -1,6 +1,7 @@
 import AppKit
 import Testing
 import DesignSystem
+import T3Protocol
 @testable import Features
 
 /// The diff panel against T3. `body`: DiffListView against T3's own @pierre/diffs rendering each
@@ -80,7 +81,7 @@ struct DiffFidelityTests {
     /// part of DiffPanel) to the bottom.
     /// 3824 expands both sandbox files. 09 uses split layout and 10 uses stacked layout.
     @Test(arguments: ["10-diff-unified", "09-diff-split"])
-    func panel(_ reference: String) throws {
+    func panel(_ reference: String) async throws {
         var fonts = FontRuntimeInput()
         fonts.smoothing = false
         FontRuntime.apply(fonts)
@@ -95,7 +96,21 @@ struct DiffFidelityTests {
             panel.statStyle = .pierre
             panel.layoutStyle = reference == "09-diff-split" ? .split : .unified
             panel.bodyOffset = 0.5
-            panel.showPatch(try String(contentsOf: Self.repo.appendingPathComponent("fixtures/3824-panel.patch"), encoding: .utf8), scopeLabel: "Changes", collapsed: false)
+            let patch = try String(contentsOf: Self.repo.appendingPathComponent("fixtures/3824-panel.patch"), encoding: .utf8)
+            panel.workspaceRoot = "/sandbox/demo-repo"
+            panel.gitLoader = { cwd, _, _ in
+                ReviewDiffPreview(cwd: cwd, sources: [.init(id: "branch", kind: "branch-range", title: "Changes",
+                    baseRef: nil, headRef: nil, diff: patch, diffHash: "3824-panel", truncated: false)])
+            }
+            panel.fileContentsLoader = { _, _, file in
+                let old = "def greet(name):\n    return f\"Hello, {name}!\"\n"
+                return ReviewDiffFileContents(oldContents: old, newContents: file.path == "hello.py"
+                    ? "\"\"\"Small demo module with a greeting helper.\"\"\"\n\n\n" + old : "")
+            }
+            panel.selectGitScope(.branch)
+            for _ in 0..<200 where panel.list.diff.files.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+            try #require(!panel.list.diff.files.isEmpty)
+            panel.list.setAllCollapsed(false)
             let ours = Snapshot.image(of: panel, size: NSSize(width: crop.width / 2, height: crop.height / 2), scale: 2, dark: theme == "dark")
             cases.append(("\(reference).\(theme)", try Self.record("\(reference).\(theme)", ref: ref, ours: ours, rows: &rows)))
         }

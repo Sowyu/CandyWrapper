@@ -44,6 +44,9 @@ public struct UnifiedDiff: Sendable {
         public var hunks: [Hunk]
         public var additions: Int
         public var deletions: Int
+        /// Nil until a context expansion hydrates both complete sides.
+        var oldLineCount: Int? = nil
+        var newLineCount: Int? = nil
 
         /// `resolveFileDiffPath`: the new name, else the old one.
         public var path: String { newPath ?? oldPath ?? "" }
@@ -54,7 +57,7 @@ public struct UnifiedDiff: Sendable {
 
     public internal(set) var files: [File] = []
     public internal(set) var lines: [Line] = []
-    let bytes: [UInt8]
+    var bytes: [UInt8]
 
     public init(_ patch: String) {
         bytes = Array(patch.utf8)

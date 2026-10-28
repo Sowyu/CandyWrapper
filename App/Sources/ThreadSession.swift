@@ -105,6 +105,7 @@ final class ThreadSession {
         if active {
             panel?.lazyDiffPanel.set(\.loader, Self.diffLoader(shell.supervisor))
             panel?.lazyDiffPanel.set(\.gitLoader, Self.gitDiffLoader(shell.supervisor))
+            panel?.lazyDiffPanel.set(\.fileContentsLoader, Self.diffFileContentsLoader(shell.supervisor))
             panel?.lazyDiffPanel.set(\.refLoader, Self.baseRefLoader(shell.supervisor))
             panel?.model.turnItemLoader = Self.turnItemLoader(shell.supervisor)
             let supervisor = shell.supervisor
@@ -308,6 +309,20 @@ final class ThreadSession {
         }
     }
 
+    /// `diffFileContents.ts:77-98` (3824): full sides for an explicit context expansion.
+    nonisolated static func diffFileContentsLoader(_ supervisor: ConnectionSupervisor) -> DiffPanelView.FileContentsLoader {
+        { cwd, source, file in
+            do {
+                let json = try await supervisor.request(ReviewDiffFileContents.method,
+                    payload: ReviewDiffFileContents.input(cwd: cwd, source: source, changeType: file.change.rawValue,
+                                                          oldPath: file.oldPath ?? file.path, newPath: file.path))
+                return try json.decode(as: ReviewDiffFileContents.self)
+            } catch let error as RPCClientError {
+                throw DiffLoadError(errorDescription: error.description)
+            }
+        }
+    }
+
     /// `vcs.listRefs` for the Changes scope's comparison target menu; nothing on failure.
     nonisolated static func baseRefLoader(_ supervisor: ConnectionSupervisor) -> DiffPanelView.RefLoader {
         { cwd, remote in
@@ -419,6 +434,10 @@ final class ThreadController {
         if let i = args.firstIndex(of: "--perf-open"), i + 2 < args.count, let delay = Double(args[i + 1]) { perfOpen = (delay, args[i + 2]) }
         sidebar.actions.openThread = { [weak self] id in self?.open(id) }
         composer = ComposerController(panel: panel, sidebar: sidebar, environments: environments)
+        panel.lazyDiffPanel.set(\.canReadFiles, { [weak self, weak environments] in
+            guard let id = self?.openThreadId?.environmentId else { return false }
+            return environments?.authSession(id)?.grants(AuthScopes.filesystemRead) == true
+        })
         PullRequestDetailBinding.savedLinks = { [weak sidebar] env in
             ((sidebar?.snapshot?.threads ?? []) + (sidebar?.snapshot?.archivedThreads ?? []))
                 .filter { $0.id.environmentId == env }.flatMap { $0.pullRequests ?? [] }

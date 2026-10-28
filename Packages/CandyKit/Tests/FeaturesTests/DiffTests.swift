@@ -222,16 +222,23 @@ struct DiffTests {
             ])
         }
         panel.threadId = "t1"
+        panel.fileContentsLoader = { _, _, _ in .init(oldContents: "a\n", newContents: "b\n") }
         #expect(panel.gitScope == .branch)
         panel.setSummaries([])
         _ = await eventually { !panel.list.diff.files.isEmpty }
         #expect(panel.list.diff.files.map(\.path) == ["branch.txt"])
+        #expect(panel.list.loadDiffFiles != nil)
+        panel.canReadFiles = { false }
+        #expect(panel.list.loadDiffFiles == nil)
+        panel.canReadFiles = { true }
+        #expect(panel.list.loadDiffFiles != nil)
         #expect(await calls.all.first?.0 == "/repo")
         panel.selectGitScope(.unstaged)
         _ = await eventually { panel.list.diff.files.first?.path == "dirty.txt" }
         #expect(panel.list.diff.files.map(\.path) == ["dirty.txt"])
         panel.open(runId: nil, filePath: nil)
         #expect(panel.gitScope == nil)
+        #expect(panel.list.loadDiffFiles == nil)
         panel.selectGitScope(.branch)
         #expect(panel.gitScope == .branch)
         let local = VcsRef(name: "main"), origin = VcsRef(name: "origin/main", isRemote: true, remoteName: "origin")

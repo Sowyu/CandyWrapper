@@ -46,7 +46,7 @@ struct DiffLayout {
     struct Anchor { var right: Bool; var line: Int; var index: Int }
 
     init(diff: UnifiedDiff, collapsed: Set<Int>, style: Style, width: CGFloat, wrap: Bool, ch: CGFloat,
-         anchors: [Int: [Anchor]] = [:], anchorHeight: (Int) -> CGFloat = { _ in 0 }) {
+         anchors: [Int: [Anchor]] = [:], anchorHeight: (Int) -> CGFloat = { _ in 0 }, expandsContext: Bool = false) {
         self.style = style
         self.width = width
         self.wrap = wrap
@@ -101,6 +101,15 @@ struct DiffLayout {
                     }
                 }
             }
+            // Pierre's partial modified files have an unknown tail only with loadDiffFiles.
+            if expandsContext, file.change == .change || file.change == .renameChanged {
+                let remaining = file.newLineCount.map { count in
+                    max(0, count - (file.hunks.last.map { $0.newStart + $0.newCount - 1 } ?? 0))
+                }
+                if remaining == nil || remaining! > 0 {
+                    add(.separator, Int32(file.hunks.count), Int32(remaining ?? -1), height: DiffStyle.separatorHeight)
+                }
+            }
             add(.footer, -1, -1, height: DiffStyle.fileBottomPadding)
         }
         height = y
@@ -128,7 +137,8 @@ struct DiffLayout {
     }
 
     static func columns(for file: UnifiedDiff.File, diff: UnifiedDiff, style: Style, width: CGFloat, wrap: Bool, ch: CGFloat) -> Columns {
-        let maxNumber = file.hunks.last.map { max($0.oldStart + $0.oldCount, $0.newStart + $0.newCount) - 1 } ?? 1
+        let maxNumber = max(file.oldLineCount ?? 1, file.newLineCount ?? 1,
+                            file.hunks.last.map { max($0.oldStart + $0.oldCount, $0.newStart + $0.newCount) - 1 } ?? 1)
         let gutter = DiffStyle.gutterWidth(digits: String(maxNumber).count, ch: ch)
         func perLine(_ codeWidth: CGFloat, border: CGFloat = 0) -> Int? {
             // The code box is the column minus `padding-inline: 1ch` on both sides.

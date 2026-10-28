@@ -330,6 +330,16 @@ final class DiffStatView: DSView {
 final class DiffSeparatorView: DiffRowView {
     let label = LabelView("", font: DSFont.ui(11), color: DiffStyle.separatorText)
     private let leftRule = CALayer(), rightRule = CALayer()
+    private let band = DSView(), content = DSView()
+    private let arrow = IconView(name: .chevronDown, size: 16)
+    private let arrowUp = IconView(name: .chevronUp, size: 16)
+    private let seam = CALayer()
+    private var tracking: NSTrackingArea?
+    private var expandable = false, first = false, last = false
+    private var hovered = false
+    private(set) var file = -1
+    private var gap = 0
+    var onExpand: ((Int, Int, DiffContextDirection, Bool) -> Void)?
     var split = false
 
     override init(frame frameRect: NSRect) {
@@ -339,17 +349,51 @@ final class DiffSeparatorView: DiffRowView {
             rule.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]
             layer?.addSublayer(rule)
         }
+        band.clipsToBounds = true
+        band.layer?.cornerRadius = 6
+        content.clipsToBounds = true
+        addSubview(band)
+        band.addSubview(content)
+        band.addSubview(arrow)
+        band.addSubview(arrowUp)
+        band.layer?.addSublayer(seam)
         addSubview(label)
     }
 
-    func configure(hidden: Int, split: Bool) {
+    func configure(hidden: Int, split: Bool, file: Int = -1, gap: Int = 0, last: Bool = false, expandable: Bool = false) {
         self.split = split
-        label.text = hidden == 1 ? "1 unmodified line" : "\(hidden) unmodified lines"
+        self.file = file; self.gap = gap; self.last = last; self.first = gap == 0
+        self.expandable = expandable
+        toolTip = nil
+        label.text = hidden < 0 ? "More unchanged context may be available" : hidden == 1 ? "1 unmodified line" : "\(hidden) unmodified lines"
+        label.removeFromSuperview()
+        if expandable { content.addSubview(label) } else { addSubview(label) }
+        label.truncates = !expandable
+        label.color = DiffStyle.separatorText
+        band.isHidden = !expandable
+        setAccessibilityElement(expandable)
+        setAccessibilityRole(expandable ? .button : .staticText)
+        setAccessibilityLabel(label.text)
         needsLayout = true
+        needsDisplay = true
     }
 
     override func layout() {
         super.layout()
+        if expandable {
+            leftRule.isHidden = true; rightRule.isHidden = true
+            band.frame = NSRect(x: 8, y: 0, width: max(0, bounds.width - 16), height: 24)
+            let end = split ? bounds.width / 2 - band.frame.minX : band.bounds.width
+            content.frame = NSRect(x: 34, y: 0, width: max(0, end - 34), height: 24)
+            label.frame = NSRect(x: 6, y: 2, width: ceil(label.textWidth), height: 20)
+            let middle = !first && !last
+            arrow.frame = NSRect(x: 8, y: middle ? 10 : 4, width: 16, height: 16)
+            arrowUp.frame = NSRect(x: 8, y: middle ? -2 : 4, width: 16, height: 16)
+            arrow.isHidden = first
+            arrowUp.isHidden = last
+            seam.frame = CGRect(x: 32, y: 0, width: 2, height: 24)
+            return
+        }
         // `padding-inline: 8px 12px`; in unified the rules share the rest equally around the label.
         let inner = CGRect(x: 8, y: 2, width: max(0, bounds.width - 20), height: 20)
         // Split: the rules have no room but their flex gaps stay, so the label starts 8px in.
@@ -368,6 +412,33 @@ final class DiffSeparatorView: DiffRowView {
         let rule = DiffStyle.separatorRule.cgColor(in: self)
         leftRule.backgroundColor = rule
         rightRule.backgroundColor = rule
+        let tint = DiffStyle.mix(DiffStyle.surface, hovered ? 0.92 : 0.97, DiffStyle.codeForeground)
+        band.layer?.backgroundColor = tint.cgColor(in: self)
+        seam.backgroundColor = DiffStyle.surface.cgColor(in: self)
+        let color = DiffStyle.mix(DiffStyle.codeForeground, hovered ? 1 : 0.5, DiffStyle.surface)
+        if expandable { label.color = color }
+        arrow.strokeColor = color; arrowUp.strokeColor = color
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        tracking = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+        addTrackingArea(tracking!)
+    }
+    override func mouseEntered(with event: NSEvent) { hovered = expandable; needsDisplay = true }
+    override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true }
+    override func resetCursorRects() { if expandable { addCursorRect(bounds, cursor: .pointingHand) } }
+    override func mouseUp(with event: NSEvent) {
+        guard expandable else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        let direction: DiffContextDirection = first ? .down : last ? .up : point.x < 40 ? (point.y < 12 ? .down : .up) : .both
+        onExpand?(file, gap, direction, event.modifierFlags.contains(.option))
+    }
+    override func accessibilityPerformPress() -> Bool {
+        guard expandable else { return false }
+        onExpand?(file, gap, first ? .down : last ? .up : .both, false)
+        return true
     }
 }
 

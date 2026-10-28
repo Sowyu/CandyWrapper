@@ -1,5 +1,23 @@
 import Foundation
 
+/// `review.getDiffFileContents`, contracts/review.ts:44-59 (Nightly 3824).
+public struct ReviewDiffFileContents: Codable, Equatable, Sendable {
+    public var oldContents: String
+    public var newContents: String
+    public init(oldContents: String, newContents: String) {
+        self.oldContents = oldContents; self.newContents = newContents
+    }
+
+    public static let method = "review.getDiffFileContents"
+    public static func input(cwd: String, source: ReviewDiffPreview.Source, changeType: String,
+                             oldPath: String, newPath: String) -> JSONValue {
+        .object(["cwd": .string(cwd), "sourceKind": .string(source.kind), "changeType": .string(changeType),
+                 "baseRef": source.baseRef.map(JSONValue.string) ?? .null,
+                 "headRef": source.headRef.map(JSONValue.string) ?? .null,
+                 "oldPath": .string(oldPath), "newPath": .string(newPath)])
+    }
+}
+
 /// `review.getDiffPreview` (packages/contracts/src/review.ts, rpc.ts:426): the checkout's working tree and
 /// branch range as unified diffs. The diff panel's Changes and Uncommitted scopes read it.
 public struct ReviewDiffPreview: Decodable, Hashable, Sendable {

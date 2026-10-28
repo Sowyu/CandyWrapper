@@ -28,6 +28,7 @@ public final class DiffPanelView: DSView {
             hasDiff = false
             shownSection = nil
             gitSource = nil
+            list.loadDiffFiles = nil
             gitResultShown = false
             refreshedSummary = nil
             // A thread change shows Changes (ChatView.tsx:2304-2313).
@@ -54,10 +55,13 @@ public final class DiffPanelView: DSView {
         }
     }
     public var refLoader: RefLoader?
+    public typealias FileContentsLoader = @Sendable (_ cwd: String, _ source: ReviewDiffPreview.Source, _ file: UnifiedDiff.File) async throws -> ReviewDiffFileContents
+    public var fileContentsLoader: FileContentsLoader? { didSet { updateContextLoader() } }
+    public var canReadFiles: @MainActor () -> Bool = { true } { didSet { updateContextLoader() } }
     /// The thread's checkout (`worktreePath ?? workspaceRoot`, DiffPanel.tsx:238).
     public var workspaceRoot: String?
     /// The shown git scope, nil while a turn shows.
-    public private(set) var gitScope: GitScope? { didSet { if gitScope != oldValue { gitResultShown = false } } }
+    public private(set) var gitScope: GitScope? { didSet { if gitScope != oldValue { gitResultShown = false; updateContextLoader() } } }
     public var selectsGitScopes: Bool { gitLoader != nil }
     private var gitSource: ReviewDiffPreview.Source?
     private var gitCwd: String?
@@ -295,6 +299,10 @@ public final class DiffPanelView: DSView {
             self?.beginReview(end, extending: true)
         }
         list.onCollapsedChange = { [weak self] in self?.updateCollapseButton() }
+        list.onContextExpanded = { [weak self] in
+            guard let self, !self.find.isHidden else { return }
+            self.search()
+        }
         headerBorder.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]
         layer?.addSublayer(headerBorder)
         message.alignment = .center
@@ -498,6 +506,7 @@ public final class DiffPanelView: DSView {
         if !keepDraft { reviewDraft = nil; reviewStart = nil; reviewDraftAnchor = nil; editingReviewId = nil }
         scroll.isHidden = false
         list.annotations = []
+        updateContextLoader()
         list.setDiff(diff, collapsedByDefault: collapsed)
         rebuildReviewAnnotations()
         fileTree.changes = Dictionary(diff.files.map { ($0.path, $0.change) }, uniquingKeysWith: { a, b in a == b ? a : .change })
@@ -517,6 +526,12 @@ public final class DiffPanelView: DSView {
             layoutSubtreeIfNeeded()
             list.reveal(path: file)
         }
+    }
+
+    private func updateContextLoader() {
+        guard gitScope != nil, canReadFiles(), let source = gitSource, let cwd = gitCwd,
+              let fileContentsLoader else { list.loadDiffFiles = nil; return }
+        list.loadDiffFiles = { file in try await fileContentsLoader(cwd, source, file) }
     }
 
     private func showMessage(_ text: String, error: String? = nil) {

@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import T3Protocol
 
 /// A card pinned under one line of a file (pierre's line annotations): a review conversation, a
 /// pending review comment or the draft of a new one. `right` is the new side.
@@ -60,6 +61,55 @@ public final class DiffListView: DSView {
     public var onVisibleFile: ((String) -> Void)?
     private var visibleFile: String?
     public var onNearEnd: (@MainActor () -> Void)?
+    var onContextExpanded: (() -> Void)?
+
+    public typealias FileContentsLoader = @Sendable (UnifiedDiff.File) async throws -> ReviewDiffFileContents
+    /// Set only for a readable git selection, never turn diffs. No file is loaded until a click.
+    public var loadDiffFiles: FileContentsLoader? {
+        didSet { clearContextLoads(); relayout() }
+    }
+    private var contextTasks: [Int: Task<Void, Never>] = [:]
+    private var fileContents: [Int: ReviewDiffFileContents] = [:]
+    private var contextGeneration = 0
+    private var expandsContext: Bool { loadDiffFiles != nil && !DesignGeometry.usesClassic(self) }
+
+    deinit { for task in contextTasks.values { task.cancel() } }
+
+    private func clearContextLoads() {
+        contextGeneration += 1
+        for task in contextTasks.values { task.cancel() }
+        contextTasks = [:]; fileContents = [:]
+    }
+
+    /// `FileDiff.expandHunk` loads the full sides once, then reveals this gap in chunks.
+    func expandContext(file: Int, gap: Int, direction: DiffContextDirection, all: Bool = false) {
+        guard expandsContext, diff.files.indices.contains(file), contextTasks[file] == nil,
+              let loadDiffFiles else { return }
+        let generation = contextGeneration, metadata = diff.files[file], cached = fileContents[file]
+        contextTasks[file] = Task { [weak self] in
+            do {
+                let contents: ReviewDiffFileContents
+                if let cached { contents = cached } else { contents = try await loadDiffFiles(metadata) }
+                guard !Task.isCancelled, let self, self.contextGeneration == generation else { return }
+                let expanded = try self.diff.expandingContext(file: file, gap: gap, contents: contents,
+                                                              direction: direction, count: all ? Int.max : 100)
+                let previous = self.diff
+                self.fileContents[file] = contents
+                self.diff = expanded
+                self.highlighter.reset(expanded)
+                self.contextTasks[file] = nil
+                self.relayoutKeepingAnchor(previousDiff: previous)
+                self.onContextExpanded?()
+            } catch {
+                guard !Task.isCancelled, let self, self.contextGeneration == generation else { return }
+                self.contextTasks[file] = nil
+                // Keep the control available for retry, as Pierre does on a failed load.
+                for case let row as DiffSeparatorView in self.visible.values where row.file == file {
+                    row.toolTip = error.localizedDescription
+                }
+            }
+        }
+    }
 
     private(set) var rowLayout = DiffLayout(diff: UnifiedDiff(""), collapsed: [], style: .unified, width: 0, wrap: true, ch: 7.8)
     private lazy var highlighter: DiffHighlighter = {
@@ -79,7 +129,7 @@ public final class DiffListView: DSView {
         super.viewDidMoveToWindow()
         if let focusObserver { NotificationCenter.default.removeObserver(focusObserver) }
         focusObserver = nil
-        guard let window else { return }
+        guard let window else { clearContextLoads(); return }
         // Window updates include keyboard focus changes. No timer runs while the diff is idle.
         focusObserver = NotificationCenter.default.addObserver(forName: NSWindow.didUpdateNotification, object: window, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -87,6 +137,11 @@ public final class DiffListView: DSView {
                 for case let header as DiffFileHeaderView in self.visible.values { header.updateCopyVisibility() }
             }
         }
+    }
+
+    public override func viewDidHide() {
+        super.viewDidHide()
+        clearContextLoads()
     }
 
     public override func updateTrackingAreas() {
@@ -130,6 +185,7 @@ public final class DiffListView: DSView {
     /// Shows a parsed diff with every file collapsed or expanded (T3's `diffFilesCollapsed`
     /// setting, default true).
     public func setDiff(_ diff: UnifiedDiff, collapsedByDefault: Bool = true) {
+        clearContextLoads()
         self.diff = diff
         collapsed = collapsedByDefault ? Set(diff.files.indices) : []
         highlighter.reset(diff)
@@ -233,7 +289,7 @@ public final class DiffListView: DSView {
         annotationViews = live
         let views = annotations.map { live[$0.id] }
         rowLayout = DiffLayout(diff: diff, collapsed: collapsed, style: style, width: width, wrap: wrap, ch: DiffStyle.ch,
-                               anchors: anchors, anchorHeight: { views[$0]?.height(forWidth: width) ?? 0 })
+                               anchors: anchors, anchorHeight: { views[$0]?.height(forWidth: width) ?? 0 }, expandsContext: expandsContext)
         var placed = Set<String>()
         for (i, row) in rowLayout.rows.enumerated() where row.kind == .annotation {
             guard let view = views[Int(row.left)] else { continue }
@@ -252,7 +308,7 @@ public final class DiffListView: DSView {
 
     /// Keeps the first visible row at the same viewport offset through a relayout (a file above it
     /// folds, an annotation grows). If that row is gone, its file folded: show the file header.
-    private func relayoutKeepingAnchor() {
+    private func relayoutKeepingAnchor(previousDiff: UnifiedDiff? = nil) {
         let top = visibleRect.minY
         let anchor = rowLayout.rows.isEmpty ? nil : rowLayout.rows[rowLayout.rowIndex(at: top)]
         let offset = anchor.map { top - $0.top } ?? 0
@@ -262,7 +318,14 @@ public final class DiffListView: DSView {
         guard rowLayout.headerRow.indices.contains(file) else { return }
         let end = file + 1 < rowLayout.headerRow.count ? rowLayout.headerRow[file + 1] : rowLayout.rows.count
         let same = rowLayout.rows[rowLayout.headerRow[file]..<end].first {
-            $0.kind == anchor.kind && $0.left == anchor.left && $0.right == anchor.right
+            if let previousDiff, anchor.kind == .line, $0.kind == .line {
+                func numbers(_ diff: UnifiedDiff, _ index: Int32) -> [Int32] {
+                    index >= 0 ? [diff.lines[Int(index)].oldNumber, diff.lines[Int(index)].newNumber] : []
+                }
+                return numbers(previousDiff, anchor.left) == numbers(diff, $0.left)
+                    && numbers(previousDiff, anchor.right) == numbers(diff, $0.right)
+            }
+            return $0.kind == anchor.kind && $0.left == anchor.left && $0.right == anchor.right
         }
         if let same {
             let y = max(0, min(same.top + offset, frame.height - viewportHeight))
@@ -381,7 +444,10 @@ public final class DiffListView: DSView {
             header.configure(viewed: viewedState?(diff.files[f].path))
             header.fileHovered = f == hoveredFile
         case let separator as DiffSeparatorView:
-            separator.configure(hidden: Int(row.right), split: rowLayout.columns[Int(row.file)].isSplit)
+            let file = Int(row.file), gap = Int(row.left)
+            separator.configure(hidden: Int(row.right), split: rowLayout.columns[file].isSplit,
+                                file: file, gap: gap, last: gap == diff.files[file].hunks.count,
+                                expandable: expandsContext && (diff.files[file].change == .change || diff.files[file].change == .renameChanged))
         case let line as DiffLineRowView:
             line.configure(row: row, context)
         default: break
@@ -415,7 +481,12 @@ public final class DiffListView: DSView {
                 if let f = self.diff.files.firstIndex(where: { $0.path == path }) { self.setCollapsed(f, viewed) }
             }
             view = header
-        case .separator: view = DiffSeparatorView()
+        case .separator:
+            let separator = DiffSeparatorView()
+            separator.onExpand = { [weak self] file, gap, direction, all in
+                self?.expandContext(file: file, gap: gap, direction: direction, all: all)
+            }
+            view = separator
         default: view = DiffLineRowView()
         }
         addSubview(view)
