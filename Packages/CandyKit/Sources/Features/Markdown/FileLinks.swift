@@ -13,6 +13,11 @@ public struct FileLinkMeta: Sendable, Equatable {
     public var line: Int?
     public var column: Int?
 
+    public init(filePath: String, targetPath: String, workspaceRelativePath: String?, basename: String, line: Int?, column: Int?) {
+        self.filePath = filePath; self.targetPath = targetPath; self.workspaceRelativePath = workspaceRelativePath
+        self.basename = basename; self.line = line; self.column = column
+    }
+
     /// `inferEntryKindFromPath` (pierre-icons.ts:152): a folder icon when the last segment has no dot,
     /// or is a dot name like `.git`.
     public var isDirectory: Bool {

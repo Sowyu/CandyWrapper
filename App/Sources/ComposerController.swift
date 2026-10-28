@@ -276,15 +276,6 @@ final class ComposerController {
         self.panel = panel
         self.sidebar = sidebar
         self.environments = environments
-        QuestionDraftResolution.observe { [weak self] threadId, pending in
-            guard let self else { return }
-            for key in ThreadRequestResolutionTracker.resolvedDraftKeys(Array(self.questionFiles.keys), threadId: threadId, pending: pending) {
-                self.releaseQuestionFiles(key)
-            }
-            if self.openThreadId == threadId {
-                self.panel.lazyQuestionPanel.loaded?.clearResolvedSession(pendingRequestIds: pending)
-            }
-        }
         let defaults = UserDefaults.standard
         prompts = defaults.dictionary(forKey: Self.promptsKey) as? [String: String] ?? [:]
         func decode(_ key: String) -> [String: DraftSession]? {
@@ -414,6 +405,15 @@ final class ComposerController {
         // The send gate follows the connection, not only the session (`activeEnvironmentUnavailable`).
         environments.observe { [weak self] in self?.syncSendBlock() }
         refresh()
+        QuestionDraftResolution.observe { [weak self] threadId, pending in
+            guard let self else { return }
+            for key in ThreadRequestResolutionTracker.resolvedDraftKeys(Array(self.questionFiles.keys), threadId: threadId, pending: pending) {
+                self.releaseQuestionFiles(key)
+            }
+            if self.openThreadId == threadId {
+                self.panel.lazyQuestionPanel.loaded?.clearResolvedSession(pendingRequestIds: pending)
+            }
+        }
     }
 
     /// v1 sessions were keyed `environmentId:projectId` with unscoped ids inside.
