@@ -63,6 +63,23 @@ struct ComposerMenusTests {
         #expect(items.first.map(ComposerMenus.replacement)?.contains("thread_b") == true)
     }
 
+    @Test func copyThreadWritesAnEnvironmentAwareChipWhilePRsCopyURLs() throws {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        let target = ThreadReferenceClipboard(threadId: "remote", title: "Deploy", environmentId: "there")
+        #expect(target.title == "Thread copied" && target.description == "Deploy")
+        #expect(target.write(to: pasteboard))
+        #expect(pasteboard.string(forType: .string) == "[Deploy](t3-context://v1/thread/thread_remote)")
+        let html = try #require(pasteboard.string(forType: .html))
+        let records = ComposerContext.pastedRecords(html: html, pastedText: target.value)
+        #expect(records["thread_remote"]?["environmentId"] == .string("there"))
+        #expect(ComposerContext.threadsOutsideEnvironment(target.value, records: records, environmentId: "here", linkedEnvironments: ["there"]).isEmpty)
+        let pr = ThreadReferenceClipboard(threadId: "remote", title: "Deploy", environmentId: "there", pullRequestURL: "https://example.com/pull/1")
+        #expect(pr.write(to: pasteboard))
+        #expect(pr.value == "https://example.com/pull/1" && pr.html == nil)
+        #expect(pasteboard.string(forType: .html) == nil)
+    }
+
     // MARK: Triggers
 
     @Test func triggers() {
