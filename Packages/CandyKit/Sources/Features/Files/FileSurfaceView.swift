@@ -571,7 +571,7 @@ final class MarkdownFileView: NSView {
     init(markdown text: String, cwd: String?) {
         super.init(frame: .zero)
         markdown.cwd = cwd
-        markdown.setMarkdown(text)
+        markdown.setMarkdown(MarkdownFrontmatter.mask(text))
         document.addSubview(markdown)
         scroll.documentView = document
         scroll.useT3Scrollbars(.overlay) // a ScrollArea (FilePreviewPanel.tsx:989)
