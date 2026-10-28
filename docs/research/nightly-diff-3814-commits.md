@@ -4,16 +4,16 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 
 | Commit | Subject | Area | Applies | Status |
 |---|---|---|---|---|
-| bbdc13640c | feat(desktop): import cookies from Zen Browser (#22970) | other | yes | open |
+| bbdc13640c | feat(desktop): import cookies from Zen Browser (#22970) | other | yes | skip: requested exclusion |
 | 87d22b00f7 | perf(shared): avoid repeated date parsing when selecting PRs (#22891) | pr/git | no | n/a |
 | 5b35402623 | fix(web): refresh the current branch when opening the picker (#22807) | pr/git | yes | ported (c0172900) |
 | efea68679f | feat(web): attach svg files to messages (#21355) | composer | yes | open |
 | 532023a241 | feat(server): send pdf attachments to claude and antigravity as documents (#21358) | wire | server-only | free with runtime |
 | 34e9c56b9b | feat(web): play audio inline and open any file the agent shares in the viewer (#21363) | thread | yes | open |
-| 5d9a5c9803 | perf(pull-requests): faster pull request timeline, code tab, summary and search (#22697) | pr/git | yes | open |
+| 5d9a5c9803 | perf(pull-requests): faster pull request timeline, code tab, summary and search (#22697) | pr/git | yes | ported; 350e8c75; Return/paste submit immediately and detail reads disallow stale answers; remaining changes are serve |
 | d414cb5103 | fix(web): question options show a radio and an aligned shortcut key (#23255) | composer | yes | open |
 | 557db6cb4e | fix(server): running delegates tell agents to end the turn (#24887) | other | server-only | free with runtime |
-| b3b2c55369 | perf(source-control): pull request previews read only the pull request (#22583) | pr/git | yes | open |
+| b3b2c55369 | perf(source-control): pull request previews read only the pull request (#22583) | pr/git | yes | skip: needs preview-specific decoding/cache, older-server fallback and GUI hover checks |
 | 3816296021 | feat(web): UI design overhaul, with the new look behind a Beta toggle (#24865) | other | yes (design) | phase 2 (design) |
 | abd9d9f970 | perf: opening a thread loads 85% less data (#24899) | wire | yes | ported (3471d72d) |
 | a960f5602f | fix(observability): every app reports its own environment and release channel (#24340) | other | no | n/a |
@@ -22,10 +22,10 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 2ed92618e6 | fix: restore files reverted by 5f1f604 | other | no | n/a |
 | 2fd28bf938 | fix(client-runtime): "Codex (hub)" badges read CH instead of C( (#22918) | composer | yes | ported (4d56c379) |
 | a27b246162 | fix(web): usage-limit banner reset time follows the Time format setting (#22915) | composer | yes | ported (e28c8b5f) |
-| 313ca2715f | fix(web): terminal drag selection scrolls faster the farther past the edge (#22872) | other | yes | open |
+| 313ca2715f | fix(web): terminal drag selection scrolls faster the farther past the edge (#22872) | other | yes | skip: SwiftTerm owns drag selection (Packages/CandyKit/Sources/Features/Terminal/TerminalSurfaceView.swift:8) |
 | 20ee805de9 | fix(observability): resources add OTel semconv runtime and browser keys (#23972) | other | no | n/a |
-| b2baf75337 | fix(web): asset URLs re-mint per revision and before expiry without effects (#24970) | thread | yes | open |
-| 7561c2e631 | fix(web): queued-message edits survive navigation and settle once (#24972) | composer | yes | open |
+| b2baf75337 | fix(web): asset URLs re-mint per revision and before expiry without effects (#24970) | thread | yes | skip: revision/revert invalidation and adopted-iframe no-reload checks need a broader media lifecycle port |
+| 7561c2e631 | fix(web): queued-message edits survive navigation and settle once (#24972) | composer | yes | ported; 15adc789; per-thread edit text and queue-exit watches survive navigation, pause during saves and recover once. |
 | d99776351c | refactor(mobile): thread visits are tracked outside React (#24973) | thread | no | n/a |
 | 6016969887 | refactor(client): cloud account transitions run in one service (#24974) | connections | no | n/a |
 | 604ecb6d9a | refactor(client): one VCS status refresh owner per checkout (#24975) | pr/git | no | n/a |
@@ -35,26 +35,26 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 1c10563ddb | refactor(web): the theme store and diff worker pool stop syncing the theme through effects (#25007) | other | no | n/a |
 | b76a110aa4 | perf(mobile): compact persisted thread snapshots (#24265) | thread | no | n/a |
 | b6c326d12f | fix(server): background compactions no longer flip threads to Working (#25122) | wire | server-only | free with runtime |
-| dd2842f238 | fix(web): a stale queued-edit save no longer clears a newer edit (#25128) | composer | yes | open |
-| 264969317c | fix(client): a thread opened before its shell loads still counts as opened (#25133) | thread | yes | open |
+| dd2842f238 | fix(web): a stale queued-edit save no longer clears a newer edit (#25128) | composer | yes | already so |
+| 264969317c | fix(client): a thread opened before its shell loads still counts as opened (#25133) | thread | yes | already so |
 | c298a401f2 | perf(web): diff file boundaries observe visibility once instead of on every render (#25134) | pr/git | no | n/a |
 | 1a13127c15 | test(web): Arabic arrow-key test no longer drops its first key press (#25145) | other | no | n/a |
 | 0aeb620a1c | chore(lint): enforce mapSomeToAsSome (#25078) | other | no | n/a |
 | 10d800cfed | chore(lint): enforce unicorn/require-module-specifiers (#25102) | other | no | n/a |
 | 15c6e6b4ba | chore(lint): enforce unicorn/no-useless-fallback-in-spread (#25103) | other | no | n/a |
 | b0f5d44475 | chore(lint): enforce eslint/no-unneeded-ternary (#25105) | other | no | n/a |
-| f9956434fa | fix(web): preview favicons resolve their project without ChatView syncing it (#25068) | other | yes | open |
+| f9956434fa | fix(web): preview favicons resolve their project without ChatView syncing it (#25068) | other | yes | skip: persistent project/thread capture ownership is missing |
 | 65822d8e17 | refactor(web): composer editor stops mirroring props into refs with effects (#25079) | composer | no | n/a |
 | 03df289735 | fix(client): usage-limit Snooze disables at reset even weeks away, via a shared deadline clock (#25005) | composer | yes | ported (e28c8b5f) |
 | 0ad399c6c5 | test(web): the diff boundary observer counter lives in its fixture (#25170) | other | no | n/a |
-| 07066c0406 | fix(client): a queued-edit save keeps its claim until it finishes (#25169) | composer | yes | open |
+| 07066c0406 | fix(client): a queued-edit save keeps its claim until it finishes (#25169) | composer | yes | already so |
 | 5fee09a2c1 | refactor(web): terminal focus requests name the terminal they focus (#25009) | other | no | n/a |
-| f4e140764f | fix(web): pull request checks stay current after a checks refresh (#25008) | pr/git | yes | open |
-| e14d08c664 | fix(web): settings panels derive state instead of syncing it with effects (#25070) | settings | yes | open |
+| f4e140764f | fix(web): pull request checks stay current after a checks refresh (#25008) | pr/git | yes | skip: needs a shared metadata/checks observation store across detail/page/card/hover caches and stale-answer ordering tests |
+| e14d08c664 | fix(web): settings panels derive state instead of syncing it with effects (#25070) | settings | yes | ported; 5711beec; late task links preserve an open editor, and diagnostics pending signals/results stay scoped to thei |
 | 5786e12981 | refactor(mobile): terminal lifecycle runs in a session store, not screen effects (#25071) | other | no | n/a |
-| 9f7b8ade1b | refactor(web): branch toolbar and dialogs stop syncing through effects (#25072) | palette | yes | open |
+| 9f7b8ade1b | refactor(web): branch toolbar and dialogs stop syncing through effects (#25072) | palette | yes | ported; 53a2b59a; select the prefilled PR reference on opening; native palette/script editors already own their inputs |
 | f16ae12bb6 | refactor(web): thread find state lives in one store instead of event buses and mirrors (#25073) | thread | no | n/a |
-| 9296c20e82 | refactor(web): browser panel tabs follow preview sessions without ChatView effects (#25006) | other | yes | open |
+| 9296c20e82 | refactor(web): browser panel tabs follow preview sessions without ChatView effects (#25006) | other | yes | skip: background preview reveal/reconnect ownership needs an environment-wide coordinator and GUI checks |
 | 11bd26e4b5 | chore(lint): enforce effectSucceedWithVoid (#25074) | other | no | n/a |
 | 9c02109b19 | chore(lint): enforce preferSucceedSomeOrNone (#25080) | other | no | n/a |
 | 312a12d726 | chore(lint): enforce unnecessaryFailYieldableError (#25083) | other | no | n/a |
@@ -62,28 +62,28 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | a8b692b3b8 | chore(lint): enforce preferTypedSchemaDecoder (#25094) | other | no | n/a |
 | a0b246d0de | chore(lint): enforce tryCatchInEffectGen (#25097) | other | no | n/a |
 | a320762cbc | chore(lint): enforce eslint/no-unused-vars (#25100) | other | no | n/a |
-| 4e43779f82 | fix(web): theme editor returns to its spot after the window shrinks and grows back (#25076) | settings | yes | open |
+| 4e43779f82 | fix(web): theme editor returns to its spot after the window shrinks and grows back (#25076) | settings | yes | already so |
 | 7a95549b94 | refactor(client): drop the VCS wake and dispatcher element scope options nobody uses (#25152) | other | no | n/a |
 | 122c5f8ffc | fix(web): keep Windows thread notifications clickable until handled (#22520) | other | no | n/a |
 | 3ca62a5644 | refactor(client): terminal sessions keep one driver per mode (#25186) | other | no | n/a |
 | b16728af84 | refactor(web): preview tab sync subscribes to the preview store instead of its own listener sets (#25196) | other | no | n/a |
 | 3de45c6254 | feat(sidebar): working section is on by default (#25190) | sidebar | yes | open |
-| d69810a97a | feat(web): preview office files, fonts, and mermaid diagrams (#21362) | other | yes | open |
-| 73afb57097 | feat(web): virtualize large file previews (#21466) | other | yes | open |
-| 9d17a02782 | feat(web): preview archives, sqlite databases, and decoded images (#21467) | other | yes | open |
-| 34ead566d4 | feat(web): preview opendocument, epub, rich text, and notebooks (#21469) | other | yes | open |
+| d69810a97a | feat(web): preview office files, fonts, and mermaid diagrams (#21362) | other | yes | skip: native Office/font/Mermaid file routing and renderers exceed 4h |
+| 73afb57097 | feat(web): virtualize large file previews (#21466) | other | yes | skip: range-based large-text loading and virtual tables exceed 4h |
+| 9d17a02782 | feat(web): preview archives, sqlite databases, and decoded images (#21467) | other | yes | skip: native archive/SQLite renderers plus decoded-image routing exceed 4h |
+| 34ead566d4 | feat(web): preview opendocument, epub, rich text, and notebooks (#21469) | other | yes | skip: six document formats need native renderers and attachment routing (>4h) |
 | fd71ddc223 | fix(desktop): hidden preview tabs throttle instead of running at full speed (#25184) | other | no | n/a |
 | f44fea47a0 | chore(lint): enforce react/no-array-index-key (#25112) | other | no | n/a |
 | f10a04b7fa | chore(lint): disable unicorn/prefer-add-event-listener (#25047) | other | no | n/a |
 | 1cd44f0d55 | chore(lint): disable eslint/no-control-regex (#25049) | other | no | n/a |
 | f88b33a16d | fix(web): thread find exports the timeline fields type its context names (#25260) | thread | no | n/a |
-| f279070244 | fix(web): Escape and copy work in chat media and markdown widgets, which attach through ref callbacks (#25246) | thread | yes | open |
-| f512ff6159 | fix(web): composer banners, menus and pickers act in their handlers (#25238) | composer | yes | open |
+| f279070244 | fix(web): Escape and copy work in chat media and markdown widgets, which attach through ref callbacks (#25246) | thread | yes | skip: Escape/copy/focus already have native handlers (ExpandedImagePreviewView.swift:111,218 |
+| f512ff6159 | fix(web): composer banners, menus and pickers act in their handlers (#25238) | composer | yes | ported; da49dd12; accepted banner dismissals survive navigation and stale exits cannot change the next animation; regr |
 | 0a3b561bc0 | refactor(web): device panel reads hub state from atoms (#25265) | other | no | n/a |
 | c3888da8b4 | feat(web): New design brings back color where it means something (#25251) | other | yes (design) | phase 2 (design) |
 | 02f4ba75a2 | fix(web): SSH password prompts wait for their dialog, and the app shell drops its sync effects (#25239) | connections | yes | ported (20b83f21) |
 | a2589f22d3 | fix(mobile): review opens on Changes and keeps the section you picked (#25223) | pr/git | no | n/a |
-| 1de64942be | chore(lint): enforce react/purity (#25038) | sidebar | yes | open |
+| 1de64942be | chore(lint): enforce react/purity (#25038) | sidebar | yes | ported; f8fe14d2; an open snooze calendar advances its day boundary with the visible-only clock; React lint changes ar |
 | 8a4ad9452a | refactor(web): root notification and toast coordinators start with the app (#25233) | other | no | n/a |
 | 6a3a460b09 | refactor(web): sidebar thread lists derive state instead of syncing it in effects (#25234) | sidebar | no | n/a |
 | 9d6a2e57fc | fix(web): new thread shortcut focuses palette search, not the Back button (#25315) | palette | yes | already so |
@@ -110,28 +110,28 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | e1c750e7bd | fix(web): composer body ref stops re-attaching on every render (#25409) | composer | no | n/a |
 | 0a20d7ea73 | fix(web): switching threads no longer delays the next thread's visit by up to 10s (#25368) | thread | yes | ported (3b91c48d) |
 | cc93cc564b | revert(web): composer body ref goes back to the #25079 ref callback (#25412) | composer | no | n/a |
-| a240408242 | refactor(web): file breadcrumb menus refetch on a new workspace change, not on every open (#25377) | other | yes | open |
+| a240408242 | refactor(web): file breadcrumb menus refetch on a new workspace change, not on every open (#25377) | other | yes | skip: needs environment/cwd/directory revision caching and permission invalidation with the broader workspace-mutation pipelin |
 | 1316d48b0c | fix(web): citations to older responses load their history instead of failing (#25371) | thread | yes | ported (fc007033) |
-| 6ea34149bb | refactor(client): composers share one workspace snapshot refresh per provider and cwd (#25370) | composer | yes | open |
+| 6ea34149bb | refactor(client): composers share one workspace snapshot refresh per provider and cwd (#25370) | composer | yes | skip: needs a shared in-flight snapshot/retry coordinator across composers (>4h) |
 | cc0b86ddf1 | fix(server): goals stop the running turn, clear while working, no echoes (#25426) | composer | yes | ported (fbc03278) |
-| 071239804e | refactor(web): pull request list remembers each answer for the next start (#25364) | pr/git | yes | open |
+| 071239804e | refactor(web): pull request list remembers each answer for the next start (#25364) | pr/git | yes | skip: needs bounded persistent answers for eight scopes/99 rows, restoration and migration tests (>4h) |
 | 3f3c1b9bcf | refactor(web): HTML previews handle frame messages in one listener (#25456) | other | no | n/a |
-| 2acc7b55cf | refactor(web): review guide runs are watched from their answers, not from mounted components (#25459) | pr/git | yes | open |
+| 2acc7b55cf | refactor(web): review guide runs are watched from their answers, not from mounted components (#25459) | pr/git | yes | skip: no native review-guide RPC/UI coordinator exists |
 | 9d7997afc5 | refactor(web): resize drags, panel shells and the browser host own their listeners (#25464) | other | no | n/a |
 | 3cb16cf165 | fix(web): find shows its match after a thread switch, and the timeline hears scrolling through one viewport signal (#25463) | thread | yes | ported (4859bd12) |
 | d5a791b940 | fix(client): drafts for answered questions are cleared even when their thread is not open (#25457) | composer | yes | ported (0c5b1475) |
-| 28df7a246f | refactor(web): terminal output no longer re-renders the drawer, theme search runs from handlers (#25458) | settings | yes | open |
+| 28df7a246f | refactor(web): terminal output no longer re-renders the drawer, theme search runs from handlers (#25458) | settings | yes | already so |
 | f0dd86f164 | fix(web): stable callbacks refresh before layout effects read them (#25489) | other | no | n/a |
 | 7d3208cbea | test(web): say why the useStableCallback test renders without a router (#25493) | other | no | n/a |
 | e5ea25d129 | fix(mobile): queued edits end when their run starts, wherever you are (#25468) | composer | no | n/a |
 | 148d2fdc0e | refactor(web): root theme, toast and chrome sync start with the app (#25461) | other | no | n/a |
-| f05c38f166 | fix(web): browser viewport resizes work without an open preview panel (#25462) | other | yes | open |
+| f05c38f166 | fix(web): browser viewport resizes work without an open preview panel (#25462) | other | yes | skip: floating viewport commits require GUI panel-closed/target-size checks |
 | d81757eea9 | test(web): attachment preview omission tests no longer time out on CI (#25515) | other | no | n/a |
-| 7c6e85cfda | fix(web): browser history and titles show up again (#25491) | other | yes | open |
+| 7c6e85cfda | fix(web): browser history and titles show up again (#25491) | other | yes | skip: background title attribution needs thread/draft/logical-project resolution and GUI history checks |
 | 3f9448747b | fix(web): switching back to a thread no longer restores its tab's older title (#25521) | other | yes | ported (6b2f8e0a) |
 | e6ec114128 | refactor(web): pull request page reacts to turns and sweep Escape without effects (#25523) | pr/git | no | n/a |
 | b424c6e429 | fix(web): an armed pull request confirm no longer outlives its button (#25530) | pr/git | yes | ported (eeeadfd0) |
-| 374e57d90b | refactor(web): provider settings and Codex setup run as explicit flows (#25524) | settings | yes | open |
+| 374e57d90b | refactor(web): provider settings and Codex setup run as explicit flows (#25524) | settings | yes | skip: provider color preview/release commits need GUI drag, keyboard and close checks |
 | 8e1bb0376c | test(web): attachment preview omission cases check the prepared document instead of rendering each one (#25562) | other | no | n/a |
 | b6994c5499 | fix(shared): pin T3 Connect cloudflared to 2026.10.4, which drops the compromised eMudhra intermediates (#25572) | connections | server-only | free with runtime |
 | 278588a61a | fix(web): skill chips in chat open the same details popover as the composer (#25432) | thread | yes | ported (48da3112) |
@@ -152,14 +152,14 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 08bd2ec09c | test(web): PDF viewer behavior is covered by fast tests (#25699) | other | no | n/a |
 | bd3287b640 | feat(web): thread state lives at the end of the timeline, not stacked on the composer (#25401) | thread | yes (design) | phase 2 (design) |
 | 5432d8e723 | refactor(web): drafts promote from the draft store, not from route effects (#25615) | composer | no | n/a |
-| becf853def | fix(web): PDF search finds phrases that wrap across lines (#25702) | other | yes | open |
+| becf853def | fix(web): PDF search finds phrases that wrap across lines (#25702) | other | yes | skip: verify PDFKit phrase/line-end-hyphen matching and highlights on screen before replacing search |
 | ed44f251d8 | feat(server): cut T3's MCP tool schemas by a third and merge 18 tools into action tools (#25423) | thread | yes | ported (49512488) |
 | daa720a986 | fix(workflows): keep completed workflows reachable (#24587) | thread | yes | n/a: mobile Agents pill only (client-runtime threadSubagents.ts isn't used by apps/web) |
-| 10a82e86ed | fix(web): devices agents open in background threads now show up (#25714) | other | yes | open |
+| 10a82e86ed | fix(web): devices agents open in background threads now show up (#25714) | other | yes | skip: needs environment-wide device-session baselines keyed with openedAt and GUI background/reopen checks |
 | 71ba6b374c | refactor(web): optimistic chat messages leave without a timer (#25710) | composer | no | n/a |
-| 6df241d23a | feat(provider): add Vercel fx as a provider (#18277) | settings | yes | open |
-| 65b4a69407 | fix(web): thread details popover closes when the card moves inline (#25731) | thread | yes | open |
-| f6a9315d19 | refactor(web): diff and file reveals are requests, and workspace edits refetch by construction (#25732) | pr/git | yes | open |
+| 6df241d23a | feat(provider): add Vercel fx as a provider (#18277) | settings | yes | ported; aa7450d5; fx label/glyph/binary setting, add choice, mutation and default row gated on the runtime advertising |
+| 65b4a69407 | fix(web): thread details popover closes when the card moves inline (#25731) | thread | yes | already so |
+| f6a9315d19 | refactor(web): diff and file reveals are requests, and workspace edits refetch by construction (#25732) | pr/git | yes | skip: diff/file revision invalidation and pending reveal ownership need a coordinated pipeline (>4h) |
 | 3425671a95 | feat(web): Add provider leads with first-class providers (#25753) | settings | yes (design) | phase 2 (design) |
 | 8e86eb2b4d | fix(client-runtime): searches and refreshes no longer wait on an unreachable environment (#25703) | connections | yes | ported (938aa3f8) |
 | 5d91ab1117 | refactor(web): command palette state lives in a store, git and branch pickers drop timer and sync effects (#25733) | palette | no | n/a |
@@ -169,19 +169,19 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | 401b01747c | chore(release): prepare v0.1.3 | other | no | n/a |
 | 96fc7b9551 | refactor(web): the new design is the only design, with no toggle (#25778) | settings | yes (design) | phase 2 (design) |
 | 70eccd48e4 | fix(web): keep right panel maximize available in narrow windows (#25389) | thread | yes | ported (3bc3509d); the sheet still has no maximize button |
-| 2202787df0 | fix(web): onboarding import no longer hangs when the project never arrives (#25805) | settings | yes | open |
-| 1a4f3c4a3c | fix(mobile): Windows image paths and non-ASCII file links open like desktop (#25802) | thread | yes | open |
+| 2202787df0 | fix(web): onboarding import no longer hangs when the project never arrives (#25805) | settings | yes | ported; 30213c1f; finish after a ten-second project-arrival timeout, cancel replaced/dismissed waits and ignore late a |
+| 1a4f3c4a3c | fix(mobile): Windows image paths and non-ASCII file links open like desktop (#25802) | thread | yes | ported; 29ab0969; Unicode letters/marks/numbers in native relative file destinations; the separate mobile Windows-pars |
 | f81c4cd79f | fix(web,mobile): markdown previews no longer show YAML frontmatter as a giant heading (#25804) | other | yes | ported (7ba45ab4) |
 | b333c175ba | fix(web): compact toggle shows the token count again (#25818) | composer | yes | open |
 | 1702d55214 | fix(web,mobile): bot approvals are visible on the PR summary (#25829) | pr/git | yes | ported (ed18558a); avatar verdict glyph is phase 2 |
 | f3b058cd6a | fix(web,mobile): stopped runs no longer look like errors (#25830) | thread | yes | open |
-| e5f2e5dbbc | fix(client-runtime): iOS resume keeps live sockets and drops dead ones 4x faster (#25824) | connections | yes | open |
+| e5f2e5dbbc | fix(client-runtime): iOS resume keeps live sockets and drops dead ones 4x faster (#25824) | connections | yes | skip: macOS already preserves/probes sockets (T3Client/ConnectionSupervisor.swift:318,524) |
 | 56695ae3ec | feat: model labels show the name you'd say out loud (#24205) | composer | yes | open |
 | 4cb29a56f6 | fix(web): switching a file between markdown and the editor no longer saves a draft twice (#25768) | other | no | n/a |
 | 92e645032c | fix(web,mobile): queued messages get a simpler Send now row, no reordering (#25846) | composer | yes | open |
 | ad068d7c93 | fix(web): Steer no longer does nothing while a compaction runs (#25837) | composer | yes | open |
 | 63bc022f64 | fix(web): clicking the device screen no longer draws a focus ring (#25882) | other | no | n/a |
-| 7873f53ada | fix(web): the Add ChatGPT account dialog animates closed once the account connects (#25868) | settings | yes | open |
+| 7873f53ada | fix(web): the Add ChatGPT account dialog animates closed once the account connects (#25868) | settings | yes | already so |
 | c39a115a14 | refactor(web): composer clears scroll-collapse in render, not after paint (#25909) | composer | no | n/a |
 | a4fe62ecfb | refactor(web): composer overlay re-measures from one layout effect (#25915) | composer | no | n/a |
 | 3e61886a24 | refactor(web): file browser records the right-click position on its own panel (#25908) | other | no | n/a |
@@ -217,7 +217,7 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | dde3fdb5a6 | feat(desktop): add a remote server by clicking its t3code://pair link (#24111) | connections | yes | not ported: t3code:// belongs to the official app; CW registering it would fight T3 for the links |
 | 4fc9e5f2fc | fix(web): settings avatar no longer hugs the modal corner (#26180) | settings | yes (design) | phase 2 (design) |
 | 294981fa72 | fix(mobile): Windows paths in messages keep their backslashes (#21454) | thread | no | n/a |
-| 7e884b2df6 | feat: triage an issue from the command palette, no terminal needed (#22753) | palette | yes | open |
+| 7e884b2df6 | feat: triage an issue from the command palette, no terminal needed (#22753) | palette | yes | ported; c46c94ce; triage/permission-gated RPC, scratch draft, empty-only prompt seeding, navigation cancellation, dela |
 | c38b265adc | feat(web): filter the sidebar by several projects at once (#25284) | sidebar | yes | open |
 | 06d4b57fa6 | fix(web): composer strip drops the folder icon next to the machine icon (#26158) | composer | yes (design) | phase 2 (design) |
 | 7e713926cd | feat(web): background work line shows the newest activity, no dots (#25299) | thread | yes | open |
@@ -234,7 +234,7 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | c2fbf0a524 | feat(server,web,mobile): thread links name their environment and never a title (#26239) | thread | yes | ported (7616fc6e) |
 | fe55faf379 | fix(clients): # suggestions put linked pull requests first for text queries (#26269) | composer | yes | ported (4cf7cdc6) |
 | 49a9e80e0b | fix(terminal): keep shared terminal grids in sync (#24352) | wire | yes | ported (40182582) |
-| 0c80751701 | feat: sign in to GitHub through the T3 Code for GitHub app [internal testing only] (#26245) | settings | yes | open |
+| 0c80751701 | feat: sign in to GitHub through the T3 Code for GitHub app [internal testing only] (#26245) | settings | yes | skip: requested exclusion |
 | 9910c0e874 | perf: reduce remote reconnect and command delays (#25754) | connections | yes | already so (wire audit) |
 | 3ef1610079 | fix(web): compaction row says "Compacting for 12s" instead of "after being idle" (#26299) | thread | yes | open |
 | 9c6429d74b | fix(web): threads without a project start on the primary environment (#26301) | palette | yes | ported (9a1ab655) |
@@ -246,7 +246,7 @@ Every commit from `git log v0.1.3-nightly.20261025.3669..v0.1.4-nightly.20261028
 | feb49e78d0 | fix(web): let theme color pickers use popover glass (#22348) | settings | yes (design) | phase 2 (design) |
 | 003ccd336d | fix(client-runtime): pairing links can no longer add routes to a saved environment (#26178) | connections | yes | ported (b089670b) |
 | feb2e32de6 | fix(web): align sidebar button geometry with shared tokens (#22287) | sidebar | yes (design) | phase 2 (design) |
-| 8e76f945d2 | feat(relay): T3 Chat Pro and Premier accounts get more tunnels (#25931) | connections | yes | open |
+| 8e76f945d2 | feat(relay): T3 Chat Pro and Premier accounts get more tunnels (#25931) | connections | yes | skip: paid caps arrive from relay, but gated T3 Chat account-link APIs/UI and lifecycle tests are missing (>4h) |
 | 50d3a31ffd | fix: guests see the screenshots the agent shows in its replies (#26323) | thread | server-only | free with runtime |
 | 4e4d4ba395 | feat(web): boring sidebar groups threads into project folders (#21039) | sidebar | yes | open |
 | cadbdafc06 | test(web): attachment preview tests wait long enough for cold workers and fonts (#26342) | other | no | n/a |
