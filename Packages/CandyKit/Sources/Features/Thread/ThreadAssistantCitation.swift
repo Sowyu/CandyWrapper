@@ -232,7 +232,7 @@ public enum AssistantCitationCommentPopup {
 
 /// T3 3814 citationProcedure.ts:36-91. Older pages populate visible turn items.
 public enum CitationHistory {
-    public enum Step: Equatable {
+    public enum Step: Equatable, Sendable {
         case waiting, loadEarlier
         case found(entryId: String, runId: String?)
         case failed(title: String, message: String)
