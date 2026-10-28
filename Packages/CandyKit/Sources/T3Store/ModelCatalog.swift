@@ -91,6 +91,46 @@ public enum ModelNames {
 
     /// The model trigger's label (`getTriggerDisplayModelName`).
     public static func trigger(_ model: ServerProviderModel) -> String { display(model, preferShortName: true) }
+
+    public static func trigger(_ model: ServerProviderModel, driver: String?, spoken: Bool = true) -> String {
+        guard spoken else { return display(model, preferShortName: true) }
+        var model = model
+        if model.shortName?.isEmpty != false { model.shortName = shortName(model.name, driver: driver) }
+        return display(model, preferShortName: true)
+    }
+
+    /// T3 3814, packages/provider-core/src/modelShortName.ts:1-71 and
+    /// packages/client-runtime/src/providerClients.ts:19-59. Keep family names when the remaining
+    /// words describe only a version or variant on another provider.
+    public static func shortName(_ name: String, driver: String?) -> String? {
+        let families: [String] = switch driver {
+        case "codex": ["GPT-", "GPT "]
+        case "claudeAgent": ["Claude "]
+        case "antigravity": ["Gemini "]
+        case "cursor", "grok": ["Grok "]
+        case "muse": ["Muse "]
+        default: []
+        }
+        let variants: Set<String> = ["pro", "flash", "mini", "max", "lite", "nano", "ultra", "plus", "fast", "turbo",
+            "preview", "latest", "thinking", "reasoning", "build", "code", "image", "vision", "audio", "live",
+            "custom", "tools", "exp", "experimental", "chat", "tts", "stt", "non", "transcribe"]
+        func words(_ text: String) -> [String] {
+            text.replacingOccurrences(of: #"\(.*?\)"#, with: " ", options: .regularExpression)
+                .components(separatedBy: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "-")))
+                .filter { !$0.isEmpty && $0.range(of: #"^v?\d+(?:\.\d+)*[a-z]?$"#, options: [.regularExpression, .caseInsensitive]) == nil }
+        }
+        func namesModel(_ text: String) -> Bool { words(text).contains { !variants.contains($0.lowercased()) } }
+        let unprefixed = name.replacingOccurrences(of: #"^[A-Z][\w.&\- ]{0,24}: (?=\S)"#, with: "", options: .regularExpression)
+        var short: String?
+        if let prefix = ["Claude ", "GPT-", "GPT ", "Gemini ", "Muse ", "Grok "].first(where: unprefixed.hasPrefix) {
+            let rest = String(unprefixed.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            if families.contains(prefix) ? !words(rest).isEmpty : namesModel(rest) {
+                short = rest.rangeOfCharacter(from: .whitespacesAndNewlines) != nil ? rest : rest.replacingOccurrences(of: "-", with: " ")
+            }
+        }
+        let result = short ?? (namesModel(unprefixed) ? unprefixed : name)
+        return result == name ? nil : result
+    }
 }
 
 // MARK: - Favorites

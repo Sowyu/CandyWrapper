@@ -90,9 +90,11 @@ public struct ResolvedComposerSelection: Sendable {
     public let interactionModeToPersist: InteractionMode?
 
     /// The model trigger's label (`triggerTitle`, ProviderModelPicker.tsx:85-91).
-    public var triggerLabel: String {
-        if let model { return ModelNames.trigger(model) }
-        if let first = entry?.models.first, modelSlug == nil { return ModelNames.trigger(first) }
+    public var triggerLabel: String { modelTriggerLabel(spoken: true) }
+
+    public func modelTriggerLabel(spoken: Bool) -> String {
+        if let model { return ModelNames.trigger(model, driver: entry?.driver, spoken: spoken) }
+        if let first = entry?.models.first, modelSlug == nil { return ModelNames.trigger(first, driver: entry?.driver, spoken: spoken) }
         return modelSlug ?? "Choose model"
     }
 }
