@@ -580,10 +580,11 @@ final class PaletteCommands {
         return threads.composer.config(env)?.scratchWorkspaceRoot
     }
 
-    /// `scratchEnvironmentId`: the current machine if it offers a scratch folder, else with no current
-    /// machine the one machine that does.
-    func scratchEnvironmentId(_ current: String?) -> String? {
-        if let current { return scratchRoot(current) != nil ? current : nil }
+    /// `scratchEnvironmentId` (useScratchProject.ts:51-60 at 3814): the primary machine wins when it offers a scratch
+    /// folder, then `fallback` when it does, else the one machine that does.
+    func scratchEnvironmentId(_ fallback: String?) -> String? {
+        if let primary = environments.primaryId, scratchRoot(primary) != nil { return primary }
+        if let fallback, scratchRoot(fallback) != nil { return fallback }
         let offering = environments.environmentIds.filter { scratchRoot($0) != nil }
         return offering.count == 1 ? offering[0] : nil
     }
