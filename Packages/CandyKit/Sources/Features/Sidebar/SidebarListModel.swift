@@ -273,7 +273,21 @@ public struct SidebarListState: Equatable, Sendable {
     public var scopedProjectIds: Set<ProjectId>?
     /// `sidebarProjectScopeKey`, a project group key. A key whose group is gone scopes nothing, as
     /// `scopedProjectGroup` resolves to null in T3 (Sidebar.tsx:2657-2674).
-    public var projectScopeKey: String?
+    public var projectScopeKeys: [String] = []
+    public var projectScopeKey: String? {
+        get { projectScopeKeys.first }
+        set { projectScopeKeys = newValue.map { [$0] } ?? [] }
+    }
+
+    /// uiStateStore.ts:154-156, sidebarProjectGrouping.ts:87-96 (3814).
+    public static func normalizedScopeKeys(_ keys: [String]) -> [String] {
+        var seen = Set<String>()
+        return keys.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && seen.insert($0).inserted }
+    }
+
+    func scopeGroups(_ groups: [SidebarModel.ProjectGroup]) -> [SidebarModel.ProjectGroup] {
+        groups.filter { projectScopeKeys.contains($0.key) }
+    }
     /// Drafts to show, the open one already frozen (see `SidebarContentView.setDrafts`).
     public var drafts: [SidebarDraft] = []
     public var activeDraftId: String?
@@ -311,7 +325,7 @@ public struct SidebarListState: Equatable, Sendable {
         a.activeThreadId == b.activeThreadId && a.snoozedExpanded == b.snoozedExpanded
             && a.settledExpanded == b.settledExpanded && a.settledVisibleCount == b.settledVisibleCount
             && a.scopedProjectIds == b.scopedProjectIds && a.localVisits == b.localVisits
-            && a.projectScopeKey == b.projectScopeKey && a.drafts == b.drafts && a.activeDraftId == b.activeDraftId
+            && a.projectScopeKeys == b.projectScopeKeys && a.drafts == b.drafts && a.activeDraftId == b.activeDraftId
             && a.capabilities.threadSettlement == b.capabilities.threadSettlement
             && a.capabilities.threadSnooze == b.capabilities.threadSnooze && a.environments == b.environments
             && a.terminalProcesses == b.terminalProcesses && a.selectedThreadIds == b.selectedThreadIds
@@ -369,9 +383,9 @@ public enum SidebarListBuilder {
             spansEnvironments = SidebarEnvironments.span(groups)
             for group in groups { for id in group.memberProjectIds { groupByProject[id] = group } }
             for p in snapshot.projects { projectById[p.id] = p }
-            let scoped = state.projectScopeKey.flatMap { key in groups.first { $0.key == key } }
-            scopedGroup = scoped
-            let scopedIds = scoped.map { Set($0.memberProjectIds) } ?? state.scopedProjectIds
+            let scoped = state.scopeGroups(groups)
+            scopedGroup = scoped.count == 1 ? scoped.first : nil
+            let scopedIds = scoped.isEmpty ? state.scopedProjectIds : Set(scoped.flatMap(\.memberProjectIds))
             self.scopedIds = scopedIds
             let requests = PendingSubagentRequests.byThread(snapshot.threads)
             let threads = snapshot.threads.filter { $0.archivedAt == nil && $0.deletedAt == nil }
@@ -404,7 +418,7 @@ public enum SidebarListBuilder {
         if !drafts.isEmpty { items = drafts.map(SidebarItem.draft) + [.draftDivider] + items }
         if items.isEmpty {
             if snapshot.projects.isEmpty { return [.noProjects] }
-            let text = ctx.scopedGroup.map { "No threads in \($0.label) yet" } ?? "No threads yet"
+            let text = state.scopeGroups(ctx.groups).count > 1 ? "No threads in these projects yet" : ctx.scopedGroup.map { "No threads in \($0.label) yet" } ?? "No threads yet"
             items = [.emptyText(text, search: false)]
         }
         cache?.record(items, state: state, nowMs: nowMs)
