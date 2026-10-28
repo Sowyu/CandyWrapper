@@ -3997,7 +3997,8 @@ extension ComposerController {
             detail += " upload failed"; state = .invalid
         }
         return ComposerChipLook(kind: a.kind == .image ? .image : .file(name: a.name),
-                                label: ComposerAttachmentRules.middleTruncate(a.name), detail: detail, state: state)
+                                label: ComposerAttachmentRules.middleTruncate(a.name), detail: detail, state: state,
+                                previewSource: ComposerAttachmentRules.isSvg(name: a.name, mimeType: a.mimeType) && !a.needsReattach ? a.fileURL : nil)
     }
 
     // MARK: Previews

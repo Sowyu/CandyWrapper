@@ -10,6 +10,19 @@ import T3Protocol
 struct ComposerAttachmentsTests {
     typealias R = ComposerAttachmentRules
 
+    @Test func svgThumbnailUsesNativeRenderingAndInvalidFilesKeepTheFileIcon() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let svg = directory.appendingPathComponent("drawing.svg")
+        try Data(#"<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24"><rect width="32" height="24" fill="red"/></svg>"#.utf8).write(to: svg)
+        let image = await ComposerImageIO.thumbnail(svg, side: 40, cover: false)
+        #expect(image != nil)
+        let broken = directory.appendingPathComponent("broken.svg")
+        try Data("invalid svg".utf8).write(to: broken)
+        #expect(await ComposerImageIO.thumbnail(broken, side: 40, cover: false) == nil)
+    }
+
     /// composerDraftStore.ts:2224-2240, 2510-2546: images upload again, finished files are checked, unfinished
     /// files come back as attach-again markers that block the send until replaced.
     @Test func draftAttachmentsSurviveARelaunchLikeT3() throws {
@@ -57,7 +70,11 @@ struct ComposerAttachmentsTests {
         #expect(R.shouldHandlePaste(files: [(name: "raw.dng", mimeType: "")], plainText: ""))
         #expect(R.classify(name: "IMG.HEIC", mimeType: "") == .image)
         #expect(R.classify(name: "x", mimeType: "image/heif") == .image)
-        #expect(R.classify(name: "a.svg", mimeType: "image/svg+xml") == .unsupportedImage)
+        #expect(R.classify(name: "a.svg", mimeType: "image/svg+xml") == .file)
+        #expect(R.classify(name: "DRAWING.SVG", mimeType: "application/octet-stream") == .file)
+        #expect(R.classify(name: "drawing", mimeType: "IMAGE/SVG+XML; charset=utf-8") == .file)
+        #expect(R.fileMimeType(name: "drawing.svg", mimeType: "text/plain") == "image/svg+xml")
+        #expect(R.shouldHandlePaste(files: [(name: "drawing.svg", mimeType: "image/svg+xml")], plainText: ""))
         #expect(R.classify(name: "a.bmp", mimeType: "image/bmp") == .unsupportedImage)
         #expect(R.classify(name: "notes.txt", mimeType: "text/plain") == .file)
         #expect(R.classify(name: "clip.mov", mimeType: "video/quicktime") == .file)

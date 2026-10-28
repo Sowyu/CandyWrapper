@@ -31,6 +31,7 @@ public struct ComposerChipLook: Equatable, Sendable {
     /// `--context-chip-accent` from content: an image chip's average color once its thumbnail loads
     /// (contextChipParts.tsx:184-192).
     public var accentOverride: NSColor?
+    public var previewSource: URL?
     /// Text and icon color from the surrounding markup: a chip rendered as a link inside chat markdown takes
     /// `.chat-markdown a { color: var(--info-foreground) }`.
     public var foregroundOverride: NSColor?
@@ -43,9 +44,9 @@ public struct ComposerChipLook: Equatable, Sendable {
     public var project: ProjectIconSource?
 
     public init(kind: Kind, label: String, detail: String? = nil, accentOverride: NSColor? = nil, foregroundOverride: NSColor? = nil,
-                state: State? = nil, project: ProjectIconSource? = nil) {
+                state: State? = nil, project: ProjectIconSource? = nil, previewSource: URL? = nil) {
         self.kind = kind; self.label = label; self.detail = detail; self.accentOverride = accentOverride; self.foregroundOverride = foregroundOverride
-        self.state = state; self.project = project
+        self.state = state; self.project = project; self.previewSource = previewSource
     }
 
     /// Mentions and skills only; every context link shows as unavailable.
@@ -331,6 +332,8 @@ private final class ChipViewProvider: NSTextAttachmentViewProvider {
 private final class ChipView: NSView {
     let look: ComposerChipLook
     let label: String
+    private var thumbnail: CGImage?
+    private var load: Task<Void, Never>?
     init(look: ComposerChipLook, label: String, frame: NSRect) {
         self.look = look
         self.label = label
@@ -357,6 +360,16 @@ private final class ChipView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         setFrameOrigin(frame.origin)
+        load?.cancel(); load = nil
+        if window == nil { thumbnail = nil }
+        else if let source = look.previewSource {
+            load = Task { [weak self] in
+                let image = await ComposerImageIO.thumbnail(source, side: 40, cover: true)
+                guard !Task.isCancelled, let self else { return }
+                thumbnail = image
+                needsDisplay = true
+            }
+        }
         needsDisplay = true
     }
     /// A move to a screen with another scale redraws at the new one.
@@ -368,7 +381,7 @@ private final class ChipView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let (icon, iconColor) = look.icon
-        ComposerChipAttachment.draw(look: look, label: label, icon: icon, iconColor: iconColor, in: bounds, ctx: ctx)
+        ComposerChipAttachment.draw(look: look, label: label, icon: icon, iconColor: iconColor, in: bounds, ctx: ctx, thumbnail: thumbnail)
     }
     override func viewDidChangeEffectiveAppearance() { needsDisplay = true }
 }
