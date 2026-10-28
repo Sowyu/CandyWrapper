@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import Testing
 import T3Protocol
+import DesignSystem
 @testable import Features
 
 struct ToolCallDiffTests {
@@ -149,9 +150,10 @@ struct ToolCallDiffPanelTests {
         panel.toolCallLoader = { _ in .init(item: detail) }
         panel.openToolCall(target)
         #expect(await eventually { panel.list.diff.files.count == 1 })
-        let notice = panel.subviews.compactMap { $0 as? NSTextField }.first { $0.stringValue.contains("exceeds the size limit") }
-        #expect(notice?.stringValue.contains("The recorded patch omits 1 of them.") == true)
-        #expect(notice?.isHidden == false)
+        // Two bars, as DiffPanel.tsx:1043-1054 stacks them.
+        let labels = panel.subviews.compactMap { $0 as? LabelView }.filter { !$0.isHidden }
+        #expect(labels.contains { $0.text == "This preview exceeds the size limit. Changes shown are incomplete." })
+        #expect(labels.contains { $0.text == "This tool call changed 2 files. The recorded patch omits 1 of them." })
         panel.closeToolCall()
     }
 
