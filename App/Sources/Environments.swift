@@ -148,6 +148,12 @@ final class Environments {
     }
     /// The session's connection state; nil when no session runs.
     func state(_ environmentId: String) -> ConnectionState? { entries[environmentId]?.state }
+    var connectedGenerations: [String: Int] {
+        Dictionary(uniqueKeysWithValues: entries.compactMap { id, entry in
+            guard let state = entry.state, state.status == .connected else { return nil }
+            return (id, state.generation)
+        })
+    }
 
     /// This client's session per environment (`GET /api/auth/session`), read once per connected session.
     private var authSessions: [String: AuthSessionState] = [:]
