@@ -870,6 +870,7 @@ final class ThreadController {
         composer.openThread = { [weak self] id in self?.open(id) }
         composer.onNewThread = { [weak self] in self?.newThread() }
         sidebar.actions.newThread = { [weak self] in self?.newThread() }
+        sidebar.actions.newThreadInProject = { [weak self] in self?.newThread(in: $0) }
         // Files dropped on a row open its thread and attach there (`handleThreadFileDrop`, Sidebar.tsx:3163-3187).
         sidebar.actions.dropFiles = { [weak self] id, urls in
             guard let self else { return }

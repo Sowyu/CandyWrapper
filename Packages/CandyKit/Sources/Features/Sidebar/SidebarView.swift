@@ -49,6 +49,7 @@ public struct SidebarActions {
     public var openProjectSettings: (String) -> Void = { _ in }
     public var addProject: () -> Void = {}
     public var newThread: () -> Void = {}
+    public var newThreadInProject: (ProjectShell) -> Void = { _ in }
     public var openSettings: () -> Void = {}
     public var openPullRequests: () -> Void = {}
     public var openUsage: () -> Void = {}
@@ -278,6 +279,24 @@ public final class SidebarContentView: DSView {
         list.registerForDraggedTypes([.fileURL, .sidebarThreads])
         list.onVisibleRowsChange = { [weak self] in self?.scheduleLabelTimer() }
         list.onToggleShelf = { [weak self] in self?.toggleShelf($0) }
+        list.onNewProjectThread = { [weak self] key in
+            guard let self, let group = SidebarListBuilder.projectScopeGroups(snapshot: self.snapshot).first(where: { $0.key == key }) else { return }
+            self.actions.newThreadInProject(group.representative)
+        }
+        // Sidebar.tsx:1194-1221 (3814).
+        list.onProjectMenu = { [weak self] key, event, view in
+            guard let self, let group = SidebarListBuilder.projectScopeGroups(snapshot: self.snapshot).first(where: { $0.key == key }) else { return }
+            let project = group.representative
+            let items = [
+                MenuItem("New thread") { [weak self] in self?.actions.newThreadInProject(project) },
+                MenuItem("Copy path") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(project.workspaceRoot, forType: .string)
+                },
+                MenuItem("Project settings", icon: .settings) { [weak self] in self?.actions.openProjectSettings(key) },
+            ]
+            MenuPopupView.showContextMenu(items, in: view, at: view.convert(event.locationInWindow, from: nil))
+        }
         list.onToggleProject = { [weak self] key in
             guard let self else { return }
             if self.state.collapsedProjects.remove(key) == nil { self.state.collapsedProjects.insert(key) }
@@ -298,7 +317,7 @@ public final class SidebarContentView: DSView {
             } ?? 0
             return SidebarSortPlanner.Context(settledExpanded: self.state.settledExpanded, settledVisibleCount: self.state.settledVisibleCount,
                                               routeThreadId: self.state.activeThreadId, snoozedCount: snoozed,
-                                              activeTimeOrdered: self.state.workingShelfEnabled)
+                                              activeTimeOrdered: self.state.workingShelfEnabled && !self.state.usesProjectFolders)
         }
         list.onShowMore = { [weak self] in self?.state.settledVisibleCount += SidebarListBuilder.settledPageCount }
         list.onHighlightSearchResult = { [weak self] i in self?.setSearchHighlight(i, scroll: false) }
@@ -315,7 +334,7 @@ public final class SidebarContentView: DSView {
         applyClientSettings(ClientSettingsStore.shared.current)
         clientSettingsObserver = ClientSettingsStore.shared.observe { [weak self] keys in
             guard keys.contains("sidebarProjectGroupingMode") || keys.contains("sidebarProjectGroupingOverrides")
-                    || keys.contains("sidebarWorkingShelfEnabled") || keys.contains("sidebarProjectSortOrder") else { return }
+                    || keys.contains("boringSidebarEnabled") || keys.contains("legacySidebarEnabled") || keys.contains("sidebarWorkingShelfEnabled") || keys.contains("sidebarProjectSortOrder") else { return }
             self?.applyClientSettings(ClientSettingsStore.shared.current)
         }
     }
@@ -335,6 +354,7 @@ public final class SidebarContentView: DSView {
         let grouping = Self.projectGrouping(c)
         SidebarModel.ProjectGrouping.current = grouping
         if state.grouping != grouping { state.grouping = grouping }
+        state.boringSidebarEnabled = c.bool("boringSidebarEnabled") || c.bool("legacySidebarEnabled")
         let working = c.bool("sidebarWorkingShelfEnabled")
         if state.workingShelfEnabled != working {
             // Off resets the tracker; on starts from a fresh baseline (`inboxReturns.observe(null)`).
@@ -480,7 +500,7 @@ public final class SidebarContentView: DSView {
         let ms = nowMs
         list.nowMs = ms
         // `inboxReturns.observe(workingShelfEnabled ? threads : null)` on every list rebuild.
-        if let tracker = state.inboxReturns, let snapshot {
+        if !state.usesProjectFolders, let tracker = state.inboxReturns, let snapshot {
             let requests = PendingSubagentRequests.byThread(snapshot.threads)
             tracker.observe(snapshot.threads.filter { $0.archivedAt == nil && $0.deletedAt == nil }
                 .map { SidebarThread($0, pendingSubagentRequest: requests[$0.id]) }, nowMs: ms)

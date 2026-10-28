@@ -530,9 +530,8 @@ public final class GeneralSettingsView: SettingsPageBase {
         let plan = clientSwitch("legacy-plan-mode", "Restore Build/Plan, /plan, /default, and Shift+Tab. Off uses build mode.", key: "planModeEnabled")
         let meter = clientSwitch("legacy-context-window-indicator", "Shows context window usage as a circular indicator in the composer.",
                                  key: "contextWindowMeterEnabled")
-        let sidebar = clientSwitch("legacy-sidebar", "Restore per-project thread trees instead of the default flat sidebar.", key: "legacySidebarEnabled")
-        for r in [plan, meter, sidebar] { r.accessories = [] }
-        let folded = SettingsFoldedSectionView(title: "Legacy features", rows: [plan, meter, sidebar])
+        for r in [plan, meter] { r.accessories = [] }
+        let folded = SettingsFoldedSectionView(title: "Legacy features", rows: [plan, meter])
         folded.onToggle = { [weak self] in self?.onHeightChange?() }
         anchors["legacy-features"] = folded
         return folded

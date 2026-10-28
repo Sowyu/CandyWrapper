@@ -33,6 +33,8 @@ public final class SidebarListView: DSView {
     var onOpen: (@MainActor (ThreadId) -> Void)?
     var onToggleShelf: (@MainActor (SidebarShelf) -> Void)?
     /// Dither's project sections: fold or unfold by group key.
+    var onNewProjectThread: ((String) -> Void)?
+    var onProjectMenu: ((String, NSEvent, NSView) -> Void)?
     var onToggleProject: (@MainActor (String) -> Void)?
     var onShowMore: (@MainActor () -> Void)?
     var onOpenDraft: (@MainActor (String) -> Void)?
@@ -322,6 +324,10 @@ public final class SidebarListView: DSView {
         if kind == .card || kind == .slim {
             view.onHoverChange = { [weak self] row, hovered in self?.rowHoverChanged(row, hovered) }
             view.onBeginDrag = { [weak self] row, id, event, press in self?.beginThreadDrag(row, id, event: event, press: press) }
+        }
+        if let header = view as? SidebarProjectHeaderRowView {
+            header.onNewThread = { [weak self] in self?.onNewProjectThread?($0) }
+            header.onProjectMenu = { [weak self] in self?.onProjectMenu?($0, $1, $2) }
         }
         if kind == .projectHeader {
             view.onBeginGroupDrag = { [weak self] header, event in self?.beginDitherGroupDrag(header, event: event) }
