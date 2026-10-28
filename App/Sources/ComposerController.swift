@@ -3413,7 +3413,7 @@ extension ComposerController {
             default: nil
             }
             if let name = skillName, let skill = self.menuProvider?.skills(cwd: self.menuCwd).first(where: { $0.name == name }) {
-                let open: (() -> Void)? = self.openThreadId == nil || skill.path.isEmpty ? nil : { [weak self] in
+                let open: (@MainActor () -> Void)? = self.openThreadId == nil || skill.path.isEmpty ? nil : { @MainActor [weak self] in
                     let path = skill.path
                     self?.panel.model.openFile?(FileLinkMeta(filePath: path, targetPath: path, workspaceRelativePath: path,
                         basename: (path as NSString).lastPathComponent, line: nil, column: nil), false)
