@@ -3,7 +3,7 @@ Bitbucket credentials (both methods), a provider's Environment section with two 
 popover with Update now, and the accent color popover.
 
 Class strings are copied from apps/web/src/components/settings/{BitbucketCredentialsSettings.tsx, ProviderInstanceCard.tsx,
-ProviderAccentColorPicker.tsx}, components/ui/{label,input,button,popover,color-picker}.tsx at the tag in T3_VERSION.
+ProviderAccentColorPicker.tsx}, components/ui/{label,input,button,popover,color-picker}.tsx at v0.1.4-nightly.20261028.3814.
 Rows, sections, toggles, buttons and inputs come from the other spec generators.
 Usage: /usr/bin/python3 -I scripts/gen-settings-pages3-spec.py
 """

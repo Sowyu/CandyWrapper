@@ -16,6 +16,10 @@ struct SettingsPagesFidelityTests {
     ]
     static let out = Fidelity.root.appendingPathComponent("settings-pages")
 
+    final class SettingsNavCanvas: DSView {
+        override func updateLayer() { layer?.backgroundColor = Themed.color(\.sidebar).cgColor(in: self) }
+    }
+
     static func context() -> SettingsPageContext {
         let c = SettingsPageContext()
         c.scope = SettingsScopeState(environments: [SettingsScopeEnvironment(id: "a", label: "host", settings: ServerSettingsValues(.object([:])),
@@ -29,20 +33,18 @@ struct SettingsPagesFidelityTests {
         case "nav-search":
             let nav = SettingsSidebarView()
             nav.stage = .none
-            // The classic reference is pinned to 3754. Snooze options arrived in 3814
-            // (93a9e079b1), after T3 removed the classic design switch.
-            nav.searchItems.removeAll { $0.id == "snooze-options" }
+            nav.isRouteModal = true
             nav.setQuery("time")
-            let box = ConnectionsFidelityTests.SidebarBox(frame: NSRect(origin: .zero, size: size))
-            nav.frame = NSRect(x: 0, y: -52, width: size.width, height: 800)
+            let box = SettingsNavCanvas(frame: NSRect(origin: .zero, size: size))
+            nav.frame = NSRect(x: 0, y: 0, width: size.width, height: 800)
             box.clipsToBounds = true
             box.addSubview(nav)
             nav.layoutSubtreeIfNeeded()
             return box
         case "behavior":
-            let page = GeneralSettingsView(context: context())
+            let page = ConcernSettingsView(context: context(), section: .general)
             let section = page.anchor("behavior") as! SettingsSectionView
-            section.group.rows = Array(section.group.rows.prefix(5))
+            section.group.rows = Array(section.group.rows.prefix(2))
             section.removeFromSuperview()
             section.frame = NSRect(x: 0, y: 0, width: size.width, height: section.height(forWidth: size.width))
             section.layoutSubtreeIfNeeded()

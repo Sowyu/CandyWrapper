@@ -8,6 +8,7 @@
 //              "cases": [ { "name": "outline.sm", "html": "<button ...>", "wrapperStyle": "...", "stateTarget": "input" } ] }
 // `stateTarget` (optional) is a selector inside the case element that receives the forced state and the
 // `disabled` attribute, for wrappers styled with `:has()` (Input, Textarea, InputGroup).
+// `viewportWidth` (optional) sets the CSS viewport width; defaults to 900 for existing specs.
 // `prepare` (optional) is a JS expression run once per theme after load, awaited if it returns a
 // promise, for markup that T3 builds at runtime (Shiki highlighting in the markdown spec).
 // `stylesheets` (optional) lists additional local CSS paths (repo-relative or ~/).
@@ -29,6 +30,7 @@ let component = spec["component"] as! String
 let states = spec["states"] as? [String] ?? ["rest"]
 let themes = spec["themes"] as? [String] ?? ["light", "dark"]
 let cases = spec["cases"] as! [[String: Any]]
+let viewportWidth = spec["viewportWidth"] as? Int ?? 900
 let outDir = root.appendingPathComponent("design/component-reference/\(component)")
 try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
 let pad = 8.0, scale = 2.0
@@ -139,7 +141,7 @@ func settle() async throws { _ = try await evaluate("new Promise(r => requestAni
 try await send("Page.enable")
 try await send("DOM.enable")
 try await send("CSS.enable")
-try await send("Emulation.setDeviceMetricsOverride", ["width": 900, "height": 900, "deviceScaleFactor": scale, "mobile": false])
+try await send("Emulation.setDeviceMetricsOverride", ["width": viewportWidth, "height": 900, "deviceScaleFactor": scale, "mobile": false])
 var manifest: [String: [String: Double]] = [:]
 var metrics: [String: Any] = [:]
 for captureScale in scales {
@@ -159,7 +161,7 @@ for captureScale in scales {
             print("prepare (\(theme)): \(result ?? "no result")")
         }
         let docHeight = try await evaluate("document.documentElement.scrollHeight") as? Double ?? 900
-        try await send("Emulation.setDeviceMetricsOverride", ["width": 900, "height": Int(docHeight), "deviceScaleFactor": captureScale, "mobile": false])
+        try await send("Emulation.setDeviceMetricsOverride", ["width": viewportWidth, "height": Int(docHeight), "deviceScaleFactor": captureScale, "mobile": false])
         try await settle()
         let doc = try await send("DOM.getDocument", ["depth": 0])
         let rootId = (doc["root"] as! [String: Any])["nodeId"] as! Int

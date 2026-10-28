@@ -30,13 +30,17 @@ final class SidebarCommands {
         c.container.onEscape = { [weak self] in self?.goBack() }
         return c
     }()
+    private var usageModal: AppRouteModalView?
+    private var recordUsageModalClose = true
     private var utilityKind: UtilityPage?
-    /// The Usage page, made on first open and kept for the session.
-    private lazy var usage: UsageController = {
+    private var usageStorage: UsageController?
+    private var usage: UsageController {
+        if let usageStorage { return usageStorage }
         let c = UsageController(environments: environments, composer: threads.composer, window: window)
         c.page.onEscape = { [weak self] in self?.goBack() }
+        usageStorage = c
         return c
-    }()
+    }
     /// A utility page opened or closed (route history).
     var onRouteChange: (() -> Void)?
     /// Leaves Settings before a utility page shows (both replace the main area; T3 routes between them).
@@ -47,7 +51,7 @@ final class SidebarCommands {
     var historyBack: () -> Bool = { false }
     var closePalette: () -> Void = {}
     /// The open utility page, nil on the thread view.
-    var openUtilityKind: UtilityPage? { utilityPage == nil ? nil : utilityKind }
+    var openUtilityKind: UtilityPage? { usageModal != nil ? .usage : utilityPage == nil ? nil : utilityKind }
 
     /// `/projects/$projectKey` for a group key, set by the app.
     var openProjectSettings: (String) -> Void = { _ in }
@@ -276,12 +280,12 @@ final class SidebarCommands {
     /// The value `thread.copyReference` copies, nil when there is none.
     var threadReference: String? { threadReferenceTarget?.value }
 
-    var isUsagePageOpen: Bool { utilityPage != nil && utilityKind == .usage }
-    var isUtilityPageOpen: Bool { utilityPage != nil }
+    var isUsagePageOpen: Bool { usageModal != nil || (utilityPage != nil && utilityKind == .usage) }
+    var isUtilityPageOpen: Bool { usageModal != nil || utilityPage != nil }
 
     /// The route's thread (`routeThreadKey`): none while Usage or Pull Requests shows, so parking or
     /// deleting the thread behind the page moves nothing (Sidebar.tsx:2494, 3318-3346).
-    private var routeThreadId: ThreadId? { utilityPage == nil ? threads.openThreadId : nil }
+    private var routeThreadId: ThreadId? { utilityPage == nil && usageModal == nil ? threads.openThreadId : nil }
 
     // MARK: Lookup
 
@@ -923,11 +927,40 @@ final class SidebarCommands {
     /// The Orchestrator's pane left the main area (Redesign).
     var onOrchestratorHidden: () -> Void = {}
 
-    /// T3 routes to `/pull-requests` and `/usage`: the page replaces the thread panel and the sidebar
-    /// footer shows Back.
+    /// A route modal returns to the current utility page; Redesign keeps its existing tab transition.
+    func prepareForSettings() {
+        if ThemeRuntime.isDither(dark: window?.effectiveAppearance.isDark ?? true) { closeUtilityPage() }
+        else { recordUsageModalClose = false; usageModal?.close(animated: false) }
+    }
+
+    /// Pull Requests replaces the thread panel; Usage floats above the current route in default themes.
+    /// Redesign keeps its utility pages as tabs.
     func openUtilityPage(_ page: UtilityPage, view custom: NSView? = nil) {
         guard let layout, let sidebar else { return }
         closeSettings()
+        if page == .usage, !ThemeRuntime.isDither(dark: window?.effectiveAppearance.isDark ?? true), let window {
+            if usageModal != nil { return }
+            // Usage floats over the route that opened it, including Pull Requests.
+            usage.page.header.isRouteModal = true
+            recordUsageModalClose = true
+            let host = AppRouteModalView.present(label: "Usage", content: usage.page, in: window)
+            usageModal = host
+            usage.page.header.close.action = { [weak host] in host?.close() }
+            host.onDismiss = { [weak self] in
+                guard let self else { return }
+                self.usageStorage?.didHide()
+                self.usageStorage = nil
+                self.usageModal = nil
+                self.navigationGeneration += 1
+                if self.recordUsageModalClose { self.onRouteChange?() }
+            }
+            usage.didShow()
+            navigationGeneration += 1
+            onRouteChange?()
+            return
+        }
+        if let usageModal { recordUsageModalClose = false; usageModal.close(animated: false) }
+        if page == .usage { usage.page.header.isRouteModal = false }
         let view: NSView = custom ?? (page == .pullRequests ? pullRequestsPage.container : usage.page)
         if utilityKind == .pullRequests && page != .pullRequests { pullRequestsPage.didHide() }
         if utilityKind == .usage && page != .usage { usage.didHide() }
@@ -954,6 +987,7 @@ final class SidebarCommands {
     /// Back (`navigateToMainApp`): the thread panel returns as it was. `record` false leaves the route
     /// history to the navigation that follows.
     func closeUtilityPage(record: Bool = true) {
+        if let usageModal { recordUsageModalClose = record; usageModal.close(animated: record); return }
         guard let layout, let page = utilityPage else { return }
         if utilityKind == .pullRequests { pullRequestsPage.didHide() }
         if utilityKind == .usage { usage.didHide() }
@@ -974,7 +1008,7 @@ final class SidebarCommands {
     /// Runs a navigation to a thread or draft; from a utility page the page closes first and the
     /// history gets one entry, the destination.
     private func leavingUtilityPage(_ navigate: () -> Void) {
-        guard utilityPage != nil else { return navigate() }
+        guard usageModal != nil || utilityPage != nil else { return navigate() }
         closeUtilityPage(record: false)
         navigate()
         onRouteChange?()

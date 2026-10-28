@@ -102,7 +102,12 @@ final class ComposerController {
     /// The open server thread.
     var openThreadId: ThreadId? { if case .thread(let id) = target { id } else { nil } }
 
-    func focusComposer() { DispatchQueue.main.async { [weak self] in self?.composer.focus() } }
+    func focusComposer() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !AppRouteModalView.isPresented(in: self.composer.window) else { return }
+            self.composer.focus()
+        }
+    }
 
     // MARK: Prompt links (promptLinks/linkedPrompt.ts, NewThreadLinkView.tsx in T3 3105)
 

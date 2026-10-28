@@ -74,7 +74,7 @@ public final class ConcernSettingsView: SettingsPageBase {
             .init(.general, [G("behavior", "Display", rows: ["time-format"])])
         ]
         case .chat: return [
-            .init(.general, [G("behavior", "Composer", rows: ["composer-rich-text", "send-shortcut", "composer-collapse", "skills-in-slash-menu"])]),
+            .init(.general, [G("behavior", "Composer", rows: ["composer-rich-text", "send-shortcut", "skills-in-slash-menu"])]),
             .init(.general, [G("behavior", "Follow-ups", rows: ["follow-up-behavior"])])
         ]
         case .diffs: return [
