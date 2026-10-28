@@ -265,6 +265,20 @@ final class TimelineContext {
     }
 }
 
+extension TimelineItem {
+    var messageAuthor: String? {
+        guard case .message(let message, _, _, _, _, _) = row.kind, message.role != .system else { return nil }
+        guard message.role == .user else { return "Assistant" }
+        let presentation = UserMessagePresentation.resolve(message)
+        if presentation.isAutomation { return "Automation" }
+        if presentation.attribution == .agent {
+            let title = ui.foldTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return title.isEmpty ? "Agent" : title
+        }
+        return presentation.guestName.map { "\($0) (guest)" } ?? "You"
+    }
+}
+
 /// Base of every timeline row. A row view is configured from a `TimelineItem` and measures itself
 /// for a width; it never owns expand state. Hover drives the hover-only timestamps and buttons.
 @MainActor
@@ -293,14 +307,15 @@ class TimelineRowView: DSView, FocusWithinObserver, HoverSyncPointerClient {
 
     // A row that is one button (a fold, a work group header) is one element for VoiceOver; other rows stay
     // transparent so their text and controls are reachable.
-    override func isAccessibilityElement() -> Bool { onClick != nil }
+    override func isAccessibilityElement() -> Bool { onClick != nil || item?.messageAuthor != nil }
     override func accessibilityRole() -> NSAccessibility.Role? {
+        if item?.messageAuthor != nil { return .group }
         let role = super.accessibilityRole()
         return onClick != nil && (role == nil || role == .group || role == .unknown) ? .button : role
     }
     override func accessibilityLabel() -> String? {
         if let explicit = super.accessibilityLabel(), !explicit.isEmpty { return explicit }
-        return onClick != nil ? ControlView.drawnText(in: self) : nil
+        return item?.messageAuthor ?? (onClick != nil ? ControlView.drawnText(in: self) : nil)
     }
     override func accessibilityPerformPress() -> Bool {
         guard let onClick else { return false }
