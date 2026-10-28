@@ -4,6 +4,13 @@ import Testing
 
 /// T3's file chip rules, cases from packages/shared/src/markdownLinks.test.ts and fileLinks.test.ts.
 struct FileLinksTests {
+    @Test(arguments: ["線性代數/考試.pdf", "資料/", "cafe\u{301}/re\u{301}sume\u{301}.md:12:3", "épreuves/été.md", "notes/ملف.md"])
+    func unicodeFileDestinations(_ href: String) {
+        let meta = FileLinks.resolveLink(href, cwd: "/tmp/workspace")
+        #expect(meta != nil)
+        #expect(meta?.workspaceRelativePath != nil)
+    }
+
     @Test(arguments: [
         ("src\\main.ts", "src/main.ts"), ("conf.d/nginx.conf", "conf.d/nginx.conf"), ("script.pl:10", "script.pl:10"),
         ("node.meta", nil), ("Recorded evidence here: /tmp/image.png", nil), ("origin/main", nil), ("127.0.0.1:3000", nil),
