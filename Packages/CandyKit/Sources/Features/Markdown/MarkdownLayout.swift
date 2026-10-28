@@ -921,13 +921,20 @@ private struct Builder {
         }
     }
 
-    /// Each context chip at its placeholder, `align-middle` like the file chips.
+    /// Each context chip at its placeholder; default chips share the surrounding text baseline.
     static func contextChips(_ inline: MarkdownStyle.Inline, in textBox: MarkdownTextBox, size: CGFloat, weight: NSFont.Weight) -> [MarkdownLayout.Item] {
         let top = FileChipStyle.top(parent: MarkdownStyle.font(size, weight: weight), size: size)
         return inline.contexts.compactMap { entry in
             guard let span = textBox.spans(entry.range).first else { return nil }
             var chip = entry.chip
             chip.frame.origin = CGPoint(x: span.x0, y: span.baseline + top)
+            if ThreadDesign.uses3814, chip.look.kind == .image {
+                // ContextChip's image variant adds a 1px border around its normal line box.
+                // Keep that border above the label baseline (contextChipParts.tsx:168-176).
+                let font = MarkdownStyle.font(size, weight: .medium)
+                chip.frame.size.height = ceil(font.ascender - font.descender) + 2
+                chip.frame.origin.y -= 1
+            }
             return .contextChip(chip)
         }
     }
