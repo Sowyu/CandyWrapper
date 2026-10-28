@@ -1,0 +1,20 @@
+{
+  "base": "http://127.0.0.1:47403",
+  "width": 1100,
+  "height": 780,
+  "scale": 2,
+  "themes": [
+    "dark"
+  ],
+  "states": [
+    {
+      "name": "52-connection-error",
+      "path": "/pair#token=invalid-reference-token",
+      "actions": [
+        {
+          "wait": 2500
+        }
+      ]
+    }
+  ]
+}

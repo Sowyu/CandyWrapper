@@ -1,0 +1,127 @@
+{
+  "base": "http://127.0.0.1:47403",
+  "width": 1100,
+  "height": 780,
+  "scale": 2,
+  "themes": [
+    "dark",
+    "light"
+  ],
+  "states": [
+    {
+      "name": "49-settings-modal-general",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "click": "[aria-label=\"Settings\"]"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "50-floating-thread-settings",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/10c87a17-cd06-4845-ae25-7733f48ef018",
+      "actions": [
+        {
+          "click": "[aria-label=\"Toggle thread details panel\"]"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "22-commit-dialog",
+      "path": "/fb58d9a1-0f99-4514-bc15-5572aee2ca1b/bf25a232-a113-43ea-b29b-d5690a3759ce",
+      "actions": [
+        {
+          "click": "[aria-label=\"Toggle thread details panel\"]"
+        },
+        {
+          "click": "[aria-label=\"Git action options\"]"
+        },
+        {
+          "js": "[...document.querySelectorAll('[role=menuitem]')].find(e=>e.textContent.trim()==='Commit').click()",
+          "log": true
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "26-usage-limits",
+      "path": "/usage",
+      "actions": [
+        {
+          "wait": 1200
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>['All providers','No providers'].includes(e.textContent.trim())).click()"
+        },
+        {
+          "js": "(()=>{const e=[...document.querySelectorAll('[role=menuitemcheckbox]')].find(e=>e.textContent.trim()==='All providers');if(e.getAttribute('aria-checked')==='true')e.click()})()"
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "click": "text=Limits"
+        },
+        {
+          "wait": 2500
+        }
+      ]
+    },
+    {
+      "name": "26b-usage-cost",
+      "path": "/usage",
+      "actions": [
+        {
+          "wait": 1200
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>['All providers','No providers'].includes(e.textContent.trim())).click()"
+        },
+        {
+          "js": "(()=>{const e=[...document.querySelectorAll('[role=menuitemcheckbox]')].find(e=>e.textContent.trim()==='All providers');if(e.getAttribute('aria-checked')==='true')e.click()})()"
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "click": "text=Cost"
+        },
+        {
+          "wait": 2500
+        }
+      ]
+    },
+    {
+      "name": "26b-usage-tokens",
+      "path": "/usage",
+      "actions": [
+        {
+          "wait": 1200
+        },
+        {
+          "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>['All providers','No providers'].includes(e.textContent.trim())).click()"
+        },
+        {
+          "js": "(()=>{const e=[...document.querySelectorAll('[role=menuitemcheckbox]')].find(e=>e.textContent.trim()==='All providers');if(e.getAttribute('aria-checked')==='true')e.click()})()"
+        },
+        {
+          "key": "Escape"
+        },
+        {
+          "click": "text=Tokens"
+        },
+        {
+          "wait": 2500
+        }
+      ]
+    }
+  ]
+}

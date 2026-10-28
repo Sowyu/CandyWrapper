@@ -1,0 +1,56 @@
+{
+  "base": "http://127.0.0.1:47403",
+  "width": 1100,
+  "height": 780,
+  "scale": 2,
+  "themes": [
+    "dark"
+  ],
+  "states": [
+    {
+      "name": "seed-approval-3824",
+      "path": "/",
+      "actions": [
+        {
+          "key": "m",
+          "meta": true,
+          "shift": true
+        },
+        {
+          "type": "haiku"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "click": "text=Claude Haiku 5.5"
+        },
+        {
+          "click": "[data-composer-shortcut~=\"composer.effort\"]"
+        },
+        {
+          "click": "[role=\"menuitemradio\"][aria-label=\"Supervised\"]"
+        },
+        {
+          "click": ".composer-tiptap"
+        },
+        {
+          "type": "Create approval-3824.txt containing hello."
+        },
+        {
+          "key": "Enter"
+        },
+        {
+          "wait": 20000
+        },
+        {
+          "js": "location.pathname",
+          "log": true
+        },
+        {
+          "dump": "/Users/mrm/CandyWrapper-research/sandbox-3824-ref/approval-3824.dom"
+        }
+      ]
+    }
+  ]
+}

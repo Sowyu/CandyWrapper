@@ -1,0 +1,109 @@
+{
+  "base": "http://127.0.0.1:47403",
+  "width": 1100,
+  "height": 780,
+  "scale": 2,
+  "themes": [
+    "dark"
+  ],
+  "states": [
+    {
+      "name": "01-running-turn",
+      "path": "/",
+      "actions": [
+        {
+          "key": "m",
+          "meta": true,
+          "shift": true
+        },
+        {
+          "type": "haiku"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "click": "text=Claude Haiku 5.5"
+        },
+        {
+          "click": ".composer-tiptap"
+        },
+        {
+          "type": "Write a 4000-word story about a lighthouse. No tools."
+        },
+        {
+          "key": "Enter",
+          "wait": 1000
+        },
+        {
+          "wait": 5000
+        },
+        {
+          "js": "location.pathname",
+          "log": true
+        }
+      ]
+    },
+    {
+      "name": "01-running-turn",
+      "theme": "light",
+      "continue": true
+    },
+    {
+      "name": "29-queued-messages",
+      "continue": true,
+      "actions": [
+        {
+          "click": ".composer-tiptap"
+        },
+        {
+          "type": "First queued note."
+        },
+        {
+          "js": "document.querySelector('[aria-label=\"Steer message\"]')?.dispatchEvent(new MouseEvent('click',{bubbles:true,metaKey:true}))"
+        },
+        {
+          "wait": 500
+        },
+        {
+          "click": ".composer-tiptap"
+        },
+        {
+          "type": "Second queued note."
+        },
+        {
+          "js": "document.querySelector('[aria-label=\"Steer message\"]')?.dispatchEvent(new MouseEvent('click',{bubbles:true,metaKey:true}))"
+        },
+        {
+          "wait": 800
+        }
+      ],
+      "theme": "dark"
+    },
+    {
+      "name": "29-queued-messages",
+      "theme": "light",
+      "continue": true,
+      "afterActions": [
+        {
+          "js": "document.querySelector('[aria-label=\"Remove queued message\"]')?.click()"
+        },
+        {
+          "wait": 700
+        },
+        {
+          "js": "document.querySelector('[aria-label=\"Remove queued message\"]')?.click()"
+        },
+        {
+          "wait": 700
+        },
+        {
+          "click": "[aria-label=\"Stop generation\"]"
+        },
+        {
+          "wait": 2000
+        }
+      ]
+    }
+  ]
+}
