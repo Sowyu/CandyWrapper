@@ -238,8 +238,11 @@ final class MetaRowsItem: DSView, StackItem {
         avatars = entries.map { actor, outcome, stale in
             let a = PullRequestAvatarView()
             a.actor = actor
-            if let outcome { a.ring = PullRequestStyle.outcomeRing(outcome, stale: stale) }
-            a.reviewOutcome = outcome; a.reviewStale = stale
+            if let outcome {
+                a.ring = PullRequestStyle.outcomeRing(outcome, stale: stale)
+                a.reviewOutcome = outcome
+                a.staleReview = stale
+            }
             a.toolTip = actor?.login ?? "ghost"
             addSubview(a)
             return a
@@ -420,6 +423,7 @@ final class ChecksListItem: DSView, StackItem {
             name.frame = NSRect(x: 30, y: 8, width: max(0, status.frame.minX - 8 - 30), height: 20)
         }
         override func updateLayer() {
+            layer?.cornerRadius = DesignGeometry.radius(8, in: self)
             layer?.backgroundColor = hovered ? Themed.color(\.accent, 0.6).cgColor(in: self) : nil
             name.color = Themed.color(\.foreground)
             status.color = Themed.color(\.mutedForeground)
@@ -887,6 +891,7 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
     }
 
     override func updateLayer() {
+        layer?.cornerRadius = DesignGeometry.radius(10, in: self)
         layer?.borderColor = Themed.color(\.border, 0.6).cgColor(in: self)
         chevron.strokeColor = Themed.color(\.mutedForeground)
         location.color = Themed.color(\.mutedForeground)

@@ -117,38 +117,31 @@ public enum PullRequestStyle {
 // ponytail: avatars load once per URL into a process cache with no eviction; bound it when long sessions show memory growth
 public final class PullRequestAvatarView: DSView {
     private let initial = LabelView()
-    private var verdictGlyph: IconView?
-    private var legacyClipsToBounds = true
-    public var reviewOutcome: String? { didSet { updateVerdict() } }
-    public var reviewStale = false { didSet { updateVerdict() } }
-    private func updateVerdict() {
-        verdictGlyph?.removeFromSuperview(); verdictGlyph = nil
-        clipsToBounds = reviewOutcome != nil && ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? false : legacyClipsToBounds
-        guard let reviewOutcome, ThreadDesign.uses3814(dark: effectiveAppearance.isDark) else { return }
-        let icon: IconName = reviewOutcome == "approved" ? .circleCheck : .circleX
-        let color = reviewOutcome == "approved" ? Themed.base("emerald-500", dark: "emerald-400") : Themed.color(reviewOutcome == "changes-requested" ? \.destructive : \.mutedForeground)
-        let glyph: IconView
-        if reviewOutcome == "dismissed" {
-            let definition = IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
-                IconElement(.circle(cx: 12, cy: 12, r: 10), IconPaint(fill: .current, stroke: .current, strokeWidth: 3)),
-                IconElement(.path(d: "M8 12h8"), .lucide)])
-            glyph = IconView(definition: definition, size: 12, color: Themed.color(\.background))
-            glyph.fillColor = color
-        } else {
-            glyph = IconView(name: icon, size: 12, strokeColor: Themed.color(\.background), fillColor: color)
-        }
-        glyph.strokeWidth = 3
-        glyph.layer?.zPosition = 1
-        glyph.alphaValue = reviewStale ? 0.5 : 1
-        addSubview(glyph); verdictGlyph = glyph
-        needsLayout = true
-    }
-    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateVerdict() }
     private let image = CALayer()
+    private let reviewRing = BoxDecorationLayer()
     private var loadedURL: String?
     @MainActor static var cache: [String: CGImage] = [:]
     /// A ring around the avatar (a reviewer's verdict), drawn 2px outside.
     public var ring: NSColor? { didSet { needsDisplay = true } }
+
+    /// #25829: a shape keeps verdicts legible over a colored bot avatar.
+    public var reviewOutcome: String? { didSet { updateVerdict() } }
+    public var staleReview = false { didSet { needsDisplay = true } }
+    private var verdict: IconView?
+
+    private func updateVerdict() {
+        verdict?.removeFromSuperview()
+        verdict = nil
+        guard let reviewOutcome else { return }
+        let icon: IconName = reviewOutcome == "approved" ? .circleCheck : reviewOutcome == "changes-requested" ? .circleX : .circleDashed
+        let mark = IconView(name: icon, size: 12, strokeColor: Themed.color(\.background))
+        mark.strokeWidth = 3
+        mark.layer?.zPosition = 1
+        verdict = mark
+        addSubview(mark)
+        needsLayout = true
+        needsDisplay = true
+    }
 
     public var actor: PullRequestActor? {
         didSet {
@@ -160,7 +153,9 @@ public final class PullRequestAvatarView: DSView {
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        legacyClipsToBounds = clipsToBounds
+        reviewRing.host = self
+        reviewRing.outset = 4
+        layer?.addSublayer(reviewRing)
         image.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
         image.contentsGravity = .resizeAspectFill
         image.masksToBounds = true
@@ -193,6 +188,8 @@ public final class PullRequestAvatarView: DSView {
     public override func layout() {
         super.layout()
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        reviewRing.frame = bounds
+        reviewRing.layout(boxSize: bounds.size)
         image.frame = bounds
         image.cornerRadius = bounds.width / 2
         CATransaction.commit()
@@ -200,40 +197,58 @@ public final class PullRequestAvatarView: DSView {
         initial.font = DSFont.ui(min(10, size), weight: .medium)
         initial.lineHeight = bounds.height
         initial.frame = bounds
-        verdictGlyph?.frame = NSRect(x: bounds.width - 8, y: isFlipped ? bounds.height - 8 : -4, width: 12, height: 12)
+        // Bottom/right -4px in CSS; this view is flipped.
+        verdict?.frame = NSRect(x: bounds.width - 8, y: bounds.height - 8, width: 12, height: 12)
     }
 
     public override func updateLayer() {
-        let showsVerdict = reviewOutcome != nil && ThreadDesign.uses3814(dark: effectiveAppearance.isDark)
-        layer?.cornerRadius = showsVerdict ? 0 : bounds.width / 2
-        layer?.backgroundColor = showsVerdict ? nil : Themed.color(\.muted).cgColor(in: self)
-        image.backgroundColor = showsVerdict ? Themed.color(\.muted).cgColor(in: self) : nil
-        if showsVerdict { layer?.masksToBounds = false }
+        // The review ring and verdict extend beyond the face, like T3's relative wrapper.
+        // AppKit otherwise restores clipping when it attaches the view to a window.
+        let classic = DesignGeometry.usesClassic(self)
+        clipsToBounds = classic
+        layer?.masksToBounds = classic
+        reviewRing.isHidden = classic || ring == nil
+        layer?.cornerRadius = bounds.width / 2
+        layer?.backgroundColor = Themed.color(\.muted).cgColor(in: self)
         initial.color = Themed.color(\.mutedForeground)
+        verdict?.isHidden = DesignGeometry.usesClassic(self)
+        verdict?.strokeColor = Themed.color(\.background)
+        verdict?.fillColor = reviewOutcome == "approved" ? Themed.base("emerald-500", 1, dark: "emerald-400", 1)
+            : reviewOutcome == "changes-requested" ? Themed.color(\.destructive) : Themed.color(\.mutedForeground)
+        verdict?.alphaValue = staleReview ? 0.5 : 1
         if let ring {
             layer?.borderWidth = 0
             layer?.shadowOpacity = 0
             layer?.borderColor = nil
             ringLayer.isHidden = false
-            ringLayer.frame = showsVerdict ? bounds : .zero
-            var stroke = ring
-            if showsVerdict, reviewStale, let reviewOutcome {
-                // T3 mixes stale rings with the canvas in sRGB, rather than making the stroke translucent.
-                effectiveAppearance.performAsCurrentDrawingAppearance {
-                    let foreground = PullRequestStyle.outcomeRing(reviewOutcome, stale: false).usingColorSpace(.extendedSRGB)!
-                    let background = Themed.color(\.background).usingColorSpace(.extendedSRGB)!
-                    let alpha: CGFloat = reviewOutcome == "dismissed" ? 0.3 : 0.35
-                    stroke = NSColor(srgbRed: foreground.redComponent * alpha + background.redComponent * (1 - alpha),
-                                     green: foreground.greenComponent * alpha + background.greenComponent * (1 - alpha),
-                                     blue: foreground.blueComponent * alpha + background.blueComponent * (1 - alpha), alpha: 1)
-                }
-            }
+            let stroke = !classic && staleReview ? reviewOutcome.flatMap { Self.staleRings[$0] } ?? ring : ring
             ringLayer.strokeColor = stroke.cgColor(in: self)
+            ringLayer.isHidden = !classic
+            if !classic {
+                var box = BoxStyle()
+                box.radius = bounds.width / 2
+                box.shadows = [BoxShadow(blur: 0, spread: 2, color: stroke)]
+                reviewRing.boxStyle = box
+                reviewRing.setNeedsDisplay()
+            }
             ringLayer.path = CGPath(ellipseIn: bounds.insetBy(dx: -1, dy: -1), transform: nil)
         } else {
             ringLayer.isHidden = true
         }
     }
+
+    /// CSS mixes the extended sRGB channels before gamut clipping, including emerald's negative red.
+    private static let staleRings: [String: NSColor] = Dictionary(uniqueKeysWithValues: ["approved", "changes-requested", "dismissed"].map { outcome in
+        (outcome, NSColor(name: nil) { appearance in
+            let dark = appearance.isDark
+            let palette = ThemeRuntime.palettes.palette(dark: dark, sidebar: false)
+            let tone = outcome == "approved" ? Tokens.baseColors[dark ? "emerald-400" : "emerald-500"]!
+                : outcome == "changes-requested" ? palette.destructive : palette.mutedForeground
+            let amount = outcome == "dismissed" ? 0.3 : 0.35
+            let rgb = tone.srgb * amount + palette.background.srgb * (1 - amount)
+            return NSColor(srgbRed: rgb.x, green: rgb.y, blue: rgb.z, alpha: 1)
+        })
+    })
 
     private lazy var ringLayer: CAShapeLayer = {
         let l = CAShapeLayer()

@@ -89,7 +89,7 @@ struct ThreadViewFidelityTests {
                     avatar.actor = try JSONDecoder().decode(PullRequestActor.self, from: Data(#"{"login":"sandbox","avatarUrl":"https://example.invalid/sandbox-avatar"}"#.utf8))
                     let stale = native["stale"] == "true"
                     avatar.ring = PullRequestStyle.outcomeRing(native["outcome"]!, stale: stale)
-                    avatar.reviewOutcome = native["outcome"]; avatar.reviewStale = stale
+                    avatar.reviewOutcome = native["outcome"]; avatar.staleReview = stale
                     canvas.addSubview(avatar)
                 } else if native["kind"] == "pr" {
                     let row = ThreadDetailsPrRowView()

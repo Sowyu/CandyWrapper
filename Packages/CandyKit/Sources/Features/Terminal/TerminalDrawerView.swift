@@ -219,7 +219,7 @@ public final class TerminalActionCluster: DSView {
 
     public override func updateLayer() {
         var style = BoxStyle()
-        style.radius = 8
+        style.radius = DesignGeometry.radius(8, in: self)
         style.fill = WindowGlass.paneFill
         style.border = Themed.color(\.border, 0.8)
         // `shadow-xs`: 0 1px 2px rgb(0 0 0 / 5%).

@@ -1,4 +1,28 @@
 {
+  "avatar.approved" : {
+    "height" : 16,
+    "width" : 16
+  },
+  "avatar.approved.stale" : {
+    "height" : 16,
+    "width" : 16
+  },
+  "avatar.changes-requested" : {
+    "height" : 16,
+    "width" : 16
+  },
+  "avatar.changes-requested.stale" : {
+    "height" : 16,
+    "width" : 16
+  },
+  "avatar.dismissed" : {
+    "height" : 16,
+    "width" : 16
+  },
+  "avatar.dismissed.stale" : {
+    "height" : 16,
+    "width" : 16
+  },
   "detail-header" : {
     "height" : 182,
     "width" : 560

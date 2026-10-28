@@ -28,8 +28,8 @@ struct GitFidelityTests {
             let composer = ComposerView(frame: NSRect(x: 8, y: 8, width: 600, height: 64))
             composer.joinsContextStrip = true
             composer.layoutSubtreeIfNeeded()
-            for v in [composer.placeholder, composer.attach, composer.primary] as [NSView] { v.alphaValue = 0 }
-            let strip = ComposerContextStripView(frame: NSRect(x: 8 + 22, y: 8 + 64 - 16, width: 556, height: ComposerContextStripView.height))
+            for v in [composer.placeholder, composer.attach, composer.primary] as [NSView] { v.removeFromSuperview() }
+            let strip = ComposerContextStripView(frame: NSRect(x: 8, y: 8 + 64, width: 600, height: 32))
             strip.showsGitControls = true
             strip.runContext.glyphs = [icon(n["folder"]!)]
             strip.runContext.text = n["workspace"]!

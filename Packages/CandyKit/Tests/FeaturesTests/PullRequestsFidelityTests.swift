@@ -23,6 +23,16 @@ struct PullRequestsFidelityTests {
 
     static func view(_ name: String, size: CGSize) throws -> NSView {
         let frame = NSRect(x: 8, y: 8, width: size.width, height: size.height)
+        if name.hasPrefix("avatar.") {
+            let parts = name.split(separator: ".")
+            let outcome = String(parts[1]), stale = parts.count > 2
+            let avatar = PullRequestAvatarView(frame: frame)
+            avatar.actor = PullRequestActor(login: "bot")
+            avatar.reviewOutcome = outcome
+            avatar.staleReview = stale
+            avatar.ring = PullRequestStyle.outcomeRing(outcome, stale: stale)
+            return avatar
+        }
         switch name {
         case "rows":
             let list = try PullRequestFixtures.list()

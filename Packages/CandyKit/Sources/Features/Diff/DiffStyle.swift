@@ -42,6 +42,17 @@ enum DiffStyle {
         return NSColor(name: nil) { $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? d : l }
     }
 
+    /// New default canvases are black; CandyWrapper's themes retain the previous diff colors.
+    private static func canvasRGB(_ light: UInt32, _ classicDark: UInt32, _ dark: UInt32) -> NSColor {
+        let previous = rgb(light, classicDark), current = rgb(light, dark)
+        return NSColor(name: nil) { appearance in
+            let color = ThemeRuntime.framesPanes(dark: appearance.isDark) ? previous : current
+            var result = color
+            appearance.performAsCurrentDrawingAppearance { result = color.usingColorSpace(.sRGB) ?? color }
+            return result
+        }
+    }
+
     /// `color-mix(in srgb, a p, b)` of two dynamic colors, resolved per appearance.
     static func mix(_ a: NSColor, _ p: CGFloat, _ b: NSColor) -> NSColor {
         NSColor(name: nil) { appearance in
@@ -68,14 +79,14 @@ enum DiffStyle {
     static var deletionBase: NSColor { alternateColors ? Themed.base("orange-600", dark: "orange-400") : rgb(0xd52c36, 0xff2e3f) }
     static let modifiedBase = rgb(0x009fff, 0x009fff)
 
-    static var additionLine: NSColor { alternateColors ? mix(additionBase, 0.08, surface) : rgb(0xecf9f4, 0x0d1713) }
-    static var additionNumber: NSColor { alternateColors ? mix(additionBase, 0.08, surface) : rgb(0xeef9f5, 0x0e1713) }
-    static var deletionLine: NSColor { alternateColors ? mix(deletionBase, 0.08, surface) : rgb(0xfef0f0, 0x1c100f) }
-    static var deletionNumber: NSColor { alternateColors ? mix(deletionBase, 0.08, surface) : rgb(0xfef1f0, 0x1c110f) }
+    static var additionLine: NSColor { alternateColors ? mix(additionBase, 0.08, surface) : canvasRGB(0xecf9f4, 0x0d1713, 0x02110b) }
+    static var additionNumber: NSColor { alternateColors ? mix(additionBase, 0.08, surface) : canvasRGB(0xeef9f5, 0x0e1713, 0x04110b) }
+    static var deletionLine: NSColor { alternateColors ? mix(deletionBase, 0.08, surface) : canvasRGB(0xfef0f0, 0x1c100f, 0x170705) }
+    static var deletionNumber: NSColor { alternateColors ? mix(deletionBase, 0.08, surface) : canvasRGB(0xfef1f0, 0x1c110f, 0x170806) }
     /// The lighter stripe of the deletion bar (`linear-gradient(0deg, alt 50%, base 50%)`, 2px tiles).
-    static var deletionBarAlt: NSColor { alternateColors ? mix(deletionBase, 0.20, surface) : rgb(0xffe8e4, 0x381917) }
+    static var deletionBarAlt: NSColor { alternateColors ? mix(deletionBase, 0.20, surface) : canvasRGB(0xffe8e4, 0x381917, 0x381a17) }
     /// `--diffs-fg-number`: the theme foreground mixed 65% in Lab with the surface.
-    static let number = rgb(0x575757, 0x9d9d9d)
+    static let number = canvasRGB(0x575757, 0x9d9d9d, 0x969696)
 
     /// Split view: the number cell beside a missing line, and the diagonal buffer stripes.
     static let gutterBuffer = rgb(0xfbfbfb, 0x131313)
@@ -88,11 +99,53 @@ enum DiffStyle {
     static let noNewlineText = codeText.withAlphaComponent(0.6)
 
     static func iconColor(_ change: UnifiedDiff.Change?) -> NSColor {
-        switch change {
+        let previous: NSColor = switch change {
         case .new: additionBase
         case .deleted: deletionBase
         case .change, .renamePure, .renameChanged: modifiedBase
         case nil: Themed.color(\.mutedForeground, 0.8)
+        }
+        return NSColor(name: nil) { appearance in
+            var result = previous
+            appearance.performAsCurrentDrawingAppearance {
+                let dark = appearance.isDark
+                let color: NSColor
+                if ThemeRuntime.framesPanes(dark: dark) { color = previous }
+                else {
+                    color = switch change {
+                    case .new: alternateColors ? (dark ? additionBase : Themed.color(\.diffAdditionForeground))
+                        : Themed.color(dark ? \.diffAddedIcon : \.diffAdditionForeground)
+                    case .deleted: dark ? deletionBase : Themed.color(\.diffDeletionForeground)
+                    case .change, .renamePure, .renameChanged: alternateColors
+                        ? Themed.color(\.mutedForeground, dark ? 0.65 : 1) : Themed.color(\.diffModifiedIcon)
+                    case nil: Themed.color(\.mutedForeground, 0.8)
+                    }
+                }
+                result = color.usingColorSpace(.sRGB) ?? color
+            }
+            return result
+        }
+    }
+
+    /// T3's t3-light palette (lib/readableSyntaxTheme.ts:6-58), with the previous palettes
+    /// retained for Glass and Redesign. Cache per token, rather than darkening on each line draw.
+    static func syntaxColor(_ kind: CodeTokenKind) -> NSColor { syntaxColors[Int(kind.rawValue)] }
+    private static let syntaxColors: [NSColor] = CodeTokenKind.allCases.map { kind in
+        let original = kind.color
+        var rgb = [16, 8, 0].map { Int(kind.hex.light >> $0 & 0xff) }
+        let minimum: Double = [0x1ca1c7, 0x636363, 0x1a85d4].contains(kind.hex.light) ? 6 : 4.5
+        func contrast() -> Double {
+            let c = rgb.map { Double($0) / 255 }.map { $0 <= 0.03928 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4) }
+            return 0.74 / (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2] + 0.05)
+        }
+        while contrast() < minimum { rgb = rgb.map { Int(floor(Double($0) * 0.96)) } }
+        let light = NSColor(srgbRed: CGFloat(rgb[0]) / 255, green: CGFloat(rgb[1]) / 255, blue: CGFloat(rgb[2]) / 255, alpha: 1)
+        return NSColor(name: nil) { appearance in
+            var result = light
+            if appearance.isDark || ThemeRuntime.framesPanes(dark: false) {
+                appearance.performAsCurrentDrawingAppearance { result = original.usingColorSpace(.sRGB) ?? original }
+            }
+            return result
         }
     }
 
@@ -133,7 +186,7 @@ enum DiffStyle {
 
     /// A pattern color from a tile drawn at 2x in a top-left coordinate space, made once per theme.
     private static func pattern(_ name: String, dark: Bool, size: CGFloat, draw: (CGContext) -> Void) -> CGColor {
-        let key = "\(name) \(dark) \(alternateColors)"
+        let key = "\(name) \(dark) \(alternateColors) \(ThemeRuntime.framesPanes(dark: dark))"
         if let cached = patternCache[key] { return cached }
         let scale: CGFloat = 2
         let px = Int(size * scale)

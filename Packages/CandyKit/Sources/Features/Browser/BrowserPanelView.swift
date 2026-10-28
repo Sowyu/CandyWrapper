@@ -533,6 +533,10 @@ public final class BrowserEmptyStateView: DSView {
             CATransaction.commit()
         }
         override func updateLayer() {
+            var box = boxStyle
+            box.radius = DesignGeometry.radius(14, in: self)
+            boxStyle = box
+            layer?.cornerRadius = box.radius
             let c = Themed.color(\.contrastBorder, 0.6).cgColor(in: self)
             dividers.forEach { $0.backgroundColor = c }
         }
@@ -779,6 +783,7 @@ public final class BrowserUnreachableView: DSView {
         paragraph.color = Themed.color(\.mutedForeground)
         paragraph.boldColor = Themed.color(\.foreground)
         code.color = Themed.color(\.mutedForeground, 0.7)
+        detailsBox.layer?.cornerRadius = DesignGeometry.radius(10, in: self)
         detailsBox.layer?.backgroundColor = Themed.color(\.muted, 0.4).cgColor(in: self)
         detailsBox.layer?.borderColor = Themed.color(\.border).cgColor(in: self)
         detailsTitle.color = Themed.color(\.foreground)

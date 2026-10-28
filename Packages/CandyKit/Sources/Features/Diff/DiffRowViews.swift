@@ -35,6 +35,7 @@ final class DiffFileHeaderView: DiffRowView {
     let title = DiffTitleView()
     let copy = ButtonView(nil, icon: .copy, variant: .ghostMuted, size: .iconMicro)
     let stat = DiffStatView()
+    var fileHovered = false { didSet { if fileHovered != oldValue { updateCopyVisibility() } } }
     private let hoverBar = CALayer()
     private var tracking: NSTrackingArea?
     private(set) var file = -1
@@ -84,7 +85,7 @@ final class DiffFileHeaderView: DiffRowView {
         let sameFile = path == file.path
         path = file.path
         chevron.setIconRotation(collapsed ? 0 : 90, motion: sameFile ? .morph : .none)
-        chevron.iconColor = DiffStyle.iconColor(file.change)
+        chevron.iconColor = DesignGeometry.usesClassic(self) ? DiffStyle.iconColor(file.change) : Themed.color(\.mutedForeground, 0.8)
         icon.change = file.change
         title.text = file.path
         stat.set(additions: file.additions, deletions: file.deletions, style: statStyle)
@@ -118,7 +119,19 @@ final class DiffFileHeaderView: DiffRowView {
 
     override func updateLayer() {
         super.updateLayer()
+        chevron.iconColor = DesignGeometry.usesClassic(self) ? DiffStyle.iconColor(icon.change) : Themed.color(\.mutedForeground, 0.8)
         hoverBar.backgroundColor = DiffStyle.headerHoverBar.cgColor(in: self)
+        updateCopyVisibility()
+    }
+
+    func updateCopyVisibility() {
+        let visible = DesignGeometry.usesClassic(self) || fileHovered || !hoverBar.isHidden || window?.firstResponder === copy
+        // Opacity keeps the button in the key loop and leaves its hit target intact.
+        let opacity: Float = visible ? 1 : 0
+        guard copy.layer?.opacity != opacity else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        copy.layer?.opacity = opacity
+        CATransaction.commit()
     }
 
     override func updateTrackingAreas() {
@@ -128,8 +141,8 @@ final class DiffFileHeaderView: DiffRowView {
         addTrackingArea(tracking!)
     }
 
-    override func mouseEntered(with event: NSEvent) { hoverBar.isHidden = false }
-    override func mouseExited(with event: NSEvent) { hoverBar.isHidden = true; title.hovered = false }
+    override func mouseEntered(with event: NSEvent) { hoverBar.isHidden = false; needsDisplay = true }
+    override func mouseExited(with event: NSEvent) { hoverBar.isHidden = true; title.hovered = false; needsDisplay = true }
     override func mouseMoved(with event: NSEvent) {
         title.hovered = title.frame.contains(convert(event.locationInWindow, from: nil))
     }
@@ -481,7 +494,7 @@ final class DiffCodeTextView: DSView {
             for span in context.highlighter.spans(file: Int(row.file), line: Int(index)) {
                 let start = Int(span.start), end = min(length, start + Int(span.length))
                 guard start < end else { continue }
-                attributed.addAttribute(.foregroundColor, value: span.kind.color, range: NSRange(location: start, length: end - start))
+                attributed.addAttribute(.foregroundColor, value: DiffStyle.syntaxColor(span.kind), range: NSRange(location: start, length: end - start))
                 if span.kind == .emphasis {
                     attributed.addAttribute(.font, value: DiffStyle.codeItalicFont, range: NSRange(location: start, length: end - start))
                 }

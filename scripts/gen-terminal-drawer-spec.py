@@ -3,7 +3,7 @@ terminal drawer's chrome (ThreadTerminalDrawer.tsx:1494-1700) with one terminal 
 action cluster over an empty terminal), the empty state, and two terminals side by side with the
 terminal list.
 
-Class strings are copied from that file at the tag in T3_VERSION. The terminal's canvas is left
+Class strings are copied from that file at Nightly 3824. The terminal's canvas is left
 empty: its text comes from libghostty in T3 and SwiftTerm here, which no screenshot compares.
 Usage: /usr/bin/python3 -I scripts/gen-terminal-drawer-spec.py
 """

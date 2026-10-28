@@ -442,7 +442,8 @@ public final class DetailsSplitPart: ControlView {
     }
 }
 
-/// The Changes row's totals (`font-mono text-2xs tabular-nums`, `gap-1`): `+N` in success, `-N` in destructive.
+/// The Changes row totals use `font-mono text-xs tabular-nums gap-1.5` and foreground diff roles.
+/// Glass and Redesign retain their previous type, spacing and colors.
 public final class DiffTotalsView: DSView {
     private let plus = LabelView()
     private let minus = LabelView()
@@ -454,11 +455,22 @@ public final class DiffTotalsView: DSView {
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        for l in [plus, minus] { l.font = DSFont.mono(ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 12 : 11); l.lineHeight = 16; addSubview(l) }
+        for l in [plus, minus] { l.font = DSFont.mono(DesignGeometry.usesClassic(self) ? 11 : 12); l.lineHeight = 16; addSubview(l) }
         update()
     }
 
+    private var gap: CGFloat { DesignGeometry.usesClassic(self) ? 4 : 6 }
+
+    private func updateMetrics() {
+        let font = DSFont.mono(DesignGeometry.usesClassic(self) ? 11 : 12)
+        guard plus.font != font else { return }
+        plus.font = font; minus.font = font
+        invalidateIntrinsicContentSize()
+        superview?.needsLayout = true
+    }
+
     private func update() {
+        updateMetrics()
         plus.text = "+\(insertions)"
         minus.text = "-\(deletions)"
         invalidateIntrinsicContentSize()
@@ -466,26 +478,21 @@ public final class DiffTotalsView: DSView {
         needsLayout = true
     }
 
-    private var gap: CGFloat { ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 6 : 4 }
-
     public override var intrinsicContentSize: NSSize { NSSize(width: ceil(plus.textWidth) + gap + ceil(minus.textWidth), height: 16) }
 
     public override func layout() {
         super.layout()
+        updateMetrics()
         let y = isFlipped ? glyphOffset : -glyphOffset
         plus.frame = NSRect(x: 0, y: y, width: ceil(plus.textWidth), height: 16)
         minus.frame = NSRect(x: ceil(plus.textWidth) + gap, y: y, width: ceil(minus.textWidth), height: 16)
     }
 
     public override func updateLayer() {
-        let modern = ThreadDesign.uses3814(dark: effectiveAppearance.isDark)
-        let font = DSFont.mono(modern ? 12 : 11)
-        if plus.font != font {
-            for label in [plus, minus] { label.font = font }
-            invalidateIntrinsicContentSize(); superview?.needsLayout = true; needsLayout = true
-        }
-        plus.color = Themed.color(modern ? (insertions == 0 ? \.mutedForeground : \.diffAdditionForeground) : \.diffAddition)
-        minus.color = Themed.color(modern ? (deletions == 0 ? \.mutedForeground : \.diffDeletionForeground) : \.diffDeletion)  // ba1907e8e0, GitActionsControl.tsx
+        updateMetrics()
+        let classic = DesignGeometry.usesClassic(self)
+        plus.color = Themed.color(classic ? \.diffAddition : insertions == 0 ? \.mutedForeground : \.diffAdditionForeground)
+        minus.color = Themed.color(classic ? \.diffDeletion : deletions == 0 ? \.mutedForeground : \.diffDeletionForeground)
     }
 }
 

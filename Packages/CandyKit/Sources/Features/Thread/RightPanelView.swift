@@ -491,6 +491,7 @@ final class PanelTabView: DSView {
     var preferredWidth: CGFloat { if renameInput != nil { return 128 }; return min(144, 6 + 16 + 2 + ceil(title.textWidth) + 8) }
 
     private func restyle() {
+        layer?.cornerRadius = DesignGeometry.radius(8, in: self)
         title.color = Themed.color(isActive || hovered ? \.foreground : \.mutedForeground)
         tintedIdentity?.strokeColor = title.color
         needsDisplay = true

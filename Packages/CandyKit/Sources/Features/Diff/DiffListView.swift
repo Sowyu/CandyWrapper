@@ -71,6 +71,47 @@ public final class DiffListView: DSView {
     private var visible: [Int: DiffRowView] = [:]
     private var pools: [DiffLayout.Row.Kind: [DiffRowView]] = [:]
     private var clipObserver: NSObjectProtocol?
+    private var hoverTracking: NSTrackingArea?
+    private var hoveredFile: Int?
+    private var focusObserver: NSObjectProtocol?
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let focusObserver { NotificationCenter.default.removeObserver(focusObserver) }
+        focusObserver = nil
+        guard let window else { return }
+        // Window updates include keyboard focus changes. No timer runs while the diff is idle.
+        focusObserver = NotificationCenter.default.addObserver(forName: NSWindow.didUpdateNotification, object: window, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.isHiddenOrHasHiddenAncestor else { return }
+                for case let header as DiffFileHeaderView in self.visible.values { header.updateCopyVisibility() }
+            }
+        }
+    }
+
+    public override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTracking { removeTrackingArea(hoverTracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        hoverTracking = area
+    }
+
+    private func updateFileHover(_ point: NSPoint?) {
+        var file: Int?
+        if let point, visibleRect.contains(point), !rowLayout.rows.isEmpty {
+            let index = rowLayout.rowIndex(at: point.y)
+            if rowLayout.rows.indices.contains(index) { file = Int(rowLayout.rows[index].file) }
+        }
+        guard file != hoveredFile else { return }
+        hoveredFile = file
+        for case let header as DiffFileHeaderView in visible.values { header.fileHovered = header.file == file }
+    }
+
+    public override func mouseMoved(with event: NSEvent) { updateFileHover(convert(event.locationInWindow, from: nil)) }
+    public override func mouseEntered(with event: NSEvent) { updateFileHover(convert(event.locationInWindow, from: nil)) }
+    public override func mouseExited(with event: NSEvent) { updateFileHover(nil) }
+
     /// Shared horizontal offset of code text when lines do not wrap.
     // ponytail: one offset for the whole list instead of pierre's per-file scrollers; fine while
     // files are read one at a time. Give each file its own offset if users compare across files.
@@ -327,6 +368,7 @@ public final class DiffListView: DSView {
             }
             visible[index]?.layer?.zPosition = row.kind == .header ? 2 : 0
         }
+        if hoveredFile != nil, let window { updateFileHover(convert(window.mouseLocationOutsideOfEventStream, from: nil)) }
     }
 
     private func configure(_ view: DiffRowView, _ row: DiffLayout.Row, index: Int, _ context: DiffRowContext) {
@@ -337,6 +379,7 @@ public final class DiffListView: DSView {
             let f = Int(row.file)
             header.configure(file: f, diff.files[f], collapsed: collapsed.contains(f), statStyle: statStyle)
             header.configure(viewed: viewedState?(diff.files[f].path))
+            header.fileHovered = f == hoveredFile
         case let separator as DiffSeparatorView:
             separator.configure(hidden: Int(row.right), split: rowLayout.columns[Int(row.file)].isSplit)
         case let line as DiffLineRowView:

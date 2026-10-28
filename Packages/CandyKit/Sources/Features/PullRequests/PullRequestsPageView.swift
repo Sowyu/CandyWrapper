@@ -865,6 +865,7 @@ final class PullRequestRowView: DSView, NSDraggingSource {
 
     override var wantsUpdateLayer: Bool { true }
     override func updateLayer() {
+        layer?.cornerRadius = DesignGeometry.radius(8, in: self)
         let fill: NSColor? = selected ? Themed.color(\.accent) : hovered ? Themed.color(\.accent, 0.6) : nil
         layer?.backgroundColor = fill?.cgColor(in: self)
         restyle()
@@ -1004,6 +1005,7 @@ final class BannerView: DSView {
         label.frame = NSRect(x: 12, y: 8, width: lw, height: label.height(forWidth: lw))
     }
     override func updateLayer() {
+        layer?.cornerRadius = DesignGeometry.radius(10, in: self)
         layer?.borderColor = Themed.color(\.warning, 0.3).cgColor(in: self)
         layer?.backgroundColor = Themed.color(\.warningSurface).cgColor(in: self)
         label.color = Themed.color(\.foreground)
@@ -1048,7 +1050,7 @@ final class PullRequestListGhostView: DSView {
         }
     }
 
-    override func updateLayer() { caption?.color = Themed.color(\.mutedForeground, 0.7) }
+    override func updateLayer() { caption?.color = Themed.color(\.mutedForeground, DesignGeometry.usesClassic(self) ? 0.7 : 1) }
 }
 
 /// `BranchMark` (PullRequestListEmptyState.tsx:24-73): the base line and a branch stopped short of

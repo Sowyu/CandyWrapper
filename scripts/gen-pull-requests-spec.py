@@ -3,15 +3,22 @@ page's list (group headers, PullRequestRow.tsx with PullRequestListRow.tsx's lin
 glyphs and label chips), the pull request detail panel's header and tab bar (PullRequestDetailPanel.tsx:1662-2540,
 PullRequestDetailLayout.tsx) and the Link pull request dialog (LinkPullRequestDialog.tsx:194-254).
 
-Class strings are copied from those files at the tag in T3_VERSION; the badge variants are read from
+Class strings are copied from those files at Nightly 3824 (CANDY_T3_SOURCE selects the source tree); the badge variants are read from
 ui/badge.tsx. Button, toggle, input, dialog and lucide helpers are reused from the button, toggles, forms,
 overlays and run-on generators. Data matches fixtures/pull-requests (relative times at 2026-10-10T16:00Z).
 Usage: /usr/bin/python3 -I scripts/gen-pull-requests-spec.py
 """
-import json, os, re
+import json, os, re, subprocess
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-T3 = "/Users/mrm/CandyWrapper-research/t3code/apps/web/src/components"
+T3 = os.path.join(os.environ.get("CANDY_T3_SOURCE") or os.path.expanduser("~/CandyWrapper-research/t3code/apps/web/src"), "components")
+
+def source_file(relative):
+    """Read the design tag without changing the shared checkout."""
+    if os.environ.get("CANDY_T3_SOURCE"):
+        return open(os.path.join(os.environ["CANDY_T3_SOURCE"], relative)).read()
+    return subprocess.check_output(["git", "-C", os.path.expanduser("~/CandyWrapper-research/t3code"), "show",
+        "v0.1.4-nightly.20261028.3824:apps/web/src/" + relative], text=True)
 
 def load(name, until):
     src = open(os.path.join(ROOT, "scripts", name)).read()
@@ -32,7 +39,7 @@ BASE, VARIANTS, SIZES = o["BASE"], o["VARIANTS"], o["SIZES"]
 input_html = f["input_html"]
 
 # ui/badge.tsx: the base, the `sm` size and the variants, read from the source.
-badge_src = open(os.path.join(T3, "ui/badge.tsx")).read()
+badge_src = source_file("components/ui/badge.tsx")
 BADGE_BASE = re.search(r'cva\(\s*"([^"]+)"', badge_src).group(1)
 def badge_part(key):
     m = re.search(r'\b' + re.escape(key) + r':\s*\n?\s*"([^"]+)"', badge_src)
@@ -59,7 +66,7 @@ def avatar(login, cls=""):
 def diffstat(add, rem, cls="font-mono"):
     if add == 0 and rem == 0: return ""
     return (f'<span class="inline-flex items-baseline gap-1 tabular-nums {cls}"><span class="text-diff-addition-foreground">+{add:,}</span>'
-            f'<span class="text-diff-deletion">-{rem:,}</span></span>')
+            f'<span class="text-diff-deletion-foreground">-{rem:,}</span></span>')
 
 def row(e):
     tone = "draft" if e["state"] == "open" and e["draft"] else e["state"]
@@ -185,6 +192,21 @@ cases = [
     {"name": "detail-header", "html": detail_html, "native": {"case": "detail-header"}, "wrapperStyle": f"display:block;width:{DW}px"},
     {"name": "link-dialog", "html": dialog_html, "native": {"case": "link-dialog"}, "wrapperStyle": "display:grid;width:576px"},
 ]
+# #25829: verdicts remain visible over bot avatars, including stale reviews.
+for outcome, icon, ring, fill in [
+    ("approved", "circle-check", "ring-2 ring-emerald-500 dark:ring-emerald-400", "fill-emerald-500 dark:fill-emerald-400"),
+    ("changes-requested", "circle-x", "ring-2 ring-destructive", "fill-destructive"),
+    ("dismissed", "circle-dashed", "ring-2 ring-muted-foreground/60", "fill-muted-foreground")]:
+    for stale in [False, True]:
+        if stale:
+            tone = "var(--color-emerald-500)" if outcome == "approved" else "var(--destructive)" if outcome == "changes-requested" else "var(--contrast-muted-foreground)"
+            dark_tone = "var(--color-emerald-400)" if outcome == "approved" else tone
+            amount = "30%" if outcome == "dismissed" else "35%"
+            ring = f"ring-2 ring-[color-mix(in_srgb,{tone}_{amount},var(--background))] dark:ring-[color-mix(in_srgb,{dark_tone}_{amount},var(--background))]"
+        html = (f'<span class="relative inline-block size-4 rounded-full {ring}">{avatar("bot")}'
+                + lucide(icon, "absolute -right-1 -bottom-1 size-3 text-background " + fill + (" opacity-50" if stale else ""), stroke="3") + '</span>')
+        name = "avatar." + outcome + (".stale" if stale else "")
+        cases.append({"name": name, "html": html, "native": {"case": name}, "wrapperStyle": "display:inline-flex"})
 spec = {"component": "pull-requests", "states": ["rest"], "themes": ["light", "dark"], "cases": cases}
 with open(os.path.join(ROOT, "design/component-reference/pull-requests.json"), "w") as fh:
     json.dump(spec, fh, indent=1, ensure_ascii=False)

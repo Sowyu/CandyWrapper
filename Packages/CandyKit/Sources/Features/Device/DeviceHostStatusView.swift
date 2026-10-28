@@ -65,6 +65,6 @@ public final class DeviceHostStatusView: DSView {
         retry.frame = NSRect(x: bounds.width - 13 - retry.intrinsicContentSize.width, y: 9, width: retry.intrinsicContentSize.width, height: 28)
     }
     public override func updateLayer() {
-        layer?.borderWidth = 1; layer?.borderColor = Themed.color(\.border, 0.6).cgColor(in: self); layer?.cornerRadius = 8
+        layer?.borderWidth = 1; layer?.borderColor = Themed.color(\.border, 0.6).cgColor(in: self); layer?.cornerRadius = DesignGeometry.radius(8, in: self)
     }
 }
