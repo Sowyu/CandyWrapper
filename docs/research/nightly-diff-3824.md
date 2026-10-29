@@ -4,7 +4,7 @@ Range: v0.1.4-nightly.20261028.3814 .. v0.1.4-nightly.20261028.3824, 30 commits.
 
 3824 is the newest Nightly with a GitHub release (released 2026-10-28 12:24 UTC); 3822 also has one and sits inside this range. The release archive matched SHA256SUMS and is unpacked in ~/CandyWrapper-research/runtimes/. A sandbox copy of the 3814 sandbox runs it on port 47404 (~/CandyWrapper-research/sandbox-3824, same tokens as sandbox-3814).
 
-Phase 2 of the 3814 catch-up (T3's new design in the default themes) was running when this audit started. Changes that only exist in the new design, or that would change a fidelity reference phase 2 is recapturing, are marked "phase 2" and left to it.
+Phase 2 of the 3814 catch-up (T3's new design in the default themes) was running when this audit started. Changes that only exist in the new design, or that would change a fidelity reference phase 2 is recapturing, are marked "phase 2" and left to it. Phase 2 took all three from 3824 and finished on 2026-10-28, and T3_VERSION moved to 3824 on 2026-10-29.
 
 ## 1. Wire changes
 
@@ -60,7 +60,7 @@ The 22 commits that touch apps/web/src, packages/client-runtime, packages/contra
 | 10e709c337 | #26355 | No duplicate queued message entries | ported (3097a414) |
 | f17c9d202b | #26358 | New Claude threads default to Opus 5.5 | free with runtime (wire 7) |
 | a4e1986585 | #26366 | Docs, tunnel limits | n/a |
-| dac58fa7a6 | #22778 | Neutral source control indicators | phase 2 |
+| dac58fa7a6 | #22778 | Neutral source control indicators | phase 2 (d642e19b) |
 | cb4fe60a4b | #24864 | Thread details tooltip shows | already so: the toggle has its tooltip (Features/Thread/ThreadPanelView.swift:150) |
 | 975b3dc568 | #26367 | Subagent questions stay off parent threads | ported (a71d76ea) |
 | be2ea30d2b | #26371 | Build, public-config bootstrap | n/a |
@@ -75,12 +75,12 @@ The 22 commits that touch apps/web/src, packages/client-runtime, packages/contra
 | d2429f733c | #26240 | Long thread history in bounded pages, deferred work | open task: opt-in (wire 3), and CW gets complete items without it |
 | c3858bf1f7 | #26427 | Snooze options order, width and link | ported (3cb2301a); rows sort when the pointer leaves the list, where T3 waits for focus to leave |
 | 48a292364a | #26432 | File preview wrap buttons stay local | already so: the toggle changes only that surface (Features/Files/FileSurfaceView.swift:111-121) |
-| bd84b1781a | #25869 | Simpler composer | phase 2 |
+| bd84b1781a | #25869 | Simpler composer | phase 2 (0433e510) |
 | 96a330c957 | #26434 | Remote delegates' icon, parent row, settings refresh | refresh ported (fb3147e2); the rest waits (section 2.11) |
 | 1abf368532 | #26440 | Build, license templates | n/a |
 | 0160c448f6 | #26442 | Agents list snoozed threads across projects | n/a (wire 5) |
 | c280e640c1 | #26448 | Delegate model search by provider name | free with runtime |
-| eb751fa073 | #26449 | Chat tables open at the right size | phase 2 |
+| eb751fa073 | #26449 | Chat tables open at the right size | phase 2 (1a86e6d7, b3851c9d, a389259b) |
 
 Found while auditing: ec43786140 (#17761, 2994 range), section 2.1, ported in 3097a414.
 
