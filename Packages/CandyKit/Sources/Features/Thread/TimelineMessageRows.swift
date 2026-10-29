@@ -296,6 +296,15 @@ final class UserMessageRowView: TimelineRowView {
             markdown.contextImageLoader = nil
         }
         markdown.onContextChip = { [weak self] action, _ in self?.openContextChip(action, message: m) }
+        // A code block's wrap toggle, a table or a diagram changes the bubble's height: the timeline remeasures the row
+        // and keeps the choice by message, as for an answer.
+        markdown.onHeightChange = { [weak self] in
+            guard let self, let id = self.item?.id else { return }
+            self.context.onMarkdownHeightChange?(id)
+        }
+        markdown.messageID = m.id.rawValue
+        markdown.layoutChoices = context.markdownChoices[m.id.rawValue] ?? .init()
+        markdown.onLayoutChoicesChange = { [weak context] in context?.markdownChoices[m.id.rawValue] = $0 }
         markdown.document = document
         attachments.configure(m, model: context.model)
         // A folded message is never collapsible (`collapsible={!folded}`).
