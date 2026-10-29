@@ -62,6 +62,19 @@ struct LinkedEnvironmentsTests {
         #expect(!form.usesExisting)
     }
 
+    @Test func linkButtonKeepsItsWidthWhileLinking() {
+        let (dialog, form, _, link) = LinkEnvironmentDialog.make(machines: [Self.box])
+        form.preset(choice: "b", access: nil, lockMachine: false)
+        dialog.frame = NSRect(x: 0, y: 0, width: 448, height: 400)
+        dialog.layoutSubtreeIfNeeded()
+        let idle = link.frame.width
+        form.isBusy = true
+        dialog.layoutSubtreeIfNeeded()
+        #expect(link.title == "Linking…")
+        #expect(link.frame.width == idle)
+        #expect(link.intrinsicContentSize.width <= link.frame.width)
+    }
+
     @Test func rowsShowAccessStatusAndDot() {
         let now = Date(timeIntervalSince1970: 1_793_188_800)
         let link = PeerLinkSummary(environmentId: "b", label: "Sandbox B", urls: ["http://127.0.0.1:47399"], access: "auto",

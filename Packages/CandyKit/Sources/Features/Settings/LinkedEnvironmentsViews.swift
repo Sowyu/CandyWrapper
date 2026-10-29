@@ -327,6 +327,8 @@ public enum LinkEnvironmentDialog {
         dialog.panelContent = [form]
         let cancel = ButtonView("Cancel", variant: .outline)
         let link = ButtonView("Link", variant: .default)
+        // The footer lays out once, so "Linking…" would spill out of a button sized for "Link".
+        link.reservedTitles = ["Linking…"]
         dialog.footerButtons = [cancel, link]
         dialog.footerVariant = .bare
         form.onChange = { [weak link, weak cancel, weak form] in
