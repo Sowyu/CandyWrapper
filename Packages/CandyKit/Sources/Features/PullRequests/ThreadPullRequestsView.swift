@@ -259,6 +259,8 @@ public final class LinkPullRequestDialog {
         preview.lineHeight = 16
         error.lineHeight = 16
         dialog.panelContent = [Fields(input: input, preview: preview, error: error)]
+        // The footer lays out once, so "Linking..." would spill out of a button sized for "Link".
+        link.reservedTitles = ["Linking..."]
         dialog.footerButtons = [cancel, link]
         input.onChange = { [weak self] _ in self?.dirty = true; self?.update() }
         input.onSubmit = { [weak self] in self?.submit() }

@@ -135,12 +135,15 @@ public final class PublishRepositoryDialog {
         back.isEnabled = !pending
         switch step {
         case 0:
+            next.reservedTitles = []
             next.title = "Next"
             next.isEnabled = readiness(provider.kind).ready
         case 1:
             next.title = pending ? "Publishing..." : "Publish"
+            next.reservedTitles = ["Publishing..."]
             next.isEnabled = canSubmit
         default:
+            next.reservedTitles = []
             next.title = "Done"
             next.isEnabled = true
         }

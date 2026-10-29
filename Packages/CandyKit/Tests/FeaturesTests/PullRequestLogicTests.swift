@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import Testing
 @testable import T3Protocol
 @testable import Features
@@ -426,5 +426,22 @@ struct PullRequestQuickActionTests {
         #expect(q("open", false, "github.com", "github") == ["close", "merge"])
         #expect(q("open", true, "github.com", "github") == ["close", "ready"])
         #expect(q("open", false, "old.example", "gitlab") == [])
+    }
+}
+
+@MainActor
+struct LinkPullRequestDialogTests {
+    @Test func linkButtonKeepsItsWidthWhileLinking() {
+        let d = LinkPullRequestDialog(project: .init(host: "github.com", repository: "pingdotgg/t3code", kind: "github"))
+        d.input.text = "#42"
+        d.input.onChange?("#42")
+        d.dialog.frame = NSRect(x: 0, y: 0, width: 576, height: 300)
+        d.dialog.layoutSubtreeIfNeeded()
+        let idle = d.link.frame.width
+        d.pending = true
+        d.dialog.layoutSubtreeIfNeeded()
+        #expect(d.link.title == "Linking...")
+        #expect(d.link.frame.width == idle)
+        #expect(d.link.intrinsicContentSize.width <= d.link.frame.width)
     }
 }
