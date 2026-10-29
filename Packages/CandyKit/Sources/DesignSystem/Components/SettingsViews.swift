@@ -183,9 +183,13 @@ public final class SettingsRowView: DSView {
         }
         let th = textHeight(inner)
         let controlY = top + th + 12
+        // `flex w-full items-center` (settingsLayout.tsx:498): a control with its own width, like a switch, keeps it at
+        // the start; a `w-full` one (inputs, sliders, selects without an intrinsic width) fills the row.
+        let hasOwnWidth = control.map { $0.intrinsicContentSize.width != NSView.noIntrinsicMetric } ?? false
+        let stackedWidth = hasOwnWidth ? min(inner, controlSize.width) : inner
         return Frames(title: NSRect(x: Self.paddingX, y: top, width: inner, height: 20),
                       detail: NSRect(x: Self.paddingX, y: top + 24, width: min(detailLimit, inner), height: detailHeight(inner)),
-                      control: NSRect(x: Self.paddingX, y: controlY, width: inner, height: controlSize.height),
+                      control: NSRect(x: Self.paddingX, y: controlY, width: stackedWidth, height: controlSize.height),
                       status: NSRect(x: Self.paddingX, y: top + th - statusHeight(inner), width: inner, height: statusHeight(inner)),
                       height: (control == nil ? top + th : controlY + controlSize.height) + footerHeight(width))
     }
