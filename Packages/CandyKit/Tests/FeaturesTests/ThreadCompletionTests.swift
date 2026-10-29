@@ -86,8 +86,8 @@ struct ThreadCompletionTests {
         let item = ThreadMinimapItem(id: "u", rowIndex: 0, userText: " Fix  it ", assistantText: "## Done\n\n**Bold** and `code`\n\n- one\n- two\n\n```swift\nlet x = 1\n```")
         #expect(item.preview == "Fix it\n\nDone Bold and code one two let x = 1")
     }
-    /// Redesign's ticks all draw the same size whatever the turn's length; the turn on screen only draws brighter.
-    @Test func ditherMinimapTicksShareOneSize() throws {
+    /// Redesign draws T3's strips: 8pt each whatever the turn's length, left-aligned, the turn on screen only brighter.
+    @Test func ditherMinimapDrawsT3Strips() throws {
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous) }
         var dither = previous
@@ -104,16 +104,18 @@ struct ThreadCompletionTests {
         map.inView = IndexSet(integer: 2)
         let rep = try #require(map.bitmapImageRepForCachingDisplay(in: map.bounds))
         map.cacheDisplay(in: map.bounds, to: rep)
-        // Each tick's widest pixel row, counting pixels well above the backing and the band. Rounded ends antialias, so
-        // the bright tick may light one more pixel a side than a quiet one; the old hints differed by 4 to 12 points.
+        // Each strip's widest pixel row, left of the guide line at x 12. Rounded ends antialias, so the bright strip may
+        // light one more pixel than a quiet one.
+        let scale = CGFloat(rep.pixelsWide) / map.bounds.width
         var ticks: [Int] = [], current = 0
         for y in 0..<rep.pixelsHigh {
-            let lit = (0..<rep.pixelsWide).filter { (rep.colorAt(x: $0, y: y)?.brightnessComponent ?? 0) > 0.3 }.count
+            let lit = (0..<Int(11 * scale)).filter { (rep.colorAt(x: $0, y: y)?.brightnessComponent ?? 0) > 0.3 }.count
             if lit > 0 { current = max(current, lit) } else if current > 0 { ticks.append(current); current = 0 }
         }
         if current > 0 { ticks.append(current) }
         #expect(ticks.count == 6)
         #expect((ticks.max() ?? 0) - (ticks.min() ?? 0) <= 2, "\(ticks)")
+        #expect(abs(CGFloat(ticks.min() ?? 0) - 8 * scale) <= 2, "\(ticks)")
     }
     @Test func taskSummaryUsesRunningThenPendingThenLast() {
         let steps = [ThreadTaskStep(text: "A", status: "pending"), ThreadTaskStep(text: "B", status: "running")]

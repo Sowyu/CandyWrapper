@@ -60,7 +60,8 @@ public struct ThreadMinimapItem: Equatable, Sendable {
     }
 }
 
-/// MessagesTimeline.tsx:1785-1934. The strip redraws only after a scroll, content or hover change.
+/// TimelineMinimap.tsx (T3 3824). The strip redraws only after a scroll, content or hover change. Every theme draws
+/// T3's default strip, Redesign included (the user, 2026-10-29).
 public final class ThreadMinimapView: DSView {
     public var threadTitle: ((String) -> String?)?
     public var items: [ThreadMinimapItem] = [] { didSet {
@@ -83,40 +84,18 @@ public final class ThreadMinimapView: DSView {
         if hovered == index { showPreview() }
     }
     /// The turn at the reader's position, for the previous and next buttons (`resolveTimelineMinimapCurrentIndex`).
-    public var currentIndex: Int? { didSet { if currentIndex != oldValue { updateNavigation(); if dither, inView.isEmpty { needsDisplay = true } } } }
+    public var currentIndex: Int? { didSet { if currentIndex != oldValue { updateNavigation() } } }
     /// Strips whose turn is on screen draw bright (`data-in-view`, MessagesTimeline.tsx:1219-1234, 1890-1902).
     public var inView = IndexSet() { didSet { if inView != oldValue { needsDisplay = true } } }
     public var persistentGutter = true { didSet { if persistentGutter != oldValue { needsDisplay = true; snapAlpha() } } }
     /// Without a persistent gutter the strip fades in while hovered (`opacity-0 transition-opacity duration-150
-    /// hover:opacity-100`, MessagesTimeline.tsx:1788-1792).
+    /// hover:opacity-100`, TimelineMinimap.tsx:118-123).
     private func updateGutter() { HoverReveal.fade(self, to: persistentGutter || hovered != nil ? 1 : 0) }
     private func snapAlpha() { alphaValue = persistentGutter || hovered != nil ? 1 : 0 }
-
-    public override var needsDisplay: Bool { didSet { if needsDisplay { ticks.needsDisplay = true } } }
-
-    // MARK: Redesign
-
-    /// Redesign (after Capy's chat minimap, which is T3's, with a preview card): one tick per turn, all the same size
-    /// and evenly spaced (the user, 2026-10-22: "keep that bar the same"), the viewport as a soft band, on the
-    /// composer's frosted pill surface so it reads over any art (the user, 2026-10-29: the faded see-through column
-    /// "looks buns"). The ticks draw in their own view, above the surface.
-    private var dither: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
-    /// Room for the surface and the band around the ticks. TimelineView outsets the frame by it.
-    public var padding: CGFloat { dither ? 8 : 0 }
-    private let surface = DitherPillSurface()
-    private lazy var ticks = MinimapTicksView(rail: self)
-    public override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        superview?.needsLayout = true
-        needsLayout = true
-    }
-    /// Where turn `i`'s tick sits, inside the padding, on whole device pixels so the gaps come out even.
-    fileprivate func tickY(_ i: Int) -> CGFloat {
-        let scale = window?.backingScaleFactor ?? 2
-        let y = padding + CGFloat(i) / CGFloat(max(1, items.count - 1)) * max(0, bounds.height - 2 * padding - 2)
-        return (y * scale).rounded() / scale
-    }
-    /// Each arrow fades in under its own pointer, not the strip's (`hover:opacity-100` on the arrow, :1969-1975).
+    /// Where turn `i`'s strip sits. T3 centres each strip on `top: i / (n - 1)` of the rail (`-translate-y-1/2`); the
+    /// strip stays inside the bounds here, so its centre is 1pt in from each end.
+    private func tickY(_ i: Int) -> CGFloat { CGFloat(i) / CGFloat(max(1, items.count - 1)) * max(0, bounds.height - 2) }
+    /// Each arrow fades in under its own pointer, not the strip's (`hover:opacity-100` on the arrow, :303-307).
     private var hoveredArrow: ButtonView? { didSet { if hoveredArrow !== oldValue { updateNavigation() } } }
     private func arrow(_ event: NSEvent) -> ButtonView? {
         let p = convert(event.locationInWindow, from: nil)
@@ -127,8 +106,6 @@ public final class ThreadMinimapView: DSView {
     private weak var previewPopup: OpenPopup?
     public override init(frame: NSRect) {
         super.init(frame: frame)
-        surface.radius = DitherChrome.cardRadius
-        addSubview(surface); addSubview(ticks)
         addSubview(previous); addSubview(next)
         previous.toolTip = "Previous turn"; next.toolTip = "Next turn"
         previous.setAccessibilityLabel("Previous turn"); next.setAccessibilityLabel("Next turn")
@@ -149,26 +126,31 @@ public final class ThreadMinimapView: DSView {
     }
     public override func layout() {
         super.layout()
-        surface.isHidden = !dither
-        ticks.isHidden = !dither
-        surface.frame = bounds
-        ticks.frame = bounds
-        previous.frame = NSRect(x: padding - 8, y: padding - 26, width: 24, height: 24)
-        next.frame = NSRect(x: padding - 8, y: bounds.height - padding + 2, width: 24, height: 24)
+        previous.frame = NSRect(x: -8, y: -26, width: 24, height: 24)
+        next.frame = NSRect(x: -8, y: bounds.height + 2, width: 24, height: 24)
     }
     public override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
         for button in [previous, next] where button.alphaValue > 0 && button.frame.contains(local) { return button }
         return super.hitTest(point)
     }
+    /// The card (TimelineMinimap.tsx:249-275): `left-8`, 32pt right of the strips, `w-80 p-3 rounded-xl dropdown-glass
+    /// shadow-xl shadow-black/25`, its middle on the hovered strip, or its top on the first and its bottom on the last
+    /// (`translateY(0% | -50% | -100%)`). The anchor is the strip's own centre, so the card sits on the strip drawn.
     private func showPreview() {
         if let previewPopup { popupHost?.close(previewPopup, returnFocus: false) }
         guard let hovered, items.indices.contains(hovered), let host = popupHost else { return }
         let content = ThreadMinimapPreviewView(item: items[hovered], threadTitle: threadTitle ?? { _ in nil })
-        let popover: PopupContent = dither ? DitherMinimapPreviewCard(content: content) : PopoverView(content: content, padding: .compact, width: .md)
-        let y = dither ? tickY(hovered) : CGFloat(hovered) / CGFloat(max(1, items.count - 1)) * bounds.height
-        previewPopup = host.open(popover, trigger: self, anchorRect: NSRect(x: 24 + padding, y: y, width: 1, height: 2),
-            placement: PopupPlacement(side: .right, align: .center, sideOffset: 8), pressesTrigger: false, returnsFocus: false, passive: true)
+        let popover = PopoverView(content: content, padding: .card, width: .md, beforeLine: false, surface: .tooltipGlass, radius: 12)
+        let align: PopupPlacement.Align = hovered == 0 ? .start : hovered == items.count - 1 ? .end : .center
+        previewPopup = host.open(popover, trigger: self, anchorRect: NSRect(x: 24, y: tickY(hovered) + 1, width: 1, height: 0),
+            placement: PopupPlacement(side: .right, align: align, sideOffset: 8), pressesTrigger: false, returnsFocus: false, passive: true)
+        updateTrackingAreas()
+    }
+    /// The card in the strip's coordinates, while it shows.
+    private var previewFrame: NSRect? {
+        guard let card = previewPopup?.content, card.window === window else { return nil }
+        return convert(card.bounds, from: card)
     }
     public override func viewDidMoveToWindow() {
         if window == nil, let previewPopup { previewPopup.content.popupHost?.close(previewPopup, returnFocus: false) }
@@ -179,26 +161,42 @@ public final class ThreadMinimapView: DSView {
     private var hovered: Int? { didSet {
         guard hovered != oldValue else { return }
         toolTip = nil; needsDisplay = true; updateGutter(); showPreview()
+        if hovered == nil { updateTrackingAreas() }
     } }
     private var tracking: NSTrackingArea?
     public override var wantsUpdateLayer: Bool { false }
     public override var acceptsFirstResponder: Bool { true }
+    /// The strip and its arrows. While a card shows, T3 widens the strip's button to 22rem and keeps the card inside
+    /// it (`resolveTimelineMinimapInteractiveWidth`, :147-150, 249), so the pointer can cross to the card and rest
+    /// on it without the card closing.
+    private var hoverRegion: NSRect {
+        let strip = bounds.insetBy(dx: -8, dy: -28)
+        guard let card = previewFrame else { return strip }
+        return strip.union(NSRect(x: 0, y: 0, width: 352, height: bounds.height)).union(card)
+    }
     public override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let tracking { removeTrackingArea(tracking) }
-        let area = NSTrackingArea(rect: bounds.insetBy(dx: -8, dy: -28), options: [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited], owner: self)
+        let area = NSTrackingArea(rect: hoverRegion, options: [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited], owner: self)
         tracking = area; addTrackingArea(area)
     }
     private func index(_ event: NSEvent) -> Int? {
         guard !items.isEmpty else { return nil }
-        let y = convert(event.locationInWindow, from: nil).y - padding
-        return max(0, min(items.count - 1, Int((y / max(1, bounds.height - 2 * padding) * CGFloat(items.count - 1)).rounded())))
+        let y = convert(event.locationInWindow, from: nil).y
+        return max(0, min(items.count - 1, Int((y / max(1, bounds.height) * CGFloat(items.count - 1)).rounded())))
     }
-    public override func mouseEntered(with event: NSEvent) { hovered = index(event); hoveredArrow = arrow(event) }
-    public override func mouseMoved(with event: NSEvent) { hovered = index(event); hoveredArrow = arrow(event) }
+    /// The card keeps its turn while the pointer is on it (`onMouseMove` stops at the card, :252).
+    private func track(_ event: NSEvent) {
+        hoveredArrow = arrow(event)
+        let point = convert(event.locationInWindow, from: nil)
+        if hovered != nil, previewFrame?.contains(point) == true { return }
+        hovered = index(event)
+    }
+    public override func mouseEntered(with event: NSEvent) { track(event) }
+    public override func mouseMoved(with event: NSEvent) { track(event) }
     public override func mouseExited(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if !bounds.insetBy(dx: -8, dy: -28).contains(point) { hovered = nil; hoveredArrow = nil }
+        if !hoverRegion.contains(point) { hovered = nil; hoveredArrow = nil }
     }
     public override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
@@ -216,18 +214,20 @@ public final class ThreadMinimapView: DSView {
         }
     }
     public override func draw(_ dirtyRect: NSRect) {
-        guard !dither, let ctx = NSGraphicsContext.current?.cgContext else { return }
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         // The strip redraws whenever the current turn changes while scrolling. With 2,500 turns, a themed color and an
-        // NSBezierPath per mark took 18% of the main thread in a long scroll; resolve the three colors once and fill
-        // each mark straight into the context, in the same order, so overlapping marks blend as before.
+        // NSBezierPath per mark took 18% of the main thread in a long scroll; resolve the colors once and fill each
+        // mark straight into the context, in the same order, so overlapping marks blend as before.
         let current = Themed.color(\.foreground, ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 0.55 : 0.9).cgColor
         let near = Themed.color(\.mutedForeground, ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 0.6 : 0.75).cgColor
         let base = Themed.color(\.mutedForeground, ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 0.25 : 0.35).cgColor
-        let span = max(0, bounds.height - 2), last = CGFloat(max(1, items.count - 1))
+        // The guide under the strips, `left-3 w-px bg-border/15` (:216).
+        let guide = CGRect(x: 12, y: 0, width: 1, height: bounds.height)
+        if guide.intersects(dirtyRect) { ctx.setFillColor(Themed.color(\.border, 0.15).cgColor); ctx.fill(guide) }
         for i in items.indices {
             let distance = hovered.map { abs(i - $0) }
             let width: CGFloat = distance == 0 ? 24 : distance == 1 ? 16 : distance == 2 ? 10 : 8
-            let rect = CGRect(x: 0, y: CGFloat(i) / last * span, width: width, height: 2)
+            let rect = CGRect(x: 0, y: tickY(i), width: width, height: 2)
             guard rect.intersects(dirtyRect) else { continue }
             let path = CGPath(roundedRect: rect, cornerWidth: 1, cornerHeight: 1, transform: nil)
             ctx.setFillColor(distance == 0 ? near : base)
@@ -242,81 +242,7 @@ public final class ThreadMinimapView: DSView {
     }
 }
 
-extension ThreadMinimapView {
-    static let tickWidth: CGFloat = 10
-
-    /// Redesign's ticks over the surface: the band over the turns on screen, then one tick per turn, centred in the
-    /// column. Four colors resolved once and plain rect fills, so a 2,500-turn redraw stays as cheap as the stock strip.
-    fileprivate func drawDither(_ ctx: CGContext, _ dirtyRect: NSRect) {
-        let band = Themed.color(\.foreground, 0.08).cgColor
-        let bright = Themed.color(\.foreground, 0.9).cgColor
-        let quiet = Themed.color(\.mutedForeground, 0.5).cgColor
-        let accent = Themed.color(\.primary).cgColor
-        let shown = inView.isEmpty ? currentIndex.map { IndexSet(integer: $0) } ?? IndexSet() : inView
-        if let first = shown.first, let last = shown.last {
-            let top = tickY(first) - 4, rect = CGRect(x: padding - 4, y: top, width: bounds.width - 2 * padding + 8, height: tickY(last) + 6 - top)
-            let r = min(5, rect.height / 2)
-            ctx.addPath(CGPath(roundedRect: rect, cornerWidth: r, cornerHeight: r, transform: nil))
-            ctx.setFillColor(band); ctx.fillPath()
-        }
-        // Every tick has the same size; the turns on screen draw brighter and the hovered one in the accent. Ticks closer
-        // than 5pt thin to a hairline, so a long thread reads as evenly spaced marks instead of a solid bar.
-        let width = min(Self.tickWidth, max(0, bounds.width - 2 * padding))
-        let pitch = items.count > 1 ? (bounds.height - 2 * padding - 2) / CGFloat(items.count - 1) : .infinity
-        let height: CGFloat = pitch < 5 ? 1 : 2
-        let x = ((bounds.width - width) / 2).rounded()
-        for i in items.indices {
-            let rect = CGRect(x: x, y: tickY(i), width: width, height: height)
-            guard rect.intersects(dirtyRect) else { continue }
-            ctx.addPath(CGPath(roundedRect: rect, cornerWidth: height / 2, cornerHeight: height / 2, transform: nil))
-            ctx.setFillColor(hovered == i ? accent : inView.contains(i) ? bright : quiet)
-            ctx.fillPath()
-        }
-    }
-}
-
-/// Redesign's ticks, drawn above the rail's surface. Lets clicks through to the rail.
-private final class MinimapTicksView: NSView {
-    private unowned let rail: ThreadMinimapView
-    init(rail: ThreadMinimapView) { self.rail = rail; super.init(frame: .zero) }
-    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    override var isFlipped: Bool { rail.isFlipped }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-    override func draw(_ dirtyRect: NSRect) {
-        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        rail.drawDither(ctx, dirtyRect)
-    }
-}
-
-/// Redesign's preview card: the composer's pill surface, so the text sits on frosted glass, or an opaque card under
-/// Reduce Transparency, instead of the thin popover fill over the art.
-private final class DitherMinimapPreviewCard: DSView, PopupContent {
-    private let surface = DitherPillSurface()
-    private let content: NSView
-    private static let inset = NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
-    init(content: NSView) {
-        self.content = content
-        super.init(frame: .zero)
-        layer?.masksToBounds = false
-        surface.radius = DitherChrome.cardRadius
-        addSubview(surface); addSubview(content)
-    }
-    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    var popupSize: CGSize {
-        let i = Self.inset
-        return CGSize(width: 320, height: content.intrinsicContentSize.height + i.top + i.bottom)
-    }
-    override var intrinsicContentSize: NSSize { popupSize }
-    var frostRadius: CGFloat { DitherChrome.cardRadius }
-    override func layout() {
-        super.layout()
-        surface.frame = bounds
-        let i = Self.inset
-        content.frame = NSRect(x: i.left, y: i.top, width: bounds.width - i.left - i.right, height: bounds.height - i.top - i.bottom)
-    }
-}
-
-/// MessagesTimeline.tsx:1907-1931. The preview is built only while a strip is hovered.
+/// TimelineMinimap.tsx:249-275. The preview is built only while a strip is hovered.
 private final class ThreadMinimapPreviewView: DSView {
     private let user: LabelView
     private let assistant: TextBlockView
