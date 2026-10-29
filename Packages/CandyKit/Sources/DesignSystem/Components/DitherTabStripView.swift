@@ -36,6 +36,8 @@ public final class DitherTabStripView: TopbarDragView {
         didSet { oldValue?.removeFromSuperview(); trailingAccessory.map { addSubview($0) }; needsLayout = true }
     }
 
+    /// Off hides the tabs and + and keeps them, so they come back as they were; the accessory stays.
+    public var showsTabs = true { didSet { if showsTabs != oldValue { needsLayout = true } } }
     private var views: [TabView] = []
     private let plus = ButtonView(nil, icon: .plus, variant: .ghost, size: .iconSm)
     /// The thread's rows scroll on under the strip, so the tabs and + sit on a blur. It shows nothing over the bare art.
@@ -58,7 +60,7 @@ public final class DitherTabStripView: TopbarDragView {
     }
 
     public override func accessibilityTabs() -> [Any]? { views }
-    public override func accessibilityChildren() -> [Any]? { views.filter { !$0.isHidden } + [plus] + [trailingAccessory].compactMap { $0?.isHidden == false ? $0 : nil } }
+    public override func accessibilityChildren() -> [Any]? { views.filter { !$0.isHidden } + (plus.isHidden ? [] : [plus]) + [trailingAccessory].compactMap { $0?.isHidden == false ? $0 : nil } }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
@@ -93,8 +95,10 @@ public final class DitherTabStripView: TopbarDragView {
                                      width: size.width, height: size.height)
             reserve = size.width + 10 + 8
         }
+        plus.isHidden = !showsTabs
+        plusFrost.isHidden = !showsTabs
         let room = max(0, bounds.width - contentStart - 40 - reserve)
-        let shown = Self.window(count: views.count, selected: views.firstIndex { $0.tab.id == selected }, room: room)
+        let shown = !showsTabs ? 0..<0 : Self.window(count: views.count, selected: views.firstIndex { $0.tab.id == selected }, room: room)
         let count = CGFloat(shown.count)
         let width = shown.isEmpty ? 0 : min(Self.tabWidth, (room - Self.gap * (count - 1)) / count)
         var x = contentStart - 12

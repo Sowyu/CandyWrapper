@@ -783,7 +783,6 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         updatePill()
         tile()
         updateMinimapPosition()
-        minimap.revealForScroll()
         requestEarlierIfNearTop()
     }
 

@@ -7,7 +7,8 @@ import T3Store
 /// Dither's tab strip and history buttons (after Capy). Each tab shows one route from the window's `RouteHistory`: a
 /// thread, the new-thread draft, Settings, Pull requests or Usage. Like Capy and a browser, navigating shows the new
 /// route in the current tab; + and Cmd-click open a new one, and a route already open in another tab switches there.
-/// Back and forward step through the history. Tabs last for this run only.
+/// Back and forward step through the history. Tabs last for this run only. The Experimental Tabs switch hides them
+/// and their entry points; while it is off the list stands still, so turning it on brings back the same tabs.
 @MainActor
 final class DitherTabsController {
     private let strip: DitherTabStripView
@@ -49,9 +50,17 @@ final class DitherTabsController {
         NotificationCenter.default.addObserver(forName: ProjectIconStore.didChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.strip.refreshImages() }
         }
-        sidebar.onOpenInNewTab = { [weak self, weak sidebar] id in self?.inNewTab { sidebar?.actions.openThread(id) } }
+        _ = ThreadTabsSetting.observe { [weak self] in self?.applySetting() }
         layout.backButton.action = { [weak history] in history?.back() }
         layout.forwardButton.action = { [weak history] in history?.forward() }
+        applySetting()
+    }
+
+    /// Cmd-click, "Open in new tab" and a subagent's open-in-tab all check `onOpenInNewTab`, so clearing it removes them.
+    private func applySetting() {
+        let on = ThreadTabsSetting.isOn
+        strip.showsTabs = on
+        sidebar?.onOpenInNewTab = on ? { [weak self, weak sidebar] id in self?.inNewTab { sidebar?.actions.openThread(id) } } : nil
         sync()
     }
 
@@ -64,7 +73,7 @@ final class DitherTabsController {
     func sync() {
         layout.backButton.isEnabled = history.canGoBack
         layout.forwardButton.isEnabled = history.canGoForward
-        guard let sidebar else { return }
+        guard let sidebar, ThreadTabsSetting.isOn else { return }
         if let active = current() {
             let changed = list.selectedKey != DitherTabList.key(active)
             list.shown(active, newTab: opensNewTab && changed)
