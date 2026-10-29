@@ -37,7 +37,8 @@ public final class ComposerControlView: ControlView {
     private var leadingPadding: CGFloat { paddingOverride?.0 ?? padding }
     private var trailingPadding: CGFloat { paddingOverride?.1 ?? padding }
     private var padding: CGFloat { capy || modern ? 8 : Self.padding }
-    private var modern: Bool { ComposerDesign.uses3814(dark: effectiveAppearance.isDark) }
+    /// Nightly 3824's footer controls; the composer's chips take them under Redesign too.
+    private var modern: Bool { ComposerDesign.uses3814(dark: effectiveAppearance.isDark) || capy }
     private var glyphWidth: CGFloat { if let compactIcon, visibleIcon === compactIcon { return 14 }; return (visibleIcon as? ComposerEffortGlyphView)?.intrinsicContentSize.width ?? 16 }
     private var visibleIconOverhang: CGFloat { compactIcon != nil && visibleIcon === compactIcon ? 2 : iconOverhang }
     private var chevronSize: CGFloat { capy ? 11 : 14 }

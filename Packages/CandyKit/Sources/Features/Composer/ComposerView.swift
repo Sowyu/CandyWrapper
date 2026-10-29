@@ -527,7 +527,7 @@ public final class ComposerView: DSView {
     func refresh() {
         defer { invalidateHeightIfNeeded() }
         // ChatComposer.tsx:7489-7490.
-        let placeholderText = planFollowUp ? "Add feedback to refine the plan, or leave this blank to implement it" : ComposerLogic.placeholder(placeholderInput, modern: modern)
+        let placeholderText = planFollowUp ? "Add feedback to refine the plan, or leave this blank to implement it" : ComposerLogic.placeholder(placeholderInput, modern: modern || capy)
         if placeholder.text != placeholderText {
             placeholder.text = placeholderText
             editor.setAccessibilityPlaceholderValue(placeholderText)
@@ -1024,9 +1024,11 @@ public final class ComposerView: DSView {
             contextWindowMeter.frame = NSRect(x: actionsLeft - 8 - 28, y: midY - 14, width: 28, height: 28)
             actionsLeft = contextWindowMeter.frame.minX
         }
-        if modern {
-            attach.frame = NSRect(x: 9, y: midY - 14, width: 28, height: 28)
-            let left: CGFloat = attach.isHidden ? 9 : 45
+        // Nightly 3824 groups the controls beside send (#25869); Redesign keeps its "+" at its own edge.
+        if modern || capyFooter {
+            let start = capyFooter ? Self.capyEdge : 9
+            attach.frame = NSRect(x: start, y: midY - 14, width: 28, height: 28)
+            let left = attach.isHidden ? start : attach.frame.maxX + (capyFooter ? 3 : 8)
             var available = max(0, actionsLeft - 8 - left)
             for control in footerControls.reversed() {
                 let width = min(control.intrinsicContentSize.width, available)
@@ -1036,20 +1038,13 @@ public final class ComposerView: DSView {
             return
         }
         // Left cluster: the first control's own 10px padding puts its icon at x 17 (`-ms-2.5`); gap 4,
-        // separators 1x16 with 2px margins. Capy puts its "+" first and the model icon at x 50.
-        var x = Self.inset + Self.pad - (modern ? 8 : 10)
-        let limit: CGFloat
-        if capyFooter {
-            attach.frame = NSRect(x: Self.capyEdge, y: midY - 14, width: 28, height: 28)
-            if !attach.isHidden { x = attach.frame.maxX + 3 }
-            limit = actionsLeft - 8
-        } else {
-            attach.frame = NSRect(x: actionsLeft - 8 - 28, y: midY - 14, width: 28, height: 28)
-            // The left cluster is `flex-1` up to the right cluster, less the footer gap.
-            limit = (attach.isHidden ? actionsLeft : attach.frame.minX) - (compactFooter ? 6 : 0)
-        }
+        // separators 1x16 with 2px margins.
+        var x = Self.inset + Self.pad - 10
+        attach.frame = NSRect(x: actionsLeft - 8 - 28, y: midY - 14, width: 28, height: 28)
+        // The left cluster is `flex-1` up to the right cluster, less the footer gap.
+        let limit = (attach.isHidden ? actionsLeft : attach.frame.minX) - (compactFooter ? 6 : 0)
         for (i, control) in footerControls.enumerated() {
-            if i > 0, !modern {
+            if i > 0 {
                 let sep = separators[i - 1]
                 x += 4 + 2
                 sep.frame = NSRect(x: x, y: midY - 8, width: 1, height: 16)

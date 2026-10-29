@@ -7,6 +7,9 @@ enum ThreadDesign {
     @TaskLocal static var layoutUses3814: Bool?
     static func uses3814(dark: Bool) -> Bool { layoutUses3814 ?? !ThemeRuntime.framesPanes(dark: dark) }
     static var uses3814: Bool { uses3814(dark: NSAppearance.current.isDark) }
+    /// Nightly 3824's chat tables (#26449) also draw in Redesign; Glass keeps the older table.
+    static func newTables(dark: Bool) -> Bool { uses3814(dark: dark) || ThemeRuntime.isDither(dark: dark) }
+    static var newTables: Bool { newTables(dark: NSAppearance.current.isDark) }
 
     static func layout(in appearance: NSAppearance, design: Bool? = layoutUses3814, _ make: () -> MarkdownLayout) -> MarkdownLayout {
         var result: MarkdownLayout?

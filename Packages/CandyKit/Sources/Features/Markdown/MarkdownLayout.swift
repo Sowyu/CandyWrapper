@@ -45,7 +45,7 @@ enum MarkdownStyle {
     /// `.chat-markdown pre::-webkit-scrollbar { height: var(--app-scrollbar-width) }`, 6px (index.css:90, 2072-2074,
     /// T3 b5a0696a98): the lane an overflowing block adds below its padding.
     static let codeScrollbar: CGFloat = 6
-    static var tableFontSize: CGFloat { ThreadDesign.uses3814 ? 14 : 12 }
+    static var tableFontSize: CGFloat { ThreadDesign.newTables ? 14 : 12 }
     static var tableLineHeight: CGFloat { tableFontSize * 1.625 }
     static let imageMaxWidth: CGFloat = 480
 
@@ -1289,7 +1289,7 @@ private struct Builder {
     mutating func table(_ table: MarkdownTable, width: CGFloat, context: Context) -> Box {
         let index = tableIndex
         tableIndex += 1
-        let modern = ThreadDesign.uses3814
+        let modern = ThreadDesign.newTables
         let expanded = modern || expandedTables.contains(index)
         let columns = table.alignments.count
         let size = MarkdownStyle.tableFontSize, line = MarkdownStyle.tableLineHeight
@@ -1370,8 +1370,8 @@ private struct Builder {
         box.items.insert(.box(viewport, fill: WindowGlass.pick(stock: .clear, frost: WindowGlass.denseFill),
                               border: WindowGlass.pick(stock: .clear, frost: WindowGlass.edge), radius: 8), at: 0)
         y = viewport.maxY
-        // Nightly 3824 wraps cells directly and keeps only Copy (MarkdownTable.tsx:29-34, #26449).
-        // Redesign and Glass retain their table controls.
+        // Nightly 3824 wraps cells directly and keeps only Copy (MarkdownTable.tsx:29-34, #26449), Redesign too.
+        // Glass retains its table controls.
         if !modern {
             box.controls.append(.init(frame: CGRect(x: 0, y: y + 2, width: 24, height: 24), icon: expanded ? .minimize2 : .maximize2,
                                       variant: expanded ? .secondary : .ghostMuted, action: .toggleTable(index)))
@@ -1443,7 +1443,7 @@ extension MarkdownLayout {
             for (c, cell) in row.enumerated() where c < columns {
                 var hasFormula = false
                 var formulaWidth: CGFloat = 0
-                if ThreadDesign.uses3814 {
+                if ThreadDesign.newTables {
                     cell.enumerateAttribute(.markdownMath, in: NSRange(location: 0, length: cell.length)) { value, range, _ in
                         if value != nil {
                             hasFormula = true
@@ -1451,7 +1451,7 @@ extension MarkdownLayout {
                         }
                     }
                 }
-                let cap: CGFloat = hasFormula ? .infinity : ThreadDesign.uses3814 ? 384 : r == 0 ? .infinity : 384
+                let cap: CGFloat = hasFormula ? .infinity : ThreadDesign.newTables ? 384 : r == 0 ? .infinity : 384
                 let padding = tableCellPadding(c, of: columns).total
                 maxs[c] = max(maxs[c], min(cap, natural(cell) + padding))
                 guard fitsLane else { continue }
@@ -1459,7 +1459,7 @@ extension MarkdownLayout {
                 let longest = Self.unbroken.matches(in: cell.string, range: NSRange(location: 0, length: cell.length))
                     .map { match -> CGFloat in
                         let word = cell.attributedSubstring(from: match.range)
-                        if ThreadDesign.uses3814, word.length > 16, word.attribute(.markdownExternalLink, at: 0, effectiveRange: nil) != nil {
+                        if ThreadDesign.newTables, word.length > 16, word.attribute(.markdownExternalLink, at: 0, effectiveRange: nil) != nil {
                             return word.string.indices.map { index in
                                 let end = word.string.index(after: index)
                                 return natural(word.attributedSubstring(from: NSRange(index..<end, in: word.string)))

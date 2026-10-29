@@ -51,14 +51,6 @@ public struct SourceControlDiscoveryItem: Equatable, Sendable {
         return status == "available" ? Themed.color(\.success) : Themed.color(\.warning)
     }
 
-    /// Redesign keeps the presentation saved before the new default design.
-    var legacyDot: NSColor {
-        if notReady { return Themed.color(\.mutedForeground, 0.35) }
-        if status != "available" { return Themed.color(\.warning) }
-        if isProvider, authStatus != "authenticated" { return Themed.color(\.warning) }
-        return Themed.color(\.success)
-    }
-
     /// The switch's checked state (`enabled`).
     var enabled: Bool { isProvider ? status == "available" && authStatus == "authenticated" : status == "available" && implemented }
 
@@ -604,7 +596,7 @@ final class SourceControlDiscoveryRow: DSView, SettingsGroupRow {
         hover = HoverGroup(self) { [weak self] _ in self?.restyleHover(transitioning: true) }
         addSubview(mark)
         dot.cornerRadius = 4
-        dot.backgroundColor = (ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? item.legacyDot : item.dot).cgColor
+        dot.backgroundColor = item.dot.cgColor
         if item.icon != nil {
             dot.borderWidth = 2
             dot.borderColor = Themed.color(\.background).cgColor
@@ -710,7 +702,7 @@ final class SourceControlDiscoveryRow: DSView, SettingsGroupRow {
         super.updateLayer()
         restyleHover(transitioning: false)
         if item.badge == "Not authenticated" { badge?.variant = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? .warning : .secondary }
-        dot.backgroundColor = (ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? item.legacyDot : item.dot).cgColor(in: self)
+        dot.backgroundColor = item.dot.cgColor(in: self)
         if item.icon != nil { dot.borderColor = Themed.color(\.background).cgColor(in: self) }
     }
 }
