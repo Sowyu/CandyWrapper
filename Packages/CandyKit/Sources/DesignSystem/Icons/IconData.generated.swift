@@ -100,6 +100,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case gripVertical
     case hammer
     case hardDrive
+    case hash
     case history
     case home
     case image
@@ -121,6 +122,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case lockOpen
     case logIn
     case mail
+    case mailOpen
     case maximize
     case maximize2
     case memoryStick
@@ -129,6 +131,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case messageSquare
     case messageSquareDashed
     case messageSquareOff
+    case messageSquarePlus
     case messageSquareText
     case messageSquareWarning
     case messagesSquare
@@ -204,6 +207,8 @@ public enum IconName: String, CaseIterable, Sendable {
     case textSearch
     case textWrap
     case ticket
+    case timer
+    case trash
     case trash2
     case trendingDown
     case trendingUp
@@ -349,6 +354,7 @@ extension IconName {
         case .gripVertical: return "grip-vertical"
         case .hammer: return "hammer"
         case .hardDrive: return "hard-drive"
+        case .hash: return "hash"
         case .history: return "history"
         case .home: return "home"
         case .image: return "image"
@@ -370,6 +376,7 @@ extension IconName {
         case .lockOpen: return "lock-open"
         case .logIn: return "log-in"
         case .mail: return "mail"
+        case .mailOpen: return "mail-open"
         case .maximize: return "maximize"
         case .maximize2: return "maximize-2"
         case .memoryStick: return "memory-stick"
@@ -378,6 +385,7 @@ extension IconName {
         case .messageSquare: return "message-square"
         case .messageSquareDashed: return "message-square-dashed"
         case .messageSquareOff: return "message-square-off"
+        case .messageSquarePlus: return "message-square-plus"
         case .messageSquareText: return "message-square-text"
         case .messageSquareWarning: return "message-square-warning"
         case .messagesSquare: return "messages-square"
@@ -453,6 +461,8 @@ extension IconName {
         case .textSearch: return "text-search"
         case .textWrap: return "text-wrap"
         case .ticket: return "ticket"
+        case .timer: return "timer"
+        case .trash: return "trash"
         case .trash2: return "trash-2"
         case .trendingDown: return "trending-down"
         case .trendingUp: return "trending-up"
@@ -1123,6 +1133,13 @@ extension IconName {
                 IconElement(.path(d: "M21.946 12.013H2.054")),
                 IconElement(.path(d: "M6 16h.01")),
             ])
+        case .hash:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.line(x1: 4, y1: 9, x2: 20, y2: 9)),
+                IconElement(.line(x1: 4, y1: 15, x2: 20, y2: 15)),
+                IconElement(.line(x1: 10, y1: 3, x2: 8, y2: 21)),
+                IconElement(.line(x1: 16, y1: 3, x2: 14, y2: 21)),
+            ])
         case .history:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8")),
@@ -1255,6 +1272,11 @@ extension IconName {
                 IconElement(.path(d: "m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7")),
                 IconElement(.rect(x: 2, y: 4, w: 20, h: 16, rx: 2, ry: 2)),
             ])
+        case .mailOpen:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M21.2 8.4c.5.38.8.97.8 1.6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10a2 2 0 0 1 .8-1.6l8-6a2 2 0 0 1 2.4 0l8 6Z")),
+                IconElement(.path(d: "m22 10-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 10")),
+            ])
         case .maximize:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "M8 3H5a2 2 0 0 0-2 2v3")),
@@ -1315,6 +1337,12 @@ extension IconName {
                 IconElement(.path(d: "M19 19H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.7.7 0 0 1 2 21.286V5a2 2 0 0 1 1.184-1.826")),
                 IconElement(.path(d: "m2 2 20 20")),
                 IconElement(.path(d: "M8.656 3H20a2 2 0 0 1 2 2v11.344")),
+            ])
+        case .messageSquarePlus:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z")),
+                IconElement(.path(d: "M12 8v6")),
+                IconElement(.path(d: "M9 11h6")),
             ])
         case .messageSquareText:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
@@ -1781,6 +1809,18 @@ extension IconName {
                 IconElement(.path(d: "M13 5v2")),
                 IconElement(.path(d: "M13 17v2")),
                 IconElement(.path(d: "M13 11v2")),
+            ])
+        case .timer:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.line(x1: 10, y1: 2, x2: 14, y2: 2)),
+                IconElement(.line(x1: 12, y1: 14, x2: 15, y2: 11)),
+                IconElement(.circle(cx: 12, cy: 14, r: 8)),
+            ])
+        case .trash:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6")),
+                IconElement(.path(d: "M3 6h18")),
+                IconElement(.path(d: "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2")),
             ])
         case .trash2:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [

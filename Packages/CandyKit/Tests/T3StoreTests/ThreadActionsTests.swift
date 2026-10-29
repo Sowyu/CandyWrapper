@@ -171,6 +171,23 @@ struct OptimisticThreadUpdateTests {
         #expect(overlay.isEmpty)
     }
 
+    /// Archive hides the row at once (the sidebar lists only `archivedAt == nil`); a refusal brings back only the
+    /// threads it hit, and an accepted one stays hidden until the shell moves it to `archivedThreads`.
+    @Test func optimisticArchiveHidesAtOnceAndRollsBackOnlyFailures() {
+        var overlay = OptimisticThreadOverlay()
+        let snapshot = ShellSnapshot(schemaVersion: 2, snapshotSequence: 10, threads: [thread("a"), thread("b"), thread("c")])
+        let listed = { (o: OptimisticThreadOverlay) in o.apply(snapshot, environmentId: "env").threads.filter { $0.archivedAt == nil }.map(\.id.rawValue) }
+        let tokens = ["a", "b", "c"].map { overlay.begin(.archive, threadId: ThreadId($0), environmentId: "env") }
+        #expect(listed(overlay) == [])
+        // The server takes a and c and refuses b.
+        overlay.confirm(tokens[0], sequence: 11)
+        overlay.cancel(tokens[1])
+        overlay.confirm(tokens[2], sequence: 12)
+        #expect(listed(overlay) == ["b"])
+        overlay.reconcile(environmentId: "env", snapshotSequence: 12)
+        #expect(overlay.isEmpty)
+    }
+
     @Test func removingAnEnvironmentDropsOnlyItsUpdates() {
         var overlay = OptimisticThreadOverlay()
         _ = overlay.begin(.settle, threadId: ThreadId("t"), environmentId: "gone")

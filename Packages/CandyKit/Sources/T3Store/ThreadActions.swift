@@ -149,6 +149,8 @@ public enum ProjectCommands {
 /// (client-runtime state/threadCommands.ts:407-490).
 public enum OptimisticThreadUpdate: Sendable, Equatable {
     case settle, unsettle, unsnooze, unpin
+    /// Hides the thread from the sidebar until the server answers (the user, 2026-10-29; T3 waits for the reply).
+    case archive
     case snooze(until: T3Timestamp)
     case pin(orderKey: String?)
     case setAutoSettle(Bool)
@@ -205,6 +207,8 @@ public enum OptimisticThreadUpdate: Sendable, Equatable {
         case .unpin:
             t.pinnedAt = nil
             t.pinOrderKey = nil
+        case .archive:
+            t.archivedAt = thread.archivedAt ?? now
         }
         return t
     }
@@ -649,11 +653,13 @@ public enum ThreadActionMenu {
     /// `count` is every selected thread with a row; `canSnooze` is true when all of them can snooze now.
     public static func bulkItems(count: Int, pinnedCount: Int, settlingCount: Int, canSnooze: Bool,
                                  titleSupportedCount: Int, titleActionableCount: Int, canOperate: Bool = true,
-                                 snoozePresets: [SnoozePreset]) -> [ThreadMenuItem] {
+                                 archivableCount: Int = 0, snoozePresets: [SnoozePreset]) -> [ThreadMenuItem] {
         var items: [ThreadMenuItem] = []
         // `buildBulkUnpinContextMenuItem`: only when something selected is pinned.
         if pinnedCount > 0 { items.append(.init("unpin", "Unpin (\(pinnedCount))", disabled: !canOperate)) }
-        items.append(.init("settle", "Settle (\(count))", disabled: settlingCount == 0 || !canOperate))
+        // T3 greys out Settle when all are settled; this client offers the way back instead (the user, 2026-10-29).
+        items.append(settlingCount == 0 && count > 0 ? .init("unsettle", "Unsettle (\(count))", disabled: !canOperate)
+                                                    : .init("settle", "Settle (\(count))", disabled: !canOperate))
         if canSnooze {
             items.append(.init("snooze", "Snooze (\(count))", disabled: !canOperate,
                                children: snoozePresets.map { .init("snooze:\($0.id)", "\($0.label) (\($0.whenLabel))", disabled: !canOperate) }
@@ -666,6 +672,9 @@ public enum ThreadActionMenu {
                 : .init("regenerate-title", "Regenerate titles (\(titleActionableCount))", disabled: !canOperate))
         }
         items.append(.init("mark-unread", "Mark unread (\(count))"))
+        // T3 has no bulk Archive (Sidebar.tsx:2236-2286); the user asked for one. Running threads can't archive, so the
+        // count is only the ones that can.
+        items.append(.init("archive", "Archive (\(archivableCount))", disabled: archivableCount == 0 || !canOperate, separatorBefore: true))
         items.append(.init("delete", "Delete (\(count))", disabled: !canOperate, destructive: true))
         return items
     }

@@ -497,29 +497,50 @@ final class SidebarCommands {
     }
 
     private func performArchive(_ id: ThreadId) {
-        guard let thread = shell(id) else { return }
+        Task { await performArchive(id, reportFailure: true) }
+    }
+
+    /// The row leaves at once: `.archive` hides it until the server answers, and a refusal brings it back with a
+    /// toast (and reopens it if it was open). T3 waits for the reply (Sidebar.tsx:2717); the user asked for this.
+    /// Returns the failure, nil on success or when nothing was sent.
+    @discardableResult
+    private func performArchive(_ id: ThreadId, reportFailure: Bool) async -> Error? {
+        guard let thread = shell(id) else { return nil }
         guard SidebarModel.runtimeCanArchive(SidebarModel.shellRuntime(thread)) else {
-            toast("Failed to archive thread", "Cannot archive while the provider is active.", .error)
-            return
+            let error = CommandMessage(errorDescription: "Cannot archive while the provider is active.")
+            if reportFailure { fail("Failed to archive thread", error) }
+            return error
         }
         let wasOpen = routeThreadId == id
         let project = snapshot?.projects.first { $0.id == thread.projectId }
         let wokeAt = SidebarModel.threadWokeAt(presented(thread), nowMs: nowMs)
         let claim = ledger.begin("archive", id.rawValue)
-        Task {
-            do { try await environments.dispatch(id, ThreadCommands.archive(id.localId)) } catch {
-                ledger.finish(claim)
-                fail("Failed to archive thread", error)
-                return
-            }
-            if let wokeAt { sidebar?.state.localVisits[id] = wokeAt }
-            showUndo(.archived, claim) { [weak self] in
-                guard let self else { return }
-                guard await self.attempt("Failed to undo archive", { try await self.environments.dispatch(id, ThreadCommands.unarchive(id.localId)) }) else { return }
-                if wasOpen { self.threads.open(id) }
-            }
-            if wasOpen { threads.newThread(in: project) }
+        // Both run before the first suspension, so the row and the route change in the same turn.
+        if wasOpen { threads.newThread(in: project) }
+        do { try await environments.dispatch(id, ThreadCommands.archive(id.localId), optimistic: .archive) } catch {
+            ledger.finish(claim)
+            if reportFailure { fail("Failed to archive thread", error) }
+            if wasOpen, routeThreadId != id { threads.open(id) }
+            return error
         }
+        if let wokeAt { sidebar?.state.localVisits[id] = wokeAt }
+        showUndo(.archived, claim) { [weak self] in
+            guard let self else { return }
+            guard await self.attempt("Failed to undo archive", { try await self.environments.dispatch(id, ThreadCommands.unarchive(id.localId)) }) else { return }
+            if wasOpen { self.threads.open(id) }
+        }
+        return nil
+    }
+
+    /// Bulk archive: every row leaves at once, and only the threads the server refuses come back, under one toast.
+    private func archiveAll(_ ids: [ThreadId]) async {
+        // Every task hides its row before its first suspension, so all rows leave together.
+        let sent = ids.map { id in Task { await self.performArchive(id, reportFailure: false) } }
+        var failures: [Error] = []
+        for task in sent { if let error = await task.value { failures.append(error) } }
+        guard let first = failures.first else { return }
+        let n = failures.count
+        fail(n < ids.count ? "Failed to archive \(n) thread\(n == 1 ? "" : "s")" : "Failed to archive threads", first)
     }
 
     private func simple(_ id: ThreadId, _ payload: JSONValue, update: OptimisticThreadUpdate? = nil, failure: String?) {
@@ -619,8 +640,7 @@ final class SidebarCommands {
             DitherThreadMenu.show(built, from: button, in: view, at: point)
             return
         }
-        let menu = Self.nativeMenu(items, choose: choose)
-        if let anchor { menu.popUp(positioning: nil, at: anchor, in: view) } else { NSMenu.popUpContextMenu(menu, with: event, for: view) }
+        ThemedItemContextMenu.show(items, in: view, at: anchor ?? view.convert(event.locationInWindow, from: nil), choose: choose)
     }
 
     private func perform(_ choice: String, id: ThreadId, thread: ThreadShell, group: SidebarModel.ProjectGroup?, presets: [SnoozePreset]) {
@@ -798,6 +818,7 @@ final class SidebarCommands {
         let pinned = selected.filter { $0.pinnedAt != nil }
         let settling = selected.filter { $0.settledOverride != .settled }
         let regeneratable = selected.filter { $0.titleRegeneration == nil }
+        let archivable = selected.filter { SidebarModel.runtimeCanArchive(SidebarModel.shellRuntime($0)) }
         // ponytail: a selection across machines snoozes with the first one's options; split per environment if users mix them
         let presets = SnoozePresets.resolve(now: Date(), presets: snoozeSettings(selected[0].id))
         let requests = PendingSubagentRequests.byThread(snapshot?.threads ?? [])
@@ -806,11 +827,10 @@ final class SidebarCommands {
                                                canSnooze: selected.allSatisfy { SidebarModel.canSnooze(SidebarThread($0, pendingSubagentRequest: requests[$0.id]), nowMs: ms) },
                                                titleSupportedCount: selected.count, titleActionableCount: regeneratable.count,
                                                canOperate: selected.allSatisfy { environments.canOperate($0.id.environmentId) },
-                                               snoozePresets: presets)
-        let menu = Self.nativeMenu(items) { [weak self] choice in
+                                               archivableCount: archivable.count, snoozePresets: presets)
+        ThemedItemContextMenu.show(items, in: view, at: view.convert(event.locationInWindow, from: nil)) { [weak self] choice in
             self?.performBulk(choice, selected: selected, pinned: pinned, settling: settling, regeneratable: regeneratable, presets: presets)
         }
-        NSMenu.popUpContextMenu(menu, with: event, for: view)
     }
 
     private func performBulk(_ choice: String, selected: [ThreadShell], pinned: [ThreadShell], settling: [ThreadShell],
@@ -846,6 +866,19 @@ final class SidebarCommands {
         case "settle":
             for t in settling where shell(t.id)?.settledOverride != .settled { settle(t.id) }
             sidebar?.clearSelection()
+        case "unsettle":
+            for t in selected where shell(t.id)?.settledOverride == .settled { unsettle(t.id) }
+            sidebar?.clearSelection()
+        case "archive":
+            let archivable = selected.filter { SidebarModel.runtimeCanArchive(SidebarModel.shellRuntime($0)) }.map(\.id)
+            let run: @MainActor () -> Void = { [weak self] in
+                guard let self else { return }
+                self.sidebar?.clearSelection()
+                Task { await self.archiveAll(archivable) }
+            }
+            let n = archivable.count
+            guard ClientSettingsStore.shared.current.bool("confirmThreadArchive") else { return run() }
+            confirm("Archive \(n) thread\(n == 1 ? "" : "s")?", then: run)
         case "regenerate-title":
             Task {
                 for t in regeneratable {
@@ -1016,3 +1049,4 @@ final class SidebarCommands {
         if !historyBack() { closeUtilityPage() }
     }
 }
+

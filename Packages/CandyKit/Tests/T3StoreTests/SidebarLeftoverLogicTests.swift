@@ -25,15 +25,18 @@ struct SidebarLeftoverLogicTests {
     @Test func bulkMenuCountsOnlyWhatEachActionTouches() {
         let presets = SnoozePresets.resolve(now: Date(timeIntervalSince1970: 1_800_000_000))
         let items = ThreadActionMenu.bulkItems(count: 3, pinnedCount: 1, settlingCount: 2, canSnooze: true,
-                                               titleSupportedCount: 3, titleActionableCount: 2, snoozePresets: presets)
-        #expect(items.map(\.label) == ["Unpin (1)", "Settle (3)", "Snooze (3)", "Regenerate titles (2)", "Mark unread (3)", "Delete (3)"])
+                                               titleSupportedCount: 3, titleActionableCount: 2, archivableCount: 2, snoozePresets: presets)
+        #expect(items.map(\.label) == ["Unpin (1)", "Settle (3)", "Snooze (3)", "Regenerate titles (2)", "Mark unread (3)",
+                                        "Archive (2)", "Delete (3)"])
+        #expect(items.first { $0.id == "archive" }?.separatorBefore == true)
         #expect(items.first { $0.id == "snooze" }?.children.last?.id == "snooze:custom")
         #expect(items.last?.destructive == true)
-        // Nothing pinned: no Unpin. Nothing regeneratable: the disabled "Regenerating…" row. A blocked thread: no Snooze.
+        // Nothing pinned: no Unpin. All settled: Unsettle instead of a greyed Settle. Nothing regeneratable: the disabled
+        // "Regenerating…" row. A blocked thread: no Snooze. Every thread running: Archive greys out.
         let none = ThreadActionMenu.bulkItems(count: 2, pinnedCount: 0, settlingCount: 0, canSnooze: false,
                                               titleSupportedCount: 2, titleActionableCount: 0, snoozePresets: presets)
-        #expect(none.map(\.label) == ["Settle (2)", "Regenerating… (2)", "Mark unread (2)", "Delete (2)"])
-        #expect(none[0].disabled && none[1].disabled)
+        #expect(none.map(\.label) == ["Unsettle (2)", "Regenerating… (2)", "Mark unread (2)", "Archive (0)", "Delete (2)"])
+        #expect(none[0].id == "unsettle" && !none[0].disabled && none[1].disabled && none[3].disabled)
     }
 
     // MARK: Custom snooze (`resolveCustomSnooze`)

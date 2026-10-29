@@ -64,6 +64,12 @@ popular = re.search(r"POPULAR_PROJECT_ICONS = \[(.*?)\]", opts, re.S)
 for k in re.findall(r'"([a-z0-9-]+)"', popular.group(1) if popular else ""):
     if k in have: resolved.setdefault(k, k)
 
+# The themed context menu draws icons named in contextMenuFallback.ts's ICON_PATHS, not imported.
+menu = open(os.path.join(SRC, "contextMenuFallback.ts"), encoding="utf-8").read()
+paths = re.search(r"const ICON_PATHS[^=]*= \{(.*?)\n\};", menu, re.S)
+for k in re.findall(r'^\s*"?([a-z0-9-]+)"?: \[', paths.group(1) if paths else "", re.M):
+    if k in have: resolved.setdefault(k, k)
+
 # ---------- shape model ----------
 def num(v):
     f = float(v)
@@ -178,7 +184,7 @@ for key, ks in groups.items():
 tsx = open(os.path.join(SRC, "components/Icons.tsx"), encoding="utf-8").read()
 blocks = re.split(r"\nexport const (?=\w+)", "\n" + tsx)[1:]
 # Glyphs T3 keeps outside Icons.tsx: the wordmark on T3 tool rows and the agent browser's app icon.
-for rel, fn in (("components/T3Wordmark.tsx", "T3Wordmark"), ("components/chat/MessagesTimeline.tsx", "BrowserAppIcon")):
+for rel, fn in (("components/T3Wordmark.tsx", "T3Wordmark"), ("components/chat/TimelineToolActivityIcon.tsx", "BrowserAppIcon")):
     src = open(os.path.join(SRC, rel), encoding="utf-8").read()
     at = src.index("function " + fn + "(")
     blocks.append(fn + src[at + len("function " + fn):src.index("</svg>", at) + len("</svg>")])

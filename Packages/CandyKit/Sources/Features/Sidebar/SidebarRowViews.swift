@@ -1076,6 +1076,8 @@ final class SidebarSlimRowView: SidebarRowBase {
     private var wokeBeside = false
     private var actionButton: RowActionButton?
     private var actionKind: SidebarRowModel.Action?
+    /// A settled row's Archive, left of Un-settle on hover (the user, 2026-10-29). Built on the first settled row.
+    private var archiveButton: RowActionButton?
     var actions = SidebarRowActions()
 
     override init(frame frameRect: NSRect) {
@@ -1172,13 +1174,24 @@ final class SidebarSlimRowView: SidebarRowBase {
             actionButton = b
             actionKind = r.action
         }
+        if unsettle, archiveButton == nil {
+            let b = RowActionButton(icon: .archive, size: 14, accessibility: "Archive thread")
+            b.action = { [weak self] in if let r = self?.row { self?.actions.archive(r.id) } }
+            addSubview(b)
+            HoverReveal.snap([b], visible: false, hides: true)
+            archiveButton = b
+        }
         // `opacity-0 transition-opacity group-any-hover/sidebar-row:opacity-100` (Sidebar.tsx:1903,1920,1937).
         if let actionButton { HoverReveal.fade([actionButton], visible: hovered, hides: true) }
+        if let archiveButton {
+            if unsettle { HoverReveal.fade([archiveButton], visible: hovered, hides: true) } else { HoverReveal.snap([archiveButton], visible: false, hides: true) }
+        }
         wokeBeside = hovered && woke && actionButton != nil
         // The lifted row trades the time and action for the drop verb (Sidebar.tsx:1847-1849).
         if lift != nil {
             time.isHidden = true
             actionButton?.isHidden = true
+            archiveButton?.isHidden = true
         } else if time.isHidden {
             time.isHidden = false
         }
@@ -1207,7 +1220,13 @@ final class SidebarSlimRowView: SidebarRowBase {
             b.frame = NSRect(x: w - 10 + 4 - bw, y: (h - 24) / 2, width: bw, height: 24) // `-mr-1`
             if wokeBeside { timeRight = b.frame.minX }
         }
-        let slot = lift == nil ? max(32, w - 10 - timeRight + pill) : lift?.verb == nil ? -10 : dropBadge?.preferredWidth ?? 0 // `min-w-8`
+        var slot = lift == nil ? max(32, w - 10 - timeRight + pill) : lift?.verb == nil ? -10 : dropBadge?.preferredWidth ?? 0 // `min-w-8`
+        if let a = archiveButton, let b = actionButton, row?.action == .unsettle {
+            let aw = a.preferredWidth
+            a.frame = NSRect(x: b.frame.minX - aw, y: b.frame.minY, width: aw, height: 24)
+            // While both show, the title stops short of them.
+            if (state.hovered || isKeyboardFocused), lift == nil { slot = max(slot, w - 10 - a.frame.minX) }
+        }
         let slotX = w - 10 - slot
         if lift != nil { dropBadge?.frame = NSRect(x: slotX, y: (h - 20) / 2, width: max(0, slot), height: 20) }
         time.frame = NSRect(x: timeRight - tw, y: (h - 16) / 2, width: tw + 1, height: 16)
