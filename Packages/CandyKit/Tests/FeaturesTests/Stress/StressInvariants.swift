@@ -69,7 +69,8 @@ enum StressInvariants {
         case .workLive(_, let entries, _, false, _, _): entries.map(\.id)
         case .contextCompaction: [row.id]
         case .event(let p, let subagents, false): (subagents ?? [p]).map(\.item.id.rawValue)
-        case .proposedPlan, .htmlRender, .mcpApp: [row.id]
+        // A pending approval takes its request item's row (T3 3814 MessagesTimeline.logic.ts:1432-1443).
+        case .proposedPlan, .htmlRender, .mcpApp, .pendingApproval: [row.id]
         default: []
         }
     }
@@ -157,7 +158,7 @@ enum StressInvariants {
             case .workLive(_, let entries, _, false, _, _), .work(let entries, false, _): for e in entries { count[e.id, default: 0] += 1 }
             case .message(let m, _, _, _, _, _): count[m.id.rawValue, default: 0] += 1
             case .event(let p, let subagents, false): for s in subagents ?? [p] { count[s.item.id.rawValue, default: 0] += 1 }
-            case .contextCompaction, .proposedPlan, .htmlRender, .mcpApp: count[row.id, default: 0] += 1
+            case .contextCompaction, .proposedPlan, .htmlRender, .mcpApp, .pendingApproval: count[row.id, default: 0] += 1
             default: break
             }
         }
