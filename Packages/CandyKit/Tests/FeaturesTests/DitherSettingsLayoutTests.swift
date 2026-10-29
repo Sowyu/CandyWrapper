@@ -54,6 +54,5 @@ struct DitherSettingsLayoutTests {
         #expect(DitherSettingsSection.home(of: .projects) == .project)
         #expect(DitherSettingsSection.home(of: .scheduledTasks) == .scheduledTasks)
         #expect(DitherSettingsSection.home(of: .connections) == .machines)
-        #expect(DitherSettingsSection.parent(of: .diagnostics) == .advanced)
     }
 }

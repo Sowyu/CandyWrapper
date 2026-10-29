@@ -29,3 +29,5 @@ No requested surface was dropped for nondeterminism. Relative-time usage-limit b
 Validation: recording and two consecutive fresh-process guard runs passed. Both comparisons found zero differing pixels across all 80 images. `scripts/test --fast` passed; it excludes this longer visual guard.
 
 Phase 3 (2026-10-29) re-recorded 18 images on purpose: the six composer states and the three thread timelines now show Nightly 3824's grouped composer controls and placeholder, and chat tables at their natural size with only Copy. Every other image stayed byte-identical.
+
+On 2026-10-29 Settings and Usage moved to the floating route modal in Redesign. Six new images cover it: `settings-modal`, `settings-modal-reduce-transparency` and `usage-modal`, light and dark, 86 in all. `settings-experimental` was re-recorded because the Tabs switch no longer lists Settings among its pages. Every other image stayed byte-identical.

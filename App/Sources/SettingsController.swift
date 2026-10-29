@@ -5,13 +5,11 @@ import T3Client
 import T3Protocol
 import T3Store
 
-/// Settings floats over the current route in default themes (3814 AppRouteModal.tsx:40-64).
-/// Redesign keeps its settings tab and sidebar. Cmd+, and the sidebar Settings action open it.
+/// Settings floats over the current route in every theme (3814 AppRouteModal.tsx:40-64); Redesign keeps its own nav,
+/// pages and surface inside the modal. Every entry point (Cmd+, the sidebar, links to a page) goes through `open`.
 @MainActor
 final class SettingsController {
     weak var window: NSWindow?
-    private weak var layout: SidebarLayoutView?
-    private let threadSidebar: NSView
     private let threadPanel: NSView
     let environments: Environments
     let t3: T3ConnectController
@@ -54,8 +52,8 @@ final class SettingsController {
     var onRouteChange: (() -> Void)?
     /// The nav's brand link to "/".
     var onHome: () -> Void = {}
-    /// The thread view is back in the window (focus goes to the composer).
-    var onThreadViewReturn: () -> Void = {}
+    /// Runs before Settings shows: a floating Usage closes, as T3 routes from `/usage` to `/settings`.
+    var willOpen: () -> Void = {}
     /// The local environment's descriptor, read when the page opens (label, machine, version).
     var primaryDescriptor: EnvironmentDescriptor?
     private var routeModal: AppRouteModalView?
@@ -96,11 +94,8 @@ final class SettingsController {
     /// The open Add Environment form, for errors and the Adding state.
     private weak var form: AddEnvironmentFormView?
 
-    init(window: NSWindow, layout: SidebarLayoutView, threadSidebar: NSView, threadPanel: NSView, environments: Environments,
-         t3: T3ConnectController) {
+    init(window: NSWindow, threadPanel: NSView, environments: Environments, t3: T3ConnectController) {
         self.window = window
-        self.layout = layout
-        self.threadSidebar = threadSidebar
         self.threadPanel = threadPanel
         self.environments = environments
         self.t3 = t3
@@ -120,7 +115,6 @@ final class SettingsController {
         setUpPageContext()
         nav.onBack = { [weak self] in self?.close() }
         nav.onHome = { [weak self] in self?.onHome() }
-        nav.onToggleSidebar = { [weak self] in self?.layout?.toggle() }
         connections.onHeightChange = { [weak self] in self?.page.needsLayout = true }
         var actions = ConnectionsActions()
         actions.addEnvironment = { [weak self] in self?.presentAdd(routeTarget: nil) }
@@ -184,23 +178,17 @@ final class SettingsController {
     }
 
     func open() {
-        guard !isOpen, let layout else { return }
+        guard !isOpen, let window else { return }
+        willOpen()
         buildViews()
         isOpen = true
-        nav.isRouteModal = !isDither
-        page.header.isRouteModal = !isDither
-        nav.windowedMac = (threadSidebar as? SidebarContentView)?.windowedMac ?? true
-        if !isDither, let window {
-            routeModal = AppRouteModalView.present(label: "Settings", content: page, navigation: nav, in: window)
-            routeModal?.onDismiss = { [weak self] in self?.finishClose(record: true) }
-            page.header.close.action = { [weak self] in self?.close() }
-        } else {
-            layout.sidebar.content = nav
-            threadPanel.removeFromSuperview()
-            layout.mainContent = page
-        }
+        pagesDither = isDither
+        nav.isRouteModal = true
+        page.header.isRouteModal = true
+        routeModal = AppRouteModalView.present(label: "Settings", content: page, navigation: nav, in: window)
+        routeModal?.onDismiss = { [weak self] in self?.finishClose(record: true) }
+        page.header.close.action = { [weak self] in self?.close() }
         show(section)
-        if routeModal == nil { window?.makeFirstResponder(page) }
         startHostAccess()
         refresh()
         loadPrimaryDescriptor()
@@ -208,78 +196,46 @@ final class SettingsController {
         t3.refreshMachines()
     }
 
-    /// Moving between default themes and Redesign changes the route presentation immediately.
+    /// Whether the built pages carry Redesign's layout.
+    private var pagesDither = false
+
+    /// Moving into or out of Redesign rebuilds the selected page with the destination theme's layout and tabs.
     func updatePresentationForTheme() {
-        guard isOpen, let layout, let window, (routeModal != nil) == isDither else { return }
-        routeModal?.onDismiss = nil
-        routeModal?.close(animated: false)
-        routeModal = nil
-        nav.removeFromSuperview()
-        page.removeFromSuperview()
-        nav.isRouteModal = !isDither
-        page.header.isRouteModal = !isDither
-        // Rebuild the selected page with the destination theme's layout, including Redesign's tabs.
+        guard isOpen, pagesDither != isDither else { return }
+        pagesDither = isDither
         page.page = nil
         general = nil; appearance = nil; keybindingsPage = nil; extraPages = [:]; ditherPages = [:]; ditherSection = nil
-        if isDither {
-            layout.sidebar.content = nav
-            layout.mainContent = page
-        } else {
-            layout.sidebar.content = threadSidebar
-            layout.mainContent = threadPanel
-            routeModal = AppRouteModalView.present(label: "Settings", content: page, navigation: nav, in: window)
-            routeModal?.onDismiss = { [weak self] in self?.finishClose(record: true) }
-            page.header.close.action = { [weak self] in self?.close() }
-        }
         show(section)
     }
 
-    /// Escape (`useEscapeToGoBack`): T3 leaves Settings for the last main app screen from any page
-    /// (routes/settings.tsx:115-116). Diagnostics and Open source licenses, reached from General, go back to
-    /// General first, as the user asked. A held key does nothing more (`event.repeat`).
+    /// Escape (`useEscapeToGoBack`): the route modal closes from any page (AppRouteModal.tsx:40-64). A held key does
+    /// nothing more (`event.repeat`).
     func escape() {
         guard isOpen, NSApp.currentEvent?.isARepeat != true else { return }
-        if routeModal != nil { close(); return }
-        if isDither, ditherSection == nil, let parent = DitherSettingsSection.parent(of: section) {
-            show(dither: parent)
-            window?.makeFirstResponder(page)
-        } else if let parent = section.parent {
-            show(parent)
-            window?.makeFirstResponder(page)
-        } else {
-            close()
-        }
+        close()
     }
 
     /// `record` false leaves the route history to the page that replaces Settings.
     func close(record: Bool = true) {
-        guard isOpen else { return }
-        if let routeModal {
-            routeModal.onDismiss = { [weak self] in self?.finishClose(record: record) }
-            routeModal.close(animated: record)
-        } else {
-            finishClose(record: record)
-        }
+        guard isOpen, let routeModal else { return }
+        routeModal.onDismiss = { [weak self] in self?.finishClose(record: record) }
+        routeModal.close(animated: record)
     }
 
     private func finishClose(record: Bool) {
-        guard isOpen, let layout else { return }
-        let wasModal = routeModal != nil
+        guard isOpen else { return }
         routeModal = nil
         modal?.close()
         stopHostAccess()
         isOpen = false
         updateScheduledTaskWatch()
-        if !wasModal { layout.sidebar.content = threadSidebar }
         page.removeFromSuperview()
         nav.removeFromSuperview()
         // A closed Settings gives back its pages (T3 unmounts the route); the next open builds the one it shows.
         page.page = nil
         general = nil; appearance = nil; keybindingsPage = nil; extraPages = [:]; ditherPages = [:]; ditherSection = nil
         projectFiles = [:]; projectFileLoads = []
-        if !wasModal { layout.mainContent = threadPanel }
         if record { onRouteChange?() }
-        if !wasModal { onThreadViewReturn() }
         let returnToWelcome = onOnboardingReturn; onOnboardingReturn = nil; returnToWelcome?()
     }
 

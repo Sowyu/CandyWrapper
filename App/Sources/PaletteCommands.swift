@@ -531,7 +531,7 @@ final class PaletteCommands {
                                     action: .run({ [weak self] in self?.openUtility(.usage) }, keepOpen: false)))
         actions.append(PaletteEntry(value: "action:settings", searchTerms: ["settings", "preferences", "configuration", "keybindings"],
                                     title: "Open settings", icon: .settings,
-                                    action: .run({ [weak self] in self?.commands.closeUtilityPage(); self?.settings.open() }, keepOpen: false)))
+                                    action: .run({ [weak self] in self?.settings.open() }, keepOpen: false)))
         // "Project settings" for the open thread's or draft's group, else the first (CommandPalette.tsx:2264-2300).
         if let group = contextualProjectGroup() {
             actions.append(PaletteEntry(value: "action:project-settings",
@@ -790,7 +790,6 @@ final class PaletteCommands {
             var entry = PaletteEntry(value: "setting:\(item.id)", searchTerms: [item.title, item.to.label] + item.searchTerms,
                                      title: item.title, description: "Settings \u{00B7} \(item.to.label)", icon: .settings,
                                      action: .run({ [weak self] in
-                                         self?.commands.closeUtilityPage()
                                          self?.settings.open()
                                          self?.settings.jump(to: item)
                                      }, keepOpen: false))
@@ -816,7 +815,6 @@ final class PaletteCommands {
 
     /// `/projects/$projectKey`: the Project settings page scoped to the group.
     func openProjectSettings(_ key: String) {
-        commands.closeUtilityPage()
         settings.openProject(key)
     }
 
@@ -869,7 +867,6 @@ final class PaletteCommands {
 
     /// Settings > Connections, where a machine gets added (`/settings/connections`).
     func openConnections() {
-        commands.closeUtilityPage()
         settings.open()
         settings.show(.connections)
     }

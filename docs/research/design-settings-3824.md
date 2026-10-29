@@ -16,7 +16,7 @@ Source at 3814, unchanged in 3824:
 - `apps/web/src/components/sidebar/mainAppLocation.ts`: the return route.
 - `apps/web/src/components/ThreadRouteView.tsx`: the mounted background thread.
 
-Native integration is in SettingsController and SidebarCommands. Settings entry points preserve a utility page underneath the modal. Redesign retains its earlier route transitions. An asynchronous composer focus request cannot take focus from an open route modal.
+Native integration is in SettingsController and SidebarCommands. Settings entry points preserve a utility page underneath the modal. Since 2026-10-29 Redesign uses the same modal and behavior: `AppRouteModalView` draws its surface with `DitherPillSurface` (62% fill over the live blur, opaque under Reduce Transparency unless "Ignore Reduce Transparency" is on), the pill rim and shadow, no sidebar band, and a 92% scrim instead of the blurred backdrop under Reduce Transparency. The Redesign nav drops its titlebar row, "← Settings" and Back in the modal. Every entry point goes through `SettingsController.open`, whose `willOpen` closes a floating Usage. Redesign tabs keep their route under Settings and Usage. Escape closes from every page, as in the default themes. An asynchronous composer focus request cannot take focus from an open route modal.
 
 ## Settings and Usage changes
 

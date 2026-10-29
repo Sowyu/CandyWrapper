@@ -15,9 +15,6 @@ public enum SettingsSection: String, CaseIterable, Sendable {
     /// Reached from General > Diagnostics; not in the nav (`SETTINGS_BREADCRUMB_LABELS`).
     case diagnostics, licenses
 
-    /// The page Escape goes back to: General for the pages reached from it.
-    public var parent: SettingsSection? { self == .diagnostics ? .maintenance : self == .licenses ? .about : nil }
-
     public var label: String {
         switch self {
         case .projects: "Projects"
@@ -460,15 +457,20 @@ public final class SettingsSidebarView: DSView {
 
     /// Dither, after Capy's settings sidebar: the traffic lights keep the 52pt titlebar row (the window draws back and
     /// forward at its right end), then "← Settings" with the collapse button, a filled search field and 28pt nav rows
-    /// in labelled groups; Sign in and Back as rows in the footer.
+    /// in labelled groups; Sign in and Back as rows in the footer. In the route modal the page's close control
+    /// replaces the titlebar row, the "← Settings" row and Back, so the search field leads.
     private func layoutDither() {
         let w = bounds.width, h = bounds.height
         let rowH = DitherSettingsNavRow.height
-        avatar.sidebarContext = true
-        var y: CGFloat = DitherChrome.band
-        ditherHeader.frame = NSRect(x: 8, y: y, width: max(0, w - 16 - 28 - 4), height: rowH)
-        trigger.frame = NSRect(x: w - 8 - 28, y: y, width: 28, height: 28)
-        y += rowH + 6
+        avatar.sidebarContext = !isRouteModal
+        for v in [ditherHeader, ditherBack, trigger] as [NSView] { v.isHidden = isRouteModal }
+        var y: CGFloat = 8
+        if !isRouteModal {
+            y = DitherChrome.band
+            ditherHeader.frame = NSRect(x: 8, y: y, width: max(0, w - 16 - 28 - 4), height: rowH)
+            trigger.frame = NSRect(x: w - 8 - 28, y: y, width: 28, height: 28)
+            y += rowH + 6
+        }
         search.frame = NSRect(x: 8, y: y, width: max(0, w - 16), height: rowH)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         searchFill.frame = search.frame
@@ -482,9 +484,15 @@ public final class SettingsSidebarView: DSView {
                 y += SettingsSearchResultRow.height + 4
             }
         }
-        layoutConcernNavigation(top: y, bottom: h - (t3Connect == .signedOut ? 88 : 48), dither: true)
         let footer: CGFloat = avatar.isHidden ? rowH : 36
         let rowY = h - 8 - footer
+        if isRouteModal {
+            layoutConcernNavigation(top: y, bottom: h - (avatar.isHidden ? (ditherSignIn.isHidden ? 0 : rowH + 16) : 52), dither: true)
+            avatar.frame = NSRect(x: 8, y: h - 44, width: 36, height: 36)
+            ditherSignIn.frame = NSRect(x: 8, y: h - 8 - rowH, width: max(0, w - 16), height: rowH)
+            return
+        }
+        layoutConcernNavigation(top: y, bottom: h - (t3Connect == .signedOut ? 88 : 48), dither: true)
         ditherBack.frame = NSRect(x: 8, y: rowY + (footer - rowH) / 2, width: w - 16 - (avatar.isHidden ? 0 : 36 + 4), height: rowH)
         avatar.frame = NSRect(x: w - 8 - 36, y: rowY, width: 36, height: 36)
         ditherSignIn.frame = NSRect(x: 8, y: rowY - 2 - rowH, width: w - 16, height: rowH)

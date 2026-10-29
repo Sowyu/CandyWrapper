@@ -21,7 +21,7 @@ public final class ExperimentalSettingsView: SettingsPageBase {
     public static let toggles: [ExperimentalToggle] = [
         ExperimentalToggle(title: "Redesign", detail: "CandyWrapper's own look, with a picture behind the chat. Off goes back to the theme you had before.", isOn: { ThemeLibrary.shared.isRedesignOn }, set: { ThemeLibrary.shared.setRedesign($0) }, observe: { f in let id = ThemeLibrary.shared.observe(f); return { ThemeLibrary.shared.removeObserver(id) } }),
         ExperimentalToggle(title: "Orchestrator", detail: "One thread that manages every thread on its machine. It adds a pinned row to the sidebar, its own chat and an Orchestrator tab here in Settings.", needsRedesign: true, isOn: { OrchestratorStore.shared.config.enabled }, set: { on in OrchestratorStore.shared.update { $0.enabled = on } }, observe: { f in let id = OrchestratorStore.shared.observe(f); return { OrchestratorStore.shared.removeObserver(id) } }),
-        ExperimentalToggle(title: "Tabs", detail: "A tab strip at the top of the window for open threads, Settings and other pages. Cmd-click a thread to open it in a new tab.", needsRedesign: true, isOn: { ThreadTabsSetting.isOn }, set: { ThreadTabsSetting.set($0) }, observe: { ThreadTabsSetting.observe($0) }),
+        ExperimentalToggle(title: "Tabs", detail: "A tab strip at the top of the window for open threads and other pages. Cmd-click a thread to open it in a new tab.", needsRedesign: true, isOn: { ThreadTabsSetting.isOn }, set: { ThreadTabsSetting.set($0) }, observe: { ThreadTabsSetting.observe($0) }),
     ]
 
     private var unsubscribe: [() -> Void] = []

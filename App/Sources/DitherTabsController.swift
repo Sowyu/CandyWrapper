@@ -5,8 +5,8 @@ import T3Protocol
 import T3Store
 
 /// Dither's tab strip and history buttons (after Capy). Each tab shows one route from the window's `RouteHistory`: a
-/// thread, the new-thread draft, Settings, Pull requests or Usage. Like Capy and a browser, navigating shows the new
-/// route in the current tab; + and Cmd-click open a new one, and a route already open in another tab switches there.
+/// thread, the new-thread draft, Pull requests or the Orchestrator; Settings and Usage float over the tab's route.
+/// Like Capy and a browser, navigating shows the new route in the current tab; + and Cmd-click open a new one, and a route already open in another tab switches there.
 /// Back and forward step through the history. Tabs last for this run only. The Experimental Tabs switch hides them
 /// and their entry points; while it is off the list stands still, so turning it on brings back the same tabs.
 @MainActor
@@ -74,7 +74,8 @@ final class DitherTabsController {
         layout.backButton.isEnabled = history.canGoBack
         layout.forwardButton.isEnabled = history.canGoForward
         guard let sidebar, ThreadTabsSetting.isOn else { return }
-        if let active = current() {
+        // Settings and Usage float over the route in their tab, so the tab keeps showing that route.
+        if let active = current(), !Self.floats(active) {
             let changed = list.selectedKey != DitherTabList.key(active)
             list.shown(active, newTab: opensNewTab && changed)
             if changed { opensNewTab = false }
@@ -112,6 +113,13 @@ final class DitherTabsController {
             }
         }
         strip.selected = list.selectedKey
+    }
+
+    private static func floats(_ route: RouteHistory.Route) -> Bool {
+        switch route {
+        case .settings, .usage: true
+        default: false
+        }
     }
 
     private func select(_ key: String) {

@@ -185,15 +185,6 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         }
         return home(of: page)
     }
-
-    /// Where Escape goes from a page reached inside a section.
-    public static func parent(of page: SettingsSection) -> DitherSettingsSection? {
-        switch page {
-        case .diagnostics: .advanced
-        case .licenses: .about
-        default: nil
-        }
-    }
 }
 
 /// Part of a T3 page shown in a Redesign section.

@@ -158,8 +158,30 @@ struct RedesignBaselineTests {
                 let page = DitherSettingsSectionView(section: section, pages: pages)
                 try capture("settings-" + section.rawValue, page, NSSize(width: 800, height: min(1800, max(100, page.height(forWidth: 800)))))
             }
+            // Settings and Usage float over the route on Redesign's pill surface; Reduce Transparency makes the pill opaque.
+            for (name, reduce) in [("settings-modal", false), ("settings-modal-reduce-transparency", true), ("usage-modal", false)] {
+                DitherPill.reduceTransparencyOverride = reduce
+                defer { DitherPill.reduceTransparencyOverride = nil }
+                let page = SettingsPageView()
+                page.header.isRouteModal = true
+                var nav: SettingsSidebarView?
+                if name.hasPrefix("settings") {
+                    var pages: [NSView & SettingsGroupRow] = []
+                    NSAppearance(named: .aqua)!.performAsCurrentDrawingAppearance {
+                        pages = DitherSettingsSection.appearance.slices.map { Self.page($0.page, context: context) as NSView & SettingsGroupRow }
+                    }
+                    page.header.section = .appearance
+                    page.page = DitherSettingsSectionView(section: .appearance, pages: pages)
+                    nav = SettingsSidebarView()
+                    nav?.isRouteModal = true
+                    nav?.selected = .appearance
+                } else {
+                    page.header.plainTitle = "Usage"
+                }
+                try capture(name, AppRouteModalView(label: "Settings", content: page, navigation: nav), NSSize(width: 1100, height: 780))
+            }
         }
-        #expect(count == 80)
+        #expect(count == 86)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 

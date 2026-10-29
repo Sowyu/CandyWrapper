@@ -282,7 +282,7 @@ final class SidebarCommands {
     /// The value `thread.copyReference` copies, nil when there is none.
     var threadReference: String? { threadReferenceTarget?.value }
 
-    var isUsagePageOpen: Bool { usageModal != nil || (utilityPage != nil && utilityKind == .usage) }
+    var isUsagePageOpen: Bool { usageModal != nil }
     var isUtilityPageOpen: Bool { usageModal != nil || utilityPage != nil }
 
     /// The route's thread (`routeThreadKey`): none while Usage or Pull Requests shows, so parking or
@@ -931,18 +931,17 @@ final class SidebarCommands {
     /// The Orchestrator's pane left the main area (Redesign).
     var onOrchestratorHidden: () -> Void = {}
 
-    /// A route modal returns to the current utility page; Redesign keeps its existing tab transition.
+    /// Settings floats over the current utility page; only a floating Usage gives way.
     func prepareForSettings() {
-        if ThemeRuntime.isDither(dark: window?.effectiveAppearance.isDark ?? true) { closeUtilityPage() }
-        else { recordUsageModalClose = false; usageModal?.close(animated: false) }
+        recordUsageModalClose = false
+        usageModal?.close(animated: false)
     }
 
-    /// Pull Requests replaces the thread panel; Usage floats above the current route in default themes.
-    /// Redesign keeps its utility pages as tabs.
+    /// Pull Requests and Redesign's Orchestrator replace the thread panel; Usage floats above the current route.
     func openUtilityPage(_ page: UtilityPage, view custom: NSView? = nil) {
         guard let layout, let sidebar else { return }
         closeSettings()
-        if page == .usage, !ThemeRuntime.isDither(dark: window?.effectiveAppearance.isDark ?? true), let window {
+        if page == .usage, let window {
             if usageModal != nil { return }
             // Usage floats over the route that opened it, including Pull Requests.
             usage.page.header.isRouteModal = true
@@ -964,10 +963,8 @@ final class SidebarCommands {
             return
         }
         if let usageModal { recordUsageModalClose = false; usageModal.close(animated: false) }
-        if page == .usage { usage.page.header.isRouteModal = false }
-        let view: NSView = custom ?? (page == .pullRequests ? pullRequestsPage.container : usage.page)
+        let view: NSView = custom ?? pullRequestsPage.container
         if utilityKind == .pullRequests && page != .pullRequests { pullRequestsPage.didHide() }
-        if utilityKind == .usage && page != .usage { usage.didHide() }
         if utilityKind == .orchestrator && utilityPage != nil && page != .orchestrator { onOrchestratorHidden() }
         utilityPage?.removeFromSuperview()
         threads.panel.removeFromSuperview()
@@ -981,9 +978,6 @@ final class SidebarCommands {
         if page == .pullRequests {
             pullRequestsPage.didShow()
             window?.makeFirstResponder(pullRequestsPage.container)
-        } else if page == .usage {
-            usage.didShow()
-            window?.makeFirstResponder(usage.page)
         }
         onRouteChange?()
     }
@@ -994,7 +988,6 @@ final class SidebarCommands {
         if let usageModal { recordUsageModalClose = record; usageModal.close(animated: record); return }
         guard let layout, let page = utilityPage else { return }
         if utilityKind == .pullRequests { pullRequestsPage.didHide() }
-        if utilityKind == .usage { usage.didHide() }
         let wasOrchestrator = utilityKind == .orchestrator
         page.removeFromSuperview()
         utilityPage = nil

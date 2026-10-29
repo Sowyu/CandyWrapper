@@ -20,8 +20,6 @@ struct SettingsConcernTests {
 
     @Test func pageNamesAndOrderFollow3814WithExperimentalLast() {
         #expect(SettingsSection.navSections.map(\.label) == ["General", "Appearance", "Chat", "Diffs & pull requests", "Keybindings", "SnapShots", "Providers", "Threads", "Browser", "Devices", "Scheduled tasks", "Projects", "Source control", "Worktrees", "Environments", "Sharing & access", "Maintenance", "Labs", "About", "Archive", "Experimental"])
-        #expect(SettingsSection.diagnostics.parent == .maintenance)
-        #expect(SettingsSection.licenses.parent == .about)
     }
 
     @Test func movedRowsKeepTheirSearchAnchorsAndDestinations() {
