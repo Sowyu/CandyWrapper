@@ -10,8 +10,8 @@ import os
 /// leaves the art still.
 public final class DitherArtView: NSView {
     private let art = CALayer()
-    /// The background over the art, one share across the panel.
-    private let scrim = CALayer()
+    /// The background over the art, one share across the panel, plus a faint veil of it behind the chat column.
+    private let scrim = CAGradientLayer()
     /// The band's color over the panel's top, so the art meets the tab strip band with no edge.
     private let blend = CAGradientLayer()
     /// How far down the panel the band's color reaches: the thread header's height. The blend eases out from the top
@@ -36,7 +36,9 @@ public final class DitherArtView: NSView {
         // exactly `dot` and every dot is the same whole number of device pixels.
         art.contentsGravity = .resize
         art.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
-        scrim.actions = ["bounds": NSNull(), "position": NSNull()]
+        scrim.actions = ["bounds": NSNull(), "position": NSNull(), "colors": NSNull(), "locations": NSNull()]
+        scrim.startPoint = CGPoint(x: 0, y: 0.5)
+        scrim.endPoint = CGPoint(x: 1, y: 0.5)
         layer?.masksToBounds = true
         layer?.addSublayer(art)
         layer?.addSublayer(scrim)
@@ -106,6 +108,15 @@ public final class DitherArtView: NSView {
         for art in arts.allObjects { art.updateScrim() }
     }
 
+    /// A thread page calls this from its layout with its chat column, in its own coordinates, so the art's veil sits
+    /// behind it. Pass nil when there is no column.
+    @MainActor
+    public static func setColumn(_ column: NSRect?, from source: NSView) {
+        guard columns.object(forKey: source)?.rectValue != column else { return }
+        if let column { columns.setObject(NSValue(rect: column), forKey: source) } else { columns.removeObject(forKey: source) }
+        art(behind: source)?.updateScrim()
+    }
+
     /// The art showing behind `source`, if any.
     @MainActor
     static func art(behind source: NSView) -> DitherArtView? {
@@ -149,6 +160,8 @@ public final class DitherArtView: NSView {
     /// Each registered page and its emphasis, weakly held.
     @MainActor private static let sources = NSMapTable<NSView, EmphasisBox>.weakToStrongObjects()
     @MainActor private static let arts = NSHashTable<DitherArtView>.weakObjects()
+    /// Each thread page's chat column, weakly held.
+    @MainActor private static let columns = NSMapTable<NSView, NSValue>.weakToStrongObjects()
 
     public override func updateLayer() {
         updateScrim()
@@ -203,19 +216,22 @@ public final class DitherArtView: NSView {
 
     /// What the panel shows over the art: the frontmost registered page that's visible inside it decides, whatever
     /// order the pages registered in, and an unregistered page gets the heavy scrim.
-    var page: DitherArt.Page {
-        guard let panel = superview, window != nil else { return .page }
+    var page: DitherArt.Page { front.page }
+
+    /// The frontmost registered page showing inside the panel and what it shows.
+    private var front: (page: DitherArt.Page, view: NSView?) {
+        guard let panel = superview, window != nil else { return (.page, nil) }
         let showing = (Self.sources.keyEnumerator().allObjects as? [NSView] ?? []).filter {
             $0.window === window && $0.isDescendant(of: panel) && !$0.isHiddenOrHasHiddenAncestor && !$0.visibleRect.isEmpty
         }
         guard let front = showing.max(by: { Self.isInFront($1, of: $0) }), let emphasis = Self.sources.object(forKey: front)?.emphasis else {
-            return .page
+            return (.page, nil)
         }
         switch emphasis {
-        case .hero: return .hero
-        case .thread: return .thread
-        case .settings: return .settings
-        case .page: return .page
+        case .hero: return (.hero, front)
+        case .thread: return (.thread, front)
+        case .settings: return (.settings, front)
+        case .page: return (.page, front)
         }
     }
 
@@ -238,7 +254,7 @@ public final class DitherArtView: NSView {
         let background = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background.nsColor
         let display = (reduceTransparency: ThemeRuntime.reducesTransparency(system: systemReducesTransparency()),
                        increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast)
-        let page = self.page
+        let (page, front) = self.front
         let duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.2
         CATransaction.begin()
         CATransaction.setAnimationDuration(duration)
@@ -250,6 +266,16 @@ public final class DitherArtView: NSView {
         scrim.backgroundColor = background.withAlphaComponent(alpha).cgColor
         CATransaction.commit()
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        // The veil follows the column through a live resize, so it never animates.
+        let veil = DitherArt.veil(page, reduceTransparency: display.reduceTransparency)
+        if veil > 0, bounds.width >= 1, let front, let column = Self.columns.object(forKey: front)?.rectValue {
+            let lane = convert(column, from: front)
+            let xs = (0...64).map { bounds.width * CGFloat($0) / 64 }
+            scrim.locations = xs.map { NSNumber(value: Double($0 / bounds.width)) }
+            scrim.colors = xs.map { background.withAlphaComponent(veil * DitherArt.veilShare($0, lane: lane.minX...lane.maxX)).cgColor }
+        } else {
+            scrim.colors = nil
+        }
         let band = DitherChrome.bandColor(in: self)
         // Bottom (no band) to top (all band).
         let ts = (0...10).reversed().map { Double($0) / 10 }
@@ -351,6 +377,37 @@ public enum DitherArt {
         case .settings: 0.88
         case .page: pageScrim
         }
+    }
+
+    /// The veil behind an open thread's chat column: a little more background over the art there, so muted text keeps
+    /// its contrast, and so faint the column never shows as a shape (the user, 2026-10-29). Reduce Transparency's
+    /// heavier scrim already covers it.
+    nonisolated static let veilAlpha: CGFloat = 0.12
+    /// How far beside the column the veil fades out, in points.
+    nonisolated static let veilFeather: CGFloat = 360
+
+    nonisolated static func veil(_ page: Page, reduceTransparency: Bool) -> CGFloat {
+        page == .thread && !reduceTransparency ? veilAlpha : 0
+    }
+
+    /// The veil's strength at `x`: full over the lane, easing to nothing `veilFeather` beside it.
+    nonisolated static func veilShare(_ x: CGFloat, lane: ClosedRange<CGFloat>) -> CGFloat {
+        let distance = x < lane.lowerBound ? lane.lowerBound - x : x > lane.upperBound ? x - lane.upperBound : 0
+        return CGFloat(smoothstep(0, 1, 1 - Double(distance / veilFeather)))
+    }
+
+    /// The brightest (dark) or darkest (light) art dot behind the chat column, as an sRGB gray, for a "Background dim"
+    /// of `dim`: the background moved by the full reach, under the thread's scrim and the veil. Muted text keeps 4.5:1
+    /// over it (`ThemeRuntime.resolve`).
+    nonisolated static let readableMembers: Set<String> = ["--muted-foreground", "--contrast-muted-foreground",
+                                                           "--secondary-label", "--contrast-secondary-label"]
+
+    nonisolated static func worstBackground(_ background: TokenColor, dark: Bool, dim: Double) -> Double {
+        let scrim = dark ? dim : max(dim, 0.65 + 0.35 * dim)
+        let cover = scrim + Double(veilAlpha) * (1 - scrim)
+        let bg = (background.srgb.x + background.srgb.y + background.srgb.z) / 3
+        let shift = reach / 255 * (1 - cover)
+        return min(max(dark ? bg + shift : bg - shift, 0), 1)
     }
 
     struct Request: Hashable, Sendable {

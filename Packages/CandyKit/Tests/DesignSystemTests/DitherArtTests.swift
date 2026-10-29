@@ -208,4 +208,40 @@ struct DitherTabStripAccessibilityTests {
         #expect(normal.label >= 0.7)
         #expect(high.label > normal.label && high.icon > normal.icon)
     }
+
+    /// Over the brightest (dark) or darkest (light) dot behind the chat column, Redesign's muted text keeps 4.5:1 in
+    /// its own colors and in another theme's, at any "Background dim" where any text could.
+    @Test func mutedTextKeepsContrastOverTheArt() {
+        for theme in [ThemeDefinition.dither] + ThemeDefinition.builtIns.prefix(3) {
+            for dim in [0, 35, 90] {
+                var input = ThemeRuntimeInput(light: theme.colors(for: .light).map { ThemeRuntimeHalf(colors: $0) },
+                                              dark: theme.colors(for: .dark).map { ThemeRuntimeHalf(colors: $0) })
+                input.ditherLight = true; input.ditherDark = true; input.ditherDim = dim
+                let palettes = ThemeRuntime.resolve(input)
+                for dark in [false, true] {
+                    let p = palettes.palette(dark: dark, sidebar: false)
+                    let worst = WindowGlass.linear(DitherArt.worstBackground(p.background, dark: dark, dim: Double(dim) / 100))
+                    for c in [p.mutedForeground, p.secondaryLabel] {
+                        let l = WindowGlass.luminance(c)
+                        let ratio = (max(l, worst) + 0.05) / (min(l, worst) + 0.05)
+                        // At no dim a lighter dark background can leave even white short; then the text is white.
+                        #expect(ratio >= 4.5 || (dark && l > 0.999), "\(theme.id) dim \(dim) dark \(dark): \(ratio)")
+                    }
+                }
+            }
+        }
+    }
+
+    /// The veil covers the chat column, eases out beside it, and is gone off a thread or under Reduce Transparency.
+    @Test func veilFadesBesideTheColumn() {
+        let lane: ClosedRange<CGFloat> = 300...1100
+        #expect(DitherArt.veilShare(700, lane: lane) == 1)
+        #expect(DitherArt.veilShare(300, lane: lane) == 1)
+        #expect(DitherArt.veilShare(300 - DitherArt.veilFeather, lane: lane) == 0)
+        let mid = DitherArt.veilShare(1100 + DitherArt.veilFeather / 2, lane: lane)
+        #expect(mid > 0.4 && mid < 0.6)
+        #expect(DitherArt.veil(.thread, reduceTransparency: false) == DitherArt.veilAlpha)
+        #expect(DitherArt.veil(.thread, reduceTransparency: true) == 0)
+        #expect(DitherArt.veil(.hero, reduceTransparency: false) == 0)
+    }
 }

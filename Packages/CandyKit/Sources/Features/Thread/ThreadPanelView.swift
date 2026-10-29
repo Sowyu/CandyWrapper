@@ -1559,6 +1559,7 @@ public final class ThreadPanelView: DSView {
         let width = placement.width
         let height = composer.preferredHeight
         let x = placement.x.rounded()
+        DitherArtView.setColumn(NSRect(x: x, y: 0, width: width, height: chatHeight), from: self)
         if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
             return layoutDitherComposer(chat: chat, chatHeight: chatHeight, x: x, width: width, height: height)
         }

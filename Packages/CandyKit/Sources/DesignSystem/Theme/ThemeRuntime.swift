@@ -111,7 +111,8 @@ public enum ThemeRuntime {
         if next.light != old.light || next.dark != old.dark || next.contrast != old.contrast || next.blueOrangeDiff != old.blueOrangeDiff
             || next.glassLight != old.glassLight || next.glassDark != old.glassDark
             || next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark
-            || (next.glassOpacity != old.glassOpacity && (next.glassLight || next.glassDark || next.ditherLight || next.ditherDark)) {
+            || (next.glassOpacity != old.glassOpacity && (next.glassLight || next.glassDark || next.ditherLight || next.ditherDark))
+            || (next.ditherDim != old.ditherDim && (next.ditherLight || next.ditherDark)) {
             let resolved = resolve(next)
             if !resolved.isSame(as: palettes) {
                 palettes = resolved
@@ -218,8 +219,17 @@ public enum ThemeRuntime {
             }
             // Dither: the main panel's cards, bubbles and popovers become frosted panes over its art. The sidebar and
             // the panel's own background stay solid.
+            // Its muted text keeps 4.5:1 over the brightest dot behind the chat column, in any theme's colors.
             if !sidebar, dark ? input.ditherDark : input.ditherLight {
-                return WindowGlass.frosted(palette, dark: dark, sidebar: false, opacity: Double(input.glassOpacity) / 100,
+                let worst = WindowGlass.linear(DitherArt.worstBackground(palette.background, dark: dark,
+                                                                         dim: Double(min(max(input.ditherDim, 0), 90)) / 100))
+                let members = palette.members
+                let readable = Palette(members: { i in
+                    let c = members[i]
+                    guard DitherArt.readableMembers.contains(Palette.memberNames[i]), c.srgb.w >= 1 else { return c }
+                    return WindowGlass.readable(c, over: worst, ratio: 4.6, dark: dark)
+                })
+                return WindowGlass.frosted(readable, dark: dark, sidebar: false, opacity: Double(input.glassOpacity) / 100,
                                            lines: true)
             }
             guard dark ? input.glassDark : input.glassLight else { return palette }

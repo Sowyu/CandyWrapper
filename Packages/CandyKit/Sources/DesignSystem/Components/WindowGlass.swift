@@ -54,6 +54,11 @@ public enum WindowGlass {
         \.secondaryLabel, \.contrastSecondaryLabel, \.placeholder, \.contrastPlaceholder,
     ]
 
+    /// The muted text roles Redesign dark paints at full strength in the main panel (`DitherArt.readableMembers`).
+    nonisolated(unsafe) static let ditherFullStrength: Set<KeyPath<Palette, TokenColor>> = [
+        \.mutedForeground, \.contrastMutedForeground, \.secondaryLabel, \.contrastSecondaryLabel,
+    ]
+
     /// `palette` with every text color moved, if it must, until it keeps its ratio over the frost's worst background.
     /// Light text darkens and dark text lightens in linear light, so colored text keeps its hue.
     nonisolated static func frostReadable(_ palette: Palette, dark: Bool, sidebar: Bool, opacity: Double) -> Palette {
