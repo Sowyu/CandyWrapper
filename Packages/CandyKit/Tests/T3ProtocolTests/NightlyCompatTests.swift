@@ -240,6 +240,12 @@ struct NightlyCompatTests {
         #expect(try JSONDecoder().decode(ServerProviderConfig.self, from: Data(#"{"providers":[]}"#.utf8)).lastEventLoopStall == nil)
     }
 
+    @Test func directEndpointsKeepTheirAddresses() throws {
+        let json = #"{"providers":[],"directEndpoints":[{"kind":"lan","httpBaseUrl":"http://192.168.1.20:3773"},{"kind":"tailnet","httpBaseUrl":"http://100.64.0.2:3773"}]}"#
+        #expect(try JSONDecoder().decode(ServerProviderConfig.self, from: Data(json.utf8)).directEndpoints
+                == ["http://192.168.1.20:3773", "http://100.64.0.2:3773"])
+    }
+
     /// 3669 adds `awaited` to background tasks (orchestrationV2.ts:556-562); 3473 sends none.
     @Test func backgroundTaskAwaitedIsOptional() throws {
         let old = try JSONDecoder().decode(PendingBackgroundTask.self, from: Data(#"{"taskId":"a","kind":"monitor"}"#.utf8))

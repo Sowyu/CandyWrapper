@@ -20,28 +20,40 @@ enum PeerLinkDialog {
     }
 
     /// `linkableMachines` (client-runtime/src/linkRequest.ts:82-170): this machine and the saved ones other than the
-    /// host, in catalog order, each with the addresses another machine could reach. An SSH machine's forward lives in
-    /// this app, so only its relay counts. This app mints a code where its session grants `access:write`.
+    /// host, in catalog order, each with the addresses another machine could reach: those it reports
+    /// (`directEndpoints`), its saved routes, then its T3 Connect address. An SSH machine's forward lives in this app,
+    /// so only its relay counts. A loopback address names whichever machine opens it, so it's offered only to a host on
+    /// this Mac; T3 sends it anyway and the host spends its probe timeout learning nothing answers there
+    /// (PeerLinks.ts:42-43, 347-380). This app mints a code where its session grants `access:write`.
     // ponytail: machines known only to T3 Connect aren't offered; type their address. Add them when users link Connect-only hosts.
-    static func machines(_ environments: Environments, hostId: String, primaryLabel: String?, linked: Set<String>) -> [LinkableMachine] {
+    static func machines(_ environments: Environments, hostId: String, primaryLabel: String?, linked: Set<String>,
+                         reported: (String) -> [String] = { _ in [] }) -> [LinkableMachine] {
         func canMint(_ id: String) -> Bool {
             environments.state(id)?.status == .connected && environments.canCreateGuestShare(id)
         }
+        let hostIsLocal = environments.saved.first { $0.environmentId == hostId }?.sshTarget == nil
+            && (environments.session(hostId).map { $0.http.baseURL.host.map { ConnectRoutes.kind(host: $0) == .loopback } ?? false } ?? false)
+        func reachable(_ id: String, routes: [String]) -> [String] {
+            ConnectRoutes.linkURLs(reported: reported(id).compactMap(URL.init(string:)).map(EnvironmentRoute.origin), routes: routes,
+                                   connect: environments.connectEndpoints[id], hostIsLocal: hostIsLocal)
+        }
         var machines: [LinkableMachine] = []
         if let primary = environments.primaryId, primary != hostId, let shell = environments.session(primary) {
-            machines.append(LinkableMachine(environmentId: primary, label: primaryLabel ?? environments.label(primary) ?? "This machine",
+            let label = primaryLabel ?? environments.label(primary) ?? "This machine"
+            machines.append(LinkableMachine(environmentId: primary, label: label,
                                             connected: environments.state(primary)?.status == .connected, linked: linked.contains(primary),
-                                            urls: [EnvironmentRoute.origin(shell.http.baseURL)], canMint: canMint(primary)))
+                                            urls: reachable(primary, routes: [EnvironmentRoute.origin(shell.http.baseURL)]), canMint: canMint(primary),
+                                            noAddressHint: "Other machines can't reach \(label): its server listens only on this Mac and it isn't on "
+                                                + "T3 Connect. Turn on T3 Connect or Network access for it in T3 Code's Settings → Connections, "
+                                                + "or enter its https or Tailscale address."))
         }
         for r in environments.saved where r.environmentId != hostId && r.environmentId != environments.primaryId {
-            var urls: [String] = []
-            if r.sshTarget == nil {
-                for u in [r.httpBaseURL] + r.alternateRoutes where !urls.contains(EnvironmentRoute.origin(u)) { urls.append(EnvironmentRoute.origin(u)) }
-            }
-            if let relay = r.relay?.endpoint.httpBaseUrl, !urls.contains(relay) { urls.append(relay) }
+            let routes = r.sshTarget != nil ? [] : ([r.httpBaseURL] + r.alternateRoutes).map(EnvironmentRoute.origin)
             machines.append(LinkableMachine(environmentId: r.environmentId, label: r.label,
                                             connected: environments.state(r.environmentId)?.status == .connected,
-                                            linked: linked.contains(r.environmentId), urls: urls, canMint: canMint(r.environmentId)))
+                                            linked: linked.contains(r.environmentId),
+                                            urls: reachable(r.environmentId, routes: routes + [r.relay?.endpoint.httpBaseUrl].compactMap { $0 }),
+                                            canMint: canMint(r.environmentId)))
         }
         return machines
     }

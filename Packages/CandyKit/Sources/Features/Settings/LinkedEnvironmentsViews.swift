@@ -143,9 +143,11 @@ public struct LinkableMachine: Equatable {
     public var urls: [String]
     /// Connected with a session there that may create pairing codes, so the dialog mints one itself.
     public var canMint: Bool
-    public init(environmentId: String, label: String, connected: Bool, linked: Bool, urls: [String], canMint: Bool) {
+    /// What to turn on so other machines reach it, shown when `urls` is empty. Nil keeps T3's generic line.
+    public var noAddressHint: String?
+    public init(environmentId: String, label: String, connected: Bool, linked: Bool, urls: [String], canMint: Bool, noAddressHint: String? = nil) {
         self.environmentId = environmentId; self.label = label; self.connected = connected; self.linked = linked
-        self.urls = urls; self.canMint = canMint
+        self.urls = urls; self.canMint = canMint; self.noAddressHint = noAddressHint
     }
 }
 
@@ -236,6 +238,7 @@ public final class LinkEnvironmentFormView: DSView {
 
     public var selected: String? { choice ?? (machines.isEmpty ? Self.anotherAddress : nil) }
     public var machine: LinkableMachine? { machines.first { $0.environmentId == selected } }
+    public var addressHintText: String { addressHint.text }
     public var needsAddress: Bool { selected == Self.anotherAddress || machine?.urls.isEmpty == true }
     /// This client mints the code there (`canMint`), unless that already failed.
     public var mints: Bool { machine.map { $0.canMint && !mintFailed.contains($0.environmentId) } ?? false }
@@ -266,7 +269,7 @@ public final class LinkEnvironmentFormView: DSView {
         addressTitle.isHidden = !address
         addressInput.isHidden = !address
         addressInput.isEnabled = !isBusy
-        addressHint.text = m.map { "This app has no address for \($0.label) that another machine can reach. Enter its https or Tailscale address." } ?? ""
+        addressHint.text = m.map { $0.noAddressHint ?? "This app has no address for \($0.label) that another machine can reach. Enter its https or Tailscale address." } ?? ""
         addressHint.isHidden = !address || m == nil
         let code = selected != nil && !mints && !usesExisting
         codeTitle.isHidden = !code

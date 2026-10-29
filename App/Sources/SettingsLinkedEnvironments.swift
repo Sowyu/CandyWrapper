@@ -77,7 +77,8 @@ extension SettingsController {
             guard case .links(let links)? = peerLinks[hostId] else { return [] }
             return Set(links.filter { $0.status != .expired }.map(\.environmentId))
         }()
-        let machines = PeerLinkDialog.machines(environments, hostId: hostId, primaryLabel: primaryDescriptor?.label, linked: linked)
+        let machines = PeerLinkDialog.machines(environments, hostId: hostId, primaryLabel: primaryDescriptor?.label, linked: linked,
+                                                  reported: { composer?.config($0)?.directEndpoints ?? [] })
         let host = PeerLinkDialog.present(
             in: window, environments: environments, machines: machines,
             toast: { [weak self] title, message, kind in self?.toast(title, message, kind) },

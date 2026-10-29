@@ -47,6 +47,17 @@ public enum ConnectRoutes {
         return routes.enumerated().sorted { ($0.element.kind, $0.offset) < ($1.element.kind, $1.offset) }.map(\.element)
     }
 
+    /// The addresses a link offers a host for one machine (linkRequest.ts:96-115): reported, then saved routes, then
+    /// T3 Connect, each once. A loopback address names whichever machine opens it, so only a host on this device gets one.
+    public static func linkURLs(reported: [String], routes: [String], connect: String?, hostIsLocal: Bool) -> [String] {
+        var urls: [String] = []
+        for u in reported + routes + [connect].compactMap({ $0 }) where !urls.contains(u) {
+            if !hostIsLocal, let host = URLComponents(string: u)?.host, kind(host: host) == .loopback { continue }
+            urls.append(u)
+        }
+        return urls
+    }
+
     /// `connectionRouteKind` for a direct host (routes.ts:89-103, shared/src/hostClassification.ts).
     public static func kind(host: String) -> DirectRoute.Kind {
         let h = normalize(host)

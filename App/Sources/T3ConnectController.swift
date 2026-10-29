@@ -18,7 +18,9 @@ final class T3ConnectController {
     private(set) var signedIn: ClerkAccount?
     private(set) var loaded = false
     /// The account's machines, nil before the first discovery.
-    private(set) var machines: [T3ConnectMachine]?
+    private(set) var machines: [T3ConnectMachine]? {
+        didSet { environments.connectEndpoints = Dictionary((machines ?? []).map { ($0.environmentId, $0.record.endpoint.httpBaseUrl) }) { a, _ in a } }
+    }
     private(set) var discovering = false
     private(set) var discoveryError: String?
     private(set) var adding: Set<String> = []

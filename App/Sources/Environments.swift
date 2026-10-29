@@ -61,6 +61,8 @@ final class Environments {
     /// Ids whose `connectSaved` is reading its route and token.
     private var connecting: Set<String> = []
     private var shellSearchGeneration = 0
+    /// Each T3 Connect machine's relay address by environment id, from the account's last discovery. Link dialogs offer it.
+    var connectEndpoints: [String: String] = [:]
     /// Connects T3 Connect routes. Nil until the account loads; relay machines wait for it.
     var t3Connect: T3ConnectAuthorizer? {
         didSet {

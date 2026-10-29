@@ -708,6 +708,16 @@ struct T3ConnectAuthorizerTests {
 }
 
 struct ConnectRoutesTests {
+    /// A Mac whose server listens on loopback only offers a remote host nothing, so the dialog asks up front.
+    @Test func linkURLsNeverHandARemoteHostALoopbackAddress() {
+        let relay = "https://prod-x.t3coderelay.com/e/mac"
+        #expect(ConnectRoutes.linkURLs(reported: [], routes: ["http://127.0.0.1:58997"], connect: nil, hostIsLocal: false).isEmpty)
+        #expect(ConnectRoutes.linkURLs(reported: ["http://192.168.1.20:3773"], routes: ["http://localhost:58997", "http://127.0.0.2:1"],
+                                       connect: relay, hostIsLocal: false) == ["http://192.168.1.20:3773", relay])
+        #expect(ConnectRoutes.linkURLs(reported: [], routes: ["http://127.0.0.1:58997", relay], connect: relay, hostIsLocal: true)
+                == ["http://127.0.0.1:58997", relay])
+    }
+
     @Test func learnedRoutesDropLoopbackAndRankLikeT3() {
         let routes = ConnectRoutes.learned(from: [
             "https://studio.example.com", "http://100.101.102.103:3773/", "http://127.0.0.1:3773",

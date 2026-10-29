@@ -402,6 +402,9 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     public var newProjectsRoot: String?
     /// `lastEventLoopStall` (server.ts:593-600, 637): the host's latest freeze, sent for a few minutes after it.
     public var lastEventLoopStall: ServerEventLoopStall?
+    /// `directEndpoints[].httpBaseUrl` (server.ts:618-619): LAN and tailnet addresses the host reports. Empty while it
+    /// listens on loopback only (DirectEndpoints.ts:52-59). Hints: check each answers as this environment.
+    public var directEndpoints: [String] = []
 
     public init(providers: [ServerProvider], settings: ServerThreadDefaults = ServerThreadDefaults(), keybindings: [ResolvedKeybindingRule] = [],
                 capabilities: Set<String> = [], keybindingsConfigPath: String? = nil) {
@@ -415,7 +418,8 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case providers, settings, keybindings, environment, keybindingsConfigPath, availableEditors, remoteOpenTargets, shellRevealInFileManager,
              shellRevealInFileManagerKind,
-             scratchWorkspaceRoot, newProjectsRoot, lastEventLoopStall, threadFind, threadFindProgressive, observability, issues
+             scratchWorkspaceRoot, newProjectsRoot, lastEventLoopStall, threadFind, threadFindProgressive, observability, issues,
+             directEndpoints
     }
 
     public init(from decoder: Decoder) throws {
@@ -441,6 +445,7 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
         scratchWorkspaceRoot = try? c.decodeIfPresent(String.self, forKey: .scratchWorkspaceRoot)
         newProjectsRoot = try? c.decodeIfPresent(String.self, forKey: .newProjectsRoot)
         lastEventLoopStall = try? c.decodeIfPresent(ServerEventLoopStall.self, forKey: .lastEventLoopStall)
+        directEndpoints = ((try? c.decodeIfPresent([JSONValue].self, forKey: .directEndpoints)) ?? []).compactMap { $0["httpBaseUrl"]?.stringValue }
     }
 }
 

@@ -51,6 +51,16 @@ struct LinkedEnvironmentsTests {
         #expect(form.urls == ["https://ssh.example.ts.net"])
     }
 
+    @Test func aMachineWithoutAnAddressSaysWhatToTurnOn() {
+        let mac = LinkableMachine(environmentId: "m", label: "MacBook", connected: true, linked: false, urls: [], canMint: true,
+                                  noAddressHint: "Turn on T3 Connect.")
+        let form = LinkEnvironmentFormView(machines: [mac])
+        form.preset(choice: "m", access: nil, lockMachine: false)
+        #expect(form.needsAddress)
+        #expect(!form.ready)
+        #expect(form.addressHintText == "Turn on T3 Connect.")
+    }
+
     /// A link request whose machine is linked already answers `use-existing`, asking for nothing else.
     @Test func aRequestForALinkedMachineUsesTheLink() {
         let form = LinkEnvironmentFormView(machines: [Self.box, Self.ssh])

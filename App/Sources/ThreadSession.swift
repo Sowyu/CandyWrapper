@@ -1686,7 +1686,8 @@ extension ThreadController {
             // `useLinkableMachines` lists the environment's links on open, to mark the machines already linked.
             let links = (try? PeerLinkSummary.list(try await environments.request(env, "peerLinks.list", .object([:])))) ?? []
             let linked = Set(links.filter { $0.status != .expired }.map(\.environmentId))
-            var machines = PeerLinkDialog.machines(environments, hostId: env, primaryLabel: nil, linked: linked)
+            var machines = PeerLinkDialog.machines(environments, hostId: env, primaryLabel: nil, linked: linked,
+                                                    reported: { composer.config($0)?.directEndpoints ?? [] })
             let named = item.string("environmentId"), url = item.string("url")
             if let named, !machines.contains(where: { $0.environmentId == named }) {
                 // A machine this app doesn't know: link it at the address the agent gave, or one typed in.
