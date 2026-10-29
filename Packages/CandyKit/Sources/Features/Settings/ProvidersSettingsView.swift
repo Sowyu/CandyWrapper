@@ -363,7 +363,7 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         providers.refresh.isEnabled = !refreshing
         let last = live.map { $0.checkedAt ?? "" }.max()
         providers.setChecked(refreshing ? "Refreshing providers" : last.map { iso -> String in
-            let label = TimestampFormat.formatRelativeTimeLabel(iso, nowMs: TimestampFormat.nowMs())
+            let label = TimestampFormat.formatRelativeTimeLabel(iso, nowMs: context.nowMs())
             return label.isEmpty ? "Checked unavailable" : "Checked \(label)"
         })
         // The project's checkouts on this environment (settings.providers.tsx:28-34). Servers without

@@ -147,6 +147,7 @@ struct RedesignBaselineTests {
             }
             let context = SettingsPagesFidelityTests.context()
             context.configs = ["a": try PickersFidelityTests.recordedConfig()]
+            context.nowMs = { TimestampFormat.nowMs(Self.now) }
             for section in DitherSettingsSection.allCases {
                 // The original fixtures constructed fixed layer colors in Aqua, even for a dark canvas.
                 // An earlier snapshot can leave a different ambient drawing appearance on this thread.

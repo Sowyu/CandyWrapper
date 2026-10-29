@@ -19,6 +19,8 @@ public final class SettingsPageContext {
     public var serverKeybindings: [ResolvedKeybindingRule] = []
     public var keybindingsConfigPath: String?
     public var appVersion = ""
+    /// The clock behind relative "Checked …" labels. Snapshot tests pin it.
+    public var nowMs: () -> Int64 = { TimestampFormat.nowMs() }
     /// The app updater's state (`useDesktopUpdateState`) for the Version and Update track rows.
     public var update: DesktopUpdateState?
     public var runtimeUpdate: DesktopUpdateState?
