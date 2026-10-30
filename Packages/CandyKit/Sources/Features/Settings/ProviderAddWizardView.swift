@@ -54,6 +54,7 @@ public final class ProviderAddWizardView: DialogView {
             let grid = ProviderAddDriverGrid(choices: choices.map { ($0.0, $0.1) }, selected: driver)
             grid.onSelect = { [weak self] driver in self?.driver = driver; self?.error = nil; self?.rebuild() }
             body.append(grid)
+            if let note = multipleAccountsNote(context: context, environment: environment, driver: driver) { body.append(note) }
             let search = InputView(placeholder: "Search ACP Registry", size: .sm)
             search.frame.size = NSSize(width: 180, height: 32)
             let button = ButtonView("Search registry", variant: .outline, size: .sm)
@@ -253,4 +254,16 @@ final class ProviderAddDriverChoice: ControlView {
         disc.frame = CGRect(x: bounds.width - 32, y: (bounds.height - 20) / 2, width: 20, height: 20)
         check.frame = NSRect(x: bounds.width - 29, y: (bounds.height - 14) / 2, width: 14, height: 14)
     }
+}
+
+/// T3 apps/web/src/components/settings/MultipleAccountsNote.tsx:24-45 (3814).
+@MainActor
+func multipleAccountsNote(context: SettingsPageContext, environment: String, driver: String) -> AlertView? {
+    guard let message = ProviderSetupLogic.multipleAccountsMessage(driver: driver, providers: context.configs[environment]?.providers ?? []) else { return nil }
+    let note = AlertView(nil, message: message, icon: .info, variant: .info)
+    note.setAccessibilityRoleDescription("note")
+    let more = ButtonView("More info", variant: .link, size: .sm)
+    more.action = { if let url = URL(string: ProviderSetupLogic.multipleAccountsFAQ) { NSWorkspace.shared.open(url) } }
+    note.actions = [more]
+    return note
 }
