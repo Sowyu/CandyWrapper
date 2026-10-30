@@ -17,7 +17,7 @@ final class HandoffDividerView: DSView {
     private let detail = DSView()
     private var parts: [(view: NSView, width: CGFloat, gap: CGFloat, label: LabelView?)] = []
     private var endpoints: HandoffEndpoints?
-    private var providers: [ServerProvider] = []
+    private var endpointLabels: [EndpointLabel] = []
     private var failed = false
 
     override init(frame frameRect: NSRect) {
@@ -35,13 +35,14 @@ final class HandoffDividerView: DSView {
         let tone = failed ? TL.c(\.destructive) : TL.c(\.mutedForeground)
         label.color = tone
         icon.strokeColor = tone
-        guard endpoints != self.endpoints || providers != self.providers || failed != self.failed else { return }
+        let labels = Self.labels(endpoints, providers: providers)
+        guard endpoints != self.endpoints || labels != endpointLabels || failed != self.failed else { return }
         self.endpoints = endpoints
-        self.providers = providers
+        endpointLabels = labels
         self.failed = failed
         parts.forEach { $0.view.removeFromSuperview() }
         parts = []
-        for (i, endpoint) in endpoints.from.enumerated() {
+        for (i, endpoint) in labels.dropLast().enumerated() {
             if i > 0 {
                 // `-ml-1` on the comma.
                 let comma = LabelView(",", font: TL.font(11), color: tone)
@@ -51,21 +52,34 @@ final class HandoffDividerView: DSView {
             appendEndpoint(endpoint, tone: tone, gap: i > 0 ? 6 : 0)
         }
         if !endpoints.from.isEmpty { parts.append((IconView(name: .arrowRight, size: 12, strokeColor: tone), 12, 6, nil)) }
-        appendEndpoint(endpoints.to, tone: tone, gap: endpoints.from.isEmpty ? 0 : 6)
+        appendEndpoint(labels[labels.count - 1], tone: tone, gap: endpoints.from.isEmpty ? 0 : 6)
         parts.forEach { detail.addSubview($0.view) }
         needsLayout = true
     }
 
     /// `HandoffEndpoint` (V2LifecycleRow.tsx:592-640): the instance's glyph and the model's trigger name in the
     /// provider's brand color, else the model slug, else the instance name. Hover shows "<instance> · <model>".
-    private func appendEndpoint(_ endpoint: HandoffEndpoints.Endpoint, tone: NSColor, gap: CGFloat) {
-        let provider = providers.first { $0.instanceId == endpoint.instanceId }
-        let entry = ProviderCatalog(providers).entry(endpoint.instanceId)
-        let model = endpoint.model?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let name = entry?.displayName ?? endpoint.instanceId.rawValue
-        let text = model.flatMap { m in entry?.models.first { $0.slug == m }.map(ModelNames.trigger) }
-            ?? (model?.isEmpty == false ? model! : name)
-        let driver = provider?.driver ?? endpoint.instanceId.rawValue
+    struct EndpointLabel: Hashable {
+        var driver: String
+        var name: String
+        var text: String
+    }
+
+    /// Health, auth and usage pushes do not change the strings or glyphs this divider draws.
+    static func labels(_ endpoints: HandoffEndpoints, providers: [ServerProvider]) -> [EndpointLabel] {
+        let catalog = ProviderCatalog(providers)
+        return (endpoints.from + [endpoints.to]).map { endpoint in
+            let entry = catalog.entry(endpoint.instanceId)
+            let model = endpoint.model?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let name = entry?.displayName ?? endpoint.instanceId.rawValue
+            let text = model.flatMap { m in entry?.models.first { $0.slug == m }.map(ModelNames.trigger) }
+                ?? (model?.isEmpty == false ? model! : name)
+            return EndpointLabel(driver: entry?.driver ?? endpoint.instanceId.rawValue, name: name, text: text)
+        }
+    }
+
+    private func appendEndpoint(_ endpoint: EndpointLabel, tone: NSColor, gap: CGFloat) {
+        let (driver, name, text) = (endpoint.driver, endpoint.name, endpoint.text)
         let box = DSView()
         let glyph = ProviderIcon.make(driver: driver, displayName: name, size: 12, color: tone)
         glyph.frame = NSRect(x: 0, y: 2, width: 12, height: 12)

@@ -29,6 +29,8 @@ struct TimelineRowUI: Hashable {
     var workflowCoordinator: JSONValue?
     /// Runs of this row's preparation failures that a Retry can prepare again.
     var retryRunIds: Set<RunId> = []
+    /// The handoff strings and glyphs form part of the row cache key.
+    var handoffLabels: [HandoffDividerView.EndpointLabel] = []
 }
 
 /// What MCP App rows ask of the environment (McpAppFrame.tsx: `mcpAppEnvironment`, `useTurnItemDetail`).
@@ -133,7 +135,12 @@ public final class ThreadViewModel {
         didSet {
             guard providers != oldValue else { return }
             for item in items {
-                if case .event(let p, _, _) = item.row.kind, p.item.type == .handoff { refreshRow(item.id) }
+                if case .event(let p, _, _) = item.row.kind, p.item.type == .handoff {
+                    let endpoints = HandoffEndpoints.resolve(p.item, runs: projection?.runs ?? [])
+                    if HandoffDividerView.labels(endpoints, providers: providers) != HandoffDividerView.labels(endpoints, providers: oldValue) {
+                        refreshRow(item.id)
+                    }
+                }
             }
         }
     }
@@ -435,6 +442,8 @@ public final class ThreadViewModel {
                 ui.folderOverrides = folderOverrides[run] ?? [:]
             }
         case .proposedPlan(let p): ui.planExpanded = expandedPlans.contains(p.id.rawValue)
+        case .event(let p, _, _) where p.item.type == .handoff:
+            ui.handoffLabels = HandoffDividerView.labels(HandoffEndpoints.resolve(p.item, runs: projection?.runs ?? []), providers: providers)
         case .event(let p, _, _) where p.item.type == .secretRequest:
             if let state = secretStates[row.id] { ui.secretSubmitting = state.submitting; ui.secretError = state.error }
         case .event(let p, let group, _) where p.item.type == .subagent:
