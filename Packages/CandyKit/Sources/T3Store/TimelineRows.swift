@@ -86,6 +86,12 @@ public struct TimelineRow: Sendable, Hashable, Identifiable {
     public var kind: Kind
     /// The next row is also a work log row, so no gap between them.
     public var continuesWorkLog = false
+    /// Another of your messages follows directly, so the two sit closer together (MessagesTimeline.logic.ts:643-648 at 4928).
+    public var groupedWithNext = false
+    /// Another of your messages sits directly above, so the joined corners tighten.
+    public var groupedWithPrevious = false
+    /// The message above is a steer too, so the steer label shows once.
+    public var continuesSteer = false
 
     public init(id: String, createdAt: T3Timestamp?, kind: Kind) {
         self.id = id
@@ -975,7 +981,24 @@ public enum TimelineRows {
         for i in result.indices.dropLast() where result[i].isWorkLog && result[i + 1].isWorkLog {
             result[i].continuesWorkLog = true
         }
+        markUserMessageBursts(&result)
         return result
+    }
+
+    /// Back-to-back messages you typed stack as one burst (MessagesTimeline.logic.ts:2409-2436 at 4928, #27305, #27978).
+    static func markUserMessageBursts(_ rows: inout [TimelineRow]) {
+        func own(_ i: Int) -> ChatMessage? {
+            guard rows.indices.contains(i), case .message(let m, _, _, _, _, _) = rows[i].kind, UserMessagePresentation.isTypedByUser(m) else { return nil }
+            return m
+        }
+        func steer(_ m: ChatMessage) -> Bool { m.inputIntent == .steer || m.inputIntent == .promotedQueuedToSteer }
+        for i in rows.indices {
+            guard let m = own(i) else { continue }
+            let previous = own(i - 1)
+            rows[i].groupedWithNext = own(i + 1) != nil
+            rows[i].groupedWithPrevious = previous != nil
+            rows[i].continuesSteer = previous.map { steer($0) && steer(m) } ?? false
+        }
     }
 
     // MARK: Updates (L:2010-2165)
@@ -1037,6 +1060,9 @@ public enum TimelineRows {
                 TimelineRows.forEachScope(entries[i]) { key in if lastUse[key] == nil { lastUse[key] = n - 1 - i } }
             }
             let head = TimelineRows.derive(Array(entries[..<cut]), input, head: true)
+            // Two of your messages meeting at the seam form a burst that spans the cut, so take the full pass.
+            if let a = head.last?.message, let b = rows[first].message,
+               UserMessagePresentation.isTypedByUser(a), UserMessagePresentation.isTypedByUser(b) { return nil }
             for row in rows[..<first] { if let m = row.message { messageRowsFromEnd[m.id.rawValue] = nil } }
             rows.replaceSubrange(0..<first, with: head)
             addMessageRows(0..<head.count)

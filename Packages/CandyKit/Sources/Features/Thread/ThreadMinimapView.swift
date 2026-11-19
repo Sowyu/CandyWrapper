@@ -14,7 +14,9 @@ public struct ThreadMinimapItem: Equatable, Sendable {
         for (index, row) in rows.enumerated() {
             guard case .message(let message, _, _, _, _, _) = row.kind else { continue }
             if message.role == .user {
-                result.append(Self(id: row.id, rowIndex: index, userText: message.text))
+                // The attachment-only prompt is hidden in the thread, so the minimap shows nothing for it (timelineMinimapItems.ts at 4928).
+                let text = UserMessagePresentation.isAttachmentOnlyBootstrapPrompt(message.text) ? "" : message.text
+                result.append(Self(id: row.id, rowIndex: index, userText: text))
             } else if message.role == .assistant, !result.isEmpty {
                 result[result.count - 1].assistantText = message.text
                 result[result.count - 1].assistantRowIndex = index

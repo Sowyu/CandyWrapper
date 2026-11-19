@@ -313,11 +313,20 @@ final class UserMessageRowView: TimelineRowView {
         toggle.isHidden = !collapsible
         time.text = TL.dayAwareTimestamp(m.createdAt, now: context.now())
         time.toolTip = nil
-        let intent = UserIntentMarkerView.presentation(m.inputIntent)
+        // A burst of your messages shows its steer label once (TimelineUserMessageRow.tsx:888-895 at 4928).
+        let intent = item.row.continuesSteer ? nil : UserIntentMarkerView.presentation(m.inputIntent)
         marker.isHidden = intent == nil
         if let intent { marker.configure(intent) }
+        bubble.joinedTop = item.row.groupedWithPrevious
+        bubble.joinedBottom = item.row.groupedWithNext
         needsLayout = true
     }
+
+    /// `pb-1` under a message another of yours follows, else `pb-4` (MessagesTimeline.tsx:1644-1645 at 4928).
+    private var bottomPadding: CGFloat { item?.row.groupedWithNext == true ? 4 : 16 }
+    /// Inside a burst the actions float beside the bubble once the lane is `@min-[37rem]` wide
+    /// (TimelineUserMessageRow.tsx:839, 1104-1113, 1118-1122 at 4928).
+    private func floatsActions(_ width: CGFloat) -> Bool { item?.row.groupedWithNext == true && width >= 592 }
 
     /// A match below a collapsed message's fold opens it (`data-thread-find-fold`, MessagesTimeline.tsx:4737-4740).
     override func activeFindRect() -> CGRect? {
@@ -421,7 +430,8 @@ final class UserMessageRowView: TimelineRowView {
             return item?.ui.messageExpanded == true ? header + m.attachments + m.body + Self.padding + 4 + 24 + 16 : header + 16
         }
         let footer: CGFloat = collapsible ? 6 + 24 : 0
-        return markerSpace + m.attachments + m.body + footer + Self.padding * 2 + 4 + 24 + 16
+        let actions: CGFloat = floatsActions(width) ? 0 : 4 + 24
+        return markerSpace + m.attachments + m.body + footer + Self.padding * 2 + actions + bottomPadding
     }
 
     override func layout() {
@@ -458,22 +468,37 @@ final class UserMessageRowView: TimelineRowView {
         bubble.layer?.masksToBounds = true
         let size = toggle.intrinsicContentSize
         toggle.frame = NSRect(x: Self.padding - 4, y: Self.padding + attachmentsHeight + m.body + 6, width: size.width, height: size.height)
-        // Hover row: `max-w-[80%] justify-end pe-1 gap-2`, 24px tall under a 4px gap.
-        let rowTop = top + bubbleHeight + 4
         let copySize = copyButton.intrinsicContentSize
-        copyButton.frame = NSRect(x: width - 4 - copySize.width, y: rowTop, width: copySize.width, height: 24)
-        editButton.frame = NSRect(x: copyButton.frame.minX - 28, y: rowTop, width: 24, height: 24)
         let timeWidth = ceil(time.textWidth)
-        time.frame = NSRect(x: (editButton.isHidden ? copyButton.frame.minX : editButton.frame.minX) - 8 - timeWidth, y: rowTop + 4, width: timeWidth, height: 16)
+        let buttonsWidth = copySize.width + (editButton.isHidden ? 0 : 28)
+        if floatsActions(width) {
+            // `absolute end-full top-1/2 me-2 w-max max-w-[calc(20cqw-0.5rem)] -translate-y-1/2`, `flex-wrap justify-end
+            // gap-x-2 gap-y-0.5`: the time and the buttons on one line, or the buttons under the time when they don't fit.
+            let right = bubble.frame.minX - 8
+            let wraps = timeWidth + 8 + buttonsWidth > width * 0.2 - 8
+            let blockHeight: CGFloat = wraps ? 16 + 2 + 24 : 24
+            let blockTop = round(bubble.frame.midY - blockHeight / 2)
+            let buttonsTop = wraps ? blockTop + 16 + 2 : blockTop
+            copyButton.frame = NSRect(x: right - copySize.width, y: buttonsTop, width: copySize.width, height: 24)
+            editButton.frame = NSRect(x: copyButton.frame.minX - 28, y: buttonsTop, width: 24, height: 24)
+            let timeRight = wraps ? right : right - buttonsWidth - 8
+            time.frame = NSRect(x: timeRight - timeWidth, y: wraps ? blockTop : blockTop + 4, width: timeWidth, height: 16)
+        } else {
+            // Hover row: `max-w-[80%] justify-end pe-1 gap-2`, 24px tall under a 4px gap.
+            let rowTop = top + bubbleHeight + 4
+            copyButton.frame = NSRect(x: width - 4 - copySize.width, y: rowTop, width: copySize.width, height: 24)
+            editButton.frame = NSRect(x: copyButton.frame.minX - 28, y: rowTop, width: 24, height: 24)
+            time.frame = NSRect(x: (editButton.isHidden ? copyButton.frame.minX : editButton.frame.minX) - 8 - timeWidth, y: rowTop + 4, width: timeWidth, height: 16)
+        }
         let linkWidth = openLink.fittingWidth
-        openLink.frame = NSRect(x: time.frame.minX - 8 - linkWidth, y: rowTop + 4, width: linkWidth, height: FoldedMessageLinkView.height)
+        openLink.frame = NSRect(x: time.frame.minX - 8 - linkWidth, y: time.frame.minY, width: linkWidth, height: FoldedMessageLinkView.height)
     }
 
     /// T3 puts `group` on the bubble column (MessagesTimeline.tsx:2359), not on the row, so the
     /// row's `pb-4` under the hover line does not reveal it.
     override var tracksPointerMoves: Bool { true }
     override func hoverChanged() {
-        let inGroup = pointer.map { $0.y < bounds.height - 16 } ?? false
+        let inGroup = pointer.map { $0.y < bounds.height - bottomPadding } ?? false
         Self.reveal([time, copyButton, editButton, openLink], inGroup || focusWithin)
     }
 }

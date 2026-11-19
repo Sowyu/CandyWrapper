@@ -333,6 +333,26 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
         #expect(!meta && !copy)
     }
 
+    /// MessagesTimeline.logic.ts:2409-2436 at 4928: your back-to-back messages form one burst, and a
+    /// steer under a steer drops its label. A message from another agent breaks the burst.
+    @Test func marksBackToBackUserMessagesAsABurst() {
+        var agent = ChatMessage(id: MessageId("g"), role: .user, text: "g", createdAt: "2026-01-01T00:00:04Z")
+        agent.createdBy = "agent"
+        let entries = [
+            user("u1", "u1", at: "2026-01-01T00:00:00Z"),
+            user("u2", "u2", at: "2026-01-01T00:00:01Z", intent: .steer),
+            user("u3", "u3", at: "2026-01-01T00:00:02Z", intent: .promotedQueuedToSteer),
+            user("u4", "u4", at: "2026-01-01T00:00:03Z"),
+            .message("g", agent),
+            user("u5", "u5", at: "2026-01-01T00:00:05Z"),
+        ]
+        let result = rows(entries)
+        #expect(result.map(\.id) == ["u1", "u2", "u3", "u4", "g", "u5"])
+        #expect(result.map(\.groupedWithNext) == [true, true, true, false, false, false])
+        #expect(result.map(\.groupedWithPrevious) == [false, true, true, true, false, false])
+        #expect(result.map(\.continuesSteer) == [false, false, true, false, false, false])
+    }
+
     @Test func marksAdjacentWorkRowsAsOneList() {
         let entries = [
             work("w1", WorkLogEntry(id: "w1", createdAt: "2026-01-01T00:00:01Z", runId: "r1", label: "x", command: "ls", tone: .tool, toolLifecycleStatus: .failed)),

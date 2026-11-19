@@ -40,7 +40,9 @@ struct UserIntentMarkerTests {
             heights.append(marked - view.height(forWidth: width))
             view.configure(item)
         }
-        #expect(heights == [0, 16, 16])
+        // The third steer sits right under the second, so the burst shows the label once (TimelineUserMessageRow.tsx:888-895 at 4928).
+        #expect(heights == [0, 16, 0])
+        #expect(users.map(\.row.continuesSteer) == [false, false, true])
         #expect(t.layoutProblems().isEmpty)
     }
 }
