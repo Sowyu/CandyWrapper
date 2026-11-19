@@ -539,6 +539,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The header's new-thread button: with several projects the palette's "New thread in..." (Sidebar.tsx:4944-4962).
         sidebar.actions.newThread = { [weak palette] in palette?.newThreadFromSidebar(shift: NSEvent.modifierFlags.contains(.shift)) }
         commands.openAddProject = { [weak palette] in palette?.openAddProject() }
+        sidebar.actions.dropFolders = { [weak commands] in commands?.addDroppedFolders($0, otherFiles: $1) }
         // The no-projects hero (NoProjectsHero.tsx).
         threads.offersScratch = { [weak palette, weak environments] in palette?.scratchEnvironmentId(environments?.primaryId) != nil }
         threads.noProjectsHero.addProject.action = { [weak commands] in commands?.addProject() }

@@ -82,6 +82,10 @@ struct SidebarLeftoverLogicTests {
         #expect(SidebarModel.fallbackThreadAfterDelete(all, deleted: ThreadId("old")) == ThreadId("gone"))
         #expect(SidebarModel.fallbackThreadAfterDelete(all, deleted: ThreadId("old"), deleting: [ThreadId("gone")]) == ThreadId("new"))
         #expect(SidebarModel.fallbackThreadAfterDelete([other], deleted: ThreadId("other")) == nil)
+        // T3 4928 #29643: a settled or snoozed thread is never the one that opens.
+        let settled = thread("settled") { $0.updatedAt = "2026-10-11T00:00:00.000Z"; $0.settledOverride = .settled }
+        let snoozed = thread("snoozed") { $0.updatedAt = "2026-10-12T00:00:00.000Z"; $0.snoozedUntil = "2999-01-01T00:00:00.000Z" }
+        #expect(SidebarModel.fallbackThreadAfterDelete(all + [settled, snoozed], deleted: ThreadId("old"), deleting: [ThreadId("gone")]) == ThreadId("new"))
     }
 
     // MARK: Working shelf (threadInbox.ts)
@@ -143,6 +147,18 @@ struct SidebarLeftoverLogicTests {
         #expect(!tracker.isWorking(pinned) && tracker.nextDeadline == nil)
     }
 
+    /// T3 4928 Sidebar.logic.ts:960-968 (#28616): opening a failed thread clears its Failed badge; a failure from
+    /// older data without a completion is dated by its start.
+    @Test func anOpenedFailureSettlesToReady() {
+        let failed = sidebarThread("t") {
+            $0.latestRunId = RunId("r"); $0.status = .failed; $0.lastError = "boom"
+            $0.latestRunCompletedAt = .value("2026-10-10T10:00:00.000Z")
+        }
+        #expect(SidebarModel.resolveSidebarRowStatus(failed, lastVisitedAt: nil) == .failed)
+        #expect(SidebarModel.resolveSidebarRowStatus(failed, lastVisitedAt: "2026-10-10T09:00:00.000Z") == .failed)
+        #expect(SidebarModel.resolveSidebarRowStatus(failed, lastVisitedAt: "2026-10-10T11:00:00.000Z") == .ready)
+    }
+
     // MARK: Project grouping (projectGrouping.ts)
 
     private func repo(_ key: String, root: String?) -> RepositoryIdentity {
@@ -163,5 +179,22 @@ struct SidebarLeftoverLogicTests {
         // A per-project override splits one physical project out (`resolveProjectGroupingMode`).
         let override = SidebarModel.ProjectGrouping(mode: .repository, overrides: [SidebarModel.physicalProjectKey(web): .separate])
         #expect(SidebarModel.buildProjectGroups([root, web], grouping: override).count == 2)
+    }
+}
+
+/// T3 4928 client-runtime/src/state/threadTagFilter.ts (#29053): tagged threads hide while their environment hides them.
+@Suite struct ThreadTagFilterTests {
+    @Test func aHiddenTagHidesTheThreadOnlyWhileTheFilterIsOn() {
+        let tagged = thread("t") { $0.tags = LenientArray(["client", "demo"]) }
+        let plain = thread("p")
+        let env = tagged.id.environmentId ?? ""
+        #expect(SidebarModel.hiddenThreadTags(settings: .object(["hiddenThreadTags": .array([.string("client")])])) == nil)
+        let on = SidebarModel.hiddenThreadTags(settings: .object(["hideTaggedThreads": .bool(true),
+                                                                  "hiddenThreadTags": .array([.string(" client "), .string("")])]))
+        #expect(on == ["client"])
+        #expect(SidebarModel.hidesForTags(tagged, hiddenTags: [env: on!]))
+        #expect(!SidebarModel.hidesForTags(plain, hiddenTags: [env: on!]))
+        #expect(!SidebarModel.hidesForTags(tagged, hiddenTags: [env: ["other"]]))
+        #expect(!SidebarModel.hidesForTags(tagged, hiddenTags: [:]))
     }
 }

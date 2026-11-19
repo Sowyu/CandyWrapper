@@ -524,6 +524,7 @@ final class SidebarCommands {
             return error
         }
         if let wokeAt { sidebar?.state.localVisits[id] = wokeAt }
+        ledger.expireListPlacement(id.rawValue)
         showUndo(.archived, claim) { [weak self] in
             guard let self else { return }
             guard await self.attempt("Failed to undo archive", { try await self.environments.dispatch(id, ThreadCommands.unarchive(id.localId)) }) else { return }
@@ -585,7 +586,10 @@ final class SidebarCommands {
     private func showSnoozeMenu(_ id: ThreadId, anchor: NSView) {
         // Presets resolve when the menu opens, so "In 1 hour" counts from the click.
         var items = SnoozePresets.resolve(now: Date(), presets: snoozeSettings(id)).map { preset in
-            MenuItem(preset.label, shortcut: preset.whenLabel) { [weak self] in self?.snooze(id, preset) }
+            // The wake time is a `MenuItemDetail`, not a shortcut (T3 4928 SidebarThreadRow.tsx, #30596).
+            var item = MenuItem(preset.label) { [weak self] in self?.snooze(id, preset) }
+            item.detail = preset.whenLabel
+            return item
         }
         items.append(.separator)
         items.append(MenuItem("Custom…") { [weak self] in
@@ -781,6 +785,7 @@ final class SidebarCommands {
         let fallback = SidebarModel.fallbackThreadAfterDelete(all, deleted: id, deleting: deleting, order: order)
         let wasOpen = routeThreadId == id
         do { try await environments.dispatch(id, ThreadCommands.delete(id.localId)) } catch { return .failure(error) }
+        ledger.expireListPlacement(id.rawValue, archive: true)
         sidebar?.deselect([id])
         if wasOpen, routeThreadId == id {
             if let fallback { threads.open(fallback) } else { threads.newThread(in: project) }
@@ -955,6 +960,20 @@ final class SidebarCommands {
                 fail("Failed to add project", error)
             }
         }
+    }
+
+    /// Folders dropped on the sidebar open as projects, one at a time so the last one stays open
+    /// (T3 4928 sidebar/SidebarFolderDrop.tsx:36-81, 103-121).
+    // ponytail: adds on the primary environment; T3 picks this computer's server (#38722). Pick the local one once
+    // Environments names it.
+    func addDroppedFolders(_ folders: [URL], otherFiles: Int) {
+        if otherFiles > 0 { toast("Only folders can be added as projects", "Drop files on a thread to attach them.", .info) }
+        guard !folders.isEmpty else { return }
+        guard let env = environments.primaryId else {
+            toast("This computer's server is not connected yet", "Try again when it connects.", .error)
+            return
+        }
+        for folder in folders { addProject(path: folder.path, environmentId: env) }
     }
 
     // MARK: Pull Requests and Usage

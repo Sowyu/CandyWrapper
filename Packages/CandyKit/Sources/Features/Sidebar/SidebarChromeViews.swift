@@ -637,3 +637,38 @@ public final class SidebarAccountRowView: ControlView {
         menu?.hostPopup?.onClose = { [weak self] in self?.menuOpen = false }
     }
 }
+
+/// The drop zone over the thread list while folders are dragged in (T3 4928 sidebar/SidebarFolderDrop.tsx:125-134):
+/// `inset-1.5 rounded-lg bg-sidebar/90 ring-1 ring-inset ring-primary/70`, a `size-5` folder-plus in
+/// `text-sidebar-muted-foreground`, then "Drop folders to add projects" in `text-sm text-sidebar-foreground`, `gap-2`.
+final class SidebarFolderDropOverlay: DSView {
+    private let icon = IconView(name: .folderPlus, size: 20)
+    private let label = LabelView("Drop folders to add projects", font: DSFont.ui(14))
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        label.lineHeight = 20
+        label.alignment = .center
+        addSubview(icon)
+        addSubview(label)
+        layer?.cornerRadius = 8
+        layer?.borderWidth = 1
+        setAccessibilityElement(false)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func updateLayer() {
+        layer?.backgroundColor = Themed.color(\.sidebar, 0.9, sidebar: true).cgColor(in: self)
+        layer?.borderColor = Themed.color(\.primary, 0.7, sidebar: true).cgColor(in: self)
+        icon.strokeColor = Themed.color(\.sidebarMutedForeground, sidebar: true)
+        label.color = Themed.color(\.sidebarForeground, sidebar: true)
+    }
+
+    override func layout() {
+        super.layout()
+        let top = ((bounds.height - 20 - 8 - 20) / 2).rounded()
+        icon.frame = NSRect(x: ((bounds.width - 20) / 2).rounded(), y: top, width: 20, height: 20)
+        label.frame = NSRect(x: 16, y: top + 28, width: max(0, bounds.width - 32), height: 20)
+    }
+}

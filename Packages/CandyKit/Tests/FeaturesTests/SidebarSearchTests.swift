@@ -43,6 +43,9 @@ struct SidebarSearchTests {
         let done = SidebarListBuilder.searchItems(snapshot: snap, state: SidebarListState(), query: "zzz", matches: [], pending: false,
                                                   highlighted: 0, nowMs: nowMs)
         #expect(done == [.emptyText("No threads found", search: true)])
+        let failed = SidebarListBuilder.searchItems(snapshot: snap, state: SidebarListState(), query: "zzz", matches: [], pending: false,
+                                                    failed: true, highlighted: 0, nowMs: nowMs)
+        #expect(failed == [.emptyText("Couldn't search thread messages", search: true)]) // T3 4928 #38155
     }
 
     @Test func pullRequestTermsMatch() {
@@ -123,7 +126,22 @@ struct SidebarSearchTests {
                                                     threads: [SidebarPreview.thread("x", "X", project: "p1", kind: .read, minutesAgo: 2)]))
         let lonely = SidebarListBuilder.projectScopeGroups(snapshot: empty.snapshot).first { $0.label == "lonely" }!
         empty.setProjectScope(lonely.key)
-        #expect(empty.list.items == [.emptyText("No threads in lonely yet", search: false)])
+        #expect(empty.list.items == [.scopeEmpty("No threads in lonely yet")])
+        // T3 4928 #35426: Show all projects clears the filter.
+        empty.list.onShowAllProjects?()
+        #expect(empty.state.projectScopeKeys.isEmpty && keys(empty).contains("thread:x"))
+    }
+
+    /// T3 4928 Sidebar.tsx:3307-3358 (#35426): a filter that leaves only settled threads still says so.
+    @Test func aFilterWithOnlySettledThreadsSaysItHidesEveryActiveThread() {
+        let c = content(SidebarPreview.snapshot(projects: [SidebarPreview.project("p1", "demo-repo"), SidebarPreview.project("p9", "quiet")],
+                                                threads: [SidebarPreview.thread("x", "X", project: "p1", kind: .read, minutesAgo: 2),
+                                                          SidebarPreview.thread("s", "S", project: "p9", kind: .read, minutesAgo: 5,
+                                                                                extra: ["settledOverride": "settled", "settledAt": SidebarPreview.iso(4)])]))
+        let quiet = SidebarListBuilder.projectScopeGroups(snapshot: c.snapshot).first { $0.label == "quiet" }!
+        c.setProjectScope(quiet.key)
+        #expect(c.list.items.first == .scopeEmpty("No active threads in quiet"))
+        #expect(keys(c).contains("shelf:settled"))
     }
 
     /// 044f07257c: a thread opened from history, the palette or a link widens a scope that hides it, once.

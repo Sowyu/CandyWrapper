@@ -60,7 +60,8 @@ struct SidebarActionWiringTests {
         window.contentView = nil
     }
 
-    @Test func undoNoticeOverlaysTheFirstShelfWithoutShrinkingTheList() throws {
+    /// T3 4928 sidebar/SidebarChrome.tsx:310: the notice fills the utility row, so the list keeps its size.
+    @Test func undoNoticeFillsTheFooterRowWithoutShrinkingTheList() throws {
         let content = SidebarContentView()
         content.now = { SidebarPreview.referenceNow }
         let window = host(content)
@@ -69,30 +70,23 @@ struct SidebarActionWiringTests {
         content.layoutSubtreeIfNeeded()
         let viewport = content.scrollArea.frame
         let tops = content.list.tops
-        content.undoNoticeText = "Settled 1 thread,"
+        content.undoNoticeText = "Settled,"
         content.layoutSubtreeIfNeeded()
         #expect(content.scrollArea.frame == viewport)
         #expect(content.list.tops == tops)
-        #expect(content.undoNotice.superview === content.list)
-        let shelf = try #require(content.list.firstShelfIndex)
-        #expect(content.undoNotice.frame.maxY == content.list.tops[shelf])
-        #expect(content.list.subviews.last === content.undoNotice)
-        content.setSearchText("greeting")
-        content.layoutSubtreeIfNeeded()
         #expect(content.undoNotice.superview === content)
-        #expect(content.scrollArea.frame.maxY <= content.undoNotice.frame.minY)
-        content.setSearchText("")
+        #expect(content.undoNotice.frame.minX == content.usageButton.frame.maxX + 4)
+        #expect(content.undoNotice.frame.midY == content.usageButton.frame.midY)
+        // A narrow sidebar drops the summary first, then shows only the undo icon.
+        content.undoNotice.frame.size.width = content.undoNotice.button.preferredWidth + 10
+        content.undoNotice.layoutSubtreeIfNeeded()
+        #expect(content.undoNotice.button.frame.width == content.undoNotice.button.preferredWidth && !content.undoNotice.button.showsIcon)
+        content.undoNotice.frame.size.width = 20
+        content.undoNotice.layoutSubtreeIfNeeded()
+        #expect(content.undoNotice.button.showsIcon && content.undoNotice.button.frame.width == 20)
         content.undoNoticeText = nil
         content.layoutSubtreeIfNeeded()
-        #expect(content.list.undoNoticeOverlay == nil)
         #expect(content.undoNotice.isHidden)
-        let capture = SidebarContentView(frame: content.frame)
-        capture.now = { SidebarPreview.referenceNow }
-        capture.setSnapshot(SidebarPreview.richSnapshot(), animated: false)
-        capture.undoNoticeText = "Settled 1 thread,"
-        capture.layoutSubtreeIfNeeded()
-        ThreadDetailsScrollTests.scrollToEnd(capture.scrollArea)
-        try Fidelity.capture(capture, name: "sidebar-undo-overlay", size: content.frame.size, sidebar: true)
     }
 
     @Test func branchLabelKeepsTheRowClickable() throws {
@@ -112,12 +106,12 @@ struct SidebarActionWiringTests {
         let window = host(content)
         var undone = 0
         content.actions.undo = { undone += 1 }
-        content.undoNoticeText = "Settled 1 thread,"
+        content.undoNoticeText = "Settled,"
         content.layoutSubtreeIfNeeded()
         #expect(!content.undoNotice.isHidden)
-        #expect(content.undoNotice.frame.height == 24) // SidebarThreadUndoNotice.tsx:35: leading-6 without the old alert border.
-        #expect(content.undoNotice.frame.maxY == content.settingsButton.frame.minY - 8)
-        #expect(content.scrollArea.frame.maxY <= content.undoNotice.frame.minY)
+        #expect(content.undoNotice.frame.height == 24) // SidebarThreadUndoNotice.tsx:51: `h-6`.
+        #expect(content.undoNotice.frame.minY == content.settingsButton.frame.minY + 4)
+        #expect(content.scrollArea.frame.maxY <= content.settingsButton.frame.minY)
         content.undoNotice.button.performAction()
         #expect(undone == 1)
         content.undoNoticeText = nil

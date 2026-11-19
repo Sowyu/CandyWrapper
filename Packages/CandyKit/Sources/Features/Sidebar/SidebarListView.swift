@@ -14,16 +14,6 @@ public final class SidebarListView: DSView {
 
     public private(set) var items: [SidebarItem] = []
     private(set) var tops: [CGFloat] = []
-    private(set) var firstShelfIndex: Int?
-    var undoNoticeOverlay: SidebarUndoNoticeView? {
-        didSet {
-            guard oldValue !== undoNoticeOverlay else { return }
-            oldValue?.overlaysList = false
-            if oldValue?.superview === self { oldValue?.removeFromSuperview() }
-            if let undoNoticeOverlay { undoNoticeOverlay.overlaysList = true; addSubview(undoNoticeOverlay) }
-            needsLayout = true
-        }
-    }
     private(set) var indexByKey: [String: Int] = [:]
     private(set) var visible: [String: SidebarRowBase] = [:]
     private var pools: [SidebarItem.Kind: [SidebarRowBase]] = [:]
@@ -52,6 +42,7 @@ public final class SidebarListView: DSView {
     var onOpenSearchResult: (@MainActor (ThreadId) -> Void)?
     /// The empty list's Add project button.
     var onAddProject: (@MainActor () -> Void)?
+    var onShowAllProjects: (@MainActor () -> Void)?
     /// The pointer moved over a search result (`onMouseMove` highlights it).
     var onHighlightSearchResult: (@MainActor (Int) -> Void)?
     var rowActions = SidebarRowActions()
@@ -176,7 +167,6 @@ public final class SidebarListView: DSView {
         indexByKey = [:]
         var y: CGFloat = 0
         let firstShelf = items.firstIndex { if case .shelfHeader = $0 { true } else { false } }
-        firstShelfIndex = firstShelf
         let natural = items.reduce(0) { $0 + $1.height } + CGFloat(max(0, items.count - 1)) * Self.gap + Self.padding
         let room = max(0, viewportHeight - natural)
         for (i, item) in items.enumerated() {
@@ -292,15 +282,6 @@ public final class SidebarListView: DSView {
         }
         if changed, sort?.sortable == true { placeSorted(animated: false) }
         if changed || oldTops != nil { onVisibleRowsChange?() }
-        layoutUndoNotice()
-    }
-
-    private func layoutUndoNotice() {
-        guard let notice = undoNoticeOverlay, let index = firstShelfIndex, tops.indices.contains(index) else { return }
-        let width = max(0, bounds.width - 16)
-        let height = notice.height(forWidth: width)
-        notice.frame = NSRect(x: 8, y: tops[index] - height, width: width, height: height)
-        if subviews.last !== notice { addSubview(notice, positioned: .above, relativeTo: nil) }
     }
 
     private func dequeue(_ kind: SidebarItem.Kind) -> SidebarRowBase {
@@ -336,6 +317,7 @@ public final class SidebarListView: DSView {
         case .noProjects:
             let row = SidebarNoProjectsRowView()
             row.onAddProject = { [weak self] in self?.onAddProject?() }
+            row.onShowAllProjects = { [weak self] in self?.onShowAllProjects?() }
             view = row
         }
         if kind == .searchResult {
@@ -502,21 +484,47 @@ public final class SidebarListView: DSView {
         }
         let row = fileDropRow(sender)
         setFileDragRow(row)
-        return row == nil ? [] : .copy
+        // A row takes the files itself; anywhere else the sidebar offers to add folders (SidebarFolderDrop.tsx:84-93).
+        let folders = row == nil && acceptsFolderDrop(sender)
+        setFolderDragActive(folders)
+        return row != nil || folders ? .copy : []
     }
 
-    public override func draggingExited(_ sender: (any NSDraggingInfo)?) { setFileDragRow(nil) }
-    public override func draggingEnded(_ sender: any NSDraggingInfo) { setFileDragRow(nil) }
+    public override func draggingExited(_ sender: (any NSDraggingInfo)?) { setFileDragRow(nil); setFolderDragActive(false) }
+    public override func draggingEnded(_ sender: any NSDraggingInfo) { setFileDragRow(nil); setFolderDragActive(false) }
 
     public override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        defer { setFileDragRow(nil) }
+        defer { setFileDragRow(nil); setFolderDragActive(false) }
         // The session's end commits the sort (`endSort`).
         if sender.draggingSource as? SidebarListView === self { return sort != nil || ditherDrag?.drop != nil }
-        guard let row = fileDropRow(sender), case .row(let r)? = row.item,
-              let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
+        guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
               !urls.isEmpty else { return false }
-        onFileDrop?(r.id, urls)
+        if let row = fileDropRow(sender), case .row(let r)? = row.item {
+            onFileDrop?(r.id, urls)
+            return true
+        }
+        guard acceptsFolderDrop(sender) else { return false }
+        let folders = urls.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
+        onFolderDrop?(folders, urls.count - folders.count)
         return true
+    }
+
+    /// Folders dropped outside the rows: the folders, and how many plain files came with them
+    /// (T3 4928 sidebar/SidebarFolderDrop.tsx:30-123, #35202).
+    var onFolderDrop: (@MainActor ([URL], Int) -> Void)?
+    /// Shows and hides the drop zone's "Drop folders to add projects" overlay.
+    var onFolderDragActive: (@MainActor (Bool) -> Void)?
+    private var folderDragActive = false
+
+    private func acceptsFolderDrop(_ sender: any NSDraggingInfo) -> Bool {
+        onFolderDrop != nil && !(sender.draggingSource is SidebarListView)
+            && sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+    }
+
+    private func setFolderDragActive(_ active: Bool) {
+        guard active != folderDragActive else { return }
+        folderDragActive = active
+        onFolderDragActive?(active)
     }
 
     /// The row's frame in the list, nil when the thread has no row.
@@ -656,6 +664,7 @@ public final class SidebarListView: DSView {
         case .draft(let d): onOpenDraft?(d.id)
         case .searchResult(let r): onOpenSearchResult?(r.id)
         case .noProjects: onAddProject?()
+        case .scopeEmpty: onShowAllProjects?()
         case .draftDivider, .emptyText: break
         }
     }

@@ -349,10 +349,10 @@ struct ThreadUndoLedgerTests {
         ledger.show(.settled, claim: ledger.begin("settle", "a")) {}
         ledger.show(.settled, claim: ledger.begin("settle", "b")) {}
         #expect(ledger.notice?.action == .settled && ledger.notice?.count == 2)
-        #expect(ThreadUndoLedger.text(.settled, count: 2) == "Settled 2 threads,")
+        #expect(ThreadUndoLedger.text(.settled, count: 2) == "Settled 2,")
         ledger.show(.snoozed, claim: ledger.begin("snooze", "c")) {}
         #expect(ledger.notice?.action == .snoozed && ledger.notice?.count == 1)
-        #expect(ThreadUndoLedger.text(.snoozed, count: 1) == "Snoozed 1 thread,")
+        #expect(ThreadUndoLedger.text(.snoozed, count: 1) == "Snoozed,")
     }
 
     @Test func aLaterClaimExpiresTheUndo() {
@@ -363,6 +363,19 @@ struct ThreadUndoLedgerTests {
         let stale = ledger.begin("settle", "b")
         _ = ledger.begin("settle", "b")
         ledger.show(.settled, claim: stale) {}
+        #expect(ledger.notice == nil)
+    }
+
+    /// T3 4928 #25444: archiving a thread ends its settle Undo; deleting it ends its archive Undo too.
+    @Test func archivingOrDeletingExpiresTheThreadsEarlierUndos() {
+        let ledger = ThreadUndoLedger()
+        ledger.show(.settled, claim: ledger.begin("settle", "a")) {}
+        ledger.show(.archived, claim: ledger.begin("archive", "b")) {}
+        ledger.expireListPlacement("a")
+        #expect(ledger.notice?.action == .archived)
+        ledger.expireListPlacement("b")
+        #expect(ledger.notice?.action == .archived)
+        ledger.expireListPlacement("b", archive: true)
         #expect(ledger.notice == nil)
     }
 

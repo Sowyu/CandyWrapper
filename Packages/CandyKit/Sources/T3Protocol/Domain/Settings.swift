@@ -175,7 +175,7 @@ public struct ServerSettingsValues: Equatable, Sendable {
         "responseStreamingMode": SettingSpec(.literals(["turn", "paragraph"]), .string("paragraph")),
         "enableProviderUpdateChecks": SettingSpec(.bool, .bool(true)),
         "continueThreadsAfterServerUpdate": SettingSpec(.bool, .bool(true)),
-        "sidebarAutoSettleAfterDays": SettingSpec(.nullableNumber(1...90), .number(3)),
+        "sidebarAutoSettleAfterDays": SettingSpec(.nullableNumber(1...90), .number(7)), // 7 since T3 4928 #32325 (contracts/settings.ts)
         "snoozePresets": SettingSpec(.any, .array(SnoozePresetSetting.defaults.map(\.json))),
         "snoozeLimitedThreads": SettingSpec(.bool, .bool(false)),
         "autoResumeLimitedThreads": SettingSpec(.bool, .bool(false)),
