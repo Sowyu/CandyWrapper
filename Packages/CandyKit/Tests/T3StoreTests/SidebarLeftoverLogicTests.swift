@@ -147,6 +147,18 @@ struct SidebarLeftoverLogicTests {
         #expect(!tracker.isWorking(pinned) && tracker.nextDeadline == nil)
     }
 
+    /// T3 4928 Sidebar.logic.ts:960-968 (#28616): opening a failed thread clears its Failed badge; a failure from
+    /// older data without a completion is dated by its start.
+    @Test func anOpenedFailureSettlesToReady() {
+        let failed = sidebarThread("t") {
+            $0.latestRunId = RunId("r"); $0.status = .failed; $0.lastError = "boom"
+            $0.latestRunCompletedAt = .value("2026-10-10T10:00:00.000Z")
+        }
+        #expect(SidebarModel.resolveSidebarRowStatus(failed, lastVisitedAt: nil) == .failed)
+        #expect(SidebarModel.resolveSidebarRowStatus(failed, lastVisitedAt: "2026-10-10T09:00:00.000Z") == .failed)
+        #expect(SidebarModel.resolveSidebarRowStatus(failed, lastVisitedAt: "2026-10-10T11:00:00.000Z") == .ready)
+    }
+
     // MARK: Project grouping (projectGrouping.ts)
 
     private func repo(_ key: String, root: String?) -> RepositoryIdentity {

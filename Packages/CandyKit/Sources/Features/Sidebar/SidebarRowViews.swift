@@ -925,14 +925,19 @@ final class SidebarCardRowView: SidebarRowBase {
                              frame: NSRect(x: left, y: top + 23, width: right - left, height: 22))
         }
         if !DesignGeometry.usesClassic(self), row?.hasMetaLine == false {
+            // `titleLineIcons` (T3 4928 SidebarThreadRow.tsx:1317-1325): the remote machine, then the providers, `gap-1`.
             let stackWidth = provider.preferredWidth
             provider.frame = NSRect(x: right - stackWidth, y: top + 27, width: stackWidth, height: 14)
-            title.frame.size.width = max(0, right - left - stackWidth - (stackWidth > 0 ? 6 : 0))
+            var iconsWidth = stackWidth
+            if !machine.isHidden {
+                machine.frame = NSRect(x: right - stackWidth - (stackWidth > 0 ? 4 : 0) - 14, y: top + 27, width: 14, height: 14)
+                iconsWidth += 14 + (stackWidth > 0 ? 4 : 0)
+            }
+            title.frame.size.width = max(0, right - left - iconsWidth - (iconsWidth > 0 ? 6 : 0))
             branch.isHidden = true
             middleBranch?.isHidden = true
             branchIcon.isHidden = true
             scratchMachine.isHidden = true
-            machine.isHidden = true
             return
         }
         branch.isHidden = middleBranch != nil

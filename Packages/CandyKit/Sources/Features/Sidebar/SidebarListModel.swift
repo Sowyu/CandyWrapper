@@ -73,9 +73,10 @@ public struct SidebarRowModel: Equatable, Sendable {
     var timeAnchorMs: Int64?
     var snoozeWakeMs: Int64?
 
-    /// SidebarThreadRow.tsx:1308-1314: omit an otherwise empty metadata line.
+    /// SidebarThreadRow.tsx:1268-1276 (T3 4928): omit an otherwise empty metadata line. The remote machine icon
+    /// alone doesn't make one; it moves to the title line (#26803).
     var hasMetaLine: Bool {
-        branch != nil || scratchMachineLabel != nil || pullRequestBadge != nil || issueBadge != nil || environmentMachine != nil || terminalProcessCount > 0
+        branch != nil || scratchMachineLabel != nil || pullRequestBadge != nil || issueBadge != nil || terminalProcessCount > 0
     }
 
     /// The status slot text as T3 renders it, for tests and accessibility.
@@ -661,7 +662,7 @@ public enum SidebarListBuilder {
         // mark-unread on the open thread stay until the user acts (Sidebar.tsx:1262-1279).
         let isUnread = SidebarModel.hasUnseenCompletion(latestRun: t.latestRun, lastVisitedAt: lastVisited)
         let isWoke = SidebarModel.isWoke(t, lastVisitedAt: lastVisited, nowMs: nowMs)
-        let status = SidebarModel.resolveSidebarThreadStatus(t)
+        let status = SidebarModel.resolveSidebarRowStatus(t, lastVisitedAt: lastVisited)
         let variant: SidebarRowModel.Variant = section == .snoozed || section == .settled || state.usesProjectFolders && section == .active ? .slim : .card
         let action: SidebarRowModel.Action = section == .snoozed ? .unsnooze : section == .settled ? .unsettle : .settle
         let anchor: T3Timestamp? = section == .settled

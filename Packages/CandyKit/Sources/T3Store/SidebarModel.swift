@@ -352,13 +352,22 @@ public enum SidebarModel {
         return completed > visited
     }
 
-    /// Port of `hasUnseenFailure` (Sidebar.logic.ts:727-739): a failed latest run nobody has looked at since it
-    /// ended. A thread never opened (an automation's) counts, unlike a completion.
+    /// Port of `hasUnseenRunFailure` (T3 4928 client-runtime threadSettled.ts, #28616): a failed latest run nobody
+    /// has looked at since it ended. A thread never opened (an automation's) counts, unlike a completion. A failed
+    /// run without a completion, from older data, is dated by its start.
     static func hasUnseenFailure(latestRun: ThreadRunSummary?, lastVisitedAt: T3Timestamp?) -> Bool {
-        guard latestRun?.status == .failed else { return false }
+        guard let run = latestRun, run.status == .failed else { return false }
         guard let lastVisitedAt else { return true }
-        guard let completed = latestRun?.completedAt?.epochMs, let visited = lastVisitedAt.epochMs else { return true }
-        return completed > visited
+        guard let failed = (run.completedAt ?? run.startedAt ?? run.requestedAt)?.epochMs, let visited = lastVisitedAt.epochMs else { return true }
+        return failed > visited
+    }
+
+    /// `resolveSidebarRowStatus` (T3 4928 Sidebar.logic.ts:960-968): a failure the user has already opened settles
+    /// to ready, like Done. A runtime failure without a failed run has nothing to date it, so it stays.
+    public static func resolveSidebarRowStatus(_ thread: SidebarThread, lastVisitedAt: T3Timestamp?) -> SidebarThreadStatus {
+        let status = resolveSidebarThreadStatus(thread)
+        guard status == .failed, thread.latestRun?.status == .failed else { return status }
+        return hasUnseenFailure(latestRun: thread.latestRun, lastVisitedAt: lastVisitedAt) ? status : .ready
     }
 
     // MARK: - Snooze (packages/client-runtime/src/state/threadSettled.ts)

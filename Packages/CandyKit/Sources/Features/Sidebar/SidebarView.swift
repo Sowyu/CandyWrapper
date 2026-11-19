@@ -866,7 +866,10 @@ public final class SidebarContentView: DSView {
 
     public func setProjectScopes(_ keys: [String]) {
         clearSelection()
-        state.projectScopeKeys = SidebarListState.normalizedScopeKeys(keys)
+        let next = SidebarListState.normalizedScopeKeys(keys)
+        // A new filter starts its list at the top (T3 4928 Sidebar.tsx, #27327).
+        if next != state.projectScopeKeys { scrollArea.scroll(to: .zero) }
+        state.projectScopeKeys = next
         scopeDefaults?.set(state.projectScopeKeys, forKey: Self.scopeDefaultsKey)
         scopeDefaults?.removeObject(forKey: "sidebar.projectScopeKey")
     }

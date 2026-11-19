@@ -76,7 +76,8 @@ public enum SidebarPreview {
         case .working:
             t["status"] = "running"; t["activeRunId"] = "run-\(id)"; t["latestRunCompletedAt"] = NSNull()
             t["activityRunStatus"] = "running"; t["activityRunStartedAt"] = iso(minutesAgo)
-        case .failed: t["status"] = "failed"; t["lastError"] = "Provider error"
+        // Never opened, so the failure stays unseen: T3 4928 settles a failure you have opened (#28616).
+        case .failed: t["status"] = "failed"; t["lastError"] = "Provider error"; t["lastVisitedAt"] = NSNull()
         case .waiting: t["status"] = "idle"; t["latestRunId"] = NSNull()
         }
         t.merge(extra) { $1 }

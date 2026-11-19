@@ -13,7 +13,7 @@ public enum SidebarCustomSnoozeDialog {
     public static func present(in window: NSWindow, now: Date = Date(), editOptions: (@MainActor () -> Void)? = nil,
                                done: @escaping @MainActor (Date?) -> Void) -> ModalHost {
         let dialog = DialogView(title: "Custom snooze", message: "Choose when snoozed threads return to your inbox.")
-        dialog.maxWidth = 384 // `sm:max-w-sm`
+        dialog.maxWidth = 448 // `sm:max-w-md`, so the footer fits (T3 4928 CustomSnoozeDialog.tsx, #33759)
         let form = SidebarCustomSnoozeForm(initial: now.addingTimeInterval(3600))
         dialog.panelContent = [form]
         let cancel = ButtonView("Cancel", variant: .outline)
@@ -166,7 +166,7 @@ final class SidebarCustomSnoozeForm: DSView {
     }
 
     /// Toggle 32 (with its 2pt track), `gap-4`, the 2-column grid (label, gap, 32pt control), the error.
-    private var gridHeight: CGFloat { 16 + (mode == .date ? 6 : 8) + 32 }
+    private var gridHeight: CGFloat { 16 + 8 + 32 }
 
     override var intrinsicContentSize: NSSize {
         var h = toggle.intrinsicContentSize.height + 16 + gridHeight
@@ -180,9 +180,9 @@ final class SidebarCustomSnoozeForm: DSView {
         toggle.frame = NSRect(x: 0, y: 0, width: w, height: toggle.intrinsicContentSize.height)
         let top = toggle.frame.maxY + 16
         let col = (w - 12) / 2 // `grid-cols-2 gap-3`
-        // The Date div is `gap-1.5`; Time, Snooze for and Unit sit in a Label with `gap-2`.
+        // Date and Time both use `gap-2`, so the fields line up (T3 4928 CustomSnoozeDialog.tsx, #23360).
         dateLabel.frame = NSRect(x: 0, y: top, width: col, height: 16)
-        dateButton.frame = NSRect(x: 0, y: top + 22, width: col, height: 32)
+        dateButton.frame = NSRect(x: 0, y: top + 24, width: col, height: 32)
         timeLabel.frame = NSRect(x: col + 12, y: top, width: col, height: 16)
         time.frame = NSRect(x: col + 12, y: top + 24, width: col, height: 32)
         amountLabel.frame = NSRect(x: 0, y: top, width: col, height: 16)

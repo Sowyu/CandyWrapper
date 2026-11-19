@@ -586,7 +586,10 @@ final class SidebarCommands {
     private func showSnoozeMenu(_ id: ThreadId, anchor: NSView) {
         // Presets resolve when the menu opens, so "In 1 hour" counts from the click.
         var items = SnoozePresets.resolve(now: Date(), presets: snoozeSettings(id)).map { preset in
-            MenuItem(preset.label, shortcut: preset.whenLabel) { [weak self] in self?.snooze(id, preset) }
+            // The wake time is a `MenuItemDetail`, not a shortcut (T3 4928 SidebarThreadRow.tsx, #30596).
+            var item = MenuItem(preset.label) { [weak self] in self?.snooze(id, preset) }
+            item.detail = preset.whenLabel
+            return item
         }
         items.append(.separator)
         items.append(MenuItem("Custom…") { [weak self] in

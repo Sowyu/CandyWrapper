@@ -63,6 +63,9 @@ public struct MenuItem {
     /// Muted 12pt tabular text at the row's end, 20pt after the title (`justify-between gap-5`, the browser
     /// device presets' sizes, BrowserDeviceToolbar.tsx:200-211). Takes the shortcut's place.
     public var trailingDetail: String?
+    /// `MenuItemDetail` (T3 4928 ui/menu.tsx, #30596): a trailing value at the row's size, such as the time a snooze
+    /// preset wakes at, in `text-secondary-label tabular-nums` after `ps-4`. Takes the shortcut's place.
+    public var detail: String?
     /// The title and glyph at 55% until the row is highlighted or its submenu is open ("Add to another machine",
     /// `ADD_TO_MACHINE_LABEL_CLASS`, BranchToolbar.logic.ts:25-27).
     public var mutedUntilHighlighted = false
@@ -620,7 +623,7 @@ final class MenuRowView: DSView {
         if leadingView != nil { w += item.leadingSize + 8 }
         if glyphView != nil { w += 12 + 6 }
         if badgeView != nil { w += 8 + 14 }
-        if let shortcut { w += (item.trailingDetail != nil ? 20 : 8) + shortcut.intrinsicContentSize.width }
+        if let shortcut { w += (item.detail != nil ? 16 : item.trailingDetail != nil ? 20 : 8) + shortcut.intrinsicContentSize.width }
         if trailing != nil { w += 8 + 14 }
         if accessoryView != nil { w += 8 + item.accessoryWidth }
         return w
@@ -699,7 +702,12 @@ final class MenuRowView: DSView {
             addSubview(v)
             trailing = v
         }
-        if let s = item.trailingDetail {
+        if let s = item.detail {
+            let v = TrackedLabelView(s, font: DSFont.ui(14).monospacedDigits, tracking: 0,
+                                     color: Themed.color(\.contrastSecondaryLabel), lineHeight: 20)
+            addSubview(v)
+            shortcut = v
+        } else if let s = item.trailingDetail {
             let v = TrackedLabelView(s, font: DSFont.ui(12).monospacedDigits, tracking: 0,
                                      color: Themed.color(\.contrastMutedForeground), lineHeight: 16)
             addSubview(v)
@@ -836,8 +844,9 @@ final class MenuRowView: DSView {
         }
         if let shortcut {
             let w = shortcut.intrinsicContentSize.width
-            shortcut.frame = NSRect(x: trailingX - w, y: (bounds.height - 16) / 2, width: w, height: 16)
-            trailingX -= w + 8
+            let h: CGFloat = item.detail != nil ? 20 : 16
+            shortcut.frame = NSRect(x: trailingX - w, y: (bounds.height - h) / 2, width: w, height: h)
+            trailingX -= w + (item.detail != nil ? 16 : 8)
         }
         let lh = label.lineHeight ?? 20
         if let subtitleLabel {
