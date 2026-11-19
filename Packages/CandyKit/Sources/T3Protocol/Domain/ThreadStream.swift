@@ -196,6 +196,9 @@ public struct ThreadEventType: OpenStringEnum {
     public static let contextHandoffUpdated: Self = "context-handoff.updated"
     public static let contextTransferCreated: Self = "context-transfer.created"
     public static let contextTransferUpdated: Self = "context-transfer.updated"
+    public static let threadTagsUpdated: Self = "thread.tags-updated"
+    public static let threadIssueSynced: Self = "thread.issue-synced"
+    public static let threadVisitRecorded: Self = "thread.visit-recorded"
 
     /// Every `thread.*` event carries the whole `AppThread`.
     static let threadPayloadTypes: Set<String> = [
@@ -205,6 +208,8 @@ public struct ThreadEventType: OpenStringEnum {
         "thread.marked-unread", "thread.metadata-updated", "thread.pull-request-synced",
         "thread.runtime-mode-updated", "thread.interaction-mode-updated", "thread.model-selection-updated",
         "thread.provider-switched", "thread.guest-share-updated",
+        // 4928 (orchestrationV2.ts:2012, :2017).
+        "thread.tags-updated", "thread.issue-synced",
     ]
 
     static let known: Set<String> = threadPayloadTypes.union([
@@ -214,6 +219,8 @@ public struct ThreadEventType: OpenStringEnum {
         "provider-turn.updated", "runtime-request.updated", "message.updated", "turn-item.updated",
         "plan.updated", "checkpoint-scope.created", "checkpoint.captured", "checkpoint.rollback-requested",
         "context-handoff.updated", "context-transfer.created", "context-transfer.updated",
+        // 4928: `{lastVisitedAt, opens}` in place of a whole-thread `thread.visited` (orchestrationV2.ts:2980).
+        "thread.visit-recorded",
     ])
 
     public var isKnown: Bool { Self.known.contains(rawValue) }

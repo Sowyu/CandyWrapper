@@ -56,6 +56,22 @@ public struct AppThread: Codable, Hashable, Sendable, Identifiable {
     public static func == (lhs: Self, rhs: Self) -> Bool { lhs.raw == rhs.raw }
     public func hash(into hasher: inout Hasher) { hasher.combine(id) }
 
+    /// 4928 thread tags (orchestrationV2.ts:522); absent on older servers.
+    public var tags: [String] { (try? raw["tags"]?.decode(as: LenientArray<String>.self))?.values ?? [] }
+    /// 4928 linked issues (orchestrationV2.ts:485).
+    public var issues: [ThreadIssueLink] { (try? raw["issues"]?.decode(as: LenientArray<ThreadIssueLink>.self))?.values ?? [] }
+    /// 4928 orchestrationV2.ts:535.
+    public var lastTitleRegeneration: LastTitleRegeneration? { try? raw["lastTitleRegeneration"]?.decode(as: LastTitleRegeneration.self) }
+
+    /// `applyOrchestrationV2ThreadVisit` (4928 orchestrationV2.ts:558-567): a `thread.visit-recorded`
+    /// payload sets `lastVisitedAt` and, when sent, `opens`.
+    public func applyingVisit(_ visit: JSONValue) -> AppThread? {
+        guard var object = raw.objectValue else { return nil }
+        object["lastVisitedAt"] = visit["lastVisitedAt"] ?? .null
+        if let opens = visit["opens"] { object["opens"] = opens }
+        return try? JSONValue.object(object).decode(as: AppThread.self)
+    }
+
     /// `isProviderNativeSubagentThread` (orchestrationV2.ts:442-451).
     public var isProviderNativeSubagent: Bool {
         lineage?.relationshipToParent == .subagent && creationSource == "provider"

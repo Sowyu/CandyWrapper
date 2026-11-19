@@ -154,8 +154,10 @@ public enum ThreadReduction {
         next.updatedAt = event.occurredAt
         switch event.payload {
         case .thread(let thread):
-            // Visited tracking is read state, not activity: no updatedAt bump.
-            if event.type == .threadVisited || event.type == .threadMarkedUnread { next.updatedAt = projection.updatedAt }
+            // Visited tracking and tags are read state, not activity: no updatedAt bump (4928 orchestrationV2Projection.ts:324-328).
+            if event.type == .threadVisited || event.type == .threadMarkedUnread || event.type == .threadTagsUpdated {
+                next.updatedAt = projection.updatedAt
+            }
             next.thread = thread
         case .run(let run):
             upsert(&next.runs, run)
@@ -210,6 +212,10 @@ public enum ThreadReduction {
             case .checkpointScopeCreated: upsertJSON(&next.checkpointScopes, payload)
             case .contextHandoffUpdated: upsertJSON(&next.contextHandoffs, payload)
             case .contextTransferCreated, .contextTransferUpdated: upsertJSON(&next.contextTransfers, payload)
+            case .threadVisitRecorded:
+                // Read state: no updatedAt bump (4928 orchestrationV2Projection.ts:329-333).
+                next.updatedAt = projection.updatedAt
+                if let thread = next.thread.applyingVisit(payload) { next.thread = thread }
             default: break // checkpoint.rollback-requested only bumps updatedAt.
             }
         }
