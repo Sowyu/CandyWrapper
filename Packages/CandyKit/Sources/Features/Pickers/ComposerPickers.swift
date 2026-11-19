@@ -136,6 +136,7 @@ public final class ComposerPickers {
                                   defaultRuntimeMode: context.projectDefaultRuntimeMode ?? context.serverDefaults.defaultRuntimeMode,
                                   interactionMode: current.interactionMode, planModeEnabled: context.planModeEnabled,
                                   themeGeneration: ThemeRuntime.generation, appearance: modelButton.effectiveAppearance.name, effortDisplay: ClientSettingsStore.shared.current.string("effortDisplay"))
+        syncDocked()
         guard state != controlsState else { return }
         controlsState = state
         modelButton.title = modelTitle
@@ -145,7 +146,7 @@ public final class ComposerPickers {
                               model: true, badge: ProviderBadge.make(e, in: context.catalog, size: .small, overhang: 2, ring: Themed.color(\.contrastInput)))
         }
         modelButton.icon = glyph
-        modelButton.toolTip = "\(spoken ? current.model.map { ModelNames.display($0) } ?? current.triggerLabel : current.triggerLabel) · ⇧⌘M"
+        modelButton.toolTip = spoken ? nil : "\(current.triggerLabel) · ⇧⌘M"
         traitsButton.icon = IconView(name: spoken ? .gauge : .brain, size: 16)
         traitsButton.title = label
         traitsButton.toolTip = label
@@ -155,25 +156,18 @@ public final class ComposerPickers {
         accessButton.icon = IconView(name: mode.icon, size: 16)
         accessButton.toolTip = mode.description
         if spoken {
-            let descriptor = current.descriptors.first { $0.type == .select }
-            let effort = descriptor.flatMap { ["reasoningEffort", "reasoning", "effort", "variant", "reasoning_effort", "thinking"].contains($0.id) ? ComposerEffort.resolve($0, current: ultrathinkControlled ? "ultrathink" : ModelTraits.currentValue($0)?.string) : nil }
+            // 4928 picks the model and its effort from one control (#28057): the effort follows the model's name
+            // (ComposerControlsBar.tsx:167, 218-219) and the traits trigger leaves the footer.
             let bars = ClientSettingsStore.shared.current.string("effortDisplay") == "bars"
-            if let effort {
-                traitsButton.icon = bars && !effort.special ? ComposerEffortGlyphView(effort) : nil
-                traitsButton.title = bars && !effort.special ? "" : effort.label
-                traitsButton.toolTip = "Effort: \(label) · Permissions: \(mode.label) · ⇧⌘P"
-            }
-            let speed: Bool? = effort == nil ? nil : label.contains("Ultrafast") ? true : label.contains("Fast") ? false : nil
-            let otherLabels = effort == nil ? [] : current.descriptors.compactMap { d -> String? in
-                guard d.id != descriptor?.id, d.id != "fastMode", !(current.entry?.driver == "codex" && d.id == "serviceTier") else { return nil }
-                return d.type == .boolean ? "\(d.label) \(d.currentValue?.bool == true ? "On" : "Off")" : ModelTraits.currentLabel(d)
-            }
-            traitsButton.adornment = speed == nil && otherLabels.isEmpty ? nil : ComposerTraitsAdornmentView(ultra: speed, labels: otherLabels)
-            traitsButton.compactIcon = IconView(name: .gauge, size: 14, strokeColor: Themed.color(\.mutedForeground))
+            let suffix = ComposerModelSuffix(current.descriptors, ultrathink: ultrathinkControlled, bars: bars)
+            modelButton.adornment = suffix.isEmpty ? nil : ComposerModelSuffixView(suffix)
+            modelButton.setAccessibilityLabel(label.isEmpty ? modelTitle : "\(modelTitle), \(label)")
+            controlsView.showsTraits = false
+            traitsButton.adornment = nil
             accessButton.paddingOverride = (6, 8)
             modelButton.textOnly = true; traitsButton.textOnly = true
-            modelButton.paddingOverride = (8, 4); traitsButton.paddingOverride = (bars && effort?.special == false ? 2 : 0, 4)
-            traitsButton.mutedLabel = effort.map { !bars || $0.special } ?? false
+            modelButton.paddingOverride = (8, 4)
+            modelButton.maximumLabelWidth = 224
             accessButton.icon = IconView(definition: current.runtimeMode == .fullAccess ? Self.fullAccessGlyph : mode.icon.definition, size: 16)
             controlsView.showsBuild = context.interactionModeEnabled(current.entry?.provider)
             controlsView.build.emphasized = current.interactionMode == .plan
@@ -182,14 +176,19 @@ public final class ComposerPickers {
             accessButton.iconFollowsLabel = true
             controlsView.build.title = current.interactionMode == .plan ? "Plan" : "Build"
             controlsView.build.icon = IconView(name: current.interactionMode == .plan ? .pencilRuler : .bot, size: 16)
+            // The picker's footer always holds Permissions, so the chip shows only off the default
+            // (composerControlsOwnership.ts:1-31).
             let defaultMode = context.projectDefaultRuntimeMode ?? context.serverDefaults.defaultRuntimeMode
-            controlsView.permissionsIconOnly = current.runtimeMode == defaultMode && current.descriptors.isEmpty
-            controlsView.hidesPermissions = (current.runtimeMode == defaultMode || permissionsShownInStrip) && !current.descriptors.isEmpty
+            controlsView.permissionsIconOnly = false
+            controlsView.hidesPermissions = current.runtimeMode == defaultMode || permissionsShownInStrip
         } else {
             accessButton.iconFollowsLabel = false
             controlsView.showsBuild = false
             controlsView.permissionsIconOnly = false
             traitsButton.adornment = nil
+            modelButton.adornment = nil
+            modelButton.maximumLabelWidth = .infinity
+            modelButton.setAccessibilityLabel(nil)
             traitsButton.compactIcon = nil
             accessButton.paddingOverride = nil
             modelButton.textOnly = false; traitsButton.textOnly = false
@@ -201,6 +200,48 @@ public final class ComposerPickers {
     }
 
     // MARK: Model picker
+
+    /// Default themes and Redesign dock the effort column and footer in the model picker (#28057); Glass keeps its
+    /// separate traits and access pickers.
+    var docksEffort: Bool { ComposerDesign.groupedControls(dark: modelButton.effectiveAppearance.isDark) }
+    private weak var docked: DockedModelPickerView?
+
+    /// Where `composer.effort` and `composer.mode` aim an open docked picker (`takeOpenTarget`, composerEventScope.ts:79-92).
+    enum PickerTarget { case effort, permissions }
+
+    /// `composer.effort` or `composer.mode` aimed at the picker: opens it, or moves within it when open
+    /// (ProviderModelPicker.tsx:215-223, 345-372).
+    func openModelPicker(to target: PickerTarget) {
+        if docked?.window == nil { toggleModelPicker() }
+        guard let docked else { return }
+        switch target {
+        case .effort: docked.focusEffort(levelsOnly: false)
+        case .permissions: if let trigger = docked.footer.permissions { openFooterPermissions(trigger) }
+        }
+    }
+
+    /// Rebuilds the open docked picker's column and footer for the current model.
+    private func syncDocked() {
+        guard let docked, docked.window != nil else { return }
+        if let id = current.instanceId { docked.picker.active = id }
+        docked.picker.activeModel = current.model?.slug ?? current.modelSlug ?? ""
+        docked.column.update(descriptors: current.descriptors, ultrathink: ultrathinkControlled,
+                             locked: ultrathinkControlled && ModelTraits.ultrathinkInBody(prompt), model: current.modelTriggerLabel(spoken: true))
+        docked.footer.update(descriptors: current.descriptors, runtimeMode: current.runtimeMode)
+    }
+
+    private func openFooterPermissions(_ trigger: NSView) {
+        guard let host = trigger.popupHost, let parent = openPopup else { return }
+        if let open = host.popups.first(where: { $0.trigger === trigger }) { host.close(open); return }
+        let menu = ComposerPermissionsMenu(modes: current.runtimeModeOptions, selected: current.runtimeMode) { [weak self] mode in
+            guard let self, mode != self.current.runtimeMode else { return }
+            store.setRuntimeMode(draftKey, mode)
+            refresh(notify: true)
+        }
+        let popup = host.open(PickerPopupView(menu), trigger: trigger, placement: PopupPlacement(side: .top, align: .end, sideOffset: 4),
+                              swallowsOutsideClick: true, parent: parent)
+        menu.onClose = { [weak host, weak popup] in if let host, let popup { host.close(popup) } }
+    }
 
     /// `modelPicker.toggle`.
     public func toggleModelPicker() {
@@ -217,10 +258,13 @@ public final class ComposerPickers {
                 manage(id)
             }
         }
+        let docks = docksEffort
         view.onSelect = { [weak self] id, slug in
             guard let self else { return }
             if self.currentMultiple != nil { self.setMultiple(nil, for: self.draftKey) }
-            self.pickModel(id, slug)
+            // Docked, the picker stays open until dismissed and focus moves to the new model's levels (#28076).
+            self.pickModel(id, slug, close: !docks)
+            if docks { self.docked?.focusEffort(levelsOnly: true) }
         }
         if supportsMultipleModels {
             view.selectedKeys = currentMultiple.map { Set($0.map(ModelFanout.key)) }
@@ -244,11 +288,28 @@ public final class ComposerPickers {
             self.toggleFavorite(id, slug)
             view?.favorites = self.favorites()
         }
-        let popup = host.open(PickerPopupView(view), trigger: modelButton,
-                              placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .end),
-                              motion: .popover)
+        let body: PickerPopupBody
+        if docks {
+            let dock = DockedModelPickerView(picker: view)
+            dock.column.onSelect = { [weak self] d, value in self?.pickSelect(d, value) }
+            dock.column.onBoolean = { [weak self] id, on in self?.pickBoolean(id, on) }
+            dock.column.onOpenOption = { [weak self] d, row in self?.openOptionMenu(d, from: row) }
+            dock.footer.onSelect = { [weak self] d, value in self?.pickSelect(d, value) }
+            dock.footer.onBoolean = { [weak self] id, on in self?.pickBoolean(id, on) }
+            dock.footer.onPermissions = { [weak self] trigger in self?.openFooterPermissions(trigger) }
+            docked = dock
+            body = dock
+        } else {
+            body = view
+        }
+        // Docked, the popup opens above the composer and slides over it when that space is short
+        // (ProviderModelPicker.tsx:462-467); the trigger grows away from its end edge (ComposerControlsBar.tsx:191-192).
+        let placement = docks ? PopupPlacement(side: .top, align: .end, sideOffset: 4, fallbackAxisSide: .none)
+            : PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .end)
+        let popup = host.open(PickerPopupView(body), trigger: modelButton, placement: placement, motion: .popover)
         track(popup)
         modelPicker = view
+        syncDocked()
         modelButton.window?.makeFirstResponder(view.search)
     }
 
@@ -266,8 +327,8 @@ public final class ComposerPickers {
     /// A pick made for the user, like a prompt link's model.
     public func select(_ id: ProviderInstanceId, model slug: String) { pickModel(id, slug) }
 
-    private func pickModel(_ id: ProviderInstanceId, _ slug: String) {
-        closeOpenPopup()
+    private func pickModel(_ id: ProviderInstanceId, _ slug: String, close: Bool = true) {
+        if close { closeOpenPopup() }
         if let reason = store.pickModel(draftKey, instance: id, model: slug, context) {
             onBlocked?(reason)
             return
@@ -285,7 +346,7 @@ public final class ComposerPickers {
     /// `composer.effort`: opens the traits menu (no-op when the model has no traits), or the overflow
     /// menu while traits sit there (the trigger carrying `data-composer-shortcut~="composer.effort"`).
     public func openTraits() {
-        if ComposerDesign.groupedControls(dark: traitsButton.effectiveAppearance.isDark) { openOptions(traits: true); return }
+        if docksEffort { openModelPicker(to: .effort); return }
         guard controlsView.showsTraits else { return }
         if controlsView.traitsInOverflow { toggleOverflowMenu(); return }
         if closeIfOpen(traitsButton) { return }
@@ -352,6 +413,29 @@ public final class ComposerPickers {
         refresh(notify: true)
     }
 
+    private func pickBoolean(_ id: String, _ on: Bool) {
+        store.setOptions(draftKey, ModelTraits.pick(current.descriptors, id: id, value: .bool(on)), context)
+        refresh(notify: true)
+    }
+
+    /// `OptionMenuRow` (ComposerModelEffort.tsx:385-485): the option's choices beside the column; a pick closes it.
+    private func openOptionMenu(_ d: ProviderOptionDescriptor, from row: NSView) {
+        guard let host = row.popupHost, let parent = openPopup else { return }
+        let value = ModelTraits.currentValue(d)?.string
+        let entries = ComposerEffortControls.choices(d).map { choice in
+            PickerMenuEntry.option(choice.label, badge: choice.isDefault == true ? "Default" : nil, description: choice.description,
+                                   checked: choice.id == value) { [weak self] in
+                guard let self, choice.id != value else { return }
+                pickSelect(d, choice.id)
+            }
+        }
+        let menu = PickerMenuView(entries: entries, style: .menu, minimumWidth: 160)
+        let popup = host.open(PickerPopupView(menu), trigger: row, placement: PopupPlacement(side: .right, align: .start, sideOffset: 6),
+                              swallowsOutsideClick: true, parent: parent)
+        menu.onClose = { [weak host, weak popup] in if let host, let popup { host.close(popup) } }
+        menu.highlightedIndex = menu.selectableIndices.first { menu.entry($0).checked }
+    }
+
     /// `composer.increaseEffort` and `composer.decreaseEffort` (ChatComposer.tsx:6054-6082): stores the
     /// next reasoning option without a popup and returns the step, whose prompt and caret the caller
     /// applies when the Ultrathink prefix changed. Nil when nothing changes.
@@ -387,7 +471,13 @@ public final class ComposerPickers {
 
     /// `composer.mode`: opens the access select, or the overflow menu while access sits there.
     public func openAccessMode() {
-        if ComposerDesign.groupedControls(dark: accessButton.effectiveAppearance.isDark) { openOptions(traits: controlsView.hidesPermissions && controlsView.showsTraits, focusPermissions: true); return }
+        if docksEffort {
+            // `pickerOwnsModeShortcut`: without a visible chip the model picker answers composer.mode.
+            if controlsView.hidesPermissions { openModelPicker(to: .permissions) }
+            else if controlsView.accessInOverflow { toggleOverflowMenu() }
+            else { openOptions(traits: false, focusPermissions: true) }
+            return
+        }
         if controlsView.accessInOverflow { toggleOverflowMenu(); return }
         if closeIfOpen(accessButton) { return }
         guard let host = accessButton.popupHost else { return }

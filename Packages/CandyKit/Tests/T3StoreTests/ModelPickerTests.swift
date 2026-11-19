@@ -149,8 +149,9 @@ struct ModelPickerTests {
         let open = ModelPickerSections(catalog: catalog, active: "claudeAgent", activeModel: "claude-haiku-5-5", favorites: [],
                                        rail: rail, query: "", expandedLegacy: ["claudeAgent"])
         #expect(open.rows.count == 14)
-        #expect(Self.names(open.rows)[4] == "Legacy models (9) open")
-        #expect(Self.names(open.rows).last == "Claude Haiku 4.5")
+        // #28076: the toggle trails the list, so the older models open above it.
+        #expect(Self.names(open.rows).last == "Legacy models (9) open")
+        #expect(Self.names(open.rows)[12] == "Claude Haiku 4.5")
 
         // Codex has no ready models; Favorites lists favorites in instance order, ungrouped.
         let codex = ModelPickerSections(catalog: catalog, active: "claudeAgent", activeModel: "claude-haiku-5-5", favorites: [],

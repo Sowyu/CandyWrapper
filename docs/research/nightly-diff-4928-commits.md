@@ -85,19 +85,19 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| cfe28f0646 | #26881 | composer | fix(web): model picker opens at its final height instead of shrinking | port |
-| c96c1b69f5 | #28057 | composer | feat(web): pick the model and its effort from one control | port |
-| 85bd3f2a2a | #28044 | composer | fix(web): hide Ultrathink from the Claude effort picker | port |
-| 2359643cff | #28076 | composer | fix(web): model picker stays open until dismissed, with a Show more row | port |
-| 15fe283272 | #28162 | composer | fix(web): effort picker shows Default or the checkmark, flush right | port |
-| 5fe18d79ac | #28307 | composer | fix(web): keep the model picker in place when its label changes | port |
-| 575579d68a | #28409 | composer | fix(web): model picker stays put with long names and agent options | port |
-| 77a728e3a1 | #28005 | connections | fix(web): show mixed automatic defaults across environments | port |
-| 72f05f6d8e | #29017 | composer | fix(web): model picker uses the full window height in short windows | port |
-| 42cf5a168c | #26415 | composer | fix(web): compact model picker row indicators | port |
-| 2d0efd3584 | #27034 | composer | feat(claude): Ultracode works with any effort, like Claude Desktop | port |
-| 402d0623d5 | #31739 | thread | fix(composer): persist model picks before the next message | port |
-| d0f7a509cc | #33511 | composer | feat(models): the model picker checks for new models when it opens | port; needs wire: model catalog refresh |
+| cfe28f0646 | #26881 | composer | fix(web): model picker opens at its final height instead of shrinking | ported: the docked picker opens at one fixed 346pt height (ModelPickerView `docked`) |
+| c96c1b69f5 | #28057 | composer | feat(web): pick the model and its effort from one control | ported: Features/Pickers/ComposerModelEffort.swift, ComposerPickers.swift |
+| 85bd3f2a2a | #28044 | composer | fix(web): hide Ultrathink from the Claude effort picker | ported: the effort column drops prompt-injected levels (`ComposerEffortControls.choices`) |
+| 2359643cff | #28076 | composer | fix(web): model picker stays open until dismissed, with a Show more row | ported: the docked picker stays open after a pick, Show more trails the list (T3Store ModelPickerSections) |
+| 15fe283272 | #28162 | composer | fix(web): effort picker shows Default or the checkmark, flush right | ported: ComposerEffortRowView shows Default or the check, flush right |
+| 5fe18d79ac | #28307 | composer | fix(web): keep the model picker in place when its label changes | ported: the docked picker aligns to the trigger's end edge |
+| 575579d68a | #28409 | composer | fix(web): model picker stays put with long names and agent options | ported: 224pt model name cap, fixed height, other options open beside the column |
+| 77a728e3a1 | #28005 | connections | fix(web): show mixed automatic defaults across environments | skip: the settings default-model row, not the composer control; take it with the settings batch |
+| 72f05f6d8e | #29017 | composer | fix(web): model picker uses the full window height in short windows | skip: PopupPositioner has no side "shift" mode, so a short window flips the picker below; add the mode to PopupHost |
+| 42cf5a168c | #26415 | composer | fix(web): compact model picker row indicators | ported: one-line model rows with the provider logo (ModelRowView `layoutModern`) |
+| 2d0efd3584 | #27034 | composer | feat(claude): Ultracode works with any effort, like Claude Desktop | ported: the footer's Ultracode toggle and the trigger's workflow icon; the server sends the descriptor |
+| 402d0623d5 | #31739 | thread | fix(composer): persist model picks before the next message | skip: needs ComposerController to send `thread.metadata.update` on a pick, which waits for an app build to verify |
+| d0f7a509cc | #33511 | composer | feat(models): the model picker checks for new models when it opens | skip: needs wire: `modelCatalogRefresh` capability and `refreshProviders { modelCatalogOnly }` |
 
 ## Port group sidebar-shelves (3)
 
@@ -727,7 +727,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 00c6adbdce | #29388 | thread | feat(fx): choose a backend per thread | port; needs wire: per-thread backend |
+| 00c6adbdce | #29388 | thread | feat(fx): choose a backend per thread | skip: needs wire: `subProviders` and a per-thread backend |
 
 ## Small fixes, browser (18)
 
@@ -875,7 +875,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 3e1b7c4e93 | #38414 | composer | fix(web): a line typed after a composer list is sent after the list | port |
 | 01cfac429d | #38475 | composer | fix(web): Paste as Text pastes text when the clipboard also holds an image | port |
 | ad77fd88e2 | #37547 | composer | fix(web): Enter during image compression sends once it finishes | port |
-| a5090a7576 | #38684 | composer | fix(web): Default effort no longer shows as the lowest bar | port |
+| a5090a7576 | #38684 | composer | fix(web): Default effort no longer shows as the lowest bar | ported: ComposerEffortGlyph names Default |
 
 ## Small fixes, connections (46)
 
