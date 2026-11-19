@@ -423,7 +423,7 @@ public enum TimelineRows {
         var lastOutput: [RunAttemptId: TimelineEntry] = [:]
         var ids = Set<String>()
         for entry in entries {
-            if case .message(_, let row?) = entry.kind, row.item.type == .assistantMessage, row.item["phase"]?.stringValue == "final_answer" {
+            if case .message(_, let row?) = entry.kind, row.item.type == .assistantMessage, row.item.assistantPhase == "final_answer" {
                 ids.insert(entry.id)
             }
             guard let attempt = entry.attempt, attempt.status == "superseded" else { continue }
@@ -436,7 +436,7 @@ public enum TimelineRows {
         }
         for entry in lastOutput.values {
             guard case .message(let message, let row) = entry.kind, !message.streaming, let item = row?.item,
-                  item.type == .assistantMessage, item["phase"] == nil, item.status == .completed,
+                  item.type == .assistantMessage, item.assistantPhase == nil, item.status == .completed,
                   let done = item.completedAt?.epochMs, let superseded = entry.attempt?.completedAt?.epochMs, done < superseded
             else { continue }
             ids.insert(entry.id)

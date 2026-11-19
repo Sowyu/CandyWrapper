@@ -5,13 +5,10 @@ import T3Store
 /// `ModelSwitchRow` (chat/V2LifecycleRow.tsx:640-662 at 4928, #28995): a divider above your message when the model
 /// or the effort changed with it, labeled "<from> → <to>" with only what changed.
 enum ModelSwitchPresentation {
-    /// `user_message.modelSwitch`, read from the item's JSON.
-    // ponytail: decoded here from `raw`; move to the item's decoded fields once T3Protocol carries `modelSwitch`
+    /// `user_message.modelSwitch`.
     static func modelSwitch(_ item: ProjectedTurnItem?) -> (from: ModelSelection, to: ModelSelection)? {
-        guard let item, item.item.type == .userMessage, let value = item.item.raw["modelSwitch"],
-              let from = try? value["from"]?.decode(as: ModelSelection.self),
-              let to = try? value["to"]?.decode(as: ModelSelection.self) else { return nil }
-        return (from, to)
+        guard let item, item.item.type == .userMessage, let value = item.item.modelSwitch else { return nil }
+        return (value.from, value.to)
     }
 
     /// The divider's label, or nil when neither the model nor the effort visibly changed
