@@ -278,11 +278,12 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
     // T3 2994 ec43786140 (MessagesTimeline.logic.ts:722-800): a reply that finished before the steer stays in the
     // timeline, so its attempt doesn't fold; one the steer cut off still folds.
     @Test func keepsAReplyThatFinishedBeforeTheSteer() {
-        func result(replyCompletedAt: String) -> [String] {
+        func result(replyCompletedAt: String, phase: String? = nil) -> [String] {
             let old = TimelineAttempt(id: "attempt-1", runId: "turn-1", rootNodeId: "root-1", status: "superseded",
                                       completedAt: "2026-01-01T00:00:03Z")
             let current = TimelineAttempt(id: "attempt-2", runId: "turn-1", attemptOrdinal: 2, rootNodeId: "root-2", status: "running")
-            let item = turnItem(#"{"id":"old-reply","type":"assistant_message","runId":"turn-1","messageId":"old","text":"done","completedAt":"\#(replyCompletedAt)"}"#)
+            let phaseField = phase.map { #","phase":"\#($0)""# } ?? ""
+            let item = turnItem(#"{"id":"old-reply","type":"assistant_message","runId":"turn-1","messageId":"old","text":"done","completedAt":"\#(replyCompletedAt)"\#(phaseField)}"#)
             let message = ChatMessage(id: MessageId("old"), role: .assistant, text: "done", runId: "turn-1", streaming: false,
                                       createdAt: "2026-01-01T00:00:01Z", updatedAt: "2026-01-01T00:00:02Z")
             let reply = TimelineEntry(id: "old-reply", createdAt: "2026-01-01T00:00:01Z",
@@ -305,6 +306,12 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
         #expect(whole.contains("old-reply") && whole.contains("old-work") && !whole.contains("attempt-fold:attempt-1"))
         let cut = result(replyCompletedAt: "2026-01-01T00:00:04Z")
         #expect(cut.contains("attempt-fold:attempt-1") && !cut.contains("old-reply") && !cut.contains("old-work"))
+        // 4928 #34501: a provider's `phase` decides instead of the timing. A final answer stays even when it closed after
+        // the steer; commentary that finished first folds.
+        let final = result(replyCompletedAt: "2026-01-01T00:00:04Z", phase: "final_answer")
+        #expect(final.contains("old-reply") && !final.contains("attempt-fold:attempt-1"))
+        let commentary = result(replyCompletedAt: "2026-01-01T00:00:02Z", phase: "commentary")
+        #expect(commentary.contains("attempt-fold:attempt-1") && !commentary.contains("old-reply"))
     }
 
     // T3 3824 #26333 (MessagesTimeline.logic.ts:788): a handoff stays visible when its superseded attempt folds.

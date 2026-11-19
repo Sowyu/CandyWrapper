@@ -415,9 +415,17 @@ public enum TimelineRows {
     /// superseded attempts that finished before the steer replaced them. A steer stamps the attempt's `completedAt`
     /// when it is sent, and the provider closes a reply it cut off only after that, so a reply that completed earlier
     /// was whole. It must be the attempt's last output: trailing tool or reasoning work means the attempt went on.
+    ///
+    /// 4928 (`retainedAssistantReplyEntryIds`, MessagesTimeline.logic.ts at 4928, #34501): an answer whose provider
+    /// marks it `phase: "final_answer"` always stays, and the timing guess applies only to answers without a phase.
+    // ponytail: no `deferredWork.lastOrdinal` skip yet; add it with deferred work rows
     static func completeSupersededReplyEntryIds(_ entries: [TimelineEntry]) -> Set<String> {
         var lastOutput: [RunAttemptId: TimelineEntry] = [:]
+        var ids = Set<String>()
         for entry in entries {
+            if case .message(_, let row?) = entry.kind, row.item.type == .assistantMessage, row.item["phase"]?.stringValue == "final_answer" {
+                ids.insert(entry.id)
+            }
             guard let attempt = entry.attempt, attempt.status == "superseded" else { continue }
             switch entry.kind {
             case .message(let message, _) where message.role != .user: break
@@ -426,10 +434,9 @@ public enum TimelineRows {
             }
             lastOutput[attempt.id] = entry
         }
-        var ids = Set<String>()
         for entry in lastOutput.values {
             guard case .message(let message, let row) = entry.kind, !message.streaming, let item = row?.item,
-                  item.type == .assistantMessage, item.status == .completed,
+                  item.type == .assistantMessage, item["phase"] == nil, item.status == .completed,
                   let done = item.completedAt?.epochMs, let superseded = entry.attempt?.completedAt?.epochMs, done < superseded
             else { continue }
             ids.insert(entry.id)
