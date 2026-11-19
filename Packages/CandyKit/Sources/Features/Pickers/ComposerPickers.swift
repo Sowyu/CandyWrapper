@@ -74,11 +74,6 @@ public final class ComposerPickers {
         modelButton.tintsIcon = false
         modelButton.minimumWidth = 52
         modelButton.action = { [weak self] in self?.toggleModelPicker() }
-        controlsView.build.action = { [weak self] in
-            guard let self else { return }
-            store.setInteractionMode(draftKey, current.interactionMode == .plan ? .default : .plan)
-            refresh(notify: true)
-        }
         traitsButton.action = { [weak self] in self?.openTraits() }
         accessButton.action = { [weak self] in self?.openAccessMode() }
         controlsView.overflow.action = { [weak self] in self?.toggleOverflowMenu() }
@@ -110,7 +105,6 @@ public final class ComposerPickers {
         var runtimeMode: RuntimeMode
         var defaultRuntimeMode: RuntimeMode
         var interactionMode: InteractionMode
-        var planModeEnabled: Bool
         var themeGeneration: Int
         var appearance: NSAppearance.Name
         var effortDisplay: String
@@ -134,7 +128,7 @@ public final class ComposerPickers {
                                   triggerLabel: current.triggerLabel, traitsLabel: label,
                                   showsTraits: !current.descriptors.isEmpty, runtimeMode: current.runtimeMode,
                                   defaultRuntimeMode: context.projectDefaultRuntimeMode ?? context.serverDefaults.defaultRuntimeMode,
-                                  interactionMode: current.interactionMode, planModeEnabled: context.planModeEnabled,
+                                  interactionMode: current.interactionMode,
                                   themeGeneration: ThemeRuntime.generation, appearance: modelButton.effectiveAppearance.name, effortDisplay: ClientSettingsStore.shared.current.string("effortDisplay"))
         syncDocked()
         guard state != controlsState else { return }
@@ -169,13 +163,7 @@ public final class ComposerPickers {
             modelButton.paddingOverride = (8, 4)
             modelButton.maximumLabelWidth = 224
             accessButton.icon = IconView(definition: current.runtimeMode == .fullAccess ? Self.fullAccessGlyph : mode.icon.definition, size: 16)
-            controlsView.showsBuild = context.interactionModeEnabled(current.entry?.provider)
-            controlsView.build.emphasized = current.interactionMode == .plan
-            controlsView.build.scalesWhenPressed = true
-            controlsView.build.setAccessibilityValue(current.interactionMode == .plan)
             accessButton.iconFollowsLabel = true
-            controlsView.build.title = current.interactionMode == .plan ? "Plan" : "Build"
-            controlsView.build.icon = IconView(name: current.interactionMode == .plan ? .pencilRuler : .bot, size: 16)
             // The picker's footer always holds Permissions, so the chip shows only off the default
             // (composerControlsOwnership.ts:1-31).
             let defaultMode = context.projectDefaultRuntimeMode ?? context.serverDefaults.defaultRuntimeMode
@@ -183,7 +171,6 @@ public final class ComposerPickers {
             controlsView.hidesPermissions = current.runtimeMode == defaultMode || permissionsShownInStrip
         } else {
             accessButton.iconFollowsLabel = false
-            controlsView.showsBuild = false
             controlsView.permissionsIconOnly = false
             traitsButton.adornment = nil
             modelButton.adornment = nil
@@ -611,8 +598,6 @@ public final class PickerControlsView: DSView {
     public let overflow = ComposerControlView(icon: IconView(name: .ellipsis, size: 16))
     private let separators = [ComposerControlSeparatorView(), ComposerControlSeparatorView()]
     /// False when the model has no trait descriptors (`shouldRenderTraitsControls`).
-    public let build = ComposerControlView(title: "Build", icon: IconView(name: .bot, size: 16))
-    public var showsBuild = false { didSet { if showsBuild != oldValue { invalidateIntrinsicContentSize(); needsLayout = true } } }
     public var permissionsIconOnly = false
     public var hidesPermissions = false { didSet { if hidesPermissions != oldValue { invalidateIntrinsicContentSize(); needsLayout = true } } }
     public var showsTraits = true { didSet { if showsTraits != oldValue { invalidateIntrinsicContentSize(); needsLayout = true } } }
@@ -646,9 +631,6 @@ public final class PickerControlsView: DSView {
         unavailable.scalesWhenPressed = true
         unavailable.setAccessibilityRole(.button)
         unavailable.isHidden = true
-        build.showsChevron = false
-        addSubview(build)
-        build.isHidden = true
         for v in [model, separators[0], traits, separators[1], access, overflow, unavailable] as [NSView] { addSubview(v) }
     }
 
@@ -671,7 +653,7 @@ public final class PickerControlsView: DSView {
         // 3824 TraitsPicker.tsx:653-655: -ms-1 reduces the effort block's flow width too.
         let modern = ComposerDesign.groupedControls(dark: effectiveAppearance.isDark)
         func margin(_ control: ComposerControlView) -> CGFloat { modern && control === traits ? -4 : 0 }
-        return ComposerFooterLayout.Measurement(gap: modern ? 2 : 4, naturalFixedWidth: model.naturalWidth + (showsBuild ? build.naturalWidth + 2 : 0), minimumFixedWidth: model.minimumWidth + (showsBuild ? build.naturalWidth + 2 : 0),
+        return ComposerFooterLayout.Measurement(gap: modern ? 2 : 4, naturalFixedWidth: model.naturalWidth, minimumFixedWidth: model.minimumWidth,
                                                 blockWidths: b.map { sep + margin($0) + $0.width(showingLabel: !($0 === access && permissionsIconOnly)) },
                                                 iconOnlyBlockWidths: b.map { sep + margin($0) + $0.width(showingLabel: false) },
                                                 overflowWidth: overflow.naturalWidth)
@@ -700,7 +682,7 @@ public final class PickerControlsView: DSView {
         unavailable.isHidden = unavailableTitle == nil
         model.isHidden = unavailableTitle != nil
         if unavailableTitle != nil {
-            for v in [separators[0], traits, separators[1], access, overflow, build] as [NSView] { v.isHidden = true }
+            for v in [separators[0], traits, separators[1], access, overflow] as [NSView] { v.isHidden = true }
             let w = min(unavailable.naturalWidth, bounds.width)
             unavailable.frame = NSRect(x: 0, y: (bounds.height - 28) / 2, width: (w * 2).rounded() / 2, height: 28)
             return
@@ -721,8 +703,6 @@ public final class PickerControlsView: DSView {
         var items: [NSView] = [model]
         for (sep, trigger) in blocks.prefix(shown) { items += noSeparators ? [trigger] : [sep, trigger] }
         if noSeparators { separators.forEach { $0.isHidden = true } }
-        build.isHidden = !showsBuild
-        if showsBuild { items.insert(build, at: min(2, items.count)) }
         if !overflow.isHidden { items.append(overflow) }
         func natural(_ v: NSView) -> CGFloat { (v as? ComposerControlView)?.naturalWidth ?? 5 }
         let modern = ComposerDesign.groupedControls(dark: effectiveAppearance.isDark)

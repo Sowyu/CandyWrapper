@@ -281,22 +281,17 @@ public enum ComposerMenus {
     public static let pullRequestDebounce: TimeInterval = 0.18
     static let threadResultLimit = 5
 
-    /// The built-in slash commands (ChatComposer.tsx:2672-2698): `/model` always, `/plan` and
-    /// `/default` while plan mode is on for the provider.
-    public static func builtInCommands(planMode: Bool) -> [ComposerMenuItem] {
-        var items = [ComposerMenuItem(id: "slash:model", kind: .builtIn("model"), label: "/model", description: "Switch response model for this thread")]
-        if planMode {
-            items.append(ComposerMenuItem(id: "slash:plan", kind: .builtIn("plan"), label: "/plan", description: "Switch this thread into plan mode"))
-            items.append(ComposerMenuItem(id: "slash:default", kind: .builtIn("default"), label: "/default", description: "Switch this thread back to normal build mode"))
-        }
-        return items
+    /// The built-in slash commands (useComposerMenuItems.ts:254-262 at 4928): `/model`. #33131 removed `/plan` and
+    /// `/default` with plan mode.
+    public static func builtInCommands() -> [ComposerMenuItem] {
+        [ComposerMenuItem(id: "slash:model", kind: .builtIn("model"), label: "/model", description: "Switch response model for this thread")]
     }
 
     /// What the `/` menu offers: built-ins, the provider's commands (minus the ones a visible skill
     /// shadows, and `/compact` unless the prompt is only the command), then its skills; provider
     /// commands only at the start of the prompt (`slashCommandItemsForPromptPosition`).
     public static func slashItems(trigger: ComposerTrigger, provider: String, commands: [ServerProviderSlashCommand],
-                                  skills: [ServerProviderSkill], showSkills: Bool, planMode: Bool, compactAvailable: Bool) -> [ComposerMenuItem] {
+                                  skills: [ServerProviderSkill], showSkills: Bool, compactAvailable: Bool) -> [ComposerMenuItem] {
         let menuSkills = showSkills ? ProviderSkills.dedupe(skills.filter(ProviderSkills.isUserInvocable)) : []
         let skillNames = Set(menuSkills.map { $0.name.trimmingCharacters(in: .whitespaces).lowercased() })
         let commandItems = commands.filter { !skillNames.contains($0.name.trimmingCharacters(in: .whitespaces).lowercased()) }
@@ -308,7 +303,7 @@ public enum ComposerMenus {
                              label: "/skill:\(s.name)", description: s.shortDescription ?? s.description ?? (s.scope.map { "\($0) skill" } ?? ""))
         }
         let atStart = trigger.rangeStart == 0
-        let items = builtInCommands(planMode: planMode) + (atStart ? commandItems : []) + skillItems
+        let items = builtInCommands() + (atStart ? commandItems : []) + skillItems
         return searchSlash(items, query: trigger.query.trimmingCharacters(in: .whitespaces).lowercased(), skills: menuSkills)
     }
 
@@ -498,7 +493,7 @@ public enum ComposerMenus {
     }
 
     /// The prompt text a pick puts in place of the trigger, or nil for a pick that only acts
-    /// (`/model`, `/plan`, `/default` remove the token).
+    /// (`/model` removes the token).
     public static func replacement(for item: ComposerMenuItem) -> String {
         switch item.kind {
         case .path(let path, _): return ComposerInlineTokens.fileLink(path) + " "

@@ -168,13 +168,14 @@ struct ComposerMenusTests {
         let skills = [ServerProviderSkill(name: "review", path: "/r"), ServerProviderSkill(name: "off", path: "/o", enabled: false)]
         let start = ComposerTrigger(kind: .slashCommand, query: "", rangeStart: 0, rangeEnd: 1)
         let ids = ComposerMenus.slashItems(trigger: start, provider: "p", commands: commands, skills: skills, showSkills: true,
-                                           planMode: false, compactAvailable: false).map(\.id)
+                                           compactAvailable: false).map(\.id)
         // `/compact` waits for an idle thread; a skill shadows the command of the same name; disabled skills stay out.
         #expect(ids == ["slash:model", "skill:p:review"])
         let later = ComposerTrigger(kind: .slashCommand, query: "", rangeStart: 5, rangeEnd: 6)
         let laterIds = ComposerMenus.slashItems(trigger: later, provider: "p", commands: commands, skills: [], showSkills: true,
-                                                planMode: true, compactAvailable: true).map(\.id)
-        #expect(laterIds == ["slash:model", "slash:plan", "slash:default"])
+                                                compactAvailable: true).map(\.id)
+        // #33131: no /plan or /default.
+        #expect(laterIds == ["slash:model"])
     }
 
     @Test func skillSearch() {

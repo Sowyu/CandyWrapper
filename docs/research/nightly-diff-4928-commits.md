@@ -319,7 +319,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 521ac7c218 | #33131 | settings | feat(settings): clean up Labs: promote tool calls, remove plan mode and old toggles | port; removes plan mode toggle and old Labs toggles |
+| 521ac7c218 | #33131 | settings | feat(settings): clean up Labs: promote tool calls, remove plan mode and old toggles | ported: Labs drops Legacy features, the composer drops Build/Plan, /plan and /default, Tool calls in chat sits in Chat > Activity; the dead proposed-plan follow-up in ComposerController and T3Store's `planModeEnabled` context field are left for cleanup |
 
 ## Port group secret-cards (1)
 
@@ -600,7 +600,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 3d78e915e3 | #30000 | settings | feat(web): a Labs setting hides tool calls so threads read like a chat | port; Labs hide tool calls |
+| 3d78e915e3 | #30000 | settings | feat(web): a Labs setting hides tool calls so threads read like a chat | partly ported: the `toolCallVisibility` setting and its row; the timeline filter (MessagesTimeline.logic.ts) is still to port in Features/Thread |
 
 ## New feature reclaim-db (1)
 

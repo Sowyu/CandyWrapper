@@ -2,8 +2,8 @@ import AppKit
 import DesignSystem
 import T3Protocol
 
-/// Settings > Beta (BetaSettingsPanel.tsx at 3669, the Beta section of LabsSettingsPanel.tsx at 3814): features still
-/// settling in, each off until turned on here.
+/// Settings > Beta (BetaSettingsPanel.tsx at 3669, LabsSettingsPanel.tsx at 4928): features still settling in, each off
+/// until turned on here.
 /// Working section moved here from General; Guest links is new. Signed out of T3 Connect, Guest links offers
 /// Sign in in place of its switch (`GuestLinksRowWithSignIn`), but only once the account has loaded.
 public final class BetaSettingsView: SettingsPageBase {
@@ -13,12 +13,10 @@ public final class BetaSettingsView: SettingsPageBase {
 
     public override init(context: SettingsPageContext) {
         super.init(context: context)
-        // LabsSettingsPanel.tsx:29-50 (3814): retain legacy opt-ins until this switch changes.
+        // LabsSettingsPanel.tsx:31-51 (4928): the legacy sidebar opt-in is gone (#33131).
         let folders = clientSwitch("boring-sidebar",
             "Group sidebar threads into project folders. Pinned threads stay on top, and Snoozed and Settled stay below the folders.",
-            key: "boringSidebarEnabled", label: "Boring sidebar (group by project)", title: "Boring sidebar (group by project)",
-            read: { $0.bool("boringSidebarEnabled") || $0.bool("legacySidebarEnabled") },
-            write: { ["boringSidebarEnabled": .bool($0), "legacySidebarEnabled": .bool(false)] })
+            key: "boringSidebarEnabled", label: "Boring sidebar (group by project)", title: "Boring sidebar (group by project)")
         let guest = serverSwitch("guest-links", Self.guestDetail, key: "guestSharingEnabled", reset: nil, label: "Guest links")
         guest.title = "Guest links"
         // T3's copy names the Connections group for links and its Sharing & access page for guests (LabsSettingsPanel.tsx at 3814).
@@ -47,9 +45,8 @@ public final class BetaSettingsView: SettingsPageBase {
             // Servers before Nightly 3814 can't link (settings.ts:1209, environment.ts:139-142).
             linked.isHidden = !self.context.scope.allStore("linkedEnvironmentsEnabled")
         }
-        let plan = clientSwitch("legacy-plan-mode", "Restore Build/Plan, /plan, /default, and Shift+Tab. Off uses build mode.", key: "planModeEnabled", title: "Plan mode (legacy)")
-        let meter = clientSwitch("legacy-context-window-indicator", "Shows context window usage as a circular indicator in the composer.", key: "contextWindowMeterEnabled", title: "Context window indicator (legacy)")
-        items = [section("beta", "Beta", [folders, guest, linked]), section("legacy-features", "Legacy features", [plan, meter])]
+        // #33131 removed the Legacy features section: plan mode and the context window indicator.
+        items = [section("beta", "Beta", [folders, guest, linked])]
         binder.refresh()
     }
 }
