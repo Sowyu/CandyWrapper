@@ -129,4 +129,19 @@ struct Nightly4928WireTests {
         #expect(try item("command_execution", #""completionWake":"always""#).completionWake == "always")
         #expect(try item("assistant_message", #""text":"x""#).assistantPhase == nil)
     }
+
+    /// Item 11: hosted thread links (shared/src/threadLinks.ts:50-68) and link metadata (orchestrationV2.ts:4017-4021).
+    @Test func hostedThreadLinksAndMetadata() throws {
+        let link = try #require(ThreadLink(href: "https://app.t3.codes/threads/env-1/thread%2E1"))
+        #expect(link.environmentId == "env-1" && link.threadId == "thread.1")
+        #expect(link.href == "t3-thread://v2/env-1/thread.1")
+        #expect(ThreadLink(href: "https://app.t3.codes/threads/env-1") == nil)
+        #expect(ThreadLink(href: "https://app.t3.codes/threads/env-1/t/extra") == nil)
+        #expect(ThreadLink(href: "https://app.t3.codes/threads/env 1/t") == nil)
+        #expect(ThreadLink(href: "t3-thread://v1/abc")?.threadId == "abc")
+
+        #expect(ThreadLinkMetadata.input(threadIds: ["a", "b"]) == Self.json(#"{"threadIds":["a","b"]}"#))
+        let meta = ThreadLinkMetadata.decode(Self.json(#"{"a":{"title":"A","projectId":"p"},"b":{"title":"B","projectId":null},"c":{"oops":1}}"#))
+        #expect(meta.count == 2 && meta["a"]?.projectId == "p" && meta["b"]?.title == "B" && meta["b"]?.projectId == nil)
+    }
 }
