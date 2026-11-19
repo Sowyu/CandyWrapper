@@ -256,6 +256,7 @@ public final class SidebarContentView: DSView {
     public private(set) var searchHighlight = 0
     private var searchMatches: [ThreadSearchMatch] = []
     private var searchPending = false
+    private var searchFailed = false
     private(set) var searchTask: Task<Void, Never>?
     /// The wait for a settled query before the server search. Tests replace it to skip the real clock.
     var searchDebounce: @MainActor () async -> Void = { try? await Task.sleep(for: .milliseconds(SidebarModel.threadSearchDebounceMs)) }
@@ -609,7 +610,7 @@ public final class SidebarContentView: DSView {
 
     private func searchItems(nowMs: Int64) -> [SidebarItem] {
         SidebarListBuilder.searchItems(snapshot: listSnapshot, state: state, query: searchQuery, matches: searchMatches,
-                                       pending: searchPending, highlighted: searchHighlight, nowMs: nowMs)
+                                       pending: searchPending, failed: searchFailed, highlighted: searchHighlight, nowMs: nowMs)
     }
 
     // MARK: Search (Sidebar.tsx:2893-2937, 3203-3250)
@@ -627,6 +628,7 @@ public final class SidebarContentView: DSView {
         searchHighlight = 0
         searchTask?.cancel()
         searchMatches = []
+        searchFailed = false
         // `useThreadSearch`: the server search waits for a settled query of two or more characters.
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         searchPending = q.count >= SidebarModel.threadSearchMinLength
@@ -638,6 +640,7 @@ public final class SidebarContentView: DSView {
                 guard !Task.isCancelled, let self,
                       self.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines) == q else { return }
                 self.searchMatches = matches ?? []
+                self.searchFailed = matches == nil
                 self.searchPending = false
                 self.rebuild(animated: false)
             }
@@ -779,6 +782,7 @@ public final class SidebarContentView: DSView {
         guard let thread = snapshot?.threads.first(where: { $0.id == id }) else { return }
         list.renameField.begin(id, title: thread.title)
         state.renamingThreadId = id
+        list.closeHoverCard()
         if let frame = list.rowFrame(id) { list.scrollToVisible(frame) }
         list.needsLayout = true
         DispatchQueue.main.async { [weak self] in
@@ -809,7 +813,8 @@ public final class SidebarContentView: DSView {
 
     /// `SidebarThreadTooltip`'s props for a thread.
     func hoverCardModel(_ id: ThreadId) -> SidebarThreadHoverCardModel? {
-        guard let snapshot, let thread = snapshot.threads.first(where: { $0.id == id }) ?? snapshot.archivedThreads.first(where: { $0.id == id })
+        // A row being renamed shows no hover card over its field (T3 4928 SidebarThreadRow.tsx, #31009).
+        guard state.renamingThreadId != id, let snapshot, let thread = snapshot.threads.first(where: { $0.id == id }) ?? snapshot.archivedThreads.first(where: { $0.id == id })
         else { return nil }
         var m = SidebarThreadHoverCardModel(title: thread.title)
         let project = snapshot.projects.first { $0.id == thread.projectId }
@@ -1050,11 +1055,12 @@ public final class SidebarContentView: DSView {
         }
         filterMonogram.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
         search.frame = NSRect(x: 8, y: rowY, width: max(0, right - 4 - 8), height: searchHeight)
-        // Footer: `flex-col gap-2 px-2 py-1`: the undo notice, then 32px icon buttons 4px apart.
+        // Footer: `flex-col gap-2 px-2 pt-1 pb-2`: 32px icon buttons 4px apart, the undo notice after them.
         // Dither (after Capy): the account row takes the footer, a 44pt pill floating 8 in from the sidebar's edges.
         let accountFooter = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !isOnUtilityPage
-        let menuTop = accountFooter ? h - 8 - SidebarAccountRowView.height : h - 36
-        var footerTop = accountFooter ? menuTop - 8 : h - 40
+        // T3 4928 ui/sidebar.tsx:675 (#22027): `pt-1 pb-[--sidebar-content-inset]`, 8 under the buttons.
+        let menuTop = accountFooter ? h - 8 - SidebarAccountRowView.height : h - 40
+        var footerTop = accountFooter ? menuTop - 8 : h - 44
         var stackTop = menuTop
         if !providerUpdatePill.isHidden {
             providerUpdatePill.frame = NSRect(x: 8, y: stackTop - 8 - 28, width: w - 16, height: 28)

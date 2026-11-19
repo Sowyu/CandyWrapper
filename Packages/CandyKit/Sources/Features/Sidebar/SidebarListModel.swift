@@ -475,7 +475,7 @@ public enum SidebarListBuilder {
     /// matches first, then the server's message matches. No results: "Searching thread messages…" while
     /// the server search is pending, else "No threads found".
     public static func searchItems(snapshot: ShellSnapshot?, state: SidebarListState, query: String, matches: [ThreadSearchMatch],
-                                   pending: Bool, highlighted: Int, nowMs: Int64) -> [SidebarItem] {
+                                   pending: Bool, failed: Bool = false, highlighted: Int, nowMs: Int64) -> [SidebarItem] {
         guard let snapshot else { return [] }
         let ctx = Context(snapshot: snapshot, state: state, nowMs: nowMs)
         let s = ctx.shelves
@@ -483,7 +483,9 @@ public enum SidebarListBuilder {
         let found = SidebarModel.searchSidebarThreads(s.pinned + s.active + s.working + s.snoozed + s.settled, query: query,
                                                       contentMatchIds: Set(matchById.keys))
         guard !found.isEmpty else {
-            return [.emptyText(pending ? "Searching thread messages\u{2026}" : "No threads found", search: true)]
+            // A search that failed says so (T3 4928 Sidebar.tsx, #38155).
+            return [.emptyText(pending ? "Searching thread messages\u{2026}" : failed ? "Couldn't search thread messages" : "No threads found",
+                               search: true)]
         }
         return found.enumerated().map { i, t in
             .searchResult(SidebarSearchResultModel(

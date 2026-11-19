@@ -2,8 +2,8 @@ import AppKit
 import DesignSystem
 import T3Protocol
 
-/// The inline rename input (Sidebar.tsx:1650-1663): `rounded-sm border border-input bg-card px-1 text-sm
-/// font-medium text-card-foreground outline-none focus:border-foreground`. Return commits, Escape cancels,
+/// The inline rename input (T3 4928 SidebarThreadRow.tsx, #31009): `-mx-1 rounded-sm bg-card px-1 text-sm font-medium
+/// text-card-foreground outline-none ring-1 ring-inset ring-input focus:ring-foreground`. Return commits, Escape cancels,
 /// leaving the field commits; the text is selected when it takes focus.
 final class SidebarRenameFieldView: DSView {
     let input = InputView(size: .inline)
@@ -65,7 +65,8 @@ final class SidebarRenameFieldView: DSView {
 
     override func layout() {
         super.layout()
-        input.frame = bounds.insetBy(dx: 1, dy: 1)
+        // `ring-1 ring-inset` takes no room, so the text sits where the title was (T3 4928 SidebarThreadRow.tsx, #31009).
+        input.frame = bounds
     }
 
     override func updateLayer() {
@@ -79,7 +80,8 @@ extension SidebarRowBase {
     func placeRenameField(_ field: SidebarRenameFieldView?, over title: NSView, frame: NSRect) {
         if let field {
             if field.superview !== self { addSubview(field) }
-            field.frame = frame
+            // `-mx-1` around the title's own line: the field's `px-1` puts the text where the title's was.
+            field.frame = NSRect(x: frame.minX - 4, y: frame.minY + 1, width: frame.width + 8, height: max(0, frame.height - 2))
             title.isHidden = true
         } else {
             title.isHidden = false

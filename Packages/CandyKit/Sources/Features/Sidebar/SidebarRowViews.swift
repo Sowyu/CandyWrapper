@@ -1180,7 +1180,9 @@ final class SidebarSlimRowView: SidebarRowBase {
             switch r.action {
             case .unsnooze: b = RowActionButton(icon: .alarmClockOff, size: 12, accessibility: "Wake thread now")
             case .unsettle: b = RowActionButton(icon: .undo2, size: 14, accessibility: "Un-settle thread")
-            case .settle: b = RowActionButton(icon: .check, size: 12, accessibility: "Settle thread")
+            case .settle:
+                b = RowActionButton(icon: .check, size: 12, accessibility: "Settle thread")
+                b.padding = 8 // `px-2`
             }
             b.action = { [weak self] in
                 guard let self, let r = self.row else { return }
@@ -1238,7 +1240,9 @@ final class SidebarSlimRowView: SidebarRowBase {
         var timeRight = w - 10
         if let b = actionButton {
             let bw = b.preferredWidth
-            b.frame = NSRect(x: w - 10 + 4 - bw, y: (h - 24) / 2, width: bw, height: 24) // `-mr-1`
+            // `-mr-1`; Settle's `-mr-2 px-2` puts its check flush with the timestamps (T3 4928 SidebarThreadRow.tsx:1508, #33053).
+            let outset: CGFloat = row?.action == .settle ? 8 : 4
+            b.frame = NSRect(x: w - 10 + outset - bw, y: (h - 24) / 2, width: bw, height: 24)
             if wokeBeside { timeRight = b.frame.minX }
         }
         var slot = lift == nil ? max(32, w - 10 - timeRight + pill) : lift?.verb == nil ? -10 : dropBadge?.preferredWidth ?? 0 // `min-w-8`

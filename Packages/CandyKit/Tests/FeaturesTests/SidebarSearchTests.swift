@@ -43,6 +43,9 @@ struct SidebarSearchTests {
         let done = SidebarListBuilder.searchItems(snapshot: snap, state: SidebarListState(), query: "zzz", matches: [], pending: false,
                                                   highlighted: 0, nowMs: nowMs)
         #expect(done == [.emptyText("No threads found", search: true)])
+        let failed = SidebarListBuilder.searchItems(snapshot: snap, state: SidebarListState(), query: "zzz", matches: [], pending: false,
+                                                    failed: true, highlighted: 0, nowMs: nowMs)
+        #expect(failed == [.emptyText("Couldn't search thread messages", search: true)]) // T3 4928 #38155
     }
 
     @Test func pullRequestTermsMatch() {
