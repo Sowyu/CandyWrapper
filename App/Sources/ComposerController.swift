@@ -360,6 +360,12 @@ final class ComposerController {
         pickers.onBlocked = { [weak self] reason in self?.report(.modelChangeBlocked(reason), key: nil) }
         // ponytail: Settings has no page per provider, so Manage lands on Providers; deep-link when it gets one
         pickers.onManageProvider = { [weak self] _ in self?.openProviderSetup?() }
+        // #33511: an opened picker asks a 4928 server for newly released models; older servers would drop the
+        // field and probe every provider, so they get nothing (ProviderModelPicker.tsx:139-150).
+        pickers.onModelPickerOpen = { [weak self] in
+            guard let supervisor = self?.shell?.supervisor, self?.serverConfig.capabilities.contains("modelCatalogRefresh") == true else { return }
+            Task { _ = try? await supervisor.request("server.refreshProviders", payload: .object(["modelCatalogOnly": .bool(true)])) }
+        }
         panel.errorBanner.onDismiss = { [weak self] in self?.dismissThreadError() }
         // ThreadErrorBanner.tsx:17-27: the admin request goes to the clipboard with a toast either way.
         panel.errorBanner.onCopyAdminRequest = { [weak self] in

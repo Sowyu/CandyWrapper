@@ -97,7 +97,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 42cf5a168c | #26415 | composer | fix(web): compact model picker row indicators | ported: one-line model rows with the provider logo (ModelRowView `layoutModern`) |
 | 2d0efd3584 | #27034 | composer | feat(claude): Ultracode works with any effort, like Claude Desktop | ported: the footer's Ultracode toggle and the trigger's workflow icon; the server sends the descriptor |
 | 402d0623d5 | #31739 | thread | fix(composer): persist model picks before the next message | ported: a pick on a started thread sends `thread.model-selection.set` at once (ComposerController `applyThreadModelPick`, T3Store `modelPickToApply`) |
-| d0f7a509cc | #33511 | composer | feat(models): the model picker checks for new models when it opens | skip: needs wire: `modelCatalogRefresh` capability and `refreshProviders { modelCatalogOnly }` |
+| d0f7a509cc | #33511 | composer | feat(models): the model picker checks for new models when it opens | ported: an opened model picker sends `server.refreshProviders {modelCatalogOnly: true}` when the server has `modelCatalogRefresh` (ComposerPickers `onModelPickerOpen`, ComposerController) |
 
 ## Port group sidebar-shelves (3)
 

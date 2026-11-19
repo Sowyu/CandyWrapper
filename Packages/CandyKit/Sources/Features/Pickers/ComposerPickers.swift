@@ -34,6 +34,8 @@ public final class ComposerPickers {
     public final var onBlocked: (@MainActor (String) -> Void)?
     /// Redesign's model picker card "Manage": open that provider's settings.
     public final var onManageProvider: (@MainActor (ProviderInstanceId) -> Void)?
+    /// The model picker opened, from any trigger (ProviderModelPicker.tsx:149 at 4928).
+    public final var onModelPickerOpen: (@MainActor () -> Void)?
 
     /// Whether the draft may fan out to several models (a new thread on a server with
     /// `requiredWorktreeBootstrap`); the app sets it per draft.
@@ -298,6 +300,7 @@ public final class ComposerPickers {
         modelPicker = view
         syncDocked()
         modelButton.window?.makeFirstResponder(view.search)
+        onModelPickerOpen?()
     }
 
     /// The model picker's provider rail (`modelPicker.previousProvider` / `nextProvider`) while it is open.
