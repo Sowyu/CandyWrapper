@@ -6,7 +6,10 @@ import T3Protocol
 /// every observer once.
 @MainActor
 public final class ClientSettingsStore {
-    public static let shared = ClientSettingsStore(ephemeral: CommandLine.arguments.contains("--fake-t3-connect"))
+    /// In-memory for test apps (`--fake-t3-connect`) and test runners. `swift test` and `xctest` keep one defaults
+    /// domain across runs and checkouts, so tests would otherwise read whatever an earlier run or the Mac saved.
+    public static let shared = ClientSettingsStore(ephemeral: CommandLine.arguments.contains("--fake-t3-connect")
+                                                   || ["swiftpm-testing-helper", "xctest"].contains(ProcessInfo.processInfo.processName))
 
     static let defaultsKey = "clientSettings.v1"
     private let defaults: UserDefaults

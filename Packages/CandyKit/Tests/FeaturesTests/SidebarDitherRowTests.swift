@@ -15,6 +15,7 @@ struct SidebarDitherRowTests {
         dither.ditherLight = true; dither.ditherDark = true
         ThemeRuntime.apply(dither)
         let content = SidebarContentView()
+        content.hideWorkingShelf()
         content.now = { SidebarPreview.referenceNow }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 255, height: 780), styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -102,5 +103,14 @@ struct SidebarDitherRowTests {
         #expect(zip(shown, shown.dropFirst()).allSatisfy { $0.frame.maxX <= $1.frame.minX })
         #expect(shown[0].frame.width > shown[1].frame.width && shown[1].frame.width == shown[2].frame.width)
         window.contentView = nil
+    }
+}
+
+extension SidebarContentView {
+    /// For tests about card rows: the Working shelf, on by default since 3814 (`sidebarWorkingShelfEnabled`),
+    /// would move their working threads out of the list.
+    func hideWorkingShelf() {
+        state.workingShelfEnabled = false
+        state.inboxReturns = nil
     }
 }

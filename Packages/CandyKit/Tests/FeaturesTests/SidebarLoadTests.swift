@@ -51,6 +51,7 @@ struct SidebarLoadTests {
     /// list still equals a fresh build.
     @Test func contentViewPatchesTheList() throws {
         let content = SidebarContentView()
+        content.hideWorkingShelf()
         var now = SidebarPreview.referenceNow
         content.now = { now }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 255, height: 780), styleMask: [.borderless], backing: .buffered, defer: false)

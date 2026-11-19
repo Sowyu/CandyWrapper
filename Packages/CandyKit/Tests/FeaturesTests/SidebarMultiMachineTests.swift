@@ -86,6 +86,7 @@ struct SidebarMultiMachineTests {
         var shells = MergedShell()
         for env in Self.envs { shells.set(Self.machineShell(env, threads: 3), environmentId: env) }
         let content = SidebarContentView()
+        content.hideWorkingShelf()
         content.now = { SidebarPreview.referenceNow }
         let window = host(content)
         defer { window.contentView = nil }

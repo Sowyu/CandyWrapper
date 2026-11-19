@@ -15,6 +15,7 @@ struct OrchestratorThreadRowTests {
     /// when the toggle is on, or without them.
     func rows(orchestrator: Bool, dark: Bool) throws -> [String: Data] {
         let content = SidebarContentView()
+        content.hideWorkingShelf()
         content.now = { SidebarPreview.referenceNow }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 255, height: 900), styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false

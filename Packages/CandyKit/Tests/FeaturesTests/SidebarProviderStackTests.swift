@@ -34,6 +34,7 @@ struct SidebarProviderStackTests {
         dither.ditherLight = true; dither.ditherDark = true
         ThemeRuntime.apply(dither)
         let content = SidebarContentView()
+        content.hideWorkingShelf()
         content.now = { SidebarPreview.referenceNow }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 255, height: 900), styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
