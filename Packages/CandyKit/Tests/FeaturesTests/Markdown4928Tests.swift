@@ -59,4 +59,18 @@ struct Markdown4928Tests {
         }
         #expect(cards(clamped).first?.height == 52)
     }
+
+    /// #32402, #32403, #37750, #30762, #34006: which inline code becomes a file chip.
+    @Test func inlineCodePathsAt4928() {
+        for chip in ["docker/Dockerfile", "allocator.cc:217", "/Users/me/Mobile Documents/a - b.md", "src/a.ts:42-64",
+                     "app/routes/posts.$id.tsx", "~/Library/Application Support/x.json"] {
+            #expect(FileLinks.inlineCodeCandidate(chip) != nil, "\(chip)")
+        }
+        for code in ["/usr/bin/python3 -m venv .venv", "/usr/local/bin/node server.js", "/tmp/.../a.ts", "src/…/b.ts",
+                     "I/W217:220", "example.com:8080", "foo bar/baz.ts", "docker/notes"] {
+            #expect(FileLinks.inlineCodeCandidate(code) == nil, "\(code)")
+        }
+        #expect(FileLinks.parseLink("src/a.ts:42-64")?.line == 42)
+        #expect(FileLinks.parseLink("src\\a.ts")?.path == "src/a.ts")
+    }
 }
