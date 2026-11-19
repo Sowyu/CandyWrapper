@@ -192,6 +192,8 @@ final class UserMessageRowView: TimelineRowView {
     private var collapsible = false
     /// The image grid and file rows above the text (MessagesTimeline.tsx:2402-2490).
     private let attachments = UserMessageAttachmentsView()
+    /// "<from> → <to>" above the message when the model or effort changed with it (TimelineUserMessageRow.tsx:270-283 at 4928).
+    private let modelSwitch = HandoffDividerView()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -199,6 +201,8 @@ final class UserMessageRowView: TimelineRowView {
         bubble.radius = ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 16 : 18
         bubble.pane = true
         attribution.lineHeight = 16
+        modelSwitch.isHidden = true
+        addSubview(modelSwitch)
         addSubview(attribution)
         addSubview(marker)
         addSubview(bubble)
@@ -252,6 +256,11 @@ final class UserMessageRowView: TimelineRowView {
         guard case .message(let m, _, _, _, _, _) = item.row.kind else { return }
         let presentation = UserMessagePresentation.resolve(m)
         text = presentation.text
+        let switchLabel = ModelSwitchPresentation.modelSwitch({ if case .message(_, let p, _, _, _, _) = item.row.kind { return p }; return nil }()).flatMap {
+            ModelSwitchPresentation.label(from: $0.from, to: $0.to, providers: context.model?.providers ?? [])
+        }
+        modelSwitch.isHidden = switchLabel == nil
+        if let switchLabel { modelSwitch.configure(label: switchLabel) }
         // "Sent by T3 Code", or in its place a guest's name (`GuestMessageName`, guestMessageStyle.tsx at 3669),
         // which VoiceOver skips because the row's heading names the guest (TimelineUserMessageRow.tsx:433-438).
         attribution.text = presentation.guestName ?? "Sent by T3 Code"
@@ -390,7 +399,8 @@ final class UserMessageRowView: TimelineRowView {
     }
 
     /// The attribution and marker lines, each with the 4px gap under it (`flex-col gap-1`).
-    private var attributionSpace: CGFloat { attribution.isHidden ? 0 : 16 + 4 }
+    private var switchSpace: CGFloat { modelSwitch.isHidden ? 0 : HandoffDividerView.height }
+    private var attributionSpace: CGFloat { switchSpace + (attribution.isHidden ? 0 : 16 + 4) }
     private var markerSpace: CGFloat { attributionSpace + (marker.isHidden ? 0 : UserIntentMarkerView.height + 4) }
 
     private func metrics(_ width: CGFloat) -> (bubble: CGFloat, attachments: CGFloat, body: CGFloat, full: CGFloat) {
@@ -446,7 +456,8 @@ final class UserMessageRowView: TimelineRowView {
             : bodyTop + (open ? m.attachments + m.body + Self.padding : 0)
         let top = markerSpace
         let attributionWidth = ceil(attribution.textWidth) + 1
-        attribution.frame = NSRect(x: width - 4 - attributionWidth, y: 0, width: attributionWidth, height: 16)
+        modelSwitch.frame = NSRect(x: 0, y: 0, width: width, height: HandoffDividerView.height)
+        attribution.frame = NSRect(x: width - 4 - attributionWidth, y: switchSpace, width: attributionWidth, height: 16)
         let markerWidth = marker.fittingWidth
         marker.frame = NSRect(x: width - 4 - markerWidth, y: attributionSpace, width: markerWidth, height: UserIntentMarkerView.height)
         bubble.frame = NSRect(x: width - m.bubble, y: top, width: m.bubble, height: bubbleHeight)
@@ -498,7 +509,7 @@ final class UserMessageRowView: TimelineRowView {
     /// row's `pb-4` under the hover line does not reveal it.
     override var tracksPointerMoves: Bool { true }
     override func hoverChanged() {
-        let inGroup = pointer.map { $0.y < bounds.height - bottomPadding } ?? false
+        let inGroup = pointer.map { $0.y >= switchSpace && $0.y < bounds.height - bottomPadding } ?? false
         Self.reveal([time, copyButton, editButton, openLink], inGroup || focusWithin)
     }
 }
