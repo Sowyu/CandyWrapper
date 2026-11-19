@@ -362,6 +362,23 @@ public enum SidebarModel {
         return failed > visited
     }
 
+    /// `hiddenThreadKeys`'s tag rule (T3 4928 client-runtime/src/state/threadTagFilter.ts, #29053): a thread hides when
+    /// one of its tags is in its environment's `hiddenThreadTags` while that environment's `hideTaggedThreads` is on.
+    /// `hiddenTags` holds only the environments whose filter is on. Subagents and side chats aren't listed anyway.
+    // ponytail: delegated tasks follow their parent in T3 (`visibilityParentKey`); add that once CW decodes `delegatedFrom`.
+    public static func hidesForTags(_ thread: ThreadShell, hiddenTags: [String: Set<String>]) -> Bool {
+        guard !hiddenTags.isEmpty, let tags = thread.tags?.values, !tags.isEmpty,
+              let hidden = hiddenTags[thread.id.environmentId ?? ""] else { return false }
+        return tags.contains { hidden.contains($0) }
+    }
+
+    /// The tags an environment hides, from its server settings: nil while `hideTaggedThreads` is off.
+    public static func hiddenThreadTags(settings: JSONValue) -> Set<String>? {
+        guard settings["hideTaggedThreads"] == .bool(true) else { return nil }
+        return Set((settings["hiddenThreadTags"]?.arrayValue ?? []).compactMap { $0.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty })
+    }
+
     /// `resolveSidebarRowStatus` (T3 4928 Sidebar.logic.ts:960-968): a failure the user has already opened settles
     /// to ready, like Done. A runtime failure without a failed run has nothing to date it, so it stays.
     public static func resolveSidebarRowStatus(_ thread: SidebarThread, lastVisitedAt: T3Timestamp?) -> SidebarThreadStatus {

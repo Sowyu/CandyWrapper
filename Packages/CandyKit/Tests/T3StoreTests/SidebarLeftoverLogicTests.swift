@@ -181,3 +181,20 @@ struct SidebarLeftoverLogicTests {
         #expect(SidebarModel.buildProjectGroups([root, web], grouping: override).count == 2)
     }
 }
+
+/// T3 4928 client-runtime/src/state/threadTagFilter.ts (#29053): tagged threads hide while their environment hides them.
+@Suite struct ThreadTagFilterTests {
+    @Test func aHiddenTagHidesTheThreadOnlyWhileTheFilterIsOn() {
+        let tagged = thread("t") { $0.tags = LenientArray(["client", "demo"]) }
+        let plain = thread("p")
+        let env = tagged.id.environmentId ?? ""
+        #expect(SidebarModel.hiddenThreadTags(settings: .object(["hiddenThreadTags": .array([.string("client")])])) == nil)
+        let on = SidebarModel.hiddenThreadTags(settings: .object(["hideTaggedThreads": .bool(true),
+                                                                  "hiddenThreadTags": .array([.string(" client "), .string("")])]))
+        #expect(on == ["client"])
+        #expect(SidebarModel.hidesForTags(tagged, hiddenTags: [env: on!]))
+        #expect(!SidebarModel.hidesForTags(plain, hiddenTags: [env: on!]))
+        #expect(!SidebarModel.hidesForTags(tagged, hiddenTags: [env: ["other"]]))
+        #expect(!SidebarModel.hidesForTags(tagged, hiddenTags: [:]))
+    }
+}

@@ -330,6 +330,8 @@ public struct SidebarListState: Equatable, Sendable {
     /// Threads the list leaves out: the Orchestrator's own, which sits pinned above the list. Every other row stays
     /// exactly as T3 draws it.
     public var hiddenThreadIds: Set<ThreadId> = []
+    /// Per environment, the thread tags it hides while its `hideTaggedThreads` is on (T3 4928 #29053).
+    public var hiddenThreadTags: [String: Set<String>] = [:]
 
     public init(activeThreadId: ThreadId? = nil) { self.activeThreadId = activeThreadId }
 
@@ -346,7 +348,7 @@ public struct SidebarListState: Equatable, Sendable {
             && a.heldOrder?.section == b.heldOrder?.section && a.heldOrder?.order == b.heldOrder?.order
             && a.collapsedProjects == b.collapsedProjects && a.dither == b.dither
             && a.projectSortOrder == b.projectSortOrder && a.projectOrder == b.projectOrder
-            && a.hiddenThreadIds == b.hiddenThreadIds
+            && a.hiddenThreadIds == b.hiddenThreadIds && a.hiddenThreadTags == b.hiddenThreadTags
     }
 }
 

@@ -489,6 +489,9 @@ final class ThreadController {
             guard let sidebar, let config = self?.composer.config(env) else { return }
             let root = config.scratchWorkspaceRoot.map(SidebarModel.normalizeProjectPath)
             if sidebar.state.scratchRoots[env] != root { sidebar.state.scratchRoots[env] = root }
+            // Threads with a hidden tag leave the sidebar while the environment hides them (T3 4928 #29053).
+            let tags = SidebarModel.hiddenThreadTags(settings: config.settings.raw)
+            if sidebar.state.hiddenThreadTags[env] != tags { sidebar.state.hiddenThreadTags[env] = tags }
         }
         lineage = ThreadLineageController(panel: panel)
         gallery = ThreadImageGalleryController(pill: panel.header.pill)

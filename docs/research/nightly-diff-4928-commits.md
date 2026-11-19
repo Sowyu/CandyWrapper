@@ -15,8 +15,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 5211acfe95 | #26463 | sidebar | feat(web): boring sidebar can show folder threads on two lines | port |
-| 911212bf4f | #26495 | composer | fix(web): open project picker from boring sidebar's header | port |
+| 5211acfe95 | #26463 | sidebar | feat(web): boring sidebar can show folder threads on two lines | left: the two-line folder row and its Labs switch, see PROGRESS.md |
+| 911212bf4f | #26495 | composer | fix(web): open project picker from boring sidebar's header | already in CandyWrapper: App/Sources/PaletteCommands.swift:916 opens the picker in every sidebar |
 
 ## Port group composer-lists (1)
 
@@ -52,7 +52,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 35b298a159 | #26874 | sidebar | fix(web): undo notice moves to the sidebar footer so it never covers a thread | port |
+| 35b298a159 | #26874 | sidebar | fix(web): undo notice moves to the sidebar footer so it never covers a thread | ported 9a0153d1 |
 
 ## Port group thread-details-card (1)
 
@@ -103,9 +103,9 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 503bf77668 | #25384 | sidebar | fix(web): prevent sidebar shelf animations from overlapping headers | port |
-| 955e2bfbb5 | #28515 | thread | fix(clients): questions always move a thread out of Working | port |
-| 34701646e3 | #31269 | sidebar | revert(web): working threads stay in the Working shelf when their environment disconnects | port; reverts #26195 |
+| 503bf77668 | #25384 | sidebar | fix(web): prevent sidebar shelf animations from overlapping headers | ported 9a0153d1 |
+| 955e2bfbb5 | #28515 | thread | fix(clients): questions always move a thread out of Working | ported 9a0153d1; the side chat roll-up waits for side chats |
+| 34701646e3 | #31269 | sidebar | revert(web): working threads stay in the Working shelf when their environment disconnects | no net change: reverts #26195, which CandyWrapper never had |
 
 ## Port group files-preview (19)
 
@@ -272,7 +272,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| d4247a5a19 | #32325 | settings | feat: auto-settle inactive threads after 7 days by default | port; needs wire: auto-settle setting |
+| d4247a5a19 | #32325 | settings | feat: auto-settle inactive threads after 7 days by default | ported 9a0153d1 |
 
 ## Port group settings-providers (2)
 
@@ -406,8 +406,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| dc032d7c8f | #34978 | thread | feat(web,mobile): Add project lists only GitHub until you turn other hosts on | port |
-| f419698aea | #35202 | sidebar | feat(web): drop folders on the sidebar to add them as projects | port |
+| dc032d7c8f | #34978 | thread | feat(web,mobile): Add project lists only GitHub until you turn other hosts on | skip: the Add project palette flow, outside the sidebar |
+| f419698aea | #35202 | sidebar | feat(web): drop folders on the sidebar to add them as projects | ported 9a0153d1; adds on the primary environment, see #38722 |
 
 ## Port group terminal (2)
 
@@ -489,8 +489,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 58e60bf5e8 | #26767 | thread | feat: turn a No project thread into a project | port |
-| 84e69da395 | #34788 | pr/git | fix(web): No project threads offer no Initialize Git, and their linked PRs show and act in the thread | port |
+| 58e60bf5e8 | #26767 | thread | feat: turn a No project thread into a project | left: needs projects.createFromThread and its menu, see PROGRESS.md |
+| 84e69da395 | #34788 | pr/git | fix(web): No project threads offer no Initialize Git, and their linked PRs show and act in the thread | left: belongs with the No project conversion |
 
 ## New feature fleet-channel (1)
 
@@ -550,7 +550,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| ffaa1dba76 | #26154 | sidebar | feat: pin favorite projects and archive old ones | port |
+| ffaa1dba76 | #26154 | sidebar | feat: pin favorite projects and archive old ones | left: pinned and archived projects span the palette, settings and the filter menu, see PROGRESS.md |
 
 ## New feature managed-policy (2)
 
@@ -563,7 +563,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 30654b3e91 | #29053 | pr/git | feat: tag threads and hide tagged threads while recording | port |
+| 30654b3e91 | #29053 | pr/git | feat: tag threads and hide tagged threads while recording | ported in part: the sidebar hides tagged threads while the environment hides them; tagging UI and the palette, PR and notification filters are left |
 
 ## New feature ghq-clone (1)
 
@@ -641,7 +641,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 |---|---|---|---|---|
 | cfb7cae2b9 | #33987 | settings | feat(web): bindable shortcut to regenerate a thread's title | port; needs wire: title regeneration command |
 | 1c9ea568a1 | #31418 | sidebar | fix(clients): report title regeneration outcomes | port |
-| ccf96b2f65 | #29383 | sidebar | feat(web): sidebar titles glimmer while they regenerate | port |
+| ccf96b2f65 | #29383 | sidebar | feat(web): sidebar titles glimmer while they regenerate | ported 9a0153d1 |
 
 ## New feature i18n (11)
 
@@ -711,7 +711,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 378584a760 | #38294 | issues | feat(web): hovering an issue link shows its preview card | port |
 | b6a0fd6d62 | #38771 | issues | feat(issues): an issue shows every thread it is linked to | port |
 | c350ee7e15 | #38256 | issues | feat(web): filter the issues list by project | port |
-| 2e3d9fccdd | #38282 | issues | feat(web): show linked issues beside thread pull requests | port |
+| 2e3d9fccdd | #38282 | issues | feat(web): show linked issues beside thread pull requests | ported 9a0153d1 in the sidebar: generic issue glyph, no state tint or hover list until CW has issues |
 | 63899c16b9 | #38654 | issues | fix(web): retrying a failed Issues list no longer restarts another environment's read | port |
 | 966bdc74f3 | #38854 | issues | fix(client): Linear issue links in messages open in the issue panel | port |
 | 60e54867fc | #38986 | issues | fix(azure-devops): refreshing Issues reads each project's current finished states | port |
@@ -1061,7 +1061,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | ea68f2a667 | #29908 | pr/git | fix(web): picking a branch in a subfolder project keeps the thread in the project folder | port |
 | c185d780fc | #29655 | pr/git | fix(preview): a dropped stream withdraws its stale file picker | port |
 | 48e73f6ca9 | #29360 | pr/git | fix: honor generic MIME aliases in attachment previews | port |
-| b3041a8cb9 | #28832 | pr/git | fix(web): show Setting up during worktree setup | port |
+| b3041a8cb9 | #28832 | pr/git | fix(web): show Setting up during worktree setup | ported 9a0153d1 |
 | 199cb5b6a9 | #30085 | pr/git | fix(web): show the comparison base beside Changes totals | port |
 | 7384cf20da | #30704 | pr/git | fix(web,mobile): save pull request description checkbox changes | port |
 | e4b98f9d39 | #21631 | pr/git | fix(assets): preserve the PR repository for GitHub media | port |
@@ -1296,80 +1296,80 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 221610f0ca | #26736 | sidebar | fix(web): keep settled drop hint inside the sidebar viewport | port |
-| 69310dbd61 | #22412 | sidebar | fix(web): the ~ breadcrumb opens the home folder | port |
-| d5536f6052 | #24209 | sidebar | fix(web): name the sidebar logo link T3 Code home | port |
-| c84acfa205 | #24109 | sidebar | fix(web): keep later navigation when thread archival completes | port |
-| f048a9b617 | #25444 | sidebar | fix(web): archiving or deleting a thread expires its earlier Undos | port |
-| 32ce9db80b | #26803 | sidebar | fix(web): remote machine icon no longer forces a third sidebar line | port |
-| 8df96fb3ec | #26477 | sidebar | fix(web): add tooltips to boring sidebar actions | port |
-| f204389a66 | #22027 | sidebar | fix(web): match sidebar footer bottom padding to its horizontal inset | port |
-| e1e60080b9 | #22311 | sidebar | fix(web): collapsing a changed-files folder no longer leaves a one-frame gap | port |
-| 033a753e34 | #26195 | sidebar | fix(web): threads on an unreachable environment no longer hide in the Working shelf | port |
-| 2a4d1288c5 | #23360 | sidebar | fix(web): line up the Date and Time fields in custom snooze | port |
-| 1dacdb9460 | #26112 | sidebar | fix(web): sidebar jump hints are readable and sit in the status slot | port |
-| e0fa102aa3 | #27327 | sidebar | fix(web): changing the sidebar project filter starts the list at the top | port |
-| c77f755090 | #28179 | sidebar | fix(web): sidebar drops a deleted project's filter with the local environment disabled | port |
-| da216062c9 | #28605 | sidebar | fix(web): sidebar project filter no longer refocuses after a pick | port |
-| e2ad07abad | #27231 | sidebar | fix(web): settled shelf no longer crashes with several projects filtered | port |
-| abcff3e49a | #27695 | sidebar | fix(web): the undo notice no longer pushes the update button out of the sidebar | port |
-| 52715df387 | #28428 | sidebar | fix(web): folder rows no longer jump at larger interface font sizes | port |
-| 52d755f91c | #28460 | sidebar | fix(clients): pasting a path copied from Finder or Explorer adds that folder | port |
-| e925dd6819 | #27785 | sidebar | fix(web): allow folder references on saved local desktop servers | port |
-| 5b9731cedc | #26690 | sidebar | fix(web): screen readers can browse and Tab through the threads sidebar again without going into focus mode | port |
-| e1e520c93c | #29704 | sidebar | fix(web): show the project pin before the remote badge | port |
-| 115739c1e0 |  | sidebar | fix(web): keep the project filter menu aligned with its trigger | port |
-| 7239986680 | #29643 | sidebar | fix(web): deleting the open thread no longer opens a snoozed or settled thread | port |
-| dd8c122c5d | #30063 | sidebar | fix(client): keep snoozed failures hidden without completion times | port |
-| 20e92ffe02 | #29639 | sidebar | fix(web): sidebar project filter rows line up and stay still on hover | port |
-| 37481f044e | #30346 | sidebar | fix(web): dragging a sidebar thread no longer scrolls the list out from under the pointer | port |
-| fb9f1c6f33 | #31642 | sidebar | fix(web): keep the folder path caret in place while editing | port |
-| bfb388415e | #30596 | sidebar | fix(ui): snooze menu times match the menu's typography | port |
-| 10f88f34ed | #30706 | sidebar | fix(web): restore folder breadcrumb trails when reopening tabs | port |
-| 86d8838e91 | #27691 | sidebar | fix(web): dragging a sidebar thread no longer scrolls the list to the bottom | port |
-| c8267db9ac | #31924 | sidebar | fix(web): tagging a thread by drag no longer scrolls the sidebar | port |
-| f8c7c7593f | #24202 | sidebar | fix(web): the main sidebar stays collapsed after relaunch | port |
-| e6d42567ba | #33109 | sidebar | fix(web): cmd+shift+o picks the current project before pinned ones | port |
-| 6f8c7433d0 |  | sidebar | fix(web): new threads use the last used project | port |
-| 580503ed30 | #33759 | sidebar | fix(web): custom snooze footer stays inside the dialog | port |
-| 30c11a3c74 | #32507 | sidebar | fix(web): the thread menu works for an older settled thread the sidebar hasn't loaded | port |
-| 8030067470 | #24945 | sidebar | fix(web): snooze times read naturally in context menus | port |
-| 2904fea7d5 | #29445 | sidebar | fix(web): Mod+B toggles bold at a collapsed cursor when the sidebar toggle is remapped | port |
-| bb646d2cad | #34759 | sidebar | fix(shared): links to bracketed filenames keep their folder labels | port |
-| 1e848876ee | #34929 | sidebar | fix(web): a sidebar click no longer gets lost when the release reports no buttons | port |
-| fc2b5de20c | #35426 | sidebar | fix(web): a project filter that hides every active thread says so and offers Show all projects | port |
-| 8fc1dade71 | #35522 | sidebar | fix(web): keep settled pagination focused while loading | port |
-| a7779fc558 | #35499 | sidebar | fix(web): a focused folder New thread button no longer draws over the hidden-thread count | port |
-| b1c1e07ded | #23517 | sidebar | fix(web): a click no longer lands on the sidebar row that just slid under it | port |
-| db470a3ebd | #35659 | sidebar | fix(web): legacy collapsed project folders stay collapsed after a save | port |
-| 2d80cb6bc7 | #36420 | sidebar | fix(clients): live working timers count on the host's clock | port |
-| dea07a1b12 | #36467 | sidebar | fix(web): rewind no longer offers file restore in project-folder threads | port |
-| 1f55acf13b | #36543 | sidebar | fix(client-runtime): refresh settled counts when threads move project | port |
-| 306914f016 | #35614 | sidebar | fix(client-runtime): grouped projects no longer take one folder's name as their label | port |
-| 28f1786829 | #36590 | sidebar | fix(web): recreated folders no longer show deleted files | port |
-| df8c1a1fd4 | #25269 | sidebar | fix(web): Narrator highlights the sidebar thread title where it is drawn | port |
-| 96735d7311 | #27109 | sidebar | fix(web): picking a sidebar search result scrolls the list to that thread | port |
-| cc0a7bb9d8 | #28644 | sidebar | fix(shared): file links with parentheses in the path keep their parent folder labels | port |
-| 47474723cb | #28616 | sidebar | fix(web): clear failed badges when threads are opened | port |
-| 04572419e4 | #36785 | sidebar | fix(clients): a one-hour snooze no longer reads "2h left" | port |
-| 752bdaeb70 | #26376 | sidebar | feat(client): add-project folder search matches substrings and fuzzy subsequences | port |
-| 9888694f80 | #36909 | sidebar | fix(client): refresh open archive when threads are archived elsewhere | port |
-| 304dc13648 | #30428 | sidebar | fix(web): opening a project or deleting the open thread skips delegated tasks | port |
-| 26bf047d5e | #30597 | sidebar | fix(client-runtime): a disconnected machine's scratch folder no longer lists as a second "No project" | port |
-| fe59fa44d0 | #31009 | sidebar | fix(web): renaming a sidebar thread no longer shifts the row or covers it with the hover card | port |
-| 81df733306 | #31894 | sidebar | fix(web): opening a project from the command palette skips settled and snoozed threads | port |
-| 86cdf80dbd | #33083 | sidebar | fix(web): sidebar edge uses the same resize cursor as side panels | port |
-| ab319a52dd | #37054 | sidebar | fix(web): attach command palette threads outside the sidebar | port |
-| 1b04bab05d | #33053 | sidebar | fix(web): settle check lines up with row timestamps | port |
-| 40f63b468f | #37067 | sidebar | fix(assets): align app icons and retain a folder placeholder while loading | port |
-| 40dcbc5f6a | #37475 | sidebar | fix(web): a stopped run no longer shows the green Done badge in the sidebar | port |
-| 45dedf2955 | #37500 | sidebar | fix(web): an open delegated task selects its parent's sidebar row | port |
-| 1d1489d0b8 | #37727 | sidebar | fix(web): keyboard-opened sidebar menus select their first item | port |
-| d405bd94ac | #29520 | sidebar | fix(web): sidebar width recovers when the window widens after a narrow start | port |
-| 55c134a346 | #37925 | sidebar | fix(client-runtime): Tab completes a folder name when the list shows fuzzy matches | port |
-| 9b3b1c79a7 | #38155 | sidebar | fix(client): a thread search that fails says so instead of "No results" | port |
-| e6265a926e | #38545 | sidebar | fix(web): thread jump hints re-check when a modifier changes while the hold is already met | port |
-| 6927cfe2ad | #38722 | sidebar | fix(web): dropped folders open on this computer's server when the desktop app's own environment is off | port |
+| 221610f0ca | #26736 | sidebar | fix(web): keep settled drop hint inside the sidebar viewport | skip: dnd-kit scroll of the projected drop box; CW drags with its own session |
+| 69310dbd61 | #22412 | sidebar | fix(web): the ~ breadcrumb opens the home folder | skip: files breadcrumb, outside the sidebar |
+| d5536f6052 | #24209 | sidebar | fix(web): name the sidebar logo link T3 Code home | skip: web link name; CW's brand is not a link |
+| c84acfa205 | #24109 | sidebar | fix(web): keep later navigation when thread archival completes | already in CandyWrapper: App/Sources/SidebarCommands.swift navigates before the archive request awaits |
+| f048a9b617 | #25444 | sidebar | fix(web): archiving or deleting a thread expires its earlier Undos | ported 9a0153d1 |
+| 32ce9db80b | #26803 | sidebar | fix(web): remote machine icon no longer forces a third sidebar line | ported 9f448337 |
+| 8df96fb3ec | #26477 | sidebar | fix(web): add tooltips to boring sidebar actions | ported 9a0153d1 for the folder header; the settle check already had its tooltip (RowActionButton) |
+| f204389a66 | #22027 | sidebar | fix(web): match sidebar footer bottom padding to its horizontal inset | ported 0166b1ef |
+| e1e60080b9 | #22311 | sidebar | fix(web): collapsing a changed-files folder no longer leaves a one-frame gap | skip: changed-files tree, outside the sidebar |
+| 033a753e34 | #26195 | sidebar | fix(web): threads on an unreachable environment no longer hide in the Working shelf | no net change: reverted by #31269 |
+| 2a4d1288c5 | #23360 | sidebar | fix(web): line up the Date and Time fields in custom snooze | ported 9f448337 |
+| 1dacdb9460 | #26112 | sidebar | fix(web): sidebar jump hints are readable and sit in the status slot | skip: CW has no modifier-hold jump hints in the default themes, only Redesign's hover badge |
+| e0fa102aa3 | #27327 | sidebar | fix(web): changing the sidebar project filter starts the list at the top | ported 9f448337 |
+| c77f755090 | #28179 | sidebar | fix(web): sidebar drops a deleted project's filter with the local environment disabled | skip: web desktop-bridge check |
+| da216062c9 | #28605 | sidebar | fix(web): sidebar project filter no longer refocuses after a pick | already in CandyWrapper: a pointer close leaves no focus ring on the filter trigger |
+| e2ad07abad | #27231 | sidebar | fix(web): settled shelf no longer crashes with several projects filtered | already in CandyWrapper: demandOlderSettled takes a Set, so project order never changes its key |
+| abcff3e49a | #27695 | sidebar | fix(web): the undo notice no longer pushes the update button out of the sidebar | ported 9a0153d1 with the footer row layout |
+| 52715df387 | #28428 | sidebar | fix(web): folder rows no longer jump at larger interface font sizes | skip: CSS content-visibility hint, web only |
+| 52d755f91c | #28460 | sidebar | fix(clients): pasting a path copied from Finder or Explorer adds that folder | skip: path paste in Add project and the palette, outside the sidebar |
+| e925dd6819 | #27785 | sidebar | fix(web): allow folder references on saved local desktop servers | skip: composer folder references, outside the sidebar |
+| 5b9731cedc | #26690 | sidebar | fix(web): screen readers can browse and Tab through the threads sidebar again without going into focus mode | skip: web ARIA focus mode |
+| e1e520c93c | #29704 | sidebar | fix(web): show the project pin before the remote badge | left: the filter row pin comes with pin projects |
+| 115739c1e0 |  | sidebar | fix(web): keep the project filter menu aligned with its trigger | left: filter popup anchoring, with the filter row work |
+| 7239986680 | #29643 | sidebar | fix(web): deleting the open thread no longer opens a snoozed or settled thread | ported 9a0153d1 |
+| dd8c122c5d | #30063 | sidebar | fix(client): keep snoozed failures hidden without completion times | ported 9a0153d1 |
+| 20e92ffe02 | #29639 | sidebar | fix(web): sidebar project filter rows line up and stay still on hover | left: filter row columns come with pin projects |
+| 37481f044e | #30346 | sidebar | fix(web): dragging a sidebar thread no longer scrolls the list out from under the pointer | skip: dnd-kit auto-scroll, web only |
+| fb9f1c6f33 | #31642 | sidebar | fix(web): keep the folder path caret in place while editing | skip: palette folder path field, outside the sidebar |
+| bfb388415e | #30596 | sidebar | fix(ui): snooze menu times match the menu's typography | ported 9f448337 (MenuItem.detail) |
+| 10f88f34ed | #30706 | sidebar | fix(web): restore folder breadcrumb trails when reopening tabs | skip: reopened tab breadcrumbs, outside the sidebar |
+| 86d8838e91 | #27691 | sidebar | fix(web): dragging a sidebar thread no longer scrolls the list to the bottom | skip: dnd-kit auto-scroll, web only |
+| c8267db9ac | #31924 | sidebar | fix(web): tagging a thread by drag no longer scrolls the sidebar | skip: dnd-kit auto-scroll, web only |
+| f8c7c7593f | #24202 | sidebar | fix(web): the main sidebar stays collapsed after relaunch | skip: window layout persistence lives in App/Sources, outside this task |
+| e6d42567ba | #33109 | sidebar | fix(web): cmd+shift+o picks the current project before pinned ones | skip: palette project order, outside the sidebar |
+| 6f8c7433d0 |  | sidebar | fix(web): new threads use the last used project | skip: new-thread project choice in App and the palette, outside the sidebar |
+| 580503ed30 | #33759 | sidebar | fix(web): custom snooze footer stays inside the dialog | ported 9f448337 |
+| 30c11a3c74 | #32507 | sidebar | fix(web): the thread menu works for an older settled thread the sidebar hasn't loaded | skip: thread route menu, outside the sidebar |
+| 8030067470 | #24945 | sidebar | fix(web): snooze times read naturally in context menus | already in CandyWrapper: native menus read "Label (time)" as ElectronMenu.ts does |
+| 2904fea7d5 | #29445 | sidebar | fix(web): Mod+B toggles bold at a collapsed cursor when the sidebar toggle is remapped | skip: composer bold shortcut, outside the sidebar |
+| bb646d2cad | #34759 | sidebar | fix(shared): links to bracketed filenames keep their folder labels | skip: Markdown links, outside the sidebar |
+| 1e848876ee | #34929 | sidebar | fix(web): a sidebar click no longer gets lost when the release reports no buttons | skip: web pointer release quirk |
+| fc2b5de20c | #35426 | sidebar | fix(web): a project filter that hides every active thread says so and offers Show all projects | ported 9a0153d1 |
+| 8fc1dade71 | #35522 | sidebar | fix(web): keep settled pagination focused while loading | already in CandyWrapper: the Show more row keeps list focus while it loads |
+| a7779fc558 | #35499 | sidebar | fix(web): a focused folder New thread button no longer draws over the hidden-thread count | already in CandyWrapper: SidebarRowViews.swift shows the folder New thread button and the count never together |
+| b1c1e07ded | #23517 | sidebar | fix(web): a click no longer lands on the sidebar row that just slid under it | left: ignore presses on rows that just slid under the pointer |
+| db470a3ebd | #35659 | sidebar | fix(web): legacy collapsed project folders stay collapsed after a save | skip: web localStorage migration |
+| 2d80cb6bc7 | #36420 | sidebar | fix(clients): live working timers count on the host's clock | left: needs a server clock offset per environment |
+| dea07a1b12 | #36467 | sidebar | fix(web): rewind no longer offers file restore in project-folder threads | skip: rewind file restore, outside the sidebar |
+| 1f55acf13b | #36543 | sidebar | fix(client-runtime): refresh settled counts when threads move project | already in CandyWrapper: ShellReducer.swift invalidates counts on any update of an older settled thread |
+| 306914f016 | #35614 | sidebar | fix(client-runtime): grouped projects no longer take one folder's name as their label | left: repository-named group labels in project grouping |
+| 28f1786829 | #36590 | sidebar | fix(web): recreated folders no longer show deleted files | skip: files panel, outside the sidebar |
+| df8c1a1fd4 | #25269 | sidebar | fix(web): Narrator highlights the sidebar thread title where it is drawn | skip: web Narrator highlight |
+| 96735d7311 | #27109 | sidebar | fix(web): picking a sidebar search result scrolls the list to that thread | already in CandyWrapper: revealRouteRow scrolls to the opened result |
+| cc0a7bb9d8 | #28644 | sidebar | fix(shared): file links with parentheses in the path keep their parent folder labels | skip: Markdown links, outside the sidebar |
+| 47474723cb | #28616 | sidebar | fix(web): clear failed badges when threads are opened | ported 9f448337 |
+| 04572419e4 | #36785 | sidebar | fix(clients): a one-hour snooze no longer reads "2h left" | ported 9a0153d1 |
+| 752bdaeb70 | #26376 | sidebar | feat(client): add-project folder search matches substrings and fuzzy subsequences | skip: Add project folder search, outside the sidebar |
+| 9888694f80 | #36909 | sidebar | fix(client): refresh open archive when threads are archived elsewhere | skip: Settings archive list, outside the sidebar |
+| 304dc13648 | #30428 | sidebar | fix(web): opening a project or deleting the open thread skips delegated tasks | left: needs delegatedFrom; the delete fallback skips nested threads already |
+| 26bf047d5e | #30597 | sidebar | fix(client-runtime): a disconnected machine's scratch folder no longer lists as a second "No project" | already in CandyWrapper: ThreadSession.swift keeps the last scratch folder while a machine is away |
+| fe59fa44d0 | #31009 | sidebar | fix(web): renaming a sidebar thread no longer shifts the row or covers it with the hover card | ported 0166b1ef |
+| 81df733306 | #31894 | sidebar | fix(web): opening a project from the command palette skips settled and snoozed threads | skip: palette, outside the sidebar |
+| 86cdf80dbd | #33083 | sidebar | fix(web): sidebar edge uses the same resize cursor as side panels | skip: the sidebar splitter cursor lives in App/Sources |
+| ab319a52dd | #37054 | sidebar | fix(web): attach command palette threads outside the sidebar | skip: palette drag, outside the sidebar |
+| 1b04bab05d | #33053 | sidebar | fix(web): settle check lines up with row timestamps | ported 0166b1ef |
+| 40f63b468f | #37067 | sidebar | fix(assets): align app icons and retain a folder placeholder while loading | skip: Markdown file links and server icons, outside the sidebar |
+| 40dcbc5f6a | #37475 | sidebar | fix(web): a stopped run no longer shows the green Done badge in the sidebar | ported 9a0153d1 |
+| 45dedf2955 | #37500 | sidebar | fix(web): an open delegated task selects its parent's sidebar row | left: needs delegatedFrom |
+| 1d1489d0b8 | #37727 | sidebar | fix(web): keyboard-opened sidebar menus select their first item | skip: CW opens native menus, where AppKit handles keyboard selection |
+| d405bd94ac | #29520 | sidebar | fix(web): sidebar width recovers when the window widens after a narrow start | skip: sidebar width lives in App/Sources |
+| 55c134a346 | #37925 | sidebar | fix(client-runtime): Tab completes a folder name when the list shows fuzzy matches | skip: Add project folder completion, outside the sidebar |
+| 9b3b1c79a7 | #38155 | sidebar | fix(client): a thread search that fails says so instead of "No results" | ported 0166b1ef in the sidebar; the palette half is outside it |
+| e6265a926e | #38545 | sidebar | fix(web): thread jump hints re-check when a modifier changes while the hold is already met | skip: modifier-hold jump hints, see #26112 |
+| 6927cfe2ad | #38722 | sidebar | fix(web): dropped folders open on this computer's server when the desktop app's own environment is off | left: pick this computer's environment for dropped folders |
 
 ## Small fixes, terminal (35)
 
@@ -1484,7 +1484,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 6dcaf6cbe7 | #29285 | thread | fix(web): remote subagents no longer split from the lineage list | port |
 | 8bf1b64cae | #32141 | thread | fix(web): the citation comment box opens at the quote instead of sliding in from the corner | port |
 | 07508ffd2f | #31794 | thread | fix(web): popovers over the desktop header respond to the pointer | port |
-| 08a3909406 | #31825 | thread | fix: show latest reply age in active thread rows | port |
+| 08a3909406 | #31825 | thread | fix: show latest reply age in active thread rows | ported 9a0153d1 |
 | 48bb784e3d | #32403 | thread | fix(shared): inline code like `allocator.cc:217` becomes a file chip | port |
 | 57ded10b74 | #25694 | thread | fix(web): restore bold weight in rendered Markdown | port |
 | 28eff11d81 | #27582 | thread | fix(web): lineage phase headers truncate instead of overflowing the details card | port |

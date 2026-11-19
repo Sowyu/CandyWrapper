@@ -142,17 +142,19 @@ public final class SidebarContentView: DSView {
         didSet {
             // Inline, so the fix-up does not run this observer again.
             if showsNoRoute { state.activeThreadId = nil; state.activeDraftId = nil }
-            if state.hiddenThreadIds != oldValue.hiddenThreadIds { refreshListSnapshot() }
+            if state.hiddenThreadIds != oldValue.hiddenThreadIds || state.hiddenThreadTags != oldValue.hiddenThreadTags { refreshListSnapshot() }
             if state != oldValue { rebuild(animated: true) }
         }
     }
-    /// The snapshot the list draws: `snapshot` without the threads `state.hiddenThreadIds` names.
+    /// The snapshot the list draws: `snapshot` without the threads `state.hiddenThreadIds` names, nor those a
+    /// hidden tag hides (`SidebarModel.hidesForTags`).
     private var listSnapshot: ShellSnapshot?
 
     private func refreshListSnapshot() {
-        let hidden = state.hiddenThreadIds
-        guard var s = snapshot, !hidden.isEmpty, s.threads.contains(where: { hidden.contains($0.id) }) else { listSnapshot = snapshot; return }
-        s.threads.removeAll { hidden.contains($0.id) }
+        let hidden = state.hiddenThreadIds, tags = state.hiddenThreadTags
+        let hides: (ThreadShell) -> Bool = { hidden.contains($0.id) || SidebarModel.hidesForTags($0, hiddenTags: tags) }
+        guard var s = snapshot, !hidden.isEmpty || !tags.isEmpty, s.threads.contains(where: hides) else { listSnapshot = snapshot; return }
+        s.threads.removeAll(where: hides)
         listSnapshot = s
     }
     /// Where the shelves' expansion persists, as T3's `t3code:sidebar:*-expanded` localStorage keys
