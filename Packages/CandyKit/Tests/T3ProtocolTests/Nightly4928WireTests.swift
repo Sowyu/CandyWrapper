@@ -110,4 +110,23 @@ struct Nightly4928WireTests {
             """#))
         #expect(item.unresponsiveAt?.raw == "2026-11-19T00:00:05.000Z")
     }
+
+    /// Item 8: 4928 turn item fields, decoded only (orchestrationV2.ts:1603-1612, 1729-1853).
+    @Test func newTurnItemFieldsDecode() throws {
+        func item(_ type: String, _ extra: String) throws -> TurnItem {
+            try TurnItem(json: Self.json(#"{"id":"i","threadId":"t1","type":"\#(type)","ordinal":1,"status":"completed","updatedAt":"2026-11-19T00:00:00.000Z",\#(extra)}"#))
+        }
+        #expect(try item("assistant_message", #""text":"x","phase":"commentary""#).assistantPhase == "commentary")
+        let user = try item("user_message", #"""
+            "text":"x","freshContext":true,
+            "linkedSender":{"environmentId":"e2","threadId":"t9","title":"Other"},
+            "modelSwitch":{"from":{"instanceId":"codex","model":"a"},"to":{"instanceId":"codex","model":"b"}}
+            """#)
+        #expect(user.freshContext && user.linkedSender?.title == "Other" && user.linkedSender?.threadId == "t9")
+        #expect(user.modelSwitch?.to.model == "b")
+        #expect(try item("system_notice", #""message":"m","level":"warning""#).noticeLevel == "warning")
+        #expect(try item("secret_request", #""label":"Key","reason":"r","secretStatus":"pending","url":"https://example.com/keys""#).secretRequestURL == "https://example.com/keys")
+        #expect(try item("command_execution", #""completionWake":"always""#).completionWake == "always")
+        #expect(try item("assistant_message", #""text":"x""#).assistantPhase == nil)
+    }
 }
