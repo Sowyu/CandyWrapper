@@ -37,4 +37,26 @@ struct Markdown4928Tests {
         guard case .alert(.insight, let children) = blocks.first else { Issue.record("no insight: \(blocks)"); return }
         #expect(children.contains { if case .code = $0 { true } else { false } })
     }
+
+    /// #34181: a quote in a sent message is a card between the text around it, two lines at most.
+    @Test func quoteInASentMessageIsACard() {
+        func cards(_ layout: MarkdownLayout) -> [CGRect] {
+            layout.items.compactMap { if case .citationCard(let r, _) = $0 { r } else { nil } }
+        }
+        let short = ThreadAssistantCitation(environmentId: "e", threadId: "t", messageId: "m", text: "the quote", start: 0, end: 9,
+                                            prefix: "", suffix: "", comment: "my note")
+        let doc = MarkdownDocument(parsing: "Look at this \(short.markdown) and tell me.", preservesLineBreaks: true)
+        let layout = ThreadDesign.layout(in: NSAppearance(named: .aqua)!, design: true) { MarkdownLayout(document: doc, width: 400) }
+        let card = cards(layout)
+        #expect(card.count == 1)
+        // Text above, a one-line card 10.4pt below it, its comment, then the rest.
+        #expect(card.first.map { $0.minY > 20 && $0.height == 32 } == true)
+        #expect(layout.links.contains { $0.frame == card.first })
+        let long = ThreadAssistantCitation(environmentId: "e", threadId: "t", messageId: "m", text: String(repeating: "word ", count: 200),
+                                           start: 0, end: 1000, prefix: "a", suffix: "b", comment: nil)
+        let clamped = ThreadDesign.layout(in: NSAppearance(named: .aqua)!, design: true) {
+            MarkdownLayout(document: MarkdownDocument(parsing: long.markdown), width: 400)
+        }
+        #expect(cards(clamped).first?.height == 52)
+    }
 }

@@ -332,6 +332,7 @@ struct MarkdownIncrementalTests {
             case .fileChip(let c): "file \(c.frame) \(c.meta.filePath)"
             case .contextChip(let c): "context \(c.frame)"
             case .link(let r, let u): "link \(r) \(u)"
+            case .citationCard(let r, let u): "citation \(r) \(u)"
             case .clip(let r): "clip \(r)"
             case .scroll(let i, let r, let w): "scroll \(i) \(r) \(w)"
             case .endClip: "endClip"

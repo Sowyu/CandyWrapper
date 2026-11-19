@@ -316,6 +316,8 @@ public final class MarkdownLayout: @unchecked Sendable {
         case contextChip(MarkdownContextChip)
         /// A web link's area on one line (not drawn; hit tested by `MarkdownView`).
         case link(CGRect, URL)
+        /// A quote card's fill (`AssistantCitationEmbed`), darker while the pointer is over its `.link`.
+        case citationCard(CGRect, URL)
         /// An external link's favicon box (14pt square) for `host`.
         case favicon(String, CGRect)
         /// A formula with its baseline's left end at the point, in the text color, clipped to the rect when it has one
@@ -780,6 +782,11 @@ private struct Builder {
 
     mutating func layout(_ block: MarkdownBlock, width: CGFloat, context: Context, tight: Bool) -> Box {
         switch block {
+        case .paragraph(let runs) where runs.contains(where: { $0.link?.scheme == "t3-citation" }):
+            var box = citationParagraph(runs, width: width, context: context)
+            let m = tight ? 0 : MarkdownStyle.blockMargin
+            box.top = m; box.bottom = m
+            return box
         case .paragraph(let runs):
             var box = text(runs, width: width, size: MarkdownStyle.fontSize, lineHeight: MarkdownStyle.lineHeight, color: context.color)
             // Tight list items hold their text inline, without a <p> and its margins.
@@ -1156,6 +1163,123 @@ private struct Builder {
         return frozen
     }
 
+    // MARK: Quote cards
+
+    /// A paragraph holding `t3-citation://` links: each is a block card (`AssistantCitationEmbed`, 4928
+    /// chat/AssistantCitationChip.tsx:60-154, ChatMarkdown.tsx `a`, #34181). A card that doesn't start or end its block
+    /// keeps `0.65rem` from the text beside it.
+    mutating func citationParagraph(_ runs: [InlineRun], width: CGFloat, context: Context) -> Box {
+        enum Piece { case text([InlineRun]), card(ThreadAssistantCitation, URL) }
+        var pieces: [Piece] = [], current: [InlineRun] = [], i = 0
+        func flush() {
+            var trimmed = current
+            while let first = trimmed.first, first.text.allSatisfy(\.isWhitespace), first.image == nil { trimmed.removeFirst() }
+            while let last = trimmed.last, last.text.allSatisfy(\.isWhitespace), last.image == nil { trimmed.removeLast() }
+            if !trimmed.isEmpty { pieces.append(.text(trimmed)) }
+            current = []
+        }
+        while i < runs.count {
+            if let url = runs[i].link, let citation = ThreadAssistantCitation.parse(url.absoluteString) {
+                flush()
+                while i < runs.count, runs[i].link == url { i += 1 }
+                pieces.append(.card(citation, url))
+            } else {
+                current.append(runs[i]); i += 1
+            }
+        }
+        flush()
+        var box = Box()
+        var y: CGFloat = 0
+        for (index, piece) in pieces.enumerated() {
+            if index > 0 { y += MarkdownStyle.blockMargin }
+            let part: Box
+            switch piece {
+            case .text(let runs):
+                part = text(runs, width: width, size: MarkdownStyle.fontSize, lineHeight: MarkdownStyle.lineHeight, color: context.color)
+            case .card(let citation, let url):
+                part = citationCard(citation, url: url, width: width, context: context)
+            }
+            box.add(part, at: CGPoint(x: 0, y: y))
+            y += part.height
+        }
+        box.height = y
+        return box
+    }
+
+    /// `ResponseCard`: `rounded-lg bg-black/10 px-2.5 py-1.5 text-sm text-muted-foreground`, the passage clamped to two
+    /// lines with the quoted part marked (`bg-foreground/12 px-0.5 text-foreground rounded-sm`), and the comment below as
+    /// text (`mt-1.5 whitespace-pre-wrap`). Copying any of the card copies the quote's Markdown; find skips it.
+    // ponytail: the card copies its quote without the comment and the comment copies as text; T3 copies both as one link
+    mutating func citationCard(_ citation: ThreadAssistantCitation, url: URL, width: CGFloat, context: Context) -> Box {
+        let font = MarkdownStyle.font(14), line: CGFloat = 20
+        let inner = max(1, width - 20)
+        var quoted = citation
+        quoted.comment = nil
+        let flat = { (text: String) in text.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
+        let whole = citation.prefix.isEmpty && citation.suffix.isEmpty
+        let base: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: Themed.color(\.mutedForeground),
+                                                   .markdownFindText: "", .markdownCopyText: quoted.markdown]
+        // Two lines hold a few hundred characters at most, so longer passages are cut before measuring.
+        let passage = String(flat(citation.text).prefix(600))
+        func string(_ passage: String, ellipsis: Bool) -> (NSAttributedString, NSRange?) {
+            let out = NSMutableAttributedString()
+            if whole {
+                out.append(NSAttributedString(string: passage + (ellipsis ? "…" : ""), attributes: base))
+                return (out, nil)
+            }
+            if !citation.prefix.isEmpty { out.append(NSAttributedString(string: "…" + flat(citation.prefix), attributes: base)) }
+            var marked = base
+            marked[.foregroundColor] = Themed.color(\.foreground)
+            let start = out.length
+            // `px-0.5`: a word joiner kerned 2px on each side of the marked text.
+            var pad = marked
+            pad[.kern] = 2
+            out.append(NSAttributedString(string: "\u{2060}", attributes: pad))
+            out.append(NSAttributedString(string: passage + (ellipsis ? "…" : ""), attributes: marked))
+            out.append(NSAttributedString(string: "\u{2060}", attributes: pad))
+            let mark = NSRange(location: start, length: out.length - start)
+            if !citation.suffix.isEmpty, !ellipsis { out.append(NSAttributedString(string: flat(citation.suffix) + "…", attributes: base)) }
+            return (out, mark)
+        }
+        var (text, mark) = string(passage, ellipsis: false)
+        var textBox = boxes.make(text, width: inner, lineHeight: line, strut: font, wraps: true)
+        if textBox.height > 2 * line + 0.5 {
+            // `line-clamp-2`: the most text that fits two lines with an ellipsis. Only long quotes get here.
+            var lo = 0, hi = passage.count
+            var best = string("", ellipsis: true)
+            while lo < hi {
+                let mid = (lo + hi + 1) / 2
+                let candidate = string(String(passage.prefix(mid)), ellipsis: true)
+                if boxes.make(candidate.0, width: inner, lineHeight: line, strut: font, wraps: true).height <= 2 * line + 0.5 {
+                    best = candidate; lo = mid
+                } else { hi = mid - 1 }
+            }
+            (text, mark) = best
+            textBox = boxes.make(text, width: inner, lineHeight: line, strut: font, wraps: true)
+        }
+        let cardHeight = 6 + textBox.height + 6
+        var box = Box(height: cardHeight)
+        let frame = CGRect(x: 0, y: 0, width: width, height: cardHeight)
+        box.items.append(.citationCard(frame, url))
+        if let mark {
+            for span in textBox.spans(mark) {
+                box.items.append(.box(CGRect(x: 10 + span.x0, y: 6 + textBox.lineTop(baseline: span.baseline), width: span.x1 - span.x0,
+                                             height: textBox.lineHeight(baseline: span.baseline)),
+                                      fill: Themed.color(\.foreground, 0.12), border: nil, radius: 2))
+            }
+        }
+        box.items.append(.text(textBox, CGPoint(x: 10, y: 6)))
+        box.items.append(.link(frame, url))
+        box.baseline = 6 + textBox.firstBaseline
+        if let comment = citation.comment, !comment.isEmpty {
+            let commentBox = self.text([InlineRun(text: comment)], width: width, size: MarkdownStyle.fontSize,
+                                       lineHeight: MarkdownStyle.lineHeight, color: context.color)
+            box.add(commentBox, at: CGPoint(x: 0, y: cardHeight + 6))
+            box.height = cardHeight + 6 + commentBox.height
+        }
+        return box
+    }
+
     // MARK: Code blocks
 
     /// Plain-text fences take the text color around them instead of the highlighter's foreground
@@ -1515,6 +1639,7 @@ private extension MarkdownLayout.Item {
         case .scroll(let index, let r, let w): .scroll(codeIndex: index, viewport: r.offsetBy(dx: p.x, dy: p.y), contentWidth: w)
         case .endClip: .endClip
         case .link(let r, let url): .link(r.offsetBy(dx: p.x, dy: p.y), url)
+        case .citationCard(let r, let url): .citationCard(r.offsetBy(dx: p.x, dy: p.y), url)
         case .favicon(let host, let r): .favicon(host, r.offsetBy(dx: p.x, dy: p.y))
         case .math(let layout, let o, let color, let clip): .math(layout, CGPoint(x: o.x + p.x, y: o.y + p.y), color, clip: clip?.offsetBy(dx: p.x, dy: p.y))
         case .hiddenText: self

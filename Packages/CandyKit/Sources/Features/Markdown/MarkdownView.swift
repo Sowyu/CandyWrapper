@@ -884,6 +884,12 @@ public final class MarkdownView: DSView {
         ExpandedImagePreviewView(items: items, index: index).present(in: window)
     }
 
+    /// The quote card under the pointer.
+    private var hoveredCitation: URL? { didSet { if hoveredCitation != oldValue { needsDisplay = true } } }
+    fileprivate func citationHover(_ url: URL, _ inside: Bool) {
+        if inside { hoveredCitation = url } else if hoveredCitation == url { hoveredCitation = nil }
+    }
+
     fileprivate func chipHover(_ index: Int, _ inside: Bool) {
         if inside { hoveredChip = index } else if hoveredChip == index { hoveredChip = nil }
     }
@@ -1340,6 +1346,10 @@ public final class MarkdownView: DSView {
                 }
             case .box(let rect, let fill, let border, let radius):
                 drawBox(rect, fill: fill, border: border, radius: radius, in: ctx)
+            case .citationCard(let rect, let url):
+                // `bg-black/10 hover:bg-black/14 dark:bg-black/35 dark:hover:bg-black/50`.
+                let alpha: CGFloat = dark ? (hoveredCitation == url ? 0.5 : 0.35) : (hoveredCitation == url ? 0.14 : 0.1)
+                drawBox(rect, fill: NSColor.black.withAlphaComponent(alpha), border: nil, radius: 8, in: ctx)
             case .glyphs(let string, let point):
                 let line = CTLineCreateWithAttributedString(string)
                 let width = CTLineGetTypographicBounds(line, nil, nil, nil)
@@ -1699,7 +1709,10 @@ private final class MarkdownLinkHitView: NSView, HoverSyncClient {
 
     override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
 
+    private var citation: ThreadAssistantCitation? { url.flatMap { ThreadAssistantCitation.parse($0.absoluteString) } }
+
     override func mouseEntered(with event: NSEvent) {
+        if let url, citation != nil { owner?.citationHover(url, true) }
         guard hasPreview else { return }
         tooltip.hide()
         pending?.cancel()
@@ -1713,6 +1726,7 @@ private final class MarkdownLinkHitView: NSView, HoverSyncClient {
     }
 
     override func mouseExited(with event: NSEvent) {
+        if let url, citation != nil { owner?.citationHover(url, false) }
         pending?.cancel()
         pending = nil
         guard previewing else { return }
@@ -1731,8 +1745,9 @@ private final class MarkdownLinkHitView: NSView, HoverSyncClient {
         tooltip.hide()
         pending?.cancel()
         if previewing { previewing = false; handler?.hideLinkPreview(anchor: self) }
-        if let citation = ThreadAssistantCitation.parse(url.absoluteString), let window {
-            ThreadAssistantCitationEditor.present(citation, in: window, openSource: { MarkdownView.onOpenCitation?(citation) })
+        if let citation = ThreadAssistantCitation.parse(url.absoluteString) {
+            // A quote card goes to the quoted response (`useCitationSourceLinkProps`, AssistantCitationChip.tsx:36-52 at 4928).
+            MarkdownView.onOpenCitation?(citation)
         } else if !SafeExternalURL.isSafe(url) {
             // T3 opens only http and https from a message (`parseSafeExternalUrl`); a `file:` or app link does nothing.
         } else if let handler { handler.openLink(url, from: owner) } else { NSWorkspace.shared.open(url) }
@@ -1765,8 +1780,9 @@ private final class MarkdownLinkHitView: NSView, HoverSyncClient {
     override func accessibilityLabel() -> String? { url?.absoluteString }
     override func accessibilityPerformPress() -> Bool {
         guard let url, let owner else { return false }
-        if let citation = ThreadAssistantCitation.parse(url.absoluteString), let window {
-            ThreadAssistantCitationEditor.present(citation, in: window, openSource: { MarkdownView.onOpenCitation?(citation) })
+        if let citation = ThreadAssistantCitation.parse(url.absoluteString) {
+            // A quote card goes to the quoted response (`useCitationSourceLinkProps`, AssistantCitationChip.tsx:36-52 at 4928).
+            MarkdownView.onOpenCitation?(citation)
         } else if !SafeExternalURL.isSafe(url) {
             // T3 opens only http and https from a message (`parseSafeExternalUrl`); a `file:` or app link does nothing.
         } else if let handler { handler.openLink(url, from: owner) } else { NSWorkspace.shared.open(url) }
