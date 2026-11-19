@@ -24,7 +24,7 @@
     "width" : 796
   },
   "authorized-clients.open" : {
-    "height" : 241,
+    "height" : 239,
     "width" : 796
   },
   "create-link-dialog" : {
@@ -44,7 +44,7 @@
     "width" : 796
   },
   "environments.rows" : {
-    "height" : 210,
+    "height" : 208,
     "width" : 796
   },
   "header" : {
@@ -60,15 +60,15 @@
     "width" : 255
   },
   "this-machine" : {
-    "height" : 106,
+    "height" : 154,
     "width" : 796
   },
   "this-machine.full" : {
-    "height" : 486,
+    "height" : 728,
     "width" : 796
   },
   "this-machine.permissions" : {
-    "height" : 722,
+    "height" : 964,
     "width" : 796
   }
 }
