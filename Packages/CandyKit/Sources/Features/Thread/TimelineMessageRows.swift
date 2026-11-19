@@ -192,6 +192,11 @@ final class UserMessageRowView: TimelineRowView {
     private var collapsible = false
     /// The image grid and file rows above the text (MessagesTimeline.tsx:2402-2490).
     private let attachments = UserMessageAttachmentsView()
+    /// Images and videos outside the bubble, and files sent without words (TimelineUserMessageRow.tsx:519-575 at 4928).
+    private var shape = UserMessageShape()
+    private let mediaBlock = UserMediaBlockView()
+    private var fileCards: [UserFileCardView] = []
+    private var fileCardIds: [String] = []
     /// "<from> → <to>" above the message when the model or effort changed with it (TimelineUserMessageRow.tsx:270-283 at 4928).
     private let modelSwitch = HandoffDividerView()
 
@@ -211,6 +216,8 @@ final class UserMessageRowView: TimelineRowView {
         bubble.addSubview(markdown)
         // Over the bubble, not in it: the bubble takes no clicks (`FillView`), the images do.
         addSubview(attachments)
+        addSubview(mediaBlock)
+        mediaBlock.onNaturalWidthChange = { [weak self] in self?.needsLayout = true }
         bubble.addSubview(toggle)
         addSubview(foldHeader)
         addSubview(openLink)
@@ -267,9 +274,6 @@ final class UserMessageRowView: TimelineRowView {
         attribution.color = presentation.guestName == nil ? TL.c(\.mutedForeground, 0.7) : GuestColors.foreground
         attribution.setAccessibilityElement(presentation.guestName == nil)
         attribution.isHidden = presentation.attribution != .t3code && presentation.guestName == nil
-        // A guest's message sits on `bg-guest-surface` (TimelineUserMessageRow.tsx:443-447 at 3669).
-        let fill = presentation.guestName == nil ? TL.c(\.messageSurface) : GuestColors.surface
-        if bubble.fill !== fill { bubble.fill = fill }
         fold = presentation.attribution == .agent || presentation.isAutomation ? presentation.attribution : nil
         foldHeader.isHidden = fold == nil
         if let fold {
@@ -281,6 +285,20 @@ final class UserMessageRowView: TimelineRowView {
                 : Self.foldSummary(ComposerInlineTokens.contextLabels(text))
             foldHeader.configure(automation: automation, label: label, summary: summary, expanded: item.ui.messageExpanded)
             openLink.configure(automation: automation)
+        }
+        shape = UserMessageShape(m, text: text, own: fold == nil && presentation.guestName == nil && presentation.attribution == nil)
+        mediaBlock.isHidden = !shape.standaloneMedia
+        if shape.standaloneMedia { mediaBlock.configure(images: shape.images, videos: shape.videos, model: context.model) }
+        let cardIds = shape.fileCardsOnly ? shape.files.map { $0["id"]?.stringValue ?? "" } : []
+        if cardIds != fileCardIds {
+            fileCardIds = cardIds
+            fileCards.forEach { $0.removeFromSuperview() }
+            fileCards = shape.fileCardsOnly ? shape.files.map { file in
+                let card = UserFileCardView(file: file)
+                card.onOpen = { [weak self] download in self?.context.model?.onOpenAttachment?(file, download) }
+                addSubview(card)
+                return card
+            } : []
         }
         openLink.isHidden = fold == nil || !item.ui.messageExpanded || (fold == .automation ? presentation.scheduledTaskId == nil : m.senderThreadId == nil)
         let open = fold == nil || item.ui.messageExpanded
@@ -315,7 +333,12 @@ final class UserMessageRowView: TimelineRowView {
         markdown.layoutChoices = context.markdownChoices[m.id.rawValue] ?? .init()
         markdown.onLayoutChoicesChange = { [weak context] in context?.markdownChoices[m.id.rawValue] = $0 }
         markdown.document = document
-        attachments.configure(m, model: context.model)
+        attachments.configure(m, model: context.model, standaloneMedia: shape.standaloneMedia, fileCards: shape.fileCardsOnly)
+        // A guest's message sits on `bg-guest-surface` (TimelineUserMessageRow.tsx:443-447 at 3669). Media, file cards
+        // and a lone voice note draw without the bubble's fill and padding.
+        let fill = shape.drawsBubble ? (presentation.guestName == nil ? TL.c(\.messageSurface) : GuestColors.surface) : nil
+        if bubble.fill !== fill { bubble.fill = fill }
+        markdown.isHidden = markdown.isHidden || shape.mediaOnly || shape.fileCardsOnly || shape.audioOnly
         // A folded message is never collapsible (`collapsible={!folded}`).
         collapsible = fold == nil && shouldCollapseUserMessage(text)
         toggle.title = item.ui.messageExpanded ? "Show less" : "Show full message"
@@ -326,8 +349,10 @@ final class UserMessageRowView: TimelineRowView {
         let intent = item.row.continuesSteer ? nil : UserIntentMarkerView.presentation(m.inputIntent)
         marker.isHidden = intent == nil
         if let intent { marker.configure(intent) }
-        bubble.joinedTop = item.row.groupedWithPrevious
+        bubble.joinedTop = item.row.groupedWithPrevious || shape.mediaAboveText
         bubble.joinedBottom = item.row.groupedWithNext
+        mediaBlock.joinedTop = item.row.groupedWithPrevious
+        mediaBlock.joinedBottom = shape.mediaAboveText || item.row.groupedWithNext
         needsLayout = true
     }
 
@@ -353,8 +378,12 @@ final class UserMessageRowView: TimelineRowView {
         return markdown.convert(rect, to: self)
     }
 
-    override func setContentVisible(_ visible: Bool) { super.setContentVisible(visible); attachments.setMediaVisible(visible) }
-    override func prepareForReuse() { attachments.setMediaVisible(false); super.prepareForReuse() }
+    override func setContentVisible(_ visible: Bool) {
+        super.setContentVisible(visible)
+        attachments.setMediaVisible(visible)
+        mediaBlock.setMediaVisible(visible)
+    }
+    override func prepareForReuse() { attachments.setMediaVisible(false); mediaBlock.setMediaVisible(false); super.prepareForReuse() }
 
     /// `text.split(/\r?\n/, 1)[0]`.
     static func firstLine(_ text: String) -> String {
@@ -413,6 +442,18 @@ final class UserMessageRowView: TimelineRowView {
             let full = markdown.height(forWidth: inner)
             return (maxBubble, attachments.height(forWidth: inner), full, full)
         }
+        if shape.mediaOnly {
+            let size = mediaBlock.size(maxWidth: maxBubble)
+            return (size.width, size.height, 0, 0)
+        }
+        if shape.fileCardsOnly {
+            let n = CGFloat(fileCards.count)
+            return (min(maxBubble, UserFileCardView.width), n * UserFileCardView.height + max(0, n - 1) * 4, 0, 0)
+        }
+        if shape.audioOnly {
+            let w = min(maxBubble, attachments.naturalWidth)
+            return (w, attachments.height(forWidth: w) - 8, 0, 0)
+        }
         let inner = maxBubble - Self.padding * 2
         // `fit-content`: the max-content width (unwrapped) if it fits, else the full 80%.
         let natural = max(markdown.layout(forWidth: 100_000).contentWidth, attachments.naturalWidth)
@@ -441,7 +482,13 @@ final class UserMessageRowView: TimelineRowView {
         }
         let footer: CGFloat = collapsible ? 6 + 24 : 0
         let actions: CGFloat = floatsActions(width) ? 0 : 4 + 24
-        return markerSpace + m.attachments + m.body + footer + Self.padding * 2 + actions + bottomPadding
+        let pad = shape.drawsBubble ? Self.padding * 2 : 0
+        return markerSpace + mediaAboveSpace(width) + m.attachments + m.body + footer + pad + actions + bottomPadding
+    }
+
+    /// Media sent with words sits above the bubble with `gap-1` (TimelineUserMessageRow.tsx:897-905 at 4928).
+    private func mediaAboveSpace(_ width: CGFloat) -> CGFloat {
+        shape.mediaAboveText ? mediaBlock.size(maxWidth: width * 0.8).height + 4 : 0
     }
 
     override func layout() {
@@ -449,12 +496,15 @@ final class UserMessageRowView: TimelineRowView {
         let width = bounds.width
         let m = metrics(width)
         let footer: CGFloat = collapsible ? 6 + 24 : 0
-        // A folded message's body sits under its 36px header with `px-3 pb-3`.
-        let bodyTop = fold == nil ? Self.padding : FoldedMessageHeaderView.height
+        // A folded message's body sits under its 36px header with `px-3 pb-3`. Media, file cards and a lone voice
+        // note have no padding.
+        let pad = shape.drawsBubble ? Self.padding : 0
+        let bodyTop = fold == nil ? pad : FoldedMessageHeaderView.height
         let open = fold == nil || item?.ui.messageExpanded == true
-        let bubbleHeight = fold == nil ? m.attachments + m.body + footer + Self.padding * 2
+        let bubbleHeight = fold == nil ? m.attachments + m.body + footer + pad * 2
             : bodyTop + (open ? m.attachments + m.body + Self.padding : 0)
-        let top = markerSpace
+        let mediaAbove = mediaAboveSpace(width)
+        let top = markerSpace + mediaAbove
         let attributionWidth = ceil(attribution.textWidth) + 1
         modelSwitch.frame = NSRect(x: 0, y: 0, width: width, height: HandoffDividerView.height)
         attribution.frame = NSRect(x: width - 4 - attributionWidth, y: switchSpace, width: attributionWidth, height: 16)
@@ -462,9 +512,22 @@ final class UserMessageRowView: TimelineRowView {
         marker.frame = NSRect(x: width - 4 - markerWidth, y: attributionSpace, width: markerWidth, height: UserIntentMarkerView.height)
         bubble.frame = NSRect(x: width - m.bubble, y: top, width: m.bubble, height: bubbleHeight)
         foldHeader.frame = NSRect(x: width - m.bubble, y: top, width: m.bubble, height: FoldedMessageHeaderView.height)
-        let attachmentsHeight = m.attachments
-        attachments.frame = NSRect(x: width - m.bubble + Self.padding, y: top + bodyTop, width: m.bubble - Self.padding * 2, height: attachmentsHeight)
+        let attachmentsHeight = shape.mediaOnly || shape.fileCardsOnly ? 0 : m.attachments
+        attachments.frame = NSRect(x: width - m.bubble + pad, y: top + bodyTop, width: m.bubble - pad * 2, height: attachmentsHeight)
         markdown.frame = NSRect(x: Self.padding, y: bodyTop + attachmentsHeight, width: m.bubble - Self.padding * 2, height: m.full)
+        if shape.mediaAboveText {
+            // `flex max-w-[80%] justify-end` above the bubble.
+            let size = mediaBlock.size(maxWidth: width * 0.8)
+            mediaBlock.frame = NSRect(x: width - size.width, y: markerSpace, width: size.width, height: size.height)
+        } else if shape.mediaOnly {
+            mediaBlock.frame = NSRect(x: width - m.bubble, y: top, width: m.bubble, height: m.attachments)
+        }
+        // `flex flex-col items-end gap-1`.
+        var cardY = top
+        for card in fileCards {
+            card.frame = NSRect(x: width - m.bubble, y: cardY, width: m.bubble, height: UserFileCardView.height)
+            cardY += UserFileCardView.height + 4
+        }
         let clipped = collapsible && m.body < m.full
         CATransaction.begin(); CATransaction.setDisableActions(true)
         if clipped {
@@ -478,7 +541,7 @@ final class UserMessageRowView: TimelineRowView {
         CATransaction.commit()
         bubble.layer?.masksToBounds = true
         let size = toggle.intrinsicContentSize
-        toggle.frame = NSRect(x: Self.padding - 4, y: Self.padding + attachmentsHeight + m.body + 6, width: size.width, height: size.height)
+        toggle.frame = NSRect(x: pad - 4, y: pad + attachmentsHeight + m.body + 6, width: size.width, height: size.height)
         let copySize = copyButton.intrinsicContentSize
         let timeWidth = ceil(time.textWidth)
         let buttonsWidth = copySize.width + (editButton.isHidden ? 0 : 28)
@@ -1116,7 +1179,8 @@ final class UserMessageAttachmentsView: DSView {
     private weak var model: ThreadViewModel?
     static let gridWidth: CGFloat = 210, gap: CGFloat = 8, rowHeight: CGFloat = 28
 
-    func configure(_ m: ChatMessage, model: ThreadViewModel?) {
+    /// `standaloneMedia`: images and videos draw outside the bubble. `fileCards`: files draw as cards.
+    func configure(_ m: ChatMessage, model: ThreadViewModel?, standaloneMedia: Bool = false, fileCards: Bool = false) {
         self.model = model
         var images: [Image] = [], files: [JSONValue] = [], media: [JSONValue] = []
         // Files with a chip in the text need no row (`chippedAttachmentIds`).
@@ -1137,6 +1201,11 @@ final class UserMessageAttachmentsView: DSView {
                 files.append(a)
             }
         }
+        if standaloneMedia {
+            images = []
+            media = media.filter { !($0["mimeType"]?.stringValue ?? "").lowercased().hasPrefix("video/") }
+        }
+        if fileCards { files = [] }
         guard images.map(\.attachmentId) != self.images.map(\.attachmentId) || files != self.files || media != self.media else { return }
         self.images = images
         self.files = files

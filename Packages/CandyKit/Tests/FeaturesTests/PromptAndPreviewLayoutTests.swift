@@ -33,14 +33,18 @@ struct PromptAndPreviewLayoutTests {
                 let attachedCollapsed = row.height(forWidth: width)
                 row.frame = CGRect(x: 0, y: 0, width: width, height: attachedCollapsed)
                 row.layoutSubtreeIfNeeded()
+                // 4928 (#27306): your images sit above the bubble as their own shape, `gap-1` over it; the in-bubble
+                // grid is empty.
                 let grid = try #require(row.subviews.compactMap { $0 as? UserMessageAttachmentsView }.first)
+                let media = try #require(row.subviews.compactMap { $0 as? UserMediaBlockView }.first)
                 let bubble = try #require(row.subviews.first { $0.subviews.contains { $0 is MarkdownView } })
                 let markdown = try #require(bubble.subviews.compactMap { $0 as? MarkdownView }.first)
                 let toggle = try #require(bubble.subviews.compactMap { $0 as? ButtonView }.first)
                 #expect(grid.frame.maxY <= bubble.frame.maxY)
                 #expect(markdown.convert(markdown.bounds, to: row).minY == grid.frame.maxY)
                 #expect(toggle.frame.minY >= markdown.frame.minY + 176)
-                #expect(abs(attachedCollapsed - plainCollapsed - grid.frame.height) < 0.01)
+                #expect(grid.frame.height == 0 && media.frame.maxY + 4 == bubble.frame.minY)
+                #expect(abs(attachedCollapsed - plainCollapsed - media.frame.height - 4) < 0.01)
                 plain.ui.messageExpanded = true
                 attached.ui.messageExpanded = true
                 row.configure(plain)
