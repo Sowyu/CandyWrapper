@@ -13,7 +13,7 @@ Usage: /usr/bin/python3 -I scripts/gen-connections-spec.py
 import json, os, re
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LUCIDE = "/Users/mrm/CandyWrapper-research/downloads/lucide-static-0.564.0/package/icons"
+LUCIDE = os.path.expanduser("~/CandyWrapper-research/downloads/lucide-static-0.564.0/package/icons")
 
 
 def prefix(name, marker):

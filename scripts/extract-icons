@@ -12,8 +12,8 @@ import xml.etree.ElementTree as ET
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 ap = argparse.ArgumentParser()
-ap.add_argument("--lucide", default="/Users/mrm/CandyWrapper-research/downloads/lucide-static-0.564.0/package")
-ap.add_argument("--t3", default="/Users/mrm/CandyWrapper-research/t3code")
+ap.add_argument("--lucide", default=os.path.expanduser("~/CandyWrapper-research/downloads/lucide-static-0.564.0/package"))
+ap.add_argument("--t3", default=os.path.expanduser("~/CandyWrapper-research/t3code"))
 ap.add_argument("--out", default=os.path.join(ROOT, "Packages/CandyKit/Sources/DesignSystem/Icons/IconData.generated.swift"))
 args = ap.parse_args()
 

@@ -14,7 +14,7 @@ Usage: /usr/bin/python3 -I scripts/gen-files-spec.py
 import glob, json, os, re, subprocess
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RESEARCH = os.environ.get("CANDY_RESEARCH") or "/Users/mrm/CandyWrapper-research"
+RESEARCH = os.environ.get("CANDY_RESEARCH") or os.path.expanduser("~/CandyWrapper-research")
 T3 = os.environ.get("CANDY_T3_SOURCE") or os.path.join(RESEARCH, "t3code/apps/web/src")
 
 def source_file(relative):

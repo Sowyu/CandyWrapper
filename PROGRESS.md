@@ -387,6 +387,7 @@ The code marks known shortcuts with `// ponytail:`, each naming when to fix it (
 
 ## Waiting on the user
 
+- The Mac mini M2 Pro needs Xcode, `.git/info/secret-patterns` and, for releases, the signing backups. [Full list](docs/research/bringup-2026-11-19.md#only-the-user-can-supply) (asked 2026-11-19).
 - The first release with the CandyWrapper Helper: scripts/release builds and signs it and puts its manifest in the app (checked in a dry run, which stops at the published build 64), and uploads its tarballs with the release (that step runs only in a real release). Release when you say so. (asked 2026-10-24)
 - Client activity reports: CandyWrapper never sends `server.reportClientActivity`. T3 sends it every 25 s per machine, and the server runs its provider checks, usage-limit refreshes and git fetch with PR status only while a client reports in, so with only CandyWrapper connected those refresh at startup or by hand. Report only while CandyWrapper is the frontmost window (recommended, nothing while it's in the background), every 25 s like T3, or not at all? Since Nightly 3669 the server also pauses periodic pull request discovery while no client holds a foreground lease (5bb54a0f77), so with only CandyWrapper connected, PR status refreshes only on demand. (asked 2026-10-22, updated 2026-10-25)
 - The Allow Remote Access design was built as proposed but never confirmed (`docs/decisions.md`).
@@ -419,6 +420,17 @@ Leave these alone during side-by-side checks.
 - Lineage lists three finished agents as running. The official app shows the same stale server data.
 
 ## On this Mac right now
+
+There are two Macs. AGENTS.md says how to tell them apart.
+
+### The Mac mini M2 Pro (user administrator)
+
+- Brought up on 2026-11-19 ([notes](docs/research/bringup-2026-11-19.md)). It has the Command Line Tools but no Xcode yet. `swift build` passes. The app doesn't build, and `swift test` stops on three XCTest files in DesignSystemTests.
+- With those three files set aside, 2,475 of 2,481 tests pass. The `RedesignBaselineTests.exactPixels` failure comes from the account name "administrator" in the sidebar footer. Five sidebar tests (`SidebarDitherRowTests`, `SidebarProviderStackTests`, `OrchestratorThreadRowTests`, `SidebarMultiMachineTests`, `SidebarLoadTests`) fail because they read the persisted `sidebarWorkingShelfEnabled`, which defaults to true since `a5bf927e`. That one is a test-isolation bug the old Mac probably hides.
+- The main sandbox server runs the 3824 runtime on port 47391 with its token in `~/CandyWrapper-research/sandbox/session.token`. A 4928 server runs on port 47392 from `~/CandyWrapper-research/sandbox-4928`. Both started from `~/CandyWrapper-research/runtimes` with `T3_BIN`.
+- The user works on this screen. Don't take the screen lock, drive the UI or launch the app unless they say so.
+
+### The remote Mac mini M4 (user mrm)
 
 - Screen Sharing leaves the desktop unlocked after disconnect: `RestoreMachineState = false` was applied at the user's request on 2026-10-18 and verified with no Screen Sharing agent left running. [Setting and diagnosis](docs/research/mcp-fullscreen-2026-10-18.md#remote-desktop-interruption).
 

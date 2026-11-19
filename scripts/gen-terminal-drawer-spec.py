@@ -10,7 +10,7 @@ Usage: /usr/bin/python3 -I scripts/gen-terminal-drawer-spec.py
 import json, os, re
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RESEARCH = os.environ.get("CANDY_RESEARCH") or "/Users/mrm/CandyWrapper-research"
+RESEARCH = os.environ.get("CANDY_RESEARCH") or os.path.expanduser("~/CandyWrapper-research")
 LUCIDE = os.path.join(RESEARCH, "downloads/lucide-static-0.564.0/package/icons")
 
 # Button classes and tailwind-merge from gen-button-spec.py (its definitions only).

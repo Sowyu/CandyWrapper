@@ -11,7 +11,7 @@ Usage: /usr/bin/python3 -I scripts/gen-settings-pages2-spec.py [t3code checkout]
 import json, os, re, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-T3 = sys.argv[1] if len(sys.argv) > 1 else "/Users/mrm/CandyWrapper-research/t3code"
+T3 = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/CandyWrapper-research/t3code")
 
 ns = {"__file__": os.path.join(ROOT, "scripts/gen-settings-spec.py")}
 src = open(os.path.join(ROOT, "scripts/gen-settings-spec.py")).read()

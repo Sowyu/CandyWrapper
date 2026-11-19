@@ -17,7 +17,7 @@ lucide, favicon, card_row, hover_card = ns["lucide"], ns["favicon"], ns["card_ro
 def brand_svg(name, gid, cls):
     """3814 SourceControlIcon data moved from Icons.tsx into provider definitions (#23998)."""
     kind = "bitbucket" if name == "BitbucketIcon" else "azure-devops"
-    source = subprocess.check_output(["git", "-C", "/Users/mrm/CandyWrapper-research/t3code", "show",
+    source = subprocess.check_output(["git", "-C", os.path.expanduser("~/CandyWrapper-research/t3code"), "show",
         f"v0.1.4-nightly.20261028.3814:packages/source-control-{kind}/src/shared/icon.ts"], text=True)
     obj = source[source.index("{", source.index("export const icon")):source.rindex("}") + 1]
     obj = re.sub(r'([,{]\s*)([A-Za-z][A-Za-z0-9]*):', r'\1"\2":', obj)

@@ -10,8 +10,8 @@ Usage: /usr/bin/python3 -I scripts/gen-run-on-spec.py
 import json, os, re, subprocess
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-T3 = "/Users/mrm/CandyWrapper-research/t3code/apps/web/src/components"
-LUCIDE = "/Users/mrm/CandyWrapper-research/downloads/lucide-static-0.564.0/package/icons"
+T3 = os.path.expanduser("~/CandyWrapper-research/t3code/apps/web/src/components")
+LUCIDE = os.path.expanduser("~/CandyWrapper-research/downloads/lucide-static-0.564.0/package/icons")
 
 def lucide(name, cls, stroke="2", extra=""):
     src = open(os.path.join(LUCIDE, name + ".svg")).read()

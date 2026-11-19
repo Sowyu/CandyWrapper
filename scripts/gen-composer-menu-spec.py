@@ -11,7 +11,7 @@ Usage: /usr/bin/python3 -I scripts/gen-composer-menu-spec.py
 import glob, html, json, os, re
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RESEARCH = os.environ.get("CANDY_RESEARCH") or "/Users/mrm/CandyWrapper-research"
+RESEARCH = os.environ.get("CANDY_RESEARCH") or os.path.expanduser("~/CandyWrapper-research")
 LUCIDE = os.path.join(RESEARCH, "downloads/lucide-static-0.564.0/package/icons")
 ASSETS = os.path.join(RESEARCH, "t3-client-assets")
 PIERRE = open(glob.glob(os.path.join(ASSETS, "pierre-icons-*.js"))[0], encoding="utf-8").read()

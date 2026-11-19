@@ -7,7 +7,7 @@ Usage: /usr/bin/python3 -I scripts/gen-notifications-spec.py
 import json, os, re
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LUCIDE = "/Users/mrm/CandyWrapper-research/downloads/lucide-static-0.564.0/package/icons"
+LUCIDE = os.path.expanduser("~/CandyWrapper-research/downloads/lucide-static-0.564.0/package/icons")
 # The toast pieces (ROOT, STYLE, ORB, btn, svg) from the overlays generator, before its cases.
 src = open(os.path.join(root, "scripts/gen-overlays-spec.py")).read()
 exec(src[:src.index("T_CASES = [")])
