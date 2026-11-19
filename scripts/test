@@ -18,17 +18,12 @@ if [[ "$1" == "--fast" ]]; then
   args=(--skip "${(j:|:)slow}" "${@:2}")
 fi
 cd "$here/../Packages/CandyKit" || exit 1
-# The Command Line Tools' swift-build sometimes compiles a test target without the Swift Testing macro plugin
-# ("plugin for module 'TestingMacros' not found"), and the next build of the same tree works. Retry only that.
-# ponytail: blind retry of a toolchain race, drop it once a toolchain without the race is installed.
-log=$(mktemp -t cw-test-build)
-for attempt in 1 2 3; do
-  swift build --build-tests 2>&1 | tee "$log"
-  build=${pipestatus[1]}
-  (( build == 0 )) && break
-  grep -q "plugin for module 'TestingMacros' not found" "$log" || { rm -f "$log"; exit $build; }
-  print -u2 "scripts/test: TestingMacros plugin missing on build $attempt, building again"
-done
-rm -f "$log"
-(( build == 0 )) || exit $build
-exec swift test --skip-build "${args[@]}"
+# On the Command Line Tools without Xcode, swift-build sometimes compiles a test target without the Swift Testing
+# macro plugin ("plugin for module 'TestingMacros' not found"). Naming the plugin library explicitly fixes that.
+plugin=/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing/libTestingMacros.dylib
+extra=()
+if [[ -f "$plugin" && "$(xcode-select -p 2>/dev/null)" == /Library/Developer/CommandLineTools ]]; then
+  extra=(-Xswiftc -load-plugin-library -Xswiftc "$plugin")
+fi
+swift build --build-tests "${extra[@]}" || exit $?
+exec swift test --skip-build "${extra[@]}" "${args[@]}"
