@@ -274,12 +274,37 @@ func withoutShellWrapper(_ command: String) -> String {
     let trimmed = command.jsTrimmed
     guard !hasSecondTopLevelStatement(trimmed), let tokens = tokenizeShellCommand(trimmed), let first = tokens.first
     else { return trimmed }
-    let program = (first.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? first)
-        .replacing(/\.exe$/.ignoresCase(), with: "")
-    guard ["sh", "bash", "zsh", "dash", "ash", "ksh", "fish"].contains(program),
-        let scriptIndex = shellCommandArgumentIndex(tokens, start: 1), scriptIndex == tokens.count - 1
-    else { return trimmed }
+    let executable = first.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? first
+    let program = executable.replacing(/\.exe$/.ignoresCase(), with: "")
+    // 4928 (commandLabel.ts:1379-1420, #38946) also unwraps `pwsh -Command` and `cmd /c` launchers.
+    let scriptIndex = ["sh", "bash", "zsh", "dash", "ash", "ksh", "fish"].contains(program)
+        ? shellCommandArgumentIndex(tokens, start: 1)
+        : ["cmd", "cmd.exe", "powershell", "powershell.exe", "pwsh", "pwsh.exe"].contains(executable.lowercased())
+            ? windowsShellScriptIndex(program.lowercased(), tokens) : nil
+    guard let scriptIndex, scriptIndex == tokens.count - 1 else { return trimmed }
     return tokens[scriptIndex].jsTrimmed.nonEmpty ?? trimmed
+}
+
+/// `windowsShellScriptIndex` (4928 commandLabel.ts:1397-1418): the script after `cmd`'s `/c` or PowerShell's
+/// `-Command`, past the switches each takes.
+func windowsShellScriptIndex(_ shell: String, _ tokens: [String]) -> Int? {
+    var index = 1
+    while index < tokens.count {
+        let option = tokens[index].lowercased()
+        if shell == "cmd" {
+            if option == "/c" { return index + 1 }
+            if !option.hasPrefix("/") { return nil }
+        } else if option == "-command" || option == "-c" {
+            return index + 1
+        } else if ["-configurationname", "-executionpolicy", "-inputformat", "-outputformat", "-version", "-windowstyle",
+                   "-workingdirectory"].contains(option) {
+            index += 1
+        } else if !["-mta", "-nologo", "-noninteractive", "-noprofile", "-sta"].contains(option) {
+            return nil
+        }
+        index += 1
+    }
+    return nil
 }
 
 /// `shellCommandArgumentIndex` (commandLabel.ts:202-213): the index of the `-c` script.
