@@ -5,13 +5,35 @@ import T3Protocol
 /// standard palette (themePalettes.ts:137-262) mapped to the variables pages style against.
 // ponytail: the standard light and dark palettes only; follow custom themes when the app gets them (WP-E)
 public struct HtmlRenderTheme: Sendable, Equatable {
-    public static func imageRequest(_ data: JSONValue) -> (src: String, name: String)? {
+    /// `readHtmlRenderImageRequest` (4928 shared/src/htmlRender.ts, #34883): the clicked image and the page's other
+    /// images, so the viewer pages through them. A page from an older server sends only `src` and `name`.
+    public static func imageRequest(_ data: JSONValue) -> (images: [(src: String, name: String)], index: Int)? {
         guard data["jsonrpc"]?.stringValue == "2.0", data["method"]?.stringValue == "t3/notifications/open-image",
-              let src = data["params"]?["src"]?.stringValue,
+              let params = data["params"], let clicked = image(params["src"], params["name"]) else { return nil }
+        var gallery: [(src: String, name: String)] = []
+        var at = -1
+        if case .array(let entries)? = params["images"] {
+            let index = params["index"]?.intValue
+            for (position, entry) in entries.enumerated() {
+                guard let image = image(entry["src"], entry["name"]) else { continue }
+                if position == index { at = gallery.count }
+                gallery.append(image)
+            }
+        }
+        return at >= 0 && gallery[at].src == clicked.src ? (gallery, at) : ([clicked], 0)
+    }
+
+    private static func image(_ src: JSONValue?, _ name: JSONValue?) -> (src: String, name: String)? {
+        guard let src = src?.stringValue,
               src.lowercased().hasPrefix("https://") || src.lowercased().hasPrefix("http://") || src.lowercased().hasPrefix("data:image/") else { return nil }
-        let label = String((data["params"]?["name"]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+        // The page sends any alt text; the label never ends on half a character.
+        let label = String((name?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
         return (src, label.isEmpty ? "Image" : label)
     }
+
+    /// `HTML_RENDER_CONTAIN_SCROLL_FRAGMENT` (4928 htmlRender.ts, #38832): an inline frame's page scrolls only itself.
+    public static let containScrollFragment = "&t3-contain-scroll"
+
     public let dark: Bool
     public let variables: [String: String]
 

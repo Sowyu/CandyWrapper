@@ -29,4 +29,16 @@ struct Nightly4928OutputTests {
         #expect(commandDisplayText("pwsh -File build.ps1") == "pwsh -File build.ps1")
         #expect(commandDisplayText("cmd /c dir extra") == "cmd /c dir extra")
     }
+
+    /// #34883: an image clicked in an HTML render opens with the page's other images.
+    @Test func htmlRenderImagesOpenAsAGallery() {
+        let a = JSONValue.object(["src": .string("https://x/a.png"), "name": .string("A")])
+        let b = JSONValue.object(["src": .string("data:image/png;base64,AA"), "name": .string("")])
+        let message = JSONValue.object(["jsonrpc": .string("2.0"), "method": .string("t3/notifications/open-image"), "params": .object([
+            "src": .string("data:image/png;base64,AA"), "name": .string(""), "images": .array([a, .string("bad"), b]), "index": .number(2)])])
+        let request = HtmlRenderTheme.imageRequest(message)
+        #expect(request?.images.map(\.src) == ["https://x/a.png", "data:image/png;base64,AA"])
+        #expect(request?.index == 1)
+        #expect(request?.images.last?.name == "Image")
+    }
 }

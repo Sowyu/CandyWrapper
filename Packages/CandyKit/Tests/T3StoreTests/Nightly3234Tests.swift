@@ -46,7 +46,7 @@ struct Nightly3234Tests {
         func message(_ src: String) -> JSONValue {
             .object(["jsonrpc": .string("2.0"), "method": .string("t3/notifications/open-image"), "params": .object(["src": .string(src)])])
         }
-        #expect(HtmlRenderTheme.imageRequest(message("https://example.com/a.png"))?.name == "Image")
+        #expect(HtmlRenderTheme.imageRequest(message("https://example.com/a.png"))?.images.first?.name == "Image")
         #expect(HtmlRenderTheme.imageRequest(message("data:image/png;base64,AA")) != nil)
         #expect(HtmlRenderTheme.imageRequest(message("file:///etc/passwd")) == nil)
         #expect(HtmlRenderTheme.imageRequest(message("javascript:alert(1)")) == nil)
