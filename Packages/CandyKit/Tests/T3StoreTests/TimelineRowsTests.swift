@@ -224,6 +224,19 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
         #expect(grouped.map(\.id) == ["tool-1"] && display == label)
     }
 
+    /// session-logic.ts:527-552 at 4928 (#23249): an answer folds into its question's card only within the
+    /// question's run; one that started a later run stays a message there.
+    @Test func lateAsyncAnswersShowInTheirOwnRun() {
+        let question = turnItem(#"{"id":"q","type":"user_input_request","runId":"r1","questionAnswer":{"requestId":"req"}}"#)
+        func answer(_ run: String) -> TurnItem {
+            turnItem(#"{"id":"a","type":"user_message","runId":"\#(run)","messageId":"async-answer:req","text":"yes"}"#)
+        }
+        let same = TimelineEntries.derive(visibleTurnItems: [question, answer("r1")].map { ProjectedTurnItem(local: $0) })
+        #expect(!same.contains { $0.message?.id.rawValue == "async-answer:req" })
+        let late = TimelineEntries.derive(visibleTurnItems: [question, answer("r2")].map { ProjectedTurnItem(local: $0) })
+        #expect(late.contains { $0.message?.id.rawValue == "async-answer:req" })
+    }
+
     @Test func dropsTheInterruptRequestAndKeepsTheResult() throws {
         let request = turnItem(#"{"id":"req","type":"run_interrupt_request","runId":"r2","message":"Interrupt requested"}"#)
         let result = turnItem(#"{"id":"res","type":"run_interrupt_result","runId":"r2","status":"interrupted","message":"Run interrupted"}"#)
