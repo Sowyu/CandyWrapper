@@ -8,6 +8,41 @@ import T3Store
 struct ComposerLogicTests {
     typealias L = ComposerLogic
 
+    /// `canResumeThread` (threadExecution.ts at 4928, #28810).
+    @Test func aPendingRequestHidesResumeForTheRunButNotForTheHeldQueue() {
+        var run = L.RunState(resumableRunId: RunId("r"))
+        run.requestPending = true
+        #expect(!run.canResume)
+        #expect(L.primaryAction(run: run, hasContent: false, busy: false, mode: .auto) == .send)
+        var queue = L.RunState(hasHeldQueuedRuns: true)
+        queue.requestPending = true
+        #expect(queue.canResume)
+    }
+
+    /// `useStopPhase` (ComposerPrimaryActions.tsx:95-136 at 4928, #20809, #35755).
+    @Test func stopWaitsThenLandsAndGuardsTheNextClick() {
+        let running = L.RunState(activeRunId: RunId("r1"), running: true)
+        let stopped = L.RunState(resumableRunId: RunId("r1"))
+        var t = L.StopTracker()
+        t.update(running)
+        #expect(t.phase == nil && t.timer == nil)
+        t.requested()
+        #expect(t.stopDisabled && t.holdsStop && t.timer == 10)
+        // Stop stays the action even before the run state catches up.
+        #expect(L.primaryAction(run: stopped, hasContent: false, busy: false, mode: .auto, stopHeld: t.holdsStop) == .stop)
+        t.expired()
+        #expect(t.phase == .timedOut && !t.stopDisabled && t.holdsStop && t.timer == nil)
+        t.update(stopped)
+        #expect(t.phase == .landed && t.swallowsClick && !t.holdsStop && t.timer == 0.5)
+        #expect(L.primaryAction(run: stopped, hasContent: false, busy: false, mode: .auto, stopHeld: t.holdsStop) == .resume)
+        t.expired()
+        #expect(t.phase == nil && !t.swallowsClick)
+        // A new run resets a pending stop.
+        t.update(running); t.requested()
+        t.update(L.RunState(activeRunId: RunId("r2"), running: true))
+        #expect(t.phase == nil)
+    }
+
     @Test func compactionAlwaysQueuesFollowUps() {
         for alternate in [true, false] {
             for steer in [true, false] {

@@ -200,6 +200,8 @@ public enum ComposerLogic {
         public var resumableRunId: RunId?
         /// Queued runs Stop held (`queueHeld`).
         public var hasHeldQueuedRuns = false
+        /// A runtime request is pending: the server refuses the run's continuation until it settles.
+        public var requestPending = false
         public init(activeRunId: RunId? = nil, running: Bool = false, resumableRunId: RunId? = nil, hasHeldQueuedRuns: Bool = false) {
             self.activeRunId = activeRunId; self.running = running
             self.resumableRunId = resumableRunId; self.hasHeldQueuedRuns = hasHeldQueuedRuns
@@ -207,7 +209,9 @@ public enum ComposerLogic {
 
         /// `deriveCanInterruptRunningThread` (session-logic.ts:1087-1095).
         public var canInterrupt: Bool { running || activeRunId != nil }
-        public var canResume: Bool { resumableRunId != nil || hasHeldQueuedRuns }
+        /// `canResumeThread` (client-runtime state/threadExecution.ts at 4928, #28810): the run's continuation, else
+        /// the held queue. While a request is pending the queue must not be released in the continuation's place.
+        public var canResume: Bool { resumableRunId != nil ? !requestPending : hasHeldQueuedRuns }
 
         public init(runs: [Run]) {
             let interruptible: Set<ThreadStatus> = [.preparing, .starting, .running]
@@ -273,6 +277,43 @@ public enum ComposerLogic {
         return busy ? (editingQueued ? "Updating queued message" : "Submitting message") : nil
     }
 
+    /// `useStopPhase` (ComposerPrimaryActions.tsx:95-136 at 4928, #20809, #35755): Stop reads "Stopping…" and takes no
+    /// clicks until the run stops or 10 seconds pass; once it lands, the action that takes its place ignores clicks for
+    /// 500 ms so a repeated Stop click can't resume. A new run starts over.
+    public struct StopTracker: Sendable, Equatable {
+        public enum Phase: Sendable, Equatable { case pending, timedOut, landed }
+        public static let pendingLimit: TimeInterval = 10
+        public static let landedGuard: TimeInterval = 0.5
+        public private(set) var phase: Phase?
+        private var runId: RunId?
+        public init() {}
+
+        /// Stop was clicked.
+        public mutating func requested() { phase = .pending }
+        /// The pending or landed timer ran out.
+        public mutating func expired() {
+            if phase == .pending { phase = .timedOut } else if phase == .landed { phase = nil }
+        }
+        /// The run state changed.
+        public mutating func update(_ run: RunState) {
+            if let id = run.activeRunId, id != runId {
+                runId = id
+                phase = nil
+            } else if (phase == .pending || phase == .timedOut) && !run.canInterrupt {
+                phase = .landed
+            } else if phase == .landed && run.canInterrupt {
+                phase = nil
+            }
+        }
+        /// Stop still shows while it waits.
+        public var holdsStop: Bool { phase == .pending || phase == .timedOut }
+        public var stopDisabled: Bool { phase == .pending }
+        /// The action in Stop's place ignores this click.
+        public var swallowsClick: Bool { phase == .landed }
+        /// How long until `expired()`, or nil when no timer runs.
+        public var timer: TimeInterval? { phase == .pending ? Self.pendingLimit : phase == .landed ? Self.landedGuard : nil }
+    }
+
     /// The primary action button's look.
     public enum PrimaryAction: Sendable, Equatable {
         /// `update`: saving an edited queued message (a check).
@@ -292,10 +333,12 @@ public enum ComposerLogic {
 
     /// `ComposerPrimaryActions.tsx:267-289`. While a queued message is being edited the button
     /// is the check, even with a run active (`isQueuing` is false while editing).
-    public static func primaryAction(run: RunState, hasContent: Bool, busy: Bool, mode: SendMode, editingQueued: Bool = false) -> PrimaryAction {
+    /// `stopHeld`: Stop was clicked and the run hasn't stopped yet (`StopTracker.holdsStop`).
+    public static func primaryAction(run: RunState, hasContent: Bool, busy: Bool, mode: SendMode, editingQueued: Bool = false,
+                                     stopHeld: Bool = false) -> PrimaryAction {
         if busy { return .busy }
         if editingQueued { return .update }
-        if run.canInterrupt, !hasContent { return .stop }
+        if run.canInterrupt || stopHeld, !hasContent { return .stop }
         if !hasContent, run.canResume { return .resume }
         switch mode {
         case .auto: return .send
