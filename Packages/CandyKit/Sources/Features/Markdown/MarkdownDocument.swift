@@ -378,6 +378,54 @@ public struct MarkdownDocument: Sendable, Equatable {
         return MarkdownListItem(task: task, blocks: blocks)
     }
 
+    /// `remarkAssistantInsights` (4928 shared/src/markdownPipeline.ts:759-835, #22239): an assistant's
+    /// `★ Insight ───` line opens a quote that a `───` line at the same indent closes. The quote is marked as an
+    /// insight alert. Code fences inside or outside never open or close one, and quotes outside never open one.
+    /// Text without the marker comes back as is after one byte search.
+    // ponytail: protects fences and `>` lines, not list items as T3's parsed ranges do; parse ranges if a list ever holds one
+    public static func rewritingInsights(_ text: String) -> String {
+        let found = text.utf8.withContiguousStorageIfAvailable { bytes in
+            insightMarker.withUnsafeBufferPointer { memmem(bytes.baseAddress, bytes.count, $0.baseAddress, $0.count) != nil }
+        } ?? text.contains("★ Insight")
+        guard found else { return text }
+        var out: [Substring] = []
+        var indent: Substring?
+        var fence: (char: Character, count: Int)?
+        var opened = false
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let value = line.hasSuffix("\r") ? line.dropLast() : line
+            let lead = value.prefix { $0 == " " }
+            let body = value.dropFirst(lead.count)
+            let blocked = fence != nil || (indent == nil && lead.count <= 3 && body.hasPrefix(">"))
+            if lead.count <= 3, let mark = body.first, mark == "`" || mark == "~" {
+                let run = body.prefix { $0 == mark }.count
+                if let open = fence {
+                    if mark == open.char, run >= open.count, body.dropFirst(run).allSatisfy({ $0 == " " || $0 == "\t" }) { fence = nil }
+                } else if run >= 3, !(mark == "`" && body.dropFirst(run).contains("`")) {
+                    fence = (mark, run)
+                }
+            }
+            if indent == nil, !blocked, lead.count <= 3, body.first == "★" || body.first == "`",
+               let match = value.wholeMatch(of: insightOpening) {
+                indent = match.output.1
+                opened = true
+                out.append("> [!\(MarkdownAlertKind.insight.rawValue)]")
+            } else if let open = indent, !blocked, lead.count <= 3, body.first == "─" || body.first == "`",
+                      let match = value.wholeMatch(of: insightClosing), match.output.1 == open {
+                indent = nil
+                out.append("")
+            } else if indent != nil {
+                out.append("> " + line)
+            } else {
+                out.append(line)
+            }
+        }
+        return opened ? out.joined(separator: "\n") : text
+    }
+    private static let insightMarker = Array("★ Insight".utf8)
+    nonisolated(unsafe) private static let insightOpening = /( {0,3})(`?)★ Insight[ \t]+─{3,}\2[ \t]*/
+    nonisolated(unsafe) private static let insightClosing = /( {0,3})(`?)─{3,}\2[ \t]*/
+
     /// T3's remark plugin: a quote whose first line is exactly `[!KIND]` (case-insensitive), one of GitHub's five.
     private static func alertKind(_ children: inout [MarkdownBlock]) -> MarkdownAlertKind? {
         guard case .paragraph(var runs)? = children.first, let first = runs.first, !first.code else { return nil }
@@ -540,6 +588,9 @@ public struct MarkdownTable: Sendable, Equatable {
 
 public enum MarkdownAlertKind: String, Sendable, CaseIterable {
     case note, tip, important, warning, caution
+    /// A Claude `★ Insight` block (`remarkAssistantInsights`). Its marker holds a private-use character, so no
+    /// written `[!...]` quote turns into one; only `MarkdownDocument.rewritingInsights` writes it.
+    case insight = "\u{F8FF}insight"
 }
 
 /// A run of text with one inline style.

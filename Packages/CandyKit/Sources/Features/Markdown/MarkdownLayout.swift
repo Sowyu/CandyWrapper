@@ -60,8 +60,12 @@ enum MarkdownStyle {
         return NSFont(descriptor: font.fontDescriptor.withSymbolicTraits(font.fontDescriptor.symbolicTraits.union(.italic)), size: font.pointSize) ?? font
     }
 
-    /// CSS `font-weight: bolder` from a parent weight.
-    static func bolder(_ weight: NSFont.Weight) -> NSFont.Weight { ThreadDesign.uses3814 ? .semibold : weight.rawValue >= NSFont.Weight.semibold.rawValue ? .black : .bold }
+    static let rule = NSColor(name: nil) { appearance in
+        Themed.color(appearance.isDark && ThreadDesign.uses3814(dark: true) ? \.contrastMutedForeground : \.border)
+    }
+
+    /// CSS `font-weight: bolder` from a parent weight. 4928 draws `strong` at 700 (index.css:2175, #25694).
+    static func bolder(_ weight: NSFont.Weight) -> NSFont.Weight { ThreadDesign.uses3814 ? .bold : weight.rawValue >= NSFont.Weight.semibold.rawValue ? .black : .bold }
 
     nonisolated(unsafe) private static var noBreakSpaceWidths: [NSFont: CGFloat] = [:]
     private static let noBreakSpaceLock = NSLock()
@@ -812,12 +816,13 @@ private struct Builder {
                 return diagramBlock(code: code, index: index, palette: diagrams.palette, width: width)
             }
             return codeBlock(language: language, title: title, code: code, width: width, wraps: wrapsCode != unwrapped.contains(index),
-                             viewToggle: mermaid, plain: drawsPlain)
+                             viewToggle: mermaid, plain: drawsPlain, textColor: Self.plainTextColor(language: language, context: context))
         case .table(let table):
             return self.table(table, width: width, context: context)
         case .rule:
-            // Preflight's hr: a 1px top border in --border, no margin.
-            return Box(height: 1, items: [.box(CGRect(x: 0, y: 0, width: width, height: 1), fill: Themed.color(\.border), border: nil, radius: 0)])
+            // Preflight's hr: a 1px top border in --border, no margin. Dark rules take --contrast-muted-foreground so they
+            // show on dark bubbles (4928 index.css:2103-2109, #22367).
+            return Box(height: 1, items: [.box(CGRect(x: 0, y: 0, width: width, height: 1), fill: MarkdownStyle.rule, border: nil, radius: 0)])
         case .image(let alt, let url):
             // A standalone image sits on the paragraph's baseline. Until it decodes it holds the loading slot,
             // 16:9 and at most 30rem wide, and keeps it if it fails; once its size is known it takes its own box
@@ -1071,7 +1076,9 @@ private struct Builder {
     // MARK: Alerts
 
     mutating func alert(_ kind: MarkdownAlertKind, _ children: [MarkdownBlock], width: CGFloat, context: Context) -> Box {
+        // Insight: `border-info` and `text-info`, both --info, blue-500 (4928 ChatMarkdown.tsx:374-382, index.css:1157).
         let (label, icon, border, light, dark): (String, IconName, String, String, String) = switch kind {
+        case .insight: ("Insight", .star, "blue-500", "blue-500", "blue-500")
         case .note: ("Note", .info, "blue-500", "blue-600", "blue-400")
         case .tip: ("Tip", .lightbulb, "emerald-500", "emerald-600", "emerald-400")
         case .important: ("Important", .messageSquareWarning, "purple-500", "purple-600", "purple-400")
@@ -1099,7 +1106,7 @@ private struct Builder {
         // The root zeroes the alert's own margin, but its last paragraph's margin still collapses through it
         // (index.css:1869-1881). The assistant meta gap then collapses with that margin too.
         if ThreadDesign.uses3814 { box.innerBottom = children.isEmpty ? title.bottom : body.bottom }
-        box.items.append(.box(CGRect(x: 0, y: 0, width: 2, height: titleAndBody.height), fill: Themed.base(border, 0.7), border: nil, radius: 0))
+        box.items.append(.box(CGRect(x: 0, y: 0, width: 2, height: titleAndBody.height), fill: Themed.base(border, kind == .insight ? 1 : 0.7), border: nil, radius: 0))
         box.add(titleAndBody, at: CGPoint(x: indent, y: 0))
         return box
     }
@@ -1115,7 +1122,7 @@ private struct Builder {
     struct ColoredCodeKey: Hashable { var code: String; var language: String; var font: NSFont }
 
     /// `plain` skips the tokens and the cache: an open code block of a streaming answer changes with every token.
-    static func coloredCode(_ code: String, language: String, font: NSFont, plain: Bool = false) -> NSAttributedString {
+    static func coloredCode(_ code: String, language: String, font: NSFont, plain: Bool = false, color: NSColor? = nil) -> NSAttributedString {
         let cached = !plain && code.utf16.count >= 2_000
         let key = ColoredCodeKey(code: code, language: language, font: font)
         if cached, let hit = coloredCodeLock.withLock({ coloredCodeCache[key] }) { return hit }
@@ -1127,7 +1134,7 @@ private struct Builder {
         paragraph.tabStops = []
         // The paragraph style goes in before the tokens split the string into runs: added after, it rebuilt
         // every run's attributes, 0.1 s for an 18,000 line block.
-        let string = NSMutableAttributedString(string: code, attributes: [.font: font, .foregroundColor: CodeTokenKind.plain.markdownColor,
+        let string = NSMutableAttributedString(string: code, attributes: [.font: font, .foregroundColor: color ?? CodeTokenKind.plain.markdownColor,
                                                                           .paragraphStyle: paragraph])
         // ponytail: NSFontManager off the main thread, under a lock and once per font; fall back to descriptor traits if it ever asserts
         let italic = coloredCodeLock.withLock {
@@ -1151,11 +1158,18 @@ private struct Builder {
 
     // MARK: Code blocks
 
+    /// Plain-text fences take the text color around them instead of the highlighter's foreground
+    /// (4928 index.css:2224-2249, #27144). Sent messages ask for `--contrast-foreground`, which their body color is.
+    static func plainTextColor(language: String, context: Context) -> NSColor? {
+        guard ThreadDesign.uses3814, ["text", "txt", "plain", "plaintext"].contains(language.lowercased()) else { return nil }
+        return context.color
+    }
+
     mutating func codeBlock(language: String, title: String?, code: String, width: CGFloat, wraps: Bool, viewToggle: Bool = false,
-                            plain: Bool = false) -> Box {
+                            plain: Bool = false, textColor: NSColor? = nil) -> Box {
         let p = MarkdownStyle.codePadding
         let font = DSFont.mono(MarkdownStyle.codeFontSize)
-        let string = Self.coloredCode(code, language: language, font: font, plain: plain)
+        let string = Self.coloredCode(code, language: language, font: font, plain: plain || textColor != nil, color: textColor)
         let inner = width - 2 - 2 * p.x
         let textBox = boxes.make(string, width: inner, lineHeight: MarkdownStyle.codeLineHeight, strut: font, wraps: wraps)
         // Chromium's scroll width counts both inline paddings; the classic scrollbar takes its 7px below them.
