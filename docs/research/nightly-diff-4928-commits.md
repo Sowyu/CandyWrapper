@@ -727,7 +727,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 00c6adbdce | #29388 | thread | feat(fx): choose a backend per thread | skip: needs wire: `subProviders` and a per-thread backend |
+| 00c6adbdce | #29388 | thread | feat(fx): choose a backend per thread | ported: `subProviders` decodes, a provider lists each backend as a collapsible heading with its count or Unavailable reason, the active backend opens expanded, and a warning provider with a usable backend stays ready (ModelCatalog, ModelPickerView) |
 
 ## Small fixes, browser (18)
 
