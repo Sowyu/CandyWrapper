@@ -342,6 +342,16 @@ public final class ComposerSelectionStore {
         return changed
     }
 
+    /// The pick a started server thread should take now, so the next turn from any client runs on it
+    /// (`useApplyThreadModelPick`, useApplyThreadModelPick.ts at 4928, #31739). Only an explicit pick on the
+    /// thread's own instance applies; another instance replaces the live session and waits for a send.
+    public func modelPickToApply(_ key: String, _ ctx: ComposerSelectionContext) -> ModelSelection? {
+        guard let thread = ctx.thread, let draft = drafts[key], draft.explicit, let id = draft.activeInstance,
+              let pick = draft.selectionByInstance[id], id == thread.modelSelection.instanceId else { return nil }
+        let selection = ModelSelection(instanceId: id, model: pick.model, selections: pick.options)
+        return Self.pickMatchesThread(selection, thread.modelSelection) ? nil : selection
+    }
+
     /// `draftModelPickMatchesThread` (packages/shared/src/model.ts:119-131): the same instance, model and options in
     /// any order, with `fastMode: false` counted as unset because mobile omits it.
     public static func pickMatchesThread(_ pick: ModelSelection, _ thread: ModelSelection) -> Bool {

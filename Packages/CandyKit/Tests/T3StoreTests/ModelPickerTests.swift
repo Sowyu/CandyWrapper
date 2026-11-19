@@ -234,6 +234,31 @@ struct ModelPickerTests {
         #expect(ModelTraits.ultrathinkInBody("Ultrathink:\nplease ultrathink") && !ModelTraits.ultrathinkInBody("Ultrathink:\nfix"))
     }
 
+    /// #31739: a pick on a started thread's own instance applies at once; a pick it already runs, a draft
+    /// thread and a pick on another instance wait for a send (useApplyThreadModelPick.ts at 4928).
+    @Test func threadModelPickAppliesOnlyOnItsInstance() throws {
+        let config = try Self.recordedConfig()
+        let catalog = ProviderCatalog(config.providers)
+        let thread = try JSONDecoder().decode(ThreadShell.self, from: Data(baseThreadJSON.replacingOccurrences(of: "codex", with: "claudeAgent")
+            .replacingOccurrences(of: "gpt-5.4", with: "claude-haiku-5-5").utf8))
+        let key = thread.id.rawValue
+        let tctx = ComposerSelectionContext(catalog: catalog, thread: thread, serverDefaults: config.settings, hasStartedSession: true)
+        let store = ComposerSelectionStore(defaults: nil)
+        #expect(store.modelPickToApply(key, tctx) == nil)
+        store.pickModel(key, instance: "claudeAgent", model: "claude-opus-5-5", tctx)
+        #expect(store.modelPickToApply(key, tctx)?.model == "claude-opus-5-5")
+        #expect(store.modelPickToApply(key, ComposerSelectionContext(catalog: catalog, serverDefaults: config.settings)) == nil)
+        store.pickModel(key, instance: "claudeAgent", model: "claude-haiku-5-5", tctx)
+        #expect(store.modelPickToApply(key, tctx) == nil)
+        if let codex = catalog.entries.first(where: { $0.id != "claudeAgent" }), let model = codex.defaultModel {
+            store.pickModel(key, instance: codex.id, model: model, tctx)
+            #expect(store.modelPickToApply(key, tctx) == nil)
+        }
+        let command = ThreadCommands.setModelSelection(thread.id, .object(["instanceId": .string("claudeAgent")]), commandId: "c1")
+        #expect(command == .object(["type": .string("thread.model-selection.set"), "commandId": .string("c1"), "threadId": .string(thread.id.rawValue),
+                                    "modelSelection": .object(["instanceId": .string("claudeAgent")])]))
+    }
+
     /// Another client moves the thread to the draft's pick: the pick drops, the access pick stays
     /// (composerDraftStore.ts:4152-4219, model.ts:119-131).
     @Test func threadModelReconcilesDraftPick() throws {

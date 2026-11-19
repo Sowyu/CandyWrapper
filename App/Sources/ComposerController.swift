@@ -376,6 +376,7 @@ final class ComposerController {
             self?.composer.needsLayout = true
             self?.onTargetChange?()
             self?.onModelChange?()
+            self?.applyThreadModelPick()
         }
         let queue = panel.queue
         queue.threadTitle = { [weak panel] in panel?.model.linkedThread?($0)?.title }
@@ -2425,6 +2426,23 @@ final class ComposerController {
     }
 
     /// The server's message for a failed command, else nil for the caller's fallback.
+    /// #31739: a model or effort pick on a started thread saves on the thread at once, so the next turn from any
+    /// client runs on it (useApplyThreadModelPick.ts at 4928). Draft reconciliation drops the pick once it lands.
+    private func applyThreadModelPick() {
+        guard let id = openThreadId, let supervisor = shell?.supervisor,
+              let pick = pickers.store.modelPickToApply(pickers.draftKey, pickers.context) else { return }
+        Task { [weak self] in
+            do {
+                _ = try await supervisor.request("orchestration.dispatchCommand",
+                                                 payload: ThreadCommands.setModelSelection(id.localId, ThreadSession.encode(pick)))
+            } catch {
+                let detail = Self.message(error) ?? "Try again."
+                self?.panel.toasts.show(ToastView(title: "Could not apply model selection",
+                                                  message: "This model pick was not saved. \(detail)", kind: .error))
+            }
+        }
+    }
+
     private static func message(_ error: Error) -> String? {
         (error as? RPCClientError)?.typedError?.message
     }
