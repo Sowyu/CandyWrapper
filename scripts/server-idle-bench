@@ -7,7 +7,7 @@ procstat over the server's process tree, and stops exactly the process group it 
 
 Usage: scripts/server-idle-bench [--settle 20] [--window 30] [--variants all|name,name]
 """
-import argparse, json, os, signal, subprocess, sys, time, urllib.request
+import argparse, json, os, pwd, signal, subprocess, sys, time, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOME = os.path.expanduser("~")
@@ -73,7 +73,7 @@ def stop_tree(proc):
 
 def run_variant(name, extra, settle, window):
     os.makedirs(BENCH_HOME, exist_ok=True)
-    env = {"HOME": HOME, "USER": os.environ.get("USER", "mrm"), "LOGNAME": os.environ.get("USER", "mrm"),
+    env = {"HOME": HOME, "USER": pwd.getpwuid(os.getuid()).pw_name, "LOGNAME": pwd.getpwuid(os.getuid()).pw_name,
            "SHELL": "/bin/zsh", "LANG": "en_US.UTF-8", "TMPDIR": os.environ.get("TMPDIR", "/tmp"),
            "PATH": f"{HOME}/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
            "T3CODE_TELEMETRY_ENABLED": "false", "T3CODE_HOME": BENCH_HOME, **extra}
