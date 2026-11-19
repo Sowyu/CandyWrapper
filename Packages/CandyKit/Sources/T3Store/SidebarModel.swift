@@ -418,9 +418,10 @@ public enum SidebarModel {
 
     // MARK: - Visibility and sections
 
-    /// Port of `isSidebarSubagentThread` (Sidebar.logic.ts:566-568).
+    /// Port of `isSidebarSubagentThread` (Sidebar.logic.ts:566-568), which 4928 widened to
+    /// `isShownUnderParent` (client-runtime/src/state/threadShell.ts:66-72): subagents and side chats.
     public static func isSidebarSubagentThread(_ thread: ThreadShell) -> Bool {
-        thread.lineage.relationshipToParent == .subagent
+        !thread.lineage.isListed
     }
 
     /// Port of `filterSidebarV2VisibleThreads` (Sidebar.logic.ts:570-583) for one environment:

@@ -279,7 +279,7 @@ public struct ShellReducer: Sendable {
                     if let cut = snapshot?.olderSettled {
                         let previous = snapshot?.threads.first { $0.id == thread.id }
                         if Self.isOlderSettled(thread, before: cut.before) || previous.map({ Self.isOlderSettled($0, before: cut.before) }) == true
-                            || (previous == nil && thread.lineage.relationshipToParent != .subagent) {
+                            || (previous == nil && thread.lineage.isListed) {
                             countsInvalidatedAt = sequence
                         }
                     }
@@ -322,7 +322,7 @@ public struct ShellReducer: Sendable {
     }
 
     private static func isOlderSettled(_ thread: ThreadShell, before: String) -> Bool {
-        thread.lineage.relationshipToParent != .subagent && thread.settledOverride == .settled
+        thread.lineage.isListed && thread.settledOverride == .settled
             && (thread.settledAt?.epochMs ?? Int64.max) < (T3Timestamp(before).epochMs ?? 0)
     }
 }

@@ -143,7 +143,8 @@ public struct ThreadNotificationTracker: Sendable {
         // Subagents are skipped below, so their requests notify through the thread above them (T3 f4df794777).
         let subagentRequests = PendingSubagentRequests.byThread(threads)
         for raw in threads {
-            if raw.lineage.relationshipToParent == .subagent { continue }
+            // Side chats too, as `isShownUnderParent` (4928 ThreadNotificationCoordinator.tsx:250).
+            if !raw.lineage.isListed { continue }
             let prior = before[raw.id]
             let subagentRequest = subagentRequests[raw.id]
             // An unchanged thread can't produce a new notification.

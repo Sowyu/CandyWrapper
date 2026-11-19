@@ -41,4 +41,13 @@ struct Nightly4928WireTests {
         let again = try TurnItem(json: JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(item)))
         #expect(again.filesTotal?.count == 250)
     }
+
+    @Test func sideChatLineageIsNotListed() throws {
+        func lineage(_ text: String) throws -> ThreadLineage { try Self.json(text).decode(as: ThreadLineage.self) }
+        #expect(try lineage(#"{"parentThreadId":null,"relationshipToParent":null,"rootThreadId":"t"}"#).isListed)
+        #expect(try lineage(#"{"parentThreadId":"p","relationshipToParent":"fork","rootThreadId":"p"}"#).isListed)
+        #expect(try !lineage(#"{"parentThreadId":"p","relationshipToParent":"subagent","rootThreadId":"p"}"#).isListed)
+        let side = try lineage(#"{"parentThreadId":"p","relationshipToParent":"fork","rootThreadId":"p","sideChat":true}"#)
+        #expect(side.sideChat == true && !side.isListed)
+    }
 }

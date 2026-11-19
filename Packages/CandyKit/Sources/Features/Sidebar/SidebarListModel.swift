@@ -371,7 +371,7 @@ public enum SidebarListBuilder {
                 let before = T3Timestamp(cut.before).epochMs ?? 0
                 let loaded = threadShells.filter {
                     (env.isEmpty || $0.id.environmentId == env) && (scopedIds?.contains($0.projectId) ?? true)
-                        && $0.settledOverride?.rawValue == "settled" && $0.lineage.relationshipToParent != .subagent
+                        && $0.settledOverride?.rawValue == "settled" && $0.lineage.isListed
                         && ($0.settledAt?.epochMs ?? Int64.max) < before
                 }.count
                 return total + max(0, remote - loaded)

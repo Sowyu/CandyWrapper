@@ -200,12 +200,19 @@ public struct ThreadLineage: Codable, Hashable, Sendable {
     public var parentThreadId: ThreadId?
     public var relationshipToParent: LineageRelationship?
     public var rootThreadId: ThreadId
+    /// A side chat: a hidden fork that lives in its parent's view (4928 orchestrationV2.ts:173).
+    public var sideChat: Bool?
 
-    public init(parentThreadId: ThreadId?, relationshipToParent: LineageRelationship?, rootThreadId: ThreadId) {
+    public init(parentThreadId: ThreadId?, relationshipToParent: LineageRelationship?, rootThreadId: ThreadId, sideChat: Bool? = nil) {
         self.parentThreadId = parentThreadId
         self.relationshipToParent = relationshipToParent
         self.rootThreadId = rootThreadId
+        self.sideChat = sideChat
     }
+
+    /// `isListedThreadLineage` (4928 orchestrationV2.ts:177-179): subagents and side chats show
+    /// inside their parent, never in thread lists, search or settled counts.
+    public var isListed: Bool { relationshipToParent != .subagent && sideChat != true }
 }
 
 /// `forkedFrom`: a union on `type` (`run`, `node`, `provider_thread`). Kept flat so a new type
