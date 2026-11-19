@@ -7,6 +7,10 @@ public enum Backoff {
     public static let maxMilliseconds = 300_000
     /// A session that stayed up this long resets the ladder.
     public static let resetAfter: Duration = .seconds(30)
+    /// Someone is approving this device on the host, so check back soon (4928 supervisor.ts:49-52).
+    public static let approvalPendingMilliseconds = 4_000
+    /// A request lives 10 minutes; past that nobody is approving, so the device backs off.
+    public static let approvalPendingFastRetries = 150
 
     /// Delay before retry number `failureCount + 1` (`failureCount` is 0 for the first retry).
     /// Equal jitter: uniform in the upper half of the ceiling, `random` in [0, 1).
@@ -126,6 +130,12 @@ public struct ConnectionState: Sendable, Equatable {
     /// When the next attempt runs, while in backoff.
     public var retryAt: ContinuousClock.Instant?
 
+    /// Waiting for the host to approve this T3 Connect device (4928 connection/presentation.ts:58-68).
+    public var awaitingApproval: Bool {
+        guard failure?.reason == ConnectionFailureInfo.approvalPendingReason else { return false }
+        return phase == .connecting || phase == .backoff
+    }
+
     public var status: Status {
         switch phase {
         case .available: .available
@@ -206,6 +216,9 @@ public actor ConnectionSupervisor {
     /// Orders `applyWatch` calls, which reach the connection through separate tasks.
     private var watchGeneration = 0
     private var failures = 0
+    /// The failures that climb the ladder: approval waits count as attempts but not here.
+    private var backoffFailures = 0
+    private var approvalWaits = 0
     private var skipNextDelay = false
     private var connection: RPCConnection?
     private var connectedAt: ContinuousClock.Instant?
@@ -271,7 +284,7 @@ public actor ConnectionSupervisor {
 
     /// The user's "Reconnect" button: resets the ladder and tries now, or quick-probes a live session.
     public func retryNow() {
-        failures = 0
+        failures = 0; backoffFailures = 0; approvalWaits = 0
         skipNextDelay = false
         if connection != nil { probe(timeout: Self.quickProbeTimeout); return }
         cancelAttempt()
@@ -282,7 +295,7 @@ public actor ConnectionSupervisor {
         guard isOnline != online else { return }
         online = isOnline
         if isOnline {
-            failures = 0
+            failures = 0; backoffFailures = 0; approvalWaits = 0
             if connection != nil { probe(timeout: Self.quickProbeTimeout) } else { cancelTimer(); evaluate() }
         } else if connection != nil {
             // A loopback session can survive losing the network. Probe before dropping it.
@@ -299,7 +312,7 @@ public actor ConnectionSupervisor {
     /// (client-runtime connection/wakeups.ts:10-25, supervisor.ts:582-596).
     public func networkPathChanged() {
         guard online else { return }
-        failures = 0
+        failures = 0; backoffFailures = 0; approvalWaits = 0
         if connection != nil {
             probe(timeout: Self.quickProbeTimeout)
         } else if attemptTask == nil {
@@ -317,7 +330,7 @@ public actor ConnectionSupervisor {
 
     public func wakeup(_ reason: ConnectionWakeup) {
         if reason == .applicationActive { appActive = true; applyWatch() }
-        failures = 0
+        failures = 0; backoffFailures = 0; approvalWaits = 0
         if connection != nil {
             probe(timeout: reason == .systemWake ? Self.quickProbeTimeout : Self.probeTimeout)
             startPinging()
@@ -488,7 +501,7 @@ public actor ConnectionSupervisor {
         connection = nil
         pingTask?.cancel()
         pingTask = nil
-        if let connectedAt, deps.now() - connectedAt >= Backoff.resetAfter { failures = 0 }
+        if let connectedAt, deps.now() - connectedAt >= Backoff.resetAfter { failures = 0; backoffFailures = 0; approvalWaits = 0 }
         if desired && online {
             scheduleRetry(reason.description, ConnectionFailureInfo(reason: "transport", blocked: false, detail: reason.description))
         } else {
@@ -499,8 +512,15 @@ public actor ConnectionSupervisor {
     private func scheduleRetry(_ detail: String, _ info: ConnectionFailureInfo) {
         state.lastFailure = detail
         state.failure = info
+        // Approval waits count as attempts but not toward backoff, so a later outage starts low (4928 supervisor.ts:1185-1305).
+        let pending = info.reason == ConnectionFailureInfo.approvalPendingReason
+        if pending { approvalWaits += 1 }
+        let awaitingApproval = pending && approvalWaits <= Backoff.approvalPendingFastRetries
+        if !awaitingApproval { backoffFailures += 1 }
         failures += 1
-        let delay: Duration = skipNextDelay ? .zero : .milliseconds(Backoff.delayMilliseconds(failureCount: failures - 1, random: deps.random()))
+        let ladder = awaitingApproval ? 0 : Backoff.delayMilliseconds(failureCount: backoffFailures - 1, random: deps.random())
+        let milliseconds = pending ? max(Backoff.approvalPendingMilliseconds, ladder) : ladder
+        let delay: Duration = skipNextDelay ? .zero : .milliseconds(milliseconds)
         skipNextDelay = false
         state.attempt = failures + 1
         state.retryAt = deps.now() + delay

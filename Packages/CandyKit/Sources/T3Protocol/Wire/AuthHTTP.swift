@@ -136,6 +136,31 @@ public struct EnvironmentHTTPErrorBody: Codable, Sendable, Equatable {
     }
 }
 
+extension EnvironmentHTTPErrorBody {
+    /// `EnvironmentConnectApprovalPendingError` (4928 packages/contracts/src/environmentHttp.ts:216): the host
+    /// requires device approval and nobody has approved this T3 Connect device yet. Sent as HTTP 403.
+    public var isConnectApprovalPending: Bool {
+        code == "connect_approval_pending" || tag == "EnvironmentConnectApprovalPendingError"
+    }
+}
+
+/// T3 Connect device approval (4928 packages/contracts/src/auth.ts:293, 337-350).
+public enum ConnectDeviceApproval {
+    static let base64URL = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+    /// `PAIRING_CODE_ALPHABET`.
+    static let pairingAlphabet = Array("23456789ABCDEFGHJKLMNPQRSTUVWXYZ")
+
+    /// `connectDeviceVerificationCode`: the `XXXX-XXXX` code both the waiting device and the approving
+    /// host show, read from the first eight characters of the DPoP key thumbprint.
+    public static func verificationCode(thumbprint: String) -> String {
+        let code = String(thumbprint.prefix(8).map { character in
+            let value = base64URL.firstIndex(of: character) ?? 0
+            return pairingAlphabet[value % pairingAlphabet.count]
+        })
+        return "\(code.prefix(4))-\(code.dropFirst(4))"
+    }
+}
+
 /// `GET /ws` answers 426 with this when `orchestrationProtocol` is missing or wrong.
 public struct ProtocolIncompatibleBody: Codable, Sendable, Equatable {
     public var code: String

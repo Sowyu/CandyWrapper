@@ -25,6 +25,9 @@ public struct ConnectionFailureInfo: Sendable, Equatable {
     public var traceId: String?
     public var serverUpdateRequired: Bool
 
+    /// `approval-pending` (4928 client-runtime/src/connection/model.ts:69): the host has yet to approve this device.
+    public static let approvalPendingReason = "approval-pending"
+
     public init(reason: String, blocked: Bool, detail: String, hop: Hop? = nil, via: Via? = nil, cause: String? = nil,
                 httpStatus: Int? = nil, traceId: String? = nil, serverUpdateRequired: Bool = false) {
         self.reason = reason; self.blocked = blocked; self.detail = detail; self.hop = hop; self.via = via
