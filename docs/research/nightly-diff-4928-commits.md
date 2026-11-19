@@ -73,13 +73,13 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| cba30591f9 | #26769 | thread | fix(web,mobile): image-only messages show the image, not the placeholder prompt | port |
-| f012fa210d | #27305 | thread | fix(web): back-to-back messages from you stack as one burst with a single steer label | port |
-| b8397e5caf | #27306 | thread | feat(web): images and videos sent with text sit above the bubble as their own shape | port |
-| 1da41f9499 | #27324 | thread | feat(web): files sent without text show as file cards | port |
-| e57ae5a0bf | #27377 | composer | feat(web): pasted text, voice notes, snapshots and sending files get their own shapes | port |
-| 6fc9144a60 | #27383 | thread | fix: image-only messages no longer leak the attachment placeholder | port |
-| d6d2433609 | #27978 | thread | fix(web): back-to-back messages stack tight with joined corners | port |
+| cba30591f9 | #26769 | thread | fix(web,mobile): image-only messages show the image, not the placeholder prompt | ported in 46e99443: the attachment-only prompt stays hidden (T3Store/UserMessagePresentation.swift, ThreadMinimapView.swift) |
+| f012fa210d | #27305 | thread | fix(web): back-to-back messages from you stack as one burst with a single steer label | ported in 46e99443 |
+| b8397e5caf | #27306 | thread | feat(web): images and videos sent with text sit above the bubble as their own shape | ported in 11fea921 |
+| 1da41f9499 | #27324 | thread | feat(web): files sent without text show as file cards | ported in 11fea921 |
+| e57ae5a0bf | #27377 | composer | feat(web): pasted text, voice notes, snapshots and sending files get their own shapes | ported in 11fea921: "Pasted text", "Sending…" on cards and the bare voice note. Skipped: the dedicated voice-note bubble style |
+| 6fc9144a60 | #27383 | thread | fix: image-only messages no longer leak the attachment placeholder | ported in 46e99443: bubble and minimap. The search-index and title changes are server-side, so n/a |
+| d6d2433609 | #27978 | thread | fix(web): back-to-back messages stack tight with joined corners | ported in 46e99443 |
 
 ## Port group model-picker (13)
 
@@ -170,7 +170,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| c65f8d552b | #28995 | composer | feat(chat): threads show when you switch models or effort | port; model or effort switch row |
+| c65f8d552b | #28995 | composer | feat(chat): threads show when you switch models or effort | ported in c06c69e7 |
 
 ## Port group timeline-misc (2)
 
@@ -373,7 +373,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | 2c74ea6915 | #22239 | thread | fix(web): render Claude insight blocks as a callout | port |
-| 1a8ecc64b7 | #34181 | thread | feat(web): a quote in a sent message shows as an inset card | port; quote inset card |
+| 1a8ecc64b7 | #34181 | thread | feat(web): a quote in a sent message shows as an inset card | skip: the quote card is a block element inside Markdown layout (Features/Markdown), so it moves to the 1.5 Chat Markdown group |
 
 ## Port group server-updates (2)
 
@@ -392,9 +392,9 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 5ee7f6fee8 | #23249 | thread | fix(chat): show late async answers in their own runs | port |
-| 836b86a5d6 | #34501 | thread | fix(chat): keep final replies visible after steering | port |
-| 9fb4492329 | #23420 | thread | fix(chat): requeued steers no longer look delivered | port |
+| 5ee7f6fee8 | #23249 | thread | fix(chat): show late async answers in their own runs | ported in f200f135 |
+| 836b86a5d6 | #34501 | thread | fix(chat): keep final replies visible after steering | ported in 082f60cb, without the deferredWork ordinal skip and the Zen filter, which CW lacks |
+| 9fb4492329 | #23420 | thread | fix(chat): requeued steers no longer look delivered | ported in d819c9ef: the client visibility and restore. The rest is server-side |
 
 ## Port group pr-review-threads (1)
 
@@ -420,9 +420,9 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 5f4368165b | #28810 | composer | fix(client): hide Resume while a pending request blocks continuing the run | port |
-| a34427662b | #27079 | terminal | fix(web): Enter on an empty prompt resumes an interrupted thread | port |
-| 442b1db161 | #35755 | composer | fix(web): Resume replaces Stop without a lingering Stopped button | port |
+| 5f4368165b | #28810 | composer | fix(client): hide Resume while a pending request blocks continuing the run | ported in abe98edb |
+| a34427662b | #27079 | terminal | fix(web): Enter on an empty prompt resumes an interrupted thread | ported in abe98edb |
+| 442b1db161 | #35755 | composer | fix(web): Resume replaces Stop without a lingering Stopped button | ported in abe98edb |
 
 ## Port group history-swipe (1)
 
@@ -799,7 +799,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 2828f28145 | #16546 | composer | fix(web): composer follows an optionless thread instead of the settings default | port |
 | d56b82c708 | #22193 | composer | fix(web): keep saved default model when changing effort | port |
 | 6700cf6f89 | #21968 | composer | fix(web): reveal expanded work rows hidden behind the composer | port |
-| cbc68c9dc1 | #20809 | composer | fix(web): Stop shows a pending state and repeat clicks no longer resume | port |
+| cbc68c9dc1 | #20809 | composer | fix(web): Stop shows a pending state and repeat clicks no longer resume | ported in abe98edb, without the second Stop button beside Send while typing |
 | 8f4166b28c | #22997 | composer | fix(web): convert composer list markers completed later | port |
 | 9d7384d096 | #23289 | composer | fix(client-runtime): reopening a folder picker refreshes its listing | port |
 | 21a9aa1d79 | #14870 | composer | fix(web): wrapping a selection in backticks formats it as code | port |
@@ -1529,7 +1529,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 1843c93e39 | #30768 | thread | fix(chat): keep scratch file links usable | port |
 | 3aea6553d3 | #18442 | thread | fix(clients): show the right app name and thread context | port |
 | a9f2d7d5f4 | #34306 | thread | fix(web): "Show full message" only appears when it at least doubles the message | port |
-| b20bbc595d | #34581 | thread | fix: deliver steering after worktree setup | port |
+| b20bbc595d | #34581 | thread | fix: deliver steering after worktree setup | ported in 818d32f4: promote-to-steer on a preparing run. CW already treated preparing and starting runs as running. CW blocks sends during setup, so the planComposerTurn change is n/a |
 | b859968cab | #25866 | thread | fix(web): a pending approval is announced once, not once per queued message | port |
 | bba1c13d87 | #24313 | thread | fix(web): opening a thread dismisses its notification toasts | port |
 | a6c26d3e77 | #27909 | thread | fix(web): the composer shows arrow ligatures like sent messages | port |
@@ -1675,7 +1675,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 42763ff8b1 | #38400 | thread | fix(web): screen readers read a pull request's number once in thread details | port |
 | 70e4319da8 | #38458 | thread | fix(web): switching back to a thread no longer jumps through its HTML renders | port |
 | 9758cf9e13 | #38476 | thread | fix(web): typing into a simulator no longer answers a waiting question | port |
-| 373ec12be6 | #38558 | thread | fix(web): very wide or tall lone images in user messages show the whole image | port |
+| 373ec12be6 | #38558 | thread | fix(web): very wide or tall lone images in user messages show the whole image | ported in 11fea921 |
 | eb46038e3a | #38763 | thread | fix(web): Background work details show a subagent as Waiting, like the line above | port |
 | 4c679a21e7 | #38832 | thread | fix(web): page scripts in inline HTML renders no longer scroll the chat | port |
 | 245a1ead92 | #38917 | thread | fix(client): resume no longer sends a blank message to older servers | port |
