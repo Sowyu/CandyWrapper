@@ -72,9 +72,8 @@ public struct SidebarThread: Sendable, Equatable, Identifiable {
         latestRun = SidebarModel.presentLatestRun(shell)
         let pending = shell.pendingRuntimeRequest
         hasPendingApprovals = pending != nil && pending?.kind != .userInput && pending?.kind != .authRefresh
-        // models.ts:226-263: an async question the run keeps working past doesn't ask for input.
-        let runtimeIsWorking = [.preparing, .starting, .running].contains(runtime?.status)
-        hasPendingUserInput = pending?.kind == .userInput && (pending?.blocking != false || !runtimeIsWorking)
+        // Async questions count too, so a thread with any open question leaves Working (T3 4928 #28515).
+        hasPendingUserInput = pending?.kind == .userInput
     }
 }
 
@@ -346,6 +345,8 @@ public enum SidebarModel {
     /// Port of `hasUnseenCompletion` (Sidebar.logic.ts:773-782). A never-visited thread is read.
     public static func hasUnseenCompletion(latestRun: ThreadRunSummary?, lastVisitedAt: T3Timestamp?) -> Bool {
         guard let completed = latestRun?.completedAt?.epochMs else { return false }
+        // A run the user stopped isn't news (T3 4928 Sidebar.logic.ts:774-776).
+        if latestRun?.status == .interrupted || latestRun?.status == .cancelled { return false }
         guard let lastVisitedAt else { return false }
         guard let visited = lastVisitedAt.epochMs else { return true }
         return completed > visited
@@ -369,7 +370,8 @@ public enum SidebarModel {
         guard let runtime = thread.runtime, runtime.status == .failed || runtime.status.rawValue == "error" else {
             return nil
         }
-        if let run = thread.latestRun, run.status == .failed, let completedAt = run.completedAt { return .some(completedAt) }
+        // A failed run without a completion has nothing to date it (T3 4928 threadSettled.ts, #30063).
+        if let run = thread.latestRun, run.status == .failed { return .some(run.completedAt) }
         return .some(runtime.updatedAt)
     }
 
@@ -562,7 +564,7 @@ public enum SidebarModel {
         if section == .settled {
             timestamp = resolveSettledThreadTimestamp(thread)
         } else {
-            timestamp = thread.shell.latestUserMessageAt ?? thread.shell.updatedAt
+            timestamp = resolveThreadActivityTimestamp(thread)
         }
         guard let timestamp else { return "" }
         return TimestampFormat.compactSidebarTimeLabel(
@@ -637,6 +639,12 @@ public enum SidebarModel {
     /// of the user message and run stamps, else `updatedAt`.
     public static func resolveSettledThreadTimestamp(_ thread: SidebarThread) -> T3Timestamp? {
         if let settledAt = thread.shell.settledAt, settledAt.isValid { return settledAt }
+        return resolveThreadActivityTimestamp(thread)
+    }
+
+    /// Port of `resolveThreadActivityTimestamp` (T3 4928 client-runtime/src/state/threadSort.ts:37-56): the latest
+    /// of the user message and run stamps, else `updatedAt`. Active rows show its age, so a fresh reply counts.
+    public static func resolveThreadActivityTimestamp(_ thread: SidebarThread) -> T3Timestamp? {
         var latest: T3Timestamp?
         for case let candidate? in [
             thread.shell.latestUserMessageAt, thread.latestRun?.requestedAt, thread.latestRun?.startedAt,

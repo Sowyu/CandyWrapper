@@ -41,8 +41,9 @@ private func pill(
         #expect(blocked == ThreadStatusPill(label: .waiting, pulse: false))
         let question = PendingRuntimeRequestSummary(id: "request-1", kind: .userInput, createdAt: "2026-03-09T10:00:00.000Z", blocking: false)
         let working = sidebarThread { $0.status = .running; $0.latestRunId = "run-1"; $0.activeRunId = "run-1"; $0.pendingRuntimeRequest = question }
-        #expect(!working.hasPendingUserInput)
-        #expect(S.resolveSidebarThreadStatus(working) == .working)
+        // T3 4928 #28515: an async question moves the thread out of Working too.
+        #expect(working.hasPendingUserInput)
+        #expect(S.resolveSidebarThreadStatus(working) == .input)
         let settled = sidebarThread { $0.status = .completed; $0.latestRunId = "run-1"; $0.pendingRuntimeRequest = question }
         #expect(settled.hasPendingUserInput)
         var blocking = question

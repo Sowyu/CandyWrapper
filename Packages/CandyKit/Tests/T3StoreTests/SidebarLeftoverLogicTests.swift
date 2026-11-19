@@ -82,6 +82,10 @@ struct SidebarLeftoverLogicTests {
         #expect(SidebarModel.fallbackThreadAfterDelete(all, deleted: ThreadId("old")) == ThreadId("gone"))
         #expect(SidebarModel.fallbackThreadAfterDelete(all, deleted: ThreadId("old"), deleting: [ThreadId("gone")]) == ThreadId("new"))
         #expect(SidebarModel.fallbackThreadAfterDelete([other], deleted: ThreadId("other")) == nil)
+        // T3 4928 #29643: a settled or snoozed thread is never the one that opens.
+        let settled = thread("settled") { $0.updatedAt = "2026-10-11T00:00:00.000Z"; $0.settledOverride = .settled }
+        let snoozed = thread("snoozed") { $0.updatedAt = "2026-10-12T00:00:00.000Z"; $0.snoozedUntil = "2999-01-01T00:00:00.000Z" }
+        #expect(SidebarModel.fallbackThreadAfterDelete(all + [settled, snoozed], deleted: ThreadId("old"), deleting: [ThreadId("gone")]) == ThreadId("new"))
     }
 
     // MARK: Working shelf (threadInbox.ts)

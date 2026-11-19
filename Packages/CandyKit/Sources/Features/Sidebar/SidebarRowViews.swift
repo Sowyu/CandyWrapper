@@ -544,6 +544,8 @@ struct SidebarRowActions {
     var pullRequest: (ThreadId) -> Void = { _ in }
     /// A row of the badge's hover mini list: that pull request, beside the thread.
     var pullRequestURL: (ThreadId, String) -> Void = { _, _ in }
+    /// The linked issue badge: the thread's pull requests and issues tab (`openLinkedItems`).
+    var linkedItems: (ThreadId) -> Void = { _ in }
     var contextMenu: (ThreadId, NSEvent, NSView) -> Void = { _, _, _ in }
     /// Dither's hover group: pin, archive, the ⋯ menu under its button, and the row's jump shortcut label.
     var pin: (ThreadId) -> Void = { _ in }
@@ -576,6 +578,7 @@ final class CapyHoverGroup {
 /// The card row (Sidebar.tsx:1955-2217): `li py-0.5`, a `rounded-md` surface 78px tall,
 /// content `px-2.5 py-2`: project line (h-5), title (`mt-1`), branch line (`mt-0.5`).
 final class SidebarCardRowView: SidebarRowBase {
+    private var glimmer: SidebarTitleGlimmer?
     private let surface = CALayer()
     /// The visible card, 2pt below the row's top: the hover card's trigger in T3 (aligned to its top edge).
     var surfaceFrame: CGRect { surface.frame }
@@ -603,6 +606,7 @@ final class SidebarCardRowView: SidebarRowBase {
     private let machine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
     let terminal = TerminalStatusGlyph()
     let prBadge = PullRequestBadgeView()
+    let issueBadge = SidebarIssueBadgeView()
     let snoozeButton = RowActionButton(icon: .clock, size: 14, accessibility: "Snooze thread").menuTrigger()
     let settleButton = RowActionButton(icon: .check, size: 14, title: "Settle", accessibility: "Settle thread")
     let wokeButton = WokeDismissButton()
@@ -624,7 +628,8 @@ final class SidebarCardRowView: SidebarRowBase {
         layer?.addSublayer(surface)
         addSubview(workingGrid)
         workingGrid.isHidden = true
-        for v in [monogram, capyIcon, project, pin, statusIcon, statusLabel, duration, title, branchIcon, branch, scratchMachine, provider, machine, terminal, prBadge] as [NSView] { addSubview(v) }
+        for v in [monogram, capyIcon, project, pin, statusIcon, statusLabel, duration, title, branchIcon, branch, scratchMachine, provider, machine, terminal, prBadge, issueBadge] as [NSView] { addSubview(v) }
+        issueBadge.action = { [weak self] in if case .row(let r)? = self?.item { self?.actions.linkedItems(r.id) } }
         prBadge.onClick = { [weak self] in if case .row(let r)? = self?.item { self?.actions.pullRequest(r.id) } }
         prBadge.onOpenURL = { [weak self] url in if case .row(let r)? = self?.item { self?.actions.pullRequestURL(r.id, url) } }
         project.font = SB.font(12, .medium); project.lineHeight = 16
@@ -762,7 +767,8 @@ final class SidebarCardRowView: SidebarRowBase {
             title.color = r.recedes ? (hovered ? SB.c(\.foreground) : SB.c(\.foreground, 0.75))
                 : r.status == .failed && !r.isUnread && !r.isWoke ? SB.c(\.foreground, 0.95) : SB.c(\.foreground)
         }
-        title.alphaValue = r.isRegeneratingTitle ? 0.55 : 1
+        if r.isRegeneratingTitle { title.color = SB.c(\.mutedForeground) }
+        SidebarTitleGlimmer.sync(&glimmer, over: title, active: r.isRegeneratingTitle)
         let showsScratch = r.branch == nil && r.scratchMachineLabel != nil
         branch.text = r.branch ?? (showsScratch ? r.scratchMachineLabel ?? "" : "")
         // Dither sections (after Capy): the time joins the meta line, and the status slot keeps only the status.
@@ -799,6 +805,7 @@ final class SidebarCardRowView: SidebarRowBase {
         machine.color = SB.c(\.sidebarMutedForeground, 0.7)
         terminal.count = r.terminalProcessCount
         prBadge.badge = r.pullRequestBadge
+        issueBadge.badge = r.issueBadge
         setAccessibilityLabel([r.title, r.isRegeneratingTitle ? "Regenerating title" : nil, r.statusLabel, r.projectLabel]
             .compactMap { $0 }.joined(separator: ", "))
         setAccessibilitySelected(r.isActive) // `aria-current="page"` (Sidebar.logic.ts:59)
@@ -939,7 +946,11 @@ final class SidebarCardRowView: SidebarRowBase {
         // `ml-auto gap-1`: the machine sits 4pt left of the provider.
         var trailing = stackWidth > 0 ? right - stackWidth : capy ? right + 4 : right
         if !machine.isHidden { machine.frame = NSRect(x: trailing - 4 - 14, y: y3 + 1, width: 14, height: 14); trailing -= 18 }
-        // The terminal glyph follows the branch, `gap-1.5` before the provider group.
+        // The terminal glyph follows the branch, `gap-1.5` before the provider group; then the pull request and issue.
+        if !issueBadge.isHidden {
+            let iw = issueBadge.preferredWidth
+            issueBadge.frame = NSRect(x: trailing - 6 - iw, y: y3, width: iw, height: 16); trailing -= iw + 6
+        }
         if !prBadge.isHidden {
             let pw = prBadge.preferredWidth
             prBadge.frame = NSRect(x: trailing - 6 - pw, y: y3, width: pw, height: 16); trailing -= pw + 6
@@ -1062,12 +1073,14 @@ final class ProviderStackView: NSView {
 
 /// The slim row (Sidebar.tsx:1791-1953): `h-9 px-2.5 gap-2.5`, used on the snoozed and settled shelves.
 final class SidebarSlimRowView: SidebarRowBase {
+    private var glimmer: SidebarTitleGlimmer?
     private let surface = CALayer()
     private let monogram = ProjectMonogramView()
     private let title = LabelView()
     let pin = PinButton()
     let terminal = TerminalStatusGlyph()
     let prBadge = PullRequestBadgeView()
+    let issueBadge = SidebarIssueBadgeView()
     private let time = LabelView()
     /// The Woke pill's `size-3` alarm clock, before "Woke" in the time slot (Sidebar.tsx:1871-1888).
     private let wokeIcon = IconView(name: .alarmClock, size: 12)
@@ -1085,7 +1098,8 @@ final class SidebarSlimRowView: SidebarRowBase {
         surface.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "borderColor": NSNull()]
         surface.cornerRadius = 8
         layer?.addSublayer(surface)
-        for v in [monogram, title, pin, terminal, prBadge, time, wokeIcon, wokeButton] as [NSView] { addSubview(v) }
+        for v in [monogram, title, pin, terminal, prBadge, issueBadge, time, wokeIcon, wokeButton] as [NSView] { addSubview(v) }
+        issueBadge.action = { [weak self] in if case .row(let r)? = self?.item { self?.actions.linkedItems(r.id) } }
         prBadge.onClick = { [weak self] in if case .row(let r)? = self?.item { self?.actions.pullRequest(r.id) } }
         prBadge.onOpenURL = { [weak self] url in if case .row(let r)? = self?.item { self?.actions.pullRequestURL(r.id, url) } }
         wokeButton.label = time
@@ -1128,10 +1142,12 @@ final class SidebarSlimRowView: SidebarRowBase {
                 : r.isActive || r.isWoke || r.status == .input || r.status == .request ? SB.c(\.foreground)
                 : r.isUnread ? SB.c(\.mutedForeground) : SB.c(\.secondaryLabel, 0.7)
         }
-        title.alphaValue = r.isRegeneratingTitle ? 0.55 : 1 // `opacity-55` (Sidebar.tsx:1691)
+        if r.isRegeneratingTitle { title.color = SB.c(\.mutedForeground) }
+        SidebarTitleGlimmer.sync(&glimmer, over: title, active: r.isRegeneratingTitle)
         pin.isHidden = !showsPin(r)
         terminal.count = r.terminalProcessCount
         prBadge.badge = r.pullRequestBadge
+        issueBadge.badge = r.issueBadge
         let woke = r.isWoke && r.snoozeLabel == nil
         if let snooze = r.snoozeLabel {
             time.text = snooze
@@ -1235,10 +1251,14 @@ final class SidebarSlimRowView: SidebarRowBase {
             wokeButton.frame = NSRect(x: timeRight - pill, y: (h - 20) / 2, width: pill, height: 20)
         }
         var right = slotX - 10
-        // `{title}{pin}{terminal}{prBadge}` in a `gap-2.5` row.
+        // `{title}{pin}{terminal}{issueBadge}{prBadge}` in a `gap-2.5` row.
         if !prBadge.isHidden {
             let pw = prBadge.preferredWidth
             prBadge.frame = NSRect(x: right - pw, y: (h - 16) / 2, width: pw, height: 16); right -= pw + 10
+        }
+        if !issueBadge.isHidden {
+            let iw = issueBadge.preferredWidth
+            issueBadge.frame = NSRect(x: right - iw, y: (h - 16) / 2, width: iw, height: 16); right -= iw + 10
         }
         if !terminal.isHidden { terminal.frame = NSRect(x: right - 14, y: (h - 14) / 2, width: 14, height: 14); right -= 14 + 10 }
         if !pin.isHidden { pin.frame = NSRect(x: right - 12, y: (h - 12) / 2, width: 12, height: 12); right -= 12 + 10 }
@@ -1448,6 +1468,9 @@ final class SidebarProjectHeaderRowView: SidebarRowBase {
         if !h.isPinned { icon.projectTitle = h.projectTitle; icon.source = h.projectIcon }
         let hovered = state.hovered || isKeyboardFocused
         label.text = h.label
+        // T3 4928 SidebarProjectFolderHeader.tsx (#26477): the button names its folder, in its tooltip too.
+        let newThreadLabel = "New thread in \(h.label)"
+        if newThread.toolTip != newThreadLabel { newThread.toolTip = newThreadLabel; newThread.setAccessibilityLabel(newThreadLabel) }
         let folderStyle = h.folder && !DesignGeometry.usesClassic(self)
         label.font = SB.font(folderStyle ? 14 : 12, .medium)
         label.lineHeight = folderStyle ? 20 : 16

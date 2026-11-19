@@ -57,9 +57,10 @@ public enum SidebarPreview {
             "lineage": ["rootThreadId": id, "parentThreadId": NSNull(), "relationshipToParent": NSNull()],
             "forkedFrom": NSNull(), "createdBy": "user", "creationSource": "web", "latestRunId": "run-\(id)",
             "activeRunId": NSNull(), "status": "completed", "pendingRuntimeRequest": NSNull(), "latestVisibleMessage": NSNull(),
-            "latestUserMessageAt": iso(minutesAgo), "hasActionableProposedPlan": false, "itemCount": 4, "visibleItemCount": 4,
+            // The reply lands at `minutesAgo`, so rows read that age, as T3 4928 dates them by the latest reply (#31825).
+            "latestUserMessageAt": iso(minutesAgo + 0.5), "hasActionableProposedPlan": false, "itemCount": 4, "visibleItemCount": 4,
             "latestRunRequestedAt": iso(minutesAgo), "latestRunStartedAt": iso(minutesAgo),
-            "latestRunCompletedAt": iso(minutesAgo - 0.5), "createdAt": iso(minutesAgo + 1), "updatedAt": iso(minutesAgo - 0.5),
+            "latestRunCompletedAt": iso(minutesAgo), "createdAt": iso(minutesAgo + 1), "updatedAt": iso(minutesAgo - 0.5),
             "archivedAt": NSNull(), "settledOverride": NSNull(), "settledAt": NSNull(), "deletedAt": NSNull(),
             "lastVisitedAt": iso(minutesAgo - 1),
         ]

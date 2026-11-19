@@ -23,6 +23,8 @@ public struct SidebarActions {
     /// A pull request row in the badge's hover list: open the thread and that pull request in its panel
     /// (`handlePrClick` with a target URL, Sidebar.tsx:1557-1567).
     public var openPullRequestURL: (ThreadId, String) -> Void = { _, _ in }
+    /// The issue badge: open the thread with its pull requests and issues tab (T3 4928 SidebarThreadRow.tsx:1118-1121).
+    public var openLinkedItems: (ThreadId) -> Void = { _ in }
     /// Right click on a thread row: the row view and the event, for the native menu.
     public var contextMenu: (ThreadId, NSEvent, NSView) -> Void = { _, _, _ in }
     /// Dither's row hover group: pin, archive, and ⋯, which opens the thread menu under the given button.
@@ -57,6 +59,9 @@ public struct SidebarActions {
     public var openAutomations: () -> Void = {}
     /// Files dropped on a thread row (`handleThreadFileDrop`): open the thread and attach them there.
     public var dropFiles: (ThreadId, [URL]) -> Void = { _, _ in }
+    /// Folders dropped outside the rows, to add as projects on this computer's server, and how many plain files came
+    /// with them (T3 4928 sidebar/SidebarFolderDrop.tsx:30-123).
+    public var dropFolders: ([URL], Int) -> Void = { _, _ in }
     /// The inline rename committed: thread, typed title, title before (`commitThreadRename`).
     public var rename: (ThreadId, String, String) -> Void = { _, _, _ in }
     /// The hover card's provider row and handoff line, from the environment's provider list: the glyph's
@@ -407,6 +412,7 @@ public final class SidebarContentView: DSView {
             unpin: { [weak self] in self?.actions.unpin($0) }, acknowledgeWake: { [weak self] in self?.actions.acknowledgeWake($0) },
             pullRequest: { [weak self] in self?.actions.openPullRequest($0) },
             pullRequestURL: { [weak self] in self?.actions.openPullRequestURL($0, $1) },
+            linkedItems: { [weak self] in self?.actions.openLinkedItems($0) },
             contextMenu: { [weak self] in self?.actions.contextMenu($0, $1, $2) },
             pin: { [weak self] in self?.actions.pin($0) }, archive: { [weak self] in self?.actions.archive($0) },
             moreMenu: { [weak self] in self?.actions.moreMenu($0, $1) },
@@ -417,7 +423,10 @@ public final class SidebarContentView: DSView {
         brand.action = { [weak self] in self?.actions.goHome() }
         list.onOpenDraft = { [weak self] id in self?.actions.openDraft(id) }
         list.onAddProject = { [weak self] in self?.actions.addProject() }
+        list.onShowAllProjects = { [weak self] in self?.setProjectScopes([]) }
         list.onFileDrop = { [weak self] id, urls in self?.actions.dropFiles(id, urls) }
+        list.onFolderDrop = { [weak self] folders, files in self?.actions.dropFolders(folders, files) }
+        list.onFolderDragActive = { [weak self] active in self?.setFolderDropOverlay(active) }
         list.hoverCard = { [weak self] id in self?.hoverCardModel(id) }
         list.onDiscardDraft = { [weak self] id in self?.actions.discardDraft(id) }
         trigger.action = { [weak self] in self?.actions.toggleSidebar() }
@@ -502,6 +511,18 @@ public final class SidebarContentView: DSView {
                                                    (listCache?.rowModelBuilds ?? 0) - built).utf8))
     }
 
+    private var lastShelfExpansion: [Bool] = []
+    private var folderDropOverlay: SidebarFolderDropOverlay?
+
+    /// The drop zone covers the thread list, `inset-1.5`, while a folder drag is over it.
+    private func setFolderDropOverlay(_ active: Bool) {
+        guard active else { folderDropOverlay?.removeFromSuperview(); folderDropOverlay = nil; return }
+        let overlay = folderDropOverlay ?? SidebarFolderDropOverlay()
+        folderDropOverlay = overlay
+        overlay.frame = scrollArea.frame.insetBy(dx: 6, dy: 6)
+        if overlay.superview !== self { addSubview(overlay, positioned: .above, relativeTo: scrollArea) }
+    }
+
     private func rebuildNow(animated: Bool) {
         let ms = nowMs
         list.nowMs = ms
@@ -530,7 +551,12 @@ public final class SidebarContentView: DSView {
             }
             if !patched {
                 let items = SidebarListBuilder.items(snapshot: listSnapshot, state: state, nowMs: ms, cache: listCache)
-                list.setItems(items, animated: animated, generation: listCache?.generation)
+                // Shelf rows would travel over the headers below a bottom-anchored shelf, so a shelf that opens or
+                // closes moves the list without motion (T3 4928 Sidebar.tsx, #25384).
+                let shelves = [state.workingExpanded, state.snoozedExpanded, state.settledExpanded]
+                let shelvesUnchanged = shelves == lastShelfExpansion
+                lastShelfExpansion = shelves
+                list.setItems(items, animated: animated && shelvesUnchanged, generation: listCache?.generation)
             }
         }
         // The results `ul` is a listbox named "Thread search results" (Sidebar.tsx:5151-5156).
@@ -1032,12 +1058,10 @@ public final class SidebarContentView: DSView {
             stackTop = providerUpdatePill.frame.minY
             footerTop = stackTop - 4
         }
-        // T3 3814 Sidebar.tsx:3373 and sidebar/SidebarListMarkers.tsx:127-132: overlay
-        // above the first shelf, with the footer hosting search and empty-list notices.
-        let overlaysShelf = !ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !isSearching && list.firstShelfIndex != nil
-        list.undoNoticeOverlay = overlaysShelf && !undoNotice.isHidden ? undoNotice : nil
-        if list.undoNoticeOverlay == nil, undoNotice.superview !== self { addSubview(undoNotice) }
-        if !undoNotice.isHidden, !overlaysShelf {
+        // T3 4928 sidebar/SidebarChrome.tsx:310: the notice fills the utility row's free space, laid out below.
+        // Redesign's account footer has no such row, so the notice keeps its own row above it.
+        undoNotice.inFooterRow = !accountFooter
+        if !undoNotice.isHidden, accountFooter {
             let nh = undoNotice.height(forWidth: w - 16)
             undoNotice.frame = NSRect(x: 8, y: stackTop - 8 - nh, width: w - 16, height: nh)
             footerTop = undoNotice.frame.minY - 4
@@ -1096,7 +1120,15 @@ public final class SidebarContentView: DSView {
         backButton.isHidden = !isOnUtilityPage
         // `SidebarMenu` is a `gap-1` row; Back is `flex-1`, the update pill `ml-auto shrink-0`.
         let pillRoom: CGFloat = updatePill.isHidden ? 0 : 32 + 4
-        backButton.frame = NSRect(x: 8, y: menuTop, width: max(0, w - 16 - pillRoom), height: 32)
+        let rowEnd = w - 8 - pillRoom
+        let noticeInRow = !accountFooter && !undoNotice.isHidden
+        // Back and the notice are both `flex-1 min-w-0`, so they split the row.
+        let backWidth = max(0, noticeInRow ? (rowEnd - 8 - 4) / 2 : rowEnd - 8)
+        backButton.frame = NSRect(x: 8, y: menuTop, width: backWidth, height: 32)
+        if noticeInRow {
+            let x = isOnUtilityPage ? backButton.frame.maxX + 4 : fx
+            undoNotice.frame = NSRect(x: x, y: menuTop + 4, width: max(0, rowEnd - x), height: 24)
+        }
         if accountFooter {
             updatePill.frame = NSRect(x: w - 8 - 8 - 28, y: menuTop + (SidebarAccountRowView.height - 28) / 2, width: 28, height: 28)
         } else {

@@ -756,6 +756,10 @@ final class ThreadController {
                 self.pullRequests.openCurrentPullRequest()
             }
         }
+        sidebar.actions.openLinkedItems = { [weak self] id in
+            self?.open(id)
+            self?.panel.mutatePanel { $0.open(.pullRequests); return [] }
+        }
         sidebar.actions.openPullRequestURL = { [weak self, weak sidebar] id, url in
             guard let self, let thread = sidebar?.snapshot?.threads.first(where: { $0.id == id }) else { return }
             self.open(id)

@@ -55,6 +55,9 @@ struct SidebarModelTests {
         #expect(SidebarListBuilder.nextLabelChange(rows.filter { $0.statusLabel == "Input" }, nowMs: nowMs) == nil)
         #expect(SidebarListBuilder.snoozeWakeLabel(wakeMs: nowMs + 90 * 60_000, nowMs: nowMs) == "2h")
         #expect(SidebarListBuilder.snoozeWakeLabel(wakeMs: nowMs + 1, nowMs: nowMs) == "1m")
+        // T3 4928 #36785: a one-hour snooze set a few seconds into a minute still reads 1h.
+        let minute = nowMs / 60_000 * 60_000
+        #expect(SidebarListBuilder.snoozeWakeLabel(wakeMs: minute + 20_000 + 3_600_000, nowMs: minute + 20_000 - 1) == "1h")
     }
 
     @Test func transcriptReplays() throws {

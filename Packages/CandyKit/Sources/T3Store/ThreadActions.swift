@@ -507,12 +507,18 @@ extension SidebarModel {
         return last.isEmpty ? trimmed : last
     }
 
-    /// `getFallbackThreadIdAfterDelete` (Sidebar.logic.ts:1262-1288): the newest other thread of the
-    /// same project that is not being deleted.
+    /// `getFallbackThreadIdAfterDelete` (T3 4928 Sidebar.logic.ts:1293-1334): the newest other thread of the
+    /// same project that is not being deleted, settled, snoozed (#29643) or shown under its parent.
+    // ponytail: "under its parent" covers subagents and side chats; add delegated tasks (#30428) once CW decodes
+    // `delegatedFrom`.
     public static func fallbackThreadAfterDelete(_ threads: [ThreadShell], deleted: ThreadId, deleting: Set<ThreadId> = [],
-                                                 order: SortOrder = .updatedAt) -> ThreadId? {
+                                                 order: SortOrder = .updatedAt,
+                                                 nowMs: Int64 = TimestampFormat.nowMs(Date())) -> ThreadId? {
         guard let thread = threads.first(where: { $0.id == deleted }) else { return nil }
-        return threads.filter { $0.projectId == thread.projectId && $0.id != deleted && !deleting.contains($0.id) }
+        return threads.filter {
+            $0.projectId == thread.projectId && $0.id != deleted && !deleting.contains($0.id) && $0.settledOverride != .settled
+                && $0.lineage.isListed && !effectiveSnoozed(SidebarThread($0), nowMs: nowMs)
+        }
             .max { l, r in
                 let lt = getThreadSortTimestamp(l, order), rt = getThreadSortTimestamp(r, order)
                 return lt != rt ? lt < rt : l.id.rawValue < r.id.rawValue // `sortThreads`: newest, then the larger id
@@ -746,6 +752,13 @@ public final class ThreadUndoLedger {
         refresh()
     }
 
+    /// Settle, snooze and pin Undos restore a thread's place in the list, which archiving it ends; deleting it ends
+    /// its archive Undo too (T3 4928 hooks/useThreadActions.ts:262-268, 439, 637, #25444).
+    public func expireListPlacement(_ threadKey: String, archive: Bool = false) {
+        for kind in ["settle", "snooze", "pin"] + (archive ? ["archive"] : []) { current[Self.key(kind, threadKey)] = nil }
+        refresh()
+    }
+
     /// Offers Undo for a finished action whose claim is still current. `undo` reports its own failure.
     public func show(_ action: Action, claim: Claim, undo: @escaping @MainActor () async -> Void) {
         guard isCurrent(claim) else { return }
@@ -791,8 +804,9 @@ public final class ThreadUndoLedger {
         if changed { onChange?() }
     }
 
-    /// "Settled 1 thread," as the notice starts (SidebarThreadUndoNotice.tsx:14-23).
+    /// "Settled," or "Settled 2," as the notice starts, short enough for the footer row
+    /// (T3 4928 sidebar/SidebarThreadUndoNotice.tsx:16-22).
     public static func text(_ action: Action, count: Int) -> String {
-        "\(action.rawValue) \(count) thread\(count == 1 ? "" : "s"),"
+        count == 1 ? "\(action.rawValue)," : "\(action.rawValue) \(count),"
     }
 }

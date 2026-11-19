@@ -133,15 +133,25 @@ final class SidebarNoProjectsRowView: SidebarRowBase {
         label.alignment = .center
         addSubview(label)
         addSubview(button)
-        button.action = { [weak self] in self?.onAddProject?() }
+        button.action = { [weak self] in self?.performAction() }
     }
+
+    /// The filter's Show all projects, for a `.scopeEmpty` item.
+    var onShowAllProjects: (@MainActor () -> Void)?
 
     override func refresh() {
+        let scoped: String? = if case .scopeEmpty(let text)? = item { text } else { nil }
+        label.text = scoped ?? "No projects yet"
+        setAccessibilityLabel(label.text)
+        button.showsAddProject = scoped == nil
         label.color = SB.c(\.mutedForeground, 0.6)
         button.isKeyboardFocused = isKeyboardFocused
+        needsLayout = true
     }
 
-    override func performAction() { onAddProject?() }
+    override func performAction() {
+        if case .scopeEmpty? = item { onShowAllProjects?() } else { onAddProject?() }
+    }
 
     override func layout() {
         super.layout()
@@ -157,6 +167,16 @@ final class SidebarNoProjectsButton: ControlView {
     private let icon = IconView(name: .plus, size: 12)
     private let title = LabelView("Add project")
     var isKeyboardFocused = false { didSet { needsDisplay = true } }
+    /// "Add project" with its plus, or the filter's "Show all projects" without an icon.
+    var showsAddProject = true {
+        didSet {
+            guard showsAddProject != oldValue else { return }
+            title.text = showsAddProject ? "Add project" : "Show all projects"
+            icon.isHidden = !showsAddProject
+            setAccessibilityLabel(title.text)
+            needsLayout = true
+        }
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -171,7 +191,7 @@ final class SidebarNoProjectsButton: ControlView {
     }
 
     /// `px-2.5`, the icon (`-mx-0.5`), `gap-1.5`, the label.
-    var preferredWidth: CGFloat { 2 * (10 + 1) + 12 - 4 + 6 + ceil(title.textWidth) }
+    var preferredWidth: CGFloat { 2 * (10 + 1) + (showsAddProject ? 12 - 4 + 6 : 0) + ceil(title.textWidth) }
 
     override var acceptsFirstResponder: Bool { false }
     override func stateDidChange(from old: State) { super.stateDidChange(from: old); needsDisplay = true }
@@ -179,7 +199,7 @@ final class SidebarNoProjectsButton: ControlView {
     override func layout() {
         super.layout()
         icon.frame = NSRect(x: 11 - 2, y: (bounds.height - 12) / 2, width: 12, height: 12)
-        title.frame = NSRect(x: 11 + 12 - 4 + 6, y: (bounds.height - 16) / 2, width: ceil(title.textWidth) + 1, height: 16)
+        title.frame = NSRect(x: showsAddProject ? 11 + 12 - 4 + 6 : 11, y: (bounds.height - 16) / 2, width: ceil(title.textWidth) + 1, height: 16)
     }
 
     override func updateLayer() {

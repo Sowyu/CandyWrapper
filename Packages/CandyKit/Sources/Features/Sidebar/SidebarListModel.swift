@@ -28,6 +28,8 @@ public struct SidebarRowModel: Equatable, Sendable {
     public var topStatus: SidebarTopStatus?
     /// `thread.goal?.status === "active"` relabels Working as "Goal".
     public var isGoal: Bool
+    /// Worktree setup (`runtime.status === "preparing"`) reads "Setting up" (T3 4928 SidebarThreadRow.tsx:784-791).
+    public var isPreparing = false
     public var isUnread: Bool
     public var isWoke: Bool
     public var isPinned: Bool
@@ -65,19 +67,21 @@ public struct SidebarRowModel: Equatable, Sendable {
 
     /// The linked pull request badge (`ThreadPullRequestBadgeControl`), nil without a link.
     public var pullRequestBadge: SidebarPullRequestBadge? = nil
+    /// The linked issue badge beside it, nil without linked issues.
+    public var issueBadge: SidebarIssueBadge? = nil
     /// Timestamps behind the labels, for the refresh timer.
     var timeAnchorMs: Int64?
     var snoozeWakeMs: Int64?
 
     /// SidebarThreadRow.tsx:1308-1314: omit an otherwise empty metadata line.
     var hasMetaLine: Bool {
-        branch != nil || scratchMachineLabel != nil || pullRequestBadge != nil || environmentMachine != nil || terminalProcessCount > 0
+        branch != nil || scratchMachineLabel != nil || pullRequestBadge != nil || issueBadge != nil || environmentMachine != nil || terminalProcessCount > 0
     }
 
     /// The status slot text as T3 renders it, for tests and accessibility.
     public var statusLabel: String? {
         switch topStatus {
-        case .working: isGoal ? "Goal" : "Working"
+        case .working: isPreparing ? "Setting up" : isGoal ? "Goal" : "Working"
         case .waiting: "Waiting"
         case .approval: "Approval"
         case .input: "Input"
@@ -205,6 +209,8 @@ public enum SidebarItem: Equatable, Sendable {
     case emptyText(String, search: Bool)
     /// "No projects yet" with its Add project button (Sidebar.tsx:5556-5569).
     case noProjects
+    /// A project filter that hides every active thread, with its Show all projects button (T3 4928 Sidebar.tsx:3307-3358).
+    case scopeEmpty(String)
     /// Dither (after Capy): a project's own section over its unpinned threads, collapsible.
     case projectHeader(SidebarProjectHeaderModel)
 
@@ -216,7 +222,7 @@ public enum SidebarItem: Equatable, Sendable {
         case .draft(let d): "draft:\(d.id)"
         case .draftDivider: "draft-divider"
         case .searchResult(let r): "search:\(r.id.rawValue)"
-        case .emptyText, .noProjects: "empty"
+        case .emptyText, .noProjects, .scopeEmpty: "empty"
         case .projectHeader(let h): "project:\(h.key)"
         }
     }
@@ -231,7 +237,7 @@ public enum SidebarItem: Equatable, Sendable {
         case .draftDivider: .divider
         case .searchResult: .searchResult
         case .emptyText: .emptyText
-        case .noProjects: .noProjects
+        case .noProjects, .scopeEmpty: .noProjects
         case .projectHeader: .projectHeader
         }
     }
@@ -254,7 +260,7 @@ public enum SidebarItem: Equatable, Sendable {
         case .searchResult(let r): r.match == nil ? 36 : 44
         case .emptyText: 64 // `py-6`, one text-xs line
         // `py-6 gap-2`: the line, then the `py-1 text-2xs` bordered button (16 + 8 + 2).
-        case .noProjects: 24 + 16 + 8 + 26 + 24
+        case .noProjects, .scopeEmpty: 24 + 16 + 8 + 26 + 24
         case .projectHeader: 32
         }
     }
@@ -422,10 +428,19 @@ public enum SidebarListBuilder {
         let drafts = draftRows(ctx, state: state)
         var items = threadItems(ctx, state: state, nowMs: nowMs, cache: cache)
         if !drafts.isEmpty { items = drafts.map(SidebarItem.draft) + [.draftDivider] + items }
-        if items.isEmpty {
-            if snapshot.projects.isEmpty { return [.noProjects] }
-            let text = state.scopeGroups(ctx.groups).count > 1 ? "No threads in these projects yet" : ctx.scopedGroup.map { "No threads in \($0.label) yet" } ?? "No threads yet"
-            items = [.emptyText(text, search: false)]
+        // T3 4928 Sidebar.tsx:3307-3358 (#35426): a filter can hide every active thread; say so even when its project
+        // still has settled ones, and offer to clear it.
+        let scoped = state.scopeGroups(ctx.groups)
+        let noActive = !items.contains { if case .row(let r) = $0 { r.section != .settled } else { false } }
+        let hasSettled = !items.isEmpty
+        if snapshot.projects.isEmpty, items.isEmpty {
+            return [.noProjects]
+        } else if drafts.isEmpty, !state.usesProjectFolders, noActive, !hasSettled || !scoped.isEmpty {
+            let place = scoped.count > 1 ? "these projects" : scoped.first?.label ?? ctx.scopedGroup?.label
+            let text = place.map { "No \(hasSettled ? "active threads" : "threads") in \($0)\(hasSettled ? "" : " yet")" } ?? "No threads yet"
+            items = [place == nil ? .emptyText(text, search: false) : .scopeEmpty(text)] + items
+        } else if items.isEmpty {
+            items = [.emptyText("No threads yet", search: false)]
         }
         cache?.record(items, state: state, nowMs: nowMs)
         return items
@@ -650,7 +665,7 @@ public enum SidebarListBuilder {
         let variant: SidebarRowModel.Variant = section == .snoozed || section == .settled || state.usesProjectFolders && section == .active ? .slim : .card
         let action: SidebarRowModel.Action = section == .snoozed ? .unsnooze : section == .settled ? .unsettle : .settle
         let anchor: T3Timestamp? = section == .settled
-            ? SidebarModel.resolveSettledThreadTimestamp(t) : (shell.latestUserMessageAt ?? shell.updatedAt)
+            ? SidebarModel.resolveSettledThreadTimestamp(t) : SidebarModel.resolveThreadActivityTimestamp(t)
         let wake = section == .snoozed ? shell.snoozedUntil?.epochMs : nil
         let working = status == .working
             ? SidebarModel.resolveWorkingStartedAt(latestRun: t.latestRun, runtime: t.runtime)?.epochMs : status == .waiting ? t.latestRun?.completedAt?.epochMs : nil
@@ -676,17 +691,22 @@ public enum SidebarListBuilder {
             pullRequestBadge: SidebarPullRequestBadge(shell),
             timeAnchorMs: anchor?.epochMs, snoozeWakeMs: wake)
         model.dither = state.dither
+        model.isPreparing = t.runtime?.status == .preparing
+        model.issueBadge = SidebarIssueBadge(shell.issues?.values ?? [])
         return model
     }
 
     /// `snoozeWakeLabel` (packages/client-runtime/src/state/threadSettled.ts:310-319).
+    /// Counts clock minutes, so a one-hour snooze reads "1h" rather than "2h" (T3 4928 threadSettled.ts, #36785).
     public static func snoozeWakeLabel(wakeMs: Int64, nowMs: Int64) -> String {
-        let remaining = Double(wakeMs - nowMs)
-        if remaining <= 0 { return "now" }
-        if remaining < 3_600_000 { return "\(max(1, Int((remaining / 60_000).rounded(.up))))m" }
-        if remaining < 86_400_000 { return "\(Int((remaining / 3_600_000).rounded(.up)))h" }
-        return "\(Int((remaining / 86_400_000).rounded(.up)))d"
+        if wakeMs <= nowMs { return "now" }
+        let minutes = max(1, Int(floorDiv(wakeMs, 60_000) - floorDiv(nowMs, 60_000)))
+        if minutes < 60 { return "\(minutes)m" }
+        if minutes < 24 * 60 { return "\(Int((Double(minutes) / 60).rounded(.up)))h" }
+        return "\(Int((Double(minutes) / (24 * 60)).rounded(.up)))d"
     }
+
+    private static func floorDiv(_ a: Int64, _ b: Int64) -> Int64 { a >= 0 ? a / b : -((-a + b - 1) / b) }
 
     /// The provider glyph for an instance id. T3 resolves the driver from the server's provider list;
     /// the shell only carries instance ids, which default to the driver name.

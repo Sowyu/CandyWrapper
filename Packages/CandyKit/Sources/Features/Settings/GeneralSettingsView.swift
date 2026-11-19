@@ -147,7 +147,7 @@ public final class GeneralSettingsView: SettingsPageBase {
         let inactive = serverSwitch("auto-settle-inactive-threads", "Sidebar threads with no activity for this long settle automatically.",
                                     key: "sidebarAutoSettleAfterDays", reset: "auto-settle",
                                     read: { $0["sidebarAutoSettleAfterDays"] != .null },
-                                    write: { on in ["sidebarAutoSettleAfterDays": on ? .number(3) : .null] })
+                                    write: { on in ["sidebarAutoSettleAfterDays": on ? .number(7) : .null] })
         let keep = serverSwitch("auto-settle-keep-pull-requests", "Inactivity does not settle threads with a pull request. Merge and close still do.",
                                 key: "sidebarAutoSettleKeepPullRequests", reset: "keep threads with pull requests", label: "Keep threads with a PR")
         // 3669 keeps this row out of settings search (SettingsPanels.tsx:1104-1105), so the title is set here.
