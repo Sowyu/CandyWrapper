@@ -79,18 +79,18 @@ struct SidebarFoldersTests {
         #expect(rows(sent) == ["first", "second"])
     }
 
-    /// 4928 dropped `legacySidebarEnabled` (T3 521ac7c218), so it no longer turns folders on.
-    @Test func legacyOptInIsIgnoredAndTheSwitchWritesOneKey() {
+    /// #33131: the Beta switch follows `boringSidebarEnabled` alone; the legacy sidebar opt-in is gone.
+    @Test func boringSidebarSwitchWritesOnlyItsOwnSetting() {
         let context = SettingsPageContext()
-        context.client.apply(["legacySidebarEnabled": .bool(true)])
+        context.client.apply(["boringSidebarEnabled": .bool(true)])
         let page = BetaSettingsView(context: context)
         let row = page.anchors["boring-sidebar"] as? SettingsRowView
         let toggle = row?.control as? SwitchView
-        #expect(toggle?.isOn == false)
+        #expect(toggle?.isOn == true)
         var patch: [String: JSONValue] = [:]
         context.writeClient = { patch = $0 }
-        toggle?.onChange?(true)
-        #expect(patch == ["boringSidebarEnabled": .bool(true)])
+        toggle?.onChange?(false)
+        #expect(patch == ["boringSidebarEnabled": .bool(false)])
     }
 
     @Test func cursorKeychainSwitchOnlyForServersThatStillHaveIt() {

@@ -97,6 +97,8 @@ public struct ClientSettings: Equatable, Sendable {
         "wordWrap": SettingSpec(.bool, .bool(true)),
         // Opt-in TeX typesetting in messages (settings.ts:475-477, T3 #18735).
         "mathRenderingEnabled": SettingSpec(.bool, .bool(false)),
+        // Tool calls in chat (settings.ts:352-353, 534-536 at 4928, #30000).
+        "toolCallVisibility": SettingSpec(.literals(["showAll", "hideSuccessful", "hideAll", "zen"]), .string("showAll")),
         // Settings > SnapShots (settings.ts:493-505).
         "onboardingCompletedAt": SettingSpec(.any, .null),
         "snapShotEnabled": SettingSpec(.bool, .bool(false)),

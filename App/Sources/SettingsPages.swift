@@ -590,7 +590,7 @@ extension SettingsController {
         labels += client("diffLayout", "Diff layout") + client("proactivePanelsEnabled", "Proactive panels")
         labels += client("showSkillsInSlashMenu", "Show skills in slash menu") + client("composerCollapseOnScroll", "Collapse composer on scroll")
         labels += client("composerRichTextEnabled", "Rich text composer") + client("sendShortcut", "Send shortcut")
-        labels += client("followUpBehavior", "Follow-up behavior") + client("contextWindowMeterEnabled", "Context window indicator")
+        labels += client("followUpBehavior", "Follow-up behavior") + client("toolCallVisibility", "Tool calls in chat")
         labels += server("responseStreamingMode", "Response streaming") + server("enableProviderUpdateChecks", "Provider update checks")
         labels += server("continueThreadsAfterServerUpdate", "Continue threads after restarts")
         labels += BackgroundActivity.isChanged(s) ? ["Background activity"] : []
@@ -630,7 +630,7 @@ extension SettingsController {
                           "fontSizeInterface", "fontFamilyComposer", "fontSizePrompt", "fontFamilyCode", "fontSizeCode", "fontFamilyTerminal",
                           "fontSizeTerminal", "diffFilesCollapsed", "diffIgnoreWhitespace", "diffLayout", "proactivePanelsEnabled",
                           "showSkillsInSlashMenu", "composerCollapseOnScroll", "composerRichTextEnabled", "sendShortcut", "followUpBehavior",
-                          "contextWindowMeterEnabled", "confirmThreadUnpin", "confirmThreadArchive", "confirmThreadDelete", "confirmQuit",
+                          "toolCallVisibility", "confirmThreadUnpin", "confirmThreadArchive", "confirmThreadDelete", "confirmQuit",
                           "menuBarItemEnabled"]
         ClientSettingsStore.shared.update(Dictionary(uniqueKeysWithValues: clientKeys.map { ($0, ClientSettings.fields[$0]!.defaultValue) }))
         let s = pageContext.scope.values

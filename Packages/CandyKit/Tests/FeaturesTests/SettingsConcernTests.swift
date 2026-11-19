@@ -42,7 +42,7 @@ struct SettingsConcernTests {
             for id in present { #expect(page.anchor(id) != nil, "\(id) in \(section)") }
             for id in absent { #expect(page.anchor(id) == nil, "\(id) outside \(section)") }
         }
-        for (id, section) in [("snooze-options", SettingsSection.threads), ("git-fetch-interval", .maintenance), ("network-access", .access), ("legacy-plan-mode", .beta)] {
+        for (id, section) in [("snooze-options", SettingsSection.threads), ("git-fetch-interval", .maintenance), ("network-access", .access), ("tool-call-visibility", .chat)] {
             #expect(SettingsSearch.items.first { $0.id == id }?.to == section)
         }
     }
@@ -58,10 +58,15 @@ struct SettingsConcernTests {
         }
     }
 
-    @Test func labsKeepsBetaAboveLegacyFeatures() {
+    /// #33131 removed Labs' Legacy features; Tool calls in chat sits in Chat's Activity group.
+    @Test func labsHasOnlyBetaAndChatShowsToolCalls() {
         let page = BetaSettingsView(context: SettingsPageContext())
-        #expect(page.items.compactMap { ($0 as? SettingsSectionView)?.title } == ["Beta", "Legacy features"])
+        #expect(page.items.compactMap { ($0 as? SettingsSectionView)?.title } == ["Beta"])
         #expect(page.anchor("boring-sidebar") != nil)
-        #expect(page.anchor("legacy-plan-mode") != nil)
+        #expect(page.anchor("legacy-plan-mode") == nil)
+        let chat = ConcernSettingsView(context: SettingsPageContext(), section: .chat)
+        chat.refresh()
+        #expect(chat.anchor("tool-call-visibility") != nil)
+        #expect(SettingsSearch.title("tool-call-visibility") == "Tool calls in chat")
     }
 }

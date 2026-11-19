@@ -11,7 +11,6 @@ public final class GeneralSettingsView: SettingsPageBase {
     private let boundary = SettingsNoticeView("")
     private var autoSettleRows: [SettingsRowView] = []
     private var daysRow: SettingsRowView?
-    private var legacy: SettingsFoldedSectionView?
     var usesBoundary = true
 
     public init(context: SettingsPageContext, groups: Set<String>? = nil) {
@@ -26,11 +25,6 @@ public final class GeneralSettingsView: SettingsPageBase {
         if groups?.contains("text-generation") != false { items.append(textGenerationSection()) }
         if groups?.contains("about") != false { items.append(aboutSection()) }
         if groups?.contains("Diagnostics") != false { items.append(diagnosticsSection()) }
-        if groups?.contains("legacy-features") != false {
-            let legacy = legacySection()
-            self.legacy = legacy
-            items.append(legacy)
-        }
         self.items = items
         binder.add { [weak self] in
             guard let self else { return }
@@ -44,12 +38,6 @@ public final class GeneralSettingsView: SettingsPageBase {
     }
 
     override var scopeItems: [NSView] { [sentence, boundary] }
-
-    /// Unfolds Legacy features for a search jump to one of its rows (`LEGACY_FEATURE_TARGET_IDS`).
-    public override func anchor(_ id: String) -> NSView? {
-        if ["legacy-plan-mode", "legacy-context-window-indicator", "legacy-sidebar"].contains(id) { legacy?.isOpen = true; onHeightChange?() }
-        return super.anchor(id)
-    }
 
     // MARK: New threads (ProjectDefaultsSettings.tsx:252-385)
 
@@ -312,9 +300,15 @@ public final class GeneralSettingsView: SettingsPageBase {
         // CandyWrapper's own: the menu bar item (Capy's "Show in menu bar", general-D4mfTeHV.js in its renderer).
         let menuBar = clientSwitch("menu-bar", "Keep the CandyWrapper icon and recent threads in the menu bar.", key: "menuBarItemEnabled",
                                    reset: "menu bar icon", title: "Show in menu bar")
+        // `ToolCallVisibilityRow` (SettingsPanels.tsx:1417-1462 at 4928, #30000, #33131): the Chat page's Activity group.
+        let toolCalls = clientSelect("tool-call-visibility",
+                                     "Hide the commands, edits, and searches agents run. Hide successful keeps failures. Zen shows only final answers. Approvals, questions, and errors always show.",
+                                     key: "toolCallVisibility",
+                                     options: [("showAll", "Show all"), ("hideSuccessful", "Hide successful"), ("hideAll", "Hide all"), ("zen", "Zen")],
+                                     width: 160, reset: "tool calls in chat", hideIndicator: false, label: "Tool calls in chat")
         return section("behavior", "Behavior", [notifications, inApp, time, streaming, whitespace, fileState, layout, proactive, skills, rich]
                        + (ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? [collapse] : [])
-                       + [send, followUp, updates, continueRow, backgroundActivityRow(), menuBar])
+                       + [send, followUp, toolCalls, updates, continueRow, backgroundActivityRow(), menuBar])
     }
 
     /// A select over a boolean client key.
@@ -543,16 +537,6 @@ public final class GeneralSettingsView: SettingsPageBase {
         return section(nil, "Diagnostics", [diagnostics, licenses])
     }
 
-    private func legacySection() -> SettingsFoldedSectionView {
-        let plan = clientSwitch("legacy-plan-mode", "Restore Build/Plan, /plan, /default, and Shift+Tab. Off uses build mode.", key: "planModeEnabled")
-        let meter = clientSwitch("legacy-context-window-indicator", "Shows context window usage as a circular indicator in the composer.",
-                                 key: "contextWindowMeterEnabled")
-        for r in [plan, meter] { r.accessories = [] }
-        let folded = SettingsFoldedSectionView(title: "Legacy features", rows: [plan, meter])
-        folded.onToggle = { [weak self] in self?.onHeightChange?() }
-        anchors["legacy-features"] = folded
-        return folded
-    }
 }
 
 /// `AboutVersionTitle`'s version code after the title (`text-2xs font-medium text-muted-foreground`), baseline aligned.

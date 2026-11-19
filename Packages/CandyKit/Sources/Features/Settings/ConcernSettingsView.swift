@@ -83,7 +83,9 @@ public final class ConcernSettingsView: SettingsPageBase {
         ]
         case .chat: return [
             .init(.general, [G("behavior", "Composer", rows: ["composer-rich-text", "send-shortcut", "skills-in-slash-menu"])]),
-            .init(.general, [G("behavior", "Follow-ups", rows: ["follow-up-behavior"])])
+            .init(.general, [G("behavior", "Follow-ups", rows: ["follow-up-behavior"])]),
+            // 4928 ChatSettingsPanel's Activity section (SettingsPanels.tsx:1396-1398).
+            .init(.general, [G("behavior", "Activity", rows: ["tool-call-visibility"])])
         ]
         case .diffs: return [
             .init(.general, [G("behavior", "Diffs", rows: ["diff-layout", "hide-whitespace-changes", "default-diff-file-state"])]),

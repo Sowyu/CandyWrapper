@@ -16,8 +16,12 @@ final class ModelPickerView: DSView, PickerPopupBody {
     var favorites: [ModelFavorite] { didSet { reload() } }
     /// `providerModelPreferences`: hidden models and order per instance.
     var preferences: JSONValue { didSet { reload() } }
-    let active: ProviderInstanceId
-    let activeModel: String
+    /// The selected model; a docked picker stays open across picks and moves its check (#28076).
+    var active: ProviderInstanceId { didSet { if active != oldValue { reload() } } }
+    var activeModel: String { didSet { if activeModel != oldValue { reload() } } }
+    /// Docked beside the effort column: one fixed height, so a model with more options never resizes the popup
+    /// (ProviderModelPicker.tsx:475-477, ModelPickerContent.tsx:944-955).
+    var docked = false
     private(set) var rail: ModelPickerRail
     private(set) var query = ""
     private var expandedLegacy: Set<ProviderInstanceId> = []
@@ -262,6 +266,12 @@ final class ModelPickerView: DSView, PickerPopupBody {
         }
     }
 
+    /// Whether row `i` is a model other than the selected one.
+    func isOtherModel(_ i: Int) -> Bool {
+        guard i < sections.rows.count, case .model(let item) = sections.rows[i] else { return false }
+        return item.entry.id != active || item.model.slug != activeModel
+    }
+
     func toggleFavorite(_ item: ModelPickerItem) { onToggleFavorite?(item.entry.id, item.model.slug) }
 
     // MARK: Size and layout
@@ -270,12 +280,8 @@ final class ModelPickerView: DSView, PickerPopupBody {
     private var rowH: CGFloat { capy ? 32 : Self.rowHeight }
     var mixesProviders: Bool { searching || rail == .favorites }
 
-    // 3824 ModelPickerContent.tsx:165-169,578-605: provider tabs omit the repeated provider line.
-    private func height(_ row: ModelPickerRow, mixed: Bool) -> CGFloat {
-        guard modern else { return rowH }
-        if case .model(let item) = row, !mixed, item.model.subProvider == nil { return 32 }
-        return 48
-    }
+    // 4928 ModelPickerContent.tsx:175-177, ModelListRow.tsx:57: one 32pt row shape in every tab (#28057).
+    private func height(_ row: ModelPickerRow, mixed: Bool) -> CGFloat { modern ? 32 : rowH }
 
     private func contentHeight(_ rows: [ModelPickerRow], mixed: Bool) -> CGFloat {
         guard !rows.isEmpty else { return 36 }
@@ -294,6 +300,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
 
     /// Search block plus the list (rows + 20) or the empty text (`p-2`, 36), then the ChatGPT footer.
     var naturalSize: CGSize {
+        if docked { return CGSize(width: Self.width(capy), height: capy ? Self.capyHeight : Self.maxHeight) }
         if let frozenHeight { return CGSize(width: Self.width(capy), height: frozenHeight) }
         let list = sections.rows.isEmpty ? 36 + (capy ? listTop - 6 : 0) : listContentHeight + listTop + listBottom
         // Redesign fits its content between a floor, so a short list (favorites, a search) isn't squashed, and Capy's
@@ -708,9 +715,27 @@ final class ModelRowView: DSView {
             }
         }
         if ComposerDesign.uses3814(dark: effectiveAppearance.isDark) {
+            // 4928 ModelListRow.tsx:57-101 (#28057): the provider's logo, the name, the check right after it on the
+            // selected model, then the sub-provider and badges on one line; the star and jump key at the end.
             name.font = DSFont.ui(14); name.lineHeight = 19.25
+            secondary.font = DSFont.ui(12); secondary.lineHeight = 16
             fill.cornerRadius = 4
-            let indicator = IconView(name: .check, size: 14); addSubview(indicator); check = indicator
+            if isSelected { let indicator = IconView(name: .check, size: 14); addSubview(indicator); check = indicator }
+            switch row {
+            case .model(let item):
+                secondary.text = item.model.subProvider ?? ""
+                providerIcon?.removeFromSuperview()
+                let icon = ProviderIcon.make(driver: item.entry.driver, displayName: item.entry.displayName, size: 16,
+                                             color: Themed.color(\.contrastMutedForeground), model: true,
+                                             badge: ProviderBadge.make(item.entry, in: picker.catalog, size: .small, overhang: 2, ring: Themed.color(\.popover)))
+                addSubview(icon)
+                providerIcon = icon
+            case .legacy(_, _, let expanded):
+                // #28076: a plain Show more row trails the list.
+                name.text = expanded ? "Show less" : "Show more"
+                secondary.text = ""
+                chevron?.removeFromSuperview(); chevron = nil
+            }
         }
         restyle()
     }
@@ -730,11 +755,7 @@ final class ModelRowView: DSView {
         fill.frame = bounds
         if capy { layoutCapy(); return }
         let modern = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
-        if modern, case .model(let item) = row {
-            let hidden = !picker.mixesProviders && item.model.subProvider == nil
-            secondary.isHidden = hidden
-            providerIcon?.isHidden = hidden
-        }
+        if modern { layoutModern(); return }
         let checkWidth: CGFloat = modern && star != nil ? 20 : 0
         // The trailing group is `gap-1.5`: the jump `Kbd`, then the star.
         let kbdWidth = kbd.map { $0.intrinsicContentSize.width + 6 } ?? 0
@@ -760,6 +781,41 @@ final class ModelRowView: DSView {
         }
         if let chevron {
             chevron.frame = NSRect(x: bounds.width - 8 - 16, y: (bounds.height - 16) / 2, width: 16, height: 16)
+        }
+    }
+
+    /// `ComboboxItem` `px-2 gap-2`: logo, then name, check, sub-provider and badges (`gap-2`), then star and `Kbd` (`gap-1.5`).
+    private func layoutModern() {
+        let mid = bounds.height / 2
+        var right = bounds.width - 8
+        if let kbd {
+            let w = kbd.intrinsicContentSize.width
+            kbd.frame = NSRect(x: right - w, y: mid - 10, width: w, height: 20)
+            right = kbd.frame.minX - 6
+        }
+        if let star {
+            star.frame = NSRect(x: right - 24, y: mid - 12, width: 24, height: 24)
+            right = star.frame.minX - 8
+        }
+        var x: CGFloat = 8
+        if let providerIcon {
+            providerIcon.frame = NSRect(x: x, y: mid - 8, width: 16, height: 16)
+            x += 16 + 8
+        }
+        let fixed = (check == nil ? 0 : 8 + 14) + (newBadge.map { 8 + $0.intrinsicContentSize.width } ?? 0)
+        let nameW = max(0, min(ceil(name.textWidth), right - x - fixed))
+        name.frame = NSRect(x: x, y: mid - 19.25 / 2, width: nameW, height: 19.25)
+        x += nameW
+        if let check { check.frame = NSRect(x: x + 8, y: mid - 7, width: 14, height: 14); x += 8 + 14 }
+        secondary.isHidden = secondary.text.isEmpty
+        if !secondary.isHidden {
+            let w = max(0, min(ceil(secondary.textWidth), right - x - 8 - (newBadge.map { 8 + $0.intrinsicContentSize.width } ?? 0)))
+            secondary.frame = NSRect(x: x + 8, y: mid - 8, width: w, height: 16)
+            x += 8 + w
+        }
+        if let newBadge {
+            let s = newBadge.intrinsicContentSize
+            newBadge.frame = NSRect(x: x + 8, y: mid - s.height / 2, width: s.width, height: s.height)
         }
     }
 
@@ -822,11 +878,18 @@ final class ModelRowView: DSView {
             kbd?.isHidden = !highlighted
             return
         }
-        // 3824 combobox.tsx:195 selects with foreground/6%; Glass retains its previous fill.
-        let color: NSColor? = highlighted ? Themed.color(\.accent) : (isSelected ? Themed.color(\.contrastForeground, ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? 0.06 : 0.08) : nil)
+        let modern = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
+        // 4928 ModelListRow.tsx:47 drops the selected fill (`selectedFill={false}`); Glass retains its previous fill.
+        let color: NSColor? = highlighted ? Themed.color(\.accent) : (isSelected && !modern ? Themed.color(\.contrastForeground, 0.08) : nil)
         fill.backgroundColor = color?.cgColor(in: self)
         name.color = highlighted ? Themed.color(\.contrastAccentForeground) : (isSelected ? Themed.color(\.contrastForeground) : Themed.color(\.contrastPopoverForeground))
-        if ComposerDesign.uses3814(dark: effectiveAppearance.isDark) { star?.alphaValue = highlighted || { if case .model(let item) = row { return item.isFavorite }; return false }() ? 1 : 0 }
+        if modern, case .legacy = row { name.color = highlighted ? Themed.color(\.contrastForeground) : Themed.color(\.contrastMutedForeground) }
+        check?.strokeColor = name.color
+        if modern {
+            // Favorites list every row starred, so there the star shows only on hover (`favoriteStarOnHover`).
+            let favorite = { if case .model(let item) = row { return item.isFavorite }; return false }()
+            star?.alphaValue = highlighted || (star?.state.hovered ?? false) || (favorite && picker.rail != .favorites) ? 1 : 0
+        }
         secondary.color = Themed.color(\.contrastMutedForeground, 0.7)
         chevron?.strokeColor = Themed.color(\.contrastMutedForeground)
     }

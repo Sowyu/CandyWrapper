@@ -321,8 +321,10 @@ public struct ModelPickerSections: Sendable {
                 rows = items.map { .model($0) }
             } else {
                 let expanded = expandedLegacy.contains(id)
-                rows = current.map { .model($0) } + [.legacy(instance: id, count: legacy.count, expanded: expanded)]
-                    + (expanded ? legacy.map { .model($0) } : [])
+                // The toggle trails the list, so expanding it reveals older models above it (#28076,
+                // ModelPickerContent.tsx:747-751).
+                rows = current.map { .model($0) } + (expanded ? legacy.map { .model($0) } : [])
+                    + [.legacy(instance: id, count: legacy.count, expanded: expanded)]
             }
         }
     }

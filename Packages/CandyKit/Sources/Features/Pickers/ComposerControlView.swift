@@ -34,6 +34,9 @@ public final class ComposerControlView: ControlView {
     public var textOnly = false { didSet { restyle() } }
     public var paddingOverride: (CGFloat, CGFloat)? { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
     public var mutedLabel = false { didSet { restyle() } }
+    /// The composer's model name stops at `max-w-56` so long names don't push the composer (#28409).
+    public var maximumLabelWidth: CGFloat = .infinity { didSet { if maximumLabelWidth != oldValue { invalidateIntrinsicContentSize(); needsLayout = true } } }
+    private var labelWidth: CGFloat { min(label.textWidth, maximumLabelWidth) }
     private var leadingPadding: CGFloat { paddingOverride?.0 ?? padding }
     private var trailingPadding: CGFloat { paddingOverride?.1 ?? padding }
     private var padding: CGFloat { capy || modern ? 8 : Self.padding }
@@ -88,9 +91,13 @@ public final class ComposerControlView: ControlView {
         let measuredIcon = showingLabel ? icon : compactIcon ?? icon
         let measuredWidth: CGFloat = !showingLabel && compactIcon != nil ? 14 : (measuredIcon as? ComposerEffortGlyphView)?.intrinsicContentSize.width ?? 16
         let overhang: CGFloat = !showingLabel && compactIcon != nil ? 2 : iconOverhang
-        let adornmentWidth = (adornment as? ComposerTraitsAdornmentView)?.width(showingLabel: showingLabel) ?? adornment?.intrinsicContentSize.width
-        let parts = [measuredIcon == nil ? nil : measuredWidth - 2 * overhang, showingLabel && (!title.isEmpty || !modern) ? label.textWidth : nil, adornmentWidth.flatMap { $0 > 0 ? $0 : nil }, (showsChevron && !modern) ? CGFloat(10) : nil].compactMap { $0 }
-        return 2 + leadingPadding + trailingPadding + parts.reduce(0, +) + CGFloat(max(0, parts.count - 1)) * Self.gap
+        let adornmentWidth = (adornment as? ComposerControlAdornment)?.width(showingLabel: showingLabel) ?? adornment?.intrinsicContentSize.width
+        let leading = [measuredIcon == nil ? nil : measuredWidth - 2 * overhang, showingLabel && (!title.isEmpty || !modern) ? labelWidth : nil].compactMap { $0 }
+        let shownAdornment = adornmentWidth.flatMap { $0 > 0 ? $0 : nil }
+        let parts = leading + [shownAdornment, (showsChevron && !modern) ? CGFloat(10) : nil].compactMap { $0 }
+        // The model suffix's `-ms-0.5` narrows its gap to 4.
+        let gapAdjust = shownAdornment != nil && !leading.isEmpty ? ((adornment as? ComposerControlAdornment)?.leadingGap ?? Self.gap) - Self.gap : 0
+        return 2 + leadingPadding + trailingPadding + parts.reduce(0, +) + CGFloat(max(0, parts.count - 1)) * Self.gap + gapAdjust
     }
 
     public override var intrinsicContentSize: NSSize { NSSize(width: (naturalWidth * 2).rounded(.up) / 2, height: 28) }
@@ -108,7 +115,7 @@ public final class ComposerControlView: ControlView {
             x += glyphWidth - 2 * visibleIconOverhang + Self.gap
         }
         if let adornment {
-            (adornment as? ComposerTraitsAdornmentView)?.showsLabels = showsLabel
+            (adornment as? ComposerControlAdornment)?.showsLabels = showsLabel
             let size = adornment.intrinsicContentSize
             adornment.frame = NSRect(x: bounds.width - 1 - trailingPadding - size.width, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
         }
@@ -121,8 +128,8 @@ public final class ComposerControlView: ControlView {
         chevron.frame = NSRect(x: chevronBox + 5 - chevronSize / 2, y: (bounds.height - chevronSize) / 2, width: chevronSize, height: chevronSize)
         // Frames snap to device pixels; a label that misses by less than that still fits, as in CSS.
         let room = showsChevron && !modern ? chevronBox - Self.gap - x : bounds.width - 1 - trailingPadding - x
-        let adornmentRoom = adornment.map { $0.intrinsicContentSize.width + Self.gap } ?? 0
-        label.frame = NSRect(x: x, y: (bounds.height - 20) / 2, width: max(0, label.textWidth <= room - adornmentRoom + 0.5 ? label.textWidth : room - adornmentRoom), height: 20)
+        let adornmentRoom = adornment.map { $0.intrinsicContentSize.width + (($0 as? ComposerControlAdornment)?.leadingGap ?? Self.gap) } ?? 0
+        label.frame = NSRect(x: x, y: (bounds.height - 20) / 2, width: max(0, labelWidth <= room - adornmentRoom + 0.5 ? labelWidth : room - adornmentRoom), height: 20)
     }
 
     public override func stateDidChange(from old: State) {
@@ -165,7 +172,7 @@ public final class ComposerControlView: ControlView {
         chevron.strokeColor = Themed.color(\.contrastIconMuted)
         if tintsIcon, let icon = icon as? IconView { icon.strokeColor = iconFollowsLabel ? label.color : Themed.color(\.contrastMutedForeground) }
         (icon as? ComposerEffortGlyphView)?.color = label.color
-        (adornment as? ComposerTraitsAdornmentView)?.color = label.color
+        (adornment as? ComposerControlAdornment)?.restyle(hovered: state.hoverOrPressed, labelColor: label.color, font: font)
         (compactIcon as? IconView)?.strokeColor = label.color
         needsDisplay = true
     }

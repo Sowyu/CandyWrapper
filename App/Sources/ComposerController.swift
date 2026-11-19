@@ -319,7 +319,7 @@ final class ComposerController {
         ClientSettingsStore.shared.observe { [weak self] keys in
             guard let self else { return }
             self.applyClientSettings()
-            if keys.contains("planModeEnabled") || keys.contains("contextWindowMeterEnabled") || keys.contains("effortDisplay") { self.refresh() }
+            if keys.contains("effortDisplay") { self.refresh() }
         }
         composer.restingBlocked = { [weak self] in
             guard let self else { return true }
@@ -1696,8 +1696,7 @@ final class ComposerController {
             thread: thread, projectDefaultModel: project?.defaultModelSelection,
             serverDefaults: serverConfig.settings,
             hasStartedSession: ComposerLogic.QueueState.hasStartedSession(projection),
-            supportsProviderHandoff: thread == nil || ComposerLogic.QueueState.supportsProviderHandoff(projection),
-            planModeEnabled: ClientSettingsStore.shared.current.bool("planModeEnabled"))
+            supportsProviderHandoff: thread == nil || ComposerLogic.QueueState.supportsProviderHandoff(projection))
         // Shift-click fan-out: a new thread on a server that bootstraps worktrees (ChatView.tsx:11584-11587).
         if case .draft = target { pickers.supportsMultipleModels = serverConfig.capabilities.contains("requiredWorktreeBootstrap") } else { pickers.supportsMultipleModels = false }
         pickers.permissionsShownInStrip = thread == nil && panel.showsContextStrip
@@ -3101,10 +3100,9 @@ extension ComposerController {
             let before = text.substring(to: trigger.rangeStart), after = text.substring(from: trigger.rangeEnd)
             let compact = before.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && after.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 && !compactUnavailable && currentAttachments.isEmpty
-            let planMode = pickers.context.interactionModeEnabled(provider)
             let items = ComposerMenus.slashItems(trigger: trigger, provider: providerKey, commands: provider?.slashCommands(cwd: cwd) ?? [],
                                                  skills: provider?.skills(cwd: cwd) ?? [],
-                                                 showSkills: ClientSettingsStore.shared.current.bool("showSkillsInSlashMenu"), planMode: planMode,
+                                                 showSkills: ClientSettingsStore.shared.current.bool("showSkillsInSlashMenu"),
                                                  compactAvailable: compact)
             return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .slashCommand, loading: false))
         case .skill:
@@ -5391,10 +5389,8 @@ extension ComposerController {
         }
     }
 
-    /// The "Context window indicator" setting; Redesign always shows its ring under the composer, as Capy does.
-    fileprivate var meterEnabled: Bool {
-        ClientSettingsStore.shared.current.bool("contextWindowMeterEnabled") || ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark)
-    }
+    /// #33131 removed T3's context window indicator; Redesign keeps its ring under the composer, as Capy does.
+    fileprivate var meterEnabled: Bool { ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark) }
 
     /// `shouldReserveContextWindowMeter` (ChatComposer.tsx:2385-2392): the meter's slot stays while a started
     /// thread's detail loads.

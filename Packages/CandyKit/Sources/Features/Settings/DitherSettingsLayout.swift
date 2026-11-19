@@ -134,8 +134,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .advanced: return [
             .init(.general, scope: true, [G("behavior", "Background work", rows: ["provider-update-checks", "continue-threads-after-server-update",
                                                                                   "background-activity"]),
-                                          G("Diagnostics", nil, rows: ["diagnostics"], also: ["telemetry-export"]),
-                                          G("legacy-features", nil, also: ["legacy-plan-mode", "legacy-context-window-indicator", "legacy-sidebar"])]),
+                                          G("Diagnostics", nil, rows: ["diagnostics"], also: ["telemetry-export"])]),
             .init(.storage, [G("storage-notice", nil), G("storage-database", nil),
                              G("storage-cleanup", nil, also: ["storage-delete-now", "storage-cleanup-last-run"]), G("storage-artifacts", nil)]),
         ]
