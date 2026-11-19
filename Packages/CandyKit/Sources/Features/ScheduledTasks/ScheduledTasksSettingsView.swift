@@ -645,6 +645,10 @@ final class ScheduledTaskFormView: DSView {
             let timeRow = ScheduledTaskInlineRow([runAt, ScheduledTaskSized(time, width: 128), on, days], trailing: [])
             timeRow.gapAfter = [2: 12]
             rows.append((timeRow, 32))
+        case .kept:
+            // ponytail: no date picker for `once` yet, add one with T3's datetime-local field when the editor gets it
+            let label = e.task.map { ScheduledTaskLogic.scheduleLabel($0.schedule) } ?? "Custom schedule"
+            rows.append(text("\(label). Pick a schedule type to replace it.", color: Themed.color(\.mutedForeground)))
         case .interval:
             let every = InputView(text: d.intervalMinutes)
             every.onChange = { [weak e] t in e?.draft.intervalMinutes = t }

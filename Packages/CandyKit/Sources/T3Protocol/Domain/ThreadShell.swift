@@ -73,6 +73,12 @@ public struct ThreadShell: Codable, Hashable, Sendable, Identifiable {
     /// Open history the palette ranks by (orchestrationV2.ts:386-399, 451). Absent before Nightly 3669.
     public var opens: Tristate<ThreadOpens>
     public var titleRegeneration: TitleRegeneration?
+    /// 4928 thread tags (orchestrationV2.ts:2278), lenient like `StoredThreadTags` (threadTags.ts:15-19).
+    public var tags: LenientArray<String>?
+    /// 4928 linked issues (orchestrationV2.ts:2222).
+    public var issues: LenientArray<ThreadIssueLink>?
+    /// The outcome of the last title regeneration (4928 orchestrationV2.ts:2289).
+    public var lastTitleRegeneration: LastTitleRegeneration?
     public var deletedAt: T3Timestamp?
     /// Guest messages waiting for the owner to send or dismiss (orchestrationV2.ts:1930-1931). Absent before Nightly 3655.
     public var pendingGuestMessageCount: Int?
@@ -195,17 +201,67 @@ public struct PullRequestLinkSource: OpenStringEnum {
 
 // MARK: - Nested shapes
 
+/// An array that drops elements it can't decode and reads a malformed value as empty, like
+/// T3's `catchDecoding` and `ForwardCompatibleArray` fields.
+public struct LenientArray<Element: Codable & Hashable & Sendable>: Codable, Hashable, Sendable {
+    public var values: [Element]
+    public init(_ values: [Element]) { self.values = values }
+
+    private struct Slot: Decodable {
+        var value: Element?
+        init(from decoder: Decoder) throws { value = try? Element(from: decoder) }
+    }
+
+    public init(from decoder: Decoder) throws {
+        values = ((try? [Slot](from: decoder)) ?? []).compactMap(\.value)
+    }
+
+    public func encode(to encoder: Encoder) throws { try values.encode(to: encoder) }
+}
+
+/// `ThreadIssueLink` (4928 packages/contracts/src/issue.ts:502-524): an issue linked to a thread.
+public struct ThreadIssueLink: Codable, Hashable, Sendable {
+    /// The tracker kind, such as `github` or `linear`.
+    public var tracker: String
+    public var host: String
+    public var scope: String
+    public var key: String
+    public var projectId: ProjectId
+    public var url: String
+    /// `manual` or `agent`.
+    public var source: String
+    public var linkedAt: T3Timestamp
+    public var displayKey: String
+    public var title: String
+}
+
+/// `OrchestrationV2LastTitleRegeneration` (4928 orchestrationV2.ts:464-468, threadTitle.ts:11-18).
+public struct LastTitleRegeneration: Codable, Hashable, Sendable {
+    /// `renamed`, `unchanged` or `failed`.
+    public var status: String
+    public var message: String?
+    public var requestId: String
+    public var completedAt: T3Timestamp
+}
+
 /// `OrchestrationV2AppThreadLineage` (orchestrationV2.ts:108-112).
 public struct ThreadLineage: Codable, Hashable, Sendable {
     public var parentThreadId: ThreadId?
     public var relationshipToParent: LineageRelationship?
     public var rootThreadId: ThreadId
+    /// A side chat: a hidden fork that lives in its parent's view (4928 orchestrationV2.ts:173).
+    public var sideChat: Bool?
 
-    public init(parentThreadId: ThreadId?, relationshipToParent: LineageRelationship?, rootThreadId: ThreadId) {
+    public init(parentThreadId: ThreadId?, relationshipToParent: LineageRelationship?, rootThreadId: ThreadId, sideChat: Bool? = nil) {
         self.parentThreadId = parentThreadId
         self.relationshipToParent = relationshipToParent
         self.rootThreadId = rootThreadId
+        self.sideChat = sideChat
     }
+
+    /// `isListedThreadLineage` (4928 orchestrationV2.ts:177-179): subagents and side chats show
+    /// inside their parent, never in thread lists, search or settled counts.
+    public var isListed: Bool { relationshipToParent != .subagent && sideChat != true }
 }
 
 /// `forkedFrom`: a union on `type` (`run`, `node`, `provider_thread`). Kept flat so a new type

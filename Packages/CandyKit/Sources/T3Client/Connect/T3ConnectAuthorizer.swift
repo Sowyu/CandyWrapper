@@ -162,7 +162,15 @@ public actor T3ConnectAuthorizer {
         request.httpBody = ConnectHTTP.formBody(
             TokenExchangeRequest(subjectToken: bootstrap.credential, clientLabel: identity.label).formFields)
         let issuedAt = now()
-        let access = try await perform(request, as: AccessTokenResult.self)
+        let access: AccessTokenResult
+        do {
+            access = try await perform(request, as: AccessTokenResult.self)
+        } catch EnvironmentHTTPError.status(403, let body?) where body.isConnectApprovalPending {
+            // The host requires device approval (4928 client-runtime/src/authorization/service.ts:148-163, 415-418).
+            throw T3ConnectError.approvalPending(host: descriptor.label,
+                                                 verificationCode: ConnectDeviceApproval.verificationCode(thumbprint: relay.key.thumbprint),
+                                                 traceId: body.traceId)
+        }
         return T3ConnectToken(environmentId: descriptor.environmentId, label: descriptor.label, endpoint: bootstrap.endpoint,
                               accessToken: access.accessToken,
                               expiresAt: issuedAt.addingTimeInterval(TimeInterval(access.expiresIn)),
@@ -410,6 +418,8 @@ private final class SharedWaiter<T: Sendable>: @unchecked Sendable {
 
 public enum T3ConnectError: Error, Sendable, Equatable {
     case environmentMismatch(expected: String, actual: String)
+    /// The host has not approved this device yet. The supervisor checks back every few seconds.
+    case approvalPending(host: String, verificationCode: String, traceId: String?)
 }
 
 public enum T3Connect {
@@ -425,6 +435,10 @@ public enum T3Connect {
         case let e as LocatedConnectionFailure: return e.info
         case let e as RelayError: return e.located
         case is CloudSessionError: return info("authentication", .relay)
+        case T3ConnectError.approvalPending(_, _, let traceId):
+            var located = info(ConnectionFailureInfo.approvalPendingReason, .server, cause: "approval_pending")
+            located.traceId = traceId
+            return located
         case is DPoPError:
             if case .blocked(let reason, _) = failure { return info(reason.rawValue, .device) }
             return info("configuration", .device)
@@ -455,6 +469,8 @@ public enum T3Connect {
             return .blocked(e == .invalidKey ? .authentication : .configuration, "Could not create the environment authorization proof.")
         case T3ConnectError.environmentMismatch(let expected, let actual):
             return .blocked(.configuration, "Connected environment \(actual) does not match \(expected).")
+        case T3ConnectError.approvalPending(let host, let code, _):
+            return .transient("Approve this device on \(host). It shows code \(code).")
         case let e as EnvironmentHTTPError:
             switch e {
             // mapRemoteDpopEnvironmentError: a refused DPoP credential carries the clock or retry hint.

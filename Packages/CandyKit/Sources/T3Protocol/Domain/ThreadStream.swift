@@ -196,6 +196,9 @@ public struct ThreadEventType: OpenStringEnum {
     public static let contextHandoffUpdated: Self = "context-handoff.updated"
     public static let contextTransferCreated: Self = "context-transfer.created"
     public static let contextTransferUpdated: Self = "context-transfer.updated"
+    public static let threadTagsUpdated: Self = "thread.tags-updated"
+    public static let threadIssueSynced: Self = "thread.issue-synced"
+    public static let threadVisitRecorded: Self = "thread.visit-recorded"
 
     /// Every `thread.*` event carries the whole `AppThread`.
     static let threadPayloadTypes: Set<String> = [
@@ -205,6 +208,8 @@ public struct ThreadEventType: OpenStringEnum {
         "thread.marked-unread", "thread.metadata-updated", "thread.pull-request-synced",
         "thread.runtime-mode-updated", "thread.interaction-mode-updated", "thread.model-selection-updated",
         "thread.provider-switched", "thread.guest-share-updated",
+        // 4928 (orchestrationV2.ts:2012, :2017).
+        "thread.tags-updated", "thread.issue-synced",
     ]
 
     static let known: Set<String> = threadPayloadTypes.union([
@@ -214,6 +219,8 @@ public struct ThreadEventType: OpenStringEnum {
         "provider-turn.updated", "runtime-request.updated", "message.updated", "turn-item.updated",
         "plan.updated", "checkpoint-scope.created", "checkpoint.captured", "checkpoint.rollback-requested",
         "context-handoff.updated", "context-transfer.created", "context-transfer.updated",
+        // 4928: `{lastVisitedAt, opens}` in place of a whole-thread `thread.visited` (orchestrationV2.ts:2980).
+        "thread.visit-recorded",
     ])
 
     public var isKnown: Bool { Self.known.contains(rawValue) }
@@ -412,5 +419,33 @@ public struct GetTurnItemResult: Codable, Hashable, Sendable {
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(item, forKey: .item)
+    }
+}
+
+/// `orchestration.forceStopThread` (4928 packages/contracts/src/rpc.ts:2061-2065, orchestrationV2.ts:4295-4320):
+/// ends a thread whose provider ignored Stop. Offer it only where the environment advertises `threadForceStop`
+/// (environment.ts:126-127), and once the interrupt request carries `unresponsiveAt`.
+public enum ForceStopThread {
+    public static let method = "orchestration.forceStopThread"
+    public static let capability = "threadForceStop"
+
+    /// `runId` is the run the user saw ignore Stop; the server refuses with reason `superseded` once a newer run started.
+    public static func input(threadId: ThreadId, runId: RunId?) -> JSONValue {
+        var o: [String: JSONValue] = ["threadId": .string(threadId.rawValue)]
+        if let runId { o["runId"] = .string(runId.rawValue) }
+        return .object(o)
+    }
+
+    /// `OrchestrationV2ForceStopThreadResult`.
+    public struct Result: Decodable, Hashable, Sendable {
+        /// `killed`, `released`, `releasing` or `shared`.
+        public var outcome: String
+        /// The other threads one shared agent process also works for, when `outcome` is `shared`.
+        public var sharedWithThreadIds: [ThreadId]
+    }
+
+    /// `OrchestrationV2ForceStopThreadError.reason == "superseded"`: a newer run started, nothing was stopped.
+    public static func isSuperseded(_ errorBody: JSONValue?) -> Bool {
+        errorBody?["_tag"]?.stringValue == "OrchestrationV2ForceStopThreadError" && errorBody?["reason"]?.stringValue == "superseded"
     }
 }

@@ -120,7 +120,16 @@ public struct PreviewListResult: Codable, Sendable, Equatable {
 
 /// One `subscribePreviewEvents` value (preview.ts:329-390): every thread's tabs on the server.
 public struct PreviewEvent: Codable, Sendable, Equatable {
-    public enum Kind: String, Codable, Sendable { case opened, navigated, resized, failed, closed }
+    /// Open, so an event type a newer server adds decodes; the state ignores it.
+    public struct Kind: OpenStringEnum {
+        public let rawValue: String
+        public init(rawValue: String) { self.rawValue = rawValue }
+        public static let opened: Self = "opened"
+        public static let navigated: Self = "navigated"
+        public static let resized: Self = "resized"
+        public static let failed: Self = "failed"
+        public static let closed: Self = "closed"
+    }
     public var type: Kind
     public var threadId: String
     public var tabId: String

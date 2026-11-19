@@ -79,16 +79,25 @@ struct SidebarFoldersTests {
         #expect(rows(sent) == ["first", "second"])
     }
 
-    @Test func legacyOptInEnablesFoldersAndTheSwitchClearsIt() {
+    /// 4928 dropped `legacySidebarEnabled` (T3 521ac7c218), so it no longer turns folders on.
+    @Test func legacyOptInIsIgnoredAndTheSwitchWritesOneKey() {
         let context = SettingsPageContext()
         context.client.apply(["legacySidebarEnabled": .bool(true)])
         let page = BetaSettingsView(context: context)
         let row = page.anchors["boring-sidebar"] as? SettingsRowView
         let toggle = row?.control as? SwitchView
-        #expect(toggle?.isOn == true)
+        #expect(toggle?.isOn == false)
         var patch: [String: JSONValue] = [:]
         context.writeClient = { patch = $0 }
-        toggle?.onChange?(false)
-        #expect(patch == ["boringSidebarEnabled": .bool(false), "legacySidebarEnabled": .bool(false)])
+        toggle?.onChange?(true)
+        #expect(patch == ["boringSidebarEnabled": .bool(true)])
+    }
+
+    @Test func cursorKeychainSwitchOnlyForServersThatStillHaveIt() {
+        let old = ServerSettingsValues(.object(["cursorKeychainUsageEnabled": .bool(false)]))
+        let new = ServerSettingsValues(.object([:]))
+        #expect(ProvidersSettingsView.showsCursorKeychainToggle(platformOS: "darwin", settings: old))
+        #expect(!ProvidersSettingsView.showsCursorKeychainToggle(platformOS: "darwin", settings: new))
+        #expect(!ProvidersSettingsView.showsCursorKeychainToggle(platformOS: "linux", settings: old))
     }
 }

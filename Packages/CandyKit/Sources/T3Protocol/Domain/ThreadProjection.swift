@@ -56,6 +56,22 @@ public struct AppThread: Codable, Hashable, Sendable, Identifiable {
     public static func == (lhs: Self, rhs: Self) -> Bool { lhs.raw == rhs.raw }
     public func hash(into hasher: inout Hasher) { hasher.combine(id) }
 
+    /// 4928 thread tags (orchestrationV2.ts:522); absent on older servers.
+    public var tags: [String] { (try? raw["tags"]?.decode(as: LenientArray<String>.self))?.values ?? [] }
+    /// 4928 linked issues (orchestrationV2.ts:485).
+    public var issues: [ThreadIssueLink] { (try? raw["issues"]?.decode(as: LenientArray<ThreadIssueLink>.self))?.values ?? [] }
+    /// 4928 orchestrationV2.ts:535.
+    public var lastTitleRegeneration: LastTitleRegeneration? { try? raw["lastTitleRegeneration"]?.decode(as: LastTitleRegeneration.self) }
+
+    /// `applyOrchestrationV2ThreadVisit` (4928 orchestrationV2.ts:558-567): a `thread.visit-recorded`
+    /// payload sets `lastVisitedAt` and, when sent, `opens`.
+    public func applyingVisit(_ visit: JSONValue) -> AppThread? {
+        guard var object = raw.objectValue else { return nil }
+        object["lastVisitedAt"] = visit["lastVisitedAt"] ?? .null
+        if let opens = visit["opens"] { object["opens"] = opens }
+        return try? JSONValue.object(object).decode(as: AppThread.self)
+    }
+
     /// `isProviderNativeSubagentThread` (orchestrationV2.ts:442-451).
     public var isProviderNativeSubagent: Bool {
         lineage?.relationshipToParent == .subagent && creationSource == "provider"
@@ -200,6 +216,28 @@ public struct CheckpointFile: Codable, Hashable, Sendable {
     }
 }
 
+/// `OrchestrationV2CheckpointFileTotals` (4928 orchestrationV2.ts:1494-1499): the count and line
+/// totals of a checkpoint's full file list, sent only when `files` is a prefix of it.
+public struct CheckpointFileTotals: Codable, Hashable, Sendable {
+    public var count: Int
+    public var additions: Int
+    public var deletions: Int
+
+    public init(count: Int, additions: Int, deletions: Int) {
+        self.count = count
+        self.additions = additions
+        self.deletions = deletions
+    }
+
+    /// `checkpointFileTotals` (4928 client-runtime/src/state/threadCheckpoints.ts:80-91): the wire
+    /// totals when present, otherwise counted from the files.
+    public static func of(files: [CheckpointFile], filesTotal: CheckpointFileTotals?) -> CheckpointFileTotals {
+        if let filesTotal { return filesTotal }
+        return CheckpointFileTotals(count: files.count, additions: files.reduce(0) { $0 + ($1.additions ?? 0) },
+                                    deletions: files.reduce(0) { $0 + ($1.deletions ?? 0) })
+    }
+}
+
 /// `OrchestrationV2Checkpoint` (orchestrationV2.ts:1202-1215).
 public struct Checkpoint: Codable, Hashable, Sendable, Identifiable {
     public var id: CheckpointId
@@ -212,6 +250,9 @@ public struct Checkpoint: Codable, Hashable, Sendable, Identifiable {
     /// `ready`, `missing`, `error`, `stale`.
     public var status: String
     public var files: [CheckpointFile]
+    /// A 4928 server sends at most 200 `files` and then sets this for the full list
+    /// (4928 orchestrationV2.ts:1514, apps/server/src/orchestration-v2/WireProjection.ts:27).
+    public var filesTotal: CheckpointFileTotals?
     public var capturedAt: T3Timestamp
 }
 

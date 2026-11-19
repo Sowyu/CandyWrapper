@@ -2,7 +2,13 @@ import Foundation
 import T3Protocol
 
 /// `EnvMode` (BranchToolbar.logic.ts:26-27): run in the project's checkout or in a new worktree.
-public enum EnvMode: String, Codable, Sendable { case local, worktree }
+/// Open, so a mode a newer client or server writes into a draft decodes.
+public struct EnvMode: OpenStringEnum {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+    public static let local: Self = "local"
+    public static let worktree: Self = "worktree"
+}
 
 /// BranchToolbar.logic.ts and shared/git.ts helpers the branch toolbar uses.
 public enum BranchToolbarLogic {

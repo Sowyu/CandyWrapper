@@ -13,12 +13,12 @@ public final class BetaSettingsView: SettingsPageBase {
 
     public override init(context: SettingsPageContext) {
         super.init(context: context)
-        // LabsSettingsPanel.tsx:29-50 (3814): retain legacy opt-ins until this switch changes.
+        // LabsSettingsPanel.tsx at 4928: 521ac7c218 (PR #33131) dropped the legacySidebarEnabled opt-in.
         let folders = clientSwitch("boring-sidebar",
             "Group sidebar threads into project folders. Pinned threads stay on top, and Snoozed and Settled stay below the folders.",
             key: "boringSidebarEnabled", label: "Boring sidebar (group by project)", title: "Boring sidebar (group by project)",
-            read: { $0.bool("boringSidebarEnabled") || $0.bool("legacySidebarEnabled") },
-            write: { ["boringSidebarEnabled": .bool($0), "legacySidebarEnabled": .bool(false)] })
+            read: { $0.bool("boringSidebarEnabled") },
+            write: { ["boringSidebarEnabled": .bool($0)] })
         let guest = serverSwitch("guest-links", Self.guestDetail, key: "guestSharingEnabled", reset: nil, label: "Guest links")
         guest.title = "Guest links"
         // T3's copy names the Connections group for links and its Sharing & access page for guests (LabsSettingsPanel.tsx at 3814).

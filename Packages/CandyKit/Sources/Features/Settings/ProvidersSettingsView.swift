@@ -451,11 +451,17 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
 
     // MARK: Usage providers (UsageProviderSettings.tsx)
 
+    /// 4928 dropped the setting, since Cursor usage now comes from the SDK account (T3 4c3a9d5818, PR #32448;
+    /// 3824 packages/contracts/src/settings.ts:1300). Servers that still have it always send it.
+    static func showsCursorKeychainToggle(platformOS: String?, settings: ServerSettingsValues) -> Bool {
+        platformOS == "darwin" && settings.raw["cursorKeychainUsageEnabled"] != nil
+    }
+
     /// The Cursor Keychain switch on a Mac server, then one row per CLIProxyAPI hub with Remove, or "No hubs configured."
     private func updateUsageProviders(_ env: SettingsScopeEnvironment, settings: ServerSettingsValues) {
         addHub.isHidden = !env.canWrite
         var rows: [any SettingsGroupRow] = []
-        if context.configs[env.id]?.platformOS == "darwin" {
+        if Self.showsCursorKeychainToggle(platformOS: context.configs[env.id]?.platformOS, settings: settings) {
             let toggle = SwitchView(isOn: settings["cursorKeychainUsageEnabled"].boolValue == true)
             toggle.setAccessibilityLabel("Cursor account usage")
             toggle.isEnabled = env.canWrite && !updatingCursor

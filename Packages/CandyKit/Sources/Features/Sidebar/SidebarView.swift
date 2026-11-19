@@ -338,7 +338,7 @@ public final class SidebarContentView: DSView {
         applyClientSettings(ClientSettingsStore.shared.current)
         clientSettingsObserver = ClientSettingsStore.shared.observe { [weak self] keys in
             guard keys.contains("sidebarProjectGroupingMode") || keys.contains("sidebarProjectGroupingOverrides")
-                    || keys.contains("boringSidebarEnabled") || keys.contains("legacySidebarEnabled") || keys.contains("sidebarWorkingShelfEnabled") || keys.contains("sidebarProjectSortOrder") else { return }
+                    || keys.contains("boringSidebarEnabled") || keys.contains("sidebarWorkingShelfEnabled") || keys.contains("sidebarProjectSortOrder") else { return }
             self?.applyClientSettings(ClientSettingsStore.shared.current)
         }
     }
@@ -358,7 +358,7 @@ public final class SidebarContentView: DSView {
         let grouping = Self.projectGrouping(c)
         SidebarModel.ProjectGrouping.current = grouping
         if state.grouping != grouping { state.grouping = grouping }
-        state.boringSidebarEnabled = c.bool("boringSidebarEnabled") || c.bool("legacySidebarEnabled")
+        state.boringSidebarEnabled = c.bool("boringSidebarEnabled")
         let working = c.bool("sidebarWorkingShelfEnabled")
         if state.workingShelfEnabled != working {
             // Off resets the tracker; on starts from a fresh baseline (`inboxReturns.observe(null)`).

@@ -636,8 +636,8 @@ public final class ThreadPanelView: DSView {
             settled: latest?.id.rawValue, completed: latest?.status == .completed, linkedTarget: proactiveLinkedPullRequestKey,
             // The plan sheet layout (a window up to 980 wide) turns proactive panels off (ChatView.tsx:5763).
             revision: panelActionRevision, enabled: ClientSettingsStore.shared.current.bool("proactivePanelsEnabled") && viewportWidth > 980,
-            checkpointStatus: summary?.status, fileCount: summary?.files.count ?? 0,
-            changedLines: summary?.files.reduce(0) { $0 + ($1.additions ?? 0) + ($1.deletions ?? 0) } ?? 0,
+            checkpointStatus: summary?.status, fileCount: summary?.totals.count ?? 0,
+            changedLines: summary.map { $0.totals.additions + $0.totals.deletions } ?? 0,
             isRepository: proactiveRepositoryIsGit, activeSurface: panelState.active?.kind.rawValue)
         switch action {
         case .none: break

@@ -3050,13 +3050,13 @@ extension ComposerController {
         var candidates = (sidebar?.snapshot?.threads ?? []).compactMap { t -> ComposerMenus.ThreadCandidate? in
             guard let owner = t.id.environmentId, owner == env || linked[owner] != nil else { return nil }
             return .init(id: t.id.rawValue, title: t.title, updatedAt: t.updatedAt.raw, archived: t.archivedAt != nil,
-                         machine: owner == env ? nil : linked[owner], isSubagent: t.lineage.relationshipToParent == .subagent)
+                         machine: owner == env ? nil : linked[owner], isSubagent: !t.lineage.isListed)
         }
         let known = Set(candidates.map(\.id))
         if let matches = menuState.threadMatches, matches.environment == env {
             candidates += matches.threads.filter { !known.contains($0.id.scoped(to: env).rawValue) }.map {
                 .init(id: $0.id.scoped(to: env).rawValue, title: $0.title, updatedAt: $0.updatedAt.raw, archived: $0.archivedAt != nil,
-                      isSubagent: $0.lineage.relationshipToParent == .subagent)
+                      isSubagent: !$0.lineage.isListed)
             }
         }
         return candidates

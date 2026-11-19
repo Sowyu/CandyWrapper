@@ -677,7 +677,7 @@ final class AssistantMessageRowView: TimelineRowView {
     private var showMeta = false
     /// `AssistantChangedFilesSection`: the card when the run changed files.
     private lazy var card = ChangedFilesCardView()
-    private var cardFiles: (files: [CheckpointFile], expanded: Bool, overrides: [String: Bool])?
+    private var cardFiles: (files: [CheckpointFile], expanded: Bool, overrides: [String: Bool], hidden: Int)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -714,7 +714,7 @@ final class AssistantMessageRowView: TimelineRowView {
         markdown.onLayoutChoicesChange = { [weak context] in context?.markdownChoices[m.id.rawValue] = $0 }
         markdown.fadesNewBlocks = m.streaming
         if let summary, !summary.files.isEmpty {
-            cardFiles = (summary.files, item.ui.filesExpanded, item.ui.folderOverrides)
+            cardFiles = (summary.files, item.ui.filesExpanded, item.ui.folderOverrides, summary.hiddenFileCount)
             if card.superview == nil { addSubview(card) }
             card.model = context.model
             card.configure(summary, allExpanded: item.ui.filesExpanded, overrides: item.ui.folderOverrides)
@@ -768,7 +768,8 @@ final class AssistantMessageRowView: TimelineRowView {
     /// The card's height plus its `mt-4`, or 0.
     private var cardSpace: CGFloat {
         guard let cardFiles else { return 0 }
-        return 16 + ChangedFilesCardView.height(cardFiles.files, allExpanded: cardFiles.expanded, overrides: cardFiles.overrides)
+        return 16 + ChangedFilesCardView.height(cardFiles.files, allExpanded: cardFiles.expanded, overrides: cardFiles.overrides,
+                                         hiddenFiles: cardFiles.hidden)
     }
 
     override func height(forWidth width: CGFloat) -> CGFloat {

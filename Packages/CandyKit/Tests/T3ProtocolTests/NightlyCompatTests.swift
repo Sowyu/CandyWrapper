@@ -144,6 +144,37 @@ struct NightlyCompatTests {
         #expect(configSeen && shellThreads > 100 && threadSeen)
     }
 
+    /// Nightly 4928 (fixtures/transcripts/26-nightly-4928.jsonl), recorded against sandbox 4928: config with
+    /// the 4928 capabilities, the shell snapshot and a thread with three haiku turns decode with this build.
+    @Test func recorded4928ConfigShellAndThreadDecode() throws {
+        var configSeen = false, shellThreads = 0, threadSeen = false
+        for frame in try WireTests.load("26-nightly-4928") where frame.dir == "recv" && frame.kind == "ws" {
+            let value = try JSONDecoder().decode(JSONValue.self, from: frame.bodyData)
+            if value["requestId"]?.stringValue == "1", let config = value["exit"]?["value"] {
+                let decoded = try config.decode(as: ServerProviderConfig.self)
+                #expect(decoded.capabilities.contains("threadForceStop"))
+                configSeen = true
+            }
+            for item in value["values"]?.arrayValue ?? [] {
+                if value["requestId"]?.stringValue == "3", case .snapshot(let shell, _) = try item.decode(as: ShellStreamItem.self) {
+                    shellThreads = max(shellThreads, shell.threads.count)
+                    #expect(shell.threads.allSatisfy { $0.lineage.isListed })
+                }
+                if value["requestId"]?.stringValue == "4" {
+                    let decoded = try item.decode(as: ThreadStreamItem.self)
+                    if case .unknownEvent(_, let type) = decoded { Issue.record("unknown 4928 event \(type)") }
+                    if let projection = item["projection"] {
+                        let p = try projection.decode(as: ThreadProjection.self)
+                        #expect(p.visibleTurnItems.contains { $0.item.type == .userMessage })
+                        #expect(p.visibleTurnItems.contains { $0.item.type == .assistantMessage })
+                        threadSeen = true
+                    }
+                }
+            }
+        }
+        #expect(configSeen && shellThreads >= 1 && threadSeen)
+    }
+
     @Test func futureRecordedConfigAndFramesDecode() throws {
         var unknown = 0, configSeen = false
         for frame in try WireTests.load("21-future-server") where frame.dir == "recv" {

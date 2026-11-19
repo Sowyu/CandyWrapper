@@ -424,6 +424,8 @@ extension TerminalSessionModel.Status {
         case .running: self = .running
         case .exited: self = .exited
         case .error: self = .error
+        // A newer server's status: treat the session as live until it says otherwise.
+        default: self = .running
         }
     }
 }

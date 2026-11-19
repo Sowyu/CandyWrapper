@@ -147,7 +147,8 @@ public struct UsageSource: Equatable, Sendable {
     public var status: String
     public var distinctSessions: Double
     public var message: String?
-    /// `enableCursorKeychain` when the source can be enabled from the client.
+    /// `enableCursorKeychain` when the source can be enabled from the client. Servers from 4928 on
+    /// never send it (removed from 3824 packages/contracts/src/usage.ts:94).
     public var action: String?
     public var refreshing: Bool
 

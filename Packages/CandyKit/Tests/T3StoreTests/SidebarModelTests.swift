@@ -66,9 +66,15 @@ private func pill(
             $0.projectId = "project-visible"
             $0.lineage = ThreadLineage(parentThreadId: "thread-parent", relationshipToParent: .fork, rootThreadId: "thread-parent")
         }
+        // 4928 side chats: forks hidden with `lineage.sideChat` (isListedThreadLineage, orchestrationV2.ts:177-179).
+        let sideChat = sidebarThread("thread-side-chat") {
+            $0.projectId = "project-visible"
+            $0.lineage = ThreadLineage(parentThreadId: "thread-parent", relationshipToParent: .fork, rootThreadId: "thread-parent", sideChat: true)
+        }
         let archived = sidebarThread("thread-archived") { $0.projectId = "project-visible"; $0.archivedAt = "2026-01-02T00:00:00.000Z" }
         let otherProject = sidebarThread("thread-other-project") { $0.projectId = "project-other" }
-        let visible = S.filterSidebarV2VisibleThreads([root, subagent, fork, archived, otherProject], scopedProjectIds: ["project-visible"])
+        let visible = S.filterSidebarV2VisibleThreads([root, subagent, fork, sideChat, archived, otherProject], scopedProjectIds: ["project-visible"])
+        #expect(S.isSidebarSubagentThread(sideChat.shell) && !sideChat.shell.lineage.isListed)
         #expect(visible.map(\.id) == ["thread-parent", "thread-fork"])
         #expect(S.isSidebarSubagentThread(subagent.shell) && !S.isSidebarSubagentThread(root.shell))
     }

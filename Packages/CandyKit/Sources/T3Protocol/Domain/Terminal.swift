@@ -5,8 +5,14 @@ import Foundation
 // with the retained history, then live events) and drives it with `terminal.write` and
 // `terminal.resize`. Thread ids on the wire are the environment's local ids.
 
-public enum TerminalSessionStatus: String, Codable, Sendable {
-    case starting, running, exited, error
+/// Open, so a status a newer server adds decodes instead of failing the snapshot.
+public struct TerminalSessionStatus: OpenStringEnum {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+    public static let starting: Self = "starting"
+    public static let running: Self = "running"
+    public static let exited: Self = "exited"
+    public static let error: Self = "error"
 }
 
 /// `TerminalSessionSnapshot` (terminal.ts:103-117). `history` is the retained output with terminal

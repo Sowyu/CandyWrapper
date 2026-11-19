@@ -163,6 +163,41 @@ public struct TurnItem: Codable, Hashable, Sendable, Identifiable {
     public var exitCode: Int? { self["exitCode"]?.intValue }
     public var questionAnswer: JSONValue? { self["questionAnswer"] }
     public var subagentId: String? { string("subagentId") }
+    // 4928 fields (orchestrationV2.ts:1729-1853), decoded only. The timeline draws them separately.
+
+    /// `assistant_message.phase`: `commentary`, `partial_answer` or `final_answer` (:1612, :1744).
+    public var assistantPhase: String? { type == .assistantMessage ? string("phase") : nil }
+    /// `user_message.modelSwitch`: a same-harness model or effort change that took effect with this message (:1606-1610, :1739).
+    public var modelSwitch: ModelSwitch? { try? self["modelSwitch"]?.decode(as: ModelSwitch.self) }
+    /// `user_message.linkedSender`: the thread on a linked environment that sent this message (:150-154, :1729).
+    public var linkedSender: LinkedSender? { try? self["linkedSender"]?.decode(as: LinkedSender.self) }
+    /// `user_message.freshContext`: the run started a fresh provider session (:768, :1732).
+    public var freshContext: Bool { self["freshContext"]?.boolValue ?? false }
+    /// `system_notice.level`: `info`, `warning` or `error` (:1603, :1853).
+    public var noticeLevel: String? { type == .systemNotice ? string("level") : nil }
+    /// `secret_request.url`: where the user can get the secret (:1673).
+    public var secretRequestURL: String? { type == .secretRequest ? string("url") : nil }
+    /// `command_execution.completionWake`: the provider wakes the agent when the command finishes (:1802).
+    public var completionWake: String? { string("completionWake") }
+
+    /// `OrchestrationV2ModelSwitch`.
+    public struct ModelSwitch: Decodable, Hashable, Sendable {
+        public var from: ModelSelection
+        public var to: ModelSelection
+    }
+
+    /// `OrchestrationV2LinkedSender`.
+    public struct LinkedSender: Decodable, Hashable, Sendable {
+        public var environmentId: String
+        public var threadId: ThreadId
+        public var title: String
+    }
+
+    /// `run_interrupt_request.unresponsiveAt` (4928 orchestrationV2.ts:1842): the provider did not confirm
+    /// the stop in time, so clients offer Force stop.
+    public var unresponsiveAt: T3Timestamp? { string("unresponsiveAt").map { T3Timestamp($0) } }
+    /// `checkpoint.filesTotal` (4928 orchestrationV2.ts:1833): set when `files` holds only the first 200.
+    public var filesTotal: CheckpointFileTotals? { try? self["filesTotal"]?.decode(as: CheckpointFileTotals.self) }
 }
 
 /// `OrchestrationV2ProjectedTurnItem` (orchestrationV2.ts:1610-1616): a row of

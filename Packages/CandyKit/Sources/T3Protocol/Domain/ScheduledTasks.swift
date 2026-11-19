@@ -12,6 +12,11 @@ public enum ScheduledTaskSchedule: Equatable, Sendable {
     case fixedTime(timeOfDay: String, weekdays: [Int]?)
     case webhook(signature: ScheduledTaskWebhookSignature?, maxDeliveryAgeMinutes: Int?,
                  dedupe: ScheduledTaskWebhookDedupe = .init(), filters: [ScheduledTaskWebhookFilter] = [])
+    /// One run at `runAt`, an ISO date and time with an offset (4928 scheduledTask.ts:67-74).
+    case once(runAt: String)
+    /// A schedule type this build doesn't know, kept as sent so the task still lists and a save
+    /// sends it back unchanged.
+    case unknown(JSONValue)
 
     init?(json: JSONValue?) {
         switch json?["type"]?.stringValue {
@@ -31,7 +36,13 @@ public enum ScheduledTaskSchedule: Equatable, Sendable {
                             dedupe: ScheduledTaskWebhookDedupe(replayKey: dedupe?["replayKey"]?.stringValue, coalesceKey: dedupe?["coalesceKey"]?.stringValue,
                                                                coalesceWindowSeconds: dedupe?["coalesceWindowSeconds"]?.intValue),
                             filters: json?["filters"]?.arrayValue?.compactMap(ScheduledTaskWebhookFilter.init(json:)) ?? [])
-        default: return nil
+        case "once":
+            guard let runAt = json?["runAt"]?.stringValue else { return nil }
+            self = .once(runAt: runAt)
+        case .some:
+            guard let json else { return nil }
+            self = .unknown(json)
+        case nil: return nil
         }
     }
 
@@ -111,6 +122,12 @@ public struct ScheduledTask: Equatable, Sendable {
     /// When the server last changed the task; the Orchestrator's handoff reads it (`ScheduledTask.updatedAt`).
     public var updatedAt: String?
     public var webhook: ScheduledTaskWebhookEndpoint?
+    /// `new_thread`, `continue` or `fresh_session` (4928 scheduledTask.ts:231). Servers before 4928 omit it.
+    /// `scheduledTasks.upsert` keeps the stored mode when the input omits it (:291), so the editor never sends it.
+    public var threadMode: String?
+
+    /// `scheduledTaskThreadMode` (4928 scheduledTask.ts:235-239).
+    public var effectiveThreadMode: String { threadMode ?? (threadId == nil ? "new_thread" : "continue") }
 
     public init(id: String, title: String, prompt: String, enabled: Bool = true, schedule: ScheduledTaskSchedule, projectId: String,
                 threadId: String? = nil, workspaceStrategy: JSONValue = .object(["type": .string("root")]),
@@ -136,10 +153,14 @@ public struct ScheduledTask: Equatable, Sendable {
                   webhook: json["webhook"]?["path"]?.stringValue.map {
                       ScheduledTaskWebhookEndpoint(path: $0, url: json["webhook"]?["url"]?.stringValue, hasSecret: json["webhook"]?["hasSecret"]?.boolValue == true)
                   }, updatedAt: json["updatedAt"]?.stringValue)
+        threadMode = json["threadMode"]?.stringValue
     }
 
     /// `ScheduledTaskListResult.tasks`: entries this build cannot decode are skipped (`ForwardCompatibleArray`).
     public static func list(_ json: JSONValue?) -> [ScheduledTask] { (json?["tasks"]?.arrayValue ?? []).compactMap(ScheduledTask.init(json:)) }
+
+    /// `ScheduledTaskListResult.timeZone`: the server's IANA zone for fixed-time schedules (4928 scheduledTask.ts:275).
+    public static func timeZone(_ json: JSONValue?) -> String? { json?["timeZone"]?.stringValue }
 }
 
 /// `ScheduledTaskWebhookDeliverySummary` and `ScheduledTaskWebhookDelivery` (scheduledTask.ts:329-365).
@@ -186,7 +207,8 @@ public struct ScheduledTaskWebhookDelivery: Equatable, Sendable {
 
 /// The task editor's form (`DraftState`, scheduledTasksSettings.logic.ts:51-90).
 public struct ScheduledTaskDraft: Equatable, Sendable {
-    public enum ScheduleMode: String, Sendable { case fixed, interval, webhook }
+    /// `kept` is a schedule the editor has no fields for yet (`once` or one from a newer server); a save sends `keptSchedule` back.
+    public enum ScheduleMode: String, Sendable { case fixed, interval, webhook, kept }
     public enum WorkspaceMode: String, Sendable { case root, worktree, existingWorktree = "existing_worktree" }
 
     public var editingId: String?
@@ -194,6 +216,7 @@ public struct ScheduledTaskDraft: Equatable, Sendable {
     public var prompt = ""
     public var enabled = true
     public var scheduleMode = ScheduleMode.fixed
+    public var keptSchedule: JSONValue?
     public var intervalMinutes = "15"
     public var timeOfDay = "09:00"
     public var weekdays: Set<Int> = [1, 2, 3, 4, 5]
@@ -396,6 +419,8 @@ public enum ScheduledTaskLogic {
                                           "maxDeliveryAgeMinutes": age.map { .number(Double($0)) } ?? .null, "dedupe": .object(dedupe)]
             if filterDraftsChanged(d.savedFilters, d.filters) { o["filters"] = .array(filters.map(\.json)) }
             return .object(o)
+        case .kept:
+            return d.keptSchedule
         case .interval:
             return .object(["type": .string("interval"), "everyMs": intervalMs(d.intervalMinutes).map(JSONValue.number) ?? .number(.nan)])
         case .fixed:
@@ -436,6 +461,14 @@ public enum ScheduledTaskLogic {
                 d.signaturePrefix = signature.prefix
             }
             d.maxDeliveryAgeMinutes = age.map(String.init) ?? ""
+        case .once(let runAt):
+            d.scheduleMode = .kept
+            d.keptSchedule = .object(["type": .string("once"), "runAt": .string(runAt)])
+            d.weekdays = Set(0...6)
+        case .unknown(let json):
+            d.scheduleMode = .kept
+            d.keptSchedule = json
+            d.weekdays = Set(0...6)
         }
         d.projectId = t.projectId
         d.threadId = t.threadId ?? ""
@@ -531,6 +564,12 @@ public enum ScheduledTaskLogic {
     public static func scheduleLabel(_ s: ScheduledTaskSchedule) -> String {
         switch s {
         case .webhook: return "On webhook"
+        case .once(let runAt):
+            // `Once, {time}` with the medium date and short time (4928 scheduledTasksSettings.logic.ts:46-60).
+            guard let ms = T3Timestamp.parseEpochMs(runAt) else { return "Once" }
+            let date = Date(timeIntervalSince1970: Double(ms) / 1000)
+            return "Once, \(date.formatted(date: .abbreviated, time: .shortened))"
+        case .unknown: return "Custom schedule"
         case .interval(let ms):
             let minutes = ms / 60_000
             return minutes == minutes.rounded() ? "Every \(jsNumberString(minutes)) min" : "Every \(Int(UsageFormat.jsRound(ms / 1000))) sec"
