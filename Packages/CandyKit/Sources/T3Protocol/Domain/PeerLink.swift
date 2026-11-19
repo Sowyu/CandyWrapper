@@ -4,7 +4,14 @@ import Foundation
 /// signed in to the peer's `/mcp` with a pairing code from it, so its agents can work there.
 /// `peerLinks.list` returns these with the `status` worked out when listing (`PeerLinkSummary`).
 public struct PeerLinkSummary: Decodable, Sendable, Equatable {
-    public enum Status: String, Decodable, Sendable { case reachable, unreachable, expired }
+    /// Open, so a status a newer server adds decodes; only `unreachable` and `expired` change the row.
+    public struct Status: OpenStringEnum {
+        public let rawValue: String
+        public init(rawValue: String) { self.rawValue = rawValue }
+        public static let reachable: Self = "reachable"
+        public static let unreachable: Self = "unreachable"
+        public static let expired: Self = "expired"
+    }
 
     public var environmentId: String
     public var label: String

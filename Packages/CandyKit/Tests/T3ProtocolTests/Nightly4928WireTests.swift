@@ -80,4 +80,20 @@ struct Nightly4928WireTests {
             #expect(input["threadMode"] == nil)
         }
     }
+
+    /// Section 5: closed enums now keep values a newer server sends.
+    @Test func closedEnumsAcceptUnknownValues() throws {
+        func dec<T: Decodable>(_ t: T.Type, _ s: String) throws -> T { try JSONDecoder().decode(T.self, from: Data(s.utf8)) }
+        #expect(try dec(TerminalSessionStatus.self, #""paused""#).rawValue == "paused")
+        #expect(try dec(TerminalSessionStatus.self, #""running""#) == .running)
+        #expect(try dec(GitStackedAction.self, #""commit_push_pr""#) == .commitPushPr)
+        #expect(try dec(GitStackedAction.self, #""rebase""#).rawValue == "rebase")
+        #expect(GitStackedAction.allCases.count == 5)
+        let stage = try dec(RelayClientInstallStage.self, #""unpacking""#)
+        #expect(stage.label == "Installing relay client" && stage.step == 5)
+        #expect(RelayClientInstallStage.activating.step == 7 && RelayClientInstallStage.waitingForLock.rawValue == "waiting_for_lock")
+        #expect(try dec(PreviewEvent.Kind.self, #""zoomed""#).rawValue == "zoomed")
+        #expect(try dec(PeerLinkSummary.Status.self, #""paused""#).rawValue == "paused")
+        #expect(try dec(PeerLinkSummary.Status.self, #""expired""#) == .expired)
+    }
 }

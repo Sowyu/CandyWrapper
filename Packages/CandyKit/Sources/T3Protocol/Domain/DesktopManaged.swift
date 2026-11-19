@@ -17,8 +17,18 @@ public struct RelayClientInstallStatus: Codable, Equatable, Sendable {
 }
 
 /// contracts/relayClient.ts:23-31 with the labels of RelayClientInstallDialog.tsx:21-32.
-public enum RelayClientInstallStage: String, Codable, CaseIterable, Sendable {
-    case checking, waitingForLock = "waiting_for_lock", downloading, verifying, installing, validating, activating
+public struct RelayClientInstallStage: OpenStringEnum, CaseIterable {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+    public static let checking: Self = "checking"
+    public static let waitingForLock: Self = "waiting_for_lock"
+    public static let downloading: Self = "downloading"
+    public static let verifying: Self = "verifying"
+    public static let installing: Self = "installing"
+    public static let validating: Self = "validating"
+    public static let activating: Self = "activating"
+    public static let allCases: [Self] = [.checking, .waitingForLock, .downloading, .verifying, .installing, .validating, .activating]
+
     public var label: String {
         switch self {
         case .checking: "Checking current installation"
@@ -28,10 +38,11 @@ public enum RelayClientInstallStage: String, Codable, CaseIterable, Sendable {
         case .installing: "Installing relay client"
         case .validating: "Validating executable"
         case .activating: "Activating installation"
+        default: "Installing relay client"
         }
     }
-    /// 1 to 7, as the dialog's "n of 7".
-    public var step: Int { Self.allCases.firstIndex(of: self)! + 1 }
+    /// 1 to 7, as the dialog's "n of 7". A stage this build doesn't know shows as installing.
+    public var step: Int { (Self.allCases.firstIndex(of: self) ?? Self.allCases.firstIndex(of: .installing)!) + 1 }
 }
 
 /// contracts/relayClient.ts:35-45: `progress` with a stage, or `complete` with the final status.

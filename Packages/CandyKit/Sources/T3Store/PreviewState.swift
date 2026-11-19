@@ -45,6 +45,7 @@ public struct ThreadPreviewState: Sendable, Equatable {
         case .closed:
             remove(event.tabId)
             suppressedTabIds.remove(event.tabId)
+        default: break
         }
         serverEpoch = event.serverEpoch
         serverRevision = event.revision

@@ -163,11 +163,15 @@ public struct VcsListRefsResult: Codable, Hashable, Sendable {
 }
 
 /// `GitStackedAction` (git.ts:18-24).
-public enum GitStackedAction: String, Codable, Sendable, CaseIterable {
-    case commit, push
-    case createPr = "create_pr"
-    case commitPush = "commit_push"
-    case commitPushPr = "commit_push_pr"
+public struct GitStackedAction: OpenStringEnum, CaseIterable {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+    public static let commit: Self = "commit"
+    public static let push: Self = "push"
+    public static let createPr: Self = "create_pr"
+    public static let commitPush: Self = "commit_push"
+    public static let commitPushPr: Self = "commit_push_pr"
+    public static let allCases: [Self] = [.commit, .push, .createPr, .commitPush, .commitPushPr]
 }
 
 /// `GitRunStackedActionResult` (git.ts:329-355), the parts the client reads.
