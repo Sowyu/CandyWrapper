@@ -96,4 +96,18 @@ struct Nightly4928WireTests {
         #expect(try dec(PeerLinkSummary.Status.self, #""paused""#).rawValue == "paused")
         #expect(try dec(PeerLinkSummary.Status.self, #""expired""#) == .expired)
     }
+
+    /// Item 7: `orchestration.forceStopThread` (orchestrationV2.ts:4295-4320) and `unresponsiveAt` (:1842).
+    @Test func forceStopWire() throws {
+        #expect(ForceStopThread.input(threadId: "t1", runId: "r1") == Self.json(#"{"threadId":"t1","runId":"r1"}"#))
+        #expect(ForceStopThread.input(threadId: "t1", runId: nil) == Self.json(#"{"threadId":"t1"}"#))
+        let result = try Self.json(#"{"outcome":"shared","sharedWithThreadIds":["t2"]}"#).decode(as: ForceStopThread.Result.self)
+        #expect(result.outcome == "shared" && result.sharedWithThreadIds == ["t2"])
+        #expect(ForceStopThread.isSuperseded(Self.json(#"{"_tag":"OrchestrationV2ForceStopThreadError","threadId":"t1","reason":"superseded"}"#)))
+        let item = try TurnItem(json: Self.json(#"""
+            {"id":"i","threadId":"t1","type":"run_interrupt_request","ordinal":1,"status":"waiting",
+             "updatedAt":"2026-11-19T00:00:00.000Z","message":"Stop","unresponsiveAt":"2026-11-19T00:00:05.000Z"}
+            """#))
+        #expect(item.unresponsiveAt?.raw == "2026-11-19T00:00:05.000Z")
+    }
 }

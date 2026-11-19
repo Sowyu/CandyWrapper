@@ -421,3 +421,31 @@ public struct GetTurnItemResult: Codable, Hashable, Sendable {
         try c.encode(item, forKey: .item)
     }
 }
+
+/// `orchestration.forceStopThread` (4928 packages/contracts/src/rpc.ts:2061-2065, orchestrationV2.ts:4295-4320):
+/// ends a thread whose provider ignored Stop. Offer it only where the environment advertises `threadForceStop`
+/// (environment.ts:126-127), and once the interrupt request carries `unresponsiveAt`.
+public enum ForceStopThread {
+    public static let method = "orchestration.forceStopThread"
+    public static let capability = "threadForceStop"
+
+    /// `runId` is the run the user saw ignore Stop; the server refuses with reason `superseded` once a newer run started.
+    public static func input(threadId: ThreadId, runId: RunId?) -> JSONValue {
+        var o: [String: JSONValue] = ["threadId": .string(threadId.rawValue)]
+        if let runId { o["runId"] = .string(runId.rawValue) }
+        return .object(o)
+    }
+
+    /// `OrchestrationV2ForceStopThreadResult`.
+    public struct Result: Decodable, Hashable, Sendable {
+        /// `killed`, `released`, `releasing` or `shared`.
+        public var outcome: String
+        /// The other threads one shared agent process also works for, when `outcome` is `shared`.
+        public var sharedWithThreadIds: [ThreadId]
+    }
+
+    /// `OrchestrationV2ForceStopThreadError.reason == "superseded"`: a newer run started, nothing was stopped.
+    public static func isSuperseded(_ errorBody: JSONValue?) -> Bool {
+        errorBody?["_tag"]?.stringValue == "OrchestrationV2ForceStopThreadError" && errorBody?["reason"]?.stringValue == "superseded"
+    }
+}

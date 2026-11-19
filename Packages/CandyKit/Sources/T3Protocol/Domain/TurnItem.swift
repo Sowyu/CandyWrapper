@@ -163,6 +163,9 @@ public struct TurnItem: Codable, Hashable, Sendable, Identifiable {
     public var exitCode: Int? { self["exitCode"]?.intValue }
     public var questionAnswer: JSONValue? { self["questionAnswer"] }
     public var subagentId: String? { string("subagentId") }
+    /// `run_interrupt_request.unresponsiveAt` (4928 orchestrationV2.ts:1842): the provider did not confirm
+    /// the stop in time, so clients offer Force stop.
+    public var unresponsiveAt: T3Timestamp? { string("unresponsiveAt").map { T3Timestamp($0) } }
     /// `checkpoint.filesTotal` (4928 orchestrationV2.ts:1833): set when `files` holds only the first 200.
     public var filesTotal: CheckpointFileTotals? { try? self["filesTotal"]?.decode(as: CheckpointFileTotals.self) }
 }
