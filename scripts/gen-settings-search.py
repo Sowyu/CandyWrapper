@@ -7,7 +7,7 @@ Usage: /usr/bin/python3 -I scripts/gen-settings-search.py [t3code checkout]
 import json, os, re, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-T3 = sys.argv[1] if len(sys.argv) > 1 else "/Users/mrm/CandyWrapper-research/t3code"
+T3 = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/CandyWrapper-research/t3code")
 src = open(os.path.join(T3, "apps/web/src/components/settings/settingsSearch.ts")).read()
 start = src.index("export const SETTINGS_SEARCH_ITEMS = [") + len("export const SETTINGS_SEARCH_ITEMS = [")
 body = src[start:src.index("] as const satisfies ReadonlyArray<SettingsSearchItem>;", start)]

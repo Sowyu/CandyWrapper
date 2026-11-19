@@ -12,7 +12,7 @@ import argparse, os, re
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 ap = argparse.ArgumentParser()
-ap.add_argument("--t3", default="/Users/mrm/CandyWrapper-research/t3code")
+ap.add_argument("--t3", default=os.path.expanduser("~/CandyWrapper-research/t3code"))
 ap.add_argument("--out", default=os.path.join(ROOT, "Packages/CandyKit/Sources/Features/Thread/EditorIcons.generated.swift"))
 args = ap.parse_args()
 SRC = os.path.join(args.t3, "apps/web/src/components")

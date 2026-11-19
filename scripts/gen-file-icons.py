@@ -15,7 +15,7 @@ version = open(os.path.join(ROOT, "T3_VERSION")).read().strip().lstrip("v")
 ap = argparse.ArgumentParser()
 ap.add_argument("--bundle", default=(glob.glob(os.path.expanduser(
     f"~/.t3/runtime/versions/{version}/client/assets/pierre-icons-*.js")) or [None])[0])
-ap.add_argument("--t3", default="/Users/mrm/CandyWrapper-research/t3code")
+ap.add_argument("--t3", default=os.path.expanduser("~/CandyWrapper-research/t3code"))
 ap.add_argument("--out", default=os.path.join(ROOT, "Packages/CandyKit/Sources/Features/Diff/FileIcons.generated.swift"))
 args = ap.parse_args()
 src = open(args.bundle, encoding="utf-8").read()
