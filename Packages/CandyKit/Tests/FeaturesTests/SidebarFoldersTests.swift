@@ -79,9 +79,10 @@ struct SidebarFoldersTests {
         #expect(rows(sent) == ["first", "second"])
     }
 
-    @Test func legacyOptInEnablesFoldersAndTheSwitchClearsIt() {
+    /// #33131: the Beta switch follows `boringSidebarEnabled` alone; the legacy sidebar opt-in is gone.
+    @Test func boringSidebarSwitchWritesOnlyItsOwnSetting() {
         let context = SettingsPageContext()
-        context.client.apply(["legacySidebarEnabled": .bool(true)])
+        context.client.apply(["boringSidebarEnabled": .bool(true)])
         let page = BetaSettingsView(context: context)
         let row = page.anchors["boring-sidebar"] as? SettingsRowView
         let toggle = row?.control as? SwitchView
@@ -89,6 +90,6 @@ struct SidebarFoldersTests {
         var patch: [String: JSONValue] = [:]
         context.writeClient = { patch = $0 }
         toggle?.onChange?(false)
-        #expect(patch == ["boringSidebarEnabled": .bool(false), "legacySidebarEnabled": .bool(false)])
+        #expect(patch == ["boringSidebarEnabled": .bool(false)])
     }
 }

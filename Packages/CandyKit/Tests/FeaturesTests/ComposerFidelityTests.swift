@@ -64,8 +64,10 @@ struct ComposerFidelityTests {
         let pickers = try Screen3824Fixtures.pickers(draft: draft)
         panel.composer.footerControls = [pickers.controlsView]
         if reference == "54-composer-effort-bars" {
-            let glyph = try #require(pickers.traitsButton.icon as? ComposerEffortGlyphView)
-            #expect(glyph.effort.count == 4 && glyph.effort.filled == 2 && pickers.traitsButton.title.isEmpty)
+            // 4928 draws the bars in the model trigger's suffix (#28057).
+            let suffix = try #require(pickers.modelButton.adornment as? ComposerModelSuffixView)
+            let glyph = try #require(suffix.subviews.compactMap { $0 as? ComposerEffortGlyphView }.first)
+            #expect(glyph.effort.count == 4 && glyph.effort.filled == 2 && suffix.suffix.word == nil)
             #expect(!glyph.wantsUpdateLayer) // Its four bars come from draw(_:), not updateLayer().
         }
         switch reference {
