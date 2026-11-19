@@ -1482,6 +1482,8 @@ final class ComposerController {
         composer.needsLayout = true
         let runs = projection?.runs ?? []
         var runState = ComposerLogic.RunState(runs: runs)
+        // The server refuses a continuation while a request is pending (threadExecution.ts `canResumeThread` at 4928).
+        runState.requestPending = projection?.runtimeRequests.contains { $0.status == "pending" } ?? false
         if let thread = shellThread, thread.status == .failed, thread.lastErrorClass == .usageLimit {
             runState.resumableRunId = thread.latestRunId
         }

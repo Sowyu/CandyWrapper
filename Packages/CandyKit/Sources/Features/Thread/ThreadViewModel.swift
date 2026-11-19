@@ -152,6 +152,8 @@ public final class ThreadViewModel {
             guard providers != oldValue else { return }
             for item in items {
                 if case .event(let p, _, _) = item.row.kind, p.item.type == .handoff { refreshRow(item.id) }
+                // A model switch row names its models by them too.
+                if case .message(_, let p?, _, _, _, _) = item.row.kind, ModelSwitchPresentation.modelSwitch(p) != nil { refreshRow(item.id) }
             }
         }
     }

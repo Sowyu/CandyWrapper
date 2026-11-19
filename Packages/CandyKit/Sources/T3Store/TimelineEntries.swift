@@ -289,18 +289,22 @@ public enum TimelineEntries {
         }
     }
 
-    /// Answers folded into their question card hide the user message that carried them.
-    static func foldedAnswerMessageIds(_ rows: [ProjectedTurnItem]) -> Set<String> {
-        Set(rows.compactMap { row -> String? in
+    /// Answers folded into their question card hide the user message that carried them, by message id with the
+    /// question's run. An answer that started a later run stays a normal message at that run's position
+    /// (session-logic.ts:527-552 at 4928, #23249).
+    static func foldedAnswerMessageIds(_ rows: [ProjectedTurnItem]) -> [String: RunId?] {
+        var result: [String: RunId?] = [:]
+        for row in rows {
             guard row.item.type == .userInputRequest, let answer = row.item.questionAnswer,
                 let requestId = answer["requestId"]?.stringValue
-            else { return nil }
-            return "async-answer:\(requestId)"
-        })
+            else { continue }
+            result["async-answer:\(requestId)"] = row.item.runId
+        }
+        return result
     }
 
     /// The entry of one row, or nil for a row the timeline leaves out.
-    static func entry(_ row: ProjectedTurnItem, attempt: TimelineAttempt?, planById: [PlanId: PlanArtifact], folded: Set<String>) -> TimelineEntry? {
+    static func entry(_ row: ProjectedTurnItem, attempt: TimelineAttempt?, planById: [PlanId: PlanArtifact], folded: [String: RunId?]) -> TimelineEntry? {
         // `position` is the row's index in `visibleTurnItems`, which every older history page
         // renumbers (threadHistoryMerge.ts:59). Nothing in the timeline reads it, so entries carry 0
         // and a page leaves the entries and rows after it equal.
@@ -310,7 +314,7 @@ public enum TimelineEntries {
         if isWorkspacePreparation(item) { return nil }
         // Task progress belongs in the composer; checkpoints become diff summaries.
         if item.type == .todoList || item.type == .checkpoint { return nil }
-        if item.type == .userMessage, let messageId = item.messageId, folded.contains(messageId.rawValue) { return nil }
+        if item.type == .userMessage, let messageId = item.messageId, folded[messageId.rawValue] == .some(item.runId) { return nil }
         // A queued message that hasn't started shows only in the composer's queue (T3 3824 #26355, session-logic.ts:606-611).
         if item.type == .userMessage, item.inputIntent == .queuedTurn, item.status == .pending { return nil }
         let createdAt = item.startedAt ?? item.updatedAt
@@ -373,7 +377,7 @@ public enum TimelineEntries {
         /// Per row, its index in `entries`, or -1 for a row left out.
         var entryIndex: [Int] = []
         var entries: [TimelineEntry] = []
-        var folded: Set<String> = []
+        var folded: [String: RunId?] = [:]
         var attemptsSource: [RunAttempt] = []
         var nodesSource: [ExecutionNode] = []
         var plansSource: [PlanArtifact] = []

@@ -46,6 +46,17 @@ public struct UserMessagePresentation: Equatable, Sendable {
             }
         }
         let attribution: Attribution? = createdBy != "agent" ? nil : creationSource == "server" ? .t3code : .agent
-        return .init(text: text, attribution: attribution, scheduledTaskId: nil)
+        // The agent needs words to start a turn; people sent only the attachments (userMessage.ts:72-73 at 4928).
+        return .init(text: isAttachmentOnlyBootstrapPrompt(text) ? "" : text, attribution: attribution, scheduledTaskId: nil)
+    }
+
+    /// `ATTACHMENT_ONLY_BOOTSTRAP_PROMPT` (packages/shared/src/composerContextReferences.ts at 4928).
+    public static let attachmentOnlyBootstrapPrompt =
+        "[User attached one or more files without additional text. Respond using the conversation context and the attached files.]"
+    nonisolated(unsafe) private static let ultrathinkPrefix = /^(?i:Ultrathink:)\s*/
+
+    /// `isAttachmentOnlyBootstrapPrompt`: Claude's ultrathink effort sends the prompt as `Ultrathink:\n<prompt>`.
+    public static func isAttachmentOnlyBootstrapPrompt(_ text: String) -> Bool {
+        text.replacing(ultrathinkPrefix, with: "", maxReplacements: 1) == attachmentOnlyBootstrapPrompt
     }
 }

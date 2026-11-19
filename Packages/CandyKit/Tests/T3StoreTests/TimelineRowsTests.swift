@@ -224,6 +224,19 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
         #expect(grouped.map(\.id) == ["tool-1"] && display == label)
     }
 
+    /// session-logic.ts:527-552 at 4928 (#23249): an answer folds into its question's card only within the
+    /// question's run; one that started a later run stays a message there.
+    @Test func lateAsyncAnswersShowInTheirOwnRun() {
+        let question = turnItem(#"{"id":"q","type":"user_input_request","runId":"r1","questionAnswer":{"requestId":"req"}}"#)
+        func answer(_ run: String) -> TurnItem {
+            turnItem(#"{"id":"a","type":"user_message","runId":"\#(run)","messageId":"async-answer:req","text":"yes"}"#)
+        }
+        let same = TimelineEntries.derive(visibleTurnItems: [question, answer("r1")].map { ProjectedTurnItem(local: $0) })
+        #expect(!same.contains { $0.message?.id.rawValue == "async-answer:req" })
+        let late = TimelineEntries.derive(visibleTurnItems: [question, answer("r2")].map { ProjectedTurnItem(local: $0) })
+        #expect(late.contains { $0.message?.id.rawValue == "async-answer:req" })
+    }
+
     @Test func dropsTheInterruptRequestAndKeepsTheResult() throws {
         let request = turnItem(#"{"id":"req","type":"run_interrupt_request","runId":"r2","message":"Interrupt requested"}"#)
         let result = turnItem(#"{"id":"res","type":"run_interrupt_result","runId":"r2","status":"interrupted","message":"Run interrupted"}"#)
@@ -265,11 +278,12 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
     // T3 2994 ec43786140 (MessagesTimeline.logic.ts:722-800): a reply that finished before the steer stays in the
     // timeline, so its attempt doesn't fold; one the steer cut off still folds.
     @Test func keepsAReplyThatFinishedBeforeTheSteer() {
-        func result(replyCompletedAt: String) -> [String] {
+        func result(replyCompletedAt: String, phase: String? = nil) -> [String] {
             let old = TimelineAttempt(id: "attempt-1", runId: "turn-1", rootNodeId: "root-1", status: "superseded",
                                       completedAt: "2026-01-01T00:00:03Z")
             let current = TimelineAttempt(id: "attempt-2", runId: "turn-1", attemptOrdinal: 2, rootNodeId: "root-2", status: "running")
-            let item = turnItem(#"{"id":"old-reply","type":"assistant_message","runId":"turn-1","messageId":"old","text":"done","completedAt":"\#(replyCompletedAt)"}"#)
+            let phaseField = phase.map { #","phase":"\#($0)""# } ?? ""
+            let item = turnItem(#"{"id":"old-reply","type":"assistant_message","runId":"turn-1","messageId":"old","text":"done","completedAt":"\#(replyCompletedAt)"\#(phaseField)}"#)
             let message = ChatMessage(id: MessageId("old"), role: .assistant, text: "done", runId: "turn-1", streaming: false,
                                       createdAt: "2026-01-01T00:00:01Z", updatedAt: "2026-01-01T00:00:02Z")
             let reply = TimelineEntry(id: "old-reply", createdAt: "2026-01-01T00:00:01Z",
@@ -292,6 +306,12 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
         #expect(whole.contains("old-reply") && whole.contains("old-work") && !whole.contains("attempt-fold:attempt-1"))
         let cut = result(replyCompletedAt: "2026-01-01T00:00:04Z")
         #expect(cut.contains("attempt-fold:attempt-1") && !cut.contains("old-reply") && !cut.contains("old-work"))
+        // 4928 #34501: a provider's `phase` decides instead of the timing. A final answer stays even when it closed after
+        // the steer; commentary that finished first folds.
+        let final = result(replyCompletedAt: "2026-01-01T00:00:04Z", phase: "final_answer")
+        #expect(final.contains("old-reply") && !final.contains("attempt-fold:attempt-1"))
+        let commentary = result(replyCompletedAt: "2026-01-01T00:00:02Z", phase: "commentary")
+        #expect(commentary.contains("attempt-fold:attempt-1") && !commentary.contains("old-reply"))
     }
 
     // T3 3824 #26333 (MessagesTimeline.logic.ts:788): a handoff stays visible when its superseded attempt folds.
@@ -331,6 +351,26 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
         #expect(result.map(\.id) == ["u", "a", "w1", "assistant-meta:a"])
         guard case .message(_, _, let meta, let copy, _, _) = result[1].kind else { Issue.record("no message"); return }
         #expect(!meta && !copy)
+    }
+
+    /// MessagesTimeline.logic.ts:2409-2436 at 4928: your back-to-back messages form one burst, and a
+    /// steer under a steer drops its label. A message from another agent breaks the burst.
+    @Test func marksBackToBackUserMessagesAsABurst() {
+        var agent = ChatMessage(id: MessageId("g"), role: .user, text: "g", createdAt: "2026-01-01T00:00:04Z")
+        agent.createdBy = "agent"
+        let entries = [
+            user("u1", "u1", at: "2026-01-01T00:00:00Z"),
+            user("u2", "u2", at: "2026-01-01T00:00:01Z", intent: .steer),
+            user("u3", "u3", at: "2026-01-01T00:00:02Z", intent: .promotedQueuedToSteer),
+            user("u4", "u4", at: "2026-01-01T00:00:03Z"),
+            .message("g", agent),
+            user("u5", "u5", at: "2026-01-01T00:00:05Z"),
+        ]
+        let result = rows(entries)
+        #expect(result.map(\.id) == ["u1", "u2", "u3", "u4", "g", "u5"])
+        #expect(result.map(\.groupedWithNext) == [true, true, true, false, false, false])
+        #expect(result.map(\.groupedWithPrevious) == [false, true, true, true, false, false])
+        #expect(result.map(\.continuesSteer) == [false, false, true, false, false, false])
     }
 
     @Test func marksAdjacentWorkRowsAsOneList() {

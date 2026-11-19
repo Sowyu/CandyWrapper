@@ -15,12 +15,13 @@ final class ThreadSentFileRowView: DSView {
         let meta = FileLinkMeta(filePath: name, targetPath: name, workspaceRelativePath: name, basename: name, line: nil, column: nil)
         let (definition, color) = FileChipStyle.icon(for: meta)
         icon = IconView(definition: definition, size: 16, color: color)
-        label = LabelView(name, font: DSFont.ui(14))
+        // Pasted text reads "Pasted text", not its file name (TimelineUserMessageRow.logic.ts:7-12 at 4928, #27377).
+        label = LabelView(UserMessageShape.fileLabel(file), font: DSFont.ui(14))
         label.lineHeight = 20
         super.init(frame: .zero)
         addSubview(preview); [icon, label, eye].forEach(preview.addSubview); addSubview(download)
-        preview.setAccessibilityLabel("Preview " + name)
-        download.setAccessibilityLabel("Download " + name)
+        preview.setAccessibilityLabel("Preview " + UserMessageShape.fileLabel(file))
+        download.setAccessibilityLabel("Download " + UserMessageShape.fileLabel(file))
         preview.action = { [weak self] in self?.onOpen?(false) }
         download.action = { [weak self] in self?.onOpen?(true) }
         preview.isEnabled = file["downloadable"]?.boolValue != false

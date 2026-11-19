@@ -425,7 +425,7 @@ final class FillView: DSView {
         }
     }
     var border: NSColor? { didSet { needsDisplay = true } }
-    var radius: CGFloat = 0 { didSet { layer?.cornerRadius = radius } }
+    var radius: CGFloat = 0 { didSet { layer?.cornerRadius = radius; if joinedTop || joinedBottom { needsLayout = true } } }
     /// A frosted pane under classic Glass (a user bubble): edge and highlight even without a border.
     var pane = false { didSet { needsDisplay = true } }
     private var paneEdge: GlassEdgeLayer?
@@ -443,12 +443,73 @@ final class FillView: DSView {
         return hit === self ? nil : hit
     }
 
+    /// The right-hand corners that meet a neighbour and tighten to `joinedRadius`: a burst of your
+    /// messages joins at `rounded-tr-md` and `rounded-br-md` (TimelineUserMessageRow.tsx:919-920 at 4928).
+    var joinedTop = false { didSet { if joinedTop != oldValue { needsLayout = true } } }
+    var joinedBottom = false { didSet { if joinedBottom != oldValue { needsLayout = true } } }
+    /// `rounded-md`, `calc(var(--radius) - 2px)`.
+    var joinedRadius: CGFloat = 6
+
+    private var drawnRadius: CGFloat {
+        ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.radius(radius) : radius
+    }
+
+    /// The fill when a corner is joined: a shape, since a layer mask doesn't show in `render(in:)` snapshots and
+    /// `cornerRadius` takes one radius.
+    private var joinedFill: CAShapeLayer?
+
+    override func layout() {
+        super.layout()
+        syncJoinedFill()
+    }
+
+    private func syncJoinedFill() {
+        guard let layer else { return }
+        let joined = joinedTop || joinedBottom
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        guard joined else {
+            if let joinedFill { joinedFill.removeFromSuperlayer(); self.joinedFill = nil; layer.cornerRadius = drawnRadius; needsDisplay = true }
+            return
+        }
+        // The shape draws every corner; the layer's clip goes square, which the bubble's padding keeps empty.
+        layer.cornerRadius = 0
+        let shape = joinedFill ?? CAShapeLayer()
+        if joinedFill == nil { layer.insertSublayer(shape, at: 0); joinedFill = shape }
+        let r = drawnRadius, j = min(r, joinedRadius)
+        shape.frame = layer.bounds
+        shape.fillColor = fill?.cgColor(in: self)
+        shape.path = Self.roundedPath(layer.bounds, topLeft: r, topRight: joinedTop ? j : r,
+                                      bottomRight: joinedBottom ? j : r, bottomLeft: r, flipped: isFlipped)
+        layer.backgroundColor = nil
+    }
+
+    /// A rectangle with its own radius per visual corner; `flipped` puts the top at `minY`.
+    static func roundedPath(_ rect: CGRect, topLeft: CGFloat, topRight: CGFloat, bottomRight: CGFloat, bottomLeft: CGFloat, flipped: Bool) -> CGPath {
+        // In unflipped space the visual top is maxY, so swap the radii and draw as if flipped.
+        let (tl, tr, br, bl) = flipped ? (topLeft, topRight, bottomRight, bottomLeft) : (bottomLeft, bottomRight, topRight, topLeft)
+        let p = CGMutablePath()
+        p.move(to: CGPoint(x: rect.minX + tl, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX - tr, y: rect.minY))
+        p.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.minY), tangent2End: CGPoint(x: rect.maxX, y: rect.minY + tr), radius: tr)
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - br))
+        p.addArc(tangent1End: CGPoint(x: rect.maxX, y: rect.maxY), tangent2End: CGPoint(x: rect.maxX - br, y: rect.maxY), radius: br)
+        p.addLine(to: CGPoint(x: rect.minX + bl, y: rect.maxY))
+        p.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.maxY), tangent2End: CGPoint(x: rect.minX, y: rect.maxY - bl), radius: bl)
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.minY + tl))
+        p.addArc(tangent1End: CGPoint(x: rect.minX, y: rect.minY), tangent2End: CGPoint(x: rect.minX + tl, y: rect.minY), radius: tl)
+        p.closeSubpath()
+        return p
+    }
+
     override func updateLayer() {
         layer?.backgroundColor = fill?.cgColor(in: self)
         layer?.borderColor = border?.cgColor(in: self)
         layer?.borderWidth = border == nil ? 0 : 1
-        let radius = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? DitherChrome.radius(self.radius) : self.radius
+        let radius = drawnRadius
         layer?.cornerRadius = radius
+        if joinedTop || joinedBottom || joinedFill != nil { syncJoinedFill() }
+        // ponytail: the Glass edge and blur keep the full radius on a joined corner; shape them too if Glass bursts look off
         paneEdge = WindowGlass.syncEdge(paneEdge, on: layer, in: self, radius: radius, edge: border == nil,
                                         show: fill != nil && (pane || border != nil))
         if pane { paneBlur = WindowGlass.syncBubbleBlur(paneBlur, in: self, radius: radius) } else { paneBlur?.removeFromSuperview(); paneBlur = nil }

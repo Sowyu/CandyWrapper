@@ -258,7 +258,7 @@ import Testing
     @Test func webContentEntriesBecomeTheirOwnRows() {
         let page = tool("mcp__t3-code__html_render", json(#"{"htmlRender":{"attachmentId":"att-1","title":"Report","height":480}}"#))
         let row = ProjectedTurnItem(position: 0, visibility: "local", sourceThreadId: "t", sourceItemId: page.id, item: page)
-        let entry = TimelineEntries.entry(row, attempt: nil, planById: [:], folded: [])
+        let entry = TimelineEntries.entry(row, attempt: nil, planById: [:], folded: [:])
         guard case .htmlRender(let ref, _)? = entry?.kind else { Issue.record("expected an html-render entry"); return }
         #expect(ref.title == "Report")
         #expect(entry?.isWebContent == true)

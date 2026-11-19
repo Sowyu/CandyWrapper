@@ -45,7 +45,32 @@ public final class ComposerView: DSView {
     /// A draft (new thread) route: `draftThreadRoute` for the send keybindings.
     public var isDraftRoute = false { didSet { if isDraftRoute != oldValue { relayoutHeight() } } }
     public var isCompacting = false { didSet { if isCompacting != oldValue { refresh() } } }
-    public var runState = ComposerLogic.RunState() { didSet { if runState != oldValue { refresh() } } }
+    public var runState = ComposerLogic.RunState() {
+        didSet {
+            guard runState != oldValue else { return }
+            stopTracker.update(runState)
+            scheduleStopTimer()
+            refresh()
+        }
+    }
+    private var stopTracker = ComposerLogic.StopTracker()
+    private var stopTimer: DispatchWorkItem?
+
+    /// Runs only while Stop waits or its click guard lasts, so an idle composer holds no timer.
+    private func scheduleStopTimer() {
+        stopTimer?.cancel()
+        stopTimer = nil
+        guard let delay = stopTracker.timer else { return }
+        let phase = stopTracker.phase
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.stopTracker.phase == phase else { return }
+            self.stopTracker.expired()
+            self.scheduleStopTimer()
+            self.refresh()
+        }
+        stopTimer = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
     /// A send or resume is in flight: the button shows a spinner and is disabled.
     public var isBusy = false { didSet { if isBusy != oldValue { refresh() } } }
     /// Sending is blocked (`sendDisabledReason`: loading, rewinding, worktree, clone, uploads); the reason is the tooltip.
@@ -552,7 +577,8 @@ public final class ComposerView: DSView {
         alphaValue = placeholderInput.projectRequired ? 0.75 : 1
         // With a question open the round button is only Stop (`renderStopGenerationButton(true)`).
         let face = questionFooter != nil ? .stop
-            : ComposerLogic.primaryAction(run: runState, hasContent: hasContent, busy: isBusy, mode: sendMode, editingQueued: editingQueued)
+            : ComposerLogic.primaryAction(run: runState, hasContent: hasContent, busy: isBusy, mode: sendMode, editingQueued: editingQueued,
+                                          stopHeld: stopTracker.holdsStop)
         if primary.face != face { needsLayout = true }
         primary.face = face
         let validationMessage = ComposerLogic.lengthValidationMessage(prompt)
@@ -562,9 +588,10 @@ public final class ComposerView: DSView {
         let canSend = sendDisabledReason == nil && !environmentUnavailable
         switch face {
         case .stop:
-            primary.isEnabled = true
-            primary.tooltip = "Interrupt"
-            primary.setAccessibilityLabel("Stop generation") // ComposerPrimaryActions.tsx:149
+            // Pending: `disabled:opacity-64` and "Stopping…" (ComposerPrimaryActions.tsx:155-186 at 4928).
+            primary.isEnabled = !stopTracker.stopDisabled
+            primary.tooltip = stopTracker.stopDisabled ? "Stopping…" : "Interrupt"
+            primary.setAccessibilityLabel(stopTracker.stopDisabled ? "Stopping" : "Stop generation")
         case .resume:
             primary.isEnabled = canSend
             primary.tooltip = status ?? "Resume thread"
@@ -712,6 +739,11 @@ public final class ComposerView: DSView {
             onQuestionAdvance?()
             return true
         }
+        // An empty draft has nothing to send; Enter does what Resume does (ChatComposer.tsx:2221-2227 at 4928, #27079).
+        if primary.face == .resume {
+            if !isBusy, !environmentUnavailable, sendDisabledReason == nil, !stopTracker.swallowsClick { onResume?() }
+            return true
+        }
         let mode = ComposerLogic.sendMode(running: runState.canInterrupt, alternate: intent == .alternate, steerByDefault: steerByDefault, canSteer: !isCompacting)
         send(mode, background: intent == .background)
         // A send key never inserts a newline, even when nothing was sent.
@@ -719,8 +751,15 @@ public final class ComposerView: DSView {
     }
 
     private func primaryPressed() {
+        // Right after Stop lands, a repeated click must not resume or send (ComposerPrimaryActions.tsx:441-447 at 4928).
+        if stopTracker.swallowsClick, primary.face != .stop { return }
         switch primary.face {
-        case .stop: onStop?()
+        case .stop:
+            guard !stopTracker.stopDisabled else { return }
+            stopTracker.requested()
+            scheduleStopTimer()
+            onStop?()
+            refresh()
         case .resume: onResume?()
         case .busy: break
         case .update: send(.queue)
