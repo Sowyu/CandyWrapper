@@ -438,7 +438,10 @@ public enum ComposerLogic {
                 ($0.attachments ?? []).isEmpty && $0.role == "user" && $0.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "/compact"
             } == true
             canReorder = turns?["supportsQueuedMessages"] == .bool(true)
-            canPromoteToSteer = promoteSkipsCompaction || steerable && (turns?["supportsActiveSteering"] == .bool(true) || turns?["supportsSteeringByInterruptRestart"] == .bool(true))
+            let steers = turns?["supportsActiveSteering"] == .bool(true) || turns?["supportsSteeringByInterruptRestart"] == .bool(true)
+            // A run still preparing its worktree takes the steer once it is ready (threadWorkflows.ts:184-189 at 4928, #34581).
+            let preparing = activeRun?.status == .preparing || activeRun?.status == .starting
+            canPromoteToSteer = promoteSkipsCompaction || preparing && (turns == nil || steers) || steerable && steers
         }
 
         /// CandyWrapper's own themes keep the queue's manual reorder behavior.

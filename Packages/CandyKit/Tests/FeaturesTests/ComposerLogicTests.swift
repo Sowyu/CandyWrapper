@@ -67,6 +67,23 @@ struct ComposerLogicTests {
         #expect(modern.activeRunId == "r" && !modern.canSendNow)
     }
 
+    /// threadWorkflows.ts:184-189 at 4928 (#34581): a queued message can steer a run that is still preparing.
+    @Test func aPreparingRunTakesASteer() throws {
+        func state(_ status: String) throws -> L.QueueState {
+            let projection = try JSONValue.object([
+                "thread": .object(["id": .string("t")]),
+                "updatedAt": .string("2026-10-27T00:00:00Z"),
+                "runs": .array([.object(["id": .string("r"), "threadId": .string("t"), "ordinal": .number(1),
+                                        "status": .string(status), "requestedAt": .string("2026-10-27T00:00:00Z")])]),
+            ]).decode(as: ThreadProjection.self)
+            return L.QueueState(projection: projection)
+        }
+        #expect(try state("preparing").canPromoteToSteer)
+        #expect(try state("starting").canPromoteToSteer)
+        // A running run needs a running provider turn first.
+        #expect(try !state("running").canPromoteToSteer)
+    }
+
     @Test func sendShortcutModes() {
         let enter = L.Key(isReturn: true), mod = L.Key(isReturn: true, mod: true)
         // mode, prompt, key, expected
