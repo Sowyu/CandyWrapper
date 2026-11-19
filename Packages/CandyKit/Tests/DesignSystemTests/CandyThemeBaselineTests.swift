@@ -1,10 +1,11 @@
-import XCTest
+import Foundation
+import Testing
 @testable import DesignSystem
 
 /// All palette colors recorded on 979c85e5 before the 3814 stylesheet update.
 @MainActor
-final class CandyThemeBaselineTests: XCTestCase {
-    func testCandyThemesKeepTheir3669Colors() throws {
+@Suite struct CandyThemeBaselineTests {
+    @Test func candyThemesKeepTheir3669Colors() throws {
         var actual: [String: [String: [[Double]]]] = [:]
         for theme in [ThemeDefinition.dither, .glass] {
             for contrast in [80, 100, 120] {
@@ -32,10 +33,10 @@ final class CandyThemeBaselineTests: XCTestCase {
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("fixtures/theme/candy-3669-baseline.json")
         let expected = try JSONDecoder().decode([String: [String: [[Double]]]].self, from: Data(contentsOf: url))
-        XCTAssertEqual(Set(actual.keys), Set(expected.keys))
+        #expect(Set(actual.keys) == Set(expected.keys))
         for (context, roles) in expected {
             for (name, value) in roles {
-                XCTAssertEqual(actual[context]?[name], value, "\(context) \(name)")
+                #expect(actual[context]?[name] == value, "\(context) \(name)")
             }
         }
     }
