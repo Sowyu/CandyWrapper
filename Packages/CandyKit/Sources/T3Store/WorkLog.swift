@@ -211,6 +211,13 @@ public enum WorkLog {
         return detail
     }
 
+    /// `workEntriesViewedImagePaths` (4928 client-runtime/src/work-log/presentation.ts:451-455): the distinct images a
+    /// tool group opened, in viewing order.
+    public static func viewedImagePaths(_ entries: [WorkLogEntry]) -> [String] {
+        var seen = Set<String>()
+        return entries.compactMap(viewedImagePath).filter { seen.insert($0).inserted }
+    }
+
     /// `isWorkspaceImagePreviewPath` (packages/shared/src/filePreview.ts:76-85,182-184).
     static func isWorkspaceImagePath(_ path: String) -> Bool {
         let lower = path.lowercased()

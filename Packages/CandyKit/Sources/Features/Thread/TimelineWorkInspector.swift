@@ -338,6 +338,8 @@ final class WorkDetailView: DSView {
     static let captionLineHeight: CGFloat = 16
     static let maxBlock: CGFloat = 320
 
+    /// The images the row's tool group viewed: the viewer steps through them from a viewed file (#34333, #36321).
+    var groupImages: [WorkImage] = []
     var detail = WorkDetail() { didSet { if detail != oldValue { cache = nil; rebuildButtons(); updateTrackingAreas(); needsDisplay = true; needsLayout = true } } }
     var onAction: ((WorkDetail.Action) -> Void)?
 
@@ -532,6 +534,12 @@ final class WorkDetailView: DSView {
     /// The tool output is not in a Markdown gallery, so the preview holds this one image (markdownImageGallery.ts:11-50).
     @objc private func expandImage(_ gesture: NSClickGestureRecognizer) {
         guard let window, let view = gesture.view as? AsyncImageView, view.image != nil, let key = view.key, let image = image(for: key) else { return }
+        let gallery = groupImages.filter { !MarkdownImages.failed.contains($0.key) }
+        if case .file = image, let index = gallery.firstIndex(where: { $0.key == key }) {
+            let items = gallery.map { $0.key == key ? imageItem($0).withPreview(from: view, sharingLoader: true) : imageItem($0) }
+            ExpandedImagePreviewView(items: items, index: index).present(in: window)
+            return
+        }
         ExpandedImagePreviewView(items: [imageItem(image).withPreview(from: view, sharingLoader: true)], index: 0).present(in: window)
     }
 

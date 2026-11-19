@@ -35,6 +35,18 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
         #expect(MemoryLayout<TimelineEntry>.stride <= 192)
     }
 
+    /// #30473 (MessagesTimeline.logic.ts:718-727 at 4928): a tool group that opened images keeps them in a row below it.
+    @Test func viewedImagesFollowTheirToolGroup() {
+        func read(_ id: String, _ second: Int, _ path: String) -> TimelineEntry {
+            work("\(id)-entry", WorkLogEntry(id: id, createdAt: T3Timestamp("2026-01-01T00:00:0\(second)Z"), runId: "turn-1", label: "Read",
+                                          tone: .tool, viewedImagePath: path, itemType: .dynamicTool, toolLifecycleStatus: .completed))
+        }
+        let derived = rows([read("a", 1, "/w/one.png"), read("b", 2, "/w/two.png"), read("c", 3, "/w/one.png")]) { $0.expandedRunIds = ["turn-1"] }
+        let images = derived.compactMap { row -> [String]? in if case .viewedImages(let paths) = row.kind { paths } else { nil } }
+        #expect(images == [["/w/one.png", "/w/two.png"]])
+        #expect(derived.last?.id.hasSuffix(":viewed-images") == true)
+    }
+
     // LT:1300
     @Test func foldsTheFirstAssistantMessageAndSettledWorkBeforeTheTerminalResponse() {
         let entries = [

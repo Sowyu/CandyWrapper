@@ -37,7 +37,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     /// Distance from the top that asks for older history.
     static let nearTop: CGFloat = 600
 
-    enum Kind: Hashable { case approval, user, workflowOpening, assistant, meta, plan, work, toggle, live, thinking, working, turnFold, attemptFold, compaction, event, subagent, secret, linkRequest, htmlRender, mcpApp }
+    enum Kind: Hashable { case approval, user, workflowOpening, assistant, meta, plan, work, toggle, live, thinking, working, turnFold, attemptFold, compaction, event, subagent, secret, linkRequest, htmlRender, mcpApp, viewedImages }
 
     let context = TimelineContext()
     let scrollView = ComposerTimelineScrollView()
@@ -378,6 +378,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
 
     /// An open work row whose entry shows the image: its tool output, or the file it viewed.
     private static func showsImage(_ item: TimelineItem, key: String) -> Bool {
+        if case .viewedImages(let paths) = item.row.kind { return key.hasPrefix("media-file:") && paths.contains { key.hasSuffix($0) } }
         guard case .work(let entries, _, _) = item.row.kind else { return false }
         return entries.contains { e in
             guard item.ui.expandedEntries.contains(e.id) else { return false }
@@ -644,6 +645,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
             let box = Double(max(0, width - 8))
             return CGFloat(page.frameHeight(width: box, contentHeight: item.ui.htmlHeights.height(width: box))) + 8
         case .mcpApp: return CGFloat(item.ui.webContentHeight ?? McpAppReference.defaultHeight) + 8
+        case .viewedImages: return ViewedImagesRowView.maxHeight + 8
         }
     }
 
@@ -929,6 +931,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
             p.item.type == .secretRequest ? .secret : p.item.type == .linkRequest ? .linkRequest : p.item.type == .subagent ? .subagent : .event
         case .htmlRender: .htmlRender
         case .mcpApp: .mcpApp
+        case .viewedImages: .viewedImages
         }
     }
 
@@ -961,6 +964,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         case .linkRequest: LinkRequestRowView()
         case .htmlRender: HtmlRenderRowView()
         case .mcpApp: McpAppRowView()
+        case .viewedImages: ViewedImagesRowView()
         }
         view.context = context
         view.kind = kind

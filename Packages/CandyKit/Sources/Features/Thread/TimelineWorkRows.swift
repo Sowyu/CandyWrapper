@@ -304,6 +304,7 @@ final class WorkRowView: WorkRowBase {
     }
 
     private var details: [WorkDetailView] = []
+    private var groupImages: [WorkImage] = []
     private var entries: [(entry: WorkLogEntry, detail: WorkDetail, open: Bool)] = []
     private var isGroupBody = false
     /// Subagent notification cards by entry index (`SimpleWorkEntryRow`); nil draws the work line.
@@ -366,6 +367,12 @@ final class WorkRowView: WorkRowBase {
             return (e, WorkDetail.of(e, label: label, workspaceRoot: root, output: item.ui.outputs[e.id],
                                      checkpointStatus: { [weak model = context.model] id in model?.checkpointStatus(id) }),
                     item.ui.expandedEntries.contains(e.id))
+        }
+        // `groupView.viewedImages` (TimelineWorkEntryRow.tsx:435-441 at 4928, #36321): an open entry's image pages
+        // through every image the group viewed.
+        groupImages = WorkLog.viewedImagePaths(grouped).compactMap { path in
+            guard case .workspaceFile(let file) = MarkdownImageSource.classify(path, workspaceRoot: root) else { return nil }
+            return .file(file, workspaceRoot: root)
         }
         syncCommandStreams()
         while cards.count < entries.count { cards.append(nil) }
@@ -432,6 +439,7 @@ final class WorkRowView: WorkRowBase {
                 details.append(d)
             }
             details[i].detail = detail
+            details[i].groupImages = groupImages
             details[i].onAction = { [weak self] action in self?.context.model?.perform(action) }
             let failedError = Self.failedError(e)
             details[i].isHidden = !open || detail.blocks.isEmpty || thought || failedError != nil
