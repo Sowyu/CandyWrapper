@@ -163,6 +163,8 @@ public struct TurnItem: Codable, Hashable, Sendable, Identifiable {
     public var exitCode: Int? { self["exitCode"]?.intValue }
     public var questionAnswer: JSONValue? { self["questionAnswer"] }
     public var subagentId: String? { string("subagentId") }
+    /// `checkpoint.filesTotal` (4928 orchestrationV2.ts:1833): set when `files` holds only the first 200.
+    public var filesTotal: CheckpointFileTotals? { try? self["filesTotal"]?.decode(as: CheckpointFileTotals.self) }
 }
 
 /// `OrchestrationV2ProjectedTurnItem` (orchestrationV2.ts:1610-1616): a row of

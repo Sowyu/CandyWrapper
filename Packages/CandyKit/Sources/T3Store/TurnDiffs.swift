@@ -12,12 +12,20 @@ public struct TurnDiffSummary: Sendable, Hashable {
     public var checkpointRef: String
     /// `ready`, `missing`, `error` or `stale`.
     public var status: String
+    /// A prefix of the changed files when `filesTotal` is set (4928 threadCheckpoints.ts:19-26).
     public var files: [CheckpointFile]
+    public var filesTotal: CheckpointFileTotals?
     public var assistantMessageId: MessageId?
     public var completedAt: T3Timestamp
 
+    /// The count and line totals of every changed file, not just the ones sent.
+    public var totals: CheckpointFileTotals { .of(files: files, filesTotal: filesTotal) }
+    /// Files the server left out of `files`; the full diff has them ("N more files", ChangedFilesTree.tsx:57).
+    public var hiddenFileCount: Int { max(0, totals.count - files.count) }
+
     public init(checkpointId: CheckpointId, scopeId: CheckpointScopeId, runId: RunId, checkpointTurnCount: Int, checkpointRef: String,
-                status: String, files: [CheckpointFile], assistantMessageId: MessageId?, completedAt: T3Timestamp) {
+                status: String, files: [CheckpointFile], filesTotal: CheckpointFileTotals? = nil,
+                assistantMessageId: MessageId?, completedAt: T3Timestamp) {
         self.checkpointId = checkpointId
         self.scopeId = scopeId
         self.runId = runId
@@ -25,6 +33,7 @@ public struct TurnDiffSummary: Sendable, Hashable {
         self.checkpointRef = checkpointRef
         self.status = status
         self.files = files
+        self.filesTotal = filesTotal
         self.assistantMessageId = assistantMessageId
         self.completedAt = completedAt
     }
@@ -46,7 +55,7 @@ public enum TurnDiffs {
             return TurnDiffSummary(
                 checkpointId: checkpoint.id, scopeId: checkpoint.scopeId, runId: runId, checkpointTurnCount: ordinal,
                 checkpointRef: checkpoint.ref, status: checkpoint.status, files: checkpoint.files,
-                assistantMessageId: assistantMessageId, completedAt: checkpoint.capturedAt)
+                filesTotal: checkpoint.filesTotal, assistantMessageId: assistantMessageId, completedAt: checkpoint.capturedAt)
         }
     }
 

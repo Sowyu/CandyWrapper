@@ -24,6 +24,10 @@ final class ChangedFilesCardView: DSView {
     private let total = DiffStatView()
     private let foldAll = ButtonView(nil, icon: .chevronsUpDown, variant: .ghostMuted, size: .iconXs)
     private let openDiff = ButtonView("Open diff", icon: .fileDiff, variant: .ghostMuted, size: .xs)
+    /// "N more files in the full diff" under the tree when the server sent only a prefix
+    /// (4928 ChangedFilesTree.tsx:148-162, `px-3 pb-2`).
+    private let moreFiles = ButtonView("", variant: .ghostMuted, size: .xs)
+    static let moreFilesHeight: CGFloat = 32
     private var rowViews: [Int: ChangedFileRowView] = [:]
     private var rowPool: [ChangedFileRowView] = []
     private var rowTops: [CGFloat] = []
@@ -42,12 +46,17 @@ final class ChangedFilesCardView: DSView {
         openDiff.iconSize = 12
         openDiff.toolTip = "Open the full diff"
         openDiff.setAccessibilityLabel("Open diff")
-        [title, total, foldAll, openDiff].forEach(addSubview)
+        moreFiles.isHidden = true
+        [title, total, foldAll, openDiff, moreFiles].forEach(addSubview)
         foldAll.action = { [weak self] in
             guard let self, let run = summary?.runId else { return }
             model?.toggleChangedFiles(run)
         }
         openDiff.action = { [weak self] in
+            guard let self, let summary else { return }
+            model?.onOpenTurnDiff?(summary.runId, summary.files.first?.path)
+        }
+        moreFiles.action = { [weak self] in
             guard let self, let summary else { return }
             model?.onOpenTurnDiff?(summary.runId, summary.files.first?.path)
         }
@@ -71,8 +80,8 @@ final class ChangedFilesCardView: DSView {
         return out
     }
 
-    static func height(_ files: [CheckpointFile], allExpanded: Bool, overrides: [String: Bool]) -> CGFloat {
-        rows(files, allExpanded: allExpanded, overrides: overrides).reduce(headerHeight + 16) {
+    static func height(_ files: [CheckpointFile], allExpanded: Bool, overrides: [String: Bool], hiddenFiles: Int = 0) -> CGFloat {
+        rows(files, allExpanded: allExpanded, overrides: overrides).reduce(headerHeight + 16 + (hiddenFiles > 0 ? moreFilesHeight : 0)) {
             if case .directory = $1.node { return $0 + folderRowHeight }
             return $0 + rowHeight
         }
@@ -81,8 +90,13 @@ final class ChangedFilesCardView: DSView {
     func configure(_ summary: TurnDiffSummary, allExpanded: Bool, overrides: [String: Bool]) {
         self.summary = summary
         let files = summary.files
-        title.text = "\(files.count) changed file\(files.count == 1 ? "" : "s")"
-        let stat = TurnDiffTree.totalStat(files)
+        // The header counts every changed file; a 4928 server sends only the first 200 (ChangedFilesTree.tsx:70-80).
+        let totals = summary.totals
+        title.text = "\(totals.count.formatted()) changed file\(totals.count == 1 ? "" : "s")"
+        let stat = TurnDiffStat(additions: totals.additions, deletions: totals.deletions)
+        let hidden = summary.hiddenFileCount
+        moreFiles.isHidden = hidden == 0
+        if hidden > 0 { moreFiles.title = "\(hidden.formatted()) more file\(hidden == 1 ? "" : "s") in the full diff" }
         total.isHidden = !stat.isNonZero
         total.setInline(additions: stat.additions, deletions: stat.deletions, size: 12)
         hasDirectories = files.contains { $0.path.contains("/") || $0.path.contains("\\") }
@@ -116,6 +130,11 @@ final class ChangedFilesCardView: DSView {
         x -= open.width
         openDiff.frame = NSRect(x: x, y: midY - 12, width: open.width, height: 24)
         foldAll.frame = NSRect(x: x - 4 - 24, y: midY - 12, width: 24, height: 24)
+        if !moreFiles.isHidden {
+            let size = moreFiles.intrinsicContentSize
+            let top = (rowTops.last ?? Self.headerHeight + 8) + (rows.last.map(Self.height(of:)) ?? 0) + 8
+            moreFiles.frame = NSRect(x: 12, y: top, width: size.width, height: 24)
+        }
         updateVisibleRows()
     }
 
