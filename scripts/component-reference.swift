@@ -69,10 +69,19 @@ func page(theme: String) throws -> URL {
 
 // MARK: - Browser
 
-let suppliedChrome = ProcessInfo.processInfo.environment["CANDY_REFERENCE_CHROME"]
-let toolDir = NSHomeDirectory() + "/.t3/tools/chrome-headless-shell/mac-arm64"
-let chrome = suppliedChrome ?? (try? FileManager.default.contentsOfDirectory(atPath: toolDir))?.sorted().last.map { "\(toolDir)/\($0)/chrome-headless-shell" }
-guard let chrome, FileManager.default.isExecutableFile(atPath: chrome) else { print("chrome-headless-shell not found under ~/.t3/tools"); exit(1) }
+// CANDY_REFERENCE_CHROME wins, then the pinned copy in ~/CandyWrapper-research/tools, then T3's own download.
+func findChrome() -> String? {
+    if let supplied = ProcessInfo.processInfo.environment["CANDY_REFERENCE_CHROME"] { return supplied }
+    for dir in ["/CandyWrapper-research/tools/chrome-headless-shell/mac-arm64", "/.t3/tools/chrome-headless-shell/mac-arm64"] {
+        let base = NSHomeDirectory() + dir
+        if let version = (try? FileManager.default.contentsOfDirectory(atPath: base))?.sorted().last {
+            return "\(base)/\(version)/chrome-headless-shell"
+        }
+    }
+    return nil
+}
+let chrome = findChrome()
+guard let chrome, FileManager.default.isExecutableFile(atPath: chrome) else { print("chrome-headless-shell not found: set CANDY_REFERENCE_CHROME or install it under ~/CandyWrapper-research/tools/chrome-headless-shell"); exit(1) }
 let port = 9334 + Int(getpid() % 500) // per process, so parallel captures never share a DevTools port
 let proc = Process()
 proc.executableURL = URL(fileURLWithPath: chrome)

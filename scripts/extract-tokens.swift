@@ -239,11 +239,22 @@ struct Resolved {
     var themeExpr: [String: Any] = [:]; var themeFixture: [String: Any] = [:]
 }
 
+// CANDY_REFERENCE_CHROME wins, then the pinned copy in ~/CandyWrapper-research/tools, then T3's own download.
+func findChrome() -> String? {
+    if let supplied = ProcessInfo.processInfo.environment["CANDY_REFERENCE_CHROME"] { return supplied }
+    for dir in ["/CandyWrapper-research/tools/chrome-headless-shell/mac-arm64", "/.t3/tools/chrome-headless-shell/mac-arm64"] {
+        let base = NSHomeDirectory() + dir
+        if let version = (try? FileManager.default.contentsOfDirectory(atPath: base))?.sorted().last {
+            return "\(base)/\(version)/chrome-headless-shell"
+        }
+    }
+    return nil
+}
+
 func resolveInBrowser(names: [String]) async throws -> Resolved {
-    let base = NSHomeDirectory() + "/.t3/tools/chrome-headless-shell/mac-arm64"
-    guard let version = (try? FileManager.default.contentsOfDirectory(atPath: base))?.sorted().last else { fail("chrome-headless-shell not found under \(base)") }
-    let chrome = "\(base)/\(version)/chrome-headless-shell"
+    guard let chrome = findChrome() else { fail("chrome-headless-shell not found: set CANDY_REFERENCE_CHROME or install it under ~/CandyWrapper-research/tools/chrome-headless-shell") }
     guard FileManager.default.isExecutableFile(atPath: chrome) else { fail("not executable: \(chrome)") }
+    let version = URL(fileURLWithPath: chrome).deletingLastPathComponent().lastPathComponent
 
     let profile = FileManager.default.temporaryDirectory.appendingPathComponent("extract-tokens-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
