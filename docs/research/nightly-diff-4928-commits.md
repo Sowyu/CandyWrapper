@@ -337,7 +337,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| ad9e87111f | #33092 | thread | feat(web): send messages while attachments upload | port |
+| ad9e87111f | #33092 | thread | feat(web): send messages while attachments upload | ported: Send stays enabled while uploads run and the send goes once they land; approval redirects still wait (ComposerAttachmentRules `sendBlockReason`). The message shows only once it sends, not as sending meanwhile |
 
 ## Port group design-icons (1)
 
@@ -871,10 +871,10 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 750e492ed6 | #37771 | composer | feat(web): copy snapshots into another composer | port |
 | e514c36f3c | #31174 | composer | fix(web): project picker jump shortcuts follow the filtered rows | port |
 | f39ecd3df8 | #29663 | composer | fix(web): a rule typed under a line stays a rule when sent | port |
-| 8753e4d36b | #31283 | composer | fix(web,mobile): Send now tells you why it could not send | port |
+| 8753e4d36b | #31283 | composer | fix(web,mobile): Send now tells you why it could not send | ported: a failed Send now on a queued message shows "Could not send queued message" with the reason (ComposerFeedback `queueSendNow`) |
 | 3e1b7c4e93 | #38414 | composer | fix(web): a line typed after a composer list is sent after the list | port |
 | 01cfac429d | #38475 | composer | fix(web): Paste as Text pastes text when the clipboard also holds an image | port |
-| ad77fd88e2 | #37547 | composer | fix(web): Enter during image compression sends once it finishes | port |
+| ad77fd88e2 | #37547 | composer | fix(web): Enter during image compression sends once it finishes | ported: Enter while an image is being prepared holds the send and sends the composer once it joins (ComposerController `sendAfterPreparing`) |
 | a5090a7576 | #38684 | composer | fix(web): Default effort no longer shows as the lowest bar | ported: ComposerEffortGlyph names Default |
 
 ## Small fixes, connections (46)

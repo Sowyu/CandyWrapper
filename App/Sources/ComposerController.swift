@@ -266,6 +266,8 @@ final class ComposerController {
     private var sendAfterRetry: [String: (text: String, mode: ComposerLogic.SendMode, background: Bool)] = [:]
     /// Images still being prepared per draft key: they hold their attachment slots.
     private var preparingImages: [String: Int] = [:]
+    /// A send made while images were being prepared, by draft key; it goes with the composer's text once they join.
+    private var sendAfterPreparing: [String: (mode: ComposerLogic.SendMode, background: Bool)] = [:]
     /// Uploaded attachment ids to their local file, so a sent image shows before the server copy is fetched.
     private var sentFiles: [String: URL] = [:]
     /// Server copies being fetched, so a cell and a chip asking for one image share one download.
@@ -1752,9 +1754,10 @@ final class ComposerController {
     private func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool = false, redirecting: Bool = false, compactConfirmed: Bool = false) {
         guard !threadRewindBusy, !declineInFlight else { return }
         let sentText = text
-        // A send now would leave a still-compressing pasted image behind (ChatComposer.tsx:4222-4237).
+        // A send now would leave a still-compressing image out of the turn, so it waits and goes once they finish
+        // (#37547, ChatComposer.tsx `useSubmitAfterPreparingImages` at 4928).
         if let key = draftKey, (preparingImages[key] ?? 0) > 0 {
-            toast(.info, "Still compressing a pasted image.", "Send again once its thumbnail appears.")
+            sendAfterPreparing[key] = (mode, background)
             return
         }
         if case .draft(let draft) = target, draft.envMode == nil, let task = settingsWorkspaceTask {
@@ -1850,8 +1853,14 @@ final class ComposerController {
             for a in failed { retryAttachment(a.id) }
             return
         }
-        // Every upload must be done (`attachmentUploadBlockReason`), within the turn's limits.
-        guard ComposerAttachmentRules.uploadBlockReason(attachments) == nil else { return }
+        // A plain send waits for running uploads and goes once they land (#33092, useComposerSend.ts:838-916 at
+        // 4928); an approval redirect needs them first. Interrupted files block.
+        guard ComposerAttachmentRules.sendBlockReason(attachments, redirectsApproval: !requests.approvals.isEmpty) == nil else { return }
+        if let key = draftKey, ComposerAttachmentRules.uploadBlockReason(attachments) != nil {
+            sendAfterRetry[key] = (sentText, mode, background)
+            refresh()
+            return
+        }
         if let limit = ComposerAttachmentRules.providerLimitError(attachments.map { ($0.kind == .image, $0.sizeBytes) }) {
             if let key = draftKey { threadErrors.set(key, limit) }
             refresh()
@@ -2527,7 +2536,8 @@ final class ComposerController {
     // MARK: Queue
 
     /// One queue command (`queued-run.cancel`, `queued-run.start`): the strip is busy until it returns.
-    private func queueCommand(_ type: String, _ fields: [String: JSONValue]) {
+    private func queueCommand(_ type: String, _ fields: [String: JSONValue],
+                              failure: @escaping (Error) -> ComposerFeedback.Failure = { _ in .queueCommand }) {
         guard let shell, case .thread(let threadId) = target, !queueBusy else { return }
         var command = fields
         command["type"] = .string(type)
@@ -2539,8 +2549,8 @@ final class ComposerController {
         Task { [weak self] in
             defer { self?.queueBusy = false; self?.refresh() }
             do { _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object(command)) } catch {
-                // T3 only logs these (QueuedRunsControl.tsx:168-245 through useAtomCommand).
-                self?.report(.queueCommand, key: nil)
+                // T3 only logs these (QueuedRunsControl.tsx:168-245 through useAtomCommand), except Send now.
+                self?.report(failure(error), key: nil)
             }
         }
     }
@@ -2549,7 +2559,7 @@ final class ComposerController {
     /// own turn with `queued-run.start`; a running one steers it in.
     private func sendQueued(_ runId: RunId) {
         if panel.queue.state.canSendNow {
-            queueCommand("queued-run.start", ["runId": .string(runId.rawValue)])
+            queueCommand("queued-run.start", ["runId": .string(runId.rawValue)]) { .queueSendNow(Self.message($0)) }
         } else {
             promoteToSteer(runId)
         }
@@ -2558,7 +2568,9 @@ final class ComposerController {
     /// Steer now: the server cancels the queued run and steers the same message into the active run.
     private func promoteToSteer(_ runId: RunId) {
         guard let active = panel.queue.state.activeRunId, panel.queue.state.canPromoteToSteer else { return }
-        queueCommand("queued-message.promote-to-steer", ["queuedRunId": .string(runId.rawValue), "targetRunId": .string(active.rawValue)])
+        queueCommand("queued-message.promote-to-steer", ["queuedRunId": .string(runId.rawValue), "targetRunId": .string(active.rawValue)]) {
+            .queueSendNow(Self.message($0))
+        }
     }
 
     private func beginEdit(_ item: ComposerLogic.QueueState.Item) {
@@ -2704,6 +2716,8 @@ extension ComposerController {
         guard let (key, session) = sessions.first(where: { $0.value.draftId == draftId }) else { return }
         sessions[key] = nil
         prompts[draftId] = nil
+        sendAfterPreparing[draftId] = nil
+        sendAfterRetry[draftId] = nil
         pickers.store.didSend(draftId)
         if target == .draft(session), let project = sidebar?.snapshot?.projects.first(where: { $0.id.rawValue == session.projectId }) {
             composer.text = ""
@@ -3793,7 +3807,7 @@ extension ComposerController {
         let composerFull = { (self.draftAttachments[key]?.count ?? 0) + (self.preparingImages[key] ?? 0) >= ComposerAttachmentRules.maxAttachments }
         guard destination.question != nil || !composerFull() else { throw CancellationError() }
         preparingImages[key, default: 0] += 1
-        defer { preparingImages[key, default: 1] -= 1 }
+        defer { preparingImages[key, default: 1] -= 1; resumeSendAfterPreparing(key) }
         // The pinned question gets the capture while it is still the open one (SnapShotCoordinator.tsx:175-197).
         var question: (key: String, requestId: String)? {
             guard let pinned = destination.question, pinned == snapShotQuestionKey, draftKey == key,
@@ -4018,6 +4032,7 @@ extension ComposerController {
             // Only failures are reported here, so a later error is never cleared by this one.
             if let failure { threadErrors.set(key, failure) }
             refresh()
+            resumeSendAfterPreparing(key)
         }
     }
 
@@ -4081,6 +4096,12 @@ extension ComposerController {
             }
             resumeSendAfterRetry(key)
         }
+    }
+
+    /// The held send goes once no image is being prepared, if its draft is still the open one.
+    private func resumeSendAfterPreparing(_ key: String) {
+        guard (preparingImages[key] ?? 0) == 0, let pending = sendAfterPreparing.removeValue(forKey: key), key == draftKey else { return }
+        send(composer.text, mode: pending.mode, background: pending.background)
     }
 
     /// Sends the retried message once no upload runs. A retry that failed again keeps the draft.
@@ -4357,7 +4378,8 @@ extension ComposerController {
                                                                             runPreparing: projection?.runs.last?.status == .preparing)
         }
         composer.sendDisabledReason = !environments.canOperate(targetEnvironmentId) ? "This connection cannot change threads." // ChatView.tsx:11619-11620
-            : block.reason ?? (questionRequestId == nil ? ComposerAttachmentRules.uploadBlockReason(currentAttachments) : nil)
+            : block.reason ?? (questionRequestId == nil
+                ? ComposerAttachmentRules.sendBlockReason(currentAttachments, redirectsApproval: !requests.approvals.isEmpty) : nil)
     }
 
     /// Enter while the environment is down (ChatView.tsx:8797-8811): a warning toast in one of three

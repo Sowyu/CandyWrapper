@@ -23,6 +23,8 @@ public enum ComposerFeedback {
         case resume(String?)
         /// `queued-run.cancel`, `reorder`, `promote-to-steer` (QueuedRunsControl.tsx:168-245).
         case queueCommand
+        /// Send now on a queued message: `queued-run.start` or promote-to-steer (QueuedRunsControl.tsx at 4928, #31283).
+        case queueSendNow(String?)
         /// A failed `queued-run.edit` (ChatView.tsx:9007-9009).
         case queuedEditSave
         /// A command whose failure shows the server's message, else T3's fallback text for it.
@@ -53,6 +55,8 @@ public enum ComposerFeedback {
         case .interrupt(let m): return banner(m, "Failed to interrupt the current turn.")
         case .resume(let m): return banner(m, "Could not resume thread.")
         case .queueCommand: return .none
+        case .queueSendNow(let m):
+            return .toast(.error, title: "Could not send queued message", description: m.flatMap(sanitize).flatMap { $0.isEmpty ? nil : $0 } ?? "An error occurred.")
         case .queuedEditSave: return .banner("Could not save the edited queued message.")
         case .command(let m, let fallback): return banner(m, fallback)
         case .noModel: return .banner("No model is available. Enable a provider in T3 Code's settings.")
