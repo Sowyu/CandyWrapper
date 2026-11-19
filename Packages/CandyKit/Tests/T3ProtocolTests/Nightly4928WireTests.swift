@@ -50,4 +50,34 @@ struct Nightly4928WireTests {
         let side = try lineage(#"{"parentThreadId":"p","relationshipToParent":"fork","rootThreadId":"p","sideChat":true}"#)
         #expect(side.sideChat == true && !side.isListed)
     }
+
+    /// 4928 one-shot schedules and thread modes (scheduledTask.ts:67-74, 231-239, 275).
+    @Test func onceAndUnknownSchedulesKeepTheirTask() throws {
+        func task(_ schedule: String, extra: String = "") -> String {
+            #"{"id":"st1","title":"T","prompt":"P","enabled":true,"schedule":\#(schedule),"projectId":"p1","threadId":null\#(extra)}"#
+        }
+        let list = Self.json(#"{"timeZone":"Europe/Berlin","tasks":["#
+            + task(#"{"type":"once","runAt":"2026-11-20T09:30:00+01:00"}"#, extra: #","threadMode":"fresh_session""#) + ","
+            + task(#"{"type":"lunar","phase":"full"}"#) + ","
+            + task(#"{"type":"interval","everyMs":60000}"#) + "]}")
+        let tasks = ScheduledTask.list(list)
+        #expect(tasks.count == 3)
+        #expect(ScheduledTask.timeZone(list) == "Europe/Berlin")
+        #expect(tasks[0].schedule == .once(runAt: "2026-11-20T09:30:00+01:00"))
+        #expect(tasks[0].threadMode == "fresh_session" && tasks[0].effectiveThreadMode == "fresh_session")
+        #expect(tasks[2].threadMode == nil && tasks[2].effectiveThreadMode == "new_thread")
+        #expect(ScheduledTaskLogic.scheduleLabel(tasks[0].schedule).hasPrefix("Once, "))
+        #expect(ScheduledTaskLogic.scheduleLabel(tasks[1].schedule) == "Custom schedule")
+
+        // Editing either sends the schedule back as it came.
+        let sent = [Self.json(#"{"type":"once","runAt":"2026-11-20T09:30:00+01:00"}"#), Self.json(#"{"type":"lunar","phase":"full"}"#)]
+        for (t, expected) in zip(tasks, sent) {
+            let draft = ScheduledTaskLogic.draft(t)
+            #expect(draft.scheduleMode == .kept)
+            let input = try ScheduledTaskLogic.upsertInput(draft, projectId: "p1", projectExists: true,
+                                                           selection: ("codex", "gpt"), storedSecret: false).get()
+            #expect(input["schedule"] == expected)
+            #expect(input["threadMode"] == nil)
+        }
+    }
 }
