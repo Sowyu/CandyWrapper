@@ -266,6 +266,9 @@ final class ComposerController {
     private var sendAfterRetry: [String: (text: String, mode: ComposerLogic.SendMode, background: Bool)] = [:]
     /// Images still being prepared per draft key: they hold their attachment slots.
     private var preparingImages: [String: Int] = [:]
+    /// `/clear` armed per thread key (freshSessionArms.ts at 4928): the next message starts a fresh provider session.
+    /// The value tells a send's arm from one made while it was in flight.
+    private var freshSessionArms: [String: UUID] = [:]
     /// A send made while images were being prepared, by draft key; it goes with the composer's text once they join.
     private var sendAfterPreparing: [String: (mode: ComposerLogic.SendMode, background: Bool)] = [:]
     /// Uploaded attachment ids to their local file, so a sent image shows before the server copy is fetched.
@@ -1841,6 +1844,14 @@ final class ComposerController {
             if openUsageLimits() { composer.text = ""; remember("") }
             return
         }
+        // `/clear` alone arms a fresh session for the next message and empties the composer (useComposerSend.ts at 4928).
+        if freshSessionCommandAvailable, attachments.isEmpty, ComposerContext.referencedIds(trimmed).isEmpty,
+           ComposerMenus.isClearCommand(trimmed), let key = draftKey {
+            armFreshSession(key)
+            composer.text = ""
+            remember("")
+            return
+        }
         // The panel closes when the next message goes.
         if !trimmed.isEmpty || !attachments.isEmpty { panel.usageLimitsBanner = nil }
         guard !trimmed.isEmpty || !attachments.isEmpty else { return }
@@ -1978,7 +1989,9 @@ final class ComposerController {
         // A stale Claude session compacts first and the message queues behind the `/compact` run, since
         // steering into it is rejected (`compactBeforeSend`, ChatView.tsx:9267-9276).
         var compactFirst = false
-        if case .thread = target {
+        // Read once: an arm made while this send is in flight belongs to the next message.
+        let freshArm = freshSessionAvailable ? picksKey.flatMap { freshSessionArms[$0] } : nil
+        if case .thread = target, freshArm == nil {
             compactFirst = ComposerCompaction.compactsBeforeSend(resumeTokens: composer.compactBeforeSendTokens,
                                                                  keepFullHistory: composer.keepFullHistory, text: trimmed)
         }
@@ -1996,7 +2009,8 @@ final class ComposerController {
             }
             return
         }
-        let mode: ComposerLogic.SendMode = compactFirst ? .queue : mode
+        // A fresh session neither compacts first nor steers (`resolveSendDispatchPlan`, ChatView.logic.ts at 4928).
+        let mode: ComposerLogic.SendMode = compactFirst || (freshArm != nil && mode == .steer) ? .queue : mode
         // Optimistic echo, then clear the composer before the command returns (ChatView.tsx:9763-9793).
         let intent: InputIntent? = mode == .queue ? .queuedTurn : mode == .steer ? .steer : nil
         // Every attachment rides as a record bound to its upload (`buildMessageContext`).
@@ -2085,6 +2099,7 @@ final class ComposerController {
             ]
             if let deliveryIntent { command["deliveryIntent"] = .string(deliveryIntent) }
             if let context { command["context"] = context }
+            if freshArm != nil { command["freshContext"] = .bool(true) }
             if let plan = implementationPlan {
                 command["sourcePlanRef"] = .object(["threadId": .string(threadId.localId.rawValue), "planId": .string(plan.id.rawValue)])
             }
@@ -2113,6 +2128,7 @@ final class ComposerController {
                     _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object(command))
                     // The turn is under way: the chip's off state for this thread is spent (ChatView.tsx:9984-9986).
                     if let picksKey { self?.fullHistoryThreadKeys.remove(picksKey) }
+                    if let picksKey, let freshArm { self?.disarmFreshSession(picksKey, arm: freshArm) }
                     self?.sentSnapShots(attachments)
                     if let picksKey { self?.pickers.store.didSend(picksKey) }
                     self?.refresh()
@@ -2441,6 +2457,47 @@ final class ComposerController {
     }
 
     /// The server's message for a failed command, else nil for the caller's fallback.
+    // MARK: Fresh session (`/clear`, #30325)
+
+    /// `freshSessionAvailable` (ChatView.tsx:2578-2579 at 4928): a server that honors `freshContext`, on a thread with messages.
+    private var freshSessionAvailable: Bool {
+        guard case .thread = target, serverConfig.capabilities.contains("freshContext") else { return false }
+        return !(projection?.messages.isEmpty ?? true)
+    }
+
+    /// While a question or approval owns the composer, its text answers that, not the agent (ChatView.tsx:2581-2582).
+    private var freshSessionCommandAvailable: Bool {
+        freshSessionAvailable && requests.approvals.isEmpty && requests.userInputs.isEmpty
+    }
+
+    private func armFreshSession(_ key: String) {
+        freshSessionArms[key] = UUID()
+        updateFreshSessionBanner()
+    }
+
+    /// With `arm`, clears only that arm, so a send never consumes one made while it was in flight.
+    private func disarmFreshSession(_ key: String, arm: UUID? = nil) {
+        guard let current = freshSessionArms[key], arm == nil || arm == current else { return }
+        freshSessionArms[key] = nil
+        updateFreshSessionBanner()
+    }
+
+    /// `freshSessionBannerItem` (ComposerFreshSession.tsx at 4928); an approval's feedback goes to that approval, so
+    /// the banner waits while one shows (ChatView.tsx:2691-2695).
+    private func updateFreshSessionBanner() {
+        let key = draftKey.flatMap { freshSessionArms[$0] == nil ? nil : $0 }
+        let shown = freshSessionAvailable && requests.approvals.isEmpty ? key : nil
+        if let shown, panel.freshSessionKey != shown {
+            let banner = panel.lazyFreshSessionBanner.view
+            banner.apply(.init(variant: .neutral, icon: .eraser, // `info` draws as neutral (ComposerBanner.tsx:29-35)
+                               title: "Your next message starts a fresh session",
+                               description: "The agent won't see earlier messages in this thread.",
+                               dismissLabel: "Keep the current session"))
+            banner.onAction = { [weak self] index in if index == nil { self?.disarmFreshSession(shown) } }
+        }
+        panel.freshSessionKey = shown
+    }
+
     /// #31739: a model or effort pick on a started thread saves on the thread at once, so the next turn from any
     /// client runs on it (useApplyThreadModelPick.ts at 4928). Draft reconciliation drops the pick once it lands.
     private func applyThreadModelPick() {
@@ -3141,7 +3198,7 @@ extension ComposerController {
             let items = ComposerMenus.slashItems(trigger: trigger, provider: providerKey, commands: provider?.slashCommands(cwd: cwd) ?? [],
                                                  skills: provider?.skills(cwd: cwd) ?? [],
                                                  showSkills: ClientSettingsStore.shared.current.bool("showSkillsInSlashMenu"),
-                                                 compactAvailable: compact)
+                                                 compactAvailable: compact, freshSessionAvailable: freshSessionCommandAvailable)
             return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .slashCommand, loading: false))
         case .skill:
             let items = ComposerMenus.skillItems(query: trigger.query, provider: providerKey, skills: provider?.skills(cwd: cwd) ?? [])
@@ -3383,6 +3440,9 @@ extension ComposerController {
         case .providerCommand("usage-limits"):
             // Picking it is the action; the draft keeps nothing of it (ChatComposer.tsx:4026-4033).
             DispatchQueue.main.async { [weak self] in self?.openUsageLimits() }
+        case .builtIn("clear"):
+            // The token goes and the next message starts a fresh session (ChatComposer.tsx `item.command === "clear"`).
+            if let key = draftKey, freshSessionCommandAvailable { armFreshSession(key) }
         case .builtIn(let mode):
             if let key = draftKey { pickers.store.setInteractionMode(key, mode == "plan" ? .plan : .default) }
             updatePickers()
@@ -5207,6 +5267,7 @@ extension ComposerController {
     }
 
     private func updateThreadBanners() {
+        updateFreshSessionBanner()
         let thread = shellThread
         panel.showsGoal = thread?.goal != nil
         if let goal = thread?.goal {

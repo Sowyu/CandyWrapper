@@ -233,7 +233,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 99e361e415 | #30325 | composer | feat: /clear starts a fresh session in the same thread | port; needs wire: fresh session |
+| 99e361e415 | #30325 | composer | feat: /clear starts a fresh session in the same thread | ported: `/clear` (menu or typed alone) arms a fresh session on servers with `freshContext`, shows "Your next message starts a fresh session" with Keep the current session, and the next send carries `freshContext: true`, never steering or compacting first. The fresh-session timeline row is left for the thread agent |
 
 ## Port group pr-actions (2)
 
@@ -855,9 +855,9 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 189290cbf0 | #24082 | composer | fix(web): [NIT] SF Pro label no longer renders in a serif in the font picker | port |
 | f52fba48d9 | #32683 | composer | fix(web): stacked composer banners no longer show dark seam bands | port |
 | 8e06750a08 | #32709 | composer | fix(web): draft images keep their order after a reload | port |
-| ca31ab64a4 | #32732 | composer | fix(web): an image-only send that fails behind a new draft now says so | port |
+| ca31ab64a4 | #32732 | composer | fix(web): an image-only send that fails behind a new draft now says so | skip: CW has no "Message not sent, your new draft was kept" toast for a send that fails behind a newer draft; a failed send restores the draft and shows the thread error banner |
 | 2dc5ebd52f | #33090 | composer | fix(web): switching providers no longer drops the thread's stored effort | port |
-| f2c944947d | #32910 | composer | fix(web): recover expired composer uploads before sending | port |
+| f2c944947d | #32910 | composer | fix(web): recover expired composer uploads before sending | left: needs a per-send attachment check (`assets.createUrl` per ready upload) and a forced re-upload before dispatch; CW checks expiry only when restoring a stash |
 | 7d9c365e17 | #37116 | composer | fix(web): keep distinct images with matching attachment metadata | port |
 | 0b489dada1 | #37208 | composer | fix(web): switching a draft’s machine keeps its selected models | port |
 | 256dce7f1f | #37243 | composer | fix(web,mobile): @ picker finds older settled threads on linked machines | port |

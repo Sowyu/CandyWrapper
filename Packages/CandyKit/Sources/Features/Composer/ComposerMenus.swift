@@ -290,12 +290,16 @@ public enum ComposerMenus {
     /// What the `/` menu offers: built-ins, the provider's commands (minus the ones a visible skill
     /// shadows, and `/compact` unless the prompt is only the command), then its skills; provider
     /// commands only at the start of the prompt (`slashCommandItemsForPromptPosition`).
+    /// `freshSessionAvailable` adds T3's `/clear` at the prompt's start and hides the provider's, which would clear a
+    /// session T3 still treats as live (useComposerMenuItems.ts:280-290 at 4928, #30325).
     public static func slashItems(trigger: ComposerTrigger, provider: String, commands: [ServerProviderSlashCommand],
-                                  skills: [ServerProviderSkill], showSkills: Bool, compactAvailable: Bool) -> [ComposerMenuItem] {
+                                  skills: [ServerProviderSkill], showSkills: Bool, compactAvailable: Bool,
+                                  freshSessionAvailable: Bool = false) -> [ComposerMenuItem] {
         let menuSkills = showSkills ? ProviderSkills.dedupe(skills.filter(ProviderSkills.isUserInvocable)) : []
         let skillNames = Set(menuSkills.map { $0.name.trimmingCharacters(in: .whitespaces).lowercased() })
         let commandItems = commands.filter { !skillNames.contains($0.name.trimmingCharacters(in: .whitespaces).lowercased()) }
             .filter { $0.name != "compact" || compactAvailable }
+            .filter { $0.name != "clear" || !freshSessionAvailable }
             .map { ComposerMenuItem(id: "provider-slash-command:\(provider):\($0.name)", kind: .providerCommand($0.name), label: "/\($0.name)",
                                     description: $0.description ?? $0.input?.hint ?? "Run provider command") }
         let skillItems = menuSkills.map { s in
@@ -303,8 +307,17 @@ public enum ComposerMenus {
                              label: "/skill:\(s.name)", description: s.shortDescription ?? s.description ?? (s.scope.map { "\($0) skill" } ?? ""))
         }
         let atStart = trigger.rangeStart == 0
-        let items = builtInCommands() + (atStart ? commandItems : []) + skillItems
+        let clear = freshSessionAvailable && atStart ? [clearCommand] : []
+        let items = builtInCommands() + clear + (atStart ? commandItems : []) + skillItems
         return searchSlash(items, query: trigger.query.trimmingCharacters(in: .whitespaces).lowercased(), skills: menuSkills)
+    }
+
+    public static let clearCommand = ComposerMenuItem(id: "slash:clear", kind: .builtIn("clear"), label: "/clear",
+                                                      description: "Start a fresh session; earlier messages stay visible")
+
+    /// `isClearComposerCommand` (packages/shared/src/composerTrigger.ts:141-143).
+    public static func isClearCommand(_ text: String) -> Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).range(of: #"^/clear\s*$"#, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     private static let slashPrefix = try! NSRegularExpression(pattern: "^/+")

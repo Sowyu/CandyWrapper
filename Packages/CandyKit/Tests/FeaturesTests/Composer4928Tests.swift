@@ -23,4 +23,19 @@ struct Composer4928Tests {
         a.needsReattach = true
         #expect(ComposerAttachmentRules.sendBlockReason([a], redirectsApproval: false) == "Attach the interrupted file again or remove it")
     }
+
+    /// #30325: `/clear` replaces the provider's command at the prompt's start when the server honors `freshContext`.
+    @Test func clearCommandArmsAFreshSession() {
+        let commands = [ServerProviderSlashCommand(name: "clear", description: "Provider clear")]
+        func labels(_ trigger: ComposerTrigger, fresh: Bool) -> [String] {
+            ComposerMenus.slashItems(trigger: trigger, provider: "claudeAgent", commands: commands, skills: [], showSkills: false,
+                                     compactAvailable: false, freshSessionAvailable: fresh).map(\.id)
+        }
+        let start = ComposerTrigger(kind: .slashCommand, query: "cl", rangeStart: 0, rangeEnd: 3)
+        #expect(labels(start, fresh: true) == ["slash:clear"])
+        #expect(labels(start, fresh: false) == ["provider-slash-command:claudeAgent:clear"])
+        #expect(labels(ComposerTrigger(kind: .slashCommand, query: "cl", rangeStart: 4, rangeEnd: 7), fresh: true).isEmpty)
+        #expect(ComposerMenus.isClearCommand("  /CLEAR  "))
+        #expect(!ComposerMenus.isClearCommand("/clear now"))
+    }
 }

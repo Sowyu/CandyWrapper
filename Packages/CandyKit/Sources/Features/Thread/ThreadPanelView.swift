@@ -415,6 +415,9 @@ public final class ThreadPanelView: DSView {
     /// The notice banners are built the first time they show; wire them through the lazy holders.
     public let lazyNoticeBanner = LazyView { ComposerNoticeBannerView() }
     public let lazyGoalBanner = LazyView { ComposerNoticeBannerView() }
+    /// `/clear`'s armed notice (ComposerFreshSession.tsx at 4928), keyed by thread; nil hides it.
+    public let lazyFreshSessionBanner = LazyView { ComposerNoticeBannerView() }
+    public var freshSessionKey: String? { didSet { if freshSessionKey != oldValue { needsLayout = true } } }
     /// "Subagent needs input" (ChatView.tsx:7462-7497), keyed by the first child like T3's `child-input:<id>`.
     public let lazyChildInputBanner = LazyView { ComposerNoticeBannerView() }
     public var childInputBanner: ComposerNoticeBannerView { lazyChildInputBanner.view }
@@ -515,6 +518,7 @@ public final class ThreadPanelView: DSView {
         // cancels a dismiss still playing instead of running it against the new thread's banner.
         let thread = model.projection?.thread.id.rawValue ?? ""
         if showsNoticeBanner && composerVisible { items.append(notice("project-clone:" + thread, noticeBanner)) }
+        if docked, let key = freshSessionKey { items.append(notice("fresh-session:" + key, lazyFreshSessionBanner.view)) }
         if docked && showsEnvironmentBanner {
             items.append(ComposerBannerStackItem(id: "environment-unavailable", view: environmentBanner,
                                                  height: { _ in EnvironmentBannerView.height }))
