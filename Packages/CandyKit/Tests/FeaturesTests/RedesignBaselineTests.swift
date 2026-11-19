@@ -106,6 +106,8 @@ struct RedesignBaselineTests {
             let sidebar = SidebarContentView()
             sidebar.windowedMac = false; sidebar.stage = .nightly
             sidebar.now = { SidebarPreview.referenceNow }
+            // The footer shows the Mac account's full name; the baselines were recorded as "mrm".
+            sidebar.accountRow.set(name: "mrm", image: nil, initials: nil)
             sidebar.state = SidebarListState(activeThreadId: SidebarPreview.referenceActiveThread)
             sidebar.setSnapshot(SidebarPreview.referenceSnapshot(), animated: false)
             try capture("sidebar-many-threads", sidebar, NSSize(width: 280, height: 900))
