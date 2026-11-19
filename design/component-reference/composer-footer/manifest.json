@@ -1,15 +1,15 @@
 {
   "cluster.access-icon" : {
     "height" : 28,
-    "width" : 92.8828125
+    "width" : 100.8828125
   },
   "cluster.bars" : {
     "height" : 28,
-    "width" : 135.0390625
+    "width" : 141.0390625
   },
   "cluster.both-icon" : {
     "height" : 28,
-    "width" : 50
+    "width" : 58
   },
   "cluster.overflow-both" : {
     "height" : 28,

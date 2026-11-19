@@ -1,10 +1,10 @@
 {
   "section.one-row" : {
-    "height" : 106,
+    "height" : 166,
     "width" : 640
   },
   "section.three-rows" : {
-    "height" : 226,
+    "height" : 396,
     "width" : 640
   }
 }

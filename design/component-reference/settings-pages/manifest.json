@@ -1,10 +1,10 @@
 {
   "general.notifications" : {
-    "height" : 191,
+    "height" : 282,
     "width" : 796
   },
   "keybindings.navigation" : {
-    "height" : 258,
+    "height" : 436,
     "width" : 796
   },
   "nav.search" : {

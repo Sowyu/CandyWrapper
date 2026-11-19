@@ -26,9 +26,19 @@ let scale = plan["scale"] as? Double ?? 2
 let themes = plan["themes"] as? [String] ?? ["dark", "light"]
 let states = plan["states"] as? [[String: Any]] ?? []
 
-let chrome = (try? FileManager.default.contentsOfDirectory(atPath: NSHomeDirectory() + "/.t3/tools/chrome-headless-shell/mac-arm64"))?
-    .sorted().last.map { NSHomeDirectory() + "/.t3/tools/chrome-headless-shell/mac-arm64/\($0)/chrome-headless-shell" }
-guard let chrome, FileManager.default.isExecutableFile(atPath: chrome) else { print("chrome-headless-shell not found under ~/.t3/tools"); exit(1) }
+// CANDY_REFERENCE_CHROME wins, then the pinned copy in ~/CandyWrapper-research/tools, then T3's own download.
+func findChrome() -> String? {
+    if let supplied = ProcessInfo.processInfo.environment["CANDY_REFERENCE_CHROME"] { return supplied }
+    for dir in ["/CandyWrapper-research/tools/chrome-headless-shell/mac-arm64", "/.t3/tools/chrome-headless-shell/mac-arm64"] {
+        let base = NSHomeDirectory() + dir
+        if let version = (try? FileManager.default.contentsOfDirectory(atPath: base))?.sorted().last {
+            return "\(base)/\(version)/chrome-headless-shell"
+        }
+    }
+    return nil
+}
+let chrome = findChrome()
+guard let chrome, FileManager.default.isExecutableFile(atPath: chrome) else { print("chrome-headless-shell not found: set CANDY_REFERENCE_CHROME or install it under ~/CandyWrapper-research/tools/chrome-headless-shell"); exit(1) }
 
 // Persistent profile keeps the paired session cookie between runs.
 let profile = ProcessInfo.processInfo.environment["CAPTURE_PROFILE"]
