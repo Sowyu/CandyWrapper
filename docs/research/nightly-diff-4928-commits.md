@@ -93,7 +93,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 5fe18d79ac | #28307 | composer | fix(web): keep the model picker in place when its label changes | ported: the docked picker aligns to the trigger's end edge |
 | 575579d68a | #28409 | composer | fix(web): model picker stays put with long names and agent options | ported: 224pt model name cap, fixed height, other options open beside the column |
 | 77a728e3a1 | #28005 | connections | fix(web): show mixed automatic defaults across environments | skip: the settings default-model row, not the composer control; take it with the settings batch |
-| 72f05f6d8e | #29017 | composer | fix(web): model picker uses the full window height in short windows | skip: PopupPositioner has no side "shift" mode, so a short window flips the picker below; add the mode to PopupHost |
+| 72f05f6d8e | #29017 | composer | fix(web): model picker uses the full window height in short windows | ported: PopupPlacement `collision: .shift` keeps the docked picker on top and offers the whole window height (ComposerPickers.swift) |
 | 42cf5a168c | #26415 | composer | fix(web): compact model picker row indicators | ported: one-line model rows with the provider logo (ModelRowView `layoutModern`) |
 | 2d0efd3584 | #27034 | composer | feat(claude): Ultracode works with any effort, like Claude Desktop | ported: the footer's Ultracode toggle and the trigger's workflow icon; the server sends the descriptor |
 | 402d0623d5 | #31739 | thread | fix(composer): persist model picks before the next message | skip: needs ComposerController to send `thread.metadata.update` on a pick, which waits for an app build to verify |

@@ -291,7 +291,7 @@ public final class ComposerPickers {
         }
         // Docked, the popup opens above the composer and slides over it when that space is short
         // (ProviderModelPicker.tsx:462-467); the trigger grows away from its end edge (ComposerControlsBar.tsx:191-192).
-        let placement = docks ? PopupPlacement(side: .top, align: .end, sideOffset: 4, fallbackAxisSide: .none)
+        let placement = docks ? PopupPlacement(side: .top, align: .end, sideOffset: 4, fallbackAxisSide: .none, collision: .shift)
             : PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .end)
         let popup = host.open(PickerPopupView(body), trigger: modelButton, placement: placement, motion: .popover)
         track(popup)
