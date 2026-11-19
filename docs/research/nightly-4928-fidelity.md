@@ -71,7 +71,7 @@ The numbers are the share of pixels that differ, then the case's ceiling.
 
 ## References that changed and still pass
 
-68 PNGs changed: composer-footer 6, composer-menu 2, connections 14, markdown 3, provider-setup 6, scroll-area 6, settings 4, settings-pages 4, settings-pages2 8, settings-pages3 2, settings-sweep 2, sidebar-leftovers 2, thread-completion 4, thread-leftovers 6, threadview 8, timeline-gaps 2 and usage 4. The scroll-area ones are the new dark scrollbar thumb (`--app-scrollbar-thumb` went from `#ffffff14` to `#ffffff5c`, #30031). The rest are mostly the markup mismatch above.
+83 PNGs changed (the commit message of `3f9c5675` says 68, which is wrong): composer-footer 6, composer-menu 2, connections 14, markdown 3, provider-setup 6, scroll-area 6, settings 4, settings-pages 4, settings-pages2 8, settings-pages3 2, settings-sweep 2, sidebar-leftovers 2, thread-completion 4, thread-leftovers 6, threadview 8, timeline-gaps 2 and usage 4. The scroll-area ones are the new dark scrollbar thumb (`--app-scrollbar-thumb` went from `#ffffff14` to `#ffffff5c`, #30031). The rest are mostly the markup mismatch above.
 
 ## Port-branch shapes without a reference
 
@@ -95,4 +95,4 @@ The current full-screen set the tests read is `design/reference-3824`. Its READM
 4. Pairing. `run.sh` mints a pairing URL with `env -i <runtime> auth pairing create --base-dir <copy>/t3home`, which works with the 4928 runtime in `~/CandyWrapper-research/runtimes`.
 5. Review. Each PNG has to be looked at before it replaces the 3824 one, so plan for the user's review time.
 
-If the user wants captures from the desktop app on a real screen instead, that needs Xcode-free screen access: the screen lock, the official Nightly app and screencapture. That waits until the user frees the screen.
+Captures from the desktop app on a real screen instead need the screen lock, the official Nightly app and screencapture, so they wait until the user frees the screen.
