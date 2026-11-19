@@ -86,6 +86,17 @@ private func ids(_ p: ThreadProjection?) -> [String] { p?.visibleTurnItems.map(\
         #expect(ids(reducer.projection).isEmpty)
     }
 
+    /// 4928 #23420: a steer that went back to the queue stays out of the thread until its run starts, whichever of the
+    /// item and the run updates arrives first.
+    @Test func aRequeuedSteerShowsOnlyOnceItsRunStarts() {
+        var reducer = ThreadReducer(threadId: "thread-1")
+        reducer.apply([snapshot(projection([message("a", ordinal: 1, runId: "r1")], runs: [run("r1", "completed"), run("r2", "queued", ordinal: 2)]), sequence: 1)])
+        reducer.apply([.event(sequence: 2, event: event(.turnItemUpdated, .turnItem(message("q", ordinal: 2, runId: "r2", intent: "queued_turn"))))])
+        #expect(ids(reducer.projection) == ["a"])
+        reducer.apply([.event(sequence: 3, event: event(.runUpdated, .run(run("r2", "running", ordinal: 2))))])
+        #expect(ids(reducer.projection) == ["a", "q"])
+    }
+
     @Test func dropsOldItemsOutsideAPartialWindow() {
         var reducer = ThreadReducer(threadId: "thread-1")
         reducer.apply([snapshot(projection([message("c", ordinal: 30)]), sequence: 1, cursor: "cur", more: true, watermark: 30)])

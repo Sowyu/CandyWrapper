@@ -78,7 +78,9 @@ public enum ThreadReduction {
         return { item in
             let status = item.runId.flatMap { statuses[$0] }
             if status == .rolledBack { return false }
-            if status == .cancelled, item.type == .userMessage, item.inputIntent == .queuedTurn { return false }
+            // A steer can return to the queue before delivery: its item stays out until its run starts
+            // (orchestrationV2Timeline.ts at 4928, #23420). Cancelled queued input never shows.
+            if status == .cancelled || status == .queued, item.type == .userMessage, item.inputIntent == .queuedTurn { return false }
             if item.type == .runInterruptResult, let runId = item.runId, let nodeId = item.nodeId,
                 supersededRoots[runId]?.contains(nodeId) == true, !interruptRuns.contains(runId)
             {
@@ -134,6 +136,18 @@ public enum ThreadReduction {
         return renumbered(updated)
     }
 
+    /// `restoreQueuedUserItems` (orchestrationV2Projection.ts at 4928, #23420): a queued run's user item stays hidden
+    /// until the run leaves the queue, and its update can arrive before or after the run's, so the run's update
+    /// brings it back. Items never received stay absent.
+    static func restoreQueuedUserItems(_ projection: ThreadProjection, _ runId: RunId) -> [ProjectedTurnItem] {
+        var current = projection
+        for item in projection.turnItems where item.runId == runId && item.type == .userMessage && item.inputIntent == .queuedTurn {
+            guard isVisible(item, in: current) else { continue }
+            current.visibleTurnItems = upsertVisibleTurnItem(current, item, partial: false, latestLocalTurnOrdinal: nil)
+        }
+        return current.visibleTurnItems
+    }
+
     static func upsert<T: Identifiable>(_ list: inout [T], _ value: T) {
         if let index = list.firstIndex(where: { $0.id == value.id }) { list[index] = value } else { list.append(value) }
     }
@@ -158,8 +172,10 @@ public enum ThreadReduction {
             if event.type == .threadVisited || event.type == .threadMarkedUnread { next.updatedAt = projection.updatedAt }
             next.thread = thread
         case .run(let run):
+            let wasQueued = projection.runs.contains { $0.id == run.id && $0.status == .queued }
             upsert(&next.runs, run)
             next.visibleTurnItems = activeVisibleTurnItems(next)
+            if wasQueued, run.status != .queued { next.visibleTurnItems = restoreQueuedUserItems(next, run.id) }
         case .attempt(let attempt):
             upsert(&next.attempts, attempt)
             next.visibleTurnItems = activeVisibleTurnItems(next)
