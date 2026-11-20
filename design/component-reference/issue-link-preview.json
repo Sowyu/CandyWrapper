@@ -1,0 +1,21 @@
+{
+ "component": "issue-link-preview",
+ "source": "apps/web/src/components/issue/IssueLinkPreview.tsx",
+ "states": [
+  "rest"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "open",
+   "html": "<div class=\"origin-(--transform-origin) rounded-lg border bg-popover text-popover-foreground shadow-lg outline-none w-80 max-w-[calc(100vw-2rem)]\" data-slot=\"preview-card-popup\"><div class=\"p-3\"><div class=\"min-w-0\"><div class=\"flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground\"><span class=\"min-w-0 truncate\">acme/demo-repo</span><span class=\"shrink-0\">#42</span><span aria-hidden>·</span><span class=\"inline-flex shrink-0 items-center gap-1\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-dot size-3 text-emerald-600 dark:text-emerald-300/90\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle> <circle cx=\"12\" cy=\"12\" r=\"1\"></circle></svg>Open</span></div><p class=\"mt-1 text-sm font-medium leading-snug text-foreground text-pretty\">Sidebar badge opens the wrong panel</p><div class=\"mt-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground\"><span aria-hidden class=\"flex size-4 shrink-0 items-center justify-center rounded-full bg-muted text-3xs font-medium text-muted-foreground size-4\">O</span><span class=\"min-w-0 truncate\">Octo Reader (@octo-reader)</span><span aria-hidden>·</span><span class=\"shrink-0\">opened 9d ago</span></div></div></div></div>",
+   "native": {
+    "case": "open"
+   },
+   "wrapperStyle": "display:inline-block"
+  }
+ ]
+}

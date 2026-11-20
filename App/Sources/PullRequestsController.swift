@@ -832,6 +832,7 @@ final class ThreadPullRequestsController {
     private var linkDialog: LinkPullRequestDialog?
     // ponytail: preview details are cached for the session with no eviction; bound it if long sessions grow
     fileprivate var previewCache: [String: PullRequestDetail] = [:]
+    fileprivate var issuePreviewCache: [String: IssueDetail] = [:]
     fileprivate weak var previewAnchor: NSView?
     fileprivate var previewPopup: OpenPopup?
 
@@ -1440,11 +1441,32 @@ extension ThreadPullRequestsController: MarkdownLinkHandler {
         }
     }
 
-    func previewsLink(_ url: URL, from markdown: MarkdownView) -> Bool { previewTarget(url) != nil }
+    func previewsLink(_ url: URL, from markdown: MarkdownView) -> Bool { previewTarget(url) != nil || issuePreviewTarget(url) != nil }
+
+    /// An issue link a project here reads (ChatMarkdown.tsx, `resolveIssueLinkTarget`, #38294), on servers with issues.
+    private func issuePreviewTarget(_ url: URL) -> (env: String, ref: IssueRef)? {
+        guard let thread, let env = thread.id.environmentId, capabilities.has(env, "issues") else { return nil }
+        let projects = (sidebar?.snapshot?.projects ?? []).filter { $0.id.environmentId == env }.map { (id: $0.id.localId.rawValue, identity: $0.repositoryIdentity) }
+        return IssueLinkLogic.target(url: url.absoluteString, projects: projects).map { (env, $0) }
+    }
+
+    /// `IssueLinkPreview`: reads `issues.detail` once the card opens; a failed read shows nothing.
+    private func showIssuePreview(_ url: URL, anchor: NSView) {
+        guard let target = issuePreviewTarget(url) else { return }
+        let key = "\(target.env) \(url.absoluteString)"
+        previewAnchor = anchor
+        if let d = issuePreviewCache[key] { previewPopup = IssueLinkPreviewView(detail: d, nowMs: TimestampFormat.nowMs()).present(over: anchor); return }
+        Task { [weak self, weak anchor] in
+            guard let self, let d = try? await self.environments.request(target.env, "issues.detail", .object(target.ref.json)).decode(as: IssueDetail.self) else { return }
+            self.issuePreviewCache[key] = d
+            guard let anchor, self.previewAnchor === anchor, anchor.window != nil else { return }
+            self.previewPopup = IssueLinkPreviewView(detail: d, nowMs: TimestampFormat.nowMs()).present(over: anchor)
+        }
+    }
 
     /// The card reads `pullRequests.detail` once it opens; a failed read shows nothing (the URL tooltip is T3's fallback).
     func showLinkPreview(_ url: URL, anchor: NSView, from markdown: MarkdownView) {
-        guard let target = previewTarget(url) else { return }
+        guard let target = previewTarget(url) else { showIssuePreview(url, anchor: anchor); return }
         let key = "\(target.env) \(url.absoluteString)"
         previewAnchor = anchor
         if let d = previewCache[key] { previewPopup = PullRequestLinkPreviewView(detail: d, nowMs: TimestampFormat.nowMs()).present(over: anchor); return }

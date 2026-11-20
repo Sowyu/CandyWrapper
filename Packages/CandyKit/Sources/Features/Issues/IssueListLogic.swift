@@ -302,3 +302,44 @@ public enum IssueListLogic {
 
     nonisolated(unsafe) private static let plain = ISO8601DateFormatter()
 }
+
+/// `resolveIssueLinkTarget` (4928 client-runtime issueLinks.ts:118-170, #38294) for git-host links: a GitHub
+/// `owner/repo/issues/N` or GitLab `group/repo/-/issues/N` link resolves through a project bound to that tracker and
+/// host, its own scope first, else any such project lending its credentials. A lookalike host matches no project.
+public enum IssueLinkLogic {
+    public typealias Project = (id: String, identity: RepositoryIdentity?)
+
+    private static let githubPath = try! NSRegularExpression(pattern: #"^/([^/]+/[^/]+)/issues/(\d+)(?:/|$)"#)
+    private static let gitlabPath = try! NSRegularExpression(pattern: #"^/([^/]+(?:/[^/]+)+)/-/(?:issues|work_items)/(\d+)(?:/|$)"#)
+
+    // ponytail: GitHub and GitLab links only; Linear and other standalone trackers need the environment's tracker bindings
+    public static func target(url: String, projects: [Project]) -> IssueRef? {
+        guard let u = URL(string: url), u.scheme == "https" || u.scheme == "http", let hostname = u.host?.lowercased() else { return nil }
+        let authority = u.port.map { "\(hostname):\($0)" } ?? hostname
+        let path = u.path.isEmpty ? "/" : u.path
+        func parse(_ re: NSRegularExpression) -> (scope: String, key: String)? {
+            guard let m = re.firstMatch(in: path, range: NSRange(path.startIndex..., in: path)), m.numberOfRanges >= 3,
+                  let s = Range(m.range(at: 1), in: path), let k = Range(m.range(at: 2), in: path),
+                  let n = Int(path[k]), n > 0 else { return nil }
+            return (String(path[s]).lowercased(), String(n))
+        }
+        let bindings: [(project: Project, tracker: String, host: String, scope: String)] = projects.compactMap { p in
+            guard let identity = p.identity, let kind = identity.provider, kind == "github" || kind == "gitlab",
+                  let host = identity.pullRequestHost, let scope = identity.pullRequestRepository else { return nil }
+            return (p, kind, host, scope.lowercased())
+        }
+        for kind in ["github", "gitlab"] {
+            // GitHub's path reads only on github.com, or on a host a GitHub project vouches for.
+            let onHost = bindings.filter { $0.tracker == kind && ($0.host == hostname || $0.host == authority) }
+            if kind == "github", hostname != "github.com", onHost.isEmpty { continue }
+            guard let link = parse(kind == "github" ? githubPath : gitlabPath) else { continue }
+            let onAuthority = onHost.filter { $0.host == authority }
+            let bound = onAuthority.isEmpty ? onHost : onAuthority
+            let own = bound.first { $0.scope == link.scope }
+            guard let lender = own ?? bound.first else { return nil }
+            return IssueRef(projectId: lender.project.id, tracker: lender.tracker, host: lender.host,
+                            scope: own == nil ? link.scope : lender.scope, key: link.key)
+        }
+        return nil
+    }
+}

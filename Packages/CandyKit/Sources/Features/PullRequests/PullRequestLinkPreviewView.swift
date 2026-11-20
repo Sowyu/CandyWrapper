@@ -9,11 +9,11 @@ import T3Store
 public final class PullRequestLinkPreviewView: DSView, PopupContent {
     static let width: CGFloat = 320
     private let decoration = BoxDecorationLayer()
-    private let repository = LabelView("", font: DSFont.ui(10))
-    private let number = LabelView("", font: DSFont.ui(10))
-    private let dot1 = LabelView("·", font: DSFont.ui(10))
+    private let repository = LabelView("", font: DSFont.ui(11))
+    private let number = LabelView("", font: DSFont.ui(11))
+    private let dot1 = LabelView("·", font: DSFont.ui(11))
     private let stateIcon: IconView
-    private let stateLabel = LabelView("", font: DSFont.ui(10))
+    private let stateLabel = LabelView("", font: DSFont.ui(11))
     private let title = TextBlockView()
     private let avatar = PullRequestAvatarView()
     private let author = LabelView("", font: DSFont.ui(12))
@@ -61,9 +61,9 @@ public final class PullRequestLinkPreviewView: DSView, PopupContent {
         let x0: CGFloat = 13, w = inner
         var y: CGFloat = 13
         // `flex gap-1.5`: the repository truncates, the rest keeps its width.
-        let nw = ceil(number.textWidth), dw = ceil(dot1.textWidth), sw = ceil(stateLabel.textWidth) + 1
+        let nw = number.textWidth, dw = dot1.textWidth, sw = stateLabel.textWidth + 1
         let tail = 6 + nw + 6 + dw + 6 + 12 + 4 + sw
-        let rw = min(ceil(repository.textWidth), max(0, w - tail))
+        let rw = min(repository.textWidth, max(0, w - tail))
         var x = x0
         repository.frame = NSRect(x: x, y: y, width: rw, height: 16); x += rw + 6
         number.frame = NSRect(x: x, y: y, width: nw, height: 16); x += nw + 6
@@ -75,8 +75,8 @@ public final class PullRequestLinkPreviewView: DSView, PopupContent {
         title.frame = NSRect(x: x0, y: y, width: w, height: th)
         y += th + 8
         avatar.frame = NSRect(x: x0, y: y, width: 16, height: 16)
-        let ow = ceil(opened.textWidth) + 1, d2 = ceil(dot2.textWidth) + 1
-        let aw = min(ceil(author.textWidth) + 1, max(0, w - 16 - 6 - 6 - d2 - 6 - ow))
+        let ow = opened.textWidth + 1, d2 = dot2.textWidth
+        let aw = min(author.textWidth, max(0, w - 16 - 6 - 6 - d2 - 6 - ow))
         x = x0 + 16 + 6
         author.frame = NSRect(x: x, y: y, width: aw, height: 16); x += aw + 6
         dot2.frame = NSRect(x: x, y: y, width: d2, height: 16); x += d2 + 6
