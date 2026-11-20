@@ -503,22 +503,23 @@ public enum TimelineEntries {
             let unchangedRow = previous.map { samePayload(old.rows[$0], row) } ?? false
             let attempt = unchangedRow && !lookupChanged ? old.attempts[previous!] : lookup.attempt(row.item)
             next.attempts.append(attempt)
-            let made: [TimelineEntry]
+            let start = next.entries.count
             if let p = previous, unchangedRow, attempt == old.attempts[p] {
                 let index = old.entryIndex[p]
-                made = index < 0 ? [] : Array(old.entries[index ..< index + old.entryCount[p]])
+                // Indexing, not slicing into a new array: this runs for every row on every streaming update.
+                if index >= 0 { for k in index ..< index + old.entryCount[p] { next.entries.append(old.entries[k]) } }
             } else {
                 if i >= front { reusedAll = false }
-                let entry = Self.entry(row, attempt: attempt, planById: planById, folded: folded)
-                made = [entry, Self.appEntry(row, attempt: attempt)].compactMap { $0 }
+                if let entry = Self.entry(row, attempt: attempt, planById: planById, folded: folded) { next.entries.append(entry) }
+                if row.item.type == .dynamicTool, let app = Self.appEntry(row, attempt: attempt) { next.entries.append(app) }
                 if sameShape, let p = previous {
-                    let index = old.entryIndex[p]
-                    if old.entryCount[p] != made.count { sameShape = false } else if index >= 0 { changed.append(contentsOf: index ..< index + made.count) }
+                    let index = old.entryIndex[p], count = next.entries.count - start
+                    if old.entryCount[p] != count { sameShape = false } else if index >= 0 { changed.append(contentsOf: index ..< index + count) }
                 }
             }
-            next.entryIndex.append(made.isEmpty ? -1 : next.entries.count)
-            next.entryCount.append(made.count)
-            next.entries.append(contentsOf: made)
+            let count = next.entries.count - start
+            next.entryIndex.append(count == 0 ? -1 : start)
+            next.entryCount.append(count)
         }
         next.prepended = reusedAll ? frontEntries : nil
         memo = next
