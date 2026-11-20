@@ -11,7 +11,10 @@ public struct CommandOutputBuffer: Sendable {
     private var saved: (Int, Int)?
     public private(set) var truncated = false
     public private(set) var running = true
-    public var text: String { settled + lines.map { String($0) }.joined(separator: "\n") }
+    public var text: String { settled + lines.map(Self.string).joined(separator: "\n") }
+    /// The second cell of a wide character, which prints nothing.
+    private static let wideTail: Character = "\u{0}"
+    private static func string(_ line: [Character]) -> String { String(line.lazy.filter { $0 != wideTail }) }
     private static let limit = 64 * 1024
     public init() {}
 
@@ -50,7 +53,7 @@ public struct CommandOutputBuffer: Sendable {
                     row += 1; column = 0
                     if row == lines.count { lines.append([]) }
                     while lines.count > 64 {
-                        settled += String(lines.removeFirst()) + "\n"
+                        settled += Self.string(lines.removeFirst()) + "\n"
                         row -= 1
                         if let old = saved { saved = (max(0, old.0 - 1), old.1) }
                     }
@@ -79,11 +82,52 @@ public struct CommandOutputBuffer: Sendable {
         }
     }
 
+    /// `characterWidth` (4928 shared/src/terminalOutput.ts, #34332): marks and default-ignorable characters take no
+    /// column, East Asian wide and fullwidth characters and emoji take two, so cursor moves land where the
+    /// program meant and an overwrite never splits a character.
+    // ponytail: the common wide blocks and emoji presentation, not the full EastAsianWidth table; use it if a script misaligns
+    static func width(_ character: Character) -> Int {
+        let scalars = character.unicodeScalars
+        guard let first = scalars.first else { return 0 }
+        if scalars.allSatisfy({ s in
+            switch s.properties.generalCategory {
+            case .nonspacingMark, .enclosingMark, .spacingMark, .format: return true
+            default: return s.properties.isDefaultIgnorableCodePoint
+            }
+        }) { return 0 }
+        if first.properties.isEmojiPresentation || scalars.contains(where: { $0.value == 0xFE0F }) { return 2 }
+        switch first.value {
+        case 0x1100...0x115F, 0x231A...0x231B, 0x2329...0x232A, 0x2E80...0x303E, 0x3041...0x33FF, 0x3400...0x4DBF,
+             0x4E00...0x9FFF, 0xA000...0xA4CF, 0xA960...0xA97F, 0xAC00...0xD7A3, 0xF900...0xFAFF, 0xFE10...0xFE19,
+             0xFE30...0xFE6F, 0xFF00...0xFF60, 0xFFE0...0xFFE6, 0x1B000...0x1B2FF, 0x1F200...0x1F2FF, 0x20000...0x3FFFD:
+            return 2
+        default: return 1
+        }
+    }
+
     private mutating func write(_ characters: [Character]) {
+        var cells: [Character] = []
+        cells.reserveCapacity(characters.count)
+        for character in characters {
+            switch Self.width(character) {
+            case 0:
+                // A lone mark joins the character before it.
+                if let last = cells.popLast() { cells.append(Character(String(last) + String(character))) }
+                else if column > 0, column <= lines[row].count, lines[row][column - 1] != Self.wideTail {
+                    lines[row][column - 1] = Character(String(lines[row][column - 1]) + String(character))
+                }
+            case 2: cells += [character, Self.wideTail]
+            default: cells.append(character)
+            }
+        }
+        guard !cells.isEmpty else { return }
         if column > lines[row].count { lines[row] += Array(repeating: " ", count: column - lines[row].count) }
-        let end = min(lines[row].count, column + characters.count)
-        lines[row].replaceSubrange(column..<end, with: characters)
-        column += characters.count
+        let end = min(lines[row].count, column + cells.count)
+        // An overwrite that cuts a wide character in half blanks the half left over.
+        if column > 0, column < lines[row].count, lines[row][column] == Self.wideTail { lines[row][column - 1] = " " }
+        if end < lines[row].count, lines[row][end] == Self.wideTail { lines[row][end] = " " }
+        lines[row].replaceSubrange(column..<end, with: cells)
+        column += cells.count
         if lines[row].count > Self.limit {
             let removed = lines[row].count - Self.limit
             lines[row].removeFirst(removed); column -= removed; truncated = true

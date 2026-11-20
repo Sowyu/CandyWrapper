@@ -36,6 +36,9 @@ import Testing
             ("mcp__t3-code__html_render", .array([.object(["type": .string("text"), "text": .string(text)])])),
             ("t3-code.html_render", .object(["structuredContent": result, "content": .array([])])),
             ("html_render", result),
+            // 4928: OpenCode 2 Code Mode's `execute` (#35022) and Grok's `OkayOutput` wrapper (#35434).
+            ("execute", .string(text)),
+            ("mcp__t3-code__html_render", .object(["type": .string("MCP"), "output": .object(["OkayOutput": .string(text)])])),
         ]
         for (name, output) in envelopes {
             #expect(ThreadWebContent.htmlRender(tool(name, output))?.attachmentId == "att-1", "\(name)")

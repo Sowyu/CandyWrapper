@@ -139,7 +139,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | a4b6afe184 | #27440 | thread | fix(client-runtime): threads with many images no longer flood a remote with URL requests | port |
 | e0f69e9ea4 | #29741 | thread | fix(web,mobile): chat images reload when the agent rewrites the file | port |
 | a11ad7424d |  | thread | fix(web): show app bundle icons and open apps from markdown links | port; app bundle icons in markdown links |
-| 330b9f4840 | #34333 | thread | fix(web): arrow keys and buttons step through the images an agent viewed | port; image stepper |
+| 330b9f4840 | #34333 | thread | fix(web): arrow keys and buttons step through the images an agent viewed | ported in 2eb8794e |
 
 ## Port group scheduled-tasks (4)
 
@@ -263,10 +263,10 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| a7f6c68fe9 | #21542 | terminal | fix(shared): underline styles and colours no longer scramble command output colours | port; ANSI colours in command output |
-| f315da3339 | #24042 | terminal | fix(shared): PASS and FAIL badges stay readable in dark command output | port |
-| 2bee33eb19 | #34332 | terminal | fix(shared): preserve Unicode during command output overwrites | port |
-| eb90b79217 | #38946 | thread | fix(client-runtime): command rows unwrap Windows pwsh -Command and cmd /c launchers | port |
+| a7f6c68fe9 | #21542 | terminal | fix(shared): underline styles and colours no longer scramble command output colours | skip: CandyWrapper draws command output as plain text and drops SGR colors (T3Store/CommandOutputBuffer.swift), so there is no color parser to fix |
+| f315da3339 | #24042 | terminal | fix(shared): PASS and FAIL badges stay readable in dark command output | skip: same as #21542, command output has no colors in CandyWrapper |
+| 2bee33eb19 | #34332 | terminal | fix(shared): preserve Unicode during command output overwrites | ported in 5ed8c36a |
+| eb90b79217 | #38946 | thread | fix(client-runtime): command rows unwrap Windows pwsh -Command and cmd /c launchers | ported in 5ed8c36a |
 
 ## Port group auto-settle (1)
 
@@ -363,17 +363,17 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | 5bb5d53312 | #22349 | thread | fix(web): full-screen HTML pages fit their content and zoom by reflowing | port |
-| 860fa7c7b6 | #34344 | thread | fix(shared): keep HTML bootstrap outside quoted attributes | port |
-| 25123c28d4 | #35022 | thread | fix(shared): html_render pages from OpenCode 2 Code Mode show and are cleaned up | port |
-| ddd02848e6 | #35434 | thread | fix(shared): html_render pages show for Grok threads | port |
-| 4ab3b98411 | #32129 | thread | fix(shared): MCP apps that fall back to a blob: frame no longer render blank | port |
+| 860fa7c7b6 | #34344 | thread | fix(shared): keep HTML bootstrap outside quoted attributes | free with the runtime: the server injects the bootstrap (apps/server/src/htmlRender/HtmlRender.ts:490) |
+| 25123c28d4 | #35022 | thread | fix(shared): html_render pages from OpenCode 2 Code Mode show and are cleaned up | ported in d1f3d2fc |
+| ddd02848e6 | #35434 | thread | fix(shared): html_render pages show for Grok threads | ported in d1f3d2fc |
+| 4ab3b98411 | #32129 | thread | fix(shared): MCP apps that fall back to a blob: frame no longer render blank | free with the runtime: the server writes the MCP app CSP (apps/server/src/mcpApps/McpAppSnapshot.ts:82) |
 
 ## Port group markdown-callouts (2)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 2c74ea6915 | #22239 | thread | fix(web): render Claude insight blocks as a callout | port |
-| 1a8ecc64b7 | #34181 | thread | feat(web): a quote in a sent message shows as an inset card | skip: the quote card is a block element inside Markdown layout (Features/Markdown), so it moves to the 1.5 Chat Markdown group |
+| 2c74ea6915 | #22239 | thread | fix(web): render Claude insight blocks as a callout | ported in eceea265 |
+| 1a8ecc64b7 | #34181 | thread | feat(web): a quote in a sent message shows as an inset card | ported in 4bb35432 |
 
 ## Port group server-updates (2)
 
@@ -1424,7 +1424,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 8d012a688e | #27522 | thread | fix(web): a new thread's first reply shows without reloading | port |
 | a0d6cc8ba9 | #21594 | thread | fix(client-runtime): goal token counts no longer read 1000k | port |
 | f47700849e | #22141 | thread | fix(web): show the result of the notified delegated task | port |
-| 5ad7da060d | #22367 | thread | fix(web): keep markdown separators visible in dark mode | port |
+| 5ad7da060d | #22367 | thread | fix(web): keep markdown separators visible in dark mode | ported in eceea265 |
 | 9ceb949a01 | #22875 | thread | fix(web): copied Markdown tables keep formula pipes | port |
 | c40b32a729 | #23448 | thread | fix(web): keep ACP agent logos in multi-model selections | port |
 | 3bd744fc11 | #23679 | thread | fix(web): show clipboard errors in anchored copy notifications | port |
@@ -1432,7 +1432,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 9ad6c7ef8b | #26145 | thread | fix(web,mobile): long links in secret requests wrap and can be copied | port |
 | 22463861cd | #26151 | thread | fix(web): clicking a secret request card focuses its field again | port |
 | 1b9437f6ab | #27078 | thread | fix(web): long pending-question headers truncate instead of overflowing | port |
-| 609dd0f7dd | #27144 | thread | fix(web): plain text code blocks match the text around them | port |
+| 609dd0f7dd | #27144 | thread | fix(web): plain text code blocks match the text around them | ported in eceea265 |
 | 12d1e4c23c | #22339 | thread | fix(web): keep truncated Markdown task previews read-only | port |
 | 469afd8b53 | #23351 | thread | fix(chat): commands that exit 0 no longer show as failed | port |
 | da94a13e59 | #23954 | thread | fix(web): tab to equations only when they overflow | port |
@@ -1466,7 +1466,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | b7ab02e0f6 | #29755 | thread | fix(web): copied code blocks keep their blank lines in lists, quotes and longer fences | port |
 | e53672d8fc | #28684 | thread | fix(web): long server lists in thread details now page 4 at a time | port |
 | ac10bb4aba | #29038 | thread | fix(web): mouse wheel over the thread minimap glides instead of jumping | port |
-| 65efae1adb | #28637 | thread | fix(shared): relative file links with routing punctuation open as files | port |
+| 65efae1adb | #28637 | thread | fix(shared): relative file links with routing punctuation open as files | ported in 93df13b9 |
 | 31564dece8 | #29759 | thread | fix(shared): find in thread matches a word typed with a curly apostrophe | port |
 | 480eb8d219 | #29814 | thread | fix(client): mark unread sticks on a thread reopened within ten minutes | port |
 | a185dd9248 | #30527 | thread | fix(web): give dialog titles a readable line height | port |
@@ -1478,19 +1478,19 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 66a2f35711 | #30367 | thread | fix(shared): long assistant quote chips no longer end in a broken character | port |
 | 6f51361a27 | #30391 | thread | fix(client-runtime): subagent previews no longer end in a broken character | port |
 | 53f1d09470 | #30528 | thread | fix(web): refresh resource timeline while diagnostics is open | port |
-| 47a89f2ee7 | #30762 | thread | fix(shared): shortened agent paths like /tmp/... no longer become broken file chips | port |
+| 47a89f2ee7 | #30762 | thread | fix(shared): shortened agent paths like /tmp/... no longer become broken file chips | ported in 93df13b9 |
 | fe199e35ca | #30390 | thread | fix(client-runtime): untitled subagent titles no longer end in a broken character | port |
 | ef81fd15ca | #31888 | thread | fix(web): keep task updates static in the timeline | port |
 | 6dcaf6cbe7 | #29285 | thread | fix(web): remote subagents no longer split from the lineage list | port |
 | 8bf1b64cae | #32141 | thread | fix(web): the citation comment box opens at the quote instead of sliding in from the corner | port |
 | 07508ffd2f | #31794 | thread | fix(web): popovers over the desktop header respond to the pointer | port |
 | 08a3909406 | #31825 | thread | fix: show latest reply age in active thread rows | ported 9a0153d1 |
-| 48bb784e3d | #32403 | thread | fix(shared): inline code like `allocator.cc:217` becomes a file chip | port |
-| 57ded10b74 | #25694 | thread | fix(web): restore bold weight in rendered Markdown | port |
+| 48bb784e3d | #32403 | thread | fix(shared): inline code like `allocator.cc:217` becomes a file chip | ported in 93df13b9 |
+| 57ded10b74 | #25694 | thread | fix(web): restore bold weight in rendered Markdown | ported in eceea265 |
 | 28eff11d81 | #27582 | thread | fix(web): lineage phase headers truncate instead of overflowing the details card | port |
 | 6417151c09 | #32926 | thread | fix(web): fill combobox search fields | port |
 | 9c0baf481e | #24084 | thread | fix(web): keep the wide table scrollbar visible when it overflows | port |
-| 78756043c2 | #27993 | thread | fix(web): file chip tooltips show the whole path | port |
+| 78756043c2 | #27993 | thread | fix(web): file chip tooltips show the whole path | already in CandyWrapper: Features/Markdown/MarkdownView.swift FileChipHitView shows the whole targetPath |
 | 69dd6956d5 | #33192 | thread | fix(web): return focus to composer after timeline prompts | port |
 | 2b1db482d0 | #28667 | thread | fix(web): open citation comments with the caret at the end | port |
 | 739aba73b7 | #29025 | thread | fix(web,mobile): per-thread auto-settle menu says what it does | port |
@@ -1509,12 +1509,12 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 08af12da49 | #33994 | thread | fix(shared): show zero seconds in minute durations | port |
 | 3051b32502 | #33943 | thread | fix: chat file links open the file agents cite | port |
 | 283fa1f1cd | #34011 | thread | fix(clients): scroll truncated command output notice with logs | port |
-| d256170b34 | #34006 | thread | fix: file links with line ranges open at their first line | port |
+| d256170b34 | #34006 | thread | fix: file links with line ranges open at their first line | ported in 93df13b9: a range opens at its first line; the label check ignores the end line |
 | d6d1763d41 | #33820 | thread | fix(web): sent messages keep the numbers written on list items | port |
 | 43915a4064 | #34095 | thread | fix(web): question panel header text sits centered in its row | port |
 | ccc7b2d96f | #33352 | thread | fix(web): MCP App cards no longer flash white in dark mode while the app loads | port |
 | 32fdad5f49 | #32151 | thread | fix(web): timeline minimap preview no longer steals hover or jumps around | port |
-| 5b11efe5df | #30473 | thread | fix(clients): images the agent opens stay visible in the chat | port |
+| 5b11efe5df | #30473 | thread | fix(clients): images the agent opens stay visible in the chat | ported in 2eb8794e |
 | 11611419f3 | #33396 | thread | fix(web): trackpad flicks over the right panel tabs no longer navigate back | port |
 | 1c17285e58 | #28084 | thread | fix(shared): cite assistant messages with IDs over 512 characters | port |
 | d835e430db | #22874 | thread | fix(web): question answers submit while normal sends are blocked | port |
@@ -1550,7 +1550,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | dbfbe3993f | #34806 | thread | fix(web): questions without options no longer mention a selected option | port |
 | 101e5f99a2 | #34855 | thread | fix(web): review comments in question answers reach the agent with their text | port |
 | 204b140073 | #34846 | thread | fix(web): context row under the composer hides chat text scrolling behind it | port |
-| 415e1cabe6 | #34883 | thread | fix(web): html render images open with the rest of their page in the viewer | port |
+| 415e1cabe6 | #34883 | thread | fix(web): html render images open with the rest of their page in the viewer | ported in d1f3d2fc |
 | d8b0a05a74 | #34784 | thread | fix(clients): Claude question option previews are shown under their option | port |
 | efd683ccc3 | #35102 | thread | fix(web): a failed send leaves the timeline when a new draft was typed | port |
 | 3d6ece2b29 | #35036 | thread | fix(web): file links the agent cited from another project open that project's file | port |
@@ -1591,12 +1591,12 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | f62fa296f0 | #36228 | thread | fix(web): Add to another machine can find ignored files past the first 200 | port |
 | c83e78fe07 | #36285 | thread | fix(web): Shift+Return after closed inline code or bold starts a plain line | port |
 | 66ec37079a | #36298 | thread | fix(shared): hosted thread URLs inside other links stay as written | port |
-| 250d372e51 | #36321 | thread | fix(web): images in expanded tool rows page through the group's viewed images | port |
+| 250d372e51 | #36321 | thread | fix(web): images in expanded tool rows page through the group's viewed images | ported in 2eb8794e |
 | cfc71e1a99 | #36357 | thread | fix(web): preview annotations in question answers reach the agent with their text | port |
 | 48cdefed5a | #32108 | thread | fix(web): size markdown media whose width and height carry a px unit | port |
 | c8db8be305 | #36334 | thread | fix(web): a run waiting on foreground subagents says so instead of Thinking | port |
 | cf382b0c44 | #24637 | thread | fix(web,mobile): explain missing file access for host videos | port |
-| 4c7685729f | #36497 | thread | fix(web): clicking a label in an inline HTML render no longer jumps the chat | port |
+| 4c7685729f | #36497 | thread | fix(web): clicking a label in an inline HTML render no longer jumps the chat | free with the runtime: the label fix is in the bootstrap the server injects |
 | a4723422e7 | #26692 | thread | fix(web): screen readers no longer say "Message" twice entering the composer | port |
 | 31d9b3bcd6 | #34569 | thread | fix(web): edited HTML previews outside the workspace no longer turn white | port |
 | 2c61677d59 | #36250 | thread | fix(web): overlays close on a click over the desktop header | port |
@@ -1642,7 +1642,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | f7a1bacd27 | #30753 | thread | fix(web): subagent status dots no longer jump between corners | port |
 | 843893e58c | #30084 | thread | fix(web): the minimap keeps the current turn lit while reading a long reply | port |
 | 37b71a4ffe | #37079 | thread | fix(web): remove redundant subagent action from background row | port |
-| 79e47e9096 | #32402 | thread | fix(shared): inline code paths like `docker/Dockerfile` become file chips | port |
+| 79e47e9096 | #32402 | thread | fix(shared): inline code paths like `docker/Dockerfile` become file chips | ported in 93df13b9 |
 | b35c9702f9 | #36997 | thread | fix(acp): optional text questions can be left blank | port |
 | 8897a6ebe1 | #37183 | thread | fix(web): keep thread mentions when editing sent messages | port |
 | 598296e850 | #37284 | thread | fix(web): copied code blocks drop the fence's trailing newline | port |
@@ -1651,7 +1651,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 56f41466f5 | #37557 | thread | fix(web): sending a new thread's first message no longer scrolls the sidebar | port |
 | dfeaf7b137 | #37579 | thread | fix(web): Tab from a citation comment reaches Save, not Cancel | port |
 | 1ae5590a32 | #37204 | thread | fix(web): find in thread no longer announces streamed count refreshes | port |
-| 6f5861fa27 | #37750 | thread | fix(shared): inline code paths with spaces become file chips | port |
+| 6f5861fa27 | #37750 | thread | fix(shared): inline code paths with spaces become file chips | ported in 93df13b9 |
 | 8ca0c88cfd | #31724 | thread | fix(web): screen readers see one Notifications landmark, not two | port |
 | 959f422d45 | #31676 | thread | fix(web): screen reader announcements no longer linger after they stop applying | port |
 | 6e650b3849 | #31710 | thread | fix(web): returning to the window keeps a text selection | port |
@@ -1677,7 +1677,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 9758cf9e13 | #38476 | thread | fix(web): typing into a simulator no longer answers a waiting question | port |
 | 373ec12be6 | #38558 | thread | fix(web): very wide or tall lone images in user messages show the whole image | ported in 11fea921 |
 | eb46038e3a | #38763 | thread | fix(web): Background work details show a subagent as Waiting, like the line above | port |
-| 4c679a21e7 | #38832 | thread | fix(web): page scripts in inline HTML renders no longer scroll the chat | port |
+| 4c679a21e7 | #38832 | thread | fix(web): page scripts in inline HTML renders no longer scroll the chat | ported in d1f3d2fc |
 | 245a1ead92 | #38917 | thread | fix(client): resume no longer sends a blank message to older servers | port |
 | 284d3de3cc | #38963 | thread | fix(web): a thread that finished while you were away opens at its end | port |
 | 94b54cfa9f | #39012 | thread | fix(client-runtime): file tooltips keep the size after workspace search | port |
@@ -1868,7 +1868,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 2dc07510e2 | #30038 | issues | perf(web): long reasoning previews format in linear time (600 ms → 1.3 ms median) | n/a: web perf |
 | cddfc8db21 | #30714 | composer | fix(composer): bound long path search requests on web and mobile | n/a: web request bounding |
 | 077fd62222 | #33503 | thread | fix(client): finishing a long background thread no longer freezes the app | n/a: web main-thread yield |
-| 9e12eca125 | #33643 | thread | fix(shared): relative Windows file links open the file | n/a: Windows paths |
+| 9e12eca125 | #33643 | thread | fix(shared): relative Windows file links open the file | ported in 93df13b9 |
 | 65ffcbf647 | #33438 | thread | perf(shared): speed up escaped Markdown in long PR descriptions | n/a: perf internals |
 | 56064fc4f6 | #33325 | sidebar | fix(ssh): Intel Mac hosts no longer try to download a missing t3 archive | n/a: SSH host install, server side |
 | fa2f4ff2a2 | #33066 | browser | fix(web): panel resize handles follow touch drags | n/a: touch drags |

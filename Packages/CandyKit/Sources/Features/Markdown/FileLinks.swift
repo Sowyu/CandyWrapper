@@ -37,14 +37,18 @@ public struct FileLinkMeta: Sendable, Equatable {
 public enum FileLinks {
     // MARK: Inline code
 
-    /// `inlineCodeFilePathCandidate` (markdownLinks.ts): path-shaped inline code. Needs an explicit
-    /// path prefix, or a separator plus an extension, or a `:line` suffix; hosts and versions are out.
+    /// `inlineCodeFilePathCandidate` (4928 shared/src/markdownLinks.ts:201-243): path-shaped inline code. Needs an
+    /// explicit path prefix, or a separator plus an extension or a known extensionless name (`docker/Dockerfile`,
+    /// #32402), or a `:line` suffix; hosts, versions and paths shortened with `...` (#30762) are out. Spaces only
+    /// in an absolute path of plain names (#37750).
     public static func inlineCodeCandidate(_ codeText: String) -> String? {
         let trimmed = codeText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty || trimmed.contains(where: { $0.isWhitespace || $0 == "`" }) { return nil }
+        if trimmed.isEmpty || trimmed.contains("`") { return nil }
+        if trimmed.contains(where: \.isWhitespace), !isSpacedAbsoluteFilePath(trimmed) { return nil }
         let candidate = isWindowsAbsolutePath(trimmed) ? trimmed : trimmed.replacingOccurrences(of: "\\", with: "/")
         let hasPosition = matches(positionSuffix, candidate)
         if !hasPosition, !candidate.contains("/"), !candidate.contains("\\") { return nil }
+        if matches(elidedSegment, replace(positionSuffix, in: candidate)) { return nil }
         let explicit = matches(relativePrefix, candidate) || candidate.hasPrefix("/") || isWindowsAbsolutePath(candidate)
         if !explicit {
             let withoutPosition = replace(positionSuffix, in: candidate)
@@ -56,9 +60,31 @@ public enum FileLinks {
             while base.hasSuffix("/") || base.hasSuffix("\\") { base.removeLast() }
             base = base.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? ""
             if matches(versionSuffix, base) { return nil }
-            if !hasPosition, !matches(fileExtension, base) { return nil }
+            if !matches(fileExtension, base) {
+                if !hasPosition { return extensionlessNames.contains(base) ? candidate : nil }
+                // A `:line` suffix alone does not make `I/W217:220` a file reference.
+                if withoutPosition.contains("/"), !matches(anyFileExtension, base), !extensionlessNames.contains(base) { return nil }
+            }
         }
         return candidate
+    }
+
+    /// `isSpacedAbsoluteFilePath` (markdownLinks.ts:43-57): `/Users/me/Mobile Documents/a - b.md` is a file,
+    /// `/usr/bin/python3 -m venv .venv` and `/usr/local/bin/node server.js` are commands.
+    static func isSpacedAbsoluteFilePath(_ text: String) -> Bool {
+        let ns = text as NSString
+        guard let root = spacedRoot.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)) else { return false }
+        let rootText = ns.substring(with: root.range)
+        let body = replace(positionSuffix, in: ns.substring(from: root.range.length))
+        guard matches(spacedBody, body), let space = body.firstIndex(of: " ") else { return false }
+        let isSeparator = { (c: Character) in c == "/" || c == "\\" }
+        let folders = body[..<space].split(omittingEmptySubsequences: false, whereSeparator: isSeparator).dropLast()
+        if folders.contains(where: { $0 == "bin" || $0 == "sbin" }) { return false }
+        let spaceInFolder = body[space...].contains(where: isSeparator)
+        if !spaceInFolder, rootText == "/", !(body.hasPrefix("Users/") || body.hasPrefix("home/") || body.hasPrefix("Users\\") || body.hasPrefix("home\\")) { return false }
+        if let last = body.last, isSeparator(last) { return true }
+        let base = body.split(omittingEmptySubsequences: false, whereSeparator: isSeparator).last.map(String.init) ?? ""
+        return matches(fileExtension, base) || extensionlessNames.contains(base)
     }
 
     /// `resolveInlineCodeFileLinkMeta` (markdown-links.ts). `cwd` is the thread's worktree or the project root.
@@ -94,8 +120,15 @@ public enum FileLinks {
         let path = stripSlashPrefixedWindowsDrive((rawPath.trimmingCharacters(in: .whitespaces).removingPercentEncoding) ?? rawPath.trimmingCharacters(in: .whitespaces))
         let hash = rawHash.trimmingCharacters(in: .whitespaces).removingPercentEncoding ?? rawHash
         if path.isEmpty || hasExternalScheme(path) { return nil }
+        // `src\a.ts` is Windows-relative: a path that doesn't parse as written tries again with `/` (markdownLinks.ts:342-360, #33643).
+        if let position = filePosition(path, hash: hash) { return position }
+        if path.hasPrefix("/") || path.hasPrefix("\\") || isWindowsAbsolutePath(path) || !path.contains("\\") { return nil }
+        return filePosition(path.replacingOccurrences(of: "\\", with: "/"), hash: hash)
+    }
+
+    private static func filePosition(_ path: String, hash: String) -> (path: String, line: Int?, column: Int?)? {
         let position = splitPosition(path, hash: hash)
-        return looksLikeFilePath(position.path, authored: path) ? position : nil
+        return !matches(elidedSegment, position.path) && looksLikeFilePath(position.path, authored: path) ? position : nil
     }
 
     /// `resolveMarkdownFileLinkMeta` for a link destination.
@@ -335,13 +368,18 @@ public enum FileLinks {
     nonisolated(unsafe) static let relativePrefix = regex(#"^(~/|\.{1,2}/)"#)
     /// The last segment is optional, so a folder link may end in `/` (`patches/`); a bare name still fails (6de7da548d).
     /// T3 3814 packages/shared/src/markdownLinks.ts:17-25 accepts names in every script.
-    nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[\p{L}\p{M}\p{N}._-]+(?: +[\p{L}\p{M}\p{N}._-]+)*/)+(?:[\p{L}\p{M}\p{N}._-]+(?: +[\p{L}\p{M}\p{N}._-]+)*(?::\d+){0,2})?$"#)
-    nonisolated(unsafe) static let relativeFileName = regex(#"^[\p{L}\p{M}\p{N}._-]+(?: +[\p{L}\p{M}\p{N}._-]+)*\.[\p{L}\p{M}\p{N}_-]+(?::\d+){0,2}$"#)
+    nonisolated(unsafe) static let relativeFilePath = regex(#"^(?:[\p{L}\p{M}\p{N}._$+@()\[\]-]+(?: +[\p{L}\p{M}\p{N}._$+@()\[\]-]+)*/)+(?:[\p{L}\p{M}\p{N}._$+@()\[\]-]+(?: +[\p{L}\p{M}\p{N}._$+@()\[\]-]+)*(?::\d+(?::\d+|-\d+)?)?)?$"#)
+    nonisolated(unsafe) static let relativeFileName = regex(#"^[\p{L}\p{M}\p{N}._$+()\[\]-]+(?: +[\p{L}\p{M}\p{N}._$+()\[\]-]+)*\.[\p{L}\p{M}\p{N}_-]+(?::\d+(?::\d+|-\d+)?)?$"#)
     nonisolated(unsafe) static let externalScheme = regex(#"^([A-Za-z][A-Za-z0-9+.-]*):(.*)$"#)
-    nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+)?$"#)
-    nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+))?$"#)
-    nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+))?$"#, options: .caseInsensitive)
-    nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+)?$"#)
+    nonisolated(unsafe) static let positionSuffix = regex(#":\d+(?::\d+|-\d+)?$"#)
+    nonisolated(unsafe) static let positionCapture = regex(#":(\d+)(?::(\d+)|-(\d+))?$"#)
+    nonisolated(unsafe) static let positionHash = try! NSRegularExpression(pattern: #"^#L(\d+)(?:C(\d+)|-L?(\d+))?$"#, options: .caseInsensitive)
+    nonisolated(unsafe) static let positionOnly = regex(#"^\d+(?::\d+|-\d+)?$"#)
+    /// Agents shorten long paths with a `...` or `…` segment, which no chip can open.
+    nonisolated(unsafe) static let elidedSegment = regex(#"(?:^|[\\/])(?:\.{3,}|…)(?:[\\/]|$)"#)
+    nonisolated(unsafe) static let anyFileExtension = regex(#"\.[^./\\]+$"#)
+    nonisolated(unsafe) static let spacedRoot = regex(#"^(?:/|~/|[A-Za-z]:[\\/])"#)
+    nonisolated(unsafe) static let spacedBody = regex(#"^(?:[\p{L}\p{M}\p{N}._$+@()\[\]-]+(?: (?!-+\p{L})[\p{L}\p{M}\p{N}._$+@()\[\]-]+)*(?:[\\/]|$))+$"#)
     nonisolated(unsafe) static let fileExtension = regex(#"\.[A-Za-z0-9_-]+$"#)
     nonisolated(unsafe) static let versionSuffix = regex(#"\d\.\d[^.]*$"#)
     nonisolated(unsafe) static let numericDotted = regex(#"^\d+(?:\.\d+)+$"#)
@@ -356,9 +394,9 @@ public enum FileLinks {
         "Procfile", "Brewfile", "Caddyfile", "Vagrantfile", "Jenkinsfile", "Podfile", "Fastfile", "BUILD", "WORKSPACE",
         "LICENSE", "LICENCE", "COPYING", "NOTICE", "AUTHORS", "CONTRIBUTORS", "CHANGELOG", "README", "CODEOWNERS"]
     static let genericTLDs: Set<String> = ["com", "net", "org", "io", "dev", "app", "ai", "co", "edu", "gov", "mil", "info", "biz",
-                                           "xyz", "me", "tv", "cc", "gg", "chat", "cloud", "site", "online", "tech", "store", "link"]
+                                           "xyz", "me", "tv", "gg", "chat", "cloud", "site", "online", "tech", "store", "link"]
     static let countryTLDs: Set<String> = ["uk", "de", "fr", "nl", "se", "no", "fi", "dk", "pl", "ch", "at", "be", "es", "it", "pt",
-                                           "eu", "us", "ca", "au", "nz", "jp", "kr", "cn", "br", "ru", "mx", "ie", "cz", "tr", "sg", "hk"]
+                                           "eu", "us", "ca", "au", "nz", "jp", "kr", "cn", "br", "ru", "mx", "ie", "cz", "tr", "sg", "hk", "cc"]
     /// filePreview.ts IMAGE_MIME_TYPE_BY_EXTENSION and video.ts VIDEO_MIME_TYPE_BY_EXTENSION.
     static let mediaExtensions: Set<String> = ["avif", "gif", "ico", "jpeg", "jpg", "png", "svg", "webp",
                                                "avi", "m4v", "mkv", "mov", "mp4", "ogv", "webm"]

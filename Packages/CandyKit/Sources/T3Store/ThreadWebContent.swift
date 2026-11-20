@@ -178,7 +178,8 @@ public enum ThreadWebContent {
         case .object(let o):
             let failed = o["isError"]?.boolValue == true || o["is_error"]?.boolValue == true
                 || o["_tag"]?.stringValue == "OrchestratorMcpFailure" || (o["error"] != nil && o["error"] != .null)
-            if let content = o["structuredContent"] ?? o["content"] {
+            // Grok CLI wraps MCP results as `{ type: "MCP", output: { OkayOutput: "<result json>" } }` (4928 toolOutput.ts:100-107, #35434).
+            if let content = o["structuredContent"] ?? o["content"] ?? (o["output"]?.objectValue != nil ? o["output"]?["OkayOutput"] : nil) {
                 let nested = readResult(content, depth: depth + 1, budget: &budget)
                 return (nested.data, failed || nested.failed)
             }
@@ -193,10 +194,12 @@ public enum ThreadWebContent {
         return readResult(output, budget: &budget)
     }
 
-    /// `htmlRenderFromToolItem` (toolOutput.ts:186-193): T3's own `html_render` tool, not failed.
+    /// `htmlRenderFromToolItem` (toolOutput.ts:186-202 at 4928): T3's own `html_render` tool, or OpenCode 2 Code Mode's
+    /// `execute`, which reports a script's nested T3 calls as one item (#35022); not failed.
     public static func htmlRender(_ item: TurnItem) -> HtmlRenderReference? {
+        let name = item.string("toolName") ?? ""
         guard item.type == .dynamicTool, item.status == .completed,
-              T3McpTools.toolName(item.string("toolName") ?? "") == "html_render" else { return nil }
+              name == "execute" || T3McpTools.toolName(name) == "html_render" else { return nil }
         let out = compactOutput(item["output"])
         return out.failed ? nil : HtmlRenderReference(out.data?["htmlRender"])
     }

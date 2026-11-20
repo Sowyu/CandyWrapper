@@ -45,6 +45,7 @@ private func kind(_ row: TimelineRow) -> String {
     case .proposedPlan: "proposed-plan"
     case .htmlRender: "html-render"
     case .mcpApp: "mcp-app"
+    case .viewedImages: "viewed-images"
     }
 }
 

@@ -64,6 +64,9 @@ public struct TimelineRow: Sendable, Hashable, Identifiable {
         case htmlRender(HtmlRenderReference)
         /// An MCP App (`mcp-app`).
         case mcpApp(McpAppEntry)
+        /// The images the agent opened in the tool group above, kept in view while the group is folded
+        /// (`viewed-images`, MessagesTimeline.logic.ts:589-595, 718-727 at 4928, #30473).
+        case viewedImages(paths: [String])
     }
 
     public struct WorkToggle: Sendable, Hashable {
@@ -423,7 +426,7 @@ public enum TimelineRows {
         var lastOutput: [RunAttemptId: TimelineEntry] = [:]
         var ids = Set<String>()
         for entry in entries {
-            if case .message(_, let row?) = entry.kind, row.item.type == .assistantMessage, row.item["phase"]?.stringValue == "final_answer" {
+            if case .message(_, let row?) = entry.kind, row.item.type == .assistantMessage, row.item.assistantPhase == "final_answer" {
                 ids.insert(entry.id)
             }
             guard let attempt = entry.attempt, attempt.status == "superseded" else { continue }
@@ -436,7 +439,7 @@ public enum TimelineRows {
         }
         for entry in lastOutput.values {
             guard case .message(let message, let row) = entry.kind, !message.streaming, let item = row?.item,
-                  item.type == .assistantMessage, item["phase"] == nil, item.status == .completed,
+                  item.type == .assistantMessage, item.assistantPhase == nil, item.status == .completed,
                   let done = item.completedAt?.epochMs, let superseded = entry.attempt?.completedAt?.epochMs, done < superseded
             else { continue }
             ids.insert(entry.id)
@@ -786,6 +789,11 @@ public enum TimelineRows {
         func expandedBody(_ groupId: String, _ createdAt: T3Timestamp, _ grouped: [WorkLogEntry]) -> TimelineRow {
             TimelineRow(id: "\(groupId):details", createdAt: createdAt, kind: .work(groupedEntries: grouped, isExpandedToolGroup: true, displayLabel: nil))
         }
+        /// `viewedImagesRows`: follows every tool group, folded or open, that viewed an image.
+        func appendViewedImages(_ groupId: String, _ createdAt: T3Timestamp?, _ grouped: [WorkLogEntry]) {
+            let paths = WorkLog.viewedImagePaths(grouped)
+            if !paths.isEmpty { rows.append(TimelineRow(id: "\(groupId):viewed-images", createdAt: createdAt, kind: .viewedImages(paths: paths))) }
+        }
         func appendWorkingRow() {
             if compactionOnlyRunFinished { return }
             if runningCompactionRunId != nil, activeCompactionRunId == nil { return }
@@ -802,6 +810,7 @@ public enum TimelineRows {
                 if case .workLive(_, let grouped, let groupId, let expanded, let active, _) = row.kind {
                     hasActivityRow = hasActivityRow || active
                     if expanded { rows.append(expandedBody(groupId, row.createdAt!, grouped)) }
+                    appendViewedImages(groupId, row.createdAt, grouped)
                 }
             }
             // The interrupt result is the marker; the request is transient bookkeeping.
@@ -906,6 +915,7 @@ public enum TimelineRows {
                         hasFailure: latestTool.map(WorkLog.displayIndicatesFailure) ?? false))))
                     if expanded { rows.append(expandedBody(groupId, entry.createdAt, visible)) }
                 }
+                appendViewedImages(groupId, entry.createdAt, visible)
 
             case .proposedPlan(let plan):
                 rows.append(TimelineRow(id: entry.id, createdAt: entry.createdAt, kind: .proposedPlan(plan)))
@@ -967,6 +977,7 @@ public enum TimelineRows {
                 rows.append(TimelineRow(id: liveActivityRowId, createdAt: input.activeTurnStartedAt,
                                         kind: .thinking(groupId: groupId, expanded: expanded, compacting: compacting)))
                 if expanded { rows.append(expandedBody(groupId, anchor.createdAt, visibleActive.map { $0.work! })) }
+                appendViewedImages(groupId, anchor.createdAt, visibleActive.map { $0.work! })
             } else {
                 rows.append(TimelineRow(id: liveActivityRowId, createdAt: input.activeTurnStartedAt,
                                         kind: .thinking(groupId: nil, expanded: nil, compacting: compacting)))

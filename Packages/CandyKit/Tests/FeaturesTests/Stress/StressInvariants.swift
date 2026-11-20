@@ -58,6 +58,7 @@ enum StressInvariants {
         case .proposedPlan: "plan"
         case .htmlRender: "html"
         case .mcpApp: "app"
+        case .viewedImages: "viewed-images"
         }
     }
 
