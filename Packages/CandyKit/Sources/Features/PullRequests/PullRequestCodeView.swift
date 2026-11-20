@@ -204,6 +204,22 @@ public final class PullRequestCodeView: DSView {
         updateCounts()
     }
 
+    /// A linked file or line waiting for its patch slice (#33989).
+    private var pendingReveal: (digest: String, range: PullRequestAnchor.Range?)?
+
+    /// `useCodeViewFileReveal`: scrolls to the file whose path hashes to `digest`, and to the line
+    /// range's start. A file not loaded yet waits for the slice that brings it.
+    func reveal(digest: String, range: PullRequestAnchor.Range?) {
+        guard let path = paths.first(where: { PullRequestAnchor.pathMatches(digest, $0) }) else { pendingReveal = (digest, range); return }
+        pendingReveal = nil
+        guard var range else { list.reveal(path: path); return }
+        // A GitLab line code whose old line was removed names that old line (resolvePullRequestAnchorRange).
+        let removed = Set(list.diff.files.first { $0.path == path }.map { f in f.hunks.flatMap { h in h.lines.compactMap { i -> Int? in
+            let l = list.diff.lines[i]; return l.kind == .deletion ? Int(l.oldNumber) : nil } } } ?? [])
+        range = PullRequestAnchor.resolve(range) { removed.contains($0) }
+        list.reveal(path: path, line: range.start, side: range.side)
+    }
+
     /// The loaded files in file tree order, tests left out while hidden (PullRequestCodeTab.tsx, #26730, #29083).
     private func rebuildDiff() {
         let joined = patches.joined(separator: patches.allSatisfy { $0.hasSuffix("\n") } ? "" : "\n")
@@ -220,6 +236,7 @@ public final class PullRequestCodeView: DSView {
         let diff = full.selecting(shown)
         paths = diff.files.map(\.path)
         list.setDiff(diff, collapsedByDefault: false)
+        if let pendingReveal { DispatchQueue.main.async { [weak self] in self?.reveal(digest: pendingReveal.digest, range: pendingReveal.range) } }
         hideTestsToggle.isPressed = DiffHideTestFiles.value
         hideTestsToggle.isHidden = testFileCount == 0
         hideTestsTooltip?.text = DiffHideTestFiles.value ? "Show test files" : "Hide test files"

@@ -1397,3 +1397,33 @@ extension PullRequestDetailView: PullRequestCompletionScopeProviding {
         return PullRequestCompletionScope(projectId: d.projectId, support: support, search: search)
     }
 }
+
+extension PullRequestDetailView {
+    /// `linkedTab` (4928 PullRequestDetailPanel.tsx:321).
+    public static func linkedTab(_ anchor: PullRequestAnchor?) -> Tab? {
+        switch anchor {
+        case .code, .diff: .code
+        case .commits, .timeline: .timeline
+        case .checks, .summary: .summary
+        case nil: nil
+        }
+    }
+
+    /// Follows a pull request link to the comment, diff line, checks or commits it names (#33989):
+    /// selects the tab, then marks and scrolls to the place. Each call is a new navigation.
+    /// Returns the commit a diff permalink is scoped to, for the caller to load.
+    @discardableResult
+    public func reveal(url: String) -> String? {
+        let anchor = PullRequestAnchor.parse(url)
+        guard let next = Self.linkedTab(anchor) else { return nil }
+        if next == .code, detail?.capabilities.diff == false { return nil }
+        tab = next
+        switch anchor {
+        case .diff(let digest, let range): code.reveal(digest: digest, range: range)
+        case .timeline(let a): timeline.reveal(anchor: a)
+        case .checks: summary.revealChecks()
+        default: break
+        }
+        return next == .code ? PullRequestAnchor.linkCommit(url) : nil
+    }
+}

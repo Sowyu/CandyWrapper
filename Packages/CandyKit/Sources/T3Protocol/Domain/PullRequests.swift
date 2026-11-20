@@ -82,6 +82,8 @@ public struct PullRequestThreadComment: Codable, Hashable, Sendable {
     public var reactions: [PullRequestReaction]?
     /// As on `PullRequestComment` (2994, pullRequest.ts:246).
     public var canEdit: Bool?
+    /// The review that posted it, so a link to a review with no words finds its comments (4928 pullRequest.ts:184).
+    public var reviewUrl: String?
 }
 
 /// `PullRequestReviewThread` (pullRequest.ts:243): a conversation pinned to a diff line.

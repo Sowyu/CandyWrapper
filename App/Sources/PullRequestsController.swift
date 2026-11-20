@@ -159,7 +159,15 @@ final class PullRequestDetailBinding {
 
     /// Shows a pull request; the same one again keeps what is loaded.
     func show(environmentId: String, target: PullRequestSurfaceTarget) {
-        if self.environmentId == environmentId, self.target?.surfaceId == target.surfaceId { return }
+        if self.environmentId == environmentId, self.target?.surfaceId == target.surfaceId {
+            // Another link to the shown pull request jumps to what it names (#33989).
+            if let url = target.url, url != self.target?.url {
+                self.target = target
+                if detail != nil { follow(url) } else { pendingReveal = url }
+            }
+            return
+        }
+        pendingReveal = target.url.flatMap { PullRequestAnchor.parse($0) == nil ? nil : $0 }
         showing += 1
         self.environmentId = environmentId
         self.target = target
@@ -204,6 +212,18 @@ final class PullRequestDetailBinding {
     /// `reference` (PullRequestDetailPanel.tsx:616-685).
     private func stillShows(_ shown: Int) -> Bool { showing == shown }
 
+    /// A link waiting for the detail before it jumps.
+    private var pendingReveal: String?
+
+    /// `followLink` (4928 PullRequestDetailPanel.tsx:501-512): the tab and place a link names, and a
+    /// diff permalink's commit scope.
+    private func follow(_ url: String) {
+        let commit = view.reveal(url: url)
+        if PullRequestDetailView.linkedTab(PullRequestAnchor.parse(url)) == .code, commit != self.commit {
+            self.commit = commit; patchKey = nil; loadCode()
+        }
+    }
+
     func clear() {
         showing += 1
         generation += 1
@@ -234,6 +254,7 @@ final class PullRequestDetailBinding {
                 self.view.activityError = nil
                 if let ref = self.reference { self.view.reviewKey = PullRequestReviewStore.key(ref) }
                 self.view.show(d)
+                if let url = self.pendingReveal { self.pendingReveal = nil; self.follow(url) }
                 self.loadStack()
                 self.onStatus?(target.surfaceId, PullRequestStateTone(state: d.state, isDraft: d.isDraft))
                 self.loadActivity(gen: gen)

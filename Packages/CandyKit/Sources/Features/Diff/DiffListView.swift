@@ -270,6 +270,26 @@ public final class DiffListView: DSView {
         scrollTo(NSPoint(x: 0, y: min(y, max(0, frame.height - viewportHeight))))
     }
 
+    /// Opens `path` and scrolls `line` on `side` (`left` is the old file) under the header, as a
+    /// linked diff line does (useCodeViewFileReveal.ts, #33989). False when the file or line is not here.
+    @discardableResult
+    public func reveal(path: String, line: Int, side: String) -> Bool {
+        guard let file = diff.files.firstIndex(where: { $0.path == path }) else { return false }
+        if collapsed.contains(file) { collapsed.remove(file); relayout(); onCollapsedChange?() }
+        layoutSubtreeIfNeeded()
+        let lines = diff.lines
+        func number(_ i: Int32) -> Int32 {
+            guard i >= 0, Int(i) < lines.count else { return 0 }
+            return side == "left" ? lines[Int(i)].oldNumber : lines[Int(i)].newNumber
+        }
+        guard let row = rowLayout.rows.first(where: { $0.file == Int32(file) && $0.kind == .line && (number($0.left) == line || number($0.right) == line) }) else {
+            reveal(path: path)
+            return false
+        }
+        scrollTo(NSPoint(x: 0, y: min(max(0, row.top - DiffStyle.headerHeight - 48), max(0, frame.height - viewportHeight))))
+        return true
+    }
+
     // MARK: Geometry
 
     private var viewportHeight: CGFloat { hostScrollView?.contentView.bounds.height ?? bounds.height }

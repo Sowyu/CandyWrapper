@@ -80,6 +80,14 @@ final class StackScrollView: DSView {
         addSubview(scroll)
     }
     func reload() { needsLayout = true; document.needsLayout = true }
+    /// Scrolls `item` near the top (`holdLinkedNodeInView`, #33989).
+    func scroll(to item: NSView) {
+        layoutSubtreeIfNeeded()
+        let clip = scroll.scrollView.contentView
+        let maxY = max(0, document.frame.height - clip.bounds.height)
+        clip.scroll(to: NSPoint(x: 0, y: min(maxY, max(0, item.frame.minY - 20))))
+        scroll.scrollView.reflectScrolledClipView(clip)
+    }
     override func layout() {
         super.layout()
         scroll.frame = bounds
@@ -121,6 +129,12 @@ public final class PullRequestSummaryView: DSView {
     /// A reaction pressed on a comment: (comment id, content, reacted, the bar to tell of a refusal).
     var onReact: ((String, String, Bool, PullRequestReactionBarView) -> Void)? { get { commentList.onReact } set { commentList.onReact = newValue } }
     var onAddToChat: ((String) -> Void)? { get { commentList.onAddToChat } set { commentList.onAddToChat = newValue } }
+    /// A checks link opens the Checks section and scrolls to it (#33989).
+    func revealChecks() {
+        checks.isOpen = true
+        stack.reload()
+        stack.scroll(to: checks)
+    }
     var bodySaving: Bool { get { markdown.saving } set { markdown.saving = newValue } }
     var commentSaving: Bool { get { commentList.saving } set { commentList.saving = newValue } }
     func finishBodyEdit() { markdown.stopEditing(); stack.reload() }
@@ -678,6 +692,8 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
     func focusWithinChanged(_ focused: Bool) { focusWithin = focused; revealEdit() }
     private func revealEdit() { HoverReveal.fade([editButton], visible: hover?.hovered == true || focusWithin) }
     private let editButton = ButtonView(nil, icon: .pencil, variant: .ghostMuted, size: .iconXs)
+    /// The comment a link named: `ring-1 ring-inset ring-primary/40` (PullRequestTimelineTab.tsx:289, #37881).
+    var linked = false { didSet { needsDisplay = true } }
     /// `AddToChatButton` (4928 PullRequestSummaryTab.tsx:267): `size="xs" variant="ghost"`, a 12pt glyph.
     private var chatButton: ButtonView?
     var onAddToChat: (() -> Void)?
@@ -922,7 +938,7 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
 
     override func updateLayer() {
         layer?.cornerRadius = DesignGeometry.radius(10, in: self)
-        layer?.borderColor = Themed.color(\.border, 0.6).cgColor(in: self)
+        layer?.borderColor = linked ? Themed.color(\.primary, 0.4).cgColor(in: self) : Themed.color(\.border, 0.6).cgColor(in: self)
         chevron.strokeColor = Themed.color(\.mutedForeground)
         location.color = Themed.color(\.mutedForeground)
         replyCount.color = Themed.color(\.mutedForeground)
@@ -973,6 +989,9 @@ public final class PullRequestTimelineView: DSView {
     var onOpenCommit: ((String) -> Void)?
     var onOpenURL: ((String) -> Void)?
     var onAddToChat: ((String) -> Void)? { didSet { if (onAddToChat == nil) != (oldValue == nil) { rebuild() } } }
+    /// The linked item stays marked and open until another link replaces it (PullRequestTimelineTab.tsx:852).
+    private var linkedAnchor: String?
+    private weak var linkedRow: NSView?
     private var detail: PullRequestDetail?
     private var pending = true
     private var error: String?
@@ -992,7 +1011,10 @@ public final class PullRequestTimelineView: DSView {
     func set(_ d: PullRequestDetail, pending: Bool, error: String?, nowMs: Int64) {
         detail = d; self.pending = pending; self.error = error; self.nowMs = nowMs
         rebuild()
+        // Activity that arrives after the link holds the comment it named.
+        if scrollPending, !pending, let linkedRow { scrollPending = false; stack.scroll(to: linkedRow) }
     }
+    private var scrollPending = false
 
     private func rebuild() {
         guard let d = detail else { return }
@@ -1002,14 +1024,18 @@ public final class PullRequestTimelineView: DSView {
             stack.reload()
             return
         }
+        let anchor = linkedAnchor
+        linkedRow = nil
         let events = PullRequestDetailLogic.timeline(d)
         let ordered = newestFirst ? events : events.reversed()
         let newestCommit = PullRequestDetailLogic.newestCommitAt(d.commits)
-        let items: [StackItem] = PullRequestDetailLogic.groupConversations(ordered).map { row in
+        let grouped = PullRequestDetailLogic.groupConversations(ordered)
+        let items: [StackItem] = grouped.map { row in
             switch row {
             case .comments(let events):
-                let r = ConversationRow(events, nowMs: nowMs, cwd: d.workspaceRoot, addsToChat: onAddToChat != nil)
+                let r = ConversationRow(events, nowMs: nowMs, cwd: d.workspaceRoot, addsToChat: onAddToChat != nil, linked: anchor)
                 r.onAddToChat = { [weak self] id in self?.onAddToChat?(id) }
+                if let anchor, events.contains(where: { PullRequestAnchor.matches(anchor, url: $0.url) }) { linkedRow = r }
                 return r
             case .event(let e):
                 if let thread = e.thread {
@@ -1029,9 +1055,31 @@ public final class PullRequestTimelineView: DSView {
                 return TimelineEventRow(lifecycle: e, nowMs: nowMs, provider: d.provider)
             }
         }
+        if let anchor, linkedRow == nil {
+            for (row, item) in zip(grouped, items) {
+                guard case .event(let e) = row else { continue }
+                if PullRequestAnchor.matches(anchor, url: e.url) || (e.thread?.replies.contains { PullRequestAnchor.matches(anchor, url: $0.url) } ?? false) {
+                    linkedRow = item; break
+                }
+            }
+        }
         note.text = "No activity yet."
-        stack.document.items = items.isEmpty ? [note] : items
+        // "The linked item is not in the loaded activity." heads the list when the link finds nothing.
+        let missed = anchor != nil && linkedRow == nil
+        let missedNote = NoteItem()
+        missedNote.text = "The linked item is not in the loaded activity."
+        stack.document.items = items.isEmpty ? [note] : (missed ? [missedNote] + items : items)
         stack.reload()
+    }
+
+    /// Opens the linked comment's row, marks it and scrolls to it; a review with no words of its own
+    /// resolves to its first line comment (`resolvePullRequestReviewAnchor`).
+    func reveal(anchor: String) {
+        guard let d = detail else { linkedAnchor = anchor; return }
+        linkedAnchor = PullRequestAnchor.resolveReview(anchor, commentURLs: d.comments.map(\.url),
+                                                       threadComments: d.reviewThreads.flatMap { $0.comments.map { ($0.url, $0.createdAt, $0.reviewUrl) } })
+        rebuild()
+        if let linkedRow, !pending { stack.scroll(to: linkedRow) } else { scrollPending = true }
     }
 
     public override func layout() {
@@ -1202,7 +1250,7 @@ final class ConversationRow: DSView, StackItem {
         // `transition-transform`, `rotate-180` when open (PullRequestTimelineTab.tsx:336-341).
         chevron.setRotation(open ? 180 : 0) } }
 
-    init(_ events: [PullRequestDetailLogic.TimelineEvent], nowMs: Int64, cwd: String, addsToChat: Bool = false) {
+    init(_ events: [PullRequestDetailLogic.TimelineEvent], nowMs: Int64, cwd: String, addsToChat: Bool = false, linked: String? = nil) {
         var actors: [String: PullRequestActor] = [:]
         var order: [String] = []
         for e in events { if let a = e.actor, actors[a.login] == nil { actors[a.login] = a; order.append(a.login) } }
@@ -1218,11 +1266,14 @@ final class ConversationRow: DSView, StackItem {
                                                    createdAt: e.at, url: e.url, path: e.path, reviewState: e.reviewState), nowMs: nowMs, cwd: cwd,
                                 addsToChat: addsToChat && PullRequestDetailLogic.visibleBody(e.body ?? "") != nil, chatIconOnly: true)
             c.onAddToChat = { [weak self] in self?.onAddToChat?(e.id) }
+            c.linked = linked.map { PullRequestAnchor.matches($0, url: e.url) } ?? false
             c.isHidden = true
             addSubview(c)
             return c
         }
         alphaValue = 1
+        // A linked comment's row opens with it (`linked.count` remounts the row open).
+        if cards.contains(where: \.linked) { open = true }
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
