@@ -36,6 +36,8 @@ final class SideChatController {
         let id: ThreadId
         let pane: SideChatPaneView
         let chat = ThreadPanelView()
+        /// "Context from · parent", the chat's list header.
+        let contextDivider = TimelineParentLinkView()
         var session: ThreadSession?
         var composer: ComposerController?
         /// The side chat's composer chords and F6, run while focus is in its pane.
@@ -46,6 +48,8 @@ final class SideChatController {
         init(id: ThreadId) {
             self.id = id
             pane = SideChatPaneView(threadId: id.localId)
+            contextDivider.sideChat = true
+            chat.timeline.setHeader(contextDivider, height: TimelineParentLinkView.height)
         }
     }
 
@@ -236,6 +240,9 @@ final class SideChatController {
         guard let s = shown, let env = s.id.environmentId else { return }
         let sideChat = shell(s.id)
         let parent = parentId().flatMap(shell)
+        // The list header of an embedded side chat (ChatView.tsx:918-928, MessagesTimeline.tsx:1206-1230): "Context from"
+        // and the parent's title, which opens nothing since the parent is the view around it.
+        s.contextDivider.parentTitle = parent?.title ?? "Parent thread"
         let canOperate = environments.canOperate(env)
         let mergeRun = s.projection.flatMap(ThreadRelationships.latestMergeBackRun)
         let parentActive = parent.map { [.preparing, .queued, .starting, .running, .waiting].contains($0.activityRunStatus ?? $0.status) } ?? false

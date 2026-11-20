@@ -153,6 +153,7 @@ public final class ThreadLineageController {
         // subagent parent.
         let thread = projection.thread
         if let link = ThreadRelationships.parentLink(thread.lineage, threads: local) {
+            parentLink.sideChat = false
             parentLink.parentTitle = link.title
             parentLink.delegated = !thread.isProviderNativeSubagent
             parentLink.onOpen = { [weak self] in self?.open(link.threadId) }
@@ -161,6 +162,15 @@ public final class ThreadLineageController {
             panel.header.onOpenParent = { [weak self] in self?.open(link.threadId) }
             panel.parentPillTitle = thread.isProviderNativeSubagent ? nil : link.title
             panel.onOpenParentPill = { [weak self] in self?.open(link.threadId) }
+        } else if thread.lineage?.sideChat == true, let parent = thread.lineage?.parentThreadId {
+            // A side chat open on its own (ChatView.tsx:918-933, MessagesTimeline.tsx:1206-1230): "Context from" and
+            // the parent's title, which opens the parent. Embedded in the parent's panel, SideChatController shows it.
+            parentLink.sideChat = true
+            parentLink.parentTitle = local.first { $0.id == parent }?.title ?? "Parent thread"
+            parentLink.onOpen = { [weak self] in self?.open(parent) }
+            panel.timeline.setHeader(parentLink, height: TimelineParentLinkView.height)
+            panel.parentPillTitle = nil
+            panel.header.parentThreadTitle = nil
         } else {
             panel.parentPillTitle = nil
             panel.timeline.setHeader(nil, height: 0)

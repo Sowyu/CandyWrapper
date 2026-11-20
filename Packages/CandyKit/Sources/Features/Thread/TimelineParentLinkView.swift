@@ -8,15 +8,19 @@ public final class TimelineParentLinkView: DSView {
     public static let height: CGFloat = 8 + 8 + 26 + 8
 
     public var parentTitle = "" { didSet { detail.text = "·\u{00a0}" + parentTitle; needsLayout = true } }
-    public var onOpen: (@MainActor () -> Void)? { didSet { pill.action = onOpen } }
+    /// Nil makes the divider a plain `rounded-full px-2 py-1` label instead of the bordered button
+    /// (TimelineSystemDivider.tsx:73-82), as in an embedded side chat.
+    public var onOpen: (@MainActor () -> Void)? { didSet { pill.action = onOpen; if (onOpen == nil) != (oldValue == nil) { updateKind() } } }
     /// Redesign only: a delegated task (another agent started it and you can message it) reads "Task from", the
     /// provider's own subagents keep "Subagent of" and their status bar instead of a composer.
     public var delegated = false { didSet { if delegated != oldValue { updateKind() } } }
+    /// A side chat's divider: "Context from" with the chat-bubbles glyph.
+    public var sideChat = false { didSet { if sideChat != oldValue { updateKind() } } }
     private var tooltip: TooltipController?
 
     private let leftRule = CALayer(), rightRule = CALayer()
     private let pill = TimelineParentLinkPill()
-    private let icon = IconView(name: .bot, size: 12)
+    private var icon = IconView(name: .bot, size: 12)
     private let label = LabelView("Subagent of", font: DSFont.ui(11, weight: .medium))
     private let detail = LabelView("", font: DSFont.ui(11))
 
@@ -37,23 +41,32 @@ public final class TimelineParentLinkView: DSView {
 
     private func updateKind() {
         let task = delegated && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-        label.text = task ? "Task from" : "Subagent of"
-        tooltip?.text = task ? "Another agent started this task. You can message it below to steer it. Click to open the parent."
+        label.text = sideChat ? "Context from" : task ? "Task from" : "Subagent of"
+        tooltip?.text = onOpen == nil ? "" : task ? "Another agent started this task. You can message it below to steer it. Click to open the parent."
             : "Open parent thread"
+        if icon.name != (sideChat ? .messagesSquare : .bot) {
+            icon.removeFromSuperview()
+            icon = IconView(name: sideChat ? .messagesSquare : .bot, size: 12)
+            pill.addSubview(icon)
+        }
+        pill.isPlain = onOpen == nil
+        pill.setAccessibilityLabel(onOpen == nil ? nil : "Open parent thread")
         needsLayout = true
+        needsDisplay = true
     }
 
     public override func layout() {
         super.layout()
         let lw = ceil(label.textWidth), dw = min(320, ceil(detail.textWidth))
         // `px-2.5 py-1 gap-1.5`, a 1pt border: icon, label, then the detail capped at `max-w-80`.
-        let pw = min(bounds.width - 32, 1 + 10 + 12 + 6 + lw + 6 + dw + 10 + 1)
+        let pad: CGFloat = onOpen == nil ? 8 : 11
+        let pw = min(bounds.width - 32, 2 * pad + 12 + 6 + lw + 6 + dw)
         let x = ((bounds.width - pw) / 2).rounded()
         let top: CGFloat = 8 + 8
         pill.frame = NSRect(x: x, y: top, width: pw, height: 26)
-        icon.frame = NSRect(x: 11, y: 7, width: 12, height: 12)
-        label.frame = NSRect(x: 11 + 12 + 6, y: 5, width: lw, height: 16)
-        detail.frame = NSRect(x: label.frame.maxX + 6, y: 5, width: max(0, pw - 11 - label.frame.maxX - 6), height: 16)
+        icon.frame = NSRect(x: pad, y: 7, width: 12, height: 12)
+        label.frame = NSRect(x: pad + 12 + 6, y: 5, width: lw, height: 16)
+        detail.frame = NSRect(x: label.frame.maxX + 6, y: 5, width: max(0, pw - pad - label.frame.maxX - 6), height: 16)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         leftRule.frame = CGRect(x: 0, y: top + 13, width: max(0, x - 8), height: 1)
         rightRule.frame = CGRect(x: x + pw + 8, y: top + 13, width: max(0, bounds.width - x - pw - 8), height: 1)
@@ -82,11 +95,13 @@ final class TimelineParentLinkPill: ControlView {
         transitions = .colors // transition-colors (TimelineSystemDivider.tsx:51)
         layer?.borderWidth = 1
     }
+    /// No action: no border, no fill and no hover.
+    var isPlain = false { didSet { isEnabled = !isPlain; layer?.borderWidth = isPlain ? 0 : 1; needsDisplay = true } }
     override func layout() { super.layout(); layer?.cornerRadius = bounds.height / 2 }
     override func stateDidChange(from old: State) { super.stateDidChange(from: old); needsDisplay = true }
     override var wantsUpdateLayer: Bool { true }
     override func updateLayer() {
         layer?.borderColor = Themed.color(\.border, 0.7).cgColor(in: self)
-        Motion.setBackground(layer, (state.hovered ? Themed.color(\.muted) : Themed.color(\.background)).cgColor(in: self))
+        Motion.setBackground(layer, isPlain ? nil : (state.hovered ? Themed.color(\.muted) : Themed.color(\.background)).cgColor(in: self))
     }
 }
