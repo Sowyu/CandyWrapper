@@ -1,0 +1,31 @@
+{
+ "component": "issues",
+ "source": "apps/web/src/components/issue/IssueRow.tsx",
+ "states": [
+  "rest"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "row.open",
+   "html": "<div class=\"flex items-center rounded-md\"><button type=\"button\" class=\"group/pr-row flex w-full items-center gap-2 rounded-md py-1 pr-1 text-left @container/issue-row-meta px-3 py-2.5\"><span class=\"inline-flex shrink-0\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-dot size-4 shrink-0 text-emerald-600 dark:text-emerald-300/90\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle> <circle cx=\"12\" cy=\"12\" r=\"1\"></circle></svg></span><span class=\"min-w-0 flex-1\"><span class=\"flex min-w-0 items-center gap-1.5\"><span class=\"shrink-0 font-mono text-xs tabular-nums text-muted-foreground\">#42</span><span class=\"min-w-0 truncate text-sm\">Sidebar badge opens the wrong panel</span><span class=\"ml-auto flex shrink-0 items-center gap-1.5 text-2xs\"><span class=\"flex items-center -space-x-1\"><span aria-hidden class=\"flex size-4 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-muted-foreground ring-1 ring-background\">O</span><span aria-hidden class=\"flex size-4 shrink-0 items-center justify-center rounded-full bg-muted font-medium text-muted-foreground ring-1 ring-background\">H</span></span><span class=\"inline-flex items-center gap-0.5 tabular-nums\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-message-square size-3\" aria-hidden=\"true\"><path d=\"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z\"></path></svg>3</span></span></span><span class=\"flex min-w-0 items-center gap-1.5 overflow-hidden text-2xs text-muted-foreground\"><span class=\"inline-flex min-w-0 items-center gap-1\"><span aria-hidden class=\"flex shrink-0 items-center justify-center rounded-full bg-muted font-medium text-muted-foreground size-3.5\">O</span><span class=\"truncate\">octo-reader</span></span><span class=\"ml-auto shrink-0 whitespace-nowrap tabular-nums\">1d ago</span></span></span></button></div>",
+   "native": {
+    "case": "row",
+    "index": "0"
+   },
+   "wrapperStyle": "display:block;width:520px"
+  },
+  {
+   "name": "row.completed",
+   "html": "<div class=\"flex items-center rounded-md\"><button type=\"button\" class=\"group/pr-row flex w-full items-center gap-2 rounded-md py-1 pr-1 text-left @container/issue-row-meta px-3 py-2.5\"><span class=\"inline-flex shrink-0\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-check size-4 shrink-0 text-violet-600 dark:text-violet-300/90\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle> <path d=\"m9 12 2 2 4-4\"></path></svg></span><span class=\"min-w-0 flex-1\"><span class=\"flex min-w-0 items-center gap-1.5\"><span class=\"shrink-0 font-mono text-xs tabular-nums text-muted-foreground\">#40</span><span class=\"min-w-0 truncate text-sm\">Document the greet command</span></span><span class=\"flex min-w-0 items-center gap-1.5 overflow-hidden text-2xs text-muted-foreground\"><span class=\"inline-flex min-w-0 items-center gap-1\"><span aria-hidden class=\"flex shrink-0 items-center justify-center rounded-full bg-muted font-medium text-muted-foreground size-3.5\">G</span><span class=\"truncate\">ghost</span></span><span class=\"ml-auto shrink-0 whitespace-nowrap tabular-nums\">7d ago</span></span></span></button></div>",
+   "native": {
+    "case": "row",
+    "index": "1"
+   },
+   "wrapperStyle": "display:block;width:520px"
+  }
+ ]
+}

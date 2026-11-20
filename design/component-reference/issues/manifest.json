@@ -1,0 +1,10 @@
+{
+  "row.completed" : {
+    "height" : 56,
+    "width" : 520
+  },
+  "row.open" : {
+    "height" : 56,
+    "width" : 520
+  }
+}

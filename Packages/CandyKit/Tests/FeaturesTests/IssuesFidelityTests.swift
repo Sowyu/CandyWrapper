@@ -1,68 +1,66 @@
 import AppKit
 import Testing
 import DesignSystem
-import T3Protocol
+@testable import T3Protocol
 import T3Store
 @testable import Features
 
-/// The Issues page against T3 4928's own screen (design/reference-4928/58-issues-page): the
-/// sandbox has no tracker, so the page shows "No trackers to read" under the search, Sort,
-/// Filters, Views and refresh. The 1100 × 780 capture is cropped to the route, right of the
-/// 256pt sidebar. Writes ref, ours and diff PNGs to `Fidelity.root/issues`.
+/// The Issues page row against T3's markup in Chromium (4928 IssueRow.tsx; spec from
+/// scripts/gen-issues-spec.py, references in design/component-reference/issues). Writes ref, ours and diff
+/// PNGs plus report-issues.html to `Fidelity.root`.
 @MainActor @Suite(.fidelity)
 struct IssuesFidelityTests {
-    /// Measured 2026-11-19 plus margin.
+    /// Per-case ceilings, measured 2026-11-19 plus margin (FidelitySupport.swift).
     static let ceilings: FidelityCeilings = [
-        "issuesPage": .init(0.025),
+        "issues": .init(0.05),
     ]
+    static let out = Fidelity.root.appendingPathComponent("issues")
+    static let nowMs = T3Timestamp.parseEpochMs("2026-11-19T09:00:00Z")!
 
-    static func page(dark: Bool) -> NSView {
-        let container = IssuesPageContainer()
-        container.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-        var m = IssuesPageView.Model()
-        m.body = .noTrackers
-        m.hostOptions = [IssueListLogic.HostOption(value: "", label: "All", tracker: nil, unavailable: nil)]
-        container.page.model = m
-        // The route starts right of the 256pt sidebar, which also keeps the header's title at its 20pt gutter.
-        let host = BackgroundHost(frame: NSRect(x: 0, y: 0, width: 1100, height: 780))
-        host.appearance = container.appearance
-        container.frame = NSRect(x: 256, y: 0, width: 844, height: 780)
-        host.addSubview(container)
-        host.layoutSubtreeIfNeeded()
-        return host
+    static func view(_ c: [String: Any], size: CGSize) throws -> NSView {
+        let native = c["native"] as! [String: String]
+        let list = try IssueListLogicTests.list()
+        let entry = list.entries[Int(native["index"]!)!]
+        let row = IssueRowView()
+        row.configure(IssueListLogic.Row(entry: entry, environmentId: "env-1"), selected: false, showScope: false, showTracker: false,
+                      environmentLabel: nil, nowMs: nowMs)
+        row.frame = NSRect(x: 8, y: 8, width: size.width, height: IssueRowView.height)
+        row.layoutSubtreeIfNeeded()
+        return row
     }
 
-    /// The app's main area paints `bg-background` behind every route.
-    final class BackgroundHost: DSView {
-        override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
-    }
-
-    @Test func issuesPage() throws {
-        let previous = FontRuntime.input
-        defer { FontRuntime.apply(previous) }
-        var fonts = FontRuntimeInput()
-        fonts.smoothing = false
-        FontRuntime.apply(fonts)
-        // Saved views live in the defaults; the capture has none.
-        let saved = UserDefaults.standard.data(forKey: SavedViewsKind.issues.storageKey)
-        UserDefaults.standard.removeObject(forKey: SavedViewsKind.issues.storageKey)
-        defer { if let saved { UserDefaults.standard.set(saved, forKey: SavedViewsKind.issues.storageKey) } }
-        var scores: [(String, Double)] = []
-        let out = Fidelity.root.appendingPathComponent("issues")
-        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
-        for dark in [false, true] {
-            let base = "58-issues-page.\(dark ? "dark" : "light")"
-            let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo
-                .appendingPathComponent("design/reference-4928/\(base).png"))))
-            let ref = ThreadFidelityTests.crop(full, x: 512, width: 1688, height: 1560)
-            let ours = ThreadFidelityTests.crop(Snapshot.image(of: Self.page(dark: dark), size: NSSize(width: 1100, height: 780), scale: 2, dark: dark),
-                                                x: 512, width: 1688, height: 1560)
-            let (score, _, diff) = SidebarFidelityTests.compare(ref, ours, bands: [])
-            try Snapshot.writePNG(ref, to: out.appendingPathComponent(base + ".ref.png"))
-            try Snapshot.writePNG(ours, to: out.appendingPathComponent(base + ".ours.png"))
-            try Snapshot.writePNG(diff, to: out.appendingPathComponent(base + ".diff.png"))
-            scores.append((base, score))
+    @Test func issues() throws {
+        let repo = SidebarFidelityTests.repo
+        let refDir = repo.appendingPathComponent("design/component-reference/issues")
+        let spec = try JSONSerialization.jsonObject(with: Data(contentsOf: repo.appendingPathComponent("design/component-reference/issues.json"))) as! [String: Any]
+        let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: refDir.appendingPathComponent("manifest.json"))) as! [String: [String: Double]]
+        try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
+        var lines: [(String, Double)] = [], images = ""
+        for c in spec["cases"] as! [[String: Any]] {
+            let name = c["name"] as! String
+            let css = manifest[name]!
+            for theme in spec["themes"] as! [String] {
+                let base = "\(name).rest.\(theme)"
+                let ref = try #require(NSBitmapImageRep(data: Data(contentsOf: refDir.appendingPathComponent("\(base).png"))))
+                let size = NSSize(width: CGFloat(ref.pixelsWide) / 2, height: CGFloat(ref.pixelsHigh) / 2)
+                let canvas = SidebarSearchFidelityTests.Canvas(frame: NSRect(origin: .zero, size: size))
+                canvas.addSubview(try Self.view(c, size: CGSize(width: css["width"]!, height: css["height"]!)))
+                let ours = Snapshot.image(of: canvas, size: size, scale: 2, dark: theme == "dark")
+                let (total, _, diff) = SidebarFidelityTests.compare(ref, ours, bands: [])
+                try ref.representation(using: .png, properties: [:])!.write(to: Self.out.appendingPathComponent("\(base).ref.png"))
+                try Snapshot.writePNG(ours, to: Self.out.appendingPathComponent("\(base).ours.png"))
+                try Snapshot.writePNG(diff, to: Self.out.appendingPathComponent("\(base).diff.png"))
+                lines.append((base, total))
+                images += "<p>\(base): \(String(format: "%.2f", total * 100))%<br>"
+                    + ["ref", "ours", "diff"].map { "<img style='zoom:.5' src='issues/\(base).\($0).png'>" }.joined() + "</p>"
+            }
         }
-        Self.ceilings.check("issuesPage", scores)
+        for (base, total) in lines.sorted(by: { $0.1 > $1.1 }) { print("issues", base, String(format: "%.2f%%", total * 100)) }
+        Self.ceilings.check("issues", lines)
+        let mean = lines.map(\.1).reduce(0, +) / Double(max(1, lines.count))
+        print(String(format: "FIDELITY issues: %d cases, mean differing %.2f%%", lines.count, mean * 100))
+        let html = "<!doctype html><meta charset=utf-8><title>Pull request writes</title><body style='font:13px -apple-system'>" + images
+        try html.write(to: Self.out.deletingLastPathComponent().appendingPathComponent("report-issues.html"), atomically: true, encoding: .utf8)
+        #expect(mean < 0.05)
     }
 }
