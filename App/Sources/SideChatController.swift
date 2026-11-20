@@ -45,6 +45,12 @@ final class SideChatController {
         panel.onAddSideChat = { [weak self] in Task { await self?.start(message: nil) } }
         panel.onSideChatShown = { [weak self] id in self?.show(id) }
         panel.onSideChatsClosed = { [weak self] ids in self?.closed(ids) }
+        composer.sideChatSlash = { [weak self] in
+            guard let facts = self?.parentFacts(), facts.offered, facts.isServerThread else { return nil }
+            return .init(disabledReason: SideChats.disabledReason(facts))
+        }
+        composer.sideChatDisabledReason = { [weak self] in self.flatMap { SideChats.disabledReason($0.parentFacts()) } }
+        composer.onSideChat = { [weak self] prompt in await self?.start(message: prompt) ?? false }
     }
 
     private var threads: [ThreadShell] { (sidebar?.snapshot?.threads ?? []) + (sidebar?.snapshot?.archivedThreads ?? []) }

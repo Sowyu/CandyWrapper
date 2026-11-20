@@ -124,6 +124,33 @@ public final class SideChatPaneView: DSView {
     public override func updateLayer() {
         border.backgroundColor = Themed.color(\.border).cgColor(in: self)
     }
+
+    // MARK: Hover
+
+    private var resignObserver: NSObjectProtocol?
+
+    /// The pane leaves when its tab hides or another side chat takes the tab, under a still pointer; the header's
+    /// buttons drop their hover and press with it, and again when the window loses focus.
+    public override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        guard newWindow !== window else { return }
+        clearHover()
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+        resignObserver = newWindow.map {
+            NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: $0, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.clearHover() }
+            }
+        }
+    }
+
+    func clearHover() {
+        for button in [bringBack, delete, close] where button.state.hovered || button.state.active {
+            var state = button.state
+            state.hovered = false
+            state.active = false
+            button.previewState(state)
+        }
+    }
 }
 
 /// A side chat tab's glyph (`SideChatTabIcon`, RightPanelTabs.tsx:738-760): the message-square icon with a static

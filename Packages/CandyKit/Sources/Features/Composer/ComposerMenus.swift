@@ -296,7 +296,7 @@ public enum ComposerMenus {
     /// session T3 still treats as live (useComposerMenuItems.ts:280-290 at 4928, #30325).
     public static func slashItems(trigger: ComposerTrigger, provider: String, commands: [ServerProviderSlashCommand],
                                   skills: [ServerProviderSkill], showSkills: Bool, compactAvailable: Bool,
-                                  freshSessionAvailable: Bool = false) -> [ComposerMenuItem] {
+                                  freshSessionAvailable: Bool = false, sideChat: SideChatSlash? = nil) -> [ComposerMenuItem] {
         let menuSkills = showSkills ? ProviderSkills.dedupe(skills.filter(ProviderSkills.isUserInvocable)) : []
         let skillNames = Set(menuSkills.map { $0.name.trimmingCharacters(in: .whitespaces).lowercased() })
         let commandItems = commands.filter { !skillNames.contains($0.name.trimmingCharacters(in: .whitespaces).lowercased()) }
@@ -310,8 +310,22 @@ public enum ComposerMenus {
         }
         let atStart = trigger.rangeStart == 0
         let clear = freshSessionAvailable && atStart ? [clearCommand] : []
-        let items = builtInCommands() + clear + (atStart ? commandItems : []) + skillItems
+        let side = atStart ? sideChat.map(sideChatCommands) ?? [] : []
+        let items = builtInCommands() + side + clear + (atStart ? commandItems : []) + skillItems
         return searchSlash(items, query: trigger.query.trimmingCharacters(in: .whitespaces).lowercased(), skills: menuSkills)
+    }
+
+    /// Whether the open thread offers side chats (`sideChatAvailable`) and why one can't start now.
+    public struct SideChatSlash: Equatable, Sendable {
+        public var disabledReason: String?
+        public init(disabledReason: String? = nil) { self.disabledReason = disabledReason }
+    }
+
+    /// `/side` and `/btw` (useComposerMenuItems.ts:262-278), only at the message start (composerSlashCommandSearch.ts:15-30).
+    /// A reason replaces their descriptions.
+    static func sideChatCommands(_ s: SideChatSlash) -> [ComposerMenuItem] {
+        [ComposerMenuItem(id: "slash:side", kind: .builtIn("side"), label: "/side", description: s.disabledReason ?? "Ask a side question in a new side chat"),
+         ComposerMenuItem(id: "slash:btw", kind: .builtIn("btw"), label: "/btw", description: s.disabledReason ?? "Same as /side")]
     }
 
     public static let clearCommand = ComposerMenuItem(id: "slash:clear", kind: .builtIn("clear"), label: "/clear",
@@ -524,6 +538,9 @@ public enum ComposerMenus {
     public static func replacement(for item: ComposerMenuItem) -> String {
         switch item.kind {
         case .path(let path, _): return ComposerInlineTokens.fileLink(path) + " "
+        // Picking `/side` or `/btw` leaves the command for the message to follow (ChatComposer.tsx:2002-2011).
+        case .builtIn("side"): return "/side "
+        case .builtIn("btw"): return "/btw "
         case .builtIn: return ""
         // `USAGE_LIMITS_COMMAND` opens the usage page instead of going to the provider (ChatComposer.tsx:4025-4036).
         case .providerCommand("usage-limits"): return ""
