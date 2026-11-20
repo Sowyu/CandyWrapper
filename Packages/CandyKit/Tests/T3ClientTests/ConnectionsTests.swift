@@ -61,6 +61,8 @@ struct ConnectionsTests {
         let routes = EnvironmentRoute.upsert(u("http://192.168.1.4:3773"), into: [u("https://mac.tail.ts.net"), u("https://box.example.com")])
         #expect(routes.map(EnvironmentRoute.label) == ["LAN", "Tailscale", "box.example.com"])
         #expect(EnvironmentRoute.upsert(u("http://192.168.1.4:3773/"), into: routes).count == 3)
+        // #25591: a new address goes first among its kind, so its fresh token connects.
+        #expect(EnvironmentRoute.upsert(u("http://192.168.1.9:3773"), into: routes).first == u("http://192.168.1.9:3773"))
         #expect(EnvironmentRoute.connectionId(environmentId: "e", u("HTTP://Mini.Local:80/")) == "bearer:e:http://mini.local")
     }
 

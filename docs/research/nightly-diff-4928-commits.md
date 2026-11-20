@@ -881,52 +881,52 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| e6ca17001d | #26917 | connections | fix(web): update everything no longer waits on npm for service hosts | left (panels-2): not checked |
-| de386ada9e | #23244 | connections | fix(web): create tasks on a permitted connected environment | left (panels-2): not checked |
-| 4092c4ac56 | #27008 | connections | fix(client): retry the permissions check after a reconnect | left (panels-2): not checked |
-| 65b0ab8c91 | #27101 | connections | fix(client): dead connection routes are probed 30x less often | left (panels-2): not checked |
-| ebd1265ccf | #21706 | connections | fix(connect): the remove dialog says whether a T3 Connect environment is still on the account | left (panels-2): not checked |
-| 503bcaaf99 | #22887 | connections | fix: keep offline environments out of thread reorder writes | left (panels-2): not checked |
-| b1b3c10e24 | #23532 | connections | fix(clients): keep accepted server updates through disconnects | left (panels-2): not checked |
-| fd78ea42fc | #23753 | connections | fix(web): show an error when merge-back or disconnect fails | left (panels-2): not checked |
-| e5871b6719 | #24691 | connections | fix(web): Reconnect on a switched-off environment switches it back on | left (panels-2): not checked |
-| 9e97921ad8 | #24716 | connections | fix(clients): a route added after a reorder no longer disappears | left (panels-2): not checked |
-| d2d1e4f50e | #27847 | connections | fix(updates): version checks respect your configured npm registry | left (panels-2): not checked |
-| a05e8fde08 | #26160 | connections | fix(web): Add Environment dialog reopens on Remote link instead of a stale SSH selection | left (panels-2): not checked |
-| 1aa46d0cdf | #27998 | connections | fix(connect): T3 Connect sockets no longer drop every hour | left (panels-2): not checked |
-| 8f0d66de5f | #26109 | connections | fix(web): servers still restarting after an app update no longer offer the update again | left (panels-2): not checked |
+| e6ca17001d | #26917 | connections | fix(web): update everything no longer waits on npm for service hosts | left (panels-4): Update everything lives in Features/Updates and Settings, outside this pass; service hosts skip the npm wait (updateEverything.logic.ts) |
+| de386ada9e | #23244 | connections | fix(web): create tasks on a permitted connected environment | left (panels-4): scheduled tasks environment choice, held for the Settings agent (ScheduledTasksSettings) |
+| 4092c4ac56 | #27008 | connections | fix(client): retry the permissions check after a reconnect | left (panels-4): the permissions note retries after a reconnect; needs a session-state reread on reconnect in ConnectionsHostViews' host (Settings agent) |
+| 65b0ab8c91 | #27101 | connections | fix(client): dead connection routes are probed 30x less often | already in CandyWrapper (panels-4): silent routes back off from 2 to 30 minutes (connection-2, Environments.routeBackoff) |
+| ebd1265ccf | #21706 | connections | fix(connect): the remove dialog says whether a T3 Connect environment is still on the account | left (panels-4): the T3 Connect remove dialog wording, held for the Settings agent |
+| 503bcaaf99 | #22887 | connections | fix: keep offline environments out of thread reorder writes | left (panels-4): offline environments in thread reorder writes, held for the Sidebar agent |
+| b1b3c10e24 | #23532 | connections | fix(clients): keep accepted server updates through disconnects | left (panels-4): Update everything lives in Features/Updates and Settings, outside this pass; accepted updates survive disconnects (outdatedHostUpdate.ts) |
+| fd78ea42fc | #23753 | connections | fix(web): show an error when merge-back or disconnect fails | left (panels-4): merge-back and disconnect errors in the relationships control, held for the Thread agent |
+| e5871b6719 | #24691 | connections | fix(web): Reconnect on a switched-off environment switches it back on | left (panels-4): Reconnect on a switched-off environment, a composer banner, held for the Composer agent |
+| 9e97921ad8 | #24716 | connections | fix(clients): a route added after a reorder no longer disappears | left (panels-4): route reorder in the routes list, held for the Settings agent |
+| d2d1e4f50e | #27847 | connections | fix(updates): version checks respect your configured npm registry | left (panels-4): Update everything lives in Features/Updates and Settings, outside this pass; npm registry for version checks is server side; CW reads the result |
+| a05e8fde08 | #26160 | connections | fix(web): Add Environment dialog reopens on Remote link instead of a stale SSH selection | left (panels-4): Add Environment dialog mode reset, held for the Settings agent |
+| 1aa46d0cdf | #27998 | connections | fix(connect): T3 Connect sockets no longer drop every hour | already in CandyWrapper (panels-4): T3 Connect sockets renew their token in the last minute (connection, T3ConnectAuthorizer.swift:310-338) |
+| 8f0d66de5f | #26109 | connections | fix(web): servers still restarting after an app update no longer offer the update again | left (panels-4): Update everything lives in Features/Updates and Settings, outside this pass; servers restarting after an update |
 | 7cd9a73b2f | #24493 | connections | fix(web): thread alerts missed during a disconnect fire on reconnect | ported (panels-2): a stale shell pauses its environment's tracker instead of forgetting it, so what changed during the disconnect notifies once on reconnect |
-| aa46f7ada4 | #25591 | connections | fix(client-runtime): re-pairing at a new address uses the new token | left (panels-2): not checked |
+| aa46f7ada4 | #25591 | connections | fix(client-runtime): re-pairing at a new address uses the new token | ported (panels-4): a route paired at a new address goes first among its kind (EnvironmentRoute.upsert, connection/routes.ts:159-169) |
 | 95d4da5a93 | #28592 | connections | fix(clients): open a delegated child's approval on the environment it runs in | already in CandyWrapper: the child input banner opens the child's scoped thread id, which carries its own environment (Features/Thread/ThreadLineageController `updateChildInputs`) |
-| 322f6544df | #30498 | connections | feat(web): show a newly created pairing link without expanding the client list | left (panels-2): not checked |
-| d520d5bb85 | #26464 | connections | fix(web): show saved service access with Local environment off | left (panels-2): not checked |
-| dff0b1159b | #25198 | connections | fix(connect): show why relay unlink failed | left (panels-2): not checked |
-| 7fe1310ee5 | #32937 | connections | fix(web): Copy MCP URL uses the T3 Connect address | left (panels-2): not checked |
-| b5256ad09c | #22839 | connections | fix(opencode): verify CLI updates when loopback server is still running | left (panels-2): not checked |
-| 25f4c9d44e | #23194 | connections | fix(web): offer retry while an environment reconnects | left (panels-2): not checked |
-| ba32aabf62 | #23111 | connections | fix(scheduler): show short server timezone on fixed-time labels | left (panels-2): not checked |
-| 54a5c51a58 | #21530 | connections | fix(web): fall back to a readable server for shared repositories | left (panels-2): not checked |
-| 42d645ae9e | #32924 | connections | fix(web): update Retry stops re-sending servers already on the target version | left (panels-2): not checked |
-| 7eca0ed885 | #29462 | connections | fix(web): hand-started t3 servers get an update command that updates them | left (panels-2): not checked |
-| 6790f85f53 | #27692 | connections | fix(web): point pairing copy at Sharing & access | left (panels-2): not checked |
+| 322f6544df | #30498 | connections | feat(web): show a newly created pairing link without expanding the client list | left (panels-4): new pairing link shown without expanding, held for the Settings agent |
+| d520d5bb85 | #26464 | connections | fix(web): show saved service access with Local environment off | left (panels-4): saved service access with Local off, held for the Settings agent |
+| dff0b1159b | #25198 | connections | fix(connect): show why relay unlink failed | left (panels-4): relay unlink failure reason, held for the Settings agent |
+| 7fe1310ee5 | #32937 | connections | fix(web): Copy MCP URL uses the T3 Connect address | left (panels-4): Copy MCP URL uses the T3 Connect address; needs presentation.ts's route choice in the Settings MCP row |
+| b5256ad09c | #22839 | connections | fix(opencode): verify CLI updates when loopback server is still running | free with the runtime (panels-4): OpenCode CLI update verification is server side |
+| 25f4c9d44e | #23194 | connections | fix(web): offer retry while an environment reconnects | left (panels-4): retry while reconnecting, a composer banner, held for the Composer agent |
+| ba32aabf62 | #23111 | connections | fix(scheduler): show short server timezone on fixed-time labels | left (panels-4): short server timezone on scheduled task labels, held for the Settings agent |
+| 54a5c51a58 | #21530 | connections | fix(web): fall back to a readable server for shared repositories | left (panels-4): PR list falls back to a readable server for shared repositories; same work as #34088 in PullRequestsPage |
+| 42d645ae9e | #32924 | connections | fix(web): update Retry stops re-sending servers already on the target version | left (panels-4): Update everything lives in Features/Updates and Settings, outside this pass; Retry skips servers already on the target |
+| 7eca0ed885 | #29462 | connections | fix(web): hand-started t3 servers get an update command that updates them | left (panels-4): Update everything lives in Features/Updates and Settings, outside this pass; hand-started servers' update command |
+| 6790f85f53 | #27692 | connections | fix(web): point pairing copy at Sharing & access | left (panels-4): pairing copy points at Sharing & access, held for the Settings agent |
 | fa9d85fad5 | #35327 | connections | fix(web): a server updated with the app reconnects as soon as it is ready | n/a (settings-3): CandyWrapper has no relaunch handoff of server updates; ServerUpdater.run already retries the connection every second while a server restarts |
-| 00f617db4e | #24400 | connections | fix(client-runtime): recover subscriptions that stop on a healthy connection | left (panels-2): not checked |
-| cbf0f0a83f | #36445 | connections | fix(web): screen readers read the Update everything machine list as a table | left (panels-2): not checked |
-| 757f71a7f6 | #29788 | connections | fix(client-runtime): new T3 Connect machines appear without signing in again | left (panels-2): not checked |
-| bd9ff7eb2a | #33244 | connections | fix(client-runtime): recover thread list updates after stream defects | left (panels-2): not checked |
+| 00f617db4e | #24400 | connections | fix(client-runtime): recover subscriptions that stop on a healthy connection | already in CandyWrapper (panels-4): a stream that fails on a healthy socket resubscribes with backoff (ConnectionSupervisor.swift:937-956) |
+| cbf0f0a83f | #36445 | connections | fix(web): screen readers read the Update everything machine list as a table | n/a (panels-4): an ARIA table role; CW's Update everything list is native AX rows |
+| 757f71a7f6 | #29788 | connections | fix(client-runtime): new T3 Connect machines appear without signing in again | left (panels-4): refresh the T3 Connect machine list on app activation; Environments.swift:94 checks routes only |
+| bd9ff7eb2a | #33244 | connections | fix(client-runtime): recover thread list updates after stream defects | already in CandyWrapper (panels-4): the thread list stream resubscribes after a bad value (ConnectionSupervisor.swift:950-956) |
 | ca7a9448b8 | #24932 | connections | fix(client-runtime): Reconnect works while the network reports offline | already in CandyWrapper: connection-2 made Reconnect work while the device reports offline (ConnectionSignalTests) |
-| efae4e9da1 | #36559 | connections | fix(client): retry unread thread visits after reconnect | left (panels-2): not checked |
-| ead133ce70 | #28297 | connections | fix(web): SSH port field no longer turns 22.5 into port 22 | left (panels-2): not checked |
-| acd192fc64 | #36726 | connections | fix(web): removing an environment dismisses its notification toasts | left (panels-2): not checked |
-| 12102c74a3 | #28907 | connections | fix(web,mobile): Linked environments shows links made outside the app | left (panels-2): not checked |
-| 5583b26460 | #36793 | connections | fix(server,client): preserve literal JSON command output | left (panels-2): not checked |
-| a6765d41d5 | #33795 | connections | fix(web): audio and server spinners respect reduced motion | left (panels-2): not checked |
-| e1458f25e2 | #32048 | connections | fix(web): track switch no longer blocked when Local environment is off | left (panels-2): not checked |
-| 1672b51630 | #32157 | connections | fix(web): Add Environment drops the old tab's error when switching mode | left (panels-2): not checked |
+| efae4e9da1 | #36559 | connections | fix(client): retry unread thread visits after reconnect | left (panels-4): ThreadSession.swift:1347-1394 drops a failed thread.visit; retry it on the next connection (ThreadSession, outside these areas) |
+| ead133ce70 | #28297 | connections | fix(web): SSH port field no longer turns 22.5 into port 22 | already in CandyWrapper (panels-4): Swift Int() rejects 22.5 (SshEnvironmentTarget.manual) |
+| acd192fc64 | #36726 | connections | fix(web): removing an environment dismisses its notification toasts | left (panels-4): removing an environment dismisses its toasts; ThreadNotificationCoordinator, outside these areas |
+| 12102c74a3 | #28907 | connections | fix(web,mobile): Linked environments shows links made outside the app | left (panels-4): links made outside the app in Linked environments, held for the Settings agent |
+| 5583b26460 | #36793 | connections | fix(server,client): preserve literal JSON command output | left (panels-4): literal JSON command output; needs commandOutput.ts's raw text path in T3Store CommandOutputBuffer, checked with a transcript |
+| a6765d41d5 | #33795 | connections | fix(web): audio and server spinners respect reduced motion | already in CandyWrapper (panels-4): SpinnerView holds a still arc under Reduce Motion (DesignSystem SpinnerView.swift:5), which ThreadServersView uses |
+| e1458f25e2 | #32048 | connections | fix(web): track switch no longer blocked when Local environment is off | left (panels-4): Update everything lives in Features/Updates and Settings, outside this pass; track switch with Local off |
+| 1672b51630 | #32157 | connections | fix(web): Add Environment drops the old tab's error when switching mode | left (panels-4): Add Environment drops the old tab's error, held for the Settings agent |
 | 399ea10f4e | #37490 | connections | fix(web): Update everything no longer offers a Nightly build to a Stable desktop app | ported (settings-3): UpdateEverythingLogic.serverTargets skips a Stable desktop host for a Nightly target |
-| 27411651a4 | #37825 | connections | fix(auth): bind automatic pairing codes to peer links | left (panels-2): not checked |
-| c48825322d | #38442 | connections | fix(web): pairing links never use the desktop app's t3code:// address | left (panels-2): not checked |
-| dcaff67177 | #38980 | connections | fix(web): removing a connection withdraws its permission update notice | left (panels-2): not checked |
+| 27411651a4 | #37825 | connections | fix(auth): bind automatic pairing codes to peer links | free with the runtime (panels-4): server-side pairing code binding |
+| c48825322d | #38442 | connections | fix(web): pairing links never use the desktop app's t3code:// address | left (panels-4): pairing links never use t3code://, held for the Settings agent (AuthorizedClientsSettings) |
+| dcaff67177 | #38980 | connections | fix(web): removing a connection withdraws its permission update notice | left (panels-4): removing a connection withdraws its permission notice; ThreadSession's permission notice, outside these areas |
 
 ## Small fixes, device (10)
 

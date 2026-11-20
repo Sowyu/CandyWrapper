@@ -246,6 +246,7 @@ struct BranchToolbarLogicTests {
 struct ChangesTotals4928Tests {
     @Test func zeroBranchTotalsFallBackToTheWorkingTree() {
         var s = GitActionsLogicTests.status(changes: true)
+        s.workingTree.insertions = 2
         s.branchChanges = VcsStatus.BranchChanges(baseRef: "main", insertions: 0, deletions: 0)
         #expect(GitActionsLogic.changesTotals(s)?.insertions == 2)
         #expect(GitActionsLogic.changesBaseLabel(s) == "Uncommitted")
