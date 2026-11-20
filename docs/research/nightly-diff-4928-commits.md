@@ -1342,7 +1342,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | a7779fc558 | #35499 | sidebar | fix(web): a focused folder New thread button no longer draws over the hidden-thread count | already in CandyWrapper: SidebarRowViews.swift shows the folder New thread button and the count never together |
 | b1c1e07ded | #23517 | sidebar | fix(web): a click no longer lands on the sidebar row that just slid under it | ported (sidebar-2): SidebarShiftGuard drops presses for 500ms on rows that moved half a row without the user's input |
 | db470a3ebd | #35659 | sidebar | fix(web): legacy collapsed project folders stay collapsed after a save | skip: web localStorage migration |
-| 2d80cb6bc7 | #36420 | sidebar | fix(clients): live working timers count on the host's clock | left: needs a server clock offset per environment |
+| 2d80cb6bc7 | #36420 | sidebar | fix(clients): live working timers count on the host's clock | ported (sidebar-2): ServerClock records the first config snapshot's serverTime; sidebar timers count on it. The timeline's work group timer (Features/Thread) still reads this Mac's clock |
 | dea07a1b12 | #36467 | sidebar | fix(web): rewind no longer offers file restore in project-folder threads | skip: rewind file restore, outside the sidebar |
 | 1f55acf13b | #36543 | sidebar | fix(client-runtime): refresh settled counts when threads move project | already in CandyWrapper: ShellReducer.swift invalidates counts on any update of an older settled thread |
 | 306914f016 | #35614 | sidebar | fix(client-runtime): grouped projects no longer take one folder's name as their label | ported (sidebar-2): deriveProjectGroupLabel names a whole-repository group after the repository |

@@ -5,6 +5,10 @@ import T3Protocol
 /// Replay belongs to one connection generation; callers own any policy cached across connections.
 public actor ServerConfigFeed {
     private let supervisor: ConnectionSupervisor
+    /// Names the host whose clock the first snapshot of each subscription reads (`ServerClock`, #36420).
+    private let environmentId: String?
+    /// When this generation's subscription went out, until its snapshot records the host's clock.
+    private var clockRequestedAtMs: Int64?
     private var subscription: Task<Void, Never>?
     private var completion: Task<Void, Never>?
     private var run: UUID?
@@ -23,8 +27,9 @@ public actor ServerConfigFeed {
         "environmentThemesUpdated", "usageLimitSourcesUpdated",
     ]
 
-    public init(supervisor: ConnectionSupervisor) {
+    public init(supervisor: ConnectionSupervisor, environmentId: String? = nil) {
         self.supervisor = supervisor
+        self.environmentId = environmentId
     }
 
     deinit {
@@ -115,6 +120,7 @@ public actor ServerConfigFeed {
         switch event {
         case .subscribed(let next):
             if generation != next {
+                clockRequestedAtMs = Self.nowMs()
                 generation = next
                 snapshot = nil
                 initialFailed = false
@@ -138,11 +144,20 @@ public actor ServerConfigFeed {
         for listener in listeners.values { listener.yield(event) }
     }
 
+    private static func nowMs() -> Int64 { Int64((Date().timeIntervalSince1970 * 1000).rounded()) }
+
     private func cache(_ value: JSONValue) {
         guard let type = value["type"]?.stringValue else { return }
         if type == "snapshot" {
             // A snapshot carries config at the top level (server.ts:693-697), never under payload.
             guard case .object? = value["config"] else { return }
+            // Only a subscription's first snapshot is fresh; later ones may repeat its serverTime
+            // (client-runtime rpc/session.ts at 4928, #36420).
+            if let requested = clockRequestedAtMs, let environmentId {
+                clockRequestedAtMs = nil
+                let serverTime = value["config"]?["serverTime"]?.stringValue.flatMap(T3Timestamp.parseEpochMs)
+                ServerClock.record(environmentId: environmentId, serverTimeMs: serverTime, requestedAtMs: requested, receivedAtMs: Self.nowMs())
+            }
             snapshot = value
             initialFailed = false
             // A later editor-discovery snapshot is authoritative for config fields. The two hubs

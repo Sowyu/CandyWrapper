@@ -757,9 +757,11 @@ public enum SidebarListBuilder {
                 consider(nextRelativeStep(anchor: anchor, nowMs: nowMs))
             }
             if working, let start = r.workingStartedMs, r.variant == .card {
-                let elapsed = max(0, nowMs - start)
+                // The timer counts on the host's clock (#36420); the next step converts back to this Mac's.
+                let offset = ServerClock.toServerClock(r.id.environmentId, nowMs) - nowMs
+                let elapsed = max(0, nowMs + offset - start)
                 let unit: Int64 = elapsed < 60_000 ? 1_000 : 60_000
-                consider(start + (elapsed / unit + 1) * unit)
+                consider(start + (elapsed / unit + 1) * unit - offset)
             }
         }
         return next
