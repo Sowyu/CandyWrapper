@@ -43,6 +43,11 @@ Download the newest DMG from [Releases](https://github.com/Sowyu/CandyWrapper/re
 
 The Mac I built releases on was returned, and the key that signs updates went with it. Newer versions are signed with a new key, and 1.14.14 and older only trust the old one, so they refuse the update. After one manual install the app updates itself again. Your settings, drafts and paired machines stay as they are.
 
+Two things to expect:
+
+- macOS may refuse to open 1.14.14 or older, say it contains malware, and move it to the Trash. It doesn't. The certificate those versions were signed with was revoked when I made a new one. Installing the newest version fixes it.
+- The first time the new version opens, macOS asks once per saved machine whether CandyWrapper may use "T3 Code environment token" in your keychain. Click Always Allow. The new certificate has a different name, so macOS asks again for items the old app saved. Deny deletes nothing, it only leaves that machine disconnected until you allow it.
+
 ## Connecting
 
 If T3 Code's server already runs on your Mac, CandyWrapper uses it. If not, it starts one from your installed T3 runtime and stops it again when you're idle.
