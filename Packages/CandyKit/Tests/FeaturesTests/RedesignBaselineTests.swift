@@ -303,11 +303,18 @@ struct RedesignBaselineTests {
                 let blur = ThemeRuntime.ditherBlur, unit = DitherArt.unit(blur: blur)
                 layer.magnificationFilter = blur ? .linear : .nearest
                 if ThemeRuntime.ditherGradient {
-                    let reach = DitherArt.gradientReach, accent = palette.primary.srgb
-                    let w = Int(ceil(art.bounds.width * reach.width)), h = Int(ceil(art.bounds.height * reach.height))
-                    layer.frame = NSRect(x: 0, y: art.bounds.height - CGFloat(h), width: CGFloat(w), height: CGFloat(h))
-                    layer.contents = DitherArt.render(.init(url: nil, width: w, height: h, background: [bg.x, bg.y, bg.z], scale: 2,
-                                                            tint: [accent.x, accent.y, accent.z], dark: dark))
+                    // The loop's first frame, which is also the still look: the cell color through the cell mask.
+                    let reach = DitherArt.gradientReach, accent = palette.primary.srgb, unit = DitherArt.gradientUnit
+                    let w = Int(ceil(art.bounds.width * reach.width / unit)), h = Int(ceil(art.bounds.height * reach.height / unit))
+                    layer.frame = NSRect(x: 0, y: art.bounds.height - CGFloat(h) * unit, width: CGFloat(w) * unit, height: CGFloat(h) * unit)
+                    layer.contents = nil
+                    layer.backgroundColor = DitherArt.gradientColor(tint: [accent.x, accent.y, accent.z], background: [bg.x, bg.y, bg.z], dark: dark)
+                    let mask = layer.mask ?? CALayer()
+                    mask.frame = layer.bounds
+                    mask.magnificationFilter = .nearest
+                    mask.contentsGravity = .resize
+                    mask.contents = DitherArt.gradientFrames(width: w, height: h, frames: 1).first
+                    layer.mask = mask
                 } else {
                     layer.frame = art.bounds
                     layer.contents = DitherArt.render(.init(url: ComposerAttachmentsFidelityTests.fixture,

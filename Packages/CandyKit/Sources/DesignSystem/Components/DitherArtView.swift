@@ -26,6 +26,12 @@ public final class DitherArtView: NSView {
     private var loggedScrim: CGFloat?
     /// macOS's Reduce Transparency, replaceable in tests.
     var systemReducesTransparency: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency }
+    /// Gradient: the accent color through the current frame's mask, one cell per mask pixel.
+    private let gradientMask = CALayer()
+    /// Gradient's loop, held only while the new-thread page shows (`DitherArt.gradientFrames`).
+    private var gradientFrames: [CGImage] = []
+    /// Whether the window is visible, unminiaturized, not covered and key; tests set it.
+    var windowIsActiveOverride: Bool?
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -36,7 +42,10 @@ public final class DitherArtView: NSView {
         // One canvas pixel is exactly one dot: the layer is the canvas's size in dots (`placeArt`), so the stretch is
         // exactly `dot` and every dot is the same whole number of device pixels.
         art.contentsGravity = .resize
-        art.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        art.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull(), "backgroundColor": NSNull(), "mask": NSNull()]
+        gradientMask.contentsGravity = .resize
+        gradientMask.magnificationFilter = .nearest
+        gradientMask.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
         scrim.actions = ["bounds": NSNull(), "position": NSNull(), "colors": NSNull(), "locations": NSNull()]
         scrim.startPoint = CGPoint(x: 0, y: 0.5)
         scrim.endPoint = CGPoint(x: 1, y: 0.5)
@@ -103,8 +112,9 @@ public final class DitherArtView: NSView {
     public static func setEmphasis(_ emphasis: Emphasis?, from source: NSView) {
         let wasHero = sources.object(forKey: source)?.emphasis == .hero
         if let emphasis { sources.setObject(EmphasisBox(emphasis: emphasis), forKey: source) } else { sources.removeObject(forKey: source) }
-        // The full art goes up first, then opening a new thread resolves its dots in.
-        for art in arts.allObjects { art.updateScrim() }
+        // The full art goes up first, then opening a new thread resolves its dots in. Gradient renders only for the
+        // new-thread page, so a page change renders or drops it.
+        for art in arts.allObjects { if ThemeRuntime.ditherGradient { art.refresh() } else { art.updateScrim() } }
         if emphasis == .hero, !wasHero, let art = art(behind: source) { art.playReveal() }
     }
 
@@ -112,7 +122,7 @@ public final class DitherArtView: NSView {
     /// of what shows now. Before, the last page's scrim stayed until something else redrew the art.
     @MainActor
     public static func pagesMoved() {
-        for art in arts.allObjects { art.updateScrim() }
+        for art in arts.allObjects { if ThemeRuntime.ditherGradient { art.refresh() } else { art.updateScrim() } }
     }
 
     /// A thread page calls this from its layout with its chat column, in its own coordinates, so the art's veil sits
@@ -135,7 +145,7 @@ public final class DitherArtView: NSView {
     /// Dots resolve in, in Bayer order, over 0.75 s, and the last frame is the static art itself, so the art ends
     /// exactly as it rests. Core Animation flips the ten frames; they exist only while it plays.
     func playReveal() {
-        guard !Motion.reduced, !ThemeRuntime.ditherBlur else { return }
+        guard !Motion.reduced, !ThemeRuntime.ditherBlur, !ThemeRuntime.ditherGradient else { return }
         guard let request = shown, let contents = art.contents else { revealsWhenShown = true; return }
         revealsWhenShown = false
         let final = DitherArtImage(image: (contents as! CGImage))
@@ -200,8 +210,12 @@ public final class DitherArtView: NSView {
         if let window {
             NotificationCenter.default.removeObserver(self, name: NSWindow.didChangeScreenNotification, object: window)
             NotificationCenter.default.removeObserver(self, name: NSWindow.didChangeOcclusionStateNotification, object: window)
+            NotificationCenter.default.removeObserver(self, name: NSWindow.didBecomeKeyNotification, object: window)
+            NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: window)
         }
         if let newWindow {
+            NotificationCenter.default.addObserver(self, selector: #selector(keyChanged), name: NSWindow.didBecomeKeyNotification, object: newWindow)
+            NotificationCenter.default.addObserver(self, selector: #selector(keyChanged), name: NSWindow.didResignKeyNotification, object: newWindow)
             NotificationCenter.default.addObserver(self, selector: #selector(desktopMayHaveChanged), name: NSWindow.didChangeScreenNotification, object: newWindow)
             NotificationCenter.default.addObserver(self, selector: #selector(visibilityChanged), name: NSWindow.didChangeOcclusionStateNotification, object: newWindow)
         }
@@ -217,10 +231,61 @@ public final class DitherArtView: NSView {
             debounce?.cancel()
             shown = nil; pending = nil
             art.contents = nil
+            dropGradient()
         } else if shown == nil {
             refresh()
         }
+        syncMotion()
     }
+
+    @objc private func keyChanged(_ note: Notification) { syncMotion() }
+
+    /// Whether the window shows and has the user's attention: visible, not miniaturized or covered, and key.
+    private var windowIsActive: Bool {
+        if let windowIsActiveOverride { return windowIsActiveOverride }
+        guard let window else { return false }
+        return window.isVisible && !window.isMiniaturized && window.occlusionState.contains(.visible) && window.isKeyWindow
+    }
+
+    /// Gradient moves only while it can be seen and wanted: the new-thread page in Gradient with Animate on, the
+    /// window active and Reduce Motion off. Anything else removes the animation, holding the frame it was on, so
+    /// nothing runs while idle (the user, 2026-11-21: "capys plain dither isnt just static").
+    func syncMotion() {
+        let on = ThemeRuntime.ditherGradient && ThemeRuntime.ditherGradientAnimates && !Motion.reduced && windowIsActive
+            && page == .hero && !art.isHidden && gradientFrames.count > 1 && art.mask === gradientMask
+        let running = gradientMask.animation(forKey: "drift") != nil
+        guard on != running else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        if on {
+            let drift = CAKeyframeAnimation(keyPath: "contents")
+            drift.values = gradientFrames
+            drift.calculationMode = .discrete
+            drift.keyTimes = (0...gradientFrames.count).map { NSNumber(value: Double($0) / Double(gradientFrames.count)) }
+            drift.duration = DitherArt.gradientPeriod
+            drift.repeatCount = .infinity
+            // Start from the frame it holds, so resuming never jumps.
+            if let held = gradientMask.contents, let i = gradientFrames.firstIndex(where: { $0 === (held as AnyObject) }) {
+                drift.timeOffset = DitherArt.gradientPeriod * Double(i) / Double(gradientFrames.count)
+            }
+            // Only `syncMotion` takes it off, never Core Animation (an offscreen window counts it finished at once).
+            drift.isRemovedOnCompletion = false
+            gradientMask.add(drift, forKey: "drift")
+        } else {
+            // Hold the frame on screen now.
+            if let current = gradientMask.presentation()?.contents { gradientMask.contents = current }
+            gradientMask.removeAnimation(forKey: "drift")
+        }
+        CATransaction.commit()
+    }
+
+    /// Gradient's frames go when its page or window does; they render again when it shows.
+    private func dropGradient() {
+        gradientMask.removeAnimation(forKey: "drift")
+        gradientMask.contents = nil
+        gradientFrames = []
+    }
+
+    var gradientAnimatingForTesting: Bool { gradientMask.animation(forKey: "drift") != nil }
 
     /// Moving between the main panel (Dither) and the window (Blur): the old art never shows at the new place.
     public override func viewDidMoveToSuperview() {
@@ -247,6 +312,7 @@ public final class DitherArtView: NSView {
         let unit = shown.unit
         let w = CGFloat(shown.width) * unit, h = CGFloat(shown.height) * unit
         art.frame = CGRect(x: 0, y: bounds.height - h, width: w, height: h)
+        gradientMask.frame = art.bounds
     }
 
     /// What the panel shows over the art: the frontmost registered page that's visible inside it decides, whatever
@@ -322,6 +388,7 @@ public final class DitherArtView: NSView {
         blend.locations = ts.map { NSNumber(value: 1 - $0) }
         blend.colors = ts.map { band.copy(alpha: DitherChrome.bandBlend($0))! }
         CATransaction.commit()
+        syncMotion()
     }
 
     /// Asks for the art at the current size and appearance, after the size settles.
@@ -340,12 +407,20 @@ public final class DitherArtView: NSView {
         art.magnificationFilter = blur ? .linear : .nearest
         let request: DitherArt.Request
         if ThemeRuntime.ditherGradient {
-            // No picture: the canvas covers only the top left, where the dots are; the ground shows past it.
+            // Only the new-thread page shows it, so no other page holds its frames.
+            guard page == .hero else {
+                debounce?.cancel()
+                shown = nil; pending = nil
+                dropGradient()
+                return
+            }
+            // No picture: the canvas covers the top of the panel, where the cells are; the ground shows below it.
             let accent = palette.primary
             request = DitherArt.Request(url: nil, width: Int((rect.width * DitherArt.gradientReach.width / DitherArt.gradientUnit).rounded(.up)),
                                         height: Int((rect.height * DitherArt.gradientReach.height / DitherArt.gradientUnit).rounded(.up)),
                                         background: [background.srgb.x, background.srgb.y, background.srgb.z], scale: scale,
-                                        tint: [accent.srgb.x, accent.srgb.y, accent.srgb.z], dark: dark)
+                                        tint: [accent.srgb.x, accent.srgb.y, accent.srgb.z], dark: dark,
+                                        frames: ThemeRuntime.ditherGradientAnimates ? Int(DitherArt.gradientPeriod * DitherArt.gradientFPS) : 1)
         } else {
             let url = ThemeRuntime.ditherPicture ?? DitherArt.desktopPicture(for: window.screen)
             let unit = DitherArt.unit(blur: blur)
@@ -359,26 +434,55 @@ public final class DitherArtView: NSView {
         pending = request
         debounce?.cancel()
         // A live resize lands here every frame; the last size renders, the old art stretches meanwhile.
+        if rendersInlineForTesting {
+            let (image, frames) = Self.render(request)
+            show(request, image: image, frames: frames)
+            return
+        }
         let work = DispatchWorkItem { [weak self] in
             DispatchQueue.global(qos: .utility).async {
-                let image = DitherArtImage(image: DitherArt.render(request))
+                let (image, frames) = Self.render(request)
                 DispatchQueue.main.async {
-                    MainActor.assumeIsolated {
-                        guard let self, self.pending == request else { return }
-                        self.pending = nil
-                        // A render that failed isn't remembered, so the next refresh tries again.
-                        self.shown = image.image == nil ? nil : request
-                        self.art.contents = image.image
-                        CATransaction.begin(); CATransaction.setDisableActions(true)
-                        self.placeArt()
-                        CATransaction.commit()
-                        if self.revealsWhenShown { self.playReveal() }
-                    }
+                    MainActor.assumeIsolated { self?.show(request, image: image, frames: frames) }
                 }
             }
         }
         debounce = work
         DispatchQueue.main.asyncAfter(deadline: .now() + (shown == nil ? 0 : 0.15), execute: work)
+    }
+
+    /// Tests render on the main thread, so they never wait with theme globals applied.
+    var rendersInlineForTesting = false
+
+    /// The picture's art, or Gradient's frames and the first of them. Runs on any thread.
+    private nonisolated static func render(_ request: DitherArt.Request) -> (DitherArtImage, DitherArtFrames) {
+        let frames = DitherArtFrames(images: request.tint == nil ? []
+            : DitherArt.gradientFrames(width: request.width, height: request.height, frames: request.frames))
+        return (DitherArtImage(image: request.tint == nil ? DitherArt.render(request) : frames.images.first), frames)
+    }
+
+    private func show(_ request: DitherArt.Request, image: DitherArtImage, frames: DitherArtFrames) {
+        guard pending == request else { return }
+        pending = nil
+        // A render that failed isn't remembered, so the next refresh tries again.
+        shown = image.image == nil ? nil : request
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        dropGradient()
+        if let tint = request.tint {
+            art.contents = nil
+            art.backgroundColor = DitherArt.gradientColor(tint: tint, background: request.background, dark: request.dark)
+            gradientFrames = frames.images
+            gradientMask.contents = image.image
+            art.mask = gradientMask
+        } else {
+            art.mask = nil
+            art.backgroundColor = nil
+            art.contents = image.image
+        }
+        placeArt()
+        CATransaction.commit()
+        if revealsWhenShown { playReveal() }
+        syncMotion()
     }
 
     var contentsForTesting: CGImage? { art.contents.map { $0 as! CGImage } }
@@ -494,62 +598,79 @@ public enum DitherArt {
         /// the canvas is in `gradientUnit`s and covers `gradientReach` of the panel.
         var tint: [Double]?
         var dark = true
+        /// Gradient's frame count: the loop, or 1 when Animate is off.
+        var frames = 1
 
         /// Points per canvas pixel.
         var unit: CGFloat { tint != nil ? DitherArt.gradientUnit : DitherArt.unit(blur: blur) }
     }
 
-    /// Gradient's canvas pixel, in points. Its dots sit on a grid of `gradientPitch` pixels, as Capy's 2pt dots on a
-    /// 3pt grid do.
-    public nonisolated static let gradientUnit: CGFloat = 1
-    nonisolated static let gradientPitch = 3
-    /// How much of the panel Gradient's canvas covers from the top left. Capy's fades to the ground about two thirds
-    /// across and a third down (the user's recording, 2026-11-21).
-    nonisolated static let gradientReach = CGSize(width: 0.75, height: 0.6)
+    /// Gradient's cell, in points: Capy's binary dither cells measured 6px at 2x in the user's recording.
+    public nonisolated static let gradientUnit: CGFloat = 3
+    /// How much of the panel Gradient's canvas covers from the top: its full width and the top half, where Capy's
+    /// field moves (the user's recording, 2026-11-21).
+    nonisolated static let gradientReach = CGSize(width: 1, height: 0.5)
+    /// The loop: 12 s at 8 frames a second. Capy's field moves at about 12 cells a second at its fastest, so a cell
+    /// flips at most once a frame or so.
+    nonisolated static let gradientPeriod: Double = 12
+    nonisolated static let gradientFPS: Double = 8
 
-    /// Gradient's halftone: an elliptical fade from the top left corner to nothing at the canvas's edges, in square
-    /// dots on a 3px grid that shrink from 2px to 1px and thin out in Bayer order as it fades, each dot the accent
-    /// mixed into the ground. The dots stay dim, so text over them reads as it does over the ground.
-    nonisolated static func gradient(_ request: Request, tint: [Double]) -> CGImage? {
-        let w = request.width, h = request.height
-        guard w > 0, h > 0, tint.count == 3,
-              let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
-                                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
-              let data = ctx.data?.bindMemory(to: UInt8.self, capacity: w * h * 4) else { return nil }
-        let bg = request.background.count == 3 ? request.background.map { $0 * 255 } : [0, 0, 0]
-        let accent = tint.map { $0 * 255 }
-        // How much of the accent a dot takes at full strength and at the fade's edge: dim in dark like Capy's navy
-        // (#26314b at most), fainter in light, where dark dots on a pale ground read stronger.
-        let (peak, edge) = request.dark ? (0.45, 0.22) : (0.3, 0.12)
-        let pitch = gradientPitch
-        ctx.setFillColor(CGColor(srgbRed: bg[0] / 255, green: bg[1] / 255, blue: bg[2] / 255, alpha: 1))
-        ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
-        // Row 0 of the buffer is the top of the canvas.
-        let cells = (x: (w + pitch - 1) / pitch, y: (h + pitch - 1) / pitch)
-        for cy in 0..<cells.y {
-            for cx in 0..<cells.x {
-                let px = Double(cx * pitch) + 1, py = Double(cy * pitch) + 1
-                let d = ((px / Double(w)) * (px / Double(w)) + (py / Double(h)) * (py / Double(h))).squareRoot()
-                // Nearly linear, so the dots stay dense across the top before thinning out (pass 1's 1.4 faded out
-                // within a fifth of the panel on screen).
-                let strength = pow(max(0, 1 - d), 0.85)
-                guard strength > 0 else { continue }
-                // Two dot sizes and none, dithered: 2 is a 2 x 2 dot, 1 a single pixel.
-                let threshold = (Double(bayer[(cy & 7) * 8 + (cx & 7)]) + 0.5) / 64
-                let scaled = strength * 2, low = scaled.rounded(.down)
-                let size = Int(scaled - low > threshold ? low + 1 : low)
-                guard size > 0 else { continue }
-                let share = edge + (peak - edge) * strength
-                let color = (0..<3).map { UInt8(min(max(bg[$0] + (accent[$0] - bg[$0]) * share, 0), 255).rounded()) }
-                for dy in 0..<min(size, h - cy * pitch) {
-                    for dx in 0..<min(size, w - cx * pitch) {
-                        let i = ((cy * pitch + dy) * w + cx * pitch + dx) * 4
-                        for c in 0..<3 { data[i + c] = color[c] }
-                    }
+    /// One soft lobe of Gradient's field along the top: its centre and strength swing around a rest value, each on a
+    /// whole number of turns per loop, so the loop is seamless.
+    struct Lobe { var centre: Double, travel: Double, phase: Double, width: Double, strength: Double, swell: Double, turns: Double, swellPhase: Double }
+    /// After Capy's recording: a lobe at the left that swells and fades, one that drifts right across the middle,
+    /// and one at the right that grows from nothing. Frame 0 is brightest at the top left, the static look.
+    nonisolated static let lobes: [Lobe] = [
+        Lobe(centre: 0.06, travel: 0.06, phase: 0, width: 0.22, strength: 0.75, swell: 0.25, turns: 1, swellPhase: 1),
+        Lobe(centre: 0.4, travel: 0.16, phase: 2, width: 0.18, strength: 0.55, swell: 0.45, turns: 2, swellPhase: 0.5),
+        Lobe(centre: 0.84, travel: 0.1, phase: 4, width: 0.2, strength: 0.5, swell: 0.5, turns: 1, swellPhase: 3.5),
+    ]
+
+    /// Gradient's field at `u` across the canvas (0 left, 1 right) and loop time `t` (0...1), 0 to 1.
+    nonisolated static func gradientField(_ u: Double, _ t: Double) -> Double {
+        var f = 0.0
+        for l in lobes {
+            let c = l.centre + l.travel * sin(2 * .pi * t + l.phase)
+            let a = l.strength + l.swell * sin(2 * .pi * t * l.turns + l.swellPhase)
+            let d = (u - c) / l.width
+            f += a * exp(-d * d)
+        }
+        return min(1, f)
+    }
+
+    /// Gradient's frames: one alpha mask per frame, a cell per pixel, on where the field beats the cell's Bayer
+    /// threshold, the way Capy's cells switch on and off on a fixed grid. One frame when `frames` is 1. The field is a
+    /// row profile times a linear falloff down the canvas, so a frame costs one multiply per cell.
+    nonisolated static func gradientFrames(width w: Int, height h: Int, frames: Int) -> [CGImage] {
+        guard w > 0, h > 0, frames > 0 else { return [] }
+        let fall = (0..<h).map { y -> Double in 1 - (Double(y) + 0.5) / Double(h) }
+        var out: [CGImage] = []
+        out.reserveCapacity(frames)
+        var row = [Double](repeating: 0, count: w)
+        for i in 0..<frames {
+            let t = Double(i) / Double(frames)
+            for x in 0..<w { row[x] = gradientField((Double(x) + 0.5) / Double(w), t) }
+            guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w, space: CGColorSpaceCreateDeviceGray(),
+                                      bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue),
+                  let data = ctx.data?.bindMemory(to: UInt8.self, capacity: w * h) else { return [] }
+            // Row 0 of the buffer is the top of the canvas.
+            for y in 0..<h {
+                let b = (y & 7) * 8, f = fall[y]
+                for x in 0..<w {
+                    data[y * w + x] = row[x] * f > (Double(bayer[b + (x & 7)]) + 0.5) / 64 ? 255 : 0
                 }
             }
+            guard let image = ctx.makeImage() else { return [] }
+            out.append(image)
         }
-        return ctx.makeImage()
+        return out
+    }
+
+    /// Gradient's one cell color: the accent mixed into the ground, dim like Capy's navy (#26314b at most).
+    nonisolated static func gradientColor(tint: [Double], background: [Double], dark: Bool) -> CGColor {
+        let share = dark ? 0.36 : 0.22
+        let c = (0..<3).map { background[$0] + (tint[$0] - background[$0]) * share }
+        return CGColor(srgbRed: c[0], green: c[1], blue: c[2], alpha: 1)
     }
 
     nonisolated static func smoothstep(_ a: Double, _ b: Double, _ x: Double) -> Double {
@@ -591,7 +712,7 @@ public enum DitherArt {
     nonisolated static func render(_ request: Request) -> CGImage? {
         let w = request.width, h = request.height
         guard w > 0, h > 0 else { log.error("no art: the canvas is \(w) x \(h) dots"); return nil }
-        if let tint = request.tint { return gradient(request, tint: tint) }
+        if request.tint != nil { return gradientFrames(width: w, height: h, frames: 1).first }
         if request.url == nil { log.notice("no chosen or desktop picture") }
         for url in [request.url].compactMap({ $0 }) + request.fallbacks {
             let t0 = Date()

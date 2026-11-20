@@ -25,7 +25,8 @@ import T3Protocol
         // The theme picker turns Redesign on: the switch follows and the rows wake.
         lib.setTheme(ThemeDefinition.dither.id)
         #expect(page.master.isOn)
-        #expect(page.gated.allSatisfy { $0.inertReason == nil })
+        // Animate gradient waits for Gradient; the default Background is Picture.
+        #expect(page.gated.allSatisfy { $0.inertReason == nil || $0.inertReason == RedesignSettingsView.animateReason })
         // The switch turns it off, and on again: the picker follows.
         page.master.onChange?(false)
         #expect(!lib.isRedesignOn && !page.master.isOn)
@@ -55,7 +56,7 @@ import T3Protocol
 
     @Test func searchFindsTheTabAndEveryRow() {
         let ids = ["redesign", "redesign-picture", "background-dim", "accent-color", "ignore-reduce-transparency", "composer-collapse",
-                   "redesign-stacked-picker", "redesign-picker-account", "redesign-background"]
+                   "redesign-stacked-picker", "redesign-picker-account", "redesign-background", "redesign-gradient-animate"]
         #expect(SettingsSearch.search("redesign").first?.id == "redesign")
         for id in ids {
             let item = SettingsSearch.item(id)

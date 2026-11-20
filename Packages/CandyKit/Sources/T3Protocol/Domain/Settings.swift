@@ -68,6 +68,7 @@ public struct ClientSettings: Equatable, Sendable {
         "ignoreReduceTransparency": SettingSpec(.bool, .bool(false)),  // CandyWrapper only: Redesign and Glass ignore macOS's Reduce Transparency
         "ditherAccent": SettingSpec(.string(maxLength: 32), .string("teal")),  // CandyWrapper only: Redesign's accent, a DitherAccent id
         "redesignBackground": SettingSpec(.literals(["dither", "blur", "gradient"]), .string("dither")),  // CandyWrapper only: Redesign's picture dithered or blurred behind the whole window, or accent dots with no picture
+        "redesignGradientAnimate": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's Gradient background moves on the new-thread page
         "redesignStackedPicker": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's docked model picker as one column
         "redesignPickerAccount": SettingSpec(.bool, .bool(false)),  // CandyWrapper only: Redesign's account and limits card in the model picker
         "appIcon": SettingSpec(.literals(["sticker", "pink", "grape", "mint", "lemon", "orange", "classic"]), .string("sticker")),  // CandyWrapper only: the Dock icon (AppIconChoice)

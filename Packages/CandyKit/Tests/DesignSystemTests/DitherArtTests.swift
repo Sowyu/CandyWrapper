@@ -98,29 +98,32 @@ struct DitherArtTests {
         #expect(art()?.requestForTesting?.width == Int((shell.main.bounds.width / DitherArt.dot).rounded(.up)))
     }
 
-    /// Gradient: no picture, a canvas over the top left only, accent dots at its top left corner and the ground at its
-    /// far edge; the art shows on a new thread and hides on every other page.
-    @MainActor @Test func gradientDrawsAccentDotsAtTheTopLeftOnly() throws {
-        let bg = 8.0 / 255, accent = [0.25, 0.5, 0.88]
-        let image = try #require(DitherArt.render(.init(url: nil, width: 300, height: 200, background: [bg, bg, bg], scale: 2,
-                                                        tint: accent, dark: true)))
-        let rep = NSBitmapImageRep(cgImage: image)
-        func rgb(_ x: Int, _ y: Int) -> [Int] {
-            let c = rep.colorAt(x: x, y: y)!.usingColorSpace(.sRGB)!
-            return [c.redComponent, c.greenComponent, c.blueComponent].map { Int(($0 * 255).rounded()) }
+    /// Gradient: no picture, binary Bayer cells of one color on a fixed grid, like Capy's: on at the top left, off
+    /// at the canvas's foot, and the loop's frames differ, so the field moves under the fixed grid.
+    @Test func gradientFramesAreBinaryCellsThatMove() throws {
+        let frames = DitherArt.gradientFrames(width: 300, height: 120, frames: 8)
+        #expect(frames.count == 8)
+        func cells(_ image: CGImage) -> [UInt8] {
+            let ctx = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width,
+                                space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue)!
+            ctx.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+            return Array(UnsafeBufferPointer(start: ctx.data!.bindMemory(to: UInt8.self, capacity: image.width * image.height),
+                                             count: image.width * image.height))
         }
-        // The first dot, at the top left: the accent's hue mixed into the ground, blue strongest, never brighter than
-        // its share allows.
-        let dot = rgb(0, 0)
-        #expect(dot[2] > dot[0] && dot[2] > 8 && dot[2] < Int(accent[2] * 255 * 0.6))
-        // The gap between dots and the canvas's far corner are the same gray ground (read back through a color
-        // conversion, so not exactly 8).
-        let ground = rgb(299, 199)
-        #expect(ground[0] == ground[1] && ground[1] == ground[2] && ground[0] <= 10)
-        #expect(rgb(2, 2) == ground)
+        let first = cells(frames[0])
+        #expect(Set(first).isSubset(of: [0, 255]))
+        // Row 0 is the top: the top left cell is on, the bottom row is all off.
+        #expect(first[0] == 255)
+        #expect(first[(119 * 300)..<(120 * 300)].allSatisfy { $0 == 0 })
+        #expect(cells(frames[4]) != first)
+    }
 
-        let previous = ThemeRuntime.input
-        defer { ThemeRuntime.apply(previous) }
+    /// The motion runs only while every condition holds, and each one stopping removes it: the window losing key,
+    /// another page, Reduce Motion, Animate off and another Background (the user, 2026-11-21: idle costs nothing).
+    @MainActor @Test func gradientMotionStopsWhenItCannotBeSeen() throws {
+        let previous = ThemeRuntime.input, motion = Motion.reducedOverride
+        defer { ThemeRuntime.apply(previous); Motion.reducedOverride = motion }
+        Motion.reducedOverride = false
         var input = ThemeRuntimeInput(light: ThemeDefinition.dither.colors(for: .light).map { ThemeRuntimeHalf(colors: $0) },
                                       dark: ThemeDefinition.dither.colors(for: .dark).map { ThemeRuntimeHalf(colors: $0) })
         input.ditherLight = true; input.ditherDark = true; input.ditherGradient = true
@@ -132,17 +135,50 @@ struct DitherArtTests {
         defer { window.contentView = nil }
         shell.layoutSubtreeIfNeeded()
         let art = try #require(shell.main.subviews.first { $0 is DitherArtView } as? DitherArtView)
-        let request = try #require(art.requestForTesting)
-        #expect(request.url == nil && request.tint != nil)
-        #expect(request.width == Int((shell.main.bounds.width * DitherArt.gradientReach.width).rounded(.up)))
-        // No page registered: the heavy-scrim page, where Gradient shows the plain ground.
-        #expect(art.layer?.sublayers?.first?.isHidden == true)
+        art.windowIsActiveOverride = true
+        art.rendersInlineForTesting = true
+        // No page registered: no frames are rendered or held, and nothing moves.
+        #expect(art.requestForTesting == nil)
+        #expect(!art.gradientAnimatingForTesting)
         let page = NSView(frame: shell.main.bounds)
         shell.main.addSubview(page)
         DitherArtView.setEmphasis(.hero, from: page)
         defer { DitherArtView.setEmphasis(nil, from: page) }
-        #expect(art.layer?.sublayers?.first?.isHidden == false)
+        let request = try #require(art.requestForTesting)
+        #expect(request.url == nil && request.tint != nil)
+        #expect(request.width == Int((shell.main.bounds.width / DitherArt.gradientUnit).rounded(.up)))
+        #expect(request.frames == Int(DitherArt.gradientPeriod * DitherArt.gradientFPS))
+        #expect(art.gradientAnimatingForTesting)
         #expect(art.scrimAlphaForTesting == 0)
+
+        art.windowIsActiveOverride = false; art.syncMotion()
+        #expect(!art.gradientAnimatingForTesting)
+        art.windowIsActiveOverride = true; art.syncMotion()
+        #expect(art.gradientAnimatingForTesting)
+
+        Motion.reducedOverride = true; art.syncMotion()
+        #expect(!art.gradientAnimatingForTesting)
+        Motion.reducedOverride = false; art.syncMotion()
+        #expect(art.gradientAnimatingForTesting)
+
+        // A thread with messages takes the page: the frames go too.
+        DitherArtView.setEmphasis(.thread, from: page)
+        #expect(!art.gradientAnimatingForTesting)
+        #expect(art.requestForTesting == nil)
+        DitherArtView.setEmphasis(.hero, from: page)
+        #expect(art.gradientAnimatingForTesting)
+
+        input.ditherGradientAnimates = false
+        ThemeRuntime.apply(input)
+        #expect(!art.gradientAnimatingForTesting)
+        #expect(art.requestForTesting?.frames == 1)
+        input.ditherGradientAnimates = true
+        ThemeRuntime.apply(input)
+        #expect(art.gradientAnimatingForTesting)
+
+        input.ditherGradient = false
+        ThemeRuntime.apply(input)
+        #expect(!art.gradientAnimatingForTesting)
     }
 
     /// "Use desktop" never leaves the panel blank: a nil desktop URL or a file that won't decode still renders art,

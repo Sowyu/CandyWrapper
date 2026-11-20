@@ -473,20 +473,25 @@ final class SidebarAccountAvatarView: ControlView {
         let g = Self.ringGap, s = Self.size
         CATransaction.begin(); CATransaction.setDisableActions(true)
         image.frame = CGRect(x: g, y: g, width: s, height: s)
-        image.cornerRadius = s / 2
         CATransaction.commit()
         initials.frame = NSRect(x: g, y: g + (s - 16) / 2, width: s, height: 16)
     }
 
+    /// A rounded square, the control corner (the user, 2026-11-21: "make it a square with rounded corners"). Strictly
+    /// concentric with the card, 8pt in from its 8pt corner, would floor at 2, a hard square at this size.
+    static let radius = RedesignTokens.Radius.control
+
     override func updateLayer() {
-        layer?.cornerRadius = bounds.height / 2
+        image.cornerRadius = Self.radius
+        // The hover ring sits `ringGap` outside the picture, so its corner is that much rounder.
+        layer?.cornerRadius = Self.radius + Self.ringGap
         layer?.borderWidth = 1
         layer?.borderColor = SB.c(\.sidebarForeground, state.hoverOrPressed ? 0.35 : 0).cgColor(in: self)
         image.backgroundColor = SB.c(\.sidebarForeground, state.hoverOrPressed ? 0.18 : 0.12).cgColor(in: self)
     }
 }
 
-/// Dither (after Capy): the account row at the foot of the sidebar. A 28pt round avatar, the name, CandyWrapper's own
+/// Dither (after Capy): the account row at the foot of the sidebar. A 28pt rounded-square avatar, the name, CandyWrapper's own
 /// CPU and memory (`AppUsageReadoutView`), and a chevron. The avatar opens Settings at Machines and connections; the
 /// rest opens the account menu above it: Settings, Usage and Appearance, then "Update all (N)" while updates wait. It
 /// shows no e-mail, which was too easy to reveal on a screen share (the user, 2026-10-22).
@@ -584,12 +589,12 @@ public final class SidebarAccountRowView: ControlView {
     }
 
     public override func updateLayer() {
-        // A floating pill: an opaque resting fill a step up from the sidebar, so its shadow stays outside, lit a
-        // step more on hover and while the menu is open, under a light hairline.
+        // A floating pill: Redesign's raised surface a step up from the sidebar, so its shadow stays outside, lit
+        // while the menu is open, under a light hairline (the user, 2026-11-21: "make this less grey").
         let dark = effectiveAppearance.isDark
-        let lift: CGFloat = menuOpen ? 2 : 0
         layer?.cornerRadius = Self.radius
-        layer?.backgroundColor = NSColor(white: dark ? 0.085 + 0.03 * lift : 1 - 0.025 * lift, alpha: 1).cgColor
+        layer?.backgroundColor = dark ? Themed.color(menuOpen ? \.muted : \.surfaceRaised).cgColor(in: self)
+            : NSColor(white: menuOpen ? 0.95 : 1, alpha: 1).cgColor
         layer?.borderColor = SB.c(\.sidebarForeground, dark ? 0.08 : 0.07).cgColor(in: self)
         layer?.shadowOpacity = dark ? 0.4 : 0.08
     }

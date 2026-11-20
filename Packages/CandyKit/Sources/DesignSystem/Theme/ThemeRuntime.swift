@@ -56,6 +56,8 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var ditherBlur = false
     /// Redesign's "Background" is Gradient: no picture, a halftone in the accent at the top left of a new thread.
     public var ditherGradient = false
+    /// Gradient's dots move on the new-thread page (the "Animate" setting).
+    public var ditherGradientAnimates = true
     /// Redesign's accent, a `DitherAccent` id.
     public var ditherAccent = DitherAccent.teal.id
     /// "Ignore Reduce Transparency": Redesign and Glass draw as if macOS's Reduce Transparency were off.
@@ -85,6 +87,8 @@ public enum ThemeRuntime {
     nonisolated(unsafe) public private(set) static var ditherBlur = false
     /// Redesign's "Background" is Gradient: accent dots on a new thread, plain ground everywhere else (`DitherArtView`).
     nonisolated(unsafe) public private(set) static var ditherGradient = false
+    /// Gradient's "Animate" setting.
+    nonisolated(unsafe) public private(set) static var ditherGradientAnimates = true
     /// Redesign's accent (the "Accent color" setting). Its palette roles arrive through the Dither half's colors.
     nonisolated(unsafe) public private(set) static var ditherAccent = DitherAccent.teal
     public private(set) static var input = ThemeRuntimeInput()
@@ -140,8 +144,9 @@ public enum ThemeRuntime {
             ditherBlur = next.ditherBlur
             changed = true
         }
-        if next.ditherGradient != old.ditherGradient {
+        if next.ditherGradient != old.ditherGradient || next.ditherGradientAnimates != old.ditherGradientAnimates {
             ditherGradient = next.ditherGradient
+            ditherGradientAnimates = next.ditherGradientAnimates
             changed = true
         }
         if next.ditherAccent != old.ditherAccent {

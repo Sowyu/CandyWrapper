@@ -17,6 +17,7 @@ enum RedesignPickerSettings {
 public final class RedesignSettingsView: SettingsPageBase {
     static let offReason = "Turn on Redesign to change this."
     static let gradientReason = "Gradient uses no picture. Choose Picture or Blur to change this."
+    static let animateReason = "Only Gradient moves. Choose Gradient to change this."
     private let library: ThemeLibrary
     private var themeObserver: Int?
     /// The master switch, bound to the theme picker's setting.
@@ -38,7 +39,10 @@ public final class RedesignSettingsView: SettingsPageBase {
         binder.add { [weak master] in master?.isOn = library.isRedesignOn }
 
         let picture = pictureRow(), dim = dimRow()
-        let look: [SettingsRowView] = [picture, backgroundRow(), dim, accentRow()]
+        // Capy's no-picture dither moves (the user, 2026-11-21: "capys plain dither isnt just static").
+        let animate = clientSwitch("redesign-gradient-animate", "Let Gradient's dots drift on the new-thread page. They stop while the window is in the background and under Reduce Motion.",
+                                   key: "redesignGradientAnimate", reset: "animate gradient", title: "Animate gradient")
+        let look: [SettingsRowView] = [picture, backgroundRow(), animate, dim, accentRow()]
         let transparency = clientSwitch("ignore-reduce-transparency", "Show the picture, Glass and blur as if Reduce Transparency were off in macOS.",
                                         key: "ignoreReduceTransparency", reset: "ignore reduce transparency", title: "Ignore Reduce Transparency")
         let collapse = clientSwitch("composer-collapse",
@@ -56,6 +60,8 @@ public final class RedesignSettingsView: SettingsPageBase {
             // Gradient shows no picture, so the picture's own settings do nothing.
             let pictureOff = off ?? (self.client.string("redesignBackground") == "gradient" ? Self.gradientReason : nil)
             for r in [picture, dim] where r.inertReason != pictureOff { r.inertReason = pictureOff }
+            let animateOff = off ?? (self.client.string("redesignBackground") == "gradient" ? nil : Self.animateReason)
+            if animate.inertReason != animateOff { animate.inertReason = animateOff }
         }
         items = [
             section(nil, "Theme", [masterRow]),
