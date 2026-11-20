@@ -85,7 +85,8 @@ struct ComposerFidelityTests {
             Screen3824Fixtures.contextStrip(panel.contextStrip)
         }
         panel.layoutSubtreeIfNeeded()
-        panel.timeline.scroll(toFraction: reference == "01-running-turn" ? 1 : 0)
+        // 01 and the 4928 capture of 54 sit at the end of the thread; 03a at its top.
+        panel.timeline.scroll(toFraction: ["01-running-turn", "54-composer-effort-bars"].contains(reference) ? 1 : 0)
         return Snapshot.image(of: ThreadFidelityTests.onSurface(panel), size: panel.frame.size, scale: 2, dark: dark)
     }
 
