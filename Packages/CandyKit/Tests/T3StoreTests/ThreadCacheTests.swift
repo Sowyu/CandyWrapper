@@ -121,13 +121,15 @@ import Testing
         let key = ThreadCache.Key(environmentId: "env-1", threadId: p.thread.id)
         let snapshot = ThreadDetailSnapshot(snapshotSequence: 9, projection: p, historyCursor: .null, hasMoreHistory: false, latestLocalTurnOrdinal: .null)
 
-        // A running run is not persisted.
+        // A running run is not persisted while its view is open, and is once the view closes (#25213).
         var running = p
         running.runs[running.runs.count - 1].status = .running
         let busy = ThreadStore(threadId: p.thread.id, cache: cache, environmentId: "env-1", onChange: {})
-        await busy.applySnapshot(ThreadDetailSnapshot(snapshotSequence: 9, projection: running, historyCursor: .null, hasMoreHistory: false, latestLocalTurnOrdinal: .null))
-        await busy.flushCache()
+        await busy.applySnapshot(ThreadDetailSnapshot(snapshotSequence: 8, projection: running, historyCursor: .null, hasMoreHistory: false, latestLocalTurnOrdinal: .null))
+        try await Task.sleep(for: .milliseconds(30))
         #expect(cache.load(key) == nil)
+        await busy.flushCache()
+        #expect(cache.load(key)?.snapshotSequence == 8)
 
         let store = ThreadStore(threadId: p.thread.id, cache: cache, environmentId: "env-1", onChange: {})
         await store.applySnapshot(snapshot)

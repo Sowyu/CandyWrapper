@@ -227,10 +227,11 @@ final class ThreadLineageRowView: ControlView {
             addSubview(b)
             stop = b
         }
-        isEnabled = !row.missing
+        // An idle child the shell leaves out still opens; opening it loads its own detail (#26762,
+        // ThreadRelationshipsControl.tsx:500 and :644 at 4928).
         scalesWhenPressed = true
         setAccessibilityLabel("\(row.title) \(ThreadRelationships.statusLabel(row.status))")
-        let hint = row.missing ? "This related thread is unavailable" : "Open \(row.relationship.lowercased()) in this chat"
+        let hint = "Open \(row.relationship.lowercased()) in this chat"
         if !row.isMergeTarget {
             // Agents get the subagent hover card (SubagentTooltipContent), the rest the hint.
             let t = TooltipController.attach(to: self, text: row.agent == nil ? hint : "")

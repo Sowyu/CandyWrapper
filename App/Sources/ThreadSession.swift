@@ -239,22 +239,28 @@ final class ThreadSession {
         http.timeout = 6
         let store = self.store, token = shell.token
         historyLoad = Task { [weak self] in
-            guard let request = await store.beginLoadEarlier(throughEntryId: throughEntryId) else {
+            guard var request = await store.beginLoadEarlier(throughEntryId: throughEntryId) else {
                 if self?.store === store { self?.historyLoad = nil }; return
             }
             do {
-                let start = ContinuousClock.now
-                try Task.checkCancellation()
-                let page = try await http.get(request.path, token: token, as: ThreadHistoryPage.self)
-                if OpenTiming.enabled {
-                    // History pages come after first paint; they print on their own clock.
-                    FileHandle.standardError.write(Data(String(
-                        format: "thread-timing history page %.1f ms (fetch and decode), %d rows, more %@\n",
-                        OpenTiming.ms(ContinuousClock.now - start), page.items.count, page.hasMoreHistory ? "yes" : "no").utf8))
+                // One click pages on until a turn starts (threads.ts:788-873 at 4928, #24417).
+                while true {
+                    let start = ContinuousClock.now
+                    try Task.checkCancellation()
+                    let page = try await http.get(request.path, token: token, as: ThreadHistoryPage.self)
+                    if OpenTiming.enabled {
+                        // History pages come after first paint; they print on their own clock.
+                        FileHandle.standardError.write(Data(String(
+                            format: "thread-timing history page %.1f ms (fetch and decode), %d rows, more %@\n",
+                            OpenTiming.ms(ContinuousClock.now - start), page.items.count, page.hasMoreHistory ? "yes" : "no").utf8))
+                    }
+                    try Task.checkCancellation()
+                    guard let next = await store.applyHistoryPage(
+                        page, requestCursor: request.cursor, throughEntryId: request.throughEntryId)
+                    else { break }
+                    request.cursor = next
                 }
-                try Task.checkCancellation()
                 self?.historyLoad = nil
-                await store.applyHistoryPage(page, requestCursor: request.cursor)
             } catch {
                 // `attach` cancelled the request and already let go of it. Like T3's interrupt path
                 // (threads.ts:733-741), the control becomes usable again, with no error and no stuck spinner.

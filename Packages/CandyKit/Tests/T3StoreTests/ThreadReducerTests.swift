@@ -158,6 +158,27 @@ private func ids(_ p: ThreadProjection?) -> [String] { p?.visibleTurnItems.map(\
         #expect(reducer.history.latestLocalTurnOrdinal == 3)
     }
 
+    /// #24417 (threads.ts:78-87, :811-819 at 4928): a page holding only steers keeps the load going,
+    /// a page with a turn start or a notification ends it, and a cited load never pages on.
+    @Test func keepsPagingUntilAPageStartsATurn() {
+        var reducer = ThreadReducer(threadId: "thread-1")
+        reducer.apply([snapshot(projection([message("d", ordinal: 4)]), sequence: 1, cursor: "c2", more: true, watermark: 4)])
+        _ = reducer.beginLoadEarlier()
+        let steers = ThreadHistoryPage(snapshotSequence: 1, items: [ProjectedTurnItem(local: message("c", ordinal: 3, intent: "steer"))],
+            nextCursor: "c1", hasMoreHistory: true)
+        let first = reducer.applyHistoryPageContinuing(steers, requestCursor: "c2")
+        #expect(first.nextCursor == "c1" && reducer.history.loading)
+        let start = ThreadHistoryPage(snapshotSequence: 1, items: [ProjectedTurnItem(local: message("b", ordinal: 2))],
+            nextCursor: "c0", hasMoreHistory: true)
+        #expect(reducer.applyHistoryPageContinuing(start, requestCursor: "c1").nextCursor == nil)
+        #expect(!reducer.history.loading && reducer.history.historyCursor == "c0")
+        _ = reducer.beginLoadEarlier(throughEntryId: "x")
+        let cited = ThreadHistoryPage(snapshotSequence: 1, items: [ProjectedTurnItem(local: message("a", ordinal: 1, intent: "steer"))],
+            nextCursor: "cz", hasMoreHistory: true)
+        #expect(reducer.applyHistoryPageContinuing(cited, requestCursor: "c0", throughEntryId: "x").nextCursor == nil)
+        #expect(!reducer.history.loading)
+    }
+
     @Test func ignoresAPageForAnOldCursor() {
         var reducer = ThreadReducer(threadId: "thread-1")
         reducer.apply([snapshot(projection([message("c", ordinal: 3)]), sequence: 1, cursor: "c1", more: true, watermark: 3)])

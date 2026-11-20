@@ -496,7 +496,7 @@ public enum ThreadRelationships {
                                   relationship: relationshipLabel(r.edge, threadId))
             row.workflow = workflow
             for m in (workflow?.phases.flatMap(\.members) ?? []) + (workflow?.unphased ?? []) {
-                if let c = m.childThreadId, g.nodes[c]?.missing == false { out.availableMembers.insert(c) }
+                if let c = m.childThreadId { out.availableMembers.insert(c) } // `canOpen = threadId !== null` (ThreadLineageWorkflowRow.tsx:64, #26762)
             }
             if !parent, node?.thread?.lineage.sideChat == true { out.sideChats.append(row) }
             else if !isSubagent || parent { out.related.append(row) }
