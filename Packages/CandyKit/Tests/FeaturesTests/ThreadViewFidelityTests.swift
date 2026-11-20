@@ -31,6 +31,11 @@ struct ThreadViewFidelityTests {
         card.gitActions.primary.text = "Commit"
         card.totals.insertions = 4
         card.totals.deletions = 0
+        // The 4928 card shows the working tree's base label (GitActionsControl.tsx:1143, #30085). The
+        // essential reference keeps the empty Workspace section T3 hides (ThreadDetailsSection.tsx:28,
+        // `has-[>div:last-child:empty]:hidden`), so its rows sit 18pt low; it gets the label once that
+        // reference is regenerated from gen-threadview-spec.py.
+        card.changesBase = density == .essential ? nil : "Uncommitted"
         card.density = density
         card.layoutSubtreeIfNeeded()
         return card

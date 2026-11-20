@@ -27,7 +27,9 @@ ICON, CHEVRON_PANEL = g["ICON"], g["CHEVRON_PANEL"]
 # ---------------------------------------------------------------------------------------------- Card
 
 def card(density, open_in=True):
-    section = "px-2 pt-2 pb-2.5"
+    # ThreadDetailsSection.tsx:28 (4928) hides a section whose content is empty (the essential Workspace).
+    # The captured card.essential reference predates this class; regenerate it with this script.
+    section = "px-2 pt-2 pb-2.5 has-[>div:last-child:empty]:hidden"
     workspace = ""
     if density == "full":
         run = control("select", '<span class="inline-flex shrink-0 items-center gap-0.5">'
