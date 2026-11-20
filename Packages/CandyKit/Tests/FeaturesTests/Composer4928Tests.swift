@@ -79,4 +79,14 @@ struct Composer4928Tests {
         #expect(link == #"[\_\_init\_\_.py](pkg/__init__.py)"#)
         #expect(ComposerInlineTokens.collect(link + " ").first?.kind == .mention(path: "pkg/__init__.py"))
     }
+
+    /// #35137: `#` suggestions sort by update instant, so a later time in another offset still comes first.
+    @Test func pullRequestsSortByInstant() {
+        func entry(_ n: Int, _ at: String) -> ComposerMenus.PullRequestEntry {
+            .init(reference: PullRequestReference(number: n, title: "t\(n)", url: "", headBranch: "b", baseBranch: "main", state: "open", isDraft: false),
+                  repository: "o/r", authorLogin: nil, updatedAt: at)
+        }
+        let items = ComposerMenus.pullRequestItems(query: "", entries: [entry(1, "2026-11-19T10:00:00Z"), entry(2, "2026-11-19T09:30:00-02:00")], hostSearched: false)
+        #expect(items.first?.label.contains("2") == true)
+    }
 }

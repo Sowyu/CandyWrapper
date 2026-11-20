@@ -816,7 +816,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 2b07556d71 | #28352 | composer | fix(web): a stashed prompt ending in a skill or file chip restores as a chip | port |
 | 002dc9b644 | #35075 | composer | fix(web): file names with a backslash no longer split into folders in the Changes card | port |
 | cb931fcbe2 | #35110 | composer | fix(web): a save in one tab no longer erases what another tab saved | port |
-| 1c9d32fe3c | #35137 | composer | fix(shared): composer # suggestions sort by update instant, not timestamp text | port |
+| 1c9d32fe3c | #35137 | composer | fix(shared): composer # suggestions sort by update instant, not timestamp text | ported: `#` suggestions sort by update instant (ComposerMenus.pullRequestItems) |
 | 0cd6a73433 | #35265 | composer | fix(web): pasting an image the draft already has no longer flashes a preparing tile | port |
 | 86ff9d073c | #35454 | composer | fix(web): Prompt Stash shrinks above the composer when vertical space is short | port |
 | 9b242e4d07 | #27414 | composer | fix(web): reveal full composer command descriptions | port |
@@ -825,7 +825,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 0bb6eaa546 | #35658 | composer | fix(web): auto-balanced drafts recheck machine load before sending | port |
 | d7a0b5371f | #33782 | composer | fix(web,mobile): triage follows the draft when you switch machines | port |
 | 96a4d2f012 | #36363 | composer | fix(web): pasted URLs and paths keep their underscores | port |
-| 2d689687f5 | #36435 | composer | fix(web): bare @ in the composer lists workspace files | port |
+| 2d689687f5 | #36435 | composer | fix(web): bare @ in the composer lists workspace files | ported: a bare `@` searches the workspace with an empty query, which 3824 and 4928 accept (ComposerController `startSearches`) |
 | 2dd6cddbc3 | #36504 | composer | fix(shared): @ mentions complete display names in any script | port |
 | 7847ec9386 | #35741 | composer | fix(web): preserve queued project settings changes | port |
 | ac180919a6 | #24619 | composer | fix(web): seeded models yield to started thread selections | port |

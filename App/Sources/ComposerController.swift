@@ -3231,7 +3231,7 @@ extension ComposerController {
             }
             let key = pathKey(trigger.query)
             let entries = menuState.paths.flatMap { $0.key == key ? $0.entries : nil } ?? []
-            let loading = !trigger.query.isEmpty && key != nil && menuState.paths?.key != key
+            let loading = key != nil && menuState.paths?.key != key
             let machines = ComposerMenus.environmentItems(query: trigger.query,
                 environments: composerLinkedNames.sorted { $0.key < $1.key }.map {
                     .init(id: $0.key, label: $0.value, machine: environments.machine($0.key) ?? "server")
@@ -3279,7 +3279,8 @@ extension ComposerController {
             menuState.pathTask?.cancel()
             let query = trigger.query.trimmingCharacters(in: .whitespacesAndNewlines)
             searchMenuThreads(query, shell: shell)
-            guard !query.isEmpty, let cwd = menuCwd, let key = pathKey(query), menuState.paths?.key != key else { return }
+            // A bare `@` lists the workspace's files too (#36435, useProjectPathSearch `allowEmptyQuery` at 4928).
+            guard let cwd = menuCwd, let key = pathKey(query), menuState.paths?.key != key else { return }
             menuState.pathTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(ComposerMenus.pathSearchDebounce))
                 guard !Task.isCancelled else { return }
