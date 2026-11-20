@@ -1507,7 +1507,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | e509db3a2f | #32605 | thread | fix(web): Tab reaches the add-project and new-project submit buttons | port |
 | 20723d6d9b | #32520 | thread | fix: Claude monitor wakes no longer fire a completion alert per line | port |
 | 08af12da49 | #33994 | thread | fix(shared): show zero seconds in minute durations | already in CandyWrapper: durations read `1m 0s` (screens-port, T3Store ThreadRelationships `formatDuration`) |
-| 3051b32502 | #33943 | thread | fix: chat file links open the file agents cite | left (thread-3): needs the workspace basename lookup CandyWrapper lacks (ThreadSession onRevealFile ponytail); #35036 builds on it |
+| 3051b32502 | #33943 | thread | fix: chat file links open the file agents cite | ported (thread-4): WorkspaceLinkLookup (T3Store) with FilesController.citedFile: bare names, package-relative paths and repeated prefixes find their file through projects.searchEntries before opening or revealing |
 | 283fa1f1cd | #34011 | thread | fix(clients): scroll truncated command output notice with logs | port |
 | d256170b34 | #34006 | thread | fix: file links with line ranges open at their first line | ported in 93df13b9: a range opens at its first line; the label check ignores the end line |
 | d6d1763d41 | #33820 | thread | fix(web): sent messages keep the numbers written on list items | ported: sent messages keep each ordered item's written number and draw every level in digits; the gutter widens by the numbers shown (thread-2, MarkdownDocument `keepWrittenNumbers`). Left: copying a list keeps CommonMark's numbers (markdown-clipboard.ts) |
@@ -1553,7 +1553,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 415e1cabe6 | #34883 | thread | fix(web): html render images open with the rest of their page in the viewer | ported in d1f3d2fc |
 | d8b0a05a74 | #34784 | thread | fix(clients): Claude question option previews are shown under their option | ported: the option `preview` decodes (T3Store UserInputQuestion.Option) and shows under its option, outside the button, at `ps-8 pe-2 pb-1.5`, 12/16 in foreground/70 (QuestionPanelView `previews`). Plain text with its line breaks; T3 renders it as ChatMarkdown, which needs a 12px MarkdownView composer-5: Markdown previews still left, a 12px MarkdownView needs a body size through MarkdownLayout (13 font-size sites in Features/Markdown, another agent's area). |
 | efd683ccc3 | #35102 | thread | fix(web): a failed send leaves the timeline when a new draft was typed | port |
-| 3d6ece2b29 | #35036 | thread | fix(web): file links the agent cited from another project open that project's file | left (thread-3): needs #33943's basename lookup first, then a search of the other project roots (client-runtime workspaceBasenameLookup.ts at 4928) |
+| 3d6ece2b29 | #35036 | thread | fix(web): file links the agent cited from another project open that project's file | ported (thread-4): citedFile searches the environment's other project roots when the thread's own has no match, after filesystem.getMetadata says the literal file is missing |
 | ced85c64ff | #35076 | thread | fix(client): a message the host never answers fails after 60 seconds instead of spinning forever | port |
 | 83ee96f485 | #35074 | thread | fix(web): chat text selection stays continuous while scrolling | port |
 | d2b8f291d6 | #35045 | thread | fix(web): icon-only chat header controls show their name on hover | port |

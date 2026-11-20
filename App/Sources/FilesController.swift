@@ -251,6 +251,49 @@ final class FilesController {
         openFile(path, line: meta.line)
     }
 
+    /// The file a chat link cites when the agent named it by basename, relative to a package or from another project
+    /// (ChatMarkdown.tsx's lookup with client-runtime workspaceBasenameLookup.ts at 4928, #33943, #35036). Nil keeps
+    /// the link as written. A path with a folder opens as written whenever it exists; a failed or unserved
+    /// `filesystem.getMetadata` (servers before 4928) keeps it as written too.
+    func citedFile(_ meta: FileLinkMeta, otherRoots: [String]) async -> FileLinkMeta? {
+        guard let ws = workspace, let relative = meta.workspaceRelativePath, let shell = environments.session(ws.environmentId),
+              let query = WorkspaceLinkLookup.query(relative, cwd: ws.cwd) else { return nil }
+        let supervisor = shell.supervisor
+        func missing(_ path: String) async -> Bool {
+            guard let reply = try? await supervisor.request("filesystem.getMetadata", payload: .object(["paths": .array([.string(path)])])),
+                  case .array(let entries)? = reply["entries"], let first = entries.first else { return false }
+            return first == .null
+        }
+        func search(_ root: String, _ query: String) async -> [WorkspaceLinkLookup.Entry] {
+            let reply = try? await supervisor.request("projects.searchEntries", payload: .object(
+                ["cwd": .string(root), "query": .string(query), "limit": .number(Double(WorkspaceLinkLookup.searchLimit)), "kind": .string("file")]))
+            return reply.map { Self.entries($0).map { WorkspaceLinkLookup.Entry(path: $0.path, isFile: !$0.isDirectory) } } ?? []
+        }
+        let literal = WorkspaceLinkLookup.join(ws.cwd, relative)
+        let bare = WorkspaceLinkLookup.needsBasenameLookup(relative)
+        if !bare, !(await missing(literal)) { return nil }
+        func link(_ path: String, relative: String?) -> FileLinkMeta {
+            let suffix = meta.line.map { ":\($0)" + (meta.column.map { ":\($0)" } ?? "") } ?? ""
+            return FileLinkMeta(filePath: path, targetPath: path + suffix, workspaceRelativePath: relative,
+                                basename: (path as NSString).lastPathComponent, line: meta.line, column: meta.column)
+        }
+        if let own = WorkspaceLinkLookup.match(relative, cwd: ws.cwd, entries: await search(ws.cwd, query)) {
+            return own == relative ? nil : link(WorkspaceLinkLookup.join(ws.cwd, own), relative: own)
+        }
+        let roots = otherRoots.filter { $0 != ws.cwd }
+        guard !roots.isEmpty else { return nil }
+        // Another project's file never replaces a thread-local file the search missed.
+        if bare, !(await missing(literal)) { return nil }
+        var searches: [(root: String, entries: [WorkspaceLinkLookup.Entry])] = []
+        for root in roots {
+            guard let q = WorkspaceLinkLookup.query(relative, cwd: root) else { searches.append((root, [])); continue }
+            searches.append((root, await search(root, q)))
+        }
+        return WorkspaceLinkLookup.projectMatch(relative, searches: searches).map { link($0, relative: nil) }
+    }
+
+    var workspaceEnvironmentId: String? { workspace?.environmentId }
+
     private func workspaceRelative(_ path: String) -> String {
         guard let cwd = workspace?.cwd, path.hasPrefix("/") else { return path }
         if path == cwd { return "." }
