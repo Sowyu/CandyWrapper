@@ -258,7 +258,7 @@ final class SidebarCommands {
         shortcuts.on("thread.regenerateTitle") { [weak self] call in
             guard let self, self.threads.panel.window != nil else { return false }
             if !call.isRepeat, let id = self.threads.openThreadId, let thread = self.shell(id), thread.titleRegeneration == nil {
-                self.simple(id, ThreadCommands.regenerateTitle(id.localId), failure: "Failed to regenerate thread title")
+                self.regenerateTitles([id])
             }
             return true
         }
@@ -569,6 +569,57 @@ final class SidebarCommands {
         fail(n < ids.count ? "Failed to archive \(n) thread\(n == 1 ? "" : "s")" : "Failed to archive threads", first)
     }
 
+    // MARK: Title regeneration (#31418)
+
+    /// Requests waiting for the server's `lastTitleRegeneration`, by request id.
+    private var titleRequests: [String: (thread: ThreadId, seenPending: Bool, done: (TitleRegenerationOutcome) -> Void)] = [:]
+    private var observingTitles = false
+
+    /// Regenerates each title, then shows one toast for how they ended (`titleRegenerationToast`,
+    /// threadTitleRegenerationToast.ts at 4928): renamed titles show nothing, kept and failed ones say so.
+    private func regenerateTitles(_ ids: [ThreadId]) {
+        guard !ids.isEmpty else { return }
+        if !observingTitles {
+            observingTitles = true
+            environments.observeShell { [weak self] in self?.settleTitleRequests() }
+        }
+        Task {
+            let requests = ids.map { id in Task { await self.regenerateTitle(id) } }
+            var results: [TitleRegenerationOutcome] = []
+            for request in requests { results.append(await request.value) }
+            if let toast = TitleRegenerationOutcome.toast(results) { self.toast(toast.title, toast.message, toast.kind) }
+        }
+    }
+
+    private func regenerateTitle(_ id: ThreadId) async -> TitleRegenerationOutcome {
+        let commandId = ThreadCommands.newCommandId()
+        do { try await environments.dispatch(id, ThreadCommands.regenerateTitle(id.localId, commandId: commandId)) } catch {
+            let message = (error as? RPCClientError)?.typedError?.message ?? (error as? LocalizedError)?.errorDescription
+            return .failure(message ?? "An error occurred.")
+        }
+        return await withCheckedContinuation { continuation in
+            titleRequests[commandId] = (id, false, { continuation.resume(returning: $0) })
+            settleTitleRequests()
+            // A server that never reports leaves the request; after two minutes it counts as unreported.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 120) { [weak self] in
+                MainActor.assumeIsolated { self?.titleRequests.removeValue(forKey: commandId)?.done(.unreported) }
+            }
+        }
+    }
+
+    private func settleTitleRequests() {
+        guard !titleRequests.isEmpty else { return }
+        for (requestId, request) in titleRequests {
+            let thread = shell(request.thread)
+            if let outcome = TitleRegenerationOutcome.settled(thread, requestId: requestId, seenPending: request.seenPending) {
+                titleRequests.removeValue(forKey: requestId)
+                request.done(outcome)
+            } else if thread?.titleRegeneration?.requestId == requestId {
+                titleRequests[requestId]?.seenPending = true
+            }
+        }
+    }
+
     private func simple(_ id: ThreadId, _ payload: JSONValue, update: OptimisticThreadUpdate? = nil, failure: String?) {
         Task {
             do { try await environments.dispatch(id, payload, optimistic: update) } catch {
@@ -705,7 +756,7 @@ final class SidebarCommands {
             simple(id, ThreadCommands.setAutoSettle(id.localId, enabled: on), update: .setAutoSettle(on), failure: "Failed to update auto-settle")
         case "regenerate-title":
             guard thread.titleRegeneration == nil else { return }
-            simple(id, ThreadCommands.regenerateTitle(id.localId), failure: "Failed to regenerate thread title")
+            regenerateTitles([id])
         case "turn-into-project":
             // Sidebar.tsx and useThreadActionMenu.ts at 4928 (#26767): a toast either way; the shell stream moves the row.
             guard let env = id.environmentId else { return }
@@ -927,15 +978,8 @@ final class SidebarCommands {
             guard ClientSettingsStore.shared.current.bool("confirmThreadArchive") else { return run() }
             confirm("Archive \(n) thread\(n == 1 ? "" : "s")?", then: run)
         case "regenerate-title":
-            Task {
-                for t in regeneratable {
-                    do { try await environments.dispatch(t.id, ThreadCommands.regenerateTitle(t.id.localId)) } catch {
-                        fail("Failed to regenerate thread titles", error)
-                        return
-                    }
-                }
-                sidebar?.clearSelection()
-            }
+            regenerateTitles(regeneratable.map(\.id))
+            sidebar?.clearSelection()
         case "mark-unread":
             for id in ids { simple(id, ThreadCommands.markUnread(id.localId), failure: nil) }
             sidebar?.clearSelection()

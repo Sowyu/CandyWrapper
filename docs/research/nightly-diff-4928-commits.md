@@ -640,7 +640,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | cfb7cae2b9 | #33987 | settings | feat(web): bindable shortcut to regenerate a thread's title | ported (settings-4928): thread.regenerateTitle is listed in Keybindings and regenerates the open thread's title; the wire command was already there |
-| 1c9ea568a1 | #31418 | sidebar | fix(clients): report title regeneration outcomes | left (composer-5, checked): T3 reports each regeneration as renamed, kept ("Title kept") or failed, from `thread.lastTitleRegeneration` (requestId, status, message, completedAt) the server now projects (threadTitle.ts:14-25, threadTitleRegenerationToast.ts). Needs the field decoded in T3Protocol thread shells behind a capability check, the regenerate path to wait for its requestId, and the toasts in SidebarCommands |
+| 1c9ea568a1 | #31418 | sidebar | fix(clients): report title regeneration outcomes | ported (composer-6): `lastTitleRegeneration` was already decoded (optional, so 3824 servers leave it out); now each regeneration sends its own command id and waits for the thread to report that request (TitleRegenerationOutcome.settled, App SidebarCommands.regenerateTitles, settled on shell changes, given up after two minutes), then one toast says how they ended: "Title kept", "Titles kept", "Kept N of M titles" or "Failed to regenerate (N of M) thread title(s)", renamed titles silent. Bulk regeneration now sends every request instead of stopping at the first failure. TitleRegenerationOutcomeTests; the server and mobile halves are n/a |
 | ccf96b2f65 | #29383 | sidebar | feat(web): sidebar titles glimmer while they regenerate | ported 9a0153d1 |
 
 ## New feature i18n (11)
