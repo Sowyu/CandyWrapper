@@ -247,7 +247,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | 7bc2a40ced | #30747 | pr/git | feat(pull-requests): PR composers complete @user mentions | ported (panels-5): @login completion in every PR textarea over `pullRequests.filterOptions` authors, PullRequestCompletion.swift, gated on `capabilities.mentions` |
-| f08d8dd0a5 | #30579 | pr/git | feat(web): add pull request comments to the chat | left (panels-2): add a PR comment to the chat, needs the composer's context insertion from Features/Composer |
+| f08d8dd0a5 | #30579 | pr/git | feat(web): add pull request comments to the chat | ported (panels-5): Add to chat on Summary cards, Timeline cards (icon) and Code tab threads, beside a thread only; PullRequestChatContext builds the PR chip and the remark records |
 | e4ff5da0d3 | #30857 | pr/git | feat(pull-requests): PR composers complete #123 and GitLab !123 references | ported (panels-5): #123 and !123 completion with `references` and `sigil`, gated on `capabilities.referenceSigils` |
 
 ## Port group pi (4)

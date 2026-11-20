@@ -843,6 +843,8 @@ final class ThreadPullRequestsController {
     private let detail: PullRequestDetailBinding
     /// The open thread (nil on a draft).
     var openThreadId: () -> ThreadId? = { nil }
+    /// Add to chat: the review-comment records for the composer beside the panel (#30579).
+    var addToChat: (([JSONValue]) -> Void)?
     private var modal: ModalHost?
     /// The open Link dialog; its fields talk to it weakly, so it is held here while it shows.
     private var linkDialog: LinkPullRequestDialog?
@@ -867,7 +869,15 @@ final class ThreadPullRequestsController {
         detail.toast = { [weak panel] title, message, kind in panel?.toasts.show(ToastView(title: title, message: message, kind: kind)) }
         detail.onStatus = { [weak self] id, tone in self?.panel.pullRequestStatus[id] = tone }
         panel.lazyPullRequestView.set(\.context, .thread)
-        panel.lazyPullRequestView.configure { [weak self] view in view.onLinkThread = { [weak self] in self?.toggleLinkFromPanel() } }
+        panel.lazyPullRequestView.configure { [weak self] view in
+            view.onLinkThread = { [weak self] in self?.toggleLinkFromPanel() }
+            // `addCommentToChat` (4928 PullRequestDetailPanel.tsx): only beside a thread's composer.
+            view.onAddToChat = { [weak self, weak panel] records in
+                guard let self, self.addToChat != nil else { return }
+                self.addToChat?(records)
+                panel?.toasts.show(ToastView(title: "Added to the composer", message: nil, kind: .success))
+            }
+        }
         panel.onAddPullRequest = { [weak self] in self?.openCurrentPullRequest() }
         panel.lazyLinkedPullRequestsView.configure { [weak self] list in
             list.onOpen = { [weak self] link in self?.open(link) }

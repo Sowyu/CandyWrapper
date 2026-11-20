@@ -76,6 +76,24 @@ public final class PullRequestDetailView: DSView {
     public var onReview: ((_ verdict: String, _ body: String, _ comments: [PullRequestReviewCommentDraft]) -> Void)?
     /// The review store's key for this pull request (`pullRequestReviewKey`); set with the detail.
     public var reviewKey: String?
+    /// Add to chat (#30579): the pull request chip and the remark's record, for the composer beside
+    /// the panel. Nil on the standalone page, where no composer is (`attachTarget === null`).
+    public var onAddToChat: (([JSONValue]) -> Void)? {
+        didSet {
+            let on = onAddToChat != nil
+            summary.onAddToChat = on ? { [weak self] id in self?.addToChat(commentId: id) } : nil
+            timeline.onAddToChat = on ? { [weak self] id in self?.addToChat(commentId: id) } : nil
+            code.onAddToChat = on ? { [weak self] t in
+                guard let self, let d = self.detail, let r = PullRequestChatContext.threadRecord(d, t) else { return }
+                self.onAddToChat?([PullRequestChatContext.pullRequestRecord(d), r])
+            } : nil
+        }
+    }
+    private func addToChat(commentId: String) {
+        guard let d = detail else { return }
+        let records = PullRequestChatContext.records(d, commentId: commentId)
+        if !records.isEmpty { onAddToChat?(records) }
+    }
     /// `pullRequests.filterOptions` for this detail's host, set by the app; nil completes nothing.
     public var completionSearch: (@MainActor (PullRequestFilterOptionsInput) async throws -> PullRequestFilterOptions)?
     /// The composer for the pull request on screen; it outlives its popover so drafts survive.

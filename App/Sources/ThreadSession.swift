@@ -750,6 +750,8 @@ final class ThreadController {
         issueStates = SidebarIssueStates(sidebar: sidebar, environments: environments, capabilities: prCapabilities)
         pullRequests = ThreadPullRequestsController(panel: panel, sidebar: sidebar, environments: environments, capabilities: prCapabilities)
         pullRequests.openThreadId = { [weak self] in self?.openThreadId }
+        // ponytail: dedupes the PR chip by id only; T3 also skips it when a `#` chip names the same URL.
+        pullRequests.addToChat = { [weak self] records in records.forEach { self?.composer.addReviewComment($0) } }
         automations.openThreadId = { [weak self] in self?.openThreadId }
         prCapabilities.onChange = { [weak self] in
             guard let self else { return }

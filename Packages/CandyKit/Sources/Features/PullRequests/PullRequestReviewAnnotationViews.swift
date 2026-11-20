@@ -187,6 +187,9 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
     private let headButton = LinkLabel()
     private let outdated = LabelView("outdated", font: DSFont.ui(12))
     private let resolve = ButtonView("Resolve", variant: .ghost, size: .xs)
+    /// Add to chat (4928 PullRequestReviewAnnotation.tsx:349-358), handed every comment loaded so far.
+    private let chat = ButtonView("Add to chat", icon: .messageSquarePlus, variant: .ghost, size: .xs)
+    public var onAddToChat: ((PullRequestReviewThread) -> Void)? { didSet { needsLayout = true } }
     private var commentViews: [PullRequestThreadCommentView] = []
     private let loadMore = ButtonView("Load more comments", variant: .ghost, size: .xs)
     private let replyButton = ButtonView("Reply", variant: .ghost, size: .xs)
@@ -207,6 +210,15 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
         headButton.underlines = false
         headButton.onClick = { [weak self] in self?.toggleExpanded() }
         outdated.lineHeight = 16
+        chat.iconSize = 12
+        chat.isHidden = true
+        chat.action = { [weak self] in
+            guard let self else { return }
+            var t = self.thread
+            if let loaded = self.loaded { t.comments = loaded.comments }
+            self.onAddToChat?(t)
+        }
+        addSubview(chat)
         replyBox.placeholder = "Reply"
         replyBox.setAccessibilityLabel("Reply to this conversation")
         [stateIcon, resolvedIcon, headButton, outdated, resolve, loadMore, replyButton, replyBox, replyCancel, replySend].forEach(card.addSubview)
@@ -339,8 +351,14 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
         let hw = ceil(headButton.textWidth) + 1
         headButton.frame = NSRect(x: r.minX + 22, y: r.minY + 4, width: hw, height: 16)
         outdated.frame = NSRect(x: headButton.frame.maxX + 8, y: r.minY + 4, width: ceil(outdated.textWidth) + 1, height: 16)
-        let rw = ceil(resolve.intrinsicContentSize.width)
-        resolve.frame = NSRect(x: r.maxX - rw, y: r.minY, width: rw, height: 24)
+        let rw = resolve.isHidden ? -8 : ceil(resolve.intrinsicContentSize.width)
+        resolve.frame = NSRect(x: r.maxX - max(0, rw), y: r.minY, width: max(0, rw), height: 24)
+        let shown = loaded?.comments ?? thread.comments
+        chat.isHidden = onAddToChat == nil || !shown.contains { PullRequestDetailLogic.visibleBody($0.body) != nil }
+        if !chat.isHidden {
+            let cw = ceil(chat.intrinsicContentSize.width)
+            chat.frame = NSRect(x: r.maxX - max(0, rw) - 8 - cw, y: r.minY, width: cw, height: 24)
+        }
         var y = r.minY + 24
         if !commentViews.isEmpty {
             y += 8

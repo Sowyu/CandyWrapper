@@ -351,6 +351,11 @@ public final class PullRequestCodeView: DSView {
         rebuildOrphans()
     }
 
+    /// Add to chat on a line's conversation; nil where no composer sits beside the panel.
+    var onAddToChat: ((PullRequestReviewThread) -> Void)? {
+        didSet { threadCards.values.forEach { $0.onAddToChat = onAddToChat } }
+    }
+
     private func threadCard(_ t: PullRequestReviewThread) -> PullRequestReviewThreadCardView? {
         guard let d = detail, let actions else { return nil }
         if let card = threadCards[t.id] { return card }
@@ -360,6 +365,7 @@ public final class PullRequestCodeView: DSView {
             canEdit: { c in PullRequestWriteLogic.canEditComment(d, author: c.author?.login, kind: "review-comment", hostAnswer: c.canEdit) },
             actions: actions, cwd: d.workspaceRoot, nowMs: nowMs, startsExpanded: t.line != nil ? true : nil)
         card.onResize = { [weak self] in self?.list.reloadAnnotations(); self?.needsLayout = true }
+        if let onAddToChat { card.onAddToChat = { onAddToChat($0) } }
         threadCards[t.id] = card
         return card
     }

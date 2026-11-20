@@ -120,6 +120,7 @@ public final class PullRequestSummaryView: DSView {
     var onSaveComment: ((PullRequestComment, String) -> Void)? { get { commentList.onSave } set { commentList.onSave = newValue } }
     /// A reaction pressed on a comment: (comment id, content, reacted, the bar to tell of a refusal).
     var onReact: ((String, String, Bool, PullRequestReactionBarView) -> Void)? { get { commentList.onReact } set { commentList.onReact = newValue } }
+    var onAddToChat: ((String) -> Void)? { get { commentList.onAddToChat } set { commentList.onAddToChat = newValue } }
     var bodySaving: Bool { get { markdown.saving } set { markdown.saving = newValue } }
     var commentSaving: Bool { get { commentList.saving } set { commentList.saving = newValue } }
     func finishBodyEdit() { markdown.stopEditing(); stack.reload() }
@@ -457,6 +458,8 @@ final class CommentsItem: DSView, StackItem {
     var saving = false { didSet { cards.forEach { $0.editor?.saving = saving } } }
     var onSave: ((PullRequestComment, String) -> Void)?
     var onReact: ((String, String, Bool, PullRequestReactionBarView) -> Void)?
+    /// Add to chat, with the comment's id; nil where no composer sits beside the panel (#30579).
+    var onAddToChat: ((String) -> Void)? { didSet { if (onAddToChat == nil) != (oldValue == nil) { rebuildCards() } } }
     var onOpenURL: ((String) -> Void)?
     var onResize: (() -> Void)?
     private let note = TextBlockView()
@@ -495,7 +498,9 @@ final class CommentsItem: DSView, StackItem {
                                canEdit: PullRequestWriteLogic.canEditComment(d, author: c.author?.login, kind: c.kind, hostAnswer: c.canEdit),
                                canReact: d.capabilities.reactions == true, editing: editingId == c.id,
                                collapsed: collapsed, open: openIds.contains(c.id), reply: reply,
-                               replyCount: replyCount, replies: replies, moreReplies: more)
+                               replyCount: replyCount, replies: replies, moreReplies: more,
+                               addsToChat: onAddToChat != nil && !reply && PullRequestDetailLogic.chatSubject(c, d))
+        card.onAddToChat = { [weak self] in self?.onAddToChat?(c.id) }
         // A rebuilt list keeps the cards the reader opened (T3 keys them by detail and comment).
         card.onResize = { [weak self, weak card] in
             guard let self, let card else { return }
@@ -673,6 +678,9 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
     func focusWithinChanged(_ focused: Bool) { focusWithin = focused; revealEdit() }
     private func revealEdit() { HoverReveal.fade([editButton], visible: hover?.hovered == true || focusWithin) }
     private let editButton = ButtonView(nil, icon: .pencil, variant: .ghostMuted, size: .iconXs)
+    /// `AddToChatButton` (4928 PullRequestSummaryTab.tsx:267): `size="xs" variant="ghost"`, a 12pt glyph.
+    private var chatButton: ButtonView?
+    var onAddToChat: (() -> Void)?
     private(set) var editor: PullRequestMarkdownEditorView?
     var onEdit: (() -> Void)?
     var onCancel: (() -> Void)?
@@ -704,7 +712,8 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
     /// `reply`: a review thread's answer, which names no file (the finding above it does).
     init(_ c: PullRequestComment, nowMs: Int64, cwd: String, canEdit: Bool = false, canReact: Bool = false, editing: Bool = false,
          collapsed: PullRequestDetailLogic.Collapsed? = nil, open: Bool = false, reply: Bool = false,
-         replyCount count: Int = 0, replies: PullRequestReplyList? = nil, moreReplies: PullRequestMoreRepliesLine? = nil) {
+         replyCount count: Int = 0, replies: PullRequestReplyList? = nil, moreReplies: PullRequestMoreRepliesLine? = nil,
+         addsToChat: Bool = false, chatIconOnly: Bool = false) {
         self.replies = replies
         self.moreReplies = moreReplies
         // An empty verdict hides the body, unless this reader may rewrite it (the pencil lives there).
@@ -716,6 +725,16 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
         reactionBar.canReact = canReact
         reactionBar.reactions = c.reactions ?? []
         addSubview(reactionBar)
+        if addsToChat {
+            // The Timeline's is icon-only, `size="icon-xs" variant="ghost-muted"` with a tooltip (PullRequestTimelineTab.tsx:191-217).
+            let b = chatIconOnly ? ButtonView(nil, icon: .messageSquarePlus, variant: .ghostMuted, size: .iconXs)
+                : ButtonView("Add to chat", icon: .messageSquarePlus, variant: .ghost, size: .xs)
+            if chatIconOnly { b.toolTip = "Add to chat"; b.setAccessibilityLabel("Add to chat") }
+            b.iconSize = 12
+            b.action = { [weak self] in self?.onAddToChat?() }
+            addSubview(b)
+            chatButton = b
+        }
         editButton.iconSize = 12
         editButton.setAccessibilityLabel("Edit comment")
         editButton.isHidden = !canEdit || editing
@@ -831,7 +850,13 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
         time.frame = NSRect(x: x, y: 11, width: tw, height: 16); x += tw + 8
         let rw = reactionBar.isHidden ? 0 : reactionBar.width
         reactionBar.frame = NSRect(x: bounds.width - 12 - rw, y: 7, width: rw, height: 24)
-        state.frame = NSRect(x: x, y: 11, width: max(0, bounds.width - 12 - x - (rw > 0 ? rw + 8 : 0)), height: 16)
+        var right = bounds.width - 12 - (rw > 0 ? rw + 8 : 0)
+        if let chatButton {
+            let cw = ceil(chatButton.intrinsicContentSize.width)
+            chatButton.frame = NSRect(x: right - cw, y: 7, width: cw, height: 24)
+            right -= cw + 8
+        }
+        state.frame = NSRect(x: x, y: 11, width: max(0, right - x), height: 16)
         body.isHidden = !hasBody || editor != nil
         let ew: CGFloat = editButton.isHidden ? 0 : 28
         if hasBody { body.frame = NSRect(x: 12, y: 37 + 12, width: bounds.width - 24 - ew, height: body.height(forWidth: bounds.width - 24 - ew)) }
@@ -857,7 +882,12 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
         }
         if let toggle {
             let w = ceil(toggle.intrinsicContentSize.width)
-            toggle.frame = NSRect(x: x, y: top, width: w, height: 24)
+            toggle.frame = NSRect(x: x, y: top, width: w, height: 24); x += w + 8
+        }
+        // After the status toggle (and Resolve, which CandyWrapper keeps in the toggle's row).
+        if let chatButton {
+            let cw = ceil(chatButton.intrinsicContentSize.width)
+            chatButton.frame = NSRect(x: x, y: top, width: cw, height: 24)
         }
         var y = top + 24
         let hasLocation = !(collapsed?.location ?? "").isEmpty
@@ -942,6 +972,7 @@ public final class PullRequestTimelineView: DSView {
     var newestFirst = true { didSet { rebuild() } }
     var onOpenCommit: ((String) -> Void)?
     var onOpenURL: ((String) -> Void)?
+    var onAddToChat: ((String) -> Void)? { didSet { if (onAddToChat == nil) != (oldValue == nil) { rebuild() } } }
     private var detail: PullRequestDetail?
     private var pending = true
     private var error: String?
@@ -976,7 +1007,10 @@ public final class PullRequestTimelineView: DSView {
         let newestCommit = PullRequestDetailLogic.newestCommitAt(d.commits)
         let items: [StackItem] = PullRequestDetailLogic.groupConversations(ordered).map { row in
             switch row {
-            case .comments(let events): return ConversationRow(events, nowMs: nowMs, cwd: d.workspaceRoot)
+            case .comments(let events):
+                let r = ConversationRow(events, nowMs: nowMs, cwd: d.workspaceRoot, addsToChat: onAddToChat != nil)
+                r.onAddToChat = { [weak self] id in self?.onAddToChat?(id) }
+                return r
             case .event(let e):
                 if let thread = e.thread {
                     let r = ReviewThreadRow(e, thread: thread, nowMs: nowMs, cwd: d.workspaceRoot)
@@ -1163,11 +1197,12 @@ final class ConversationRow: DSView, StackItem {
     private let subtitle = LabelView("", font: DSFont.ui(10))
     private let chevron = IconView(name: .chevronDown, size: 14)
     private var cards: [CommentCard] = []
+    var onAddToChat: ((String) -> Void)?
     private var open = false { didSet { (superview as? StackDocument)?.needsLayout = true; superview?.superview?.superview?.superview?.needsLayout = true; needsLayout = true; cards.forEach { $0.isHidden = !open }
         // `transition-transform`, `rotate-180` when open (PullRequestTimelineTab.tsx:336-341).
         chevron.setRotation(open ? 180 : 0) } }
 
-    init(_ events: [PullRequestDetailLogic.TimelineEvent], nowMs: Int64, cwd: String) {
+    init(_ events: [PullRequestDetailLogic.TimelineEvent], nowMs: Int64, cwd: String, addsToChat: Bool = false) {
         var actors: [String: PullRequestActor] = [:]
         var order: [String] = []
         for e in events { if let a = e.actor, actors[a.login] == nil { actors[a.login] = a; order.append(a.login) } }
@@ -1180,7 +1215,9 @@ final class ConversationRow: DSView, StackItem {
         [marker, title, subtitle, chevron].forEach(addSubview)
         cards = events.map { e in
             let c = CommentCard(PullRequestComment(id: e.id, kind: e.kind == .review ? "review" : "issue-comment", author: e.actor, body: e.body ?? "",
-                                                   createdAt: e.at, url: e.url, path: e.path, reviewState: e.reviewState), nowMs: nowMs, cwd: cwd)
+                                                   createdAt: e.at, url: e.url, path: e.path, reviewState: e.reviewState), nowMs: nowMs, cwd: cwd,
+                                addsToChat: addsToChat && PullRequestDetailLogic.visibleBody(e.body ?? "") != nil, chatIconOnly: true)
+            c.onAddToChat = { [weak self] in self?.onAddToChat?(e.id) }
             c.isHidden = true
             addSubview(c)
             return c
