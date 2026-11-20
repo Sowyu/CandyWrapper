@@ -1,0 +1,256 @@
+{
+ "base": "http://127.0.0.1:47404",
+ "width": 1100,
+ "height": 780,
+ "scale": 2,
+ "themes": [
+  "dark"
+ ],
+ "states": [
+  {
+   "name": "01-running-turn",
+   "path": "/",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))",
+     "log": false
+    },
+    {
+     "path": "/"
+    },
+    {
+     "wait": 2500
+    },
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 800
+    },
+    {
+     "key": "m",
+     "meta": true,
+     "shift": true
+    },
+    {
+     "wait": 800
+    },
+    {
+     "click": "[aria-label=\"Claude\"][data-orientation]"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "js": "(()=>{const o=[...document.querySelectorAll('[role=option]')].find(e=>e.textContent.includes('Haiku 5.5'));o?.click();return !!o})()",
+     "log": true
+    },
+    {
+     "wait": 600
+    },
+    {
+     "js": "[...document.querySelectorAll('[data-effort-level]')].find(e=>e.textContent.trim().startsWith(\"Medium\"))?.click()",
+     "log": true
+    },
+    {
+     "wait": 400
+    },
+    {
+     "click": "[data-composer-permissions-trigger]"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "click": "[role=\"menuitemradio\"][aria-label=\"Full access\"]"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "click": "[data-testid=composer-editor]"
+    },
+    {
+     "type": "Write a 4000-word story about a lighthouse. No tools."
+    },
+    {
+     "js": "(()=>{const l=document.querySelector('[data-chat-provider-model-picker]').getAttribute('aria-label');if(!l.startsWith('Claude Haiku 5.5')){const e=document.querySelector('[data-testid=composer-editor]');e.focus();document.execCommand('selectAll');document.execCommand('delete');return 'BLOCKED '+l}return l})()",
+     "log": true
+    },
+    {
+     "key": "Enter"
+    },
+    {
+     "wait": 6000
+    },
+    {
+     "js": "location.pathname",
+     "log": true
+    }
+   ]
+  },
+  {
+   "name": "01-running-turn",
+   "path": null,
+   "actions": [],
+   "theme": "light",
+   "continue": true
+  },
+  {
+   "name": "29-queued-messages",
+   "path": null,
+   "actions": [
+    {
+     "click": "[data-testid=composer-editor]"
+    },
+    {
+     "type": "First queued note."
+    },
+    {
+     "js": "document.querySelector('[aria-label=\"Steer message\"]')?.dispatchEvent(new MouseEvent('click',{bubbles:true,metaKey:true}))",
+     "log": true
+    },
+    {
+     "wait": 1500
+    },
+    {
+     "click": "[data-testid=composer-editor]"
+    },
+    {
+     "type": "Second queued note."
+    },
+    {
+     "js": "document.querySelector('[aria-label=\"Steer message\"]')?.dispatchEvent(new MouseEvent('click',{bubbles:true,metaKey:true}))",
+     "log": true
+    },
+    {
+     "wait": 1500
+    },
+    {
+     "js": "[...document.querySelectorAll('button')].filter(b=>/close|dismiss/i.test(b.getAttribute('aria-label')||'')&&b.closest('[data-slot*=toast],[role=status],[role=alert],li')).map(b=>(b.click(),b.getAttribute('aria-label')))",
+     "log": true
+    },
+    {
+     "wait": 600
+    }
+   ],
+   "continue": true
+  },
+  {
+   "name": "29-queued-messages",
+   "path": null,
+   "actions": [],
+   "theme": "light",
+   "afterActions": [
+    {
+     "js": "document.querySelector('[aria-label=\"Remove queued message\"]')?.click()",
+     "log": true
+    },
+    {
+     "wait": 700
+    },
+    {
+     "js": "document.querySelector('[aria-label=\"Remove queued message\"]')?.click()",
+     "log": true
+    },
+    {
+     "wait": 700
+    },
+    {
+     "until": "!document.querySelector('[aria-label=\"Stop generation\"]')&&document.querySelector('[aria-label=\"Submit message\"]')",
+     "timeout": 300000
+    },
+    {
+     "wait": 3000
+    },
+    {
+     "until": "!document.querySelector('[aria-label=\"Stop generation\"]')&&document.querySelector('[aria-label=\"Submit message\"]')",
+     "timeout": 300000
+    }
+   ],
+   "continue": true
+  },
+  {
+   "name": "56-model-switch-media",
+   "path": null,
+   "actions": [
+    {
+     "key": "m",
+     "meta": true,
+     "shift": true
+    },
+    {
+     "wait": 800
+    },
+    {
+     "js": "[...document.querySelectorAll('[data-effort-level]')].find(e=>e.textContent.trim().startsWith(\"Low\"))?.click()",
+     "log": true
+    },
+    {
+     "wait": 400
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "upload": [
+      "~/CandyWrapper-research/sandbox-4928-ref/attachments/sky.png",
+      "~/CandyWrapper-research/sandbox-4928-ref/attachments/todo.txt"
+     ]
+    },
+    {
+     "wait": 1500
+    },
+    {
+     "click": "[data-testid=composer-editor]"
+    },
+    {
+     "js": "(()=>{const l=document.querySelector('[data-chat-provider-model-picker]').getAttribute('aria-label');if(!l.startsWith('Claude Haiku 5.5')){const e=document.querySelector('[data-testid=composer-editor]');e.focus();document.execCommand('selectAll');document.execCommand('delete');return 'BLOCKED '+l}return l})()",
+     "log": true
+    },
+    {
+     "key": "Enter"
+    },
+    {
+     "wait": 5000
+    },
+    {
+     "until": "!document.querySelector('[aria-label=\"Stop generation\"]')&&document.querySelector('[aria-label=\"Submit message\"]')",
+     "timeout": 300000
+    },
+    {
+     "wait": 2000
+    },
+    {
+     "js": "[...document.querySelectorAll('button')].filter(b=>/close|dismiss/i.test(b.getAttribute('aria-label')||'')&&b.closest('[data-slot*=toast],[role=status],[role=alert],li')).map(b=>(b.click(),b.getAttribute('aria-label')))",
+     "log": true
+    },
+    {
+     "js": "(()=>{const e=[...document.querySelectorAll('*')].find(e=>e.children.length===0&&/Medium.*Low/.test(e.textContent));e?.scrollIntoView({block:'center'});return e?.textContent})()",
+     "log": true
+    },
+    {
+     "wait": 800
+    }
+   ],
+   "continue": true
+  },
+  {
+   "name": "56-model-switch-media",
+   "path": null,
+   "actions": [],
+   "theme": "light",
+   "continue": true
+  }
+ ]
+}

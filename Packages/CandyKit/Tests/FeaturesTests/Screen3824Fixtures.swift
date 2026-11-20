@@ -4,24 +4,23 @@ import T3Protocol
 import T3Store
 @testable import Features
 
-/// The copied sandbox behind reference-3824. Keep the older gallery and Redesign data unchanged.
+/// The seeded sandbox behind reference-4928 (sandbox-4928-ref). Keep the older gallery and Redesign data unchanged.
 @MainActor
 enum Screen3824Fixtures {
     static func sidebar(dark: Bool) -> ShellSnapshot {
         let p = "project-demo"
+        // The rows of reference-4928/02-sidebar-populated.dark.png, newest first.
         let rows: [(String, SidebarPreview.Kind, Double)] = [
-            ("Write a Lighthouse Story", .read, 3),
-            ("Create Approval Text File", .approval, 4),
-            ("Create Approval Demo File", .done, 5),
-            ("Set Purpose and Language Preferences", .input, 6),
-            ("Write a Lighthouse Story", .read, 65),
-            ("Wait 45 Seconds Before Replying", .done, 66),
-            ("Wait 45 Seconds", .read, 67),
-            ("Document Hello Demo", .read, 68),
-            ("Run Basic Shell Commands", .read, 69),
-            ("Format a Markdown Reply", .read, 70),
+            ("Lighthouse Story", .read, 1),
+            ("Lighthouse Story", .read, 4),
+            ("Scratch idea", .read, 3),
+            ("Document greet and update notes", .done, 5),
+            ("Create Approval File", .approval, 6),
+            ("CLI Tool Clarification", .input, 7),
+            ("Run Shell Commands", .read, 17),
+            ("Markdown Response Formatting Request", .read, 17),
         ]
-        return SidebarPreview.snapshot(projects: [SidebarPreview.project(p, "demo-repo")], threads: rows.enumerated().filter { !dark || $0.offset != 0 }.map { i, row in
+        return SidebarPreview.snapshot(projects: [SidebarPreview.project(p, "demo-repo")], threads: rows.enumerated().map { i, row in
             SidebarPreview.thread("t\(i)", row.0, project: p, kind: row.1, minutesAgo: row.2)
         })
     }
@@ -36,7 +35,7 @@ enum Screen3824Fixtures {
 
     static func markdown() throws -> ThreadProjection {
         var projection = try ThreadPreview.projection(titled: ThreadPreview.markdownThread)!
-        let text = try String(contentsOf: SidebarFidelityTests.repo.appendingPathComponent("fixtures/screen-3824-markdown.md"), encoding: .utf8)
+        let text = try String(contentsOf: SidebarFidelityTests.repo.appendingPathComponent("fixtures/screen-4928-markdown.md"), encoding: .utf8)
         for i in projection.messages.indices where projection.messages[i].role == "assistant" { projection.messages[i].text = text }
         func replace(_ item: TurnItem) throws -> TurnItem {
             guard item.type == .assistantMessage else { return item }

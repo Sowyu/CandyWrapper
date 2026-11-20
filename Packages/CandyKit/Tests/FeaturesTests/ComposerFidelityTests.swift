@@ -5,7 +5,7 @@ import T3Protocol
 import T3Store
 @testable import Features
 
-/// The composer against design/reference-3824: 03a (at rest over the markdown thread), 01 (running,
+/// The composer against design/reference-4928: 03a (at rest over the markdown thread), 01 (running,
 /// Stop), 04 and 04n (the new-thread page). Compared at 2x in the main panel's coordinates.
 /// Writes ref, ours and diff PNGs plus report-composer.html to `Fidelity.root`.
 @MainActor @Suite(.fidelity)
@@ -103,7 +103,7 @@ struct ComposerFidelityTests {
         for (reference, width, top, bottom) in cases {
             for theme in ["light", "dark"] {
                 let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
-                    "design/reference-3824/\(reference).\(theme).png"))))
+                    "design/reference-4928/\(reference).\(theme).png"))))
                 let w = Int(width * 2)
                 let crop = CGRect(x: full.pixelsWide - w, y: top * 2, width: w, height: (bottom - top) * 2)
                 let ref = NSBitmapImageRep(cgImage: full.cgImage!.cropping(to: crop)!)

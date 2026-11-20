@@ -121,7 +121,7 @@ struct PickersFidelityTests {
         for c in Self.cases {
             for theme in ["light", "dark"] {
                 let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
-                    "design/reference-3824/\(c.reference).\(theme).png"))))
+                    "design/reference-4928/\(c.reference).\(theme).png"))))
                 let ref = Self.crop(full, c.rect)
                 let (view, natural) = c.make(try Self.pickers())
                 let ours = Self.render(view, size: c.rect.size, backdrop: Self.color(full, c.backdropAt.x, c.backdropAt.y), dark: theme == "dark")
@@ -142,7 +142,7 @@ struct PickersFidelityTests {
         // The closed footer controls in 03c: model and effort; default permissions live in its menu.
         for theme in ["light", "dark"] {
             let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
-                "design/reference-3824/03c-kitchen-sink-bottom.\(theme).png"))))
+                "design/reference-4928/03c-kitchen-sink-bottom.\(theme).png"))))
             let p = try Screen3824Fixtures.pickers()
             let width = p.controlsView.intrinsicContentSize.width
             // Preserve the official fractional anchor inside its enclosing 2x pixel crop.

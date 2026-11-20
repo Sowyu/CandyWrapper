@@ -1,0 +1,55 @@
+{
+ "base": "http://127.0.0.1:47404",
+ "width": 1100,
+ "height": 780,
+ "scale": 2,
+ "themes": [
+  "dark",
+  "light"
+ ],
+ "states": [
+  {
+   "name": "51-composer-branch-notice",
+   "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/c80527b4-84fe-4d7e-947e-c0b9b7ab10f1",
+   "actions": [
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 5000
+    },
+    {
+     "click": ".composer-tiptap"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "js": "document.querySelector('.composer-tiptap').focus();document.execCommand('selectAll');document.execCommand('delete')"
+    },
+    {
+     "type": "Continue reviewing this demo."
+    },
+    {
+     "wait": 3500
+    }
+   ],
+   "afterActions": [
+    {
+     "click": ".composer-tiptap"
+    },
+    {
+     "key": "a",
+     "meta": true
+    },
+    {
+     "key": "Backspace"
+    }
+   ]
+  }
+ ]
+}

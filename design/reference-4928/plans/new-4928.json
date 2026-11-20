@@ -1,0 +1,429 @@
+{
+ "base": "http://127.0.0.1:47404",
+ "width": 1100,
+ "height": 780,
+ "scale": 2,
+ "themes": [
+  "dark",
+  "light"
+ ],
+ "states": [
+  {
+   "name": "55-picker-permissions-menu",
+   "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/c80527b4-84fe-4d7e-947e-c0b9b7ab10f1",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))",
+     "log": false
+    },
+    {
+     "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/c80527b4-84fe-4d7e-947e-c0b9b7ab10f1"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 1300
+    },
+    {
+     "click": "[data-chat-provider-model-picker]"
+    },
+    {
+     "wait": 1000
+    },
+    {
+     "click": "[data-composer-permissions-trigger]"
+    },
+    {
+     "wait": 900
+    }
+   ]
+  },
+  {
+   "name": "58-issues-page",
+   "path": "/issues",
+   "actions": [
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 600
+    },
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))",
+     "log": false
+    },
+    {
+     "path": "/issues"
+    },
+    {
+     "wait": 2500
+    }
+   ]
+  },
+  {
+   "name": "59-settings-thread-details-items",
+   "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/c80527b4-84fe-4d7e-947e-c0b9b7ab10f1",
+   "actions": [
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 600
+    },
+    {
+     "click": "[aria-label=\"Settings\"]"
+    },
+    {
+     "wait": 800
+    },
+    {
+     "js": "[...document.querySelectorAll('[data-app-modal] button,[data-app-modal] a')].find(e=>e.textContent.trim()===\"Appearance\")?.click()",
+     "log": true
+    },
+    {
+     "wait": 1800
+    },
+    {
+     "js": "document.querySelector('[aria-label^=\"Thread details:\"]')?.scrollIntoView({block:'center'})",
+     "log": true
+    },
+    {
+     "wait": 500
+    },
+    {
+     "click": "[aria-label^=\"Thread details:\"]"
+    },
+    {
+     "wait": 900
+    }
+   ]
+  },
+  {
+   "name": "60-thread-details-notes",
+   "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/e86a0458-bc4b-4729-abe2-43ebd84933be",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))",
+     "log": false
+    },
+    {
+     "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/e86a0458-bc4b-4729-abe2-43ebd84933be"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 1300
+    },
+    {
+     "click": "[aria-label=\"Toggle thread details panel\"]"
+    },
+    {
+     "wait": 1200
+    }
+   ]
+  },
+  {
+   "name": "61-sidebar-undo-notice",
+   "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/c80527b4-84fe-4d7e-947e-c0b9b7ab10f1",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))",
+     "log": false
+    },
+    {
+     "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/c80527b4-84fe-4d7e-947e-c0b9b7ab10f1"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 1300
+    },
+    {
+     "hover": "[data-sidebar-row$=\"13fe081e-a960-4019-9cf2-ee17da57f4d5\"]"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "click": "[data-sidebar-row$=\"13fe081e-a960-4019-9cf2-ee17da57f4d5\"] [aria-label=\"Settle thread\"]"
+    },
+    {
+     "wait": 900
+    }
+   ],
+   "afterActions": [
+    {
+     "key": "z",
+     "meta": true
+    },
+    {
+     "wait": 1500
+    }
+   ]
+  },
+  {
+   "name": "56-model-switch-media",
+   "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/3ecb9fcf-4294-473d-94c5-4b9f7947db85",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))",
+     "log": false
+    },
+    {
+     "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/3ecb9fcf-4294-473d-94c5-4b9f7947db85"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 1300
+    },
+    {
+     "js": "(()=>{const e=[...document.querySelectorAll('*')].find(e=>e.children.length===0&&/Medium.*Low/.test(e.textContent));e?.scrollIntoView({block:'start'});let p=e?.parentElement;while(p&&!(p.scrollHeight>p.clientHeight&&['auto','scroll'].includes(getComputedStyle(p).overflowY)))p=p.parentElement;if(p)p.scrollTop-=80;return e?.textContent})()",
+     "log": true
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "57-user-message-burst",
+   "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/73fa4405-43d4-4da6-accf-8ceb096b9a26",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))",
+     "log": false
+    },
+    {
+     "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/73fa4405-43d4-4da6-accf-8ceb096b9a26"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 1300
+    },
+    {
+     "js": "(()=>{const e=[...document.querySelectorAll('*')].find(e=>e.children.length===0&&e.textContent.trim()==='Keep it short.');e?.scrollIntoView({block:'center'});return !!e})()",
+     "log": true
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "62-side-chat-panel",
+   "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/66f82559-8a0b-4b6e-ae38-a2c7adaaf684",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))",
+     "log": false
+    },
+    {
+     "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/66f82559-8a0b-4b6e-ae38-a2c7adaaf684"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 1300
+    },
+    {
+     "key": "b",
+     "meta": true,
+     "alt": true
+    },
+    {
+     "wait": 1200
+    },
+    {
+     "click": "text=Side chat"
+    },
+    {
+     "wait": 1500
+    }
+   ]
+  },
+  {
+   "name": "64a-scheduled-task-once-top",
+   "path": "/settings/scheduled-tasks",
+   "actions": [
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 600
+    },
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))",
+     "log": false
+    },
+    {
+     "path": "/settings/scheduled-tasks"
+    },
+    {
+     "wait": 2200
+    },
+    {
+     "click": "text=New task"
+    },
+    {
+     "wait": 1200
+    },
+    {
+     "click": "#scheduled-task-title"
+    },
+    {
+     "type": "Check the notes"
+    },
+    {
+     "click": "#scheduled-task-prompt"
+    },
+    {
+     "type": "Summarize notes.md in one line."
+    },
+    {
+     "js": "[...document.querySelectorAll('[role=dialog] button')].find(e=>e.textContent.trim()==='Once')?.click()",
+     "log": true
+    },
+    {
+     "wait": 800
+    },
+    {
+     "js": "(()=>{const e=[...document.querySelectorAll('[role=dialog] *')].filter(e=>e.scrollHeight>e.clientHeight+30&&['auto','scroll'].includes(getComputedStyle(e).overflowY)).sort((a,b)=>b.clientHeight-a.clientHeight)[0];if(e)e.scrollTop=(e.scrollHeight-e.clientHeight)*0;return e?.scrollTop})()",
+     "log": true
+    },
+    {
+     "wait": 400
+    }
+   ]
+  },
+  {
+   "name": "64b-scheduled-task-once",
+   "path": "/settings/scheduled-tasks",
+   "actions": [
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 600
+    },
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))",
+     "log": false
+    },
+    {
+     "path": "/settings/scheduled-tasks"
+    },
+    {
+     "wait": 2200
+    },
+    {
+     "click": "text=New task"
+    },
+    {
+     "wait": 1200
+    },
+    {
+     "click": "#scheduled-task-title"
+    },
+    {
+     "type": "Check the notes"
+    },
+    {
+     "click": "#scheduled-task-prompt"
+    },
+    {
+     "type": "Summarize notes.md in one line."
+    },
+    {
+     "js": "[...document.querySelectorAll('[role=dialog] button')].find(e=>e.textContent.trim()==='Once')?.click()",
+     "log": true
+    },
+    {
+     "wait": 800
+    },
+    {
+     "js": "(()=>{const e=document.querySelector(\"#scheduled-task-run-at\");if(!e)return 'missing';const d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e),'value');d.set.call(e,\"2026-12-01T09:00\");e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return e.value})()",
+     "log": true
+    },
+    {
+     "js": "[...document.querySelectorAll('[role=dialog] button')].find(e=>e.textContent.trim()==='Once')?.scrollIntoView({block:'start'})",
+     "log": true
+    },
+    {
+     "wait": 500
+    }
+   ]
+  }
+ ]
+}

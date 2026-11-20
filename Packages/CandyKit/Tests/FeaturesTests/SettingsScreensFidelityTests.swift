@@ -149,7 +149,7 @@ struct SettingsScreensFidelityTests {
         let theme = dark ? "dark" : "light"
         let base = "\(name).\(theme)"
         let reference = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo
-            .appendingPathComponent("design/reference-3824/\(base).png"))))
+            .appendingPathComponent("design/reference-4928/\(base).png"))))
         let ref = panel(reference)
         let ours = panel(Snapshot.image(of: view, size: NSSize(width: 1100, height: 780), scale: 2, dark: dark))
         let (score, _, diff) = SidebarFidelityTests.compare(ref, ours, bands: [])
