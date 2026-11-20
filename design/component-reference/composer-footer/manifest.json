@@ -9,11 +9,11 @@
   },
   "cluster.both-icon" : {
     "height" : 28,
-    "width" : 178.4453125
+    "width" : 132
   },
   "cluster.overflow-both" : {
     "height" : 28,
-    "width" : 180.4453125
+    "width" : 192.5
   },
   "files.question" : {
     "height" : 104,

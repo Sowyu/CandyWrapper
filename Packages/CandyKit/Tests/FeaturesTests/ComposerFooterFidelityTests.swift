@@ -5,7 +5,7 @@ import DesignSystem
 
 /// The composer footer's narrow states and the "..." overflow menu against T3's markup in Chromium
 /// (spec from scripts/gen-composer-footer-spec.py, references in design/component-reference/composer-footer).
-/// The cluster cases start at the traits separator. Writes ref, ours and diff PNGs plus
+/// The cluster cases start at the model trigger, which carries the effort as its suffix at 4928. Writes ref, ours and diff PNGs plus
 /// report-composer-footer.html to `Fidelity.root`.
 @MainActor @Suite(.fidelity)
 struct ComposerFooterFidelityTests {
@@ -42,14 +42,21 @@ struct ComposerFooterFidelityTests {
                 let canvas = SidebarSearchFidelityTests.Canvas(frame: .zero)
                 let p = try PickersFidelityTests.pickers()
                 if native["kind"] == "cluster" {
-                    let iconOnly = Int(native["iconOnly"]!)!, hidden = Int(native["hidden"]!)!
-                    if native["bars"] == "true" { p.traitsButton.icon = ComposerEffortGlyphView(.init(count: 4, filled: 2, label: "Medium", special: false)); p.traitsButton.title = ""; p.traitsButton.paddingOverride = (2, 4); p.traitsButton.mutedLabel = false }
+                    // 4928 has one resting block, the permissions chip (ComposerControlsBar.tsx:168-183), so the spec's
+                    // 3824 fit names map to it: one icon-only step, then the overflow trigger.
+                    let hidden = min(1, Int(native["hidden"]!)!), iconOnly = min(1, Int(native["iconOnly"]!)!)
+                    if native["bars"] == "true" {
+                        p.modelButton.adornment = ComposerModelSuffixView(ComposerModelSuffix(p.current.descriptors, ultrathink: false, bars: true))
+                    }
                     let v = Self.fitted(p, iconOnly: iconOnly, hidden: hidden)
                     #expect(v.fit == ComposerFooterLayout.Fit(hiddenCount: hidden, iconOnlyCount: iconOnly))
-                    // The reference starts at the first block's separator, one gap after the model.
-                    let start = v.model.frame.maxX - 2
-                    v.model.alphaValue = 0 // The reference contains only the controls after the model.
-                    v.frame.origin = NSPoint(x: 8 - start, y: 8)
+                    if let width = native["modelWidth"].flatMap(Double.init) {
+                        // A narrower host shrinks the model trigger once the chip is in the overflow menu.
+                        v.frame.size.width -= v.model.frame.width - CGFloat(width)
+                        v.layoutSubtreeIfNeeded()
+                    }
+                    // The reference starts at the model trigger (ComposerControlsBar.tsx:186-247).
+                    v.frame.origin = NSPoint(x: 8 - v.model.frame.minX, y: 8)
                     canvas.addSubview(v)
                 } else if native["kind"] == "files" {
                     let list = ComposerFileListView(frame: NSRect(x: 8, y: 8, width: 360, height: 104))
@@ -83,9 +90,9 @@ struct ComposerFooterFidelityTests {
         #expect(mean < 0.05)
     }
 
-    /// 3824 ComposerFooterControls.tsx:111-116 and composerFooterLayout.ts:53-75,109-117.
-    /// Replacing compact permissions with overflow costs 2px, so the old overflow-access
-    /// screenshot state cannot fit at any width. Keep a geometry check beside the reachable cases.
+    /// 4928 composerFooterLayout.ts:76-115 with one resting block, the permissions chip (ComposerControlsBar.tsx:168-183).
+    /// The overflow trigger is 2px wider than the icon-only chip (`px-2` against `ps-1.5`), so below the icon-only
+    /// width the chip moves straight into the overflow menu and the model trigger shrinks to make room.
     @Test func overflowSkipsPermissionsOnlyState() throws {
         for dark in [false, true] {
             let p = try PickersFidelityTests.pickers()
@@ -93,13 +100,15 @@ struct ComposerFooterFidelityTests {
             v.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
             v.hidesPermissions = false
             let m = v.measurement
-            let before = ComposerFooterLayout.width(m, hidden: 0, fixed: m.naturalFixedWidth, iconOnly: 2)
-            let intermediate = ComposerFooterLayout.width(m, hidden: 1, fixed: m.naturalFixedWidth, iconOnly: 2)
-            #expect(intermediate >= before)
-            v.frame = NSRect(x: 0, y: 0, width: before - 0.5, height: 28)
+            #expect(m.blockWidths.count == 1)
+            let iconOnly = ComposerFooterLayout.width(m, hidden: 0, fixed: m.naturalFixedWidth, iconOnly: 1)
+            let overflow = ComposerFooterLayout.width(m, hidden: 1, fixed: m.naturalFixedWidth, iconOnly: 1)
+            #expect(overflow == iconOnly + 2)
+            v.frame = NSRect(x: 0, y: 0, width: iconOnly - 0.5, height: 28)
             v.layoutSubtreeIfNeeded()
-            #expect(v.fit.hiddenCount == 2 && v.fit.iconOnlyCount == 2)
-            print("composer-overflow", dark ? "dark" : "light", "both icons", before, "permissions only hidden", intermediate, "overflow at", v.frame.width)
+            #expect(v.fit == ComposerFooterLayout.Fit(hiddenCount: 1, iconOnlyCount: 1))
+            #expect(v.model.frame.width < v.model.naturalWidth)
+            print("composer-overflow", dark ? "dark" : "light", "icon-only", iconOnly, "overflow", overflow, "host", v.frame.width)
         }
     }
 
