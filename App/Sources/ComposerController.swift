@@ -1971,7 +1971,8 @@ final class ComposerController {
         }
         let project = snapshot?.projects.first { $0.id == projectId }
         let context = ComposerSelectionContext(
-            catalog: ProviderCatalog(serverConfig.providers, settings: ServerSettingsValues(serverConfig.settings.raw), projectId: projectId?.localId.rawValue),
+            catalog: ProviderCatalog(serverConfig.providers.map { $0.resolved(cwd: menuCwd) }, settings: ServerSettingsValues(serverConfig.settings.raw),
+                                     projectId: projectId?.localId.rawValue),
             thread: thread, projectDefaultModel: project?.defaultModelSelection,
             serverDefaults: serverConfig.settings,
             hasStartedSession: ComposerLogic.QueueState.hasStartedSession(projection),
@@ -1979,6 +1980,7 @@ final class ComposerController {
         // Shift-click fan-out: a new thread on a server that bootstraps worktrees (ChatView.tsx:11584-11587).
         if case .draft = target { pickers.supportsMultipleModels = serverConfig.capabilities.contains("requiredWorktreeBootstrap") } else { pickers.supportsMultipleModels = false }
         pickers.permissionsShownInStrip = thread == nil && panel.showsContextStrip
+        pickers.workspaceModelsScanning = workspaceSkillsScanning
         pickers.update(draftKey: draftKey ?? "", context: context)
         let strip = panel.contextStrip
         let modern = !ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark) && !ThemeRuntime.isGlass(dark: composer.effectiveAppearance.isDark)
@@ -2626,7 +2628,8 @@ final class ComposerController {
             }
         }
         // The project's provider switches apply to the fan-out too (ChatView.tsx:3245-3249).
-        let catalog = ProviderCatalog(serverConfig.providers, settings: ServerSettingsValues(serverConfig.settings.raw), projectId: ProjectId(session.projectId).localId.rawValue)
+        let catalog = ProviderCatalog(serverConfig.providers.map { $0.resolved(cwd: menuCwd) }, settings: ServerSettingsValues(serverConfig.settings.raw),
+                                      projectId: ProjectId(session.projectId).localId.rawValue)
         for s in selections where catalog.entry(s.instanceId)?.isReady != true {
             threadErrors.set(key, "Provider for \(s.model) is unavailable.")
             refresh()
@@ -3949,7 +3952,7 @@ extension ComposerController {
         let key = "\(env)|\(provider.instanceId.rawValue)|\(cwd)"
         let ttl: TimeInterval = 5 * 60
         if let last = menuState.workspaceRefresh[key], Date().timeIntervalSince(last) < ttl { return }
-        if let snapshot = provider.workspaceSnapshot(cwd), snapshot.slashCommandsPending != true,
+        if let snapshot = provider.workspaceSnapshot(cwd), !snapshot.isPending,
            let checked = T3Timestamp(snapshot.checkedAt).date, Date().timeIntervalSince(checked) < ttl { return }
         menuState.workspaceRefresh[key] = Date()
         menuState.workspaceScanning.insert(key)
@@ -3959,6 +3962,7 @@ extension ComposerController {
             let reply = try? await supervisor.request("server.refreshProviders", payload: payload)
             guard let self else { return }
             menuState.workspaceScanning.remove(key)
+            pickers.workspaceModelsScanning = workspaceSkillsScanning
             if panel.menus.isOpen { panel.menus.reload() }
             guard environments.session(env) === shell else { return }
             guard let providers = try? reply?["providers"]?.decode(as: [ServerProvider].self) else {
@@ -3968,6 +3972,8 @@ extension ComposerController {
             applyWorkspaceReply(providers, env: env, instance: provider.instanceId.rawValue, cwd: cwd, fresh: false, basis: provider)
             if panel.menus.isOpen { panel.menus.reload() }
             composer.refreshChips()
+            // The project's own models join the picker's catalog (#24585). The TTL stamp keeps this from rescanning.
+            refresh()
         }
     }
 

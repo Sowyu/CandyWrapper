@@ -22,6 +22,8 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     /// Docked beside the effort column: one fixed height, so a model with more options never resizes the popup
     /// (ProviderModelPicker.tsx:475-477, ModelPickerContent.tsx:944-955).
     var docked = false
+    /// The open provider's project models are still being scanned (ModelPickerContent.tsx:1225-1231 at 4928, #24585).
+    var workspaceModelsScanning = false { didSet { emptyLabel.text = workspaceModelsScanning ? "Searching project models..." : "No models found" } }
     private(set) var rail: ModelPickerRail
     private(set) var query = ""
     private var expandedLegacy: Set<ProviderInstanceId> = []

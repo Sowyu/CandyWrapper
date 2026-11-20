@@ -202,12 +202,19 @@ public struct ServerProviderSkill: Codable, Hashable, Sendable {
 }
 
 /// `ServerProviderWorkspaceSnapshot` (server.ts:137-145): skills and commands found under one cwd.
-public struct ServerProviderWorkspaceSnapshot: Codable, Hashable, Sendable {
+public struct ServerProviderWorkspaceSnapshot: Decodable, Hashable, Sendable {
     public var cwd: String
     public var checkedAt: String
     public var slashCommands: [ServerProviderSlashCommand]
     public var slashCommandsPending: Bool?
     public var skills: [ServerProviderSkill]
+    /// A project's own models, for OpenCode's project config (server.ts:129-133 at 4928, #24585). Absent means the
+    /// provider's machine `models`.
+    public var models: [ServerProviderModel]?
+    public var modelsPending: Bool?
+
+    /// `isProviderWorkspaceSnapshotPending` (server.ts:147-152 at 4928): kept, and rescanned before its TTL.
+    public var isPending: Bool { slashCommandsPending == true || modelsPending == true }
 }
 
 /// `ServerProvider` (server.ts:213-300), one configured provider instance. Fields nothing here
@@ -356,6 +363,13 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     public func skills(cwd: String?) -> [ServerProviderSkill] { workspaceSnapshot(cwd)?.skills ?? skills }
     /// `resolveProviderSlashCommandsForCwd`.
     public func slashCommands(cwd: String?) -> [ServerProviderSlashCommand] { workspaceSnapshot(cwd)?.slashCommands ?? slashCommands }
+    /// `resolveProvidersForCwd` (providerSkills.ts:136-154 at 4928, #24585): the provider with the cwd's own models.
+    public func resolved(cwd: String?) -> ServerProvider {
+        guard let models = workspaceSnapshot(cwd)?.models, models != self.models else { return self }
+        var copy = self
+        copy.models = models
+        return copy
+    }
     public func workspaceSnapshot(_ cwd: String?) -> ServerProviderWorkspaceSnapshot? {
         guard let cwd else { return nil }
         return workspaceSnapshots?.first { $0.cwd == cwd }
