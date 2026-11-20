@@ -647,7 +647,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 2a6b2c8298 | #31313 | settings | feat(web): switch the UI language from Settings, with Spanish and Chinese | partly ported (settings-2): General > Display > Language with System default and English, the languages CandyWrapper ships; no translations |
+| 2a6b2c8298 | #31313 | settings | feat(web): switch the UI language from Settings, with Spanish and Chinese | left (settings-3): plan and counts in docs/research/translation-4928.md (T3 catalogs keyed by hash, 3,853 CandyWrapper strings already have a key, about 9 to 12 hours of agent work) |
 | afade9b562 | #33161 | settings | feat(web): add Brazilian Portuguese translation | port |
 | 93d502f237 | #33162 | settings | feat(web): add French translation | port |
 | d8631c8711 | #33163 | settings | feat(web): add German translation | port |
