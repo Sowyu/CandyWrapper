@@ -430,6 +430,10 @@ public final class ThreadPanelView: DSView {
     public var childInputBanner: ComposerNoticeBannerView { lazyChildInputBanner.view }
     public var childInputKey: String? { didSet { if childInputKey != oldValue { needsLayout = true } } }
     public let lazyRecoveryBanner = LazyView { ComposerNoticeBannerView() }
+    /// "Stopping" or "Agent not responding to Stop" with Force stop (`runStopNowItem`, ThreadActivityBanners.tsx:154-195
+    /// at 4928); nil hides it.
+    public let lazyRunStopBanner = LazyView { ComposerNoticeBannerView() }
+    public var runStopState: RunStop.State? { didSet { if runStopState != oldValue { needsLayout = true } } }
     public var noticeBanner: ComposerNoticeBannerView { lazyNoticeBanner.view }
     public var goalBanner: ComposerNoticeBannerView { lazyGoalBanner.view }
     public var recoveryBanner: ComposerNoticeBannerView { lazyRecoveryBanner.view }
@@ -538,6 +542,8 @@ public final class ThreadPanelView: DSView {
             } else { items.append(notice("server-version", serverUpdateBanner)) }
         }
         let legacyStatus = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        // Redesign's Stop button already reads Stopping; only an unanswered Stop gets a banner.
+        if docked && legacyStatus && runStopState == .unresponsive { items.append(notice("run-stop:" + thread, lazyRunStopBanner.view)) }
         if docked && legacyStatus, let key = childInputKey { items.append(notice("child-input:" + key, childInputBanner)) }
         if docked && legacyStatus && showsGoal { items.append(notice("goal:" + thread, goalBanner)) }
         if docked && legacyStatus && showsBackgroundWork { items.append(notice("background-work:" + thread, backgroundWorkBanner)) }
@@ -599,8 +605,12 @@ public final class ThreadPanelView: DSView {
             return
         }
         var lines: [(String, ComposerNoticeBannerView)] = []
-        if childInputKey != nil, let view = lazyChildInputBanner.loaded { lines.append(("attention", view)) }
-        if showsBackgroundWork, let view = lazyBackgroundWorkBanner.loaded { lines.append(("work", view)) }
+        // A Stop that went unanswered needs the user; one in progress is the thread's work (useThreadLifecycle.tsx:739-741).
+        let runStop = runStopState.flatMap { _ in lazyRunStopBanner.loaded }
+        if runStopState == .unresponsive, let runStop { lines.append(("attention", runStop)) }
+        else if childInputKey != nil, let view = lazyChildInputBanner.loaded { lines.append(("attention", view)) }
+        if runStopState == .stopping, let runStop { lines.append(("work", runStop)) }
+        else if showsBackgroundWork, let view = lazyBackgroundWorkBanner.loaded { lines.append(("work", view)) }
         if showsActivity {
             timelineStatus.sync.apply(.init(variant: .neutral, icon: .refreshCw,
                 title: activityRow.phase == .loading ? "Loading messages..." : "Syncing messages..."))

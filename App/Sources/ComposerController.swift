@@ -283,6 +283,8 @@ final class ComposerController {
     /// Attachments a sent message took while their upload ran (#33092): the upload writes its outcome here once the
     /// draft lets go of it, and the message's dispatch waits on it (`awaitAttachmentUploads`, attachmentUploadQueue.ts:548-553).
     private var sendingUploads: [String: ComposerAttachment] = [:]
+    /// The thread a Force stop is running for (`stoppingThreadId`).
+    fileprivate var forceStopping: ThreadId?
     private var sendingUploadWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
     /// Server copies being fetched, so a cell and a chip asking for one image share one download.
     private var attachmentFetches: [String: Task<URL?, Never>] = [:]
@@ -5526,6 +5528,55 @@ extension ComposerController {
 
 
 extension ComposerController {
+    /// `runStopNowItem` (ThreadActivityBanners.tsx:154-195, useThreadLifecycle.tsx:602-616 at 4928): a Stop still
+    /// winding down, or one the agent ignored with Force stop where the server has `threadForceStop`.
+    private func updateRunStopBanner(_ thread: ThreadShell?) {
+        let found = projection.flatMap(RunStop.present)
+        // A background Stop matters only while that work is still pending.
+        let stop = found?.background == true && (thread?.backgroundTasks.isEmpty ?? true) ? nil : found
+        panel.runStopState = stop?.state
+        guard let stop, let thread else { return }
+        let unresponsive = stop.state == .unresponsive
+        let canForce = unresponsive && serverConfig.capabilities.contains(ForceStopThread.capability) && environments.canOperate(thread.id.environmentId)
+        let forcing = forceStopping == thread.id
+        let banner = panel.lazyRunStopBanner.view
+        banner.apply(.init(variant: unresponsive ? .warning : .neutral, icon: unresponsive ? .triangleAlert : .circleStop,
+                           title: unresponsive ? "Agent not responding to Stop" : "Stopping",
+                           description: unresponsive ? "It may be short on memory. Force stop kills its processes." : nil,
+                           actions: canForce ? [forcing ? "Force stopping..." : "Force stop"] : [],
+                           elapsedStartedAt: stop.requestedAt.date?.timeIntervalSince1970))
+        banner.disabledActions = forcing ? [0] : []
+        banner.onAction = { [weak self] index in if index == 0 { self?.forceStop(thread.id, runId: stop.runId) } }
+    }
+
+    /// `useForceStopThread` (useForceStopThread.ts:17-64): the run that ignored Stop rides along, so a Force stop left
+    /// open can't hit a newer run; `releasing` and `shared` say what kept running.
+    private func forceStop(_ threadId: ThreadId, runId: RunId) {
+        guard forceStopping == nil, let supervisor = environments.session(threadId.environmentId)?.supervisor else { return }
+        forceStopping = threadId
+        updateThreadBanners()
+        Task { [weak self] in
+            do {
+                let value = try await supervisor.request(ForceStopThread.method, payload: ForceStopThread.input(threadId: threadId.localId, runId: runId))
+                guard let self else { return }
+                let result = try? JSONDecoder().decode(ForceStopThread.Result.self, from: JSONEncoder().encode(value))
+                let others = result?.sharedWithThreadIds.count ?? 0
+                if result?.outcome == "releasing" { toast(.info, "Turn stopped; the agent is still shutting down", nil) }
+                if result?.outcome == "shared" {
+                    toast(.info, "Turn stopped; the agent process kept running",
+                          others == 0 ? "It is shared with other working threads. Stop those to free it."
+                              : "It is shared with \(others) working thread\(others == 1 ? "" : "s"). Stop those to free it.")
+                }
+            } catch let error as RPCClientError where ForceStopThread.isSuperseded(error.typedError.map { .object($0.fields.merging(["_tag": .string($0.tag)]) { a, _ in a }) }) {
+                // A newer run started: nothing was stopped and the banner follows the new run.
+            } catch {
+                self?.toast(.error, "Could not force stop the agent", Self.message(error))
+            }
+            self?.forceStopping = nil
+            self?.updateThreadBanners()
+        }
+    }
+
     /// `backgroundWorkBannerItem` (ThreadActivityBanners.tsx:100-170, ChatView.tsx:3791-3819, 3930-3939): shown
     /// only while the thread isn't working. One subagent gets "Show", several get their titles as links; Stop
     /// sends what the composer's Stop sends and reads "Stopping..." until the server accepts it.
@@ -5614,6 +5665,7 @@ extension ComposerController {
             panel.goalBanner.apply(.init(variant: .neutral, icon: .target, title: ThreadGoalPresentation.title(goal, working: composer.runState.canInterrupt), description: goal.objective, actions: actions))
         }
         updateBackgroundWorkBanner(thread)
+        updateRunStopBanner(thread)
         let limited = thread?.status == .failed && thread?.lastErrorClass == .usageLimit
         panel.showsRecovery = limited
         if let thread, limited {

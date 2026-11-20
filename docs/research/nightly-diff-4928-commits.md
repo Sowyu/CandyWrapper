@@ -1987,7 +1987,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | a1621a81af | #25225 | - | fix(server): show MCP App forms from failed tool results | n/a: server only |
 | cb5fac907a | #24080 | - | fix(server): mark unread no longer brings back a dismissed wake | n/a: server only |
 | 44d508fd8b | #27239 | - | feat(server): `t3 service protect` keeps the server alive when agents fill memory | n/a: server only |
-| 6b1245cced | #27252 | - | fix(server): Stop always completes, and an agent that ignores it can be force stopped | n/a: server only |
+| 6b1245cced | #27252 | - | fix(server): Stop always completes, and an agent that ignores it can be force stopped | ported: the thread's now lines show Stopping with its time, and Agent not responding to Stop with Force stop once the request has `unresponsiveAt`, behind `threadForceStop` (thread-2, T3Store `RunStop`, ComposerController `forceStop`) |
 | 476590d0ad | #27430 | - | feat(desktop): back/forward buttons and trackpad swipe navigation | n/a: desktop only |
 | e4ecaf629d | #27373 | - | feat(mobile): message media, file cards and grouped steers match web | n/a: mobile only |
 | 028ed851d5 | #19066 | - | fix(server): Codex generated images show in chat, including on Android with a Windows host | n/a: server only |
