@@ -251,7 +251,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let threads = ThreadController(sidebar: sidebar, window: window, environments: environments)
         self.threads = threads
         let windowTitle = WindowTitleController(window: window, sidebar: sidebar, environments: environments) { [weak threads] in threads?.openThreadId }
-        threads.onOpenThreadChange = { [weak windowTitle] in windowTitle?.update() }
+        threads.onOpenThreadChange = { [weak windowTitle, weak self] in windowTitle?.update(); self?.notifications?.threadOpened() }
         self.windowTitle = windowTitle
         threads.files.serverConfig = { [weak composer = threads.composer] env in composer?.config(env) }
         let main: NSView = Self.threadPreview() ?? threads.panel

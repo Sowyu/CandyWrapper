@@ -11,15 +11,15 @@ struct BackgroundWorkBannerTests {
 
     @Test func titlesOneTask() {
         #expect(BackgroundWorkPresentation.present([]) == nil)
-        #expect(BackgroundWorkPresentation.present([task(.command, "npm test")])?.title == "Running: npm test")
+        #expect(BackgroundWorkPresentation.present([task(.command, "npm test")])?.title == "Running · npm test")
         #expect(BackgroundWorkPresentation.present([task(.command, "  ")])?.title == "Running a command")
-        #expect(BackgroundWorkPresentation.present([task(.subagent, "Subagent: Fix the bug", child: "c1")])?.title == "Waiting on subagent Fix the bug")
+        #expect(BackgroundWorkPresentation.present([task(.subagent, "Subagent: Fix the bug", child: "c1")])?.title == "Waiting · Fix the bug")
         #expect(BackgroundWorkPresentation.present([task(.subagent)])?.title == "Waiting on a subagent")
-        #expect(BackgroundWorkPresentation.present([task(.monitor, "CI", awaited: true)])?.title == "CI")
+        #expect(BackgroundWorkPresentation.present([task(.monitor, "CI", awaited: true)])?.title == "Waiting · CI")
         // 3669: a monitor the agent doesn't wait on reads as running, like a dev server.
-        #expect(BackgroundWorkPresentation.present([task(.monitor, "CI")])?.title == "Running: CI")
+        #expect(BackgroundWorkPresentation.present([task(.monitor, "CI")])?.title == "Running · CI")
         // A server before 3655 marks nothing awaited, so its monitors wait as on 3473.
-        #expect(BackgroundWorkPresentation.present([task(.monitor, "CI")], awaitedMarked: false)?.title == "CI")
+        #expect(BackgroundWorkPresentation.present([task(.monitor, "CI")], awaitedMarked: false)?.title == "Waiting · CI")
         #expect(BackgroundWorkPresentation.present([task(BackgroundTaskKind(rawValue: "future"))])?.title == "Waiting on a background task")
         // Commands don't hold completion, so their dot stays still.
         #expect(BackgroundWorkPresentation.present([task(.command)])?.waiting == false)
@@ -46,10 +46,10 @@ struct BackgroundWorkBannerTests {
                      try item("two", taskId: "b", progress: "  Reading\n files  ", updated: "2026-10-28T00:00:02Z")]
         let multiple = BackgroundWorkPresentation.activity(try #require(BackgroundWorkPresentation.present(tasks)), turnItems: items)
         #expect(multiple.detail == "Second: Reading files")
-        #expect(multiple.startedAt == nil && multiple.childThreadId == nil)
+        #expect(multiple.startedAt == nil)
         let one = BackgroundWorkPresentation.activity(try #require(BackgroundWorkPresentation.present([tasks[1]])), turnItems: items)
-        #expect(one.title == "Waiting on Second" && one.detail == "Reading files")
-        #expect(one.startedAt == "2026-10-28T00:00:00Z" && one.childThreadId == "child")
+        #expect(one.title == "Waiting · Second" && one.detail == "Reading files")
+        #expect(one.startedAt == "2026-10-28T00:00:00Z")
         #expect(!one.commandsOnly)
     }
 
