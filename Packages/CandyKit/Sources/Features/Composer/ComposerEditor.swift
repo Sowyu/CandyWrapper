@@ -265,6 +265,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         typedInsert = !clipboardEdit
         defer { typedInsert = false }
         let range = replacementRange.location == NSNotFound ? (hasMarkedText() ? markedRange() : selectedRange()) : replacementRange
+        if surroundSelection(range, with: (string as? String) ?? (string as? NSAttributedString)?.string) { return }
         let opensPair = richTextEnabled && !hasMarkedText() && range.length == 0 && ((string as? String) ?? (string as? NSAttributedString)?.string) == "`"
             && codePair(at: range.location - 1) == nil && typedPairCanOpen(before: range.location)
         // Text typed inside a typed pair joins it; anywhere else it stays out.
@@ -277,6 +278,24 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             nextCodePair += 1
             storage.addAttribute(.composerCodePair, value: nextCodePair, range: NSRange(location: caret - 2, length: 2))
         }
+    }
+
+    /// `surroundSelectionWithMark` (composer-rich-text-doc.ts at 4928, #14870): a backtick typed over a selection
+    /// formats it as code, `*` or `_` as italic, instead of replacing it. Selections over chips, markers, code
+    /// blocks or a line break keep the literal replace.
+    private func surroundSelection(_ range: NSRange, with typed: String?) -> Bool {
+        let marks: [String: ComposerRichText.Mark] = ["`": .code, "*": .italic, "_": .italic]
+        guard richTextEnabled, !hasMarkedText(), range.length > 0, let typed, let mark = marks[typed], let storage = textStorage,
+              NSMaxRange(range) <= storage.length, !storage.containsAttachments(in: range),
+              !(storage.string as NSString).substring(with: range).contains("\n") else { return false }
+        var inCode = false
+        storage.enumerateAttribute(.composerCodeBlock, in: range) { value, _, stop in if value != nil { inCode = true; stop.pointee = true } }
+        guard !inCode else { return false }
+        var hasAll = true
+        storage.enumerateAttribute(.composerMarks, in: range) { value, _, _ in if !ComposerRichTextStyler.marks(value).contains(mark) { hasAll = false } }
+        setSelectedRange(range)
+        if !hasAll { toggleMark(mark) }
+        return true
     }
 
     // MARK: Typed code pairs (`codePairCaretPlugin`, composer-rich-text-doc.ts:50-113, 7259e4f594)

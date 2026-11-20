@@ -353,6 +353,23 @@ import Testing
         #expect(editor.expandedText == "- a\n  - bxc")
     }
 
+    /// #14870: a backtick typed over a selection formats it as code, `_` as italic; across a line it replaces.
+    @Test func typedMarkerWrapsTheSelection() {
+        let editor = makeEditor()
+        editor.setText("say hi now")
+        editor.setSelectedRange((editor.string as NSString).range(of: "hi"))
+        editor.insertText("`", replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(storedDraft(editor) == "say `hi` now")
+        editor.setSelectedRange((editor.string as NSString).range(of: "now"))
+        editor.insertText("_", replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(storedDraft(editor) == "say `hi` *now*" || storedDraft(editor) == "say `hi` _now_")
+        let lines = makeEditor()
+        lines.setText("a\nb")
+        lines.setSelectedRange(NSRange(location: 0, length: 3))
+        lines.insertText("`", replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(storedDraft(lines) == "`")
+    }
+
     /// #17138 and #27016 in the rich editor: a numbered item nests as its parent's first child, and
     /// Shift+Tab lifts it back with the parent list's next number.
     @Test func tabNestsANumberedItemAndShiftTabLiftsIt() throws {

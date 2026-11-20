@@ -802,13 +802,13 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | cbc68c9dc1 | #20809 | composer | fix(web): Stop shows a pending state and repeat clicks no longer resume | ported in abe98edb, without the second Stop button beside Send while typing |
 | 8f4166b28c | #22997 | composer | fix(web): convert composer list markers completed later | port |
 | 9d7384d096 | #23289 | composer | fix(client-runtime): reopening a folder picker refreshes its listing | port |
-| 21a9aa1d79 | #14870 | composer | fix(web): wrapping a selection in backticks formats it as code | port |
+| 21a9aa1d79 | #14870 | composer | fix(web): wrapping a selection in backticks formats it as code | ported: a backtick typed over a one-line selection makes it code, `*` or `_` italic (ComposerEditor `surroundSelection`); T3 also checks the span reparses the same, which CW skips |
 | a02bc75737 | #34572 | composer | fix(web): keep background toast Open button inline | port |
 | 6a5d6085ba | #32959 | composer | fix(web): prompt links work for encoded thread IDs | port |
 | 3de3c9ffff | #34307 | composer | fix(web): keep a leading blank line selected when indenting code | port |
 | ea3e20a0e2 | #27287 | composer | fix(web): double-clicking another thread in the sidebar renames it instead of focusing its composer | port |
 | 4e6924753c | #27280 | composer | fix(web): pasted CRLF text keeps its blank lines and caret in the composer | port |
-| 6a03ef6568 | #34493 | composer | fix(web): app keybindings on Mod+B, Mod+I and Mod+E win over composer formatting | port |
+| 6a03ef6568 | #34493 | composer | fix(web): app keybindings on Mod+B, Mod+I and Mod+E win over composer formatting | already in CandyWrapper: App/Sources/ComposerController.swift:789 lets a bound app command beat the editor formatting, and Mod+B over selected text still bolds as in 4928 AppSidebarLayout.tsx:342-350 |
 | 4ae66e2e86 | #24585 | composer | fix(opencode): project-defined models appear in that project's picker | port |
 | d9a54ec645 | #34724 | composer | fix(web): file breadcrumbs keep backslashes in POSIX folder names | port |
 | 1a1f9ac18e | #34810 | composer | fix(web): Ctrl/Cmd+Enter sends new threads when the send shortcut needs it | port |
