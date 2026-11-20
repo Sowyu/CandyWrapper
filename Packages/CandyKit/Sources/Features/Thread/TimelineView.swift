@@ -804,22 +804,40 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         minimap.frame = NSRect(x: 12, y: topClearance + (bounds.height - topClearance - height) / 2, width: min(40, max(0, gutter - 12)), height: height)
         updateMinimapPosition()
     }
-    /// The first turn on screen is the current one, else the last above it; every turn on screen lights its strip
-    /// (`resolveTimelineMinimapCurrentIndex`, MessagesTimeline.logic.ts:383-409).
+    /// Every turn with a row on screen lights its strip; a turn runs from its prompt to the next prompt, so a long
+    /// reply keeps its strip lit (`isTimelineMinimapTurnVisible`, MessagesTimeline.logic.ts:432-445, at 4928). The
+    /// current turn is the first prompt on screen, else the turn being read, measured 25pt below the top
+    /// (`resolveTimelineMinimapCurrentIndex`, :447-465, `TIMELINE_MINIMAP_TARGET_OFFSET + 1`, MessagesTimeline.tsx:957-962).
     private func updateMinimapPosition() {
-        let top = viewport.minY + topClearance, bottom = viewport.maxY
-        var current: Int?, preceding: Int?, inView = IndexSet()
-        for (index, item) in minimap.items.enumerated() where item.rowIndex < tops.count && item.rowIndex < heights.count {
-            let rowTop = tops[item.rowIndex]
-            if rowTop < bottom, rowTop + max(1, heights[item.rowIndex]) > top {
-                inView.insert(index)
-                if current == nil { current = index }
-            } else if rowTop <= top {
-                preceding = index
+        let items = minimap.items
+        let all = visibleRows(top: viewport.minY + topClearance)
+        var inView = IndexSet()
+        if let all {
+            for (index, item) in items.enumerated() where item.rowIndex <= all.upperBound {
+                let next = index + 1 < items.count ? items[index + 1].rowIndex : nil
+                if next.map({ $0 > all.lowerBound }) ?? true { inView.insert(index) }
             }
         }
-        minimap.currentIndex = current ?? preceding
+        var current: Int?
+        if let rows = visibleRows(top: viewport.minY + topClearance + 25) {
+            // `current` holds the preceding turn until a prompt at or below the top turns up.
+            for (index, item) in items.enumerated() {
+                if item.rowIndex >= rows.lowerBound { if item.rowIndex <= rows.upperBound { current = index }; break }
+                current = index
+            }
+        }
+        minimap.currentIndex = current
         minimap.inView = inView
+    }
+    /// `resolveTimelineMinimapVisibleRange` (MessagesTimeline.logic.ts:402-430): the first and last row on screen.
+    /// Rows stack top to bottom, so both ends are binary searches.
+    private func visibleRows(top: CGFloat) -> ClosedRange<Int>? {
+        let bottom = viewport.maxY, n = min(tops.count, heights.count)
+        var lo = 0, hi = n
+        while lo < hi { let m = (lo + hi) / 2; if tops[m] + max(1, heights[m]) > top { hi = m } else { lo = m + 1 } }
+        var end = lo, upper = n
+        while end < upper { let m = (end + upper) / 2; if tops[m] < bottom { end = m + 1 } else { upper = m } }
+        return lo < end ? lo...(end - 1) : nil
     }
 
     /// Lays out rows in the visible rect plus overscan. Rows measured for the first time can change

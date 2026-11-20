@@ -64,7 +64,7 @@ public struct ThreadMinimapItem: Equatable, Sendable {
 
 /// TimelineMinimap.tsx (T3 3824). The strip redraws only after a scroll, content or hover change. Every theme draws
 /// T3's default strip, Redesign included (the user, 2026-10-29).
-public final class ThreadMinimapView: DSView {
+public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
     public var threadTitle: ((String) -> String?)?
     public var items: [ThreadMinimapItem] = [] { didSet {
         guard !updatingPreview else { return }
@@ -99,10 +99,6 @@ public final class ThreadMinimapView: DSView {
     private func tickY(_ i: Int) -> CGFloat { CGFloat(i) / CGFloat(max(1, items.count - 1)) * max(0, bounds.height - 2) }
     /// Each arrow fades in under its own pointer, not the strip's (`hover:opacity-100` on the arrow, :303-307).
     private var hoveredArrow: ButtonView? { didSet { if hoveredArrow !== oldValue { updateNavigation() } } }
-    private func arrow(_ event: NSEvent) -> ButtonView? {
-        let p = convert(event.locationInWindow, from: nil)
-        return [previous, next].first { $0.frame.contains(p) }
-    }
     private let previous = ButtonView(icon: .chevronUp, variant: .ghost, size: .iconXs)
     private let next = ButtonView(icon: .chevronDown, variant: .ghost, size: .iconXs)
     private weak var previewPopup: OpenPopup?
@@ -140,14 +136,20 @@ public final class ThreadMinimapView: DSView {
     /// shadow-xl shadow-black/25`, its middle on the hovered strip, or its top on the first and its bottom on the last
     /// (`translateY(0% | -50% | -100%)`). The anchor is the strip's own centre, so the card sits on the strip drawn.
     private func showPreview() {
-        if let previewPopup { popupHost?.close(previewPopup, returnFocus: false) }
+        defer { layoutHoverZone() }
+        if let old = previewPopup { previewPopup = nil; popupHost?.close(old, returnFocus: false) }
         guard let hovered, items.indices.contains(hovered), let host = popupHost else { return }
         let content = ThreadMinimapPreviewView(item: items[hovered], threadTitle: threadTitle ?? { _ in nil })
         let popover = PopoverView(content: content, padding: .card, width: .md, beforeLine: false, surface: .tooltipGlass, radius: 12)
         let align: PopupPlacement.Align = hovered == 0 ? .start : hovered == items.count - 1 ? .end : .center
         previewPopup = host.open(popover, trigger: self, anchorRect: NSRect(x: 24, y: tickY(hovered) + 1, width: 1, height: 0),
             placement: PopupPlacement(side: .right, align: align, sideOffset: 8), pressesTrigger: false, returnsFocus: false, passive: true)
-        updateTrackingAreas()
+        // A card closed from outside takes the fisheye with it, so the two never disagree.
+        previewPopup?.onClose = { [weak self, weak popup = previewPopup] in
+            guard let self, let popup, self.previewPopup === popup else { return }
+            self.previewPopup = nil
+            self.hovered = nil
+        }
     }
     /// The card in the strip's coordinates, while it shows.
     private var previewFrame: NSRect? {
@@ -160,12 +162,12 @@ public final class ThreadMinimapView: DSView {
         if window != nil { snapAlpha() }
     }
     public var onSelect: ((String) -> Void)?
+    /// The hovered turn. The fisheye and the card both follow it: setting it opens or closes the card, and a card
+    /// closed from outside (a click anywhere, Escape, another hover card) clears it.
     private var hovered: Int? { didSet {
         guard hovered != oldValue else { return }
         toolTip = nil; needsDisplay = true; updateGutter(); showPreview()
-        if hovered == nil { updateTrackingAreas() }
     } }
-    private var tracking: NSTrackingArea?
     public override var wantsUpdateLayer: Bool { false }
     public override var acceptsFirstResponder: Bool { true }
     /// The strip and its arrows. While a card shows, T3 widens the strip's button to 22rem and keeps the card inside
@@ -176,33 +178,62 @@ public final class ThreadMinimapView: DSView {
         guard let card = previewFrame else { return strip }
         return strip.union(NSRect(x: 0, y: 0, width: 352, height: bounds.height)).union(card)
     }
-    public override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let tracking { removeTrackingArea(tracking) }
-        let area = NSTrackingArea(rect: hoverRegion, options: [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited], owner: self)
-        tracking = area; addTrackingArea(area)
+    /// The hover region reaches far outside the strip's own bounds, and AppKit drops the exit of such an area when it
+    /// is rebuilt under a moving pointer or its window stops being key, which left the fisheye stuck. HoverSync
+    /// delivers enter and exit from the pointer position after every move, geometry, key and app change, but only
+    /// for areas inside their view. So the region lives on this sibling view, sized to it, and HoverSync owns the
+    /// rail's hover; an exit always means the pointer left.
+    private let hoverZone = MinimapHoverZone()
+    private func layoutHoverZone() {
+        guard let superview, hoverZone.superview === superview else { return }
+        let zone = convert(hoverRegion, to: superview).intersection(superview.bounds)
+        if hoverZone.frame != zone { hoverZone.frame = zone }
     }
-    private func index(_ event: NSEvent) -> Int? {
+    public override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        hoverZone.removeFromSuperview()
+        if let superview {
+            if hoverZone.trackingAreas.isEmpty {
+                hoverZone.addTrackingArea(NSTrackingArea(rect: .zero, options: [.activeInKeyWindow, .mouseEnteredAndExited, .inVisibleRect], owner: self))
+            }
+            superview.addSubview(hoverZone, positioned: .below, relativeTo: self)
+            layoutHoverZone()
+        } else {
+            hovered = nil
+        }
+    }
+    public override func setFrameOrigin(_ newOrigin: NSPoint) { super.setFrameOrigin(newOrigin); layoutHoverZone() }
+    public override func setFrameSize(_ newSize: NSSize) { super.setFrameSize(newSize); layoutHoverZone() }
+    public override func viewDidHide() { super.viewDidHide(); hoverZone.isHidden = isHidden; hovered = nil; hoveredArrow = nil }
+    public override func viewDidUnhide() { super.viewDidUnhide(); hoverZone.isHidden = isHidden }
+    private func index(atY y: CGFloat) -> Int? {
         guard !items.isEmpty else { return nil }
-        let y = convert(event.locationInWindow, from: nil).y
         return max(0, min(items.count - 1, Int((y / max(1, bounds.height) * CGFloat(items.count - 1)).rounded())))
     }
-    /// The card keeps its turn while the pointer is on it (`onMouseMove` stops at the card, :252).
-    private func track(_ event: NSEvent) {
-        hoveredArrow = arrow(event)
-        let point = convert(event.locationInWindow, from: nil)
+    private func index(_ event: NSEvent) -> Int? { index(atY: convert(event.locationInWindow, from: nil).y) }
+    /// Follows the pointer where it is now, not where an event said it was. The card keeps its turn while the pointer
+    /// is on it (`onMouseMove` stops at the card, :252).
+    private func trackPointer() {
+        guard let window else { return }
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        hoveredArrow = [previous, next].first { $0.frame.contains(point) }
         if hovered != nil, previewFrame?.contains(point) == true { return }
-        hovered = index(event)
+        hovered = index(atY: point.y)
     }
-    public override func mouseEntered(with event: NSEvent) { track(event) }
-    public override func mouseMoved(with event: NSEvent) { track(event) }
-    public override func mouseExited(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        if !hoverRegion.contains(point) { hovered = nil; hoveredArrow = nil }
-    }
+    private var pointerInside = false
+    public override func mouseEntered(with event: NSEvent) { pointerInside = true; trackPointer() }
+    public func hoverPointerMoved() { if pointerInside { trackPointer() } }
+    /// `onMouseLeave={() => setActiveIndex(null)}` (TimelineMinimap.tsx:185).
+    public override func mouseExited(with event: NSEvent) { pointerInside = false; hovered = nil; hoveredArrow = nil }
     public override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         if let i = index(event) { hovered = i; onSelect?(items[i].id) }
+    }
+    /// `onBlur={() => setActiveIndex(null)}` (TimelineMinimap.tsx:155): the keyboard's turn goes with the focus.
+    public override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned, !pointerInside { hovered = nil }
+        return resigned
     }
     public override func keyDown(with event: NSEvent) {
         guard !items.isEmpty else { return }
@@ -242,6 +273,11 @@ public final class ThreadMinimapView: DSView {
             }
         }
     }
+}
+
+/// Holds the rail's hover area where HoverSync can find it. It draws nothing and lets every click through.
+private final class MinimapHoverZone: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 /// TimelineMinimap.tsx:249-275. The preview is built only while a strip is hovered.
