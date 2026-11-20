@@ -144,7 +144,18 @@ public final class DiffPanelView: DSView {
 
     /// T3's Changes (`branch`, the branch range against its base) and Uncommitted (`unstaged`, the working
     /// tree) scopes (diffPanelStore.ts, DiffPanel.tsx:289-412). The default selection.
-    public enum GitScope: String, Sendable { case branch, unstaged }
+    /// `commit` is one local commit's own changes (4928 diffPanelStore.ts, #19941).
+    public enum GitScope: Equatable, Sendable { case branch, unstaged, commit(String) }
+    /// `review.getDiffPreview` with `commitSha`.
+    public typealias CommitLoader = @Sendable (_ cwd: String, _ sha: String, _ baseRef: String?, _ ignoreWhitespace: Bool) async throws -> ReviewDiffPreview
+    /// `review.getBranchCommits` for the Commits submenu; nil hides it.
+    public typealias BranchCommitsLoader = @Sendable (_ cwd: String, _ baseRef: String?) async throws -> ReviewBranchCommits
+    public var commitLoader: CommitLoader?
+    public var branchCommitsLoader: BranchCommitsLoader?
+    /// The last list read; the open menu keeps the one it opened with (DiffPanel.tsx:246).
+    private var branchCommits: ReviewBranchCommits?
+    private var branchCommitsError: String?
+    private var branchCommitsTask: Task<Void, Never>?
     /// `review.getDiffPreview` for a checkout. Without one the panel shows turn diffs only.
     public typealias GitLoader = @Sendable (_ cwd: String, _ baseRef: String?, _ ignoreWhitespace: Bool) async throws -> ReviewDiffPreview
     /// `vcs.listRefs` with `refKind` local or remote and `includeMatchingRemoteRefs`, 100 refs.
@@ -212,6 +223,7 @@ public final class DiffPanelView: DSView {
         return switch gitScope {
         case .branch: ("branch", "Changes")
         case .unstaged: ("unstaged", "Uncommitted")
+        case .commit(let sha): ("commit:\(sha)", commitLabel(sha))
         case nil:
             if let summary = selectedSummary { ("turn:\(summary.runId.rawValue)", "Turn \(summary.checkpointTurnCount)") }
             else { ("diff", scopeButton.title ?? "Diff") }
@@ -590,6 +602,58 @@ public final class DiffPanelView: DSView {
         }
     }
 
+    var scopeTitle: String? { scopeButton.title }
+    /// The Commits submenu as it would open now, for tests.
+    var commitsMenuForTesting: MenuItem? { commitsMenu() }
+
+    /// `selectedGitScopeLabel` (DiffPanel.tsx:445): the commit's subject once its source names it.
+    private func commitLabel(_ sha: String) -> String {
+        if let s = gitSource, s.kind == "commit", s.headRef == sha, let subject = s.commitSubject { return subject }
+        if let c = branchCommits?.commits.first(where: { $0.sha == sha }) { return c.subject }
+        return "Commit \(sha.prefix(7))"
+    }
+
+    /// Reads the branch's commits for the Commits submenu, once per git load (no polling).
+    private func loadBranchCommits() {
+        guard let branchCommitsLoader, let cwd = workspaceRoot, branchCommitsTask == nil else { return }
+        let base = baseRef
+        branchCommitsTask = Task { [weak self] in
+            do {
+                let result = try await branchCommitsLoader(cwd, base)
+                self?.branchCommits = result; self?.branchCommitsError = nil
+            } catch {
+                let text = (error as? LocalizedError)?.errorDescription ?? ""
+                self?.branchCommitsError = text.isEmpty ? "The environment request failed." : text
+            }
+            self?.branchCommitsTask = nil
+        }
+    }
+
+    /// The Commits submenu (DiffPanel.tsx:950-1037): each commit with its relative time, then a
+    /// note for errors, an empty branch or a capped list.
+    private func commitsMenu() -> MenuItem? {
+        // A server without `review.getBranchCommits` (3824) refuses it: no submenu there.
+        guard branchCommitsLoader != nil, branchCommitsError == nil || branchCommits != nil else { return nil }
+        var rows: [MenuItem] = []
+        let selected: String? = { if case .commit(let sha) = gitScope { return sha }; return nil }()
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        for c in branchCommits?.commits ?? [] {
+            var item = MenuItem(c.subject, kind: .radio(selected == c.sha))
+            item.shortcut = TimestampFormat.formatRelativeTimeLabel(c.committedAt, nowMs: nowMs) + "  " + c.sha.prefix(7)
+            item.closesOnClick = true
+            // Choosing the selected commit again goes back to Changes (`selectScopeValue`).
+            item.action = { [weak self] in self?.selectGitScope(selected == c.sha ? .branch : .commit(c.sha)) }
+            rows.append(item)
+        }
+        func note(_ text: String) -> MenuItem { var m = MenuItem(text); m.isDisabled = true; return m }
+        if let branchCommitsError { rows.append(note(branchCommitsError)) }
+        else if !canReadFiles() { rows.append(note("This connection cannot read local diffs.")) }
+        else if branchCommits == nil { rows.append(note("Loading commits...")) }
+        else if branchCommits?.commits.isEmpty == true { rows.append(note("No commits on this branch.")) }
+        else if branchCommits?.truncated == true { rows.append(note("Showing latest \(branchCommits?.commits.count ?? 0) commits")) }
+        return .submenu("Commits", rows)
+    }
+
     /// `review.getDiffPreview` for the checkout, then the scope's source: `branch-range` for Changes,
     /// `working-tree` for Uncommitted (DiffPanel.tsx:342-412, 1086-1117).
     private func reloadGit(_ scope: GitScope) {
@@ -597,7 +661,12 @@ public final class DiffPanelView: DSView {
             showMessage("No patch available for this selection.")
             return
         }
-        let baseRef = scope == .branch ? self.baseRef : nil
+        let baseRef = scope == .unstaged ? nil : self.baseRef
+        var commitSha: String?
+        if case .commit(let sha) = scope { commitSha = sha }
+        let commitLoader = self.commitLoader
+        if commitSha != nil, commitLoader == nil { showMessage("No patch available for this selection."); return }
+        loadBranchCommits()
         let whitespace = ignoreWhitespace
         // A refresh keeps what shows until the answer arrives.
         if !gitResultShown { showMessage(scope == .unstaged ? "Loading uncommitted changes..." : "Loading changes...") }
@@ -608,8 +677,11 @@ public final class DiffPanelView: DSView {
             var source: ReviewDiffPreview.Source?
             var failure: String?
             do {
-                let preview = try await gitLoader(cwd, baseRef, whitespace)
-                source = preview.sources.first { $0.kind == (scope == .unstaged ? "working-tree" : "branch-range") }
+                let preview: ReviewDiffPreview
+                if let commitSha, let commitLoader { preview = try await commitLoader(cwd, commitSha, baseRef, whitespace) }
+                else { preview = try await gitLoader(cwd, baseRef, whitespace) }
+                let kind = commitSha != nil ? "commit" : scope == .unstaged ? "working-tree" : "branch-range"
+                source = preview.sources.first { $0.kind == kind }
                 if let source {
                     parsed = await Task.detached(priority: .userInitiated) { UnifiedDiff(source.diff) }.value
                 }
@@ -735,6 +807,7 @@ public final class DiffPanelView: DSView {
         switch gitScope {
         case .branch: scopeButton.title = "Changes"; return
         case .unstaged: scopeButton.title = "Uncommitted"; return
+        case .commit(let sha): scopeButton.title = commitLabel(sha); return
         case nil: break
         }
         guard let summary = selectedSummary else { return }
@@ -819,7 +892,10 @@ public final class DiffPanelView: DSView {
             uncommitted.action = { [weak self] in self?.selectGitScope(.unstaged) }
             items = [changes, uncommitted, latestItem]
         }
-        MenuPopupView.show(items + [.submenu("Turn", turns)], from: scopeButton, placement: .dropdown)
+        // The menu shows the list read last; opening it reads again for next time (DiffPanel.tsx:938-945).
+        let commits = gitLoader != nil ? commitsMenu() : nil
+        MenuPopupView.show(items + [.submenu("Turn", turns)] + [commits].compactMap { $0 }, from: scopeButton, placement: .dropdown)
+        if gitLoader != nil { loadBranchCommits() }
     }
 
     /// A git scope reads the checkout again when the window comes forward (`refreshOnFocus`, DiffPanel.tsx:512-517).

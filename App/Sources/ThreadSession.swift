@@ -108,6 +108,8 @@ final class ThreadSession {
             panel?.lazyDiffPanel.set(\.gitLoader, Self.gitDiffLoader(shell.supervisor))
             panel?.lazyDiffPanel.set(\.fileContentsLoader, Self.diffFileContentsLoader(shell.supervisor))
             panel?.lazyDiffPanel.set(\.refLoader, Self.baseRefLoader(shell.supervisor))
+            panel?.lazyDiffPanel.set(\.commitLoader, Self.commitDiffLoader(shell.supervisor))
+            panel?.lazyDiffPanel.set(\.branchCommitsLoader, Self.branchCommitsLoader(shell.supervisor))
             panel?.lazyDiffPanel.set(\.toolCallLoader, Self.toolCallDiffLoader(shell.supervisor))
             panel?.model.turnItemLoader = Self.turnItemLoader(shell.supervisor)
             let supervisor = shell.supervisor
@@ -336,6 +338,32 @@ final class ThreadSession {
                 let json = try await supervisor.request(ReviewDiffPreview.method,
                                                         payload: ReviewDiffPreview.input(cwd: cwd, baseRef: baseRef, ignoreWhitespace: ignoreWhitespace))
                 return try JSONDecoder().decode(ReviewDiffPreview.self, from: JSONEncoder().encode(json))
+            } catch let error as RPCClientError {
+                throw DiffLoadError(errorDescription: error.description)
+            }
+        }
+    }
+
+    /// `review.getDiffPreview` with `commitSha` for one local commit (4928 DiffPanel.tsx:375-388, #19941).
+    nonisolated static func commitDiffLoader(_ supervisor: ConnectionSupervisor) -> DiffPanelView.CommitLoader {
+        { cwd, sha, baseRef, ignoreWhitespace in
+            do {
+                let json = try await supervisor.request(ReviewDiffPreview.method,
+                                                        payload: ReviewDiffPreview.input(cwd: cwd, commitSha: sha, baseRef: baseRef, ignoreWhitespace: ignoreWhitespace))
+                return try json.decode(as: ReviewDiffPreview.self)
+            } catch let error as RPCClientError {
+                throw DiffLoadError(errorDescription: error.description)
+            }
+        }
+    }
+
+    /// `review.getBranchCommits` (4928 rpc.ts:1767). A 3824 server does not serve it; its refusal
+    /// reaches the Commits submenu as the reason.
+    nonisolated static func branchCommitsLoader(_ supervisor: ConnectionSupervisor) -> DiffPanelView.BranchCommitsLoader {
+        { cwd, baseRef in
+            do {
+                return try await supervisor.request(ReviewBranchCommits.method, payload: ReviewBranchCommits.input(cwd: cwd, baseRef: baseRef))
+                    .decode(as: ReviewBranchCommits.self)
             } catch let error as RPCClientError {
                 throw DiffLoadError(errorDescription: error.description)
             }
