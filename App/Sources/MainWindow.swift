@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import T3Client
 
 /// The main window, configured like the official desktop app on macOS
 /// (apps/desktop/src/window/DesktopWindow.ts): `titleBarStyle: "hiddenInset"` with the
@@ -57,6 +58,13 @@ final class MainWindow: NSWindow {
     private weak var lastPressTarget: NSView?
 
     override func sendEvent(_ event: NSEvent) {
+        // The one place input meets the connection: one comparison per event while the sockets are healthy, a probe of
+        // a socket silent for 15 s otherwise (InputQuietGate).
+        switch event.type {
+        case .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel, .mouseEntered:
+            InputQuietGate.shared.noteInput(at: event.timestamp)
+        default: break
+        }
         guard event.type == .leftMouseDown, let frameView = contentView?.superview else { return super.sendEvent(event) }
         let target = frameView.hitTest(event.locationInWindow)
         let moved = target !== lastPressTarget

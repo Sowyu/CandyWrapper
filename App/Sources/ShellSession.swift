@@ -39,7 +39,7 @@ final class ShellSession {
     /// The cold start's HTTP shell, asked for while the socket opens and the config downloads, when the descriptor
     /// names the shell flags (#35071, client-runtime state/shell.ts:562-611, environment.ts shellThreadFamilies).
     /// Used once, and only when the live config confirms the same omissions and build.
-    private var earlyShell: (omissions: ShellOmissions, version: String, load: Task<ShellSnapshot?, Never>)?
+    private var earlyShell: (omissions: ShellOmissions, version: String, load: Task<ShellHttpSnapshot?, Never>)?
     private var familyConsumers: [UUID: ThreadId] = [:]
     private var familyReads: [ThreadId: Task<Void, Never>] = [:]
     private var loadedFamilies: [ThreadId: Int] = [:]
@@ -140,7 +140,7 @@ final class ShellSession {
 
     private func subscribeShell() {
         guard !stopped else { return }
-        subscription = supervisor.subscribe("orchestration.subscribeShell", payload: { [weak self] in
+        subscription = supervisor.subscribe("orchestration.subscribeShell", resubscribesOnActivation: true, payload: { [weak self] in
             await self?.subscribeInput() ?? .object([:])
         }, handler: { [weak self] event in
             guard let self else { return }
@@ -166,7 +166,7 @@ final class ShellSession {
         }
         Task { [weak self] in
             guard let (policy, version) = await ready.value else { return }
-            let load = Task { try? await transport.get(policy.snapshotPath, token: token, as: ShellSnapshot.self) }
+            let load = Task { try? await transport.get(policy.snapshotPath, token: token, as: ShellHttpSnapshot.self) }
             guard let self, !self.stopped, !self.negotiatedConfig else { load.cancel(); return }
             self.earlyShell = (policy, version, load)
         }
@@ -196,6 +196,7 @@ final class ShellSession {
     private func prepareShell(_ generation: Int) async {
         guard preparedGeneration != generation, !stopped, !Task.isCancelled else { return }
         preparingGeneration = generation
+        knownProjectIdentities = nil
         // A resumed session may make no HTTP call, yet asset links build on `http.baseURL`: follow the tunnel now (audit TR-1).
         if isRelay { await http.refreshBaseURL() }
         let version = await supervisor.serverVersion
@@ -226,14 +227,16 @@ final class ShellSession {
         let policy = omissions
         let early = earlyShell
         earlyShell = nil
-        let snapshot: ShellSnapshot?
-        if let early, early.omissions == policy, early.version == version, let loaded = await early.load.value {
-            snapshot = loaded
+        let loaded: ShellHttpSnapshot?
+        if let early, early.omissions == policy, early.version == version, let value = await early.load.value {
+            loaded = value
         } else {
             early?.load.cancel()
-            snapshot = try? await transport.get(policy.snapshotPath, token: token, as: ShellSnapshot.self)
+            loaded = try? await transport.get(policy.snapshotPath, token: token, as: ShellHttpSnapshot.self)
         }
         guard !Task.isCancelled, !stopped, preparingGeneration == generation, await supervisor.state.generation == generation else { return }
+        let snapshot = loaded?.snapshot
+        knownProjectIdentities = loaded?.projectIdentities
         if var snapshot {
             missingThreads = []
             snapshot.omissions = policy
@@ -245,10 +248,17 @@ final class ShellSession {
     }
 
     private var resumePrepared = false
+    /// The digest of the HTTP shell this subscription resumes from, sent once: no stream item has touched that shell
+    /// yet, so its identities still hold (state/shell.ts:703-707).
+    private var knownProjectIdentities: String?
     private func subscribeInput() async -> JSONValue {
         var payload = omissions.payload
         if completionMarker { payload["requestCompletionMarker"] = .bool(true) }
-        if resumePrepared, let sequence = await store.afterSequence { payload["afterSequence"] = .number(Double(sequence)) }
+        if resumePrepared, let sequence = await store.afterSequence {
+            payload["afterSequence"] = .number(Double(sequence))
+            if let knownProjectIdentities { payload["knownProjectIdentities"] = .string(knownProjectIdentities) }
+        }
+        knownProjectIdentities = nil
         return .object(payload)
     }
 

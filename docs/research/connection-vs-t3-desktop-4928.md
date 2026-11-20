@@ -19,15 +19,17 @@ Gaps ranked by how much the user would feel them:
 |---|---|---|---|---|
 | 1 | A socket dies silently (Wi-Fi change, VPN drop, remote host asleep) and a signal arrives | 16 to 28 s to reconnect | about 1 to 3 s on LAN, 15 s worst case | 0.56 s for wake, path change and Reconnect, 2.6 s for app activation |
 | 2 | The same while a turn streams | over 30 s | at most 15 s | 15.1 s |
-| 3 | The same while idle with no signal | never noticed | at most 15 s (5 s pings) | never noticed, by design |
+| 3 | The same while idle with no signal | never noticed | at most 15 s (5 s pings) | the first input after 15 s of silence finds it: 0.53 s on LAN, about 2.5 s remote (connection-2) |
 | 4 | T3 Connect socket at the token's hour | drops and reconnects every hour | renewed in place | renewed in place |
 | 5 | A message the host never answers | spins forever | fails after 60 s | fails after 60 s |
 | 6 | A big frame on a slow link trips the 15 s liveness check and loops | yes | fixed with frame parts | fixed with frame parts |
 | 7 | Cold connect: the shell loads after the socket and the config | 27 ms loopback | 21 ms | 20 ms with the early load |
 | 8 | A busy host misses one foreground probe | drops a live session | asks again | asks again |
-| 9 | Thread history of finished runs (`deferWork`) | full work rows | folded, loaded on demand | not ported |
-| 10 | Shell and thread resubscribe on app activation | no | yes | not ported |
-| 11 | T3 Connect rechecks for a better route every 60 s while on a fallback | no | yes | not ported |
+| 9 | Thread history of finished runs (`deferWork`) | full work rows | folded, loaded on demand | not ported, see below |
+| 10 | Shell and thread resubscribe on app activation | no | yes | yes (connection-2) |
+| 11 | A better route while on a fallback | never | every 60 s | on activation, path change and input after quiet (connection-2) |
+| 12 | "is offline" while the machine is reachable | stuck until the next path update, Reconnect did nothing | Reconnect always tries | fixed (connection-2), see "The offline banner and the Syncing chip" |
+| 13 | A saved route that stops working (left home, LAN address reused) | retried the same route forever | every attempt walks all routes | a failed attempt checks all routes in 2.5 s and moves (connection-2) |
 
 ## How this was measured
 
@@ -85,6 +87,8 @@ The harness freezes the proxy, sends one signal, and records when the supervisor
 | System wake | 3.0 s, 16.9 s | 0.54 s, 0.57 s | no wake signal on desktop |
 | Network path change | 3.0 s, 15.8 s | 0.54 s, 0.56 s | silent socket check: about 0.5 to 1 s on LAN, 2.5 s remote |
 | Reconnect button | 3.0 s, 16.5 s | 0.54 s, 0.54 s | the same |
+| Input 20 s after the freeze (connection-2), timed from the input | never | 0.53 s, 0.55 s | already dropped by pings |
+| The device reports offline (connection-2) | stays offline until the next path update | 0.52 s, 0.53 s | Reconnect and a dead socket's replacement still try |
 
 ## Behavior by behavior
 
@@ -124,7 +128,7 @@ Covered above: CandyWrapper sends the same config flags as the desktop app. Fram
 
 ### Liveness
 
-T3's Effect client pings every 5 s and drops a socket after 15 s without any frame (client-runtime/rpc/protocol.ts:10-12). CandyWrapper sends no idle pings on direct routes, to keep idle wakeups at zero (T3Client/ConnectionSupervisor.swift:173-186). It checks a quiet socket only while a reply is owed or a turn runs with the app active (T3Transport/RPCConnection.swift:56-70). On relay routes it pings every 80 s while the app is active. So an idle half-open socket stays "connected" in CandyWrapper until a signal arrives: app activation, wake, a path change or Reconnect. That is worse by design, and the user decided it. Each signal now finds a dead socket quickly:
+T3's Effect client pings every 5 s and drops a socket after 15 s without any frame (client-runtime/rpc/protocol.ts:10-12). CandyWrapper sends no idle pings on direct routes, to keep idle wakeups at zero (T3Client/ConnectionSupervisor.swift:173-186). It checks a quiet socket only while a reply is owed or a turn runs with the app active (T3Transport/RPCConnection.swift:56-70). On relay routes it pings every 80 s while the app is active. So an idle half-open socket stays "connected" in CandyWrapper until a signal arrives: app activation, wake, a path change, Reconnect, or since connection-2 the first input after 15 s of silence. Nobody sees it in between, so that is equal where it matters. Each signal now finds a dead socket quickly:
 
 - The silent socket check (client-runtime/connection/supervisor.ts:745-790): a probe still unanswered after 500 ms asks the host for its descriptor on a session of its own, once a second. If the host answers while the socket delivered no frame, the socket is dead. It is replaced at once on loopback and LAN, and 2.5 s after the check started elsewhere (T3Client/ConnectionSupervisor.swift:663-718). T3 skips this check for its foreground probe because its pings already watch the socket. CandyWrapper runs it there with the 2.5 s wait on every route, since the foreground probe is its main check.
 - Probe deadlines follow T3's: 15 s with one tolerated miss for app activation (#24309), and 3 s for Reconnect, wake and going offline. A path change gets 3 s on loopback and LAN, 15 s elsewhere (supervisor.ts:710-743; ConnectionSupervisor.swift:627-660). Before, a path change used 3 s on every route, which could drop a live tailnet socket.
@@ -139,7 +143,7 @@ T3's RPC client acks each chunk as its stream pulls it, and the stores batch upd
 
 ### T3 Connect and remote machines
 
-Routes: both rank learned direct routes as LAN, tailnet, public, then relay, and check a direct route's descriptor before sending a credential (T3Client/Connect/ConnectRoutes.swift:1-60; client-runtime/connection/routes.ts:110-299). T3 checks every 60 s for a better route while on a fallback, and skips a route that failed for 5 minutes (supervisor.ts:44-49, 810-815). CandyWrapper picks a route once per connect (App/Sources/Environments.swift:294), so a laptop that comes home stays on the tunnel until the next reconnect. That is worse and not ported. It needs a 60 s tick while on a fallback route, which T3 runs but is an idle timer.
+Routes: both rank learned direct routes as LAN, tailnet, public, then relay, and check a direct route's descriptor before sending a credential (T3Client/Connect/ConnectRoutes.swift:1-60; client-runtime/connection/routes.ts:110-299). T3 checks every 60 s for a better route while on a fallback, and skips a route that failed for 5 minutes (supervisor.ts:44-49, 810-815). CandyWrapper picked a route once per connect, so a laptop that came home stayed on the tunnel until the next reconnect. Since connection-2 it checks on signals instead of a 60 s tick; see "Better routes and failed routes".
 
 Relay keepalive: CandyWrapper pings every 80 s while the app is active, because tunnels drop idle sockets after about 100 s. T3 pings every 5 s. Equal in effect.
 
@@ -149,22 +153,74 @@ What the user sees while routes are tried: both show "Connecting" on the first a
 
 The offline banner and its diagnosis use T3's failure kinds and hops (T3Client/ConnectionSupervisor.swift:36-98; client-runtime/connection/errors.ts:115-277, diagnosis.ts). Equal. Stale data: both keep cached rows readable while offline and resume them from their cursor (connection-runtime.md). Optimistic updates: both show sidebar moves at once and take them back on failure (App/Sources/Environments.swift:623-645). Equal. Before this task, the visible difference was the time a dead connection kept showing "Connected" with stale rows after the user came back to the app: 15 s, then 13 s of "Reconnecting". It is now about 2.5 s.
 
+### The offline banner and the Syncing chip (connection-2)
+
+The user's recording, v1.14.14 with a remote machine: while they read a thread, the composer showed a red "<machine> is offline" with Reconnect, and "Syncing messages…" above it. T3 desktop doesn't show this.
+
+What shows them. The banner (App/Sources/ThreadSession.swift, `updateEnvironmentBanner`) follows T3's rules (apps/web/src/components/ChatView.tsx:1217-1229, components/chat/useSystemComposerBanners.tsx:78-228): any phase but connected shows it, "reconnecting" waits out a 2 s grace, and the error variant, red, is the blocked phase. "is offline" comes from two supervisor phases: `.offline`, when NWPathMonitor reports no network, and `.blocked`, after an attempt that T3's error rules call blocked. The chip (App/Sources/ComposerController.swift, `threadStatusChanged`) is T3's `resolveThreadSyncPhase` (apps/web/src/threadSync.ts:8-26): a thread with rows that is cached or synchronizing shows "Syncing messages…" after the delay, until its subscription sees `synchronized`. A thread opened from the cache while the environment is down shows both, in T3 too. So the chip follows the banner: it stays because the subscription waits for a session that doesn't come.
+
+The states where CandyWrapper showed offline and T3 wouldn't, or kept it after the network was back:
+
+1. A late "offline" path update. PlatformSignals sent each NWPathMonitor update to the supervisor in its own task, and tasks don't keep their order on the way into an actor. A Wi-Fi change delivers unsatisfied then satisfied within milliseconds; when the second landed first, the supervisor stayed offline until the next path update, which may not come for hours. Updates now carry the monitor's order and a late one is dropped (`ConnectionSupervisor.pathUpdated`). Test: `aLateOfflineUpdateDoesNotUndoTheOnlineOneAfterIt`.
+2. Reconnect while the device reports offline. `retryNow` went back to the offline phase without trying, so the button did nothing. T3 tries on an explicit retry because the report can stay wrong (client-runtime/connection/supervisor.ts:1213-1221). Same for replacing a socket a probe found dead, which T3 calls `replacing`. Test: `reconnectTriesWhileThePlatformSaysOffline`, `aFailedProbeReplacesTheSocketWhileThePlatformSaysOffline`. Harness, socket frozen and the device reporting offline: before, offline until the next path update; now connected again 523 ms after the report.
+3. A host on this device parked offline with the rest. T3 never parks the primary environment on the offline report (supervisor.ts:323-327). Loopback hosts now ignore it (`Dependencies.ignoresOffline`).
+4. `requiresConnection` read as offline. NWPath reports it for a VPN on demand and similar paths that carry a socket once used. Only `unsatisfied` is offline now, closer to Chromium's `navigator.onLine` that T3 reads (apps/web/src/connection/platform.ts:74).
+5. A saved route that stopped working. CandyWrapper picked a route once per connect (App/Sources/Environments.swift, `pickRoute`) and retried it forever. Away from home that is "reconnecting" for good; if the LAN address now answers as another machine, the descriptor mismatch blocks, which is the red "is offline", and Reconnect retried the same address. T3 checks every route on each attempt and uses the first that answers as the environment (connection/driver.ts:83-130). Now a failed or blocked attempt checks all saved routes at once and moves the session to the first that answers, and Reconnect does the same (`Environments.checkRoutes`, `RouteCheck`). This is the case that fits the recording best: a red banner means blocked, and a remote machine with a LAN route is the common way to get there.
+6. "Retry now". T3 offers it while reconnecting and nothing on the first attempt; CandyWrapper hid the button while reconnecting. It now matches.
+
+I didn't find a path that keeps either one after the session is back: the banner updates on every supervisor state, and a resumed thread subscription reaches `synchronized`. A thread subscription that died without an error would have kept the chip; the activation resubscribe now covers that (below).
+
+### Input after a quiet socket (connection-2)
+
+T3 finds an idle half-open socket within 15 s through 5 s pings. CandyWrapper runs no timer while idle, so it now asks when someone is there: MainWindow.sendEvent passes keys, clicks, scrolls and pointer entries to `InputQuietGate`. While healthy, that is one comparison of the event's timestamp against the next check time. Past it, every supervisor whose socket said nothing for 15 s (T3's limit, rpc/protocol.ts:10-12) probes it with the silent socket check, and the next check moves to when the soonest socket could be quiet that long. A quiet but healthy socket costs one `server.probe` round trip per 15 s of use. The same moment runs the route checks.
+
+Harness: freeze the socket, wait 20 s idle, then one input. Time from the input to a working session:
+
+| Route | Before | Now | T3 |
+|---|---|---|---|
+| Loopback and LAN | never | 533 and 553 ms | at most 15 s after the freeze, whether anyone is there or not |
+| Remote (2.5 s silent socket wait) | never | 2,530 to 2,534 ms, 3 runs | the same |
+| Relay, no host check (probe deadline) | never | noticed at 15.0 s, 3 runs | the same |
+
+The relay row runs the supervisor without a host check (`CW_TIMING_BASELINE=1`), which is how relay sessions run: the probe waits out its 15 s deadline. That baseline also skips the pooled HTTP reset, so its reconnect time (26 s) isn't the relay's and I left it out. Giving relay sessions the silent socket check over the tunnel's descriptor, as T3's `checkHost` does for every route (connection/driver.ts:229-240), would bring relay to the remote row.
+
+### Resubscribe on activation (connection-2)
+
+T3 subscribes the shell and open threads again on app activation, on the same session, from their cursors (connection/wakeups.ts:25-27, rpc/client.ts:284-330, state/shell.ts:629, state/threads.ts:984). CandyWrapper now does too: `subscribe(resubscribesOnActivation:)` interrupts the stream and subscribes again with a fresh payload. The shell and the thread opt in. One small round trip per activation; a subscription whose server side died without an error is live again. Test: `activationResubscribesOnTheSameSession`.
+
+### Better routes and failed routes (connection-2)
+
+T3 checks for a better route every 60 s while on a fallback (supervisor.ts:414-475, 800-822). Without a timer, CandyWrapper checks the routes ahead of the one in use on app activation, on a network path change, and on input after a quiet socket. A route that answers replaces the session, keeping the shell on screen. Silent routes back off from 2 to 30 minutes and are forgotten on a path change; a route that fails right after a switch is skipped for 5 minutes (supervisor.ts:74-81, 176-185, 1050-1060). The tunnel isn't descriptor-checked, as in T3. All routes are checked at once, so dead LAN addresses cost one 2.5 s check together.
+
+| Case | Before | Now |
+|---|---|---|
+| On the tunnel, the LAN route answers again (coming home) | stays on the tunnel until the next reconnect | 1.5 ms to find it (loopback), at the next signal |
+| On a LAN route that stopped answering, tunnel behind it (left home) | retries the LAN route forever | 2,505 ms after the failed attempt, the dead route's 2.5 s check |
+| Two dead routes ahead of the working one, at connect | 5.0 s, checked one by one | 2,503 ms |
+
+Then a new session opens on that route: a cold connect, about 20 ms on loopback (above). CandyWrapper learns no `directEndpoints` from the config, so a T3 Connect machine only has the routes saved for it; T3 learns them while connected (supervisor.ts:380-400). Not ported.
+
+### Shell resume identities (connection-2)
+
+The HTTP shell from a 4928 server carries `projectIdentities`, and the resume that follows now names it back as `knownProjectIdentities`, so the server skips repository identities the client holds (client-runtime/state/shell.ts:703-707, server orchestration-v2/ShellStream.ts:126-141). On my 4928 sandbox the resume is 719 bytes either way, since its projects resolve no repository identity. A machine with many git projects saves their identity records on each reconnect.
+
 ## Timers while connected
 
 After this change, these run while a session is connected:
 
-- On a direct route, idle, nothing.
+- On a direct route, idle, nothing. connection-2 added no timer: the input gate is a comparison per event, and the route checks and resubscribes run only on signals.
 - While a turn runs and the app is active, or while a unary call or a stream's first answer is owed: the RPCConnection watchdog, one wakeup per 5 s (T3Transport/RPCConnection.swift:376-410). This existed before.
 - On a relay route while the app is active: one ping per 80 s (T3Client/ConnectionSupervisor.swift:720-736). This existed before.
 - On a relay route, always: one sleep until the token's last minute, about one wakeup per hour per relay connection (T3Client/Connect/T3ConnectAuthorizer.swift:310-338). This is new. T3's protocol needs it: without it the server closes the socket. After a failed renewal it retries every 5 s until the token expires.
 - While a message send waits for its answer: one 60 s deadline, cancelled when the answer arrives (`dispatchMessage`). This is new.
-- During a probe, which only a signal starts: the probe deadline, and the silent socket check's 500 ms and 1 s waits. These end with the probe.
+- During a probe, which only a signal or input after a quiet socket starts: the probe deadline, and the silent socket check's 500 ms and 1 s waits. These end with the probe.
+- During a route check, which only a signal or a failed attempt starts: one 2.5 s descriptor timeout per route checked. These end with the check.
+- After a reconnect fails: the backoff sleep until the next attempt. This existed before; it isn't idle and connected.
 
 ## Not ported
 
-- `deferWork` folding. It needs the Features/Thread timeline to show and page folded work groups.
-- Shell and thread resubscribe on app activation. It costs one small round trip per activation. Add it if a stream that stops without an error turns up in practice.
-- The 60 s better-route check on T3 Connect fallbacks. It is an idle timer while on a fallback.
+- `deferWork` folding (#26240). Opting in without the timeline part hides rows, so it is all or nothing. It needs `deferredWork` decoded on turn items, `acceptDeferredWork` and `deferWork=1` sent only when the server advertises them, a history page with `view: "work"` merged at its anchor (client-runtime/state/threads.ts:727-860), and the Features/Thread fold showing `itemCount` and loading on expand (apps/web/src/components/chat/MessagesTimeline.logic.ts:780-890, MessagesTimeline.tsx:1803-1815). That is larger than the rest of connection-2, so it waits for its own task. T3Store/TimelineRows.swift:424 has the marker.
+- Learning `directEndpoints` from a T3 Connect machine's config while connected (supervisor.ts:380-400). The route checks use saved routes only.
 - DPoP pairing and `accessTokenRenewal` for direct pairing links.
-- `knownProjectIdentities` and `httpSnapshotFallback` on the shell resume.
-- 5 s idle pings. The user's zero-idle rule wins; signals and the silent socket check cover the common cases.
+- `httpSnapshotFallback` on the shell resume.
+- 5 s idle pings. The user's zero-idle rule wins; signals, input after quiet and the silent socket check cover it.
