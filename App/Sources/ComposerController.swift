@@ -5135,7 +5135,9 @@ extension ComposerController {
         let snapshot = [key, prompt, attachments.map { "\($0.kind.rawValue):\($0.id)" }.joined(separator: ",")].joined(separator: "\n")
         guard stashInFlight.insert(snapshot).inserted else { return }
         let referenced = contextRecords(for: prompt)
-        let records = ComposerContext.referencedIds(prompt).compactMap { referenced[$0] }
+        // The reply rides first, so it comes back with the prompt (useComposerStash.ts:518-530 at 4928).
+        let reply = replyTargets[key]
+        let records = (reply.map { [$0] } ?? []) + ComposerContext.referencedIds(prompt).compactMap { referenced[$0] }
         let entryId = UUID().uuidString.lowercased()
         let entry = PromptStashEntry(id: entryId, createdAt: Self.isoNow(), prompt: prompt, files: stashedFiles.isEmpty ? nil : stashedFiles,
                                      unreadableImageNames: [], pendingImageCount: images.count, records: records.isEmpty ? nil : records)
@@ -5147,6 +5149,7 @@ extension ComposerController {
         }
         // Everything the entry carries leaves the draft with it; images are uploaded again on restore.
         draftAttachments[key] = nil
+        if reply != nil { replyTargets[key] = nil; updateReplyBanner() }
         for image in images { release(image) }
         composer.text = ""
         remember("")
@@ -5241,8 +5244,16 @@ extension ComposerController {
         if !durable {
             toast(.warning, "Restored prompt may reappear in the stash", "The stash could not be updated on disk, so this entry could still be there after a relaunch.")
         }
-        for record in entry.records ?? [] {
+        for record in entry.records ?? [] where record["kind"]?.stringValue != "response" {
             if let contextId = record["contextId"]?.stringValue { menuState.records[contextId] = record }
+        }
+        // A reply only makes sense in the thread that holds the response, and one already pending wins (useComposerStash.ts:243-253).
+        if case .thread(let id) = target, replyTargets[key] == nil,
+           let reply = entry.records?.first(where: { $0["kind"]?.stringValue == "response" }),
+           let citation = reply["citation"], citation["environmentId"]?.stringValue == id.environmentId,
+           [id.localId.rawValue, id.rawValue].contains(citation["threadId"]?.stringValue ?? "") {
+            replyTargets[key] = reply
+            updateReplyBanner()
         }
         var existing = draftAttachments[key] ?? []
         var reasons: [String] = []
