@@ -57,6 +57,21 @@ struct ComposerLayoutTransitionTests {
         }
     }
 
+    /// Screen pass 2026-11-20, item 7: T3 renders Previous, the submit pill, then Stop (ComposerPrimaryActions.tsx:332-361).
+    @Test func questionFooterPutsStopAfterTheSubmitPill() throws {
+        let panel = ThreadPanelView(frame: NSRect(x: 0, y: 0, width: 1000, height: 780))
+        let composer = panel.composer
+        composer.runState = ComposerLogic.RunState(running: true)
+        composer.pending = .question(.init(label: "Submit answers", compactLabel: "Submit", enabled: true, showsPrevious: true,
+                                           responding: false, showsAttach: false))
+        panel.layoutSubtreeIfNeeded()
+        composer.layoutSubtreeIfNeeded()
+        let previous = composer.previousFull.isHidden ? composer.previousCompact : composer.previousFull
+        #expect(!composer.primary.isHidden && !composer.questionPill.isHidden && !previous.isHidden)
+        #expect(previous.frame.maxX <= composer.questionPill.frame.minX)
+        #expect(composer.questionPill.frame.maxX <= composer.primary.frame.minX, "Stop sits right of the pill")
+    }
+
     private func collapsedPanel() throws -> ThreadPanelView {
         let panel = ThreadPanelView(frame: NSRect(x: 0, y: 0, width: 1000, height: 780))
         let projection = try #require(try ThreadPreview.projection(titled: ThreadPreview.markdownThread))

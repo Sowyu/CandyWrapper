@@ -1032,12 +1032,19 @@ public final class ComposerView: DSView {
         separators.forEach { $0.isHidden = modern }
         var actionsLeft: CGFloat
         if let footer = questionFooter {
-            // Right to left: the pill, Previous, Stop (28, only while a run can stop); `gap-1.5` compact, else `gap-2`.
+            // Right to left: Stop (28, only while a run can stop), the pill, Previous; `gap-1.5` compact, else `gap-2`
+            // (ComposerPrimaryActions.tsx:332-361 at 4928 renders Stop after the submit pill).
             let gap: CGFloat = compactActions ? 6 : 8
+            primary.isHidden = !runState.canInterrupt
+            var pillRight = right
+            if runState.canInterrupt {
+                primary.frame = NSRect(x: right - 28, y: midY - 14, width: 28, height: 28)
+                pillRight = primary.frame.minX - gap
+            }
             questionPill.compact = compactActions
             questionPill.title = compactActions ? footer.compactLabel : footer.label
             let pillWidth = questionPill.intrinsicContentSize.width
-            questionPill.frame = NSRect(x: right - pillWidth, y: midY - 14, width: pillWidth, height: 28)
+            questionPill.frame = NSRect(x: pillRight - pillWidth, y: midY - 14, width: pillWidth, height: 28)
             questionPill.isHidden = false
             actionsLeft = questionPill.frame.minX
             let previous = compactActions ? previousCompact : previousFull
@@ -1048,11 +1055,6 @@ public final class ComposerView: DSView {
                 previous.frame = NSRect(x: actionsLeft - gap - pw, y: midY - 14, width: pw, height: 28)
                 previous.isHidden = false
                 actionsLeft = previous.frame.minX
-            }
-            primary.isHidden = !runState.canInterrupt
-            if runState.canInterrupt {
-                primary.frame = NSRect(x: actionsLeft - gap - 28, y: midY - 14, width: 28, height: 28)
-                actionsLeft = primary.frame.minX
             }
             attach.isHidden = !footer.showsAttach
         } else {
