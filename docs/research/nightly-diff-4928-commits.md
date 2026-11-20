@@ -526,25 +526,25 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 50c1c5dc53 | #26901 | browser | feat: side chats beside the main thread | port |
-| b5c83cdb95 | #28326 | thread | Show the full title in lineage/side-chat row tooltips | port |
-| 171f78b879 | #29917 | thread | fix(client): project removal counts only listed threads, not side chats or subagents | port |
-| 12ec17ce4c | #29891 | thread | fix(web): opening a project from the command palette no longer lands in a subagent or side chat | port |
-| 725cfc9c3d | #31114 | thread | fix(threads): side chats inherit parent permissions by default | port |
-| e455200077 | #32315 | thread | fix: side chats start with the parent's permission mode and reasoning level | port |
-| 915676ee6a | #30370 | thread | fix(web): deleting the open thread no longer opens a side chat or subagent | port |
-| b8c2cfad6b | #29832 | composer | fix(web): deleting a thread clears its side chats' drafts | port |
-| b10cdded50 | #32929 | thread | fix(web): a new side chat focuses its message input | port |
-| 46015ec958 | #33160 | thread | fix(web): Go to source on a side chat quote keeps you on its parent thread | port |
-| d63db06436 | #34686 | pr/git | fix(contracts): side chats open after an abandoned worktree setup | port |
-| 76ae36ef8c | #36800 | pr/git | fix(web): deleting a thread with side chats offers to delete its worktree | port |
-| 2dd810d0f6 | #36932 | thread | fix(web,mobile): /btw and /side drafts show the send arrow while a turn runs | port |
-| a31fab93a2 | #31360 | thread | fix(web): focus side-chat composer when selecting its tab | port |
-| d23f479a87 | #32117 | thread | fix(web): right panel shortcuts work while a side chat has focus | port |
-| def3722faa | #31931 | thread | fix(web): Shift+F6 moves from a side chat back to the main chat | port |
-| 4fa5f0e0e6 | #32907 | thread | fix(web): a side chat's subagent opens its parent as a side chat tab, not a bare page | port |
-| 0de6ddb823 | #37228 | thread | fix(web): editing a queued message into /btw no longer saves it to the main thread | port |
-| 052ca497cf | #38350 | composer | fix(web,mobile): side chats keep your attachments and context | port |
+| 50c1c5dc53 | #26901 | browser | feat: side chats beside the main thread | left: planned in side-chats-4928.md (sidebar-2) |
+| b5c83cdb95 | #28326 | thread | Show the full title in lineage/side-chat row tooltips | left: planned in side-chats-4928.md (sidebar-2) |
+| 171f78b879 | #29917 | thread | fix(client): project removal counts only listed threads, not side chats or subagents | already in CandyWrapper: SettingsPages.swift:80 counts only lineage.isListed threads (sidebar-2) |
+| 12ec17ce4c | #29891 | thread | fix(web): opening a project from the command palette no longer lands in a subagent or side chat | already in CandyWrapper: PaletteCommands.swift:717 skips threads that are not listed (sidebar-2) |
+| 725cfc9c3d | #31114 | thread | fix(threads): side chats inherit parent permissions by default | left: planned in side-chats-4928.md (sidebar-2) |
+| e455200077 | #32315 | thread | fix: side chats start with the parent's permission mode and reasoning level | left: planned in side-chats-4928.md (sidebar-2) |
+| 915676ee6a | #30370 | thread | fix(web): deleting the open thread no longer opens a side chat or subagent | already in CandyWrapper: the delete fallback skips threads that are not lineage.isListed (sidebar-2) |
+| b8c2cfad6b | #29832 | composer | fix(web): deleting a thread clears its side chats' drafts | left: planned in side-chats-4928.md (sidebar-2) |
+| b10cdded50 | #32929 | thread | fix(web): a new side chat focuses its message input | left: planned in side-chats-4928.md (sidebar-2) |
+| 46015ec958 | #33160 | thread | fix(web): Go to source on a side chat quote keeps you on its parent thread | left: planned in side-chats-4928.md (sidebar-2) |
+| d63db06436 | #34686 | pr/git | fix(contracts): side chats open after an abandoned worktree setup | left: planned in side-chats-4928.md (sidebar-2) |
+| 76ae36ef8c | #36800 | pr/git | fix(web): deleting a thread with side chats offers to delete its worktree | left: planned in side-chats-4928.md (sidebar-2) |
+| 2dd810d0f6 | #36932 | thread | fix(web,mobile): /btw and /side drafts show the send arrow while a turn runs | left: planned in side-chats-4928.md (sidebar-2) |
+| a31fab93a2 | #31360 | thread | fix(web): focus side-chat composer when selecting its tab | left: planned in side-chats-4928.md (sidebar-2) |
+| d23f479a87 | #32117 | thread | fix(web): right panel shortcuts work while a side chat has focus | left: planned in side-chats-4928.md (sidebar-2) |
+| def3722faa | #31931 | thread | fix(web): Shift+F6 moves from a side chat back to the main chat | left: planned in side-chats-4928.md (sidebar-2) |
+| 4fa5f0e0e6 | #32907 | thread | fix(web): a side chat's subagent opens its parent as a side chat tab, not a bare page | left: planned in side-chats-4928.md (sidebar-2) |
+| 0de6ddb823 | #37228 | thread | fix(web): editing a queued message into /btw no longer saves it to the main thread | left: planned in side-chats-4928.md (sidebar-2) |
+| 052ca497cf | #38350 | composer | fix(web,mobile): side chats keep your attachments and context | left: planned in side-chats-4928.md (sidebar-2) |
 
 ## New feature pin-archive-projects (1)
 
