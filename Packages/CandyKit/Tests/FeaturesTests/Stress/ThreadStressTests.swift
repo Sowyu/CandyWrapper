@@ -230,8 +230,17 @@ final class ThreadStressRun {
             } else {
                 let page = server.historyPage(cursor: request.cursor)
                 note("history page \(page.items.count) rows, more \(page.hasMoreHistory)")
-                let changes = client.applyHistoryPage(page, requestCursor: request.cursor)
+                // Like `ThreadSession.loadEarlier`: a page without a turn start keeps the load going on the
+                // returned cursor (#24417), so the next step fetches it instead of starting a new load.
+                let (changes, next) = client.applyHistoryPageContinuing(
+                    page, requestCursor: request.cursor, throughEntryId: request.throughEntryId)
                 check(projectionChanged: changes.projectionChanged)
+                if let next {
+                    var follow = request
+                    follow.cursor = next
+                    historyRequest = follow
+                    note("keeps paging \(next)")
+                }
             }
         } else if let request = client.beginLoadEarlier() {
             note("load earlier \(request.cursor)")
