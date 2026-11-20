@@ -9,8 +9,8 @@ private typealias Tokens = RedesignTokens
 ///
 /// Images take their place only once their natural size is known (from the signed URL or the first decode), and only
 /// in order, so a placed image never moves when a later one measures or when its pixels arrive. Measuring is the first
-/// load at the column's size, stored in the decode cache the tile then reads. Only tiles within half a viewport of the
-/// visible rect exist; the rest hold nothing.
+/// load at the column's size, which the tile then shows. Only tiles within half a viewport of the visible rect exist;
+/// the rest hold nothing.
 final class GalleryMasonryView: DSView {
     struct Metrics {
         var inset: NSEdgeInsets
@@ -32,8 +32,10 @@ final class GalleryMasonryView: DSView {
     }
     /// Builds an image's loader; called once per image while it stays in `images`.
     var makeLoader: ((GalleryImage) -> AsyncImageView.Loader)?
-    /// Prefixes the decode cache keys, so the full gallery can drop its own decodes on close.
-    var cachePrefix = ""
+    /// The card shares the decode cache with the timeline, so a reopened card shows its pictures at once. The full
+    /// gallery keeps its pixels in its tiles only, so closing it frees them all: a decode already in flight when a
+    /// shared request is cancelled can still land in the cache after the views are gone.
+    var sharedCache = true
     var onSelect: ((Int) -> Void)?
     /// The placed height or the measured estimate changed; the card resizes to fit.
     var onContentHeight: (() -> Void)?
@@ -45,8 +47,8 @@ final class GalleryMasonryView: DSView {
     private var loaders: [String: AsyncImageView.Loader] = [:]
     private var measuring: Set<String> = []
     private var failed: Set<String> = []
-    /// Cache keys this view stored or its tiles read, so `releaseDecodes` can drop exactly those.
-    private(set) var cacheKeys: Set<String> = []
+    /// First loads of pictures not tiled yet, handed to their tile as its first pixels. Without the shared cache only.
+    private var measured: [String: CGImage] = [:]
     nonisolated(unsafe) private var observer: NSObjectProtocol?
     private var lastWidth: CGFloat = 0
 
@@ -158,9 +160,9 @@ final class GalleryMasonryView: DSView {
             }()
             tile.frame = frames[index]
             tile.keyFocused = index == focused
-            let key = cachePrefix + image.pixelKey
-            cacheKeys.insert(key)
-            tile.show(image, key: key, loader: failed.contains(image.pixelKey) ? { @Sendable _ in nil } : loader(image))
+            tile.thumb.cacheable = sharedCache
+            tile.show(image, key: image.pixelKey, loader: failed.contains(image.pixelKey) ? { @Sendable _ in nil } : loader(image),
+                      preview: measured.removeValue(forKey: image.pixelKey))
         }
     }
 
@@ -182,8 +184,7 @@ final class GalleryMasonryView: DSView {
         for image in images[frames.count...].prefix(12) where measuring.count < 6 {
             guard aspect(image) == nil, !measuring.contains(image.pixelKey) else { continue }
             let pixelKey = image.pixelKey, key = image.key
-            let memoryKey = "\(cachePrefix)\(pixelKey)|cover"
-            cacheKeys.insert(cachePrefix + pixelKey)
+            let memoryKey = "\(pixelKey)|cover"
             measuring.insert(pixelKey)
             let load = loader(image)
             Task { [weak self] in
@@ -193,7 +194,7 @@ final class GalleryMasonryView: DSView {
                 guard let self else { return }
                 self.measuring.remove(pixelKey)
                 if let image {
-                    ImageDecodeCache.store(image, side: side, key: memoryKey)
+                    if self.sharedCache { ImageDecodeCache.store(image, side: side, key: memoryKey) } else { self.measured[pixelKey] = image }
                     // A loader that measured nothing on the way (a kept copy) still gives the proportions.
                     if self.images.first(where: { $0.pixelKey == pixelKey })?.naturalSize == nil {
                         MarkdownImages.record(CGSize(width: image.width, height: image.height), for: key)
@@ -209,13 +210,10 @@ final class GalleryMasonryView: DSView {
     /// The pictures that failed while this view showed them.
     var failedImages: [GalleryImage] { images.filter { failed.contains($0.pixelKey) } }
 
-    /// Drops every decode this view put in the shared cache. The full gallery calls it on close.
+    /// Lets go of the loaders (and their downloaded files) and any first loads not tiled yet. The full gallery calls
+    /// it on close, after its tiles are gone.
     func releaseDecodes() {
-        for key in cacheKeys {
-            ImageDecodeCache.memory.removeObject(forKey: "\(key)|cover" as NSString)
-            ImageDecodeCache.memory.removeObject(forKey: "\(key)|fit" as NSString)
-        }
-        cacheKeys = []
+        measured = [:]
         loaders = [:]
     }
 
@@ -263,8 +261,8 @@ final class GalleryTileView: ControlView {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
-    func show(_ image: GalleryImage, key: String, loader: @escaping AsyncImageView.Loader) {
-        thumb.set(key: key, fallbackText: "Image unavailable", loader: loader, loadingText: "")
+    func show(_ image: GalleryImage, key: String, loader: @escaping AsyncImageView.Loader, preview: CGImage? = nil) {
+        thumb.set(key: key, fallbackText: "Image unavailable", loader: loader, preview: preview, loadingText: "")
         caption.text = ThreadImageGalleryView.caption(image)
         setAccessibilityLabel(ThreadImageGalleryView.name(image) + ", " + caption.text)
     }
@@ -318,7 +316,8 @@ final class GalleryTileView: ControlView {
 final class GalleryViewerView: DSView {
     var images: [GalleryImage] = [] { didSet { if images != oldValue { show() } } }
     var index = 0 { didSet { if index != oldValue { show() } } }
-    var cachePrefix = ""
+    /// The tile's pixels, shown while the large decode is on its way.
+    var preview: ((Int) -> CGImage?)?
     var makeLoader: ((GalleryImage) -> AsyncImageView.Loader)?
     var onClose: (() -> Void)?
     var onOpenInThread: ((GalleryImage) -> Void)?
@@ -335,7 +334,6 @@ final class GalleryViewerView: DSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         picture.cover = false
-        picture.cacheable = true
         picture.skeleton = true
         picture.layer?.cornerRadius = Tokens.Radius.card
         picture.layer?.cornerCurve = .continuous
@@ -366,8 +364,7 @@ final class GalleryViewerView: DSView {
     private func show() {
         guard let image = shown else { picture.set(key: nil, fallbackText: "", loader: nil); return }
         let loader = makeLoader?(image) ?? ThreadImageGalleryView.loader(image)
-        picture.set(key: cachePrefix + image.pixelKey, fallbackText: "Image unavailable", loader: loader,
-                    preview: ImageDecodeCache.preview(for: cachePrefix + image.pixelKey), loadingText: "")
+        picture.set(key: image.pixelKey, fallbackText: "Image unavailable", loader: loader, preview: preview?(index), loadingText: "")
         count.text = "\(index + 1) of \(images.count)"
         detail.text = ThreadImageGalleryView.caption(image, long: true) + " · " + ThreadImageGalleryView.name(image)
         picture.setAccessibilityLabel(ThreadImageGalleryView.name(image) + ", " + ThreadImageGalleryView.caption(image))
@@ -444,7 +441,6 @@ public final class ThreadImageWallView: DSView {
     public var onHash: ((GalleryImage, String) -> Void)?
 
     static let header: CGFloat = 52
-    static let prefix = "wall:"
 
     let back = ButtonView(nil, icon: .arrowLeft, variant: .ghost, size: .iconSm)
     let title = LabelView("Agent images", font: DSFont.ui(13, weight: .medium), color: Themed.color(\.foreground))
@@ -462,7 +458,7 @@ public final class ThreadImageWallView: DSView {
         back.toolTip = "Back to thread"
         back.setAccessibilityLabel("Back to thread")
         back.action = { [weak self] in self?.onClose?() }
-        masonry.cachePrefix = Self.prefix
+        masonry.sharedCache = false
         masonry.makeLoader = { [weak self] image in
             ThreadImageGalleryView.loader(image, onHash: { hash in self?.onHash?(image, hash) })
         }
@@ -504,7 +500,7 @@ public final class ThreadImageWallView: DSView {
         guard images.indices.contains(index) else { return }
         if let viewer { viewer.index = index; return }
         let viewer = GalleryViewerView(frame: bounds)
-        viewer.cachePrefix = Self.prefix
+        viewer.preview = { [weak self] index in self?.masonry.tiles[index]?.thumb.image }
         viewer.makeLoader = { [weak self] image in
             ThreadImageGalleryView.loader(image, onHash: { hash in self?.onHash?(image, hash) })
         }

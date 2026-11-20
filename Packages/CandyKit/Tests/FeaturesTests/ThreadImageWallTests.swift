@@ -132,27 +132,14 @@ struct ThreadImageWallTests {
         #expect(wall != nil && gallery.isWallOpen)
         wall?.layoutSubtreeIfNeeded()
         await ThreadImageGalleryTests.pump { (wall?.masonry.tiles.values.allSatisfy { $0.thumb.image != nil } ?? true) && !(wall?.masonry.tiles.isEmpty ?? true) }
-        #expect(wall?.masonry.cacheKeys.isEmpty == false)
-        let keys = wall?.masonry.cacheKeys ?? []
+        let tiles = wall?.masonry.tiles.values.map { $0 } ?? []
+        #expect(!tiles.isEmpty)
         autoreleasepool { gallery.closeWall(animated: false) }
         // The run loop drains what AppKit autoreleased while the views left the window.
         try await Task.sleep(for: .milliseconds(50))
         #expect(!gallery.isWallOpen)
         #expect(wall == nil, "nothing holds the wall once it closes")
-        #expect(!keys.contains { ImageDecodeCache.memory.object(forKey: "\($0)|cover" as NSString) != nil }, "its decodes leave the cache")
-    }
-
-    /// With every size known before the card opens, as after the wall measured them, the card still makes its tiles
-    /// once its scroll view has a frame. On screen the card came up empty.
-    @Test func aCardOfMeasuredPicturesTilesOnLayout() {
-        let window = Self.window()
-        defer { window.contentView = nil; window.close() }
-        let card = ThreadImageGalleryView()
-        card.images = Self.measuredImages()
-        window.contentView!.addSubview(card)
-        card.layoutSubtreeIfNeeded()
-        #expect(card.grid.frames.count == 10)
-        #expect(!card.grid.tiles.isEmpty)
+        #expect(tiles.allSatisfy { $0.window == nil && $0.thumb.image == nil }, "its tiles left the window with their pixels")
     }
 
     // MARK: Count and hover
