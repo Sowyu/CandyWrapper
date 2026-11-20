@@ -54,6 +54,21 @@ public final class GeneralSettingsView: SettingsPageBase {
             modelRow?.status = scope.connected.isEmpty || mixed || overridden || self.server["defaultModelSelection"] != .null ? nil : "Automatic"
         }
 
+        // Fallback model (ProjectDefaultsSettings.tsx:271-351, #26164, #27593): what new threads start on while the default
+        // model's provider is out of usage. Not at a project scope, and only on servers that send the key (4928 on).
+        let fallback = SettingsModelPickerControl(context: context, key: "fallbackModelSelection", unsetFrom: "defaultModelSelection")
+        let fallbackRow = row("fallback-model", title: "Fallback model",
+                              detail: "Used for new threads when the default model's provider is out of usage.", control: fallback)
+        _ = bindServerRow(fallbackRow, keys: ["fallbackModelSelection"], reset: "fallback model",
+                          isDefault: { [weak self] in self.map { !$0.context.scope.isMixed(["fallbackModelSelection"]) && $0.server["fallbackModelSelection"] == .null } ?? true },
+                          resetPatch: { ["fallbackModelSelection": .null] })
+        binder.add { [weak self, weak fallbackRow, weak fallback] in
+            guard let self else { return }
+            fallback?.refresh()
+            let scope = self.context.scope
+            fallbackRow?.isHidden = scope.isProjectScope || !Self.serversSend("fallbackModelSelection", scope)
+        }
+
         let modes = RuntimeMode.all.map { (value: $0.rawValue, label: ComposerPickers.modes[$0]!.label) }
         let (permissions, permissionSelect) = serverSelect("default-permissions", "Default permissions for new threads. Projects can override them.",
                                                            key: "defaultRuntimeMode", options: modes, width: nil, reset: "default permissions",
@@ -85,7 +100,12 @@ public final class GeneralSettingsView: SettingsPageBase {
                              (workspace, "Where new threads in this project start.", "Where new threads start. Projects and their t3.json can override it."),
                              (submodules, "How new worktrees in this project populate git submodules.",
                               "How new worktrees populate git submodules. Projects and their t3.json can override it.")])
-        return section("project-defaults", "New threads", [modelRow, permissions, workspace, submodules])
+        return section("project-defaults", "New threads", [modelRow, fallbackRow, permissions, workspace, submodules])
+    }
+
+    /// Every connected target's server sends `key`, so a server that predates it never gets a patch it would refuse.
+    static func serversSend(_ key: String, _ scope: SettingsScopeState) -> Bool {
+        !scope.connected.isEmpty && scope.connected.allSatisfy { $0.settings?.raw[key] != nil }
     }
 
     /// File-backed keys reset to null (inherit), not to a value. At a project scope the row's own reset clears the override.
@@ -246,6 +266,11 @@ public final class GeneralSettingsView: SettingsPageBase {
         let time = clientSelect("time-format", "System default follows your browser or OS clock preference.", key: "timestampFormat",
                                 options: [("locale", "System default"), ("12-hour", "12-hour"), ("24-hour", "24-hour")], width: 160,
                                 reset: "time format", label: "Timestamp format")
+        // 4928's Language row (SettingsPanels.tsx:1118-1157). CandyWrapper ships English only, so the choices are
+        // System default and English, and both read in English.
+        let language = clientSelect("language", "System default follows your browser or OS language.", key: "language",
+                                    options: [("system", "System default"), ("en", "English")], width: 160,
+                                    reset: "language", label: "Language")
         let (streaming, _) = serverSelect("response-streaming", nil, key: "responseStreamingMode",
                                           options: [("turn", "Wait for the full response"), ("paragraph", "Show finished paragraphs")], width: 224,
                                           reset: "response streaming")
@@ -306,7 +331,7 @@ public final class GeneralSettingsView: SettingsPageBase {
                                      key: "toolCallVisibility",
                                      options: [("showAll", "Show all"), ("hideSuccessful", "Hide successful"), ("hideAll", "Hide all"), ("zen", "Zen")],
                                      width: 160, reset: "tool calls in chat", hideIndicator: false, label: "Tool calls in chat")
-        return section("behavior", "Behavior", [notifications, inApp, time, streaming, whitespace, fileState, layout, proactive, skills, rich]
+        return section("behavior", "Behavior", [notifications, inApp, language, time, streaming, whitespace, fileState, layout, proactive, skills, rich]
                        + (ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? [collapse] : [])
                        + [send, followUp, toolCalls, updates, continueRow, backgroundActivityRow(), menuBar])
     }
@@ -409,11 +434,13 @@ public final class GeneralSettingsView: SettingsPageBase {
                                    key: "confirmThreadArchive", reset: "archive confirmation", label: "Confirm thread archiving")
         let delete = clientSwitch("delete-confirmation", "Ask before deleting a thread and its chat history.", key: "confirmThreadDelete",
                                   reset: "delete confirmation", label: "Confirm thread deletion")
+        let terminal = clientSwitch("terminal-close-confirmation", "Ask before closing terminals and stopping their running processes.",
+                                    key: "confirmTerminalClose", reset: "terminal close confirmation", label: "Confirm terminal closing")
         // ponytail: the quit shortcut stores its mode; Cmd+Q's hold and double press come with WP7.8 (desktop parts)
         let quit = clientSelect("quit-confirmation", "Hold mode also quits on two quick presses.", key: "confirmQuit",
                                 options: [("direct", "Direct"), ("hold", "Hold"), ("double-click", "Double press")], width: 160,
                                 reset: "quit shortcut behavior", label: "Quit shortcut behavior")
-        return section("confirmations", "Confirmations", [unpin, archive, delete] + (context.desktopAvailable ? [quit] : []))
+        return section("confirmations", "Confirmations", [unpin, archive, delete, terminal] + (context.desktopAvailable ? [quit] : []))
     }
 
     // MARK: Text generation, About, Diagnostics, Legacy
@@ -617,11 +644,15 @@ final class SettingsModelPickerControl: DSView {
     private let traits = ComposerControlView(icon: IconView(name: .brain, size: 16)).menuTrigger()
     private let context: SettingsPageContext
     private let key: String
+    /// A key whose value shows while this one is unset, under the title "None" (the fallback model shows the default's).
+    private let unsetFrom: String?
     private weak var popup: OpenPopup?
+    private var isUnset: Bool { unsetFrom != nil && context.scope.values[key] == .null }
 
-    init(context: SettingsPageContext, key: String) {
+    init(context: SettingsPageContext, key: String, unsetFrom: String? = nil) {
         self.context = context
         self.key = key
+        self.unsetFrom = unsetFrom
         super.init(frame: .zero)
         button.tintsIcon = false
         button.action = { [weak self] in self?.open() }
@@ -639,7 +670,7 @@ final class SettingsModelPickerControl: DSView {
 
     /// The selection shown: the setting, else the first ready provider's default (`resolveDefaultProviderModelSelection`).
     private var selection: (ProviderInstanceEntry, String)? {
-        let raw = context.scope.values[key]
+        let raw = isUnset ? context.scope.values[unsetFrom!] : context.scope.values[key]
         if let id = raw["instanceId"]?.stringValue, let model = raw["model"]?.stringValue, let entry = catalog.entry(ProviderInstanceId(rawValue: id)) {
             return (entry, model)
         }
@@ -657,13 +688,14 @@ final class SettingsModelPickerControl: DSView {
             button.title = "Mixed"
             button.icon = nil
         } else if let (entry, slug) = selection {
-            button.title = entry.models.first { $0.slug == slug }.map(ModelNames.trigger) ?? slug
+            // `triggerLabel: "None"` keeps the provider's logo (ProjectDefaultsSettings.tsx:298-302).
+            button.title = isUnset ? "None" : entry.models.first { $0.slug == slug }.map(ModelNames.trigger) ?? slug
             button.icon = ProviderIcon.make(driver: entry.driver, displayName: entry.displayName, size: 16, color: Themed.color(\.contrastMutedForeground))
         } else {
             button.title = "No providers available"
             button.icon = nil
         }
-        traits.isHidden = descriptors.isEmpty || context.scope.isMixed([key]) || context.scope.connected.isEmpty
+        traits.isHidden = descriptors.isEmpty || context.scope.isMixed([key]) || context.scope.connected.isEmpty || isUnset
         traits.title = ModelTraits.triggerLabel(descriptors, ultrathink: false, provider: selection?.0.driver)
         invalidateIntrinsicContentSize()
         superview?.needsLayout = true
@@ -719,6 +751,9 @@ final class SettingsModelPickerControl: DSView {
         view.onSelect = { [weak self] id, model in
             guard let self else { return }
             if let popup = self.popup { self.button.popupHost?.close(popup) }
+            // `pickModelSelection` (shared/model.ts:542-550): the same pick keeps its options.
+            let current = self.context.scope.values[self.key]
+            if !self.context.scope.isMixed([self.key]), current["instanceId"]?.stringValue == id.rawValue, current["model"]?.stringValue == model { return }
             let value = (try? JSONValue(encoding: ModelSelection(instanceId: id, model: model))) ?? .null
             self.context.patchServer([self.key: value])
         }

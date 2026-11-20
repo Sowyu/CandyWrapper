@@ -250,6 +250,7 @@ extension SettingsController {
         case .archive: ArchiveSettingsView(context: c)
         case .diagnostics: DiagnosticsSettingsView(context: c)
         case .licenses: SettingsOpenSourceLicensesView(context: c)
+        case .voice: VoiceSettingsView(context: c)
         case .scheduledTasks: ScheduledTasksSettingsView(context: c)
         case .orchestrator: OrchestratorSettingsView(context: c)
         case .connectors: ConnectorsSettingsView(context: c)
@@ -602,7 +603,9 @@ extension SettingsController {
         labels += BackgroundActivity.isChanged(s) ? ["Background activity"] : []
         labels += server("defaultThreadEnvMode", "New thread mode") + server("newWorktreesStartFromOrigin", "New worktrees start from remote")
         labels += server("addProjectBaseDirectory", "Add project base directory")
+        labels += client("language", "Language")  // SettingsPanels.tsx:516
         labels += client("confirmThreadUnpin", "Unpin confirmation") + client("confirmThreadArchive", "Archive confirmation")
+        labels += client("confirmTerminalClose", "Terminal close confirmation")
         labels += client("confirmThreadDelete", "Delete confirmation") + client("confirmQuit", "Quit shortcut")
         labels += client("menuBarItemEnabled", "Menu bar icon")
         labels += server("textGenerationModelSelection", "Text generation model")
@@ -637,6 +640,7 @@ extension SettingsController {
                           "fontSizeTerminal", "diffFilesCollapsed", "diffIgnoreWhitespace", "diffLayout", "proactivePanelsEnabled",
                           "showSkillsInSlashMenu", "composerCollapseOnScroll", "composerRichTextEnabled", "sendShortcut", "followUpBehavior",
                           "toolCallVisibility", "confirmThreadUnpin", "confirmThreadArchive", "confirmThreadDelete", "confirmQuit",
+                          "confirmTerminalClose", "language",
                           "menuBarItemEnabled"]
         ClientSettingsStore.shared.update(Dictionary(uniqueKeysWithValues: clientKeys.map { ($0, ClientSettings.fields[$0]!.defaultValue) }))
         let s = pageContext.scope.values

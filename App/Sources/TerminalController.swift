@@ -372,6 +372,8 @@ final class TerminalController {
     /// `confirmTerminalClose` (lib/terminalCloseConfirm.ts:16-36): one terminal asks by name, several list them.
     private func confirmClose(_ terminalIds: [String], then close: @escaping () -> Void) {
         guard let window = panel.window, modal == nil, !terminalIds.isEmpty else { return }
+        // 4928's Terminal close confirmation switch (lib/terminalCloseConfirm.ts:23-29).
+        guard ClientSettingsStore.shared.current["confirmTerminalClose"] != .bool(false) else { return close() }
         let labels = terminalIds.map(label)
         let title = labels.count == 1 ? "Close terminal \"\(labels[0])\"?" : "Close \(labels.count) terminals?"
         let message = labels.count == 1 ? "This stops the running process and clears its history."
