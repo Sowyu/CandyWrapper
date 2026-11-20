@@ -64,10 +64,10 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 7f39a860d9 | #27110 | thread | perf: huge checkpoints ship up to 75x smaller to clients | port; needs wire: compact checkpoint payload |
+| 7f39a860d9 | #27110 | thread | perf: huge checkpoints ship up to 75x smaller to clients | already in CandyWrapper: server side; TurnItem.filesTotal reads the cap (connection, protocol.md) |
 | f702f892ae | #27722 | thread | fix(client): a new thread's content no longer stays blank after an early 404 | port |
 | 5f8294246c | #24417 | thread | fix(client): reveal earlier agent turns in one load | port |
-| 2482b03a01 | #35071 | connections | perf(client): threads load while the socket connects, with fewer round trips | port; needs wire: threads load during connect |
+| 2482b03a01 | #35071 | connections | perf(client): threads load while the socket connects, with fewer round trips | already in CandyWrapper: ShellSession.startEarlyShellLoad and the HTTP bounded snapshot (connection) |
 
 ## Port group message-shapes (7)
 
@@ -135,10 +135,10 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 854247e242 | #27519 | thread | fix(web): expanded SVG diagrams fill the image viewer | port |
-| a4b6afe184 | #27440 | thread | fix(client-runtime): threads with many images no longer flood a remote with URL requests | port |
-| e0f69e9ea4 | #29741 | thread | fix(web,mobile): chat images reload when the agent rewrites the file | port |
-| a11ad7424d |  | thread | fix(web): show app bundle icons and open apps from markdown links | port; app bundle icons in markdown links |
+| 854247e242 | #27519 | thread | fix(web): expanded SVG diagrams fill the image viewer | left (thread-3): ExpandedImagePreviewView is Features/Composer, another agent's area; needs the SVG mime type passed and no upper zoom cap for vectors |
+| a4b6afe184 | #27440 | thread | fix(client-runtime): threads with many images no longer flood a remote with URL requests | ported (thread-3): AssetURLLimit, 6 assets.createUrl at a time |
+| e0f69e9ea4 | #29741 | thread | fix(web,mobile): chat images reload when the agent rewrites the file | left (thread-3): needs the thread's workspace mutation id (client-runtime state/assets.ts, threadDetail.ts at 4928) in MarkdownImageSource's key so a rewritten file signs a new URL |
+| a11ad7424d |  | thread | fix(web): show app bundle icons and open apps from markdown links | left (thread-3): app bundle icons need the server's NativeAppIconResolver asset and an app-icon chip in FileLinks; open goes through externalLauncher |
 | 330b9f4840 | #34333 | thread | fix(web): arrow keys and buttons step through the images an agent viewed | ported in 2eb8794e |
 
 ## Port group scheduled-tasks (4)
@@ -154,7 +154,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 70f475f511 | #28516 | thread | feat(clients): surface child approvals in parent threads | left (thread-2): needs a watch per approving child through `watchThread`, `PendingRequests.derive` on each, and a card list above the composer shell, outside the banner stack, reusing PendingApprovalInlineView, plus a spec case and reference. The banner's Open approval works meanwhile |
+| 70f475f511 | #28516 | thread | feat(clients): surface child approvals in parent threads | ported (thread-3): ChildApprovalsView above the composer, a watch per approving child in ThreadLineageController, ChildApprovalsFidelityTests 1.78 to 2.74% |
 
 ## Port group usage-page (5)
 
@@ -362,7 +362,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 5bb5d53312 | #22349 | thread | fix(web): full-screen HTML pages fit their content and zoom by reflowing | port |
+| 5bb5d53312 | #22349 | thread | fix(web): full-screen HTML pages fit their content and zoom by reflowing | left (thread-3): the full-screen HTML dialog's fit and reflow zoom (HtmlRenderDialog.tsx at 4928) in HtmlRenderDialogView; needs an on-screen check |
 | 860fa7c7b6 | #34344 | thread | fix(shared): keep HTML bootstrap outside quoted attributes | free with the runtime: the server injects the bootstrap (apps/server/src/htmlRender/HtmlRender.ts:490) |
 | 25123c28d4 | #35022 | thread | fix(shared): html_render pages from OpenCode 2 Code Mode show and are cleaned up | ported in d1f3d2fc |
 | ddd02848e6 | #35434 | thread | fix(shared): html_render pages show for Grok threads | ported in d1f3d2fc |
@@ -1425,16 +1425,16 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | a0d6cc8ba9 | #21594 | thread | fix(client-runtime): goal token counts no longer read 1000k | ported: goal usage reads 1m, not 1000k, from 999,500 tokens (thread-2, ThreadRecoveryPresentation) |
 | f47700849e | #22141 | thread | fix(web): show the result of the notified delegated task | port |
 | 5ad7da060d | #22367 | thread | fix(web): keep markdown separators visible in dark mode | ported in eceea265 |
-| 9ceb949a01 | #22875 | thread | fix(web): copied Markdown tables keep formula pipes | port |
+| 9ceb949a01 | #22875 | thread | fix(web): copied Markdown tables keep formula pipes | ported (thread-3): table Copy as Markdown keeps formula pipes (MarkdownLayout.markdown) |
 | c40b32a729 | #23448 | thread | fix(web): keep ACP agent logos in multi-model selections | port |
 | 3bd744fc11 | #23679 | thread | fix(web): show clipboard errors in anchored copy notifications | n/a: web clipboard API errors; NSPasteboard writes don't fail this way |
-| 17580724fc | #26067 | thread | fix(web): byte sizes just under the next unit no longer read "1024 KB" | port |
+| 17580724fc | #26067 | thread | fix(web): byte sizes just under the next unit no longer read "1024 KB" | ported (thread-3): StorageCleanupReport.formatBytes picks the unit after rounding |
 | 9ad6c7ef8b | #26145 | thread | fix(web,mobile): long links in secret requests wrap and can be copied | port |
 | 22463861cd | #26151 | thread | fix(web): clicking a secret request card focuses its field again | port |
 | 1b9437f6ab | #27078 | thread | fix(web): long pending-question headers truncate instead of overflowing | port |
 | 609dd0f7dd | #27144 | thread | fix(web): plain text code blocks match the text around them | ported in eceea265 |
 | 12d1e4c23c | #22339 | thread | fix(web): keep truncated Markdown task previews read-only | port |
-| 469afd8b53 | #23351 | thread | fix(chat): commands that exit 0 no longer show as failed | port |
+| 469afd8b53 | #23351 | thread | fix(chat): commands that exit 0 no longer show as failed | ported (thread-3): WorkLog.checkFailure trusts the exit code over output and command text |
 | da94a13e59 | #23954 | thread | fix(web): tab to equations only when they overflow | port |
 | f3bbd0fd07 | #21378 | thread | fix(web): video full-screen buttons work in HTML renders | port |
 | 447d71d901 | #25838 | thread | fix(web): chat stays centered while the thread details card fits beside it | port |
@@ -1446,7 +1446,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 0343c83aa6 | #24833 | thread | fix(web,mobile): lineage and agent rows show which account a subagent runs on | ported: lineage rows draw the subagent's instance badge on its glyph and lift the status dot to the top corner while any instance shows one (thread-2, ThreadRelationshipIconView). Left: workflow member rows |
 | 2c59bf66c7 | #24898 | thread | fix(web,mobile): subagent cards show which account each subagent runs on | ported: subagent cards draw the instance badge on the avatar's glyph and lift the dot the same way (thread-2, SubagentCardLinkView, ThreadViewModel `providerBadge`) |
 | bfd37b774b | #27310 | thread | fix(web): Queued messages can be edited during Compact and send | port |
-| b0aa468aa1 | #23621 | thread | fix(web): copy and save images embedded as data URLs | port |
+| b0aa468aa1 | #23621 | thread | fix(web): copy and save images embedded as data URLs | already in CandyWrapper: copy and save use the loader's decoded image, and MarkdownImages.decodeData reads data URLs |
 | c2dc2eaaf5 | #24050 | thread | fix(web,mobile): Hebrew and Arabic read right to left in questions, citations, attachments and diff comments | port |
 | b5ced43833 | #25746 | thread | fix(web): local visit migration preserves mark unread | port |
 | 6525e4cb59 | #26232 | thread | fix(web): maximize button no longer jumps when the right panel closes | port |
@@ -1456,30 +1456,30 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 510aa5af40 | #26095 | thread | fix(web): Arabic paragraphs with many English terms now read right to left | port |
 | b46a4edc03 | #26398 | thread | fix(web): dark-mode <picture> images load instead of showing "Image unavailable" | skip: CandyWrapper draws no raw HTML `<picture>` in replies yet; take it with raw HTML support |
 | 58f8ab47a0 | #27794 | thread | fix(web): bare URL links keep trailing underscores and tildes | ported: a bare URL takes back the trailing `_` and `~` that GFM's autolink drops (thread-2, MarkdownDocument `keepingBareLinkTails`) |
-| 16f35ce29b | #27841 | thread | fix(shared): truncate keeps emoji whole | port |
+| 16f35ce29b | #27841 | thread | fix(shared): truncate keeps emoji whole | n/a (thread-3): Swift String.prefix cuts at whole characters |
 | 46e90bad0d | #28585 | thread | fix(web): many automations no longer hide the thread details Automations section | ported (settings-4928): automations no longer count toward the card's density fit; the list's 13.5rem scroll cap is not ported |
 | 5884d43481 | #23588 | thread | fix(web): sort pull request lists and timelines by time | port |
-| d05e4f8e8f | #28285 | thread | fix(web): streamed replies render a list's code block as the finished reply does | port |
+| d05e4f8e8f | #28285 | thread | fix(web): streamed replies render a list's code block as the finished reply does | ported (thread-3): MarkdownDocument.stableCut stops at a line left of an open list fence |
 | 05c0ed7da6 | #28969 | thread | fix(web): clarify the waiting label for background work | port |
 | ec3ebdbb67 | #29166 | thread | fix(web): preserve scroll position when expanding work details | port |
 | 701e13cebb | #29329 | thread | fix(web): hide image action tooltip in expanded viewer | port |
-| b7ab02e0f6 | #29755 | thread | fix(web): copied code blocks keep their blank lines in lists, quotes and longer fences | port |
+| b7ab02e0f6 | #29755 | thread | fix(web): copied code blocks keep their blank lines in lists, quotes and longer fences | n/a (thread-3): T3 serializes a DOM selection back to Markdown; CandyWrapper copies code blocks from their source |
 | e53672d8fc | #28684 | thread | fix(web): long server lists in thread details now page 4 at a time | ported (settings-4928): Servers shows four, then Show N more pages four at a time, and the extra rows stay out of the density fit |
 | ac10bb4aba | #29038 | thread | fix(web): mouse wheel over the thread minimap glides instead of jumping | port |
 | 65efae1adb | #28637 | thread | fix(shared): relative file links with routing punctuation open as files | ported in 93df13b9 |
-| 31564dece8 | #29759 | thread | fix(shared): find in thread matches a word typed with a curly apostrophe | port |
+| 31564dece8 | #29759 | thread | fix(shared): find in thread matches a word typed with a curly apostrophe | ported (thread-3): ThreadFindText.fold folds curly apostrophes |
 | 480eb8d219 | #29814 | thread | fix(client): mark unread sticks on a thread reopened within ten minutes | port |
 | a185dd9248 | #30527 | thread | fix(web): give dialog titles a readable line height | port |
-| d51bc58f5e | #30389 | thread | fix(tools): show images from MCP and OpenCode outputs | port |
+| d51bc58f5e | #30389 | thread | fix(tools): show images from MCP and OpenCode outputs | left (thread-3): TurnItemDetail formats structuredContent and image markers for MCP outputs (client-runtime work-log/itemDetail.ts at 4928); about 40 lines plus tests |
 | 567a105705 | #30606 | thread | fix(client-runtime): expire missing file metadata per thread | port |
-| c15e49a77c | #26435 | thread | fix: keep older pending questions answerable | port |
+| c15e49a77c | #26435 | thread | fix: keep older pending questions answerable | ported (thread-3): history pages reveal older approval and question cards (ThreadReduction.mergeOlderHistory) |
 | 9bfecb8f1e | #29000 | thread | fix(web): deleted forks no longer remain in Lineage | port |
 | c0cb75e815 | #31653 | thread | fix(web): screen readers no longer read out a secret typed into the request card | port |
-| 66a2f35711 | #30367 | thread | fix(shared): long assistant quote chips no longer end in a broken character | port |
-| 6f51361a27 | #30391 | thread | fix(client-runtime): subagent previews no longer end in a broken character | port |
+| 66a2f35711 | #30367 | thread | fix(shared): long assistant quote chips no longer end in a broken character | n/a (thread-3): Swift String.prefix cuts at whole characters (MarkdownContextChips, ThreadAssistantCitation) |
+| 6f51361a27 | #30391 | thread | fix(client-runtime): subagent previews no longer end in a broken character | n/a (thread-3): Swift String.prefix cuts at whole characters (SubagentCardRowView.hoverPreview) |
 | 53f1d09470 | #30528 | thread | fix(web): refresh resource timeline while diagnostics is open | port |
 | 47a89f2ee7 | #30762 | thread | fix(shared): shortened agent paths like /tmp/... no longer become broken file chips | ported in 93df13b9 |
-| fe199e35ca | #30390 | thread | fix(client-runtime): untitled subagent titles no longer end in a broken character | port |
+| fe199e35ca | #30390 | thread | fix(client-runtime): untitled subagent titles no longer end in a broken character | n/a (thread-3): Swift String.prefix cuts at whole characters (ThreadRelationships.swift:72) |
 | ef81fd15ca | #31888 | thread | fix(web): keep task updates static in the timeline | port |
 | 6dcaf6cbe7 | #29285 | thread | fix(web): remote subagents no longer split from the lineage list | port |
 | 8bf1b64cae | #32141 | thread | fix(web): the citation comment box opens at the quote instead of sliding in from the corner | port |
@@ -1498,7 +1498,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 6e4711d376 | #33525 | thread | fix(web): clicked workspace areas no longer show the focus ring after a stray key | port |
 | 45e0143cf1 | #33598 | thread | fix(web): thread title menu opens without a half-second wait on desktop | n/a: the desktop shell's menu delay; CandyWrapper's title menu opens on click |
 | ad989057ba | #32643 | thread | fix(web): dropdown items over the desktop title bar respond to clicks | n/a: Electron's title bar drag region |
-| 046efd791e | #26630 | thread | fix(web): scrolling pans expanded images and Mermaid diagrams | port |
+| 046efd791e | #26630 | thread | fix(web): scrolling pans expanded images and Mermaid diagrams | left (thread-3): ExpandedImagePreviewView is Features/Composer, another agent's area; plain scroll pans, pinch or Ctrl+scroll zooms |
 | 16a6c1c41f | #33647 | thread | fix(web): show details for background commands | port |
 | 934c7f8d8e | #33724 | thread | fix(web): center short PR titles in thread details | port |
 | e4d86abca9 | #33181 | thread | fix(web): remote Lineage rows keep their title when the environment name is long | port |
@@ -1507,7 +1507,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | e509db3a2f | #32605 | thread | fix(web): Tab reaches the add-project and new-project submit buttons | port |
 | 20723d6d9b | #32520 | thread | fix: Claude monitor wakes no longer fire a completion alert per line | port |
 | 08af12da49 | #33994 | thread | fix(shared): show zero seconds in minute durations | already in CandyWrapper: durations read `1m 0s` (screens-port, T3Store ThreadRelationships `formatDuration`) |
-| 3051b32502 | #33943 | thread | fix: chat file links open the file agents cite | port |
+| 3051b32502 | #33943 | thread | fix: chat file links open the file agents cite | left (thread-3): needs the workspace basename lookup CandyWrapper lacks (ThreadSession onRevealFile ponytail); #35036 builds on it |
 | 283fa1f1cd | #34011 | thread | fix(clients): scroll truncated command output notice with logs | port |
 | d256170b34 | #34006 | thread | fix: file links with line ranges open at their first line | ported in 93df13b9: a range opens at its first line; the label check ignores the end line |
 | d6d1763d41 | #33820 | thread | fix(web): sent messages keep the numbers written on list items | ported: sent messages keep each ordered item's written number and draw every level in digits; the gutter widens by the numbers shown (thread-2, MarkdownDocument `keepWrittenNumbers`). Left: copying a list keeps CommonMark's numbers (markdown-clipboard.ts) |
@@ -1528,7 +1528,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 1a1a57376c | #22226 | thread | fix(web): start clone when destination is picked in file manager | port |
 | 1843c93e39 | #30768 | thread | fix(chat): keep scratch file links usable | port |
 | 3aea6553d3 | #18442 | thread | fix(clients): show the right app name and thread context | port |
-| a9f2d7d5f4 | #34306 | thread | fix(web): "Show full message" only appears when it at least doubles the message | port |
+| a9f2d7d5f4 | #34306 | thread | fix(web): "Show full message" only appears when it at least doubles the message | left (thread-3): the fold would need the body's laid-out height (twice 176 pt) instead of shouldCollapseUserMessage in TimelineMessageRows.swift, which the on-screen agent is editing; needs a fidelity check of user messages |
 | b20bbc595d | #34581 | thread | fix: deliver steering after worktree setup | ported in 818d32f4: promote-to-steer on a preparing run. CW already treated preparing and starting runs as running. CW blocks sends during setup, so the planComposerTurn change is n/a |
 | b859968cab | #25866 | thread | fix(web): a pending approval is announced once, not once per queued message | port |
 | bba1c13d87 | #24313 | thread | fix(web): opening a thread dismisses its notification toasts | port |
@@ -1542,7 +1542,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 7271ea06a2 | #30889 | thread | fix(web): editing a queued message keeps its thread mention chips | port |
 | cc624432ac | #27781 | thread | fix(web): formatted link labels wrap inside table cells | port |
 | b18fefde72 | #25986 | thread | fix(web): switching a cold Claude thread to Codex no longer compacts first | port |
-| a24f7a1150 | #34527 | thread | fix(web): code blocks always show their own highlighted source | port |
+| a24f7a1150 | #34527 | thread | fix(web): code blocks always show their own highlighted source | n/a (thread-3): CandyWrapper highlights each block from its own source; no hash-keyed cache |
 | 1c65ad032e | #30738 | thread | fix(web): Cmd+A in the rendered Markdown preview selects only the file | port |
 | 1c3d5f7e82 | #34657 | thread | fix(web): a link to a thread on a linked machine no longer opens a blank pane | port |
 | a6d676fd9a | #24336 | thread | fix(web): keep background tasks visible during follow-up turns | port |
@@ -1553,13 +1553,13 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 415e1cabe6 | #34883 | thread | fix(web): html render images open with the rest of their page in the viewer | ported in d1f3d2fc |
 | d8b0a05a74 | #34784 | thread | fix(clients): Claude question option previews are shown under their option | ported: the option `preview` decodes (T3Store UserInputQuestion.Option) and shows under its option, outside the button, at `ps-8 pe-2 pb-1.5`, 12/16 in foreground/70 (QuestionPanelView `previews`). Plain text with its line breaks; T3 renders it as ChatMarkdown, which needs a 12px MarkdownView |
 | efd683ccc3 | #35102 | thread | fix(web): a failed send leaves the timeline when a new draft was typed | port |
-| 3d6ece2b29 | #35036 | thread | fix(web): file links the agent cited from another project open that project's file | port |
+| 3d6ece2b29 | #35036 | thread | fix(web): file links the agent cited from another project open that project's file | left (thread-3): needs #33943's basename lookup first, then a search of the other project roots (client-runtime workspaceBasenameLookup.ts at 4928) |
 | ced85c64ff | #35076 | thread | fix(client): a message the host never answers fails after 60 seconds instead of spinning forever | port |
 | 83ee96f485 | #35074 | thread | fix(web): chat text selection stays continuous while scrolling | port |
 | d2b8f291d6 | #35045 | thread | fix(web): icon-only chat header controls show their name on hover | port |
 | 5574cca053 | #35043 | thread | fix(web): panel resize handle no longer covers the chat scrollbar | port |
-| 3a815e9749 | #35031 | thread | fix(client-runtime): relative Markdown images in a remote thread no longer show the desktop's file | port |
-| 4d641633b2 | #35267 | thread | fix(web): bare URLs end at Chinese and Japanese punctuation | port |
+| 3a815e9749 | #35031 | thread | fix(client-runtime): relative Markdown images in a remote thread no longer show the desktop's file | n/a (thread-3): CandyWrapper never retries a remote thread's media on this Mac's server, so a relative path cannot show the desktop's file |
+| 4d641633b2 | #35267 | thread | fix(web): bare URLs end at Chinese and Japanese punctuation | left (thread-3): CandyWrapper's parser leaves a URL followed by Chinese or Japanese punctuation unlinked altogether (`打开 http://localhost:18780，然后刷新` has no link), so the port needs autolink detection for that case before it can end the link at the mark |
 | 13645b1904 | #35549 | thread | fix(web): align timeline activity timestamps | port |
 | 932cbd4e44 | #31115 | thread | fix(web): the Fix action on a thread details PR row stays inside the card | port |
 | c0df40aa54 | #33405 | thread | fix(web): queued message preview keeps inline image labels in place | port |
@@ -1569,13 +1569,13 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | dfded9d759 | #27436 | thread | fix(web): keep the child thread open when its remote parent was deleted | port |
 | 9ac4535b06 | #35634 | thread | fix(shared): token counts just below a unit boundary use the next unit | ported: token counts pick their unit after rounding, so 999,999 reads 1M (thread-2, T3Store `formatTokens`) |
 | c6b18c4741 | #33353 | thread | fix(web,mobile): keep line breaks in pending question text | port |
-| c4e74fe767 | #29511 | thread | Typeset equations that fail only because of an unescaped percent | port |
+| c4e74fe767 | #29511 | thread | Typeset equations that fail only because of an unescaped percent | ported (thread-3): MathLayout retries with escapeLiteralPercents |
 | 9ccc0f8a60 | #33558 | thread | fix(editors): JetBrains IDEs open file links in the thread's project | port |
-| cfad310913 | #35680 | thread | fix(client-runtime): long MCP app download names no longer split an emoji | port |
+| cfad310913 | #35680 | thread | fix(client-runtime): long MCP app download names no longer split an emoji | n/a (thread-3): Swift String.prefix cuts at whole characters (ThreadMcpAppDownload.swift:33) |
 | 4cfcfaf2fd | #35574 | thread | fix(web): a question answer restored with undo is no longer sent twice | port |
 | c1b42c17dc | #33873 | thread | fix(client-runtime): last user message sort ignores agent-posted messages | port |
 | f8372d1baf | #35681 | thread | fix(web): long screen-reader announcements keep emoji whole at the cutoff | port |
-| 9b0387d6cd | #32334 | thread | fix(web): triple-click selects the whole line around links and file chips | port |
+| 9b0387d6cd | #32334 | thread | fix(web): triple-click selects the whole line around links and file chips | n/a (thread-3): browser triple-click box rules; CandyWrapper draws its own selection |
 | c99201cc15 | #33036 | thread | fix(web): minimap Next turn no longer sticks on adjacent user messages | port |
 | 4137412fe9 | #35739 | thread | fix(web): screen readers at Everything hear context compaction start | port |
 | 05cc444a4a | #35781 | thread | fix(web): a failed commit keeps the commit message you typed | port |
@@ -1637,7 +1637,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | dd3d4a4e4a | #37024 | thread | fix(web): prevent stray highlights when selecting shell commands | port |
 | eb8b1f5246 | #31738 | thread | fix(client): avoid worktree setup flash after editing first message | port |
 | e6344bebd8 | #31338 | thread | fix(client-runtime): MCP app results with images reach the app instead of waiting forever | port |
-| 25a1afe7d5 | #29711 | thread | fix(client-runtime): opening an old search result keeps messages in order | port |
+| 25a1afe7d5 | #29711 | thread | fix(client-runtime): opening an old search result keeps messages in order | ported (thread-3): plain history pages interleave at shared rows (ThreadReduction.interleave) |
 | 25c44fcc33 | #30503 | thread | fix(web): use available space for project breadcrumbs | port |
 | f7a1bacd27 | #30753 | thread | fix(web): subagent status dots no longer jump between corners | port |
 | 843893e58c | #30084 | thread | fix(web): the minimap keeps the current turn lit while reading a long reply | port |
@@ -1671,7 +1671,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 68108be900 | #38250 | thread | fix(web): minimap previews show cited assistant text, not the raw link | port |
 | 2df750e0c9 | #38303 | thread | fix(web): MCP app full screen header clears the native window controls | port |
 | 009966d073 | #38329 | thread | fix(web): find in thread paints only matches near the viewport | port |
-| 24467d671d | #38368 | thread | fix(client): a subagent prompt that opens with comment dividers no longer freezes the thread | port |
+| 24467d671d | #38368 | thread | fix(client): a subagent prompt that opens with comment dividers no longer freezes the thread | ported (thread-3): WorkflowOpening.scriptStart without backtracking, 57.6 to 0.001 ms |
 | 42763ff8b1 | #38400 | thread | fix(web): screen readers read a pull request's number once in thread details | port |
 | 70e4319da8 | #38458 | thread | fix(web): switching back to a thread no longer jumps through its HTML renders | port |
 | 9758cf9e13 | #38476 | thread | fix(web): typing into a simulator no longer answers a waiting question | port |
@@ -1769,7 +1769,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 29f33af7d7 | #26727 | thread | perf(web): long-thread timeline rebuilds 45 → 9 ms, tool updates 12 → 0.3 ms | n/a: React render perf |
+| 29f33af7d7 | #26727 | thread | perf(web): long-thread timeline rebuilds 45 → 9 ms, tool updates 12 → 0.3 ms | already in CandyWrapper: entries memoized per row (TimelineEntries.Memo), see perf-sweep-4928.md |
 | a03e630705 | #22352 | thread | fix(web): find in thread opens from the thread title menu, so phones can reach it | n/a: touch or phone only |
 | 8084e00bce | #25204 | thread | fix(shared): stop parsing CLI flags after -- | n/a: CLI parsing, server side |
 | 4e274aed25 | #23416 | thread | fix(shared): Open in Zed prefers zeditor over the ZFS zed on Linux | n/a: Linux only |
@@ -1808,12 +1808,12 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 2f777bdd49 | #28264 | connections | perf(web): main thread updates no longer re-render an open side chat | n/a: React render perf |
 | 39bca5365c | #28267 | composer | perf(web): typing in a thread no longer re-renders sidebar drafts | n/a: React render perf |
 | 35df72f268 | #28270 | thread | perf(web): render minimap highlights without extra nodes | n/a: DOM perf |
-| 1915569b19 | #18416 | thread | perf(client-runtime): merge shell deltas once per received batch | n/a: client perf internals |
+| 1915569b19 | #18416 | thread | perf(client-runtime): merge shell deltas once per received batch | partly in CandyWrapper: one redraw per pull, the reducer still merges per item, see perf-sweep-4928.md |
 | 21483318f2 | #18421 | files | perf(web): coalesce overlapping file tree refreshes | n/a: web perf |
-| 3f105e00e3 | #21277 | thread | perf(clients): bound subagent preview processing to the visible prefix | n/a: client perf internals |
+| 3f105e00e3 | #21277 | thread | perf(clients): bound subagent preview processing to the visible prefix | ported (thread-3): SubagentCardRowView hoverPreview reads only to the 280-character cut |
 | 7a633ce081 | #24005 | pr/git | fix(shared): keep Azure clone URLs valid when switching protocols | n/a: server clone URL |
 | 35c7696790 | #24362 | thread | fix(web,mobile): time out client activity reports that never settle | n/a: web activity reporter |
-| ea95364640 | #25258 | thread | perf(client-runtime): index checkpoint answers in one bounded scan | n/a: client perf internals |
+| ea95364640 | #25258 | thread | perf(client-runtime): index checkpoint answers in one bounded scan | already in CandyWrapper: TurnDiffs.summaries in one pass |
 | c2985a7cb5 | #26691 | terminal | perf(shared): fold command output without copying scrollback per chunk | n/a: perf internals |
 | 0da2bb625c | #26720 | composer | perf(web): composer serializes each draft doc once per keystroke | n/a: web composer perf |
 | 9504a09f08 | #26936 | thread | perf(clients): thread search reuses per-thread fields across keystrokes | n/a: client perf internals |
@@ -1825,7 +1825,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 8a18bbf281 | #27818 | settings | perf(client): repeated server settings keep the same settings object | n/a: client perf internals |
 | 67ff912ccd | #28288 | thread | fix(shared): opening a database waits for another process's lock | n/a: server SQLite |
 | 2101c6f619 | #28470 | composer | fix: paste-as-text shortcut on non-Latin layouts | n/a: non-Latin paste shortcut, AppKit menus handle it |
-| 6879da849a | #28537 | issues | perf(shared): strip plan prefixes in linear time | n/a: perf internals |
+| 6879da849a | #28537 | issues | perf(shared): strip plan prefixes in linear time | ported (thread-3): ProposedPlanActions.displayed on an ArraySlice |
 | 6ef66b6cd1 | #28539 | terminal | perf(shared): count terminal resume lines without allocations | n/a: perf internals |
 | 0c0de57dfd | #28563 | terminal | perf(web): terminal updates no longer re-render every sidebar row and chat | n/a: React render perf |
 | bcc6c08d75 | #28564 | thread | perf(web): chat view redraws no longer re-render the composer or side chat timeline | n/a: React render perf |
@@ -1835,19 +1835,19 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | d8a829e5ec | #29626 | pr/git | perf(web): PDF previews reload without starting a new pdf.js worker | n/a: pdf.js worker |
 | f981b7a226 | #27460 | thread | perf(client): skip idle inbox placement serialization | n/a: client perf internals |
 | 5fa0d0be7d | #29006 | thread | fix(clients): cancel oversized project icon responses | n/a: web favicon cache |
-| 89c2a5c4dd | #29114 | thread | perf(client-runtime): expanding deferred work skips an unused timeline rebuild | n/a: client perf internals |
+| 89c2a5c4dd | #29114 | thread | perf(client-runtime): expanding deferred work skips an unused timeline rebuild | ported (thread-3): with deferred work, a work page merges at its anchor only |
 | efcb937695 | #29245 | composer | fix(shared): Linux file links preserve literal backslashes | n/a: Linux only |
-| a6a921c763 | #29105 | thread | perf(client): streamed row updates no longer rescan question history | n/a: client perf internals |
+| a6a921c763 | #29105 | thread | perf(client): streamed row updates no longer rescan question history | ported (thread-3): TimelineEntries.QuestionHistoryCache, see perf-sweep-4928.md |
 | 296b089ab6 | #23373 | terminal | fix(web): terminal controls no longer cover the first line | n/a: reverted by #30493 |
-| d61058debf | #29008 | thread | perf(web): reuse repeated inline skill lookups | n/a: perf internals |
+| d61058debf | #29008 | thread | perf(web): reuse repeated inline skill lookups | ported (thread-3): MarkdownInlineSkills name table, see perf-sweep-4928.md |
 | acad1d5a08 | #28930 | thread | perf(shared): stop single-token message search at the best hit | n/a: perf internals |
-| 0a86e157a0 | #28965 | connections | perf(shared): avoid redundant visibility work on status updates | n/a: perf internals |
+| 0a86e157a0 | #28965 | connections | perf(shared): avoid redundant visibility work on status updates | ported (thread-3): visibility fast path and a one-item isVisible, see perf-sweep-4928.md |
 | 1b6336d237 | #29335 | thread | fix(shared): preserve omitted components in zero-major caret ranges | n/a: server semver |
 | 2b4d6a3141 | #29457 | thread | fix(source-control): remotes like github.com:owner/repo reach their host | n/a: server remote parsing |
 | 8704966861 | #29614 | pr/git | fix(shared): preview_open reports about: and mailto: as unsupported instead of misreading them | n/a: agent tool, server side |
 | e1cd7f0e15 | #29730 | thread | fix(shared): accept whitespace after engine range operators | n/a: server semver |
 | 76f29667c6 | #29727 | thread | fix(mcp): accept CR and mixed line endings in response streams | n/a: MCP server side |
-| ebfca09e91 | #29971 | thread | perf(web): long threads stream with 70% less work-row derivation | n/a: client perf internals |
+| ebfca09e91 | #29971 | thread | perf(web): long threads stream with 70% less work-row derivation | partly in CandyWrapper: failure checks cached per revision; toolGroupAction is not, see perf-sweep-4928.md |
 | 66e6217b93 | #30493 | terminal | Revert "fix(web): terminal controls no longer cover the first line" | n/a: revert of #23373 |
 | c1f91b5be1 | #26806 | thread | fix(web): keep message navigation visible on touch when there is room | n/a: touch only |
 | 0ea3c0243f | #27798 | pr/git | perf(pr): pull requests paint from data already held, on web, desktop and mobile | n/a: PR cache perf, web storage |
@@ -1865,26 +1865,26 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | c1463af205 | #28571 | thread | perf(web): changing file counts no longer re-render the chat view | n/a: React render perf |
 | a0056dddb1 | #29150 | sidebar | perf(web): switching threads no longer re-renders every sidebar row | n/a: React render perf |
 | dca297cd1a | #29171 | settings | perf(web): Appearance settings no longer re-probe fonts on every open | n/a: web font probe perf |
-| 2dc07510e2 | #30038 | issues | perf(web): long reasoning previews format in linear time (600 ms → 1.3 ms median) | n/a: web perf |
+| 2dc07510e2 | #30038 | issues | perf(web): long reasoning previews format in linear time (600 ms → 1.3 ms median) | ported (thread-3) in kind: liveThoughtLine reads a 1,024-character prefix, see perf-sweep-4928.md |
 | cddfc8db21 | #30714 | composer | fix(composer): bound long path search requests on web and mobile | n/a: web request bounding |
 | 077fd62222 | #33503 | thread | fix(client): finishing a long background thread no longer freezes the app | n/a: web main-thread yield |
 | 9e12eca125 | #33643 | thread | fix(shared): relative Windows file links open the file | ported in 93df13b9 |
-| 65ffcbf647 | #33438 | thread | perf(shared): speed up escaped Markdown in long PR descriptions | n/a: perf internals |
+| 65ffcbf647 | #33438 | thread | perf(shared): speed up escaped Markdown in long PR descriptions | already in CandyWrapper: keepingWindowsPathEscapes is a linear byte scan |
 | 56064fc4f6 | #33325 | sidebar | fix(ssh): Intel Mac hosts no longer try to download a missing t3 archive | n/a: SSH host install, server side |
 | fa2f4ff2a2 | #33066 | browser | fix(web): panel resize handles follow touch drags | n/a: touch drags |
-| 05020d6fa9 | #34002 | thread | perf(client): reopening a finished command row no longer refetches its output | n/a: client perf internals |
+| 05020d6fa9 | #34002 | thread | perf(client): reopening a finished command row no longer refetches its output | ported (thread-3): finished command output stays 5 minutes after its row hides |
 | ba4d01cf7f | #32646 | connections | fix(shared): login-shell environment probe ignores DEBUG trap output | n/a: server shell probe |
 | 4363d0bf65 | #32963 | thread | fix(web): mouse tilt wheel no longer switches threads on Windows and Linux desktop | n/a: Windows and Linux |
 | 2163d41409 | #33479 | thread | fix(shared): Open in Zed ignores the OpenZFS zed daemon on Linux | n/a: Linux only |
 | 52d621a6f1 | #21661 | files | fix(desktop,web): Open in runs locally for a background service sharing the desktop's T3 home | n/a: web desktop shared home |
 | e0379fbf5c | #23001 | pr/git | fix(web): collapsed reasoning previews no longer process the whole block | n/a: web perf |
-| ad0b2a9d2f | #27425 | files | perf(client): streamed text no longer republishes thread queue and checkpoints | n/a: client perf internals |
+| ad0b2a9d2f | #27425 | files | perf(client): streamed text no longer republishes thread queue and checkpoints | already in CandyWrapper: streaming-only updates skip the composer (ThreadSession onProjection) |
 | 0629735d37 | #27490 | sidebar | fix(web): thread controls hide while the mobile sidebar is open | n/a: mobile web sidebar |
 | 4eb20e4d38 | #33829 | thread | fix(shared): clicked HTML images keep whole emoji in capped names | n/a: HTML render internals |
 | 96a2f0a776 | #27426 | connections | fix(shared): relay client install survives antivirus-slowed first launch | n/a: relay client install, desktop |
 | f89af364ec | #34315 | pr/git | fix(web): avoid false errors when cancelling preview popouts | n/a: web picture-in-picture |
 | c2ff84a4bb | #34311 | issues | fix(client): trim model-reference delimiters in linear time | n/a: perf internals |
-| 3d12c90ea8 | #34340 | thread | perf(shared): avoid quadratic file link labels | n/a: perf internals |
+| 3d12c90ea8 | #34340 | thread | perf(shared): avoid quadratic file link labels | ported (thread-3): FileLinks.parentSuffixes counts suffixes once, 107.0 to 3.3 ms for 800 files |
 | cd8fc91a57 | #27557 | browser | fix(web): don't offer VS Code on iPad, iPhone and Android browsers | n/a: mobile browsers |
 | 6b2591b252 | #34857 | thread | fix(source-control): a query or fragment after .git keeps the repository identity | n/a: server git identity |
 | 71dfe27e45 | #35174 | sidebar | fix(web): an untouched sidebar thread rename keeps a title that arrived while it was open | n/a: touch or phone only |
@@ -1897,7 +1897,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | e1d59d1884 | #29959 | thread | fix(web): the collapsed mobile composer shows Stop while a turn runs | n/a: mobile composer |
 | ff045198dc | #35666 | pr/git | fix(web): PDF preview prerenders pages two viewports below the visible area | n/a: pdf.js prerender |
 | f6787e8537 | #24121 | thread | fix(web): reuse timeline rows while thinking and plans stream | n/a: React render perf |
-| bb9658d3a7 | #26935 | thread | perf(shared): command output failure scan rejects clean output in one pass | n/a: perf internals |
+| bb9658d3a7 | #26935 | thread | perf(shared): command output failure scan rejects clean output in one pass | already in CandyWrapper: one ICU alternation cached per item revision |
 | 2755a951a1 | #35806 | thread | fix(web): "Try again" recovers from a failed page chunk load | n/a: web chunk reload |
 | 36371de910 | #35815 | thread | fix(shared): read MCP event streams whatever the case of the content type | n/a: MCP server side |
 | 87a772a3c6 | #29496 | composer | fix(web): opening a thread on a touch tablet no longer focuses the composer | n/a: touch tablets |
