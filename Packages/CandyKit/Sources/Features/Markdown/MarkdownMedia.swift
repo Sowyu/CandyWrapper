@@ -61,11 +61,16 @@ enum MarkdownImageSource: Equatable, Sendable {
 @MainActor
 public enum MarkdownImages {
     /// A signed URL for a host file (`assets.createUrl`, resource `media-file` on the open thread) and the
-    /// pixel size the server read from its header. Set by the app; nil without an open thread.
+    /// pixel size the server read from its header. Set by the app; nil without an open thread. It must sign through
+    /// `signedURL(resource:)`, the one place that takes a turn of `AssetURLLimit`.
     public static var assetURL: ((_ path: String) async -> (url: URL, size: CGSize?)?)?
     /// A signed URL and pixel size for any `assets.createUrl` resource on the open thread's environment
     /// (`useAssetUrlState`, apps/web/src/assets/assetUrls.ts:20-41). Set by the app.
     public static var resourceURL: ((_ resource: JSONValue) async -> (url: URL, size: CGSize?)?)?
+    /// How long `resourceURL` waits for `assets.createUrl` before it gives up. T3 sets no limit and lets an unmounted
+    /// image interrupt the call, but a reply that stays on screen would keep its turn of `AssetURLLimit` forever.
+    // ponytail: one fixed limit for loopback and T3 Connect; scale it by route if slow relays fail images that would have loaded
+    public static let signingTimeout: Duration = .seconds(30)
     /// CandyWrapper's kept copy of an image a tool item viewed (`AgentImageCache`), for when the file is gone. Set by the app.
     public static var keptCopy: ((_ thread: ThreadId, _ item: TurnItemId) async -> URL?)?
     /// Opens a workspace-relative file in the right panel's file viewer ("Open in file viewer").
@@ -175,11 +180,10 @@ public enum MarkdownImages {
         }
     }
 
+    /// Takes no turn of `AssetURLLimit`: the app's `assetURL` signs through `signedURL(resource:)`, which takes it.
+    /// Taking one here as well held six turns while six images each waited for a second one, forever.
     static func signedURL(_ path: String) async -> (url: URL, size: CGSize?)? {
-        guard let assetURL, await AssetURLLimit.shared.acquire() else { return nil }
-        let result = await assetURL(path)
-        await AssetURLLimit.shared.release()
-        return result
+        await assetURL?(path)
     }
 
     public static func signedURL(resource: JSONValue) async -> (url: URL, size: CGSize?)? {

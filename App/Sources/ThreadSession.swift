@@ -988,7 +988,10 @@ final class ThreadController {
             guard let self, let env = self.openThreadId?.environmentId, let shell = self.environments.session(env) else { return nil }
             let reply: JSONValue
             do {
-                reply = try await shell.supervisor.request("assets.createUrl", payload: .object(["resource": resource]))
+                // A call the server never answers would keep its turn of `AssetURLLimit` forever. Giving up sends
+                // `Interrupt`, and the image shows "Image unavailable" like a failed one.
+                reply = try await shell.supervisor.request("assets.createUrl", payload: .object(["resource": resource]),
+                                                           timeout: MarkdownImages.signingTimeout)
             } catch let error as RPCClientError {
                 guard resource["_tag"]?.stringValue == "media-file", let path = resource["path"]?.stringValue else { return nil }
                 let typed = error.typedError
