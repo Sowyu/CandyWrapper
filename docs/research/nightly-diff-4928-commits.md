@@ -766,7 +766,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 2274ff9a5d | #27033 | composer | fix(web): Compact chip fits on narrow composers | port |
 | 7c90d51d61 | #23957 | composer | fix(web): composer keeps the picked effort when it falls back to another instance | port |
 | 7917ac895b | #24697 | composer | fix(web): Resume keeps its thread's model when you switch threads | port |
-| 6e1bec50d5 | #26470 | composer | fix(web): prevent permissions label from shrinking on click | port |
+| 6e1bec50d5 | #26470 | composer | fix(web): prevent permissions label from shrinking on click | skip: adds `aria-haspopup` to the strip control only |
 | 7d7db0cbc3 | #26514 | composer | fix(web): remove gaps between permission options | port |
 | 00b2d0e271 | #26559 | composer | fix(web): the prompt box follows the interface font size | port |
 | e00f98fde2 | #22236 | composer | fix(web): stacked composer notices line up their details buttons | port |
@@ -851,7 +851,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 6f8144b5c4 | #37010 | composer | fix(web): overlapping image pastes keep their prompt order | port |
 | 617c6c74f6 | #31541 | composer | fix(web): thread chips in the composer can no longer be dragged out as links | port |
 | ed6cb97f07 | #31880 | composer | fix(web): reopened composer drafts keep quote spacing and show the caret | port |
-| 1cec1043eb | #31593 | composer | fix(shared): file mentions of __init__.py keep their name as the label | port |
+| 1cec1043eb | #31593 | composer | fix(shared): file mentions of __init__.py keep their name as the label | ported: file link labels escape `*` and `_` too (ComposerInlineTokens.fileLink) |
 | 189290cbf0 | #24082 | composer | fix(web): [NIT] SF Pro label no longer renders in a serif in the font picker | port |
 | f52fba48d9 | #32683 | composer | fix(web): stacked composer banners no longer show dark seam bands | port |
 | 8e06750a08 | #32709 | composer | fix(web): draft images keep their order after a reload | port |
@@ -864,7 +864,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 3cf00c3e8b | #37495 | composer | fix(web): composer drafts keep underscores in non-Latin names | port |
 | 506a0438a3 | #37528 | composer | fix(web): keep Pi and ACP model selections during catalog gaps | port |
 | 50b885e036 | #37593 | composer | fix(web): switching a draft's machine uses that machine's default model | port |
-| bcb0604581 | #37661 | composer | fix(web): model picker options no longer jump a pixel on hover | port |
+| bcb0604581 | #37661 | composer | fix(web): model picker options no longer jump a pixel on hover | skip: Chromium re-snaps text after the popover scale-in at fractional zoom; AppKit draws the rows at fixed positions |
 | 6f5838f9bc | #37691 | composer | fix(client-runtime): a relative "Add project starts in" opens the picker under home | port |
 | caef8c3847 | #32912 | composer | fix(composer): show local command actions while running | port |
 | c69f4b780b | #31590 | composer | fix(web): model picker lists a model reported twice once | ported: ModelPickerSections lists a model reported twice once |

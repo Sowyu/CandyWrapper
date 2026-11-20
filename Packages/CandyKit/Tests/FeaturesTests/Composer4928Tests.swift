@@ -72,4 +72,11 @@ struct Composer4928Tests {
         #expect(ComposerFileRow.formatSize(1024 * 1024 - 100) == "1.0 MB")
         #expect(ComposerFileRow.formatSize(1500) == "2 KB")
     }
+
+    /// #31593: a file named like `__init__.py` keeps its name as the chip label.
+    @Test func emphasisMarkersInFileLinkLabelsEscape() {
+        let link = ComposerInlineTokens.fileLink("pkg/__init__.py")
+        #expect(link == #"[\_\_init\_\_.py](pkg/__init__.py)"#)
+        #expect(ComposerInlineTokens.collect(link + " ").first?.kind == .mention(path: "pkg/__init__.py"))
+    }
 }

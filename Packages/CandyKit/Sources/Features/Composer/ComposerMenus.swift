@@ -646,7 +646,8 @@ public enum ComposerInlineTokens {
     /// `serializeComposerFileLink` (shared/composerTrigger.ts): `[basename](encoded path)`.
     public static func fileLink(_ path: String) -> String {
         let base = path.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? path
-        let label = base.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "[", with: "\\[").replacingOccurrences(of: "]", with: "\\]")
+        // Emphasis markers too, so `__init__.py` never renders bold and stays its own chip label (#31593).
+        let label = base.replacingOccurrences(of: #"[\\\[\]*_]"#, with: #"\\$0"#, options: .regularExpression)
         return "[\(label)](\(encodeURI(path)))"
     }
 
