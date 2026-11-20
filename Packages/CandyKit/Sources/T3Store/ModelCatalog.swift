@@ -519,7 +519,9 @@ public enum ModelTraits {
                 }
             }
             let label = ultrathink && d.id == primary ? "Ultrathink"
-                : d.type == .boolean ? "\(d.label) \(d.currentValue?.bool == true ? "On" : "Off")" : currentLabel(d)
+                : d.type == .boolean ? "\(d.label) \(d.currentValue?.bool == true ? "On" : "Off")"
+                // Pi's thinking select shows its own label before a level is picked (#27397, modelTraits.ts:168-176 at 4928).
+                : currentLabel(d) ?? (d.id == "thinking" ? d.label : nil)
             guard let label, !label.isEmpty else { continue }
             if reasoningIndex == -1, d.type == .select, reasoningIds.contains(d.id) { reasoningIndex = labels.count }
             labels.append(label)

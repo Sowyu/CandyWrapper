@@ -145,3 +145,15 @@ import T3Protocol
         #expect(shown(started: true, pick: true) == "claude-opus-5-5")
     }
 }
+
+/// #27397 (modelTraits.test.ts at 4928): Pi's thinking trigger names itself before a level is picked, without inventing one.
+struct PiThinkingTriggerTests {
+    @Test(arguments: [(String?.none, String?.none, "thinking", "Thinking"), (nil, "high", "thinking", "High"), ("low", nil, "thinking", "Low"),
+                      ("max", "high", "thinking", "Max"), (nil, nil, "effort", "")])
+    func labelsPiThinkingWithoutInventingASelection(_ row: (current: String?, defaultValue: String?, id: String, label: String)) {
+        let options = ["low", "high", "max"].map { ProviderOptionChoice(id: $0, label: $0.prefix(1).uppercased() + $0.dropFirst(), isDefault: $0 == row.defaultValue ? true : nil) }
+        var descriptor = ProviderOptionDescriptor(id: row.id, label: "Thinking", type: .select, options: options)
+        descriptor.currentValue = row.current.map { .string($0) }
+        #expect(ModelTraits.triggerLabel([descriptor]) == row.label)
+    }
+}
