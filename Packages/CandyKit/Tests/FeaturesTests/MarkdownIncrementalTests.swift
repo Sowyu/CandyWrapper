@@ -208,6 +208,10 @@ struct MarkdownIncrementalTests {
         }
         #expect(MarkdownDocument.stableCut(Substring("```\na\n\nb\n```\n\nc")) != nil)
         #expect(MarkdownDocument.stableCut(Substring("```\na\n\nb")) == nil)
+        // A line left of a list item's fence ends the item, so nothing after it is final (#28285).
+        for text in ["- a\n\n  ```\n  x\n\n```\n\nb", "- a\n\n  ```\n  x\n\ny\n\n  ```\n\nb"] {
+            #expect(MarkdownDocument.stableCut(Substring(text)) == nil, "\(text)")
+        }
         // Reference definitions and HTML blocks that span blank lines always parse whole.
         #expect(!MarkdownDocument.canSplit("[a]\n\n[a]: https://example.com"))
         #expect(!MarkdownDocument.canSplit("<!--\n\n-->"))
