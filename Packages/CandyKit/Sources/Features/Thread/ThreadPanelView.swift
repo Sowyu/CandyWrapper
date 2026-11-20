@@ -304,7 +304,9 @@ public final class ThreadHeaderView: TopbarDragView {
     }
     public override func updateLayer() {
         // ChatView's bg-background header covers the scrolled rows in the default themes.
-        layer?.backgroundColor = ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? Themed.color(\.background).cgColor(in: self) : nil
+        // A theme's background image shows through (ThemeBackgroundView).
+        layer?.backgroundColor = ThreadDesign.uses3814(dark: effectiveAppearance.isDark) && ThemeBackgroundView.image == nil
+            ? Themed.color(\.background).cgColor(in: self) : nil
     }
 
 }

@@ -170,3 +170,15 @@ Measured over a busy striped and blocked backdrop, worst-case background next to
 - File chips in markdown: clicks call `ThreadViewModel.openFile`, which the app does not set yet, so a click shows the chip's menu (copy relative or full path), as T3 does when it has no open action. No "copied" toast, no hover transition, no Open in editor or Reveal items yet.
 - Markdown: the native highlighter approximates Shiki (82 to 100% of characters match per language on sample snippets; TS, JSON, YAML, TOML, HTML, diff, Markdown at 97% or more). Code block titles show the language label, not pierre's file-type icons. External links have no favicon. Tables never wrap or truncate cells and clip instead of scrolling; the expand toggle does nothing yet. Unwrapped code clips instead of scrolling. All lists render tight (Foundation does not report looseness). Images are the 16:9 loading slot.
 - Diff panel: no file tree aside (the toggle only shows state), no line selection or review comments, no expanding of hidden lines (patches carry no file contents), no 200ms fade on expand, no title hover transition. Unwrapped lines share one horizontal offset across the list. Wrapping counts every character as one column, so wide CJK or emoji lines wrap later than Chromium.
+
+## Theme CSS
+
+Environment themes from agents can carry `css` (contracts server.ts:657). CandyWrapper has no CSS engine and never hands that text to a web view, so nothing in it can load a file. `Features/Settings/ThemeCSSVariables.swift` reads exactly this and ignores the rest:
+
+1. The 61 theme color variables T3 sets on the root (`APP_THEME_VARIABLES`, themePalette.ts:1653-1715): `--app-theme-<role>` with the `ThemeColorRole` in kebab case, such as `--app-theme-canvas`, `--app-theme-muted-foreground` and `--app-theme-sidebar-row-hover`. `terminalSelection` is `--app-theme-terminal-selection-background`.
+2. Only declarations marked `!important`. T3 writes these variables inline on the root (themePalette.ts:1736), so an unmarked stylesheet value loses in T3 too.
+3. Only in top-level rules where every selector is `:root` or `html` for both appearances, `.dark`, `:root.dark` or `html.dark` for dark, or `:root:not(.dark)` or `html:not(.dark)` for light. Rules inside `@media` or any other at-rule are skipped.
+4. Only values that pass T3's `themeCssValueFetches` (shared/src/themeCss.ts:28-30) and parse as a theme color. A value with a backslash, `url()` other than `data:` or `#id`, `image-set()` or `src()` is dropped before it is parsed.
+5. The colors overlay the published theme's own appearance, and its other appearance only when the theme has a `variants` entry for it.
+
+`var(--theme-background-image)` anywhere outside comments turns on the theme's published background image (themeBackground.ts). It fills the main panel, `center / cover`, under every page, wherever T3's CSS would have put it.

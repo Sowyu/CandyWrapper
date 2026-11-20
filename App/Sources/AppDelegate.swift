@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var environments: Environments?
     private var server: ServerController?
     private var threads: ThreadController?
+    private var themeBackground: ThemeBackgroundController?
     private var ditherTabs: DitherTabsController?
     private var settings: SettingsController?
     private var sidebarCommands: SidebarCommands?
@@ -255,6 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // settings.tsx:122, _chat.index.tsx:128), so the official main panel is flat #0a0a0a in dark mode.
         layout.main.showsGrain = false
         window.contentView = layout
+        themeBackground = ThemeBackgroundController(window: window, environments: environments)
         sidebar.actions.toggleSidebar = { [weak layout] in layout?.toggle() }
         // The account row samples CPU and memory only while the sidebar is open.
         layout.onOpenChange = { [weak sidebar] open in sidebar?.accountRow.usage.sidebarOpen = open }

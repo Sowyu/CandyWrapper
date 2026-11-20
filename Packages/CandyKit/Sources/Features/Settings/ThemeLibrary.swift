@@ -123,6 +123,17 @@ public final class ThemeLibrary {
         changed()
     }
 
+    /// The background image revision for `themeId` (`EnvironmentTheme.background`, themeBackground.ts:61-66),
+    /// or nil when the theme has none, its CSS never shows it, or a saved theme owns the id.
+    public func backgroundRevision(_ themeId: String?) -> String? {
+        guard let themeId, !customThemes.contains(where: { $0.id == themeId }),
+              let raw = publishedRaw.first(where: { $0["id"]?.stringValue == themeId }),
+              environmentThemes.contains(where: { $0.id == themeId }),
+              let revision = raw["background"]?.stringValue, !revision.isEmpty,
+              ThemeCSSVariables.usesBackgroundImage(raw["css"]?.stringValue) else { return nil }
+        return revision
+    }
+
     /// One published theme, or nil when it is invalid or claims a reserved id.
     public static func publishedTheme(_ value: JSONValue) -> ThemeDefinition? {
             guard let id = value["id"]?.stringValue, ThemePalette.isThemeId(id), !ThemePalette.reservedIds.contains(id),
@@ -144,6 +155,12 @@ public final class ThemeLibrary {
             var variants: [ThemeAppearance: [ThemeColorRole: String]] = [:]
             if value["variants"]?[appearance.other.rawValue] != nil {
                 var base = ThemePalette.defaultColors(appearance.other); base.merge(other) { _, new in new }; variants[appearance.other] = base
+            }
+            // The color variables its `css` sets (ThemeCSSVariables); a side the theme lacks stays unpainted.
+            let css = ThemeCSSVariables.overrides(value["css"]?.stringValue)
+            if !css.isEmpty {
+                colors.merge(css.colors(for: appearance)) { $1 }
+                variants[appearance.other]?.merge(css.colors(for: appearance.other)) { $1 }
             }
             return ThemeDefinition(id: id, label: name, appearance: appearance, colors: colors, variants: variants,
                                    managed: seeded && value["colors"] == nil && value["variants"] == nil)

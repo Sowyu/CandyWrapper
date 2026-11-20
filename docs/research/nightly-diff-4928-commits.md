@@ -669,11 +669,11 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 42057b82d0 | #35247 | settings | feat: agents can restyle T3 Code with theme colors and CSS | left (settings-3): CandyWrapper has no CSS engine; needs a decision on theme CSS (themeCss.ts strips every value themeCssValueFetches flags; a native port could read only :root custom properties for known tokens after that check) |
-| c3517ec0bf | #36696 | settings | fix(shared): theme CSS checks allow url() inside a quoted data: address | left (settings-3): CandyWrapper has no CSS engine; needs a decision on theme CSS (themeCss.ts strips every value themeCssValueFetches flags; a native port could read only :root custom properties for known tokens after that check) |
-| e82050b8b9 | #36656 | settings | feat(themes): theme CSS can hold 50,000 characters | left (settings-3): CandyWrapper has no CSS engine; needs a decision on theme CSS (themeCss.ts strips every value themeCssValueFetches flags; a native port could read only :root custom properties for known tokens after that check) |
-| 9d28fc921b | #37781 | settings | feat(themes): theme CSS can hold 100,000 characters | left (settings-3): CandyWrapper has no CSS engine; needs a decision on theme CSS (themeCss.ts strips every value themeCssValueFetches flags; a native port could read only :root custom properties for known tokens after that check) |
-| 31706f3d41 | #38150 | settings | fix(shared): theme CSS check no longer rejects @import text inside a string | left (settings-3): CandyWrapper has no CSS engine; needs a decision on theme CSS (themeCss.ts strips every value themeCssValueFetches flags; a native port could read only :root custom properties for known tokens after that check) |
+| 42057b82d0 | #35247 | settings | feat: agents can restyle T3 Code with theme colors and CSS | ported (settings-4): ThemeCSSVariables reads only `!important` `--app-theme-*` color variables on `:root`/`html`/`.dark`/`:root:not(.dark)` after T3's themeCssValueFetches check, and ignores the rest; see docs/design.md "Theme CSS" |
+| c3517ec0bf | #36696 | settings | fix(shared): theme CSS checks allow url() inside a quoted data: address | ported (settings-4): ThemeCSSVariables reads only `!important` `--app-theme-*` color variables on `:root`/`html`/`.dark`/`:root:not(.dark)` after T3's themeCssValueFetches check, and ignores the rest; see docs/design.md "Theme CSS" |
+| e82050b8b9 | #36656 | settings | feat(themes): theme CSS can hold 50,000 characters | ported (settings-4): ThemeCSSVariables reads only `!important` `--app-theme-*` color variables on `:root`/`html`/`.dark`/`:root:not(.dark)` after T3's themeCssValueFetches check, and ignores the rest; see docs/design.md "Theme CSS" |
+| 9d28fc921b | #37781 | settings | feat(themes): theme CSS can hold 100,000 characters | ported (settings-4): ThemeCSSVariables reads only `!important` `--app-theme-*` color variables on `:root`/`html`/`.dark`/`:root:not(.dark)` after T3's themeCssValueFetches check, and ignores the rest; see docs/design.md "Theme CSS" |
+| 31706f3d41 | #38150 | settings | fix(shared): theme CSS check no longer rejects @import text inside a string | ported (settings-4): ThemeCSSVariables reads only `!important` `--app-theme-*` color variables on `:root`/`html`/`.dark`/`:root:not(.dark)` after T3's themeCssValueFetches check, and ignores the rest; see docs/design.md "Theme CSS" |
 
 ## New feature connect-device-approval (1)
 
@@ -685,9 +685,9 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 7d32075e37 | #36680 | settings | feat(web): themes can use full-size background images | left (settings-3): needs assets.createUrl with environment-theme-background, an HTTP fetch into an image behind the window, and retries at 1, 2, 4 and 8 s (themeBackground.ts) |
-| b75424062a | #37843 | settings | fix(web): retry a failed theme wallpaper download when back online | left (settings-3): needs assets.createUrl with environment-theme-background, an HTTP fetch into an image behind the window, and retries at 1, 2, 4 and 8 s (themeBackground.ts) |
-| 49c3ab8632 | #37981 | settings | fix(web): published background no longer shows under a saved theme with the same id | left (settings-3): needs assets.createUrl with environment-theme-background, an HTTP fetch into an image behind the window, and retries at 1, 2, 4 and 8 s (themeBackground.ts) |
+| 7d32075e37 | #36680 | settings | feat(web): themes can use full-size background images | ported (settings-4): ThemeBackground mints environment-theme-background through assets.createUrl on the primary environment, decodes once, retries at 1, 2, 4 and 8 s and shows it behind the main panel while the theme's CSS uses var(--theme-background-image); App/Sources/ThemeBackgroundController.swift |
+| b75424062a | #37843 | settings | fix(web): retry a failed theme wallpaper download when back online | partly (settings-4): failed downloads retry on the next theme change and when the window shows again; no network-online hook yet |
+| 49c3ab8632 | #37981 | settings | fix(web): published background no longer shows under a saved theme with the same id | ported (settings-4): ThemeBackground mints environment-theme-background through assets.createUrl on the primary environment, decodes once, retries at 1, 2, 4 and 8 s and shows it behind the main panel while the theme's CSS uses var(--theme-background-image); App/Sources/ThemeBackgroundController.swift |
 | 28d2262083 | #38132 | pr/git | fix(web): theme wallpaper stays in the live preview when connectivity returns | port |
 
 ## New feature issues (22)
@@ -1282,7 +1282,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 63b5645678 | #32859 | settings | fix(web): Esc in Clerk's account modal no longer closes Settings | port |
 | 6d3f6423a3 | #37198 | settings | fix(web): Enter sends when a panel-conditioned shortcut is inactive | port |
 | 57ec00ddd6 | #37509 | settings | fix(web): source control settings notice a CLI login made outside the app | port |
-| 83e3c4f60d | #37493 | settings | fix(web): published themes keep their CSS when a saved theme shares the id | left (settings-3): CandyWrapper has no CSS engine; needs a decision on theme CSS (themeCss.ts strips every value themeCssValueFetches flags; a native port could read only :root custom properties for known tokens after that check) |
+| 83e3c4f60d | #37493 | settings | fix(web): published themes keep their CSS when a saved theme shares the id | n/a (settings-4): CandyWrapper bakes a published theme's CSS colors into its palette, so a saved copy keeps them; no CSS travels with saved themes |
 | d6a28f4faa | #37818 | settings | fix(client): guard saved environment routes during SSH onboarding | port |
 | 4021638273 | #31527 | settings | fix(web): thread hover cards show the provider icon in its brand color | port |
 | cd9c39fe3c | #37982 | settings | fix(web): imported theme files keep their top-level canvas and accent | port |

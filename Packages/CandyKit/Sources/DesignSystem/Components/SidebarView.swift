@@ -105,9 +105,9 @@ public final class SidebarLayoutView: DSView {
 
     /// The main column's page: the thread panel, Settings or a utility page. Setting it takes the others out.
     public var mainContent: NSView? {
-        get { main.subviews.first { !($0 is DitherArtView) } }
+        get { main.subviews.first { !($0 is DitherArtView) && !($0 is ThemeBackgroundView) } }
         set {
-            for view in main.subviews where view !== newValue && !(view is DitherArtView) { view.removeFromSuperview() }
+            for view in main.subviews where view !== newValue && !(view is DitherArtView) && !(view is ThemeBackgroundView) { view.removeFromSuperview() }
             if let newValue, newValue.superview !== main { main.addSubview(newValue) }
             needsLayout = true
         }
@@ -134,6 +134,7 @@ public final class SidebarLayoutView: DSView {
         collapsedTrigger.action = { [weak self] in self?.toggle() }
         if let sidebarContent { sidebar.content = sidebarContent }
         if let mainContent { main.addSubview(mainContent) }
+        ThemeBackgroundView.register(main)
         rail.layoutView = self
         setAccessibilityRole(.group)
     }
@@ -283,7 +284,7 @@ public final class SidebarLayoutView: DSView {
             b.frame = NSRect(x: gap - 8 - 28 * CGFloat(2 - i) - 2 * CGFloat(1 - i), y: (DitherChrome.band - 28) / 2, width: 28, height: 28)
         }
         for view in main.subviews {
-            view.frame = view is DitherArtView ? main.bounds
+            view.frame = view is DitherArtView || view is ThemeBackgroundView ? main.bounds
                 : NSRect(x: 0, y: band, width: main.bounds.width, height: max(0, main.bounds.height - band))
         }
         // The padding box ends at w - 1 (inside the 1px border); the rail is centred there.
