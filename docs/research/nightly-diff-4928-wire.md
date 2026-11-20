@@ -218,7 +218,7 @@ I generated this list from `WsRpcGroup` in `packages/contracts/src/rpc.ts` at bo
 | `projectClone.cancel` | unchanged | 1494 | yes |  |
 | `projectClone.retry` | unchanged | 1500 | yes |  |
 | `projectClone.start` | unchanged | 1484 | yes |  |
-| `projects.createFromThread` | new | 1573 | no | added in 58e60bf5e8 #26767 |
+| `projects.createFromThread` | new | 1573 | yes (sidebar-2) | added in 58e60bf5e8 #26767; thread menu Turn into project behind `threadProjectFromScratch` |
 | `projects.createNew` | unchanged | 1567 | yes |  |
 | `projects.ensureScratch` | unchanged | 1561 | yes |  |
 | `projects.listEntries` | unchanged | 1531 | yes |  |

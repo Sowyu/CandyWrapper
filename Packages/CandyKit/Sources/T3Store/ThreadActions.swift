@@ -129,6 +129,19 @@ public enum ThreadCommands {
 /// (CommandPalette.tsx:2465-2474): the folder's name as title, create the folder if missing, no
 /// default model.
 public enum ProjectCommands {
+    /// `projects.createFromThread` (4928 contracts rpc.ts, project.ts ProjectCreateFromThreadInput, #26767): promotes a
+    /// No project thread's own folder to a project. Servers offer it with `threadProjectFromScratch`.
+    public static let createFromThreadMethod = "projects.createFromThread"
+    public static let createFromThreadCapability = "threadProjectFromScratch"
+    public static func createFromThread(_ threadId: ThreadId) -> JSONValue { .object(["threadId": .string(threadId.rawValue)]) }
+
+    /// `canTurnThreadIntoProject` (4928 hooks/useThreadActions.ts): a thread with its own folder, in the server's
+    /// scratch project, on a server that can promote it.
+    public static func canTurnIntoProject(worktreePath: String?, projectRoot: String?, scratchRoot: String?, capabilities: Set<String>) -> Bool {
+        guard worktreePath != nil, capabilities.contains(createFromThreadCapability), let projectRoot, let scratchRoot else { return false }
+        return SidebarModel.normalizeProjectPath(projectRoot) == SidebarModel.normalizeProjectPath(scratchRoot)
+    }
+
     public static func create(projectId: ProjectId, workspaceRoot: String, createWorkspaceRootIfMissing: Bool = true, title: String? = nil, commandId: String = ThreadCommands.newCommandId()) -> JSONValue {
         .object([
             "type": .string("project.create"), "commandId": .string(commandId), "projectId": .string(projectId.rawValue),
@@ -606,6 +619,8 @@ public enum ThreadActionMenu {
         /// Guest links need their own grant and the server's beta, so the caller checks them instead of `canOperate`
         /// (threadActionMenu.logic.ts:90-91, guestShareAvailability.ts).
         public var canShareWithGuest = false
+        /// A No project thread with its own folder, on a server that can promote it (threadActionMenu.logic.ts:229-238).
+        public var canTurnIntoProject = false
         public init() {}
     }
 
@@ -637,6 +652,7 @@ public enum ThreadActionMenu {
         if let filter = s.projectFilter {
             items.append(.init("filter-by-project", filter.isActive ? "Show all projects" : "Filter by \(filter.label)"))
         }
+        if s.canTurnIntoProject { items.append(.init("turn-into-project", "Turn into project", disabled: s.isRunning)) }
         if s.supportsAutoSettleOptOut {
             items.append(.init("auto-settle", "Auto-settle behavior", children: [
                 .init("auto-settle:enabled", "Enabled", checked: s.autoSettleEnabled),

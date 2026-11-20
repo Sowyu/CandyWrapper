@@ -11,7 +11,7 @@ public enum ThemedItemContextMenu {
     static let icons: [String: IconName] = [
         "new-thread-on-branch": .messageSquarePlus, "pin": .pin, "unpin": .pinOff, "settle": .circleCheck,
         "unsettle": .circleCheck, "snooze": .clock, "unsnooze": .clock, "rename": .pencil, "regenerate-title": .refreshCw,
-        "mark-unread": .mailOpen, "share-guest": .userPlus, "filter-by-project": .folderTree, "auto-settle": .timer,
+        "mark-unread": .mailOpen, "share-guest": .userPlus, "filter-by-project": .folderTree, "turn-into-project": .folderPlus, "auto-settle": .timer,
         "copy": .copy, "copy-path": .folder, "copy-branch": .gitBranch, "copy-thread": .messageSquare, "copy-thread-id": .hash,
         "project-settings": .settings, "archive": .archive, "delete": .trash,
     ]

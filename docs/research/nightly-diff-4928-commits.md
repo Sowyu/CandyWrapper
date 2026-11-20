@@ -489,7 +489,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 58e60bf5e8 | #26767 | thread | feat: turn a No project thread into a project | left: needs projects.createFromThread and its menu, see PROGRESS.md |
+| 58e60bf5e8 | #26767 | thread | feat: turn a No project thread into a project | ported (sidebar-2): projects.createFromThread behind threadProjectFromScratch; thread menu Turn into project with its toasts |
 | 84e69da395 | #34788 | pr/git | fix(web): No project threads offer no Initialize Git, and their linked PRs show and act in the thread | left: belongs with the No project conversion |
 
 ## New feature fleet-channel (1)
