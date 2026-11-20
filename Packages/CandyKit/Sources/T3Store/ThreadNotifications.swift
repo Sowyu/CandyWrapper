@@ -67,35 +67,53 @@ public struct ThreadNotificationEvent: Sendable, Equatable {
     public var tag: String { "\(environmentId):\(threadId.rawValue)" }
 }
 
-/// `EnvironmentNotifications`' diff over one environment's live shell (ThreadNotificationCoordinator.tsx:97-280)
-/// and `createThreadNotificationGate` (ThreadNotificationCoordinator.logic.ts:19-82). A thread seen for the first
-/// time never notifies, so connecting to a server with finished threads is quiet. Attention notifies at once.
-/// Completion waits out the Working shelf's exit grace, because an orchestrator run can end moments before its
-/// continuation starts; `scan` holds it and `flush` delivers it once due, unless the thread stopped being settled.
+/// `EnvironmentNotifications`' diff over one environment's live shell (4928 ThreadNotificationCoordinator.tsx:235-360)
+/// and `createThreadNotificationGate` (4928 ThreadNotificationCoordinator.logic.ts:39-133). A thread seen for the first
+/// time never notifies, so connecting to a server with finished threads is quiet. Attention and completion notify at
+/// once (#29146); only a completion that answers a background progress wake waits `releasedCompletionGraceMs`, in
+/// `flush`, since a final wake can start right after it. Snoozed threads send no completion (#27458). While the shell
+/// is not live the environment is paused, not forgotten, so what changed meanwhile notifies on reconnect (#24493).
 public struct ThreadNotificationTracker: Sendable {
+    /// `RELEASED_COMPLETION_GRACE_MS`.
+    public static let releasedCompletionGraceMs: Int64 = 5_000
+
     struct State: Sendable {
         var raw: ThreadShell
         var subagentRequest: PendingSubagentRequest?
         var attention: String?
+        var requestId: String?
         var settled: Bool
         var completedAt: Int64?
+        var backgroundWake: Bool
+        var event: ThreadNotificationEvent
     }
 
-    struct Pending: Sendable {
+    struct Release: Sendable {
         var at: Int64
-        var dueMs: Int64
+        /// Nil while paused: no wake until the next observation restarts it.
+        var dueMs: Int64?
         var event: ThreadNotificationEvent
     }
 
     struct Gate: Sendable {
-        var pending: [ThreadId: Pending] = [:]
+        var releases: [ThreadId: Release] = [:]
         /// The newest completion already notified, or deliberately skipped.
         var handled: [ThreadId: Int64] = [:]
-        /// The newest completion seen settled, kept while the thread works or waits.
-        var lastSettled: [ThreadId: Int64] = [:]
+        /// Attention keys with a request id seen since the thread last stopped needing attention.
+        var attended: [ThreadId: Set<String>] = [:]
+        /// The shell went stale: the next scan observes every thread again.
+        var reconnecting = false
 
         mutating func skip(_ id: ThreadId, _ at: Int64?) {
             if let at, at > (handled[id] ?? .min) { handled[id] = at }
+        }
+
+        mutating func attend(_ id: ThreadId, _ prior: State?, _ next: State) -> Bool {
+            guard let attention = next.attention else { attended[id] = nil; return false }
+            guard next.requestId != nil else { return attention != prior?.attention }
+            if attended[id]?.contains(attention) == true { return false }
+            attended[id, default: []].insert(attention)
+            return true
         }
     }
 
@@ -104,7 +122,7 @@ public struct ThreadNotificationTracker: Sendable {
 
     public init() {}
 
-    /// The environment's shell is not live (or left): forget it, like `previous.current.clear()` and `gate.clear()`.
+    /// The environment left or notifications turned off: forget it, like `gate.clear()`.
     public mutating func reset(environmentId: String) {
         previous[environmentId] = nil
         gates[environmentId] = nil
@@ -115,31 +133,56 @@ public struct ThreadNotificationTracker: Sendable {
         gates = [:]
     }
 
+    /// The snapshot went stale (`entry.reconnecting = true; entry.gate.pause()`): grace timers stop and the next
+    /// live scan compares every thread with what was last seen.
+    public mutating func pause(environmentId: String) {
+        guard var gate = gates[environmentId] else { return }
+        for id in gate.releases.keys { gate.releases[id]?.dueMs = nil }
+        gate.reconnecting = true
+        gates[environmentId] = gate
+    }
+
     /// When the next held completion is due, or nil while none is held.
-    public var nextDueMs: Int64? { gates.values.flatMap { $0.pending.values.map(\.dueMs) }.min() }
+    public var nextDueMs: Int64? { gates.values.flatMap { $0.releases.values.compactMap(\.dueMs) }.min() }
 
     /// The held completions due by `nowMs`, which count as notified.
     public mutating func flush(nowMs: Int64) -> [ThreadNotificationEvent] {
         var events: [ThreadNotificationEvent] = []
         for env in gates.keys.sorted() {
             guard var gate = gates[env] else { continue }
-            for (id, p) in gate.pending.sorted(by: { $0.value.dueMs < $1.value.dueMs }) where p.dueMs <= nowMs {
-                gate.pending[id] = nil
-                gate.handled[id] = p.at
-                events.append(p.event)
+            for (id, r) in gate.releases.sorted(by: { ($0.value.dueMs ?? .max) < ($1.value.dueMs ?? .max) }) {
+                guard let due = r.dueMs, due <= nowMs else { continue }
+                gate.releases[id] = nil
+                gate.handled[id] = r.at
+                events.append(r.event)
             }
             gates[env] = gate
         }
         return events
     }
 
-    /// Diffs the environment's live threads against the last scan and returns the attention notifications due
-    /// now. Completions wait in `flush`.
+    /// `isSnoozedForNotification` (logic.ts:24-37): a completion that landed during the snooze stays quiet even when
+    /// its update arrives after the wake.
+    static func snoozedForNotification(_ thread: SidebarThread, completedAt: Int64?, nowMs: Int64) -> Bool {
+        if SidebarModel.effectiveSnoozed(thread, nowMs: nowMs) { return true }
+        guard let completedAt else { return false }
+        if let snoozedAt = thread.shell.snoozedAt?.epochMs, completedAt < snoozedAt { return false }
+        return SidebarModel.effectiveSnoozed(thread, nowMs: completedAt)
+    }
+
+    /// `monitorHoldsWakeCompletion` (shared orchestrationV2PendingBackgroundWork.ts:120-129).
+    static func monitorHoldsWakeCompletion(_ raw: ThreadShell) -> Bool {
+        raw.latestRunBackgroundWake == true && raw.backgroundTasks.contains { $0.kind == .monitor && !$0.taskId.hasPrefix("pull-request-watch:") }
+    }
+
+    /// Diffs the environment's live threads against the last scan and returns the notifications due now. Wake
+    /// completions wait in `flush`.
     public mutating func scan(environmentId: String, threads: [ThreadShell], nowMs: Int64) -> [ThreadNotificationEvent] {
         let before = previous[environmentId] ?? [:]
         var gate = gates[environmentId] ?? Gate()
+        let reconnecting = gate.reconnecting
         var next: [ThreadId: State] = [:]
-        var changed: [(prior: State?, state: State, status: SidebarThreadStatus)] = []
+        var changed: [(prior: State?, state: State, thread: SidebarThread)] = []
         // Subagents are skipped below, so their requests notify through the thread above them (T3 f4df794777).
         let subagentRequests = PendingSubagentRequests.byThread(threads)
         for raw in threads {
@@ -147,54 +190,66 @@ public struct ThreadNotificationTracker: Sendable {
             if !raw.lineage.isListed { continue }
             let prior = before[raw.id]
             let subagentRequest = subagentRequests[raw.id]
-            // An unchanged thread can't produce a new notification.
-            if let prior, prior.raw == raw, prior.subagentRequest == subagentRequest {
+            // An unchanged thread can't produce a new notification, unless the shell just came back.
+            if !reconnecting, let prior, prior.raw == raw, prior.subagentRequest == subagentRequest {
                 next[raw.id] = prior
                 continue
             }
             let thread = SidebarThread(raw, pendingSubagentRequest: subagentRequest)
             var status = SidebarModel.resolveSidebarThreadStatus(thread)
             if status == .ready, thread.latestRun?.status == .failed { status = .failed }
-            let attention: String? = [.input, .request, .approval, .failed, .limited].contains(status)
-                ? "\(thread.latestRun?.runId.rawValue ?? ""):\(status.rawValue)" : nil
+            let needsAttention = [.input, .request, .approval, .failed, .limited].contains(status)
+            // `resolveBackgroundThreadRequest` (backgroundThreadAnnouncement.ts:27-41): the thread's own request id.
+            let requestId = needsAttention && (thread.hasPendingApprovals || thread.hasPendingUserInput) ? raw.pendingRuntimeRequest?.id.rawValue : nil
+            // Queued messages become the latest run while a request stays pending, so a request with an id is
+            // keyed by that id alone and announces once.
+            let attention: String? = !needsAttention ? nil
+                : requestId.map { "\(status.rawValue):\($0)" } ?? "\(thread.latestRun?.runId.rawValue ?? ""):\(status.rawValue)"
             // Commands left running (a dev server) read as ready; subagents and awaited work wait.
-            let settled = status == .ready && thread.latestRun?.status == .completed
-            let state = State(raw: raw, subagentRequest: subagentRequest, attention: attention, settled: settled,
-                              completedAt: settled ? thread.latestRun?.completedAt?.epochMs : nil)
+            let settled = status == .ready && thread.latestRun?.status == .completed && !Self.monitorHoldsWakeCompletion(raw)
+            let state = State(raw: raw, subagentRequest: subagentRequest, attention: attention, requestId: requestId, settled: settled,
+                              completedAt: settled ? thread.latestRun?.completedAt?.epochMs : nil,
+                              backgroundWake: raw.latestRunBackgroundWake == true,
+                              event: ThreadNotificationEvent(environmentId: environmentId, threadId: raw.id, threadTitle: raw.title,
+                                                             kind: .input, status: status))
             next[raw.id] = state
-            changed.append((prior, state, status))
+            changed.append((prior, state, thread))
         }
+        gate.reconnecting = false
         previous[environmentId] = next
         // `retain`: forget threads that left the snapshot.
-        gate.pending = gate.pending.filter { next[$0.key] != nil }
+        gate.releases = gate.releases.filter { next[$0.key] != nil }
         gate.handled = gate.handled.filter { next[$0.key] != nil }
-        gate.lastSettled = gate.lastSettled.filter { next[$0.key] != nil }
+        gate.attended = gate.attended.filter { next[$0.key] != nil }
         var events: [ThreadNotificationEvent] = []
-        for (prior, state, status) in changed {
+        for (prior, state, thread) in changed {
             let id = state.raw.id
             let archived = state.raw.archivedAt != nil
             // A run the user stopped or a compaction T3 Code started doesn't announce itself
-            // (ThreadNotificationCoordinator.tsx:271-277). Failures still do, through `attention`.
+            // (ThreadNotificationCoordinator.tsx:308-312). Failures still do, through `attention`.
             let quiet = state.raw.latestRunStopRequested == true || state.raw.latestRunSilent == true
-            if state.settled, let at = state.completedAt { gate.lastSettled[id] = at }
-            if !state.settled || archived || quiet { gate.pending[id] = nil }
-            // The first sighting, archived threads, and stopped runs never notify completion.
-            if prior == nil || archived || quiet { gate.skip(id, state.completedAt) }
-            guard let prior, !archived else { continue }
-            let event = ThreadNotificationEvent(environmentId: environmentId, threadId: id, threadTitle: state.raw.title,
-                                                kind: .input, status: status)
-            if let attention = state.attention, attention != prior.attention {
-                // Attention replaces the completion before it, so that run must not notify later.
-                gate.skip(id, gate.lastSettled[id])
-                gate.pending[id] = nil
-                events.append(event)
+            let snoozed = Self.snoozedForNotification(thread, completedAt: state.completedAt, nowMs: nowMs)
+            let silenced = archived || quiet || snoozed
+            let completion = ThreadNotificationEvent(environmentId: environmentId, threadId: id, threadTitle: state.raw.title,
+                                                     kind: .completion, status: state.event.status)
+            // The grace survives updates that keep the wake's completion; anything else cancels it.
+            if let pending = gate.releases[id], pending.at == state.completedAt, !silenced {
+                if pending.dueMs == nil { gate.releases[id]?.dueMs = nowMs + Self.releasedCompletionGraceMs }
                 continue
             }
+            gate.releases[id] = nil
+            // The first sighting, archived or snoozed threads, and stopped or silent runs never notify completion.
+            if prior == nil || silenced { gate.skip(id, state.completedAt) }
+            let fresh = gate.attend(id, prior, state)
+            guard prior != nil, !archived else { continue }
+            if fresh { events.append(state.event); continue }
             guard state.settled, let at = state.completedAt, at > (gate.handled[id] ?? .min) else { continue }
-            if gate.pending[id]?.at == at { continue }
-            gate.pending[id] = Pending(at: at, dueMs: nowMs + SidebarInboxReturnTracker.workingExitGraceMs,
-                                       event: ThreadNotificationEvent(environmentId: environmentId, threadId: id,
-                                                                      threadTitle: state.raw.title, kind: .completion, status: status))
+            if state.backgroundWake {
+                gate.releases[id] = Release(at: at, dueMs: nowMs + Self.releasedCompletionGraceMs, event: completion)
+                continue
+            }
+            gate.handled[id] = at
+            events.append(completion)
         }
         gates[environmentId] = gate
         return events

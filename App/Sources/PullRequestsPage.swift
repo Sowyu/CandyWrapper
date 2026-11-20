@@ -121,8 +121,8 @@ final class PullRequestsPageController {
         page.onSpeedAction = { [weak self] entry, action in self?.speedAction(entry, action) }
         page.onCopyLink = { [weak self] url in
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(url, forType: .string)
-            self?.toast("Link copied", url, .success)
+            // 4928 dropped routine success toasts (PullRequestsPage.tsx, #36527).
+            if !NSPasteboard.general.setString(url, forType: .string) { self?.toast("Failed to copy link", nil, .error) }
         }
         page.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
         page.views.onApply = { [weak self] p in self?.applyView(p) }

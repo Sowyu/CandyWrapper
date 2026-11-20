@@ -93,8 +93,8 @@ final class PullRequestDetailBinding {
             view.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
             view.onCopy = { [weak self] text, label in
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(text, forType: .string)
-                self?.toast("\(label) copied", text, .success)
+                // 4928 dropped routine success toasts; only a failure speaks (#36527).
+                if !NSPasteboard.general.setString(text, forType: .string) { self?.toast("Failed to copy \(label.lowercased())", nil, .error) }
             }
             view.onMergeMethod = { m in UserDefaults.standard.set(m, forKey: Self.mergeMethodKey) }
             view.onAction = { [weak self] action, method in self?.perform(action, mergeMethod: method) }
@@ -1312,8 +1312,10 @@ final class ThreadPullRequestsController {
 
     private func copy(_ text: String, title: String) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-        panel.toasts.show(ToastView(title: title, message: text, kind: .success))
+        // 4928 dropped routine success toasts (#36527); `title` stays for the failure.
+        if !NSPasteboard.general.setString(text, forType: .string) {
+            panel.toasts.show(ToastView(title: "Failed to copy", message: title.replacingOccurrences(of: " copied", with: ""), kind: .error))
+        }
     }
 
     func registerShortcuts(_ shortcuts: Shortcuts) {

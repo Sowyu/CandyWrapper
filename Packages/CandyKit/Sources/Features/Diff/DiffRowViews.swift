@@ -64,7 +64,8 @@ final class DiffFileHeaderView: DiffRowView {
             guard let self else { return }
             NSPasteboard.general.clearContents()
             let copied = NSPasteboard.general.setString(path, forType: .string)
-            AnchoredCopyToast.show(from: copy, success: copied)
+            // 4928 DiffFilePathCopyButton.tsx shows only the failure (#36527).
+            if !copied { AnchoredCopyToast.show(from: copy, success: false) }
         }
         setAccessibilityRole(.button)
     }

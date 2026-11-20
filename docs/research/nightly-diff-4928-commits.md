@@ -183,8 +183,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| a852de0b7b | #29146 | thread | fix(web): play completion sounds without delay | port |
-| 5ef603df34 | #36527 | pr/git | fix(web): remove routine success notifications | port; routine success toasts removed |
+| a852de0b7b | #29146 | thread | fix(web): play completion sounds without delay | ported (panels-2): completions notify at once; only a background progress wake's completion waits 5 s, ThreadNotificationTracker |
+| 5ef603df34 | #36527 | pr/git | fix(web): remove routine success notifications | ported in part (panels-2): pull request copies, the Pull Requests page link copy, Git branch copies and the diff path copy toast only on failure. Left: the same in Sidebar, Settings, chat, media and the thread action menu, which other agents hold |
 
 ## Port group provider-status (1)
 
@@ -356,7 +356,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 40c3682543 | #33900 | thread | feat(web): screen readers can hear the agent's messages and steps during a turn | port; screen reader turn announcements |
+| 40c3682543 | #33900 | thread | feat(web): screen readers can hear the agent's messages and steps during a turn | left (panels-2): ThreadActivityAnnouncer belongs in Features/Thread TimelineView, which another agent holds |
 
 ## Port group html-render (5)
 
@@ -837,7 +837,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 5e27bae22e | #28780 | composer | fix(web): a stashed prompt keeps its machine mentions | left: not reached in composer-3; T3 changes useComposerStash.ts (26 lines), still unchecked against CW |
 | f84ad6f30b | #36732 | composer | fix(web): discarded drafts stay discarded after image compression | left: not reached in composer-3; T3 changes preparingComposerImages.ts, discardComposerDraft.ts (16 lines), still unchecked against CW |
 | 081a5d92bf | #29617 | composer | fix(clients): the folder picker finds folders with accented names on macOS | left: belongs with the add-project folder picker, outside the composer; not checked this session |
-| 4954322f02 | #27458 | composer | fix(web): don't send completion notifications for snoozed threads | left: belongs with notifications, outside the composer; not checked this session |
+| 4954322f02 | #27458 | composer | fix(web): don't send completion notifications for snoozed threads | ported (panels-2): snoozed threads send no completion, including one that landed during the snooze and arrived after the wake |
 | f751c8488f | #29846 | composer | fix(web): the new-thread project picker follows the manual project order | left: belongs with the project picker, outside the composer; not checked this session |
 | 1f45f14ae8 | #33298 | composer | fix(web): queued images open in the image viewer | left: not reached in composer-3; T3 changes ChatView.tsx, QueuedRunsControl.tsx (68 lines), still unchecked against CW |
 | 619c652d25 | #35176 | composer | fix(web): retain custom model drafts until saved | left: not reached in composer-3; T3 changes ProviderInstanceCard.tsx, ProviderModelsSection.tsx, ProviderSettingsPanel.tsx (41 lines), still unchecked against CW |
@@ -895,7 +895,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | a05e8fde08 | #26160 | connections | fix(web): Add Environment dialog reopens on Remote link instead of a stale SSH selection | port |
 | 1aa46d0cdf | #27998 | connections | fix(connect): T3 Connect sockets no longer drop every hour | port |
 | 8f0d66de5f | #26109 | connections | fix(web): servers still restarting after an app update no longer offer the update again | port |
-| 7cd9a73b2f | #24493 | connections | fix(web): thread alerts missed during a disconnect fire on reconnect | port |
+| 7cd9a73b2f | #24493 | connections | fix(web): thread alerts missed during a disconnect fire on reconnect | ported (panels-2): a stale shell pauses its environment's tracker instead of forgetting it, so what changed during the disconnect notifies once on reconnect |
 | aa46f7ada4 | #25591 | connections | fix(client-runtime): re-pairing at a new address uses the new token | port |
 | 95d4da5a93 | #28592 | connections | fix(clients): open a delegated child's approval on the environment it runs in | port |
 | 322f6544df | #30498 | connections | feat(web): show a newly created pairing link without expanding the client list | port |
@@ -1247,7 +1247,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | b2e86d7902 | #35100 | settings | fix(web): an invalid provider setting is refused at its field instead of taking the provider offline | left (settings-4928): refuse an invalid provider setting at its field (ProviderSettingsPanel field validation) instead of sending it |
 | 32f3d8b160 | #35116 | settings | fix(client-runtime): Diagnostics Resource History keeps updating while open | port |
 | a30cb3283a | #35161 | settings | fix(web): Esc in the keybindings search clears it without closing Settings | port |
-| 1d218d1525 | #34697 | settings | feat(web): screen reader window title leads with the thread's status and name | port |
+| 1d218d1525 | #34697 | settings | feat(web): screen reader window title leads with the thread's status and name | left (panels-2): needs the `screenReaderWindowTitle` client setting and its Settings switch (Features/Settings), then status first in the window title (branding.logic.ts, Sidebar.logic.ts resolveWindowTitleThreadStatus) |
 | 4f555c746c | #28584 | settings | fix(web): choosing a project icon again re-reads it from disk | port |
 | 817b92f13a | #24110 | settings | fix(pi): stop offering extension-only models for text generation | port |
 | 141de5e9f4 | #25513 | settings | fix(web): a dismissed provider banner stays dismissed when you switch threads | port |

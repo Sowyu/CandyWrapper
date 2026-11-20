@@ -133,7 +133,9 @@ final class ThreadNotificationCoordinator: NSObject {
 
     private func liveShell(_ environmentId: String, _ snapshot: ShellSnapshot?) {
         guard let snapshot else {
-            tracker.reset(environmentId: environmentId)
+            // Paused, not forgotten, so alerts missed during a disconnect fire on reconnect (4928
+            // ThreadNotificationCoordinator.tsx:327-341, #24493). A removed environment is forgotten.
+            if environments.isRegistered(environmentId) { tracker.pause(environmentId: environmentId) } else { tracker.reset(environmentId: environmentId) }
             scheduleCompletions()
             // Notifications from environments that left the client close (ThreadNotificationCoordinator.tsx:42-51).
             if !environments.isRegistered(environmentId) {
