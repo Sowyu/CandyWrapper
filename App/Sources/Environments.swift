@@ -127,6 +127,14 @@ final class Environments {
         return Set(ids.compactMap(\.stringValue).map { ThreadId($0).scoped(to: environmentId) })
     }
 
+    /// `orchestration.getThreadFamily` (4928 orchestrationV2.ts:3994-4008), on servers whose shell can leave
+    /// rows out (`shellThreadFamilies`); nil elsewhere, where the shell already holds every thread.
+    func threadFamily(_ environmentId: String, threadId: ThreadId) async -> [ThreadShell]? {
+        guard hasPartialShell(environmentId), let session = session(environmentId), session.omissions.omitIdleSubagents else { return nil }
+        let json = try? await session.supervisor.request("orchestration.getThreadFamily", payload: .object(["threadId": .string(threadId.localId.rawValue)]))
+        return (try? json?.decode(as: ShellThreadRead.self))?.threads
+    }
+
     func demandOlderSettled(minimum: Int, projectIds: Set<ProjectId>?) {
         for id in order {
             let local = projectIds.map { $0.filter { $0.environmentId == id }.map(\.localId) }

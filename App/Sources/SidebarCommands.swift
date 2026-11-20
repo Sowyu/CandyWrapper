@@ -877,7 +877,12 @@ final class SidebarCommands {
         let order = SidebarModel.SortOrder(rawValue: ClientSettingsStore.shared.current.string("sidebarThreadSortOrder")) ?? .updatedAt
         let fallback = SidebarModel.fallbackThreadAfterDelete(all, deleted: id, deleting: deleting, order: order)
         let wasOpen = routeThreadId == id
+        // A partial shell may leave side chats out (useThreadActions.ts:470-486): read the family first.
+        let family = await environments.threadFamily(env, threadId: id) ?? all
         do { try await environments.dispatch(id, ThreadCommands.delete(id.localId)) } catch { return .failure(error) }
+        // The server deletes the side chats with the thread; their drafts and uploads go too (#29832, useThreadActions.ts:640-649).
+        let sideChats = family.filter { $0.lineage.sideChat == true && $0.lineage.parentThreadId?.localId == id.localId }
+        threads.composer.clearDrafts(threads: [id] + sideChats.map { $0.id.localId.scoped(to: env) })
         ledger.expireListPlacement(id.rawValue, archive: true)
         sidebar?.deselect([id])
         if wasOpen, routeThreadId == id {

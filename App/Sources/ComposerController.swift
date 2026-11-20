@@ -4626,6 +4626,21 @@ extension ComposerController {
         return true
     }
 
+    /// A deleted thread's drafts go with it, its side chats' too (`releaseComposerDraftUploads` and
+    /// `clearDraftThread`, 4928 useThreadActions.ts:493-504, 640-649): the prompt, reply target and
+    /// attachments, whose uploads are released.
+    func clearDrafts(threads ids: [ThreadId]) {
+        for id in ids {
+            let key = id.rawValue
+            for a in draftAttachments.removeValue(forKey: key) ?? [] { release(a) }
+            prompts[key] = nil
+            replyTargets[key] = nil
+            if draftKey == key { composer.text = ""; refresh() }
+        }
+        persistDraftAttachments()
+        scheduleSave()
+    }
+
     /// A moved file comment's new lines; one whose chip the user already removed stays removed.
     func updateReviewComment(_ record: JSONValue) {
         guard let id = record["contextId"]?.stringValue, ComposerContext.referencedIds(composer.text).contains(id) else { return }
