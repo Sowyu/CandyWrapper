@@ -343,16 +343,16 @@ private func messageFlags(_ row: TimelineRow?) -> (meta: Bool, copy: Bool, strea
             }
         }
         let settled = rows(.completed, working: false)
-        #expect(shape(settled) == ["user:launch", "fold:Worked for 8.0s", "assistant:launch-answer", "user:resume", "fold:Worked for 8.0s", "assistant:resume-answer"])
+        #expect(shape(settled) == ["user:launch", "fold:Worked for 8s", "assistant:launch-answer", "user:resume", "fold:Worked for 8s", "assistant:resume-answer"])
         guard case .turnFold(let launch, _, _)? = settled.first(where: { kind($0) == "turn-fold" })?.kind else {
             Issue.record("no launch fold")
             return
         }
         #expect(shape(rows(.completed, working: false, expanded: [launch])) == [
-            "user:launch", "fold:Worked for 8.0s", "work-toggle", "assistant:launch-answer", "user:resume", "fold:Worked for 8.0s", "assistant:resume-answer",
+            "user:launch", "fold:Worked for 8s", "work-toggle", "assistant:launch-answer", "user:resume", "fold:Worked for 8s", "assistant:resume-answer",
         ])
-        #expect(shape(rows(.running, working: true)) == ["user:launch", "fold:Worked for 8.0s", "assistant:launch-answer", "user:resume", "working", "work-live"])
-        #expect(shape(rows(.failed, working: false)) == ["user:launch", "fold:Worked for 8.0s", "assistant:launch-answer", "user:resume", "work", "work", "assistant:resume-answer"])
+        #expect(shape(rows(.running, working: true)) == ["user:launch", "fold:Worked for 8s", "assistant:launch-answer", "user:resume", "working", "work-live"])
+        #expect(shape(rows(.failed, working: false)) == ["user:launch", "fold:Worked for 8s", "assistant:launch-answer", "user:resume", "work", "work", "assistant:resume-answer"])
     }
 
     // LT:2340
