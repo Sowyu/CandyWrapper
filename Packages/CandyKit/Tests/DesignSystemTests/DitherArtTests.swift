@@ -63,9 +63,10 @@ struct DitherArtTests {
         #expect(line.first! < 20 && line.last! > 80)
     }
 
-    /// Flipping Background to Blur moves the art from the main panel to the whole window and renders it again, with
-    /// no relaunch; flipping back returns it.
-    @MainActor @Test func backgroundSwitchMovesTheArtLive() async throws {
+    /// Flipping Background to Blur moves the art from the main panel to the whole window and asks for a blurred
+    /// render at Blur's canvas size, with no relaunch; flipping back returns it. Synchronous, so no other test runs
+    /// while the theme runtime shows Redesign.
+    @MainActor @Test func backgroundSwitchMovesTheArtLive() throws {
         _ = NSApplication.shared
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous) }
@@ -80,25 +81,21 @@ struct DitherArtTests {
         defer { window.contentView = nil }
         shell.layoutSubtreeIfNeeded()
         func art() -> DitherArtView? { (shell.subviews + shell.main.subviews).first { $0 is DitherArtView } as? DitherArtView }
-        func rendered(_ width: Int) async -> Bool {
-            for _ in 0..<200 {
-                if let image = art()?.contentsForTesting, image.width == width { return true }
-                try? await Task.sleep(for: .milliseconds(25))
-            }
-            return false
-        }
         #expect(art()?.superview === shell.main)
+        #expect(art()?.requestForTesting?.blur == false)
         input.ditherBlur = true
         ThemeRuntime.apply(input)
         shell.layoutSubtreeIfNeeded()
         #expect(art()?.superview === shell)
         #expect(art()?.frame == shell.bounds)
-        #expect(await rendered(Int((shell.bounds.width / DitherArt.blurPixel).rounded(.up))))
+        #expect(art()?.requestForTesting?.blur == true)
+        #expect(art()?.requestForTesting?.width == Int((shell.bounds.width / DitherArt.blurPixel).rounded(.up)))
         input.ditherBlur = false
         ThemeRuntime.apply(input)
         shell.layoutSubtreeIfNeeded()
         #expect(art()?.superview === shell.main)
-        #expect(await rendered(Int((shell.main.bounds.width / DitherArt.dot).rounded(.up))))
+        #expect(art()?.requestForTesting?.blur == false)
+        #expect(art()?.requestForTesting?.width == Int((shell.main.bounds.width / DitherArt.dot).rounded(.up)))
     }
 
     /// "Use desktop" never leaves the panel blank: a nil desktop URL or a file that won't decode still renders art,

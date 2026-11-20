@@ -367,6 +367,7 @@ public final class DitherArtView: NSView {
     }
 
     var contentsForTesting: CGImage? { art.contents.map { $0 as! CGImage } }
+    var requestForTesting: DitherArt.Request? { pending ?? shown }
     var scrimAlphaForTesting: CGFloat { scrim.backgroundColor.flatMap { NSColor(cgColor: $0)?.alphaComponent } ?? 0 }
 }
 
