@@ -6,7 +6,7 @@ import T3Store
 /// T3's model picker popover body (chat/ModelPickerContent.tsx, ModelPickerSidebar.tsx,
 /// ModelListRow.tsx): a 44pt provider rail with Favorites, a search field and the model list.
 /// 360 wide, at most 346 tall. Spec: docs/research/J-composer-visuals.md 8.1, reference 13.
-final class ModelPickerView: DSView, PickerPopupBody {
+final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     static let width: CGFloat = 360, maxHeight: CGFloat = 346, railWidth: CGFloat = 44
     static let capyWidth: CGFloat = 420, capyHeight: CGFloat = 440, capyMinHeight: CGFloat = 300
     static func width(_ capy: Bool) -> CGFloat { capy ? capyWidth : width }
@@ -553,13 +553,19 @@ final class ModelPickerView: DSView, PickerPopupBody {
         tracking = area
     }
 
-    private func rowIndex(_ event: NSEvent) -> Int? {
-        let p = list.convert(event.locationInWindow, from: nil)
+    private func rowIndex(at windowPoint: NSPoint) -> Int? {
+        let p = list.convert(windowPoint, from: nil)
         guard list.bounds.contains(p) else { return nil }
         return rowViews.firstIndex { $0.frame.contains(p) }
     }
 
-    override func mouseMoved(with event: NSEvent) { if let i = rowIndex(event) { highlightedRow = i } }
+    override func mouseMoved(with event: NSEvent) { if let i = rowIndex(at: event.locationInWindow) { highlightedRow = i } }
+    /// HoverSync forwards every pointer move while the picker is hovered: AppKit sent Redesign's rows no `mouseMoved`
+    /// after the popup built its area under the pointer, so they never lit (screen pass 2026-11-20, item 9).
+    func hoverPointerMoved() {
+        guard let window, let i = rowIndex(at: window.mouseLocationOutsideOfEventStream) else { return }
+        highlightedRow = i
+    }
     override func mouseExited(with event: NSEvent) { highlightedRow = nil }
 }
 
