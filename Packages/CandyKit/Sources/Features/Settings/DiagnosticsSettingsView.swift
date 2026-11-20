@@ -92,6 +92,7 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
     private var signalGeneration = UUID()
     private var loadedFor: String?
     private weak var telemetrySectionView: SettingsSectionView?
+    private weak var hostSectionView: SettingsSectionView?
     /// The OTLP export form, kept across rebuilds so drafts survive (one per environment).
     private var exportForm: TelemetryExportView?
     static let windows: [(label: String, windowMs: Double, bucketMs: Double)] = [("5m", 300_000, 30_000), ("15m", 900_000, 60_000),
@@ -132,6 +133,10 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
             self.telemetry = value
             if let section = self.telemetrySectionView {
                 let updated = self.telemetrySection()
+                section.group.rows = updated.group.rows
+                section.headerAction = updated.headerAction
+            }
+            if let section = self.hostSectionView, let updated = self.hostSection() {
                 section.group.rows = updated.group.rows
                 section.headerAction = updated.headerAction
             }
@@ -329,7 +334,9 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
         }
         let monitor = telemetrySection()
         telemetrySectionView = monitor
-        body = [monitor, live, resources, trace, latest, common, slowest, logs, top] + (exportSection(env).map { [$0] } ?? [])
+        let host = hostSection()
+        hostSectionView = host
+        body = [monitor] + (host.map { [$0] } ?? []) + [live, resources, trace, latest, common, slowest, logs, top] + (exportSection(env).map { [$0] } ?? [])
     }
 
     /// `TelemetryExportSettings` (TelemetryExportSettings.tsx:44-56, 2994) under the tables, on every server as in
@@ -351,6 +358,28 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
         }
         anchors["telemetry-export"] = section
         return section
+    }
+
+    /// "Host & collection" under the resource monitor (ResourceTelemetryDiagnostics.tsx:1224-1368), default themes only
+    /// like the footprint, with Retry monitor in its header when the collector needs it.
+    private func hostSection() -> SettingsSectionView? {
+        guard !DesignGeometry.usesClassic(self) else { return nil }
+        let section = SettingsSectionView(title: "Host & collection", rows: [SettingsHostCollectionView(snapshot: telemetry)])
+        section.icon = IconView(name: .gauge, size: 16, strokeColor: Themed.color(\.mutedForeground))
+        if let status = telemetry?["health"]?["native"]?["status"]?.stringValue, ["degraded", "unavailable", "stopped"].contains(status) {
+            let retry = ButtonView("Retry monitor", icon: .refreshCw, variant: .outline, size: .xs)
+            retry.action = { [weak self] in self?.retryMonitor() }
+            section.headerAction = retry
+        }
+        return section
+    }
+
+    private func retryMonitor() {
+        guard let env = environment?.id, let request = context.request else { return }
+        Task { [weak self] in
+            do { _ = try await request(env, "server.retryResourceTelemetry", .object([:])); self?.load("telemetry") }
+            catch { self?.context.toast?("Could not retry resource monitor", "\(error)", .error) }
+        }
     }
 
     // ponytail: backend summary and history only; add the remaining telemetry groups with their detail views.
