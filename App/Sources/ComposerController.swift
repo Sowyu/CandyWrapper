@@ -49,8 +49,8 @@ final class ComposerController {
     private var followUpSteers = false
     /// A send is declining approvals before it goes (`sendInFlightRef` in T3).
     private var declineInFlight = false
-    /// The thread whose background work Stop is stopping (`stoppingBackgroundWorkKey`, ChatView.tsx:3794).
-    private var stoppingBackgroundWork: ThreadId?
+    /// The background work Stop is stopping (`backgroundWorkStops`, useThreadLifecycle.tsx:426-473).
+    private var backgroundWorkStop: BackgroundWorkPresentation.StopRequest?
     private var recoveryErrors: [ThreadId: String] = [:]
     private var recoveryResetWork: DispatchWorkItem?
     private var recoveryResetKey: String?
@@ -2925,8 +2925,9 @@ final class ComposerController {
     /// from earlier turns. Older servers get `run.interrupt` with `holdQueue` on the active run
     /// (I-composer-flow 2.1). No local "stopping" state; the button stays until the run settles.
     /// `done` runs once the server answered, or at once when there was nothing to send.
-    private func stop(done: (@MainActor () -> Void)? = nil) {
-        guard let shell, case .thread(let threadId) = target, let projection else { done?(); return }
+    /// `done` learns whether the server accepted the command.
+    private func stop(done: (@MainActor (_ accepted: Bool) -> Void)? = nil) {
+        guard let shell, case .thread(let threadId) = target, let projection else { done?(false); return }
         let commandId = JSONValue.string(UUID().uuidString.lowercased())
         let payload: JSONValue
         if let env = threadId.environmentId, capabilities[env]?.threadStop == true {
@@ -2936,7 +2937,7 @@ final class ComposerController {
             // The shell's activeRunId skips `waiting`; T3's helper falls back to the projection's last live run, then
             // to the latest run while background work is pending (commands.ts:813-835).
             let background = shellThread?.backgroundTasks.isEmpty == false ? projection.runs.last?.id : nil
-            guard let runId = state.activeRunId ?? projection.runs.last(where: { $0.status == .waiting })?.id ?? background else { done?(); return }
+            guard let runId = state.activeRunId ?? projection.runs.last(where: { $0.status == .waiting })?.id ?? background else { done?(false); return }
             payload = .object([
                 "type": .string("run.interrupt"), "commandId": commandId,
                 "threadId": .string(threadId.localId.rawValue), "runId": .string(runId.rawValue), "holdQueue": .bool(true),
@@ -2945,8 +2946,9 @@ final class ComposerController {
         let supervisor = shell.supervisor
         let key = draftKey
         Task { [weak self] in
-            defer { done?() }
-            do { _ = try await supervisor.request("orchestration.dispatchCommand", payload: payload) } catch {
+            var accepted = false
+            defer { done?(accepted) }
+            do { _ = try await supervisor.request("orchestration.dispatchCommand", payload: payload); accepted = true } catch {
                 if let rpc = error as? RPCClientError, rpc.isTransport { return }
                 self?.report(.interrupt(Self.message(error)), key: key)
             }
@@ -5795,14 +5797,26 @@ extension ComposerController {
         let presentation = composer.runState.canInterrupt ? nil : thread.flatMap { BackgroundWorkPresentation.present($0.backgroundTasks, awaitedMarked: $0.marksAwaitedWork) }
         panel.showsBackgroundWork = presentation != nil
         guard let thread, let presentation else { return }
+        let stopping = BackgroundWorkPresentation.stopPending(backgroundWorkStop, threadId: thread.id, tasks: thread.backgroundTasks)
         let stopWork: @MainActor () -> Void = { [weak self] in
-            guard let self, self.stoppingBackgroundWork != thread.id, self.openThreadId == thread.id else { return }
-            self.stoppingBackgroundWork = thread.id
+            guard let self, !stopping, self.openThreadId == thread.id else { return }
+            let request = BackgroundWorkPresentation.StopRequest(threadId: thread.id, taskIds: Set(thread.backgroundTasks.map(\.taskId)))
+            self.backgroundWorkStop = request
             self.updateThreadBanners()
-            // Acceptance does not confirm termination: Stop comes back for a retry while the tasks wind down.
-            self.stop { [weak self] in
-                guard let self, self.stoppingBackgroundWork == thread.id else { return }
-                self.stoppingBackgroundWork = nil
+            // Acceptance does not end the tasks: "Stopping..." stays while they are listed, and Stop comes back
+            // after 10 s for a retry (useThreadLifecycle.tsx:436-473).
+            self.stop { [weak self] accepted in
+                guard let self, self.backgroundWorkStop == request else { return }
+                if accepted {
+                    self.backgroundWorkStop?.retryAt = Date().addingTimeInterval(BackgroundWorkPresentation.stopRetryAfter)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + BackgroundWorkPresentation.stopRetryAfter) { [weak self] in
+                        guard let self, self.backgroundWorkStop?.taskIds == request.taskIds, self.backgroundWorkStop?.threadId == thread.id else { return }
+                        self.backgroundWorkStop = nil
+                        self.updateThreadBanners()
+                    }
+                } else {
+                    self.backgroundWorkStop = nil
+                }
                 self.updateThreadBanners()
             }
         }
@@ -5826,7 +5840,6 @@ extension ComposerController {
         parts = parts.reduce(into: []) { merged, part in
             if part.link == nil, let last = merged.last, last.link == nil { merged[merged.count - 1].text += part.text } else { merged.append(part) }
         }
-        let stopping = stoppingBackgroundWork == thread.id
         let banner = panel.backgroundWorkBanner
         banner.apply(.init(variant: .neutral, icon: .info, title: presentation.title, actions: [stopping ? "Stopping..." : "Stop"],
                            priority: .activity, dot: presentation.waiting ? .pulsing : .still, descriptionParts: parts))
