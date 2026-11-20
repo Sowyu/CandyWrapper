@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Features
 
@@ -36,5 +37,31 @@ struct TerminalLinksTests {
         }
         let line = "src/server.ts:12 GET /api/users?id=42 200 /app/bin/server:3:7 https://example.com/api/users?id=42"
         #expect(TerminalLinks.extract(line).map(\.text) == ["src/server.ts:12", "/app/bin/server:3:7", "https://example.com/api/users?id=42"])
+    }
+}
+
+/// 4928 terminal-links.test.ts cases for the new patterns (#28189, #30603, #35404, #36174, #37071, #37201).
+struct TerminalLinks4928Tests {
+    @Test(arguments: ["src/app/[id]/page.tsx:3:10", "src/routes/(app)/+page.svelte:12:4", "src/contact@support.vue:12:3",
+                      "src/foo$contact@support.ts:12:3", "node_modules/.pnpm/react@18.3.1/node_modules/react/index.js:12:5",
+                      "app/routes/posts.$id.tsx:5", "main.c:1:25", "page.test.tsx:5:3", "+page.svelte:12:4", "contact@support.ts:12:3"])
+    func keepsTheCompleteRelativePath(_ text: String) {
+        let n = (text as NSString).length
+        #expect(TerminalLinks.extract("see \(text) for details") == [TerminalLinks.Match(kind: .path, text: text, start: 4, end: 4 + n)])
+    }
+
+    @Test(arguments: ["connected to redis://127.0.0.1:6379/0", "connected to postgres://localhost:5432/app", "uploaded s3://bucket/reports/today.csv",
+                      "    at main (file:///Users/jane/app/src/index.mjs:3:7)", "+redis://localhost:6379/0", "-redis://localhost:6379/0",
+                      "git clone git@github.com:acme/widgets.git", "remote: git@gitlab.com:group/sub/project.git"])
+    func nonWebURLsGiveNoEditorLink(_ line: String) {
+        #expect(TerminalLinks.extract(line).isEmpty)
+    }
+
+    @Test func fileLinksBesideANonWebURLAndTypeScriptLocations() {
+        #expect(TerminalLinks.extract("src/db.ts:4 redis://localhost:6379/0 C:/app/src/db.ts:9") == [
+            .init(kind: .path, text: "src/db.ts:4", start: 0, end: 11), .init(kind: .path, text: "C:/app/src/db.ts:9", start: 37, end: 55)])
+        #expect(TerminalLinks.extract("src/main.ts(42,7): error TS2322: Type mismatch") == [.init(kind: .path, text: "src/main.ts:42:7", start: 0, end: 17)])
+        #expect(TerminalLinks.extract(#"PS C:\dev\folder (42,7)> "#).first?.text == #"C:\dev\folder (42,7)"#)
+        #expect(TerminalLinks.extract("prose like host:8080 stays text").isEmpty)
     }
 }
