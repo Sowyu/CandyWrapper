@@ -25,6 +25,17 @@ public enum ProjectOrganization {
         return open.filter(\.pinned) + open.filter { !$0.pinned }
     }
 
+    /// `newThreadNoProjectIndex` (CommandPalette.logic.ts at 4928): where "No project" goes among the new-thread picker's
+    /// real projects. At the scratch project's own place when it is pinned or current, else after the pinned projects
+    /// and the first unpinned one.
+    public static func noProjectIndex(_ entries: [(isScratch: Bool, pinned: Bool, isPreferred: Bool)]) -> Int {
+        let projects = entries.filter { !$0.isScratch }
+        if let at = entries.firstIndex(where: \.isScratch), entries[at].pinned || entries[at].isPreferred {
+            return entries[..<at].filter { !$0.isScratch }.count
+        }
+        return min(projects.filter(\.pinned).count + 1, projects.count)
+    }
+
     /// `shouldCreateNewThreadInCurrentProject` (sidebarProjectGrouping.ts at 4928): "New thread" skips the project
     /// picker with Shift, with exactly one open project, or with none at all.
     public static func newThreadInCurrentProject(shift: Bool, openGroups: Int, allGroups: Int) -> Bool {

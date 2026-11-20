@@ -40,6 +40,21 @@ struct SidebarProjectFilterTests {
         #expect(!ProjectOrganization.newThreadInCurrentProject(shift: false, openGroups: 0, allGroups: 2))
     }
 
+    /// CommandPalette.logic.test.ts at 4928: "No project" follows the pinned projects and the first other one, or keeps
+    /// the scratch project's place when that one is pinned or current.
+    @Test func noProjectGoesAfterThePins() {
+        typealias E = (isScratch: Bool, pinned: Bool, isPreferred: Bool)
+        let plain: [E] = [(false, false, false), (false, false, false), (true, false, false)]
+        #expect(ProjectOrganization.noProjectIndex(plain) == 1)
+        let pinned: [E] = [(false, true, false), (false, true, false), (false, false, false), (true, false, false)]
+        #expect(ProjectOrganization.noProjectIndex(pinned) == 3)
+        let scratchCurrent: [E] = [(true, false, true), (false, false, false)]
+        #expect(ProjectOrganization.noProjectIndex(scratchCurrent) == 0)
+        let scratchPinned: [E] = [(false, true, false), (true, true, false), (false, false, false)]
+        #expect(ProjectOrganization.noProjectIndex(scratchPinned) == 1)
+        #expect(ProjectOrganization.noProjectIndex([]) == 0)
+    }
+
     @Test func pinningFromARowKeepsTheOrderWhileOpen() {
         let groups = SidebarListBuilder.projectScopeGroups(snapshot: Self.snapshot())
         let view = SidebarProjectScopeView(groups: groups, selectedKey: nil, minimumWidth: 200, canPin: { _ in true })

@@ -998,6 +998,16 @@ final class SidebarCommands {
     func addProject(path: String, environmentId env: String) {
         let projects = (snapshot?.projects ?? []).filter { $0.id.environmentId == env }
         if let existing = ProjectCommands.existing(projects, workspaceRoot: path) {
+            // Adding an archived project's folder again brings the project back (CommandPalette.tsx:2003-2010 at 4928).
+            if existing.archivedAt != nil {
+                Task { [weak self] in
+                    do {
+                        _ = try await self?.environments.request(env, "projects.mutate", ProjectOrganization.update(projectId: existing.id.localId.rawValue, archived: false))
+                    } catch {
+                        self?.fail("Failed to unarchive project", error)
+                    }
+                }
+            }
             let latest = (snapshot?.threads ?? []).filter { $0.projectId == existing.id }
                 .max { SidebarModel.getThreadSortTimestamp($0, .updatedAt) < SidebarModel.getThreadSortTimestamp($1, .updatedAt) }
             if let latest, latest.settledOverride != .settled { threads.open(latest.id) } else { threads.newThread(in: existing) }
