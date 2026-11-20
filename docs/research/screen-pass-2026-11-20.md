@@ -4,6 +4,30 @@ The first look at the Nightly 4928 port in a real window, on branch `screen-pass
 
 The app ran against the 4928 sandbox on port 47392 with `--fake-t3-connect`, in default dark, default light and Redesign dark, in a 1342 by 912 pt window on a 1x screen. It used 12 real Haiku 5.5 turns.
 
+## Verdicts after screen-fixes, 2026-11-20
+
+Branch `screen-fixes` from `catchup-4928`. Before and after crops live in `~/CandyWrapper-research/sandbox/screen-fixes-2026-11-20/`, called `$F` below. Each fix was checked in a real window against the 4928 sandbox, and the rail in default dark, default light and Redesign dark.
+
+1. Fixed. The rail never needed the app switch: any pointer that moved right off the rail onto the card or the messages kept the fisheye and card up, because the hover area still held T3's old 352pt band and the card. At 4928 the hit strip is at most 40pt (MessagesTimeline.logic.ts:482-497) and the card is `pointer-events-none` (TimelineMinimap.tsx:229). `$F/rail-exits-after-fix-default-dark.mov`.
+2. Fixed. Reply was gated on `serverUpdateStaging`, which only boot-service installs report; it now keys on `shellThreadFamilies`. `$F/reply-banner-after-default-dark.png`.
+3. Fixed. The panel hid only the banners it listed when they left the stack, and the fresh-session, reply and fallback banners were missing. `$F/fresh-session-banner-on-new-thread-after-default-dark.png`.
+4. Fixed in code. The link hit view gave quote cards their URL as a tooltip. Not seen on screen: synthetic drags did not select reply text, so no new quote card could be sent.
+5. Not a bug. The tooltip names `sky.png` because it belongs to the `sky.png` image cell now under the still pointer; the header beside it names `sky2.png`. HoverSync opens it as Chromium's hover update after layout does.
+6. Fixed. A card due 150ms after the hover opened beside a menu a quick right-click had opened; and a card the host closed left the list thinking it was open. `$F/sidebar-context-menu-no-hover-card-after-default-dark.png`.
+7. Fixed. Stop now follows Submit. `$F/question-card-submit-then-stop-after-default-light.png`.
+8. Fixed in part. The first click selected on this build; the second lit row was the focus fill from the model click, which T3 draws only for `focus-visible`.
+9. Fixed for model rows. Redesign's list got no `mouseMoved`; it now takes HoverSync's pointer moves. `$F/docked-picker-row-hover-after-redesign-dark.png`. Legacy models opening on click is unchanged: it is a toggle, and Redesign is our own look.
+10. Not a bug. The paste tool exited right after writing, and another process then reads only its first pasteboard item. With the writer alive both files attach. `$F/paste-image-and-file-together-now-default-dark.png`.
+11. Already fixed before this pass: the nav reads "Source control & issues".
+12. Not reproduced. Archive lit in the nav when opened from the nav and from the palette with Settings closed. `$F/settings-archive-nav-highlight-now-default-dark.png`.
+13. Fixed. The dialog says "once at a set date".
+14. Fixed. The workspace icon trails the environment row. `$F/thread-details-env-row-after-default-light.png`.
+15. Fixed. File chip icons keep their file-type color, gray for text; seen in the composer chip.
+
+The two side-by-side differences the pass did not rank are different states. T3's model jump keys need `isDesktop` and the reference came from the web build; "Default" shows beside a default level that is not selected, and T3's capture had Medium selected (ComposerModelEffort.tsx:219-232). The image above a bubble with text joins at a 6pt corner, `rounded-br-md` (TimelineUserMessageRow.tsx:559); T3's capture had no text.
+
+Not reached this time: the title glimmer, folder drop, the rename field, the project filter notice, the prompt suggestion, send while uploading, "Stopping…", Resume's click guard and the undo notice's hover, which expired (5 s, as T3) before the pointer got there. Seen but not fixed: the sidebar's draft row shows its raw prompt, `[todo.txt](t3-context://…)`, in default and Redesign; that belongs to the sidebar task.
+
 ## Ten images that show the state of the app
 
 1. `/Users/administrator/CandyWrapper-research/sandbox/screen-pass-2026-11-20/BROKEN-message-rail-stuck-after-app-switch-default-dark.png`
