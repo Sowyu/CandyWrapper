@@ -402,7 +402,8 @@ public final class PullRequestCodeView: DSView {
             thread: t, canReply: d.capabilities.review.reply, canResolve: d.capabilities.review.resolve && PullRequestWriteLogic.canResolveThread(d, t),
             canReact: d.capabilities.reactions == true,
             canEdit: { c in PullRequestWriteLogic.canEditComment(d, author: c.author?.login, kind: "review-comment", hostAnswer: c.canEdit) },
-            actions: actions, cwd: d.workspaceRoot, nowMs: nowMs, startsExpanded: t.line != nil ? true : nil)
+            actions: actions, cwd: d.workspaceRoot, nowMs: nowMs, startsExpanded: t.line != nil ? true : nil,
+            lineBreaks: PullRequestDetailLogic.hardLineBreaks(d.provider))
         card.onResize = { [weak self] in self?.list.reloadAnnotations(); self?.needsLayout = true }
         if let onAddToChat { card.onAddToChat = { onAddToChat($0) } }
         threadCards[t.id] = card

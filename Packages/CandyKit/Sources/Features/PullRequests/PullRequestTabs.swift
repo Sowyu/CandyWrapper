@@ -513,7 +513,8 @@ final class CommentsItem: DSView, StackItem {
                                canReact: d.capabilities.reactions == true, editing: editingId == c.id,
                                collapsed: collapsed, open: openIds.contains(c.id), reply: reply,
                                replyCount: replyCount, replies: replies, moreReplies: more,
-                               addsToChat: onAddToChat != nil && !reply && PullRequestDetailLogic.chatSubject(c, d))
+                               addsToChat: onAddToChat != nil && !reply && PullRequestDetailLogic.chatSubject(c, d),
+                               lineBreaks: PullRequestDetailLogic.hardLineBreaks(d.provider))
         card.onAddToChat = { [weak self] in self?.onAddToChat?(c.id) }
         // A rebuilt list keeps the cards the reader opened (T3 keys them by detail and comment).
         card.onResize = { [weak self, weak card] in
@@ -729,7 +730,7 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
     init(_ c: PullRequestComment, nowMs: Int64, cwd: String, canEdit: Bool = false, canReact: Bool = false, editing: Bool = false,
          collapsed: PullRequestDetailLogic.Collapsed? = nil, open: Bool = false, reply: Bool = false,
          replyCount count: Int = 0, replies: PullRequestReplyList? = nil, moreReplies: PullRequestMoreRepliesLine? = nil,
-         addsToChat: Bool = false, chatIconOnly: Bool = false) {
+         addsToChat: Bool = false, chatIconOnly: Bool = false, lineBreaks: Bool = false) {
         self.replies = replies
         self.moreReplies = moreReplies
         // An empty verdict hides the body, unless this reader may rewrite it (the pencil lives there).
@@ -761,6 +762,7 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
         hover = HoverGroup(self) { [weak self] _ in self?.revealEdit() }
         if editing {
             let e = PullRequestMarkdownEditorView(value: c.body, label: "Edit comment", cwd: cwd)
+            e.lineBreaks = lineBreaks
             e.onCancel = { [weak self] in self?.onCancel?() }
             e.onSave = { [weak self] body in self?.onSave?(body) }
             editor = e
@@ -783,7 +785,8 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
         for l in [login, time, state] { l.lineHeight = 16; addSubview(l) }
         addSubview(avatar)
         body.cwd = cwd
-        if hasBody { body.setMarkdown(c.body) }
+        // Comments break lines where the host does, as the description does (PullRequestDetailPanel.tsx:302).
+        if hasBody { body.setMarkdown(c.body, preservesLineBreaks: lineBreaks) }
         addSubview(body)
         if let collapsed {
             headFill.isHidden = true
@@ -1033,7 +1036,8 @@ public final class PullRequestTimelineView: DSView {
         let items: [StackItem] = grouped.map { row in
             switch row {
             case .comments(let events):
-                let r = ConversationRow(events, nowMs: nowMs, cwd: d.workspaceRoot, addsToChat: onAddToChat != nil, linked: anchor)
+                let r = ConversationRow(events, nowMs: nowMs, cwd: d.workspaceRoot, addsToChat: onAddToChat != nil, linked: anchor,
+                                        lineBreaks: PullRequestDetailLogic.hardLineBreaks(d.provider))
                 r.onAddToChat = { [weak self] id in self?.onAddToChat?(id) }
                 if let anchor, events.contains(where: { PullRequestAnchor.matches(anchor, url: $0.url) }) { linkedRow = r }
                 return r
@@ -1050,7 +1054,8 @@ public final class PullRequestTimelineView: DSView {
                 }
                 if let outcome = PullRequestDetailLogic.reviewOutcome(e.reviewState) {
                     let stale = newestCommit.map { e.at < $0 } ?? false
-                    return TimelineEventRow(verdict: e, outcome: outcome, stale: stale, nowMs: nowMs, cwd: d.workspaceRoot)
+                    return TimelineEventRow(verdict: e, outcome: outcome, stale: stale, nowMs: nowMs, cwd: d.workspaceRoot,
+                                            lineBreaks: PullRequestDetailLogic.hardLineBreaks(d.provider))
                 }
                 return TimelineEventRow(lifecycle: e, nowMs: nowMs, provider: d.provider)
             }
@@ -1176,7 +1181,7 @@ final class TimelineEventRow: DSView, StackItem {
         hover = HoverGroup(self) { [weak self] _ in self?.redisplay(transitioning: .color) }
     }
 
-    init(verdict e: PullRequestDetailLogic.TimelineEvent, outcome: String, stale: Bool, nowMs: Int64, cwd: String) {
+    init(verdict e: PullRequestDetailLogic.TimelineEvent, outcome: String, stale: Bool, nowMs: Int64, cwd: String, lineBreaks: Bool = false) {
         marker = TimelineMarker(actor: e.actor, fallback: outcome == "approved" ? .circleCheck : outcome == "changes-requested" ? .circleX : .circleDashed)
         pinTop = true
         super.init(frame: .zero)
@@ -1191,7 +1196,7 @@ final class TimelineEventRow: DSView, StackItem {
         if let text = e.body {
             let m = MarkdownView()
             m.cwd = cwd
-            m.setMarkdown(text)
+            m.setMarkdown(text, preservesLineBreaks: lineBreaks)
             body = m
             addSubview(m)
         }
@@ -1250,7 +1255,7 @@ final class ConversationRow: DSView, StackItem {
         // `transition-transform`, `rotate-180` when open (PullRequestTimelineTab.tsx:336-341).
         chevron.setRotation(open ? 180 : 0) } }
 
-    init(_ events: [PullRequestDetailLogic.TimelineEvent], nowMs: Int64, cwd: String, addsToChat: Bool = false, linked: String? = nil) {
+    init(_ events: [PullRequestDetailLogic.TimelineEvent], nowMs: Int64, cwd: String, addsToChat: Bool = false, linked: String? = nil, lineBreaks: Bool = false) {
         var actors: [String: PullRequestActor] = [:]
         var order: [String] = []
         for e in events { if let a = e.actor, actors[a.login] == nil { actors[a.login] = a; order.append(a.login) } }
@@ -1264,7 +1269,7 @@ final class ConversationRow: DSView, StackItem {
         cards = events.map { e in
             let c = CommentCard(PullRequestComment(id: e.id, kind: e.kind == .review ? "review" : "issue-comment", author: e.actor, body: e.body ?? "",
                                                    createdAt: e.at, url: e.url, path: e.path, reviewState: e.reviewState), nowMs: nowMs, cwd: cwd,
-                                addsToChat: addsToChat && PullRequestDetailLogic.visibleBody(e.body ?? "") != nil, chatIconOnly: true)
+                                addsToChat: addsToChat && PullRequestDetailLogic.visibleBody(e.body ?? "") != nil, chatIconOnly: true, lineBreaks: lineBreaks)
             c.onAddToChat = { [weak self] in self?.onAddToChat?(e.id) }
             c.linked = linked.map { PullRequestAnchor.matches($0, url: e.url) } ?? false
             c.isHidden = true
@@ -1522,6 +1527,7 @@ final class PullRequestDescriptionItem: DSView, StackItem, FocusWithinObserver {
         guard let d = detail else { return }
         let e = PullRequestMarkdownEditorView(value: d.body, label: "\(ChangeRequestTerminology.of(kind: d.provider).title) description", placeholder: "Describe this \(ChangeRequestTerminology.of(kind: d.provider).singular)",
                                               allowEmpty: true, cwd: d.workspaceRoot)
+        e.lineBreaks = PullRequestDetailLogic.hardLineBreaks(d.provider)
         e.onCancel = { [weak self] in self?.stopEditing(); self?.onResize?() }
         e.onSave = { [weak self] body in self?.onSave?(body) }
         e.onResize = { [weak self] in self?.onResize?() }

@@ -67,3 +67,16 @@ struct PullRequestChatContextTests {
         #expect(C.records(d, commentId: d.comments[0].id).isEmpty)
     }
 }
+
+/// #26060 for comments: a comment breaks lines where its host does, as the description does.
+@MainActor
+struct PullRequestCommentLineBreakTests {
+    @Test func commentsKeepSingleLineBreaksWhenTheHostDoes() {
+        let c = PullRequestComment(id: "1", kind: "issue-comment", author: PullRequestActor(login: "a"), body: "line one\nline two", createdAt: "2026-10-10T00:00:00Z")
+        let soft = CommentCard(c, nowMs: 0, cwd: "/")
+        let hard = CommentCard(c, nowMs: 0, cwd: "/", lineBreaks: true)
+        #expect(hard.height(forWidth: 600) > soft.height(forWidth: 600))
+        #expect(PullRequestDetailLogic.hardLineBreaks("github"))
+        #expect(!PullRequestDetailLogic.hardLineBreaks("gitlab"))
+    }
+}

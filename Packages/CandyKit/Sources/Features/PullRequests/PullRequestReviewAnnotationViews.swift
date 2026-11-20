@@ -172,6 +172,7 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
     private let canReply: Bool
     private let canResolve: Bool
     private let canReact: Bool
+    private let lineBreaks: Bool
     private let canEdit: (PullRequestThreadComment) -> Bool
     private let actions: PullRequestReviewThreadActions
     private let cwd: String
@@ -199,7 +200,8 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
 
     public init(thread: PullRequestReviewThread, canReply: Bool, canResolve: Bool, canReact: Bool,
                 canEdit: @escaping (PullRequestThreadComment) -> Bool, actions: PullRequestReviewThreadActions, cwd: String, nowMs: Int64,
-                startsExpanded: Bool? = nil) {
+                startsExpanded: Bool? = nil, lineBreaks: Bool = false) {
+        self.lineBreaks = lineBreaks
         self.thread = thread
         self.canReply = canReply; self.canResolve = canResolve; self.canReact = canReact
         self.canEdit = canEdit; self.actions = actions; self.cwd = cwd; self.nowMs = nowMs
@@ -291,7 +293,7 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
         resolve.title = thread.isResolved ? "Unresolve" : "Resolve"
         commentViews.forEach { $0.removeFromSuperview() }
         commentViews = expanded ? comments.map { c in
-            let v = PullRequestThreadCommentView(c, cwd: cwd, nowMs: nowMs, canReact: canReact, canEdit: canEdit(c), editing: editingId == c.id)
+            let v = PullRequestThreadCommentView(c, cwd: cwd, nowMs: nowMs, canReact: canReact, canEdit: canEdit(c), editing: editingId == c.id, lineBreaks: lineBreaks)
             v.onEdit = { [weak self] in self?.editingId = c.id; self?.rebuild() }
             v.onCancel = { [weak self] in self?.editingId = nil; self?.rebuild() }
             v.onSave = { [weak self] body in
@@ -416,7 +418,7 @@ final class PullRequestThreadCommentView: DSView, FocusWithinObserver {
     private var hover: HoverGroup?
     private var focusWithin = false
 
-    init(_ c: PullRequestThreadComment, cwd: String, nowMs: Int64, canReact: Bool, canEdit: Bool, editing: Bool) {
+    init(_ c: PullRequestThreadComment, cwd: String, nowMs: Int64, canReact: Bool, canEdit: Bool, editing: Bool, lineBreaks: Bool = false) {
         super.init(frame: .zero)
         avatar.actor = c.author
         login.text = c.author?.login ?? "ghost"
@@ -425,7 +427,7 @@ final class PullRequestThreadCommentView: DSView, FocusWithinObserver {
         reactions.canReact = canReact
         reactions.reactions = c.reactions ?? []
         body.cwd = cwd
-        body.setMarkdown(c.body)
+        body.setMarkdown(c.body, preservesLineBreaks: lineBreaks)
         edit.iconSize = 12
         edit.setAccessibilityLabel("Edit comment")
         edit.isHidden = !canEdit || editing
@@ -435,6 +437,7 @@ final class PullRequestThreadCommentView: DSView, FocusWithinObserver {
         [avatar, login, time, reactions, body, edit].forEach(addSubview)
         if editing {
             let e = PullRequestMarkdownEditorView(value: c.body, label: "Edit comment", cwd: cwd)
+            e.lineBreaks = lineBreaks
             e.onCancel = { [weak self] in self?.onCancel?() }
             e.onSave = { [weak self] text in self?.onSave?(text) }
             e.onResize = { [weak self] in self?.onResize?() }
