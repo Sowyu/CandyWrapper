@@ -93,17 +93,26 @@ GHOST_MUTED_ICON_XS = ("[--control-icon-color:currentColor] [&_svg]:-mx-0.5 rela
                        "size-7 sm:size-6 not-in-data-[slot=input-group]:[&_svg:not([class*='size-'])]:size-4 sm:not-in-data-[slot=input-group]:[&_svg:not([class*='size-'])]:size-3.5 ml-auto")
 INPUT = "h-7.5 w-full min-w-0 rounded-[inherit] px-[calc(--spacing(2.5)-1px)] leading-7.5 outline-none placeholder:text-placeholder sm:h-6.5 sm:leading-6.5 [transition:background-color_5000000s_ease-in-out_0s]"
 
+# A scope row at 4928 (Sidebar.tsx:3120-3190, ProjectComboboxRow.tsx, #29639, #29704): the favicon, the label, then
+# `ProjectRowActions` with the settings button, visible on the highlighted row, and the pin column. These cases are a
+# server without `projectOrganization`, so the pin column is its `size-6` stand-in; "All projects" ends in one too.
 def scope_item(label, project=None, selected=False, highlighted=False):
     attrs = (' data-selected=""' if selected else "") + (' data-highlighted=""' if highlighted else "")
     icon = favicon(project, "size-4 shrink-0") if project else svg(FOLDER, "size-4 shrink-0")
     if selected:
         icon = ('<span class="relative flex shrink-0">' + icon + '<span class="pointer-events-none absolute -right-1 -bottom-1 grid size-3 place-items-center rounded-full bg-primary ring-2 ring-popover">'
                 + svg('<path d="M20 6 9 17l-5-5"></path>', 'size-2 text-primary-foreground').replace('stroke-width="2"', 'stroke-width="4"') + '</span></span>')
-    settings = (f'<button type="button" tabindex="-1" aria-hidden="true" class="{GHOST_MUTED_ICON_XS}">{svg(SETTINGS, "size-3.5")}</button>'
-                if project else "")
+    if project:
+        button = GHOST_MUTED_ICON_XS.removesuffix(" ml-auto")
+        actions = ('<span class="ml-auto flex shrink-0 items-center pointer-coarse:gap-1">'
+                   '<span class="flex pointer-fine:invisible pointer-fine:in-data-highlighted:visible">'
+                   f'<button type="button" tabindex="-1" aria-hidden="true" class="{button}">{svg(SETTINGS, "size-3.5")}</button></span>'
+                   '<span class="size-7 sm:size-6"></span></span>')
+    else:
+        actions = '<span class="ml-auto size-7 shrink-0 sm:size-6"></span>'
     return (f'<div role="option" data-slot="combobox-item" class="{ITEM}"{attrs}>'
             '<div class="flex min-w-0 flex-1 items-center gap-2 [&_svg:not([class*=\'text-\'])]:text-muted-foreground" data-slot="combobox-item-content">'
-            f'{icon}<span class="min-w-0 flex-1 truncate text-sm">{label}</span>{settings}</div></div>')
+            f'{icon}<span class="min-w-0 truncate text-sm">{label}</span>{actions}</div></div>')
 
 def scope_popup(query, items):
     search = ('<div class="min-w-0 shrink-0 px-3 pt-2.5"><div class="relative -translate-y-px border-b border-border/70 pb-1.5 transition-colors focus-within:border-ring">'
