@@ -13,6 +13,10 @@ public struct ComposerIncomingFile: Sendable {
 }
 
 public enum ComposerPasteboard {
+    /// `readPastedPlainText` (composerInlineTokenPaste.ts at 4928): CRLF and lone CR read as LF.
+    public static func normalizedLineBreaks(_ text: String) -> String {
+        text.utf16.contains(13) ? text.replacingOccurrences(of: "\r\n?", with: "\n", options: .regularExpression) : text
+    }
     /// Files on a pasteboard: file URLs first, else raw image data (a copied screenshot) written
     /// to a PNG in `tempDir` named `image.png`, as Chromium names a pasted image.
     public static func files(_ pboard: NSPasteboard, tempDir: URL) -> [ComposerIncomingFile] {

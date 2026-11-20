@@ -133,6 +133,13 @@ public enum ComposerAttachmentRules {
         return uploadBlockReason(attachments.map(\.status))
     }
 
+    /// The send button's block for a draft's attachments at 4928 (#33092, ChatComposer.tsx:758-769): a plain send
+    /// goes while uploads run and starts once they land, so only an approval redirect, which declines first and
+    /// can't take that back, still waits for them. Interrupted files always block.
+    public static func sendBlockReason(_ attachments: [ComposerAttachment], redirectsApproval: Bool) -> String? {
+        redirectsApproval || attachments.contains(where: \.needsReattach) ? uploadBlockReason(attachments) : nil
+    }
+
     /// The failed uploads a send starts again (`retryAttachmentUpload`, ChatView.tsx:6438-6446).
     public static func retryableFailures(_ attachments: [ComposerAttachment]) -> [ComposerAttachment] {
         attachments.filter { a in

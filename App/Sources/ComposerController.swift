@@ -266,6 +266,11 @@ final class ComposerController {
     private var sendAfterRetry: [String: (text: String, mode: ComposerLogic.SendMode, background: Bool)] = [:]
     /// Images still being prepared per draft key: they hold their attachment slots.
     private var preparingImages: [String: Int] = [:]
+    /// `/clear` armed per thread key (freshSessionArms.ts at 4928): the next message starts a fresh provider session.
+    /// The value tells a send's arm from one made while it was in flight.
+    private var freshSessionArms: [String: UUID] = [:]
+    /// A send made while images were being prepared, by draft key; it goes with the composer's text once they join.
+    private var sendAfterPreparing: [String: (mode: ComposerLogic.SendMode, background: Bool)] = [:]
     /// Uploaded attachment ids to their local file, so a sent image shows before the server copy is fetched.
     private var sentFiles: [String: URL] = [:]
     /// Server copies being fetched, so a cell and a chip asking for one image share one download.
@@ -360,6 +365,12 @@ final class ComposerController {
         pickers.onBlocked = { [weak self] reason in self?.report(.modelChangeBlocked(reason), key: nil) }
         // ponytail: Settings has no page per provider, so Manage lands on Providers; deep-link when it gets one
         pickers.onManageProvider = { [weak self] _ in self?.openProviderSetup?() }
+        // #33511: an opened picker asks a 4928 server for newly released models; older servers would drop the
+        // field and probe every provider, so they get nothing (ProviderModelPicker.tsx:139-150).
+        pickers.onModelPickerOpen = { [weak self] in
+            guard let supervisor = self?.shell?.supervisor, self?.serverConfig.capabilities.contains("modelCatalogRefresh") == true else { return }
+            Task { _ = try? await supervisor.request("server.refreshProviders", payload: .object(["modelCatalogOnly": .bool(true)])) }
+        }
         panel.errorBanner.onDismiss = { [weak self] in self?.dismissThreadError() }
         // ThreadErrorBanner.tsx:17-27: the admin request goes to the clipboard with a toast either way.
         panel.errorBanner.onCopyAdminRequest = { [weak self] in
@@ -376,6 +387,7 @@ final class ComposerController {
             self?.composer.needsLayout = true
             self?.onTargetChange?()
             self?.onModelChange?()
+            self?.applyThreadModelPick()
         }
         let queue = panel.queue
         queue.threadTitle = { [weak panel] in panel?.model.linkedThread?($0)?.title }
@@ -1561,6 +1573,18 @@ final class ComposerController {
                 self?.refresh()
             }
             panel.providerBanner.setup.action = { [weak self] in self?.openProviderSetup?() }
+            // Refresh probes that instance again (ProviderStatusBanner.tsx at 4928, #24861).
+            let refreshEnv = targetEnvironmentId, instance = provider?.instanceId
+            panel.providerBanner.refresh.action = { [weak self] in
+                guard let self, let refreshEnv, let instance, let supervisor = self.environments.session(refreshEnv)?.supervisor,
+                      self.environments.canOperate(refreshEnv), !self.panel.providerBanner.refreshing else { return }
+                self.panel.providerBanner.refreshing = true
+                Task { [weak self] in
+                    _ = try? await supervisor.request("server.refreshProviders", payload: .object([
+                        "instanceId": .string(instance.rawValue), "refreshModels": .bool(true)]))
+                    self?.panel.providerBanner.refreshing = false
+                }
+            }
             panel.needsLayout = true
         }
         panel.updateComposerShown()
@@ -1603,7 +1627,14 @@ final class ComposerController {
 
     /// The question closed: the thread's prompt comes back to the editor.
     private func leaveQuestion() {
-        guard questionRequestId != nil else { return }
+        guard let requestId = questionRequestId else { return }
+        // A question that closed unanswered (Stop, a timeout) never sent what was typed (#23617).
+        if let status = projection?.runtimeRequests.first(where: { $0.id == requestId })?.status, status == "cancelled" || status == "expired",
+           let session = panel.lazyQuestionPanel.loaded?.session, session.request.requestId == requestId, let key = draftKey {
+            let next = UserInputAnswers.returningUnsent(prompts[key] ?? "", questions: session.request.questions, drafts: session.drafts)
+            prompts[key] = next.isEmpty ? nil : next
+            scheduleSave()
+        }
         questionRequestId = nil
         composer.fileRows = []
         composer.text = queuedEdit?.text ?? draftKey.flatMap { prompts[$0] } ?? ""
@@ -1707,7 +1738,7 @@ final class ComposerController {
         let mode = ComposerPickers.modes[pickers.current.runtimeMode] ?? ComposerPickers.modes[.fullAccess]!
         strip.permissions.text = mode.label
         strip.permissions.glyphs = [pickers.current.runtimeMode == .fullAccess ? ComposerPickers.fullAccessGlyph : mode.icon.definition]
-        strip.permissions.action = { [weak self] in self?.pickers.openAccessMode() }
+        strip.permissions.action = { [weak self, weak strip] in if let strip { self?.pickers.openPermissions(from: strip.permissions) } }
         panel.model.providers = serverConfig.providers
         onModelChange?()
         // No enabled provider (ChatComposer.tsx:2140-2153): sending stays blocked, and once the catalog
@@ -1745,9 +1776,10 @@ final class ComposerController {
     private func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool = false, redirecting: Bool = false, compactConfirmed: Bool = false) {
         guard !threadRewindBusy, !declineInFlight else { return }
         let sentText = text
-        // A send now would leave a still-compressing pasted image behind (ChatComposer.tsx:4222-4237).
+        // A send now would leave a still-compressing image out of the turn, so it waits and goes once they finish
+        // (#37547, ChatComposer.tsx `useSubmitAfterPreparingImages` at 4928).
         if let key = draftKey, (preparingImages[key] ?? 0) > 0 {
-            toast(.info, "Still compressing a pasted image.", "Send again once its thumbnail appears.")
+            sendAfterPreparing[key] = (mode, background)
             return
         }
         if case .draft(let draft) = target, draft.envMode == nil, let task = settingsWorkspaceTask {
@@ -1831,6 +1863,14 @@ final class ComposerController {
             if openUsageLimits() { composer.text = ""; remember("") }
             return
         }
+        // `/clear` alone arms a fresh session for the next message and empties the composer (useComposerSend.ts at 4928).
+        if freshSessionCommandAvailable, attachments.isEmpty, ComposerContext.referencedIds(trimmed).isEmpty,
+           ComposerMenus.isClearCommand(trimmed), let key = draftKey {
+            armFreshSession(key)
+            composer.text = ""
+            remember("")
+            return
+        }
         // The panel closes when the next message goes.
         if !trimmed.isEmpty || !attachments.isEmpty { panel.usageLimitsBanner = nil }
         guard !trimmed.isEmpty || !attachments.isEmpty else { return }
@@ -1843,8 +1883,14 @@ final class ComposerController {
             for a in failed { retryAttachment(a.id) }
             return
         }
-        // Every upload must be done (`attachmentUploadBlockReason`), within the turn's limits.
-        guard ComposerAttachmentRules.uploadBlockReason(attachments) == nil else { return }
+        // A plain send waits for running uploads and goes once they land (#33092, useComposerSend.ts:838-916 at
+        // 4928); an approval redirect needs them first. Interrupted files block.
+        guard ComposerAttachmentRules.sendBlockReason(attachments, redirectsApproval: !requests.approvals.isEmpty) == nil else { return }
+        if let key = draftKey, ComposerAttachmentRules.uploadBlockReason(attachments) != nil {
+            sendAfterRetry[key] = (sentText, mode, background)
+            refresh()
+            return
+        }
         if let limit = ComposerAttachmentRules.providerLimitError(attachments.map { ($0.kind == .image, $0.sizeBytes) }) {
             if let key = draftKey { threadErrors.set(key, limit) }
             refresh()
@@ -1962,7 +2008,9 @@ final class ComposerController {
         // A stale Claude session compacts first and the message queues behind the `/compact` run, since
         // steering into it is rejected (`compactBeforeSend`, ChatView.tsx:9267-9276).
         var compactFirst = false
-        if case .thread = target {
+        // Read once: an arm made while this send is in flight belongs to the next message.
+        let freshArm = freshSessionAvailable ? picksKey.flatMap { freshSessionArms[$0] } : nil
+        if case .thread = target, freshArm == nil {
             compactFirst = ComposerCompaction.compactsBeforeSend(resumeTokens: composer.compactBeforeSendTokens,
                                                                  keepFullHistory: composer.keepFullHistory, text: trimmed)
         }
@@ -1980,7 +2028,8 @@ final class ComposerController {
             }
             return
         }
-        let mode: ComposerLogic.SendMode = compactFirst ? .queue : mode
+        // A fresh session neither compacts first nor steers (`resolveSendDispatchPlan`, ChatView.logic.ts at 4928).
+        let mode: ComposerLogic.SendMode = compactFirst || (freshArm != nil && mode == .steer) ? .queue : mode
         // Optimistic echo, then clear the composer before the command returns (ChatView.tsx:9763-9793).
         let intent: InputIntent? = mode == .queue ? .queuedTurn : mode == .steer ? .steer : nil
         // Every attachment rides as a record bound to its upload (`buildMessageContext`).
@@ -2069,6 +2118,7 @@ final class ComposerController {
             ]
             if let deliveryIntent { command["deliveryIntent"] = .string(deliveryIntent) }
             if let context { command["context"] = context }
+            if freshArm != nil { command["freshContext"] = .bool(true) }
             if let plan = implementationPlan {
                 command["sourcePlanRef"] = .object(["threadId": .string(threadId.localId.rawValue), "planId": .string(plan.id.rawValue)])
             }
@@ -2097,6 +2147,7 @@ final class ComposerController {
                     _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object(command))
                     // The turn is under way: the chip's off state for this thread is spent (ChatView.tsx:9984-9986).
                     if let picksKey { self?.fullHistoryThreadKeys.remove(picksKey) }
+                    if let picksKey, let freshArm { self?.disarmFreshSession(picksKey, arm: freshArm) }
                     self?.sentSnapShots(attachments)
                     if let picksKey { self?.pickers.store.didSend(picksKey) }
                     self?.refresh()
@@ -2425,6 +2476,64 @@ final class ComposerController {
     }
 
     /// The server's message for a failed command, else nil for the caller's fallback.
+    // MARK: Fresh session (`/clear`, #30325)
+
+    /// `freshSessionAvailable` (ChatView.tsx:2578-2579 at 4928): a server that honors `freshContext`, on a thread with messages.
+    private var freshSessionAvailable: Bool {
+        guard case .thread = target, serverConfig.capabilities.contains("freshContext") else { return false }
+        return !(projection?.messages.isEmpty ?? true)
+    }
+
+    /// While a question or approval owns the composer, its text answers that, not the agent (ChatView.tsx:2581-2582).
+    private var freshSessionCommandAvailable: Bool {
+        freshSessionAvailable && requests.approvals.isEmpty && requests.userInputs.isEmpty
+    }
+
+    private func armFreshSession(_ key: String) {
+        freshSessionArms[key] = UUID()
+        updateFreshSessionBanner()
+    }
+
+    /// With `arm`, clears only that arm, so a send never consumes one made while it was in flight.
+    private func disarmFreshSession(_ key: String, arm: UUID? = nil) {
+        guard let current = freshSessionArms[key], arm == nil || arm == current else { return }
+        freshSessionArms[key] = nil
+        updateFreshSessionBanner()
+    }
+
+    /// `freshSessionBannerItem` (ComposerFreshSession.tsx at 4928); an approval's feedback goes to that approval, so
+    /// the banner waits while one shows (ChatView.tsx:2691-2695).
+    private func updateFreshSessionBanner() {
+        let key = draftKey.flatMap { freshSessionArms[$0] == nil ? nil : $0 }
+        let shown = freshSessionAvailable && requests.approvals.isEmpty ? key : nil
+        if let shown, panel.freshSessionKey != shown {
+            let banner = panel.lazyFreshSessionBanner.view
+            banner.apply(.init(variant: .neutral, icon: .eraser, // `info` draws as neutral (ComposerBanner.tsx:29-35)
+                               title: "Your next message starts a fresh session",
+                               description: "The agent won't see earlier messages in this thread.",
+                               dismissLabel: "Keep the current session"))
+            banner.onAction = { [weak self] index in if index == nil { self?.disarmFreshSession(shown) } }
+        }
+        panel.freshSessionKey = shown
+    }
+
+    /// #31739: a model or effort pick on a started thread saves on the thread at once, so the next turn from any
+    /// client runs on it (useApplyThreadModelPick.ts at 4928). Draft reconciliation drops the pick once it lands.
+    private func applyThreadModelPick() {
+        guard let id = openThreadId, let supervisor = shell?.supervisor,
+              let pick = pickers.store.modelPickToApply(pickers.draftKey, pickers.context) else { return }
+        Task { [weak self] in
+            do {
+                _ = try await supervisor.request("orchestration.dispatchCommand",
+                                                 payload: ThreadCommands.setModelSelection(id.localId, ThreadSession.encode(pick)))
+            } catch {
+                let detail = Self.message(error) ?? "Try again."
+                self?.panel.toasts.show(ToastView(title: "Could not apply model selection",
+                                                  message: "This model pick was not saved. \(detail)", kind: .error))
+            }
+        }
+    }
+
     private static func message(_ error: Error) -> String? {
         (error as? RPCClientError)?.typedError?.message
     }
@@ -2503,7 +2612,8 @@ final class ComposerController {
     // MARK: Queue
 
     /// One queue command (`queued-run.cancel`, `queued-run.start`): the strip is busy until it returns.
-    private func queueCommand(_ type: String, _ fields: [String: JSONValue]) {
+    private func queueCommand(_ type: String, _ fields: [String: JSONValue],
+                              failure: @escaping (Error) -> ComposerFeedback.Failure = { _ in .queueCommand }) {
         guard let shell, case .thread(let threadId) = target, !queueBusy else { return }
         var command = fields
         command["type"] = .string(type)
@@ -2515,8 +2625,8 @@ final class ComposerController {
         Task { [weak self] in
             defer { self?.queueBusy = false; self?.refresh() }
             do { _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object(command)) } catch {
-                // T3 only logs these (QueuedRunsControl.tsx:168-245 through useAtomCommand).
-                self?.report(.queueCommand, key: nil)
+                // T3 only logs these (QueuedRunsControl.tsx:168-245 through useAtomCommand), except Send now.
+                self?.report(failure(error), key: nil)
             }
         }
     }
@@ -2525,7 +2635,7 @@ final class ComposerController {
     /// own turn with `queued-run.start`; a running one steers it in.
     private func sendQueued(_ runId: RunId) {
         if panel.queue.state.canSendNow {
-            queueCommand("queued-run.start", ["runId": .string(runId.rawValue)])
+            queueCommand("queued-run.start", ["runId": .string(runId.rawValue)]) { .queueSendNow(Self.message($0)) }
         } else {
             promoteToSteer(runId)
         }
@@ -2534,7 +2644,9 @@ final class ComposerController {
     /// Steer now: the server cancels the queued run and steers the same message into the active run.
     private func promoteToSteer(_ runId: RunId) {
         guard let active = panel.queue.state.activeRunId, panel.queue.state.canPromoteToSteer else { return }
-        queueCommand("queued-message.promote-to-steer", ["queuedRunId": .string(runId.rawValue), "targetRunId": .string(active.rawValue)])
+        queueCommand("queued-message.promote-to-steer", ["queuedRunId": .string(runId.rawValue), "targetRunId": .string(active.rawValue)]) {
+            .queueSendNow(Self.message($0))
+        }
     }
 
     private func beginEdit(_ item: ComposerLogic.QueueState.Item) {
@@ -2680,6 +2792,8 @@ extension ComposerController {
         guard let (key, session) = sessions.first(where: { $0.value.draftId == draftId }) else { return }
         sessions[key] = nil
         prompts[draftId] = nil
+        sendAfterPreparing[draftId] = nil
+        sendAfterRetry[draftId] = nil
         pickers.store.didSend(draftId)
         if target == .draft(session), let project = sidebar?.snapshot?.projects.first(where: { $0.id.rawValue == session.projectId }) {
             composer.text = ""
@@ -3103,7 +3217,7 @@ extension ComposerController {
             let items = ComposerMenus.slashItems(trigger: trigger, provider: providerKey, commands: provider?.slashCommands(cwd: cwd) ?? [],
                                                  skills: provider?.skills(cwd: cwd) ?? [],
                                                  showSkills: ClientSettingsStore.shared.current.bool("showSkillsInSlashMenu"),
-                                                 compactAvailable: compact)
+                                                 compactAvailable: compact, freshSessionAvailable: freshSessionCommandAvailable)
             return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .slashCommand, loading: false))
         case .skill:
             let items = ComposerMenus.skillItems(query: trigger.query, provider: providerKey, skills: provider?.skills(cwd: cwd) ?? [])
@@ -3117,7 +3231,7 @@ extension ComposerController {
             }
             let key = pathKey(trigger.query)
             let entries = menuState.paths.flatMap { $0.key == key ? $0.entries : nil } ?? []
-            let loading = !trigger.query.isEmpty && key != nil && menuState.paths?.key != key
+            let loading = key != nil && menuState.paths?.key != key
             let machines = ComposerMenus.environmentItems(query: trigger.query,
                 environments: composerLinkedNames.sorted { $0.key < $1.key }.map {
                     .init(id: $0.key, label: $0.value, machine: environments.machine($0.key) ?? "server")
@@ -3165,7 +3279,8 @@ extension ComposerController {
             menuState.pathTask?.cancel()
             let query = trigger.query.trimmingCharacters(in: .whitespacesAndNewlines)
             searchMenuThreads(query, shell: shell)
-            guard !query.isEmpty, let cwd = menuCwd, let key = pathKey(query), menuState.paths?.key != key else { return }
+            // A bare `@` lists the workspace's files too (#36435, useProjectPathSearch `allowEmptyQuery` at 4928).
+            guard let cwd = menuCwd, let key = pathKey(query), menuState.paths?.key != key else { return }
             menuState.pathTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(ComposerMenus.pathSearchDebounce))
                 guard !Task.isCancelled else { return }
@@ -3345,6 +3460,9 @@ extension ComposerController {
         case .providerCommand("usage-limits"):
             // Picking it is the action; the draft keeps nothing of it (ChatComposer.tsx:4026-4033).
             DispatchQueue.main.async { [weak self] in self?.openUsageLimits() }
+        case .builtIn("clear"):
+            // The token goes and the next message starts a fresh session (ChatComposer.tsx `item.command === "clear"`).
+            if let key = draftKey, freshSessionCommandAvailable { armFreshSession(key) }
         case .builtIn(let mode):
             if let key = draftKey { pickers.store.setInteractionMode(key, mode == "plan" ? .plan : .default) }
             updatePickers()
@@ -3769,7 +3887,7 @@ extension ComposerController {
         let composerFull = { (self.draftAttachments[key]?.count ?? 0) + (self.preparingImages[key] ?? 0) >= ComposerAttachmentRules.maxAttachments }
         guard destination.question != nil || !composerFull() else { throw CancellationError() }
         preparingImages[key, default: 0] += 1
-        defer { preparingImages[key, default: 1] -= 1 }
+        defer { preparingImages[key, default: 1] -= 1; resumeSendAfterPreparing(key) }
         // The pinned question gets the capture while it is still the open one (SnapShotCoordinator.tsx:175-197).
         var question: (key: String, requestId: String)? {
             guard let pinned = destination.question, pinned == snapShotQuestionKey, draftKey == key,
@@ -3994,6 +4112,7 @@ extension ComposerController {
             // Only failures are reported here, so a later error is never cleared by this one.
             if let failure { threadErrors.set(key, failure) }
             refresh()
+            resumeSendAfterPreparing(key)
         }
     }
 
@@ -4057,6 +4176,12 @@ extension ComposerController {
             }
             resumeSendAfterRetry(key)
         }
+    }
+
+    /// The held send goes once no image is being prepared, if its draft is still the open one.
+    private func resumeSendAfterPreparing(_ key: String) {
+        guard (preparingImages[key] ?? 0) == 0, let pending = sendAfterPreparing.removeValue(forKey: key), key == draftKey else { return }
+        send(composer.text, mode: pending.mode, background: pending.background)
     }
 
     /// Sends the retried message once no upload runs. A retry that failed again keeps the draft.
@@ -4333,7 +4458,8 @@ extension ComposerController {
                                                                             runPreparing: projection?.runs.last?.status == .preparing)
         }
         composer.sendDisabledReason = !environments.canOperate(targetEnvironmentId) ? "This connection cannot change threads." // ChatView.tsx:11619-11620
-            : block.reason ?? (questionRequestId == nil ? ComposerAttachmentRules.uploadBlockReason(currentAttachments) : nil)
+            : block.reason ?? (questionRequestId == nil
+                ? ComposerAttachmentRules.sendBlockReason(currentAttachments, redirectsApproval: !requests.approvals.isEmpty) : nil)
     }
 
     /// Enter while the environment is down (ChatView.tsx:8797-8811): a warning toast in one of three
@@ -5161,6 +5287,7 @@ extension ComposerController {
     }
 
     private func updateThreadBanners() {
+        updateFreshSessionBanner()
         let thread = shellThread
         panel.showsGoal = thread?.goal != nil
         if let goal = thread?.goal {

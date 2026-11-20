@@ -265,6 +265,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         typedInsert = !clipboardEdit
         defer { typedInsert = false }
         let range = replacementRange.location == NSNotFound ? (hasMarkedText() ? markedRange() : selectedRange()) : replacementRange
+        if surroundSelection(range, with: (string as? String) ?? (string as? NSAttributedString)?.string) { return }
         let opensPair = richTextEnabled && !hasMarkedText() && range.length == 0 && ((string as? String) ?? (string as? NSAttributedString)?.string) == "`"
             && codePair(at: range.location - 1) == nil && typedPairCanOpen(before: range.location)
         // Text typed inside a typed pair joins it; anywhere else it stays out.
@@ -277,6 +278,24 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             nextCodePair += 1
             storage.addAttribute(.composerCodePair, value: nextCodePair, range: NSRange(location: caret - 2, length: 2))
         }
+    }
+
+    /// `surroundSelectionWithMark` (composer-rich-text-doc.ts at 4928, #14870): a backtick typed over a selection
+    /// formats it as code, `*` or `_` as italic, instead of replacing it. Selections over chips, markers, code
+    /// blocks or a line break keep the literal replace.
+    private func surroundSelection(_ range: NSRange, with typed: String?) -> Bool {
+        let marks: [String: ComposerRichText.Mark] = ["`": .code, "*": .italic, "_": .italic]
+        guard richTextEnabled, !hasMarkedText(), range.length > 0, let typed, let mark = marks[typed], let storage = textStorage,
+              NSMaxRange(range) <= storage.length, !storage.containsAttachments(in: range),
+              !(storage.string as NSString).substring(with: range).contains("\n") else { return false }
+        var inCode = false
+        storage.enumerateAttribute(.composerCodeBlock, in: range) { value, _, stop in if value != nil { inCode = true; stop.pointee = true } }
+        guard !inCode else { return false }
+        var hasAll = true
+        storage.enumerateAttribute(.composerMarks, in: range) { value, _, _ in if !ComposerRichTextStyler.marks(value).contains(mark) { hasAll = false } }
+        setSelectedRange(range)
+        if !hasAll { toggleMark(mark) }
+        return true
     }
 
     // MARK: Typed code pairs (`codePairCaretPlugin`, composer-rich-text-doc.ts:50-113, 7259e4f594)
@@ -740,11 +759,14 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         let pboard = NSPasteboard.general
         let bypass = pasteAsTextPending
         pasteAsTextPending = false
-        // Images, and files without text, become attachments (`shouldHandleComposerAttachmentPaste`).
-        if onPasteAttachments?(pboard) == true { return }
+        // CRLF and CR become LF, as ProseMirror's clipboard parser does (`readPastedPlainText`, #27280).
+        let plain = pboard.string(forType: .string).map(ComposerPasteboard.normalizedLineBreaks)
+        // Images, and files without text, become attachments (`shouldHandleComposerAttachmentPaste`); Paste as Text
+        // keeps the text even when the source also put an image of it on the clipboard (#38475).
+        if !(bypass && plain?.isEmpty == false), onPasteAttachments?(pboard) == true { return }
         // Large text becomes a text file unless Cmd+Shift+V asked for it inline (`foldPastedText`).
-        if let text = pboard.string(forType: .string), onPasteText?(text, bypass) == true { return }
-        guard let text = pboard.string(forType: .string) else { return super.pasteAsPlainText(sender) }
+        if let text = plain, onPasteText?(text, bypass) == true { return }
+        guard let text = plain else { return super.pasteAsPlainText(sender) }
         if let html = pboard.string(forType: .html) {
             let records = ComposerContext.pastedRecords(html: html, pastedText: text)
             if !records.isEmpty { onPasteRecords?(records) }
@@ -827,27 +849,33 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         return allowed
     }
 
-    private func listEdit(indent: Bool) -> Bool {
+    /// Applies a list edit computed on the draft's Markdown (composerCommandKey.ts `applyListEdit` at 4928). In a
+    /// rich draft a piece inside a line's marker rewrites that marker atom's source, which the styler reads back.
+    private func listEdit(_ compute: (String, Int) -> ComposerListContinuation.Edit?) -> Bool {
         let selection = selectedRange()
-        guard selection.length == 0 else { return false }
-        guard let storage = textStorage else { return false }
+        guard selection.length == 0, let storage = textStorage else { return false }
         let mapping = ComposerRichTextStyler.mapping(storage)
         let cursor = mapping.offsets[min(selection.location, mapping.offsets.count - 1)]
-        guard let edit = ComposerListContinuation.edit(mapping.value, selection: NSRange(location: cursor, length: 0), indent: indent) else { return false }
-        func storageRange(_ range: NSRange) -> NSRange {
-            let start = mapping.offsets.lastIndex(where: { $0 <= range.location }) ?? 0
-            let end = mapping.offsets.lastIndex(where: { $0 <= NSMaxRange(range) }) ?? start
-            return NSRange(location: start, length: max(0, end - start))
-        }
+        guard let edit = compute(mapping.value, cursor) else { return false }
+        func storageIndex(_ markdown: Int) -> Int { mapping.offsets.lastIndex(where: { $0 <= markdown }) ?? 0 }
         breakUndoCoalescing()
         applyingListEdit = true
         undoManager?.beginUndoGrouping()
-        // The renumbered items sit after the caret: change them last to first so earlier offsets hold.
-        for r in edit.renumber.reversed() { replace(storageRange(r.range), with: r.number) }
-        replace(storageRange(edit.range), with: edit.replacement)
+        // Last to first, so earlier offsets hold.
+        for piece in edit.pieces.reversed() {
+            let start = storageIndex(piece.range.location)
+            if richTextEnabled, start < storage.length, start + 1 < mapping.offsets.count, let atom = block(at: start), atom.isLineMarker,
+               NSMaxRange(piece.range) <= mapping.offsets[start + 1] {
+                let local = NSRange(location: piece.range.location - mapping.offsets[start], length: piece.range.length)
+                replaceBlocks(NSRange(location: start, length: 1), with: (atom.source as NSString).replacingCharacters(in: local, with: piece.text))
+            } else {
+                let end = storageIndex(NSMaxRange(piece.range))
+                replace(NSRange(location: start, length: max(0, end - start)), with: piece.text)
+            }
+        }
         undoManager?.endUndoGrouping()
         applyingListEdit = false
-        if indent { setCaret(markdown: cursor + 2) }
+        setCaret(markdown: edit.cursorAfter)
         breakUndoCoalescing()
         return true
     }
@@ -901,8 +929,12 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             } else { insertText("  ", replacementRange: selectedRange()) }
             return
         }
-        if event.keyCode == 48, event.modifierFlags.intersection([.shift, .option, .command, .control]).isEmpty,
-           !hasMarkedText(), blockIndent() || listEdit(indent: true) { return }
+        // Tab nests a list item and Shift+Tab lifts it back out (#17138, #27016, composerCommandKey.ts at 4928).
+        if event.keyCode == 48, !hasMarkedText() {
+            let flags = event.modifierFlags.intersection([.shift, .option, .command, .control])
+            if flags.isEmpty, listEdit(ComposerListContinuation.indent) { return }
+            if flags == .shift, listEdit(ComposerListContinuation.outdent) { return }
+        }
         let returnKeys: Set<UInt16> = [36, 76]
         if returnKeys.contains(event.keyCode) {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -924,7 +956,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             if onSubmitKey?(key) == true { return }
             // A list item splits or leaves its list, a quote or heading continues (Shift+Enter in T3).
             if !key.composing, blockReturn() { scrollRangeToVisible(selectedRange()); return }
-            if !key.composing, listEdit(indent: false) { return }
+            if !key.composing, listEdit(ComposerListContinuation.enter) { return }
         }
         let plainKey = event.modifierFlags.intersection([.shift, .option, .command, .control]).isEmpty && !hasMarkedText()
         // ArrowLeft 123, ArrowRight 124: a styled edge is two caret stops (`stepCaretAcrossStyledEdge`).

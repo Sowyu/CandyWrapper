@@ -10,6 +10,25 @@ struct PopupBehaviourTests {
 
     // MARK: Positioning
 
+    /// #29017: the docked model picker keeps the top side in a short window and slides over its trigger,
+    /// offered the whole window height instead of the sliver above the composer.
+    @Test func shiftCollisionKeepsTheSideAndOffersTheWholeHeight() {
+        let p = PopupPlacement(side: .top, align: .end, sideOffset: 4, fallbackAxisSide: .none, collision: .shift)
+        let anchor = CGRect(x: 600, y: 120, width: 120, height: 28)
+        let tall = CGSize(width: 300, height: 346)
+        let r = PopupPositioner.place(size: tall, anchor: anchor, in: bounds, p)
+        #expect(r.side == .top)
+        #expect(r.frame.minY == 5)
+        #expect(r.frame.maxX == anchor.maxX)
+        #expect(r.available == CGSize(width: 790, height: 590))
+        // With room above, it sits on the trigger as before.
+        let roomy = PopupPositioner.place(size: tall, anchor: anchor.offsetBy(dx: 0, dy: 400), in: bounds, p)
+        #expect(roomy.frame.maxY == anchor.minY + 400 - 4)
+        // The flip default still moves the same popup below.
+        var flip = p; flip.collision = .flip
+        #expect(PopupPositioner.place(size: tall, anchor: anchor, in: bounds, flip).side == .bottom)
+    }
+
     @Test func menuOpensBelowCentred() {
         let anchor = CGRect(x: 300, y: 100, width: 80, height: 32)
         let r = PopupPositioner.place(size: size, anchor: anchor, in: bounds, .menu)

@@ -64,6 +64,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case database
     case download
     case ellipsis
+    case eraser
     case externalLink
     case eye
     case eyeOff
@@ -318,6 +319,7 @@ extension IconName {
         case .database: return "database"
         case .download: return "download"
         case .ellipsis: return "ellipsis"
+        case .eraser: return "eraser"
         case .externalLink: return "external-link"
         case .eye: return "eye"
         case .eyeOff: return "eye-off"
@@ -881,6 +883,11 @@ extension IconName {
                 IconElement(.path(d: "M12 15V3")),
                 IconElement(.path(d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4")),
                 IconElement(.path(d: "m7 10 5 5 5-5")),
+            ])
+        case .eraser:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21")),
+                IconElement(.path(d: "m5.082 11.09 8.828 8.828")),
             ])
         case .ellipsis:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [

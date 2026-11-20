@@ -158,10 +158,19 @@ private func question(_ id: String, multi: Bool = false, custom: Bool? = nil, in
         #expect(UserInputAnswers.carryDisplaced("draft", "  ") == "draft")
     }
 
+    /// #23617: answers typed into a question that Stop cancelled go to the thread's prompt.
+    @Test func unsentAnswersReturnToThePrompt() {
+        let drafts = ["a": UserInputDraft(customAnswer: "first"), "b": UserInputDraft(selectedOptionValues: ["B"])]
+        #expect(UserInputAnswers.returningUnsent("draft", questions: [question("a"), question("b")], drafts: drafts) == "draft\n\nfirst")
+        #expect(UserInputAnswers.returningUnsent("", questions: [question("b")], drafts: drafts) == "")
+    }
+
     @Test func sessionFlow() {
         let request = PendingUserInput(requestId: "r", createdAt: nil, questions: [question("a"), question("b")],
                                        responseCapability: "live", dismissible: false)
         var session = UserInputSession(request)
+        #expect(session.advance() == .blocked) // #23626: Enter never skips an unanswered question
+        #expect(session.progress.questionIndex == 0)
         session.setCustomAnswer("typed")
         #expect(session.select("A") == "typed")
         #expect(session.progress.resolvedAnswer == .text("A"))

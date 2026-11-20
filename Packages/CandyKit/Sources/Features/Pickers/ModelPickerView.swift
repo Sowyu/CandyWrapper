@@ -25,6 +25,8 @@ final class ModelPickerView: DSView, PickerPopupBody {
     private(set) var rail: ModelPickerRail
     private(set) var query = ""
     private var expandedLegacy: Set<ProviderInstanceId> = []
+    /// Expanded backend headings (`ModelPickerRow.subProviderKey`); the active model's opens expanded.
+    private var expandedSubProviders: Set<String> = []
     private(set) var sections: ModelPickerSections
     /// Keyboard highlight in the list (`data-highlighted`).
     var highlightedRow: Int? { didSet { if highlightedRow != oldValue { restyleHighlight(from: oldValue); scrollToHighlight() } } }
@@ -79,8 +81,11 @@ final class ModelPickerView: DSView, PickerPopupBody {
         // Opens the legacy group on an active legacy model unless it is a favorite (ModelPickerContent.tsx:433-440).
         if let model = catalog.entry(active)?.model(activeModel), model.isLegacy == true,
            !favorites.contains(ModelFavorite(provider: active, model: activeModel)) { expandedLegacy = [active] }
+        // The thread's backend opens expanded, so its models show without a click (ModelPickerContent.tsx:470-476).
+        if let sub = catalog.entry(active)?.model(activeModel)?.subProvider { expandedSubProviders = [ModelPickerRow.subProviderKey(active, sub)] }
         sections = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
-                                       rail: rail, query: "", expandedLegacy: expandedLegacy, preferences: self.preferences)
+                                       rail: rail, query: "", expandedLegacy: expandedLegacy, preferences: self.preferences,
+                                       expandedSubProviders: expandedSubProviders)
         favoritesButton = RailButtonView(kind: .favorites)
         super.init(frame: .zero)
         clipsToBounds = true
@@ -132,14 +137,16 @@ final class ModelPickerView: DSView, PickerPopupBody {
             }
         }
         sections = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
-                                       rail: rail, query: query, expandedLegacy: expandedLegacy, selectedKeys: selectedKeys, preferences: preferences)
+                                       rail: rail, query: query, expandedLegacy: expandedLegacy, selectedKeys: selectedKeys, preferences: preferences,
+                                       expandedSubProviders: expandedSubProviders)
         if !capy, !searching {
             // T3 3814 ModelPickerContent.tsx:583-610,832-836 fits the tallest eligible tab.
             let tabs: [ModelPickerRail] = [.favorites] + sections.rail.filter { !$0.isDisabled }.map { .instance($0.entry.id) }
             tallestTabHeight = tabs.map { tab in
                 let rows = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
                                                rail: tab, query: "", expandedLegacy: expandedLegacy,
-                                               selectedKeys: selectedKeys, preferences: preferences).rows
+                                               selectedKeys: selectedKeys, preferences: preferences,
+                                               expandedSubProviders: expandedSubProviders).rows
                 if modern { return contentHeight(rows, mixed: tab == .favorites) }
                 return rows.isEmpty ? 36 : CGFloat(rows.count) * Self.rowHeight + CGFloat(rows.count - 1) * Self.rowGap + 20
             }.max() ?? 36
@@ -193,6 +200,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
         switch row {
         case .model(let item): "model:\(item.key)"
         case .legacy(let instance, _, _): "legacy:\(instance.rawValue)"
+        case .subProvider(let instance, let name, _, _, _): "sub:\(ModelPickerRow.subProviderKey(instance, name))"
         }
     }
 
@@ -235,6 +243,15 @@ final class ModelPickerView: DSView, PickerPopupBody {
 
     func toggleLegacy(_ id: ProviderInstanceId) {
         if expandedLegacy.contains(id) { expandedLegacy.remove(id) } else { expandedLegacy.insert(id) }
+        reloadKeepingHighlight()
+    }
+
+    func toggleSubProvider(_ key: String) {
+        if expandedSubProviders.remove(key) == nil { expandedSubProviders.insert(key) }
+        reloadKeepingHighlight()
+    }
+
+    private func reloadKeepingHighlight() {
         let keep = highlightedRow
         reload()
         highlightedRow = keep
@@ -257,6 +274,7 @@ final class ModelPickerView: DSView, PickerPopupBody {
         guard i < sections.rows.count else { return }
         switch sections.rows[i] {
         case .legacy(let id, _, _): toggleLegacy(id)
+        case .subProvider(let id, let name, _, _, let reason): if reason == nil { toggleSubProvider(ModelPickerRow.subProviderKey(id, name)) }
         case .model(let item):
             if let onToggle, NSApp.currentEvent?.modifierFlags.contains(.shift) == true {
                 onToggle(item.entry.id, item.model.slug)
@@ -281,7 +299,11 @@ final class ModelPickerView: DSView, PickerPopupBody {
     var mixesProviders: Bool { searching || rail == .favorites }
 
     // 4928 ModelPickerContent.tsx:175-177, ModelListRow.tsx:57: one 32pt row shape in every tab (#28057).
-    private func height(_ row: ModelPickerRow, mixed: Bool) -> CGFloat { modern ? 32 : rowH }
+    /// A backend heading is two lines in the default themes: `py-1`, the name, `mt-1` and the count (ModelPickerContent.tsx:1157-1173).
+    private func height(_ row: ModelPickerRow, mixed: Bool) -> CGFloat {
+        if modern, case .subProvider = row { return 48 }
+        return modern ? 32 : rowH
+    }
 
     private func contentHeight(_ rows: [ModelPickerRow], mixed: Bool) -> CGFloat {
         guard !rows.isEmpty else { return 36 }
@@ -646,6 +668,7 @@ final class ModelRowView: DSView {
     private var providerIcon: NSView?
     private var star: StarButtonView?
     private var chevron: IconView?
+    private var unavailableBadge: BadgeView?
     private var kbd: KbdView?
     /// Redesign: one line, the model's glyph first, a check at the right on the selected model.
     private let capy: Bool
@@ -701,6 +724,20 @@ final class ModelRowView: DSView {
             addSubview(c)
             chevron = c
             setAccessibilityExpanded(expanded) // ModelPickerContent.tsx:1001
+        case .subProvider(_, let title, let count, let expanded, let reason):
+            name.text = title
+            secondary.text = reason ?? (count == 1 ? "1 model" : "\(count) models")
+            if reason == nil {
+                let c = IconView(name: expanded ? .chevronDown : .chevronRight, size: 16)
+                addSubview(c)
+                chevron = c
+                setAccessibilityExpanded(expanded)
+            } else {
+                let b = BadgeView("Unavailable", variant: .outline, size: .sm)
+                addSubview(b)
+                unavailableBadge = b
+                alphaValue = 0.64 // `data-disabled:opacity-64`
+            }
         }
         if capy {
             name.font = DSFont.ui(13)
@@ -735,6 +772,8 @@ final class ModelRowView: DSView {
                 name.text = expanded ? "Show less" : "Show more"
                 secondary.text = ""
                 chevron?.removeFromSuperview(); chevron = nil
+            case .subProvider:
+                name.font = DSFont.ui(14, weight: .regular)
             }
         }
         restyle()
@@ -755,6 +794,7 @@ final class ModelRowView: DSView {
         fill.frame = bounds
         if capy { layoutCapy(); return }
         let modern = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
+        if modern, case .subProvider = row { layoutSubProvider(); return }
         if modern { layoutModern(); return }
         let checkWidth: CGFloat = modern && star != nil ? 20 : 0
         // The trailing group is `gap-1.5`: the jump `Kbd`, then the star.
@@ -782,6 +822,21 @@ final class ModelRowView: DSView {
         if let chevron {
             chevron.frame = NSRect(x: bounds.width - 8 - 16, y: (bounds.height - 16) / 2, width: 16, height: 16)
         }
+    }
+
+    /// A backend heading: the name and an Unavailable badge (`gap-2`) over the count or reason, the chevron at the end.
+    private func layoutSubProvider() {
+        let right = bounds.width - 8 - (chevron == nil ? 0 : 16 + 8)
+        let badgeW = unavailableBadge.map { 8 + $0.intrinsicContentSize.width } ?? 0
+        let nameW = max(0, min(ceil(name.textWidth), right - 8 - badgeW))
+        name.frame = NSRect(x: 8, y: 4, width: nameW, height: 19.25)
+        if let b = unavailableBadge {
+            let s = b.intrinsicContentSize
+            b.frame = NSRect(x: 8 + nameW + 8, y: 4 + (19.25 - s.height) / 2, width: s.width, height: s.height)
+        }
+        secondary.isHidden = false
+        secondary.frame = NSRect(x: 8, y: 4 + 19.25 + 4, width: max(0, right - 8), height: 16)
+        chevron?.frame = NSRect(x: bounds.width - 8 - 16, y: (bounds.height - 16) / 2, width: 16, height: 16)
     }
 
     /// `ComboboxItem` `px-2 gap-2`: logo, then name, check, sub-provider and badges (`gap-2`), then star and `Kbd` (`gap-1.5`).

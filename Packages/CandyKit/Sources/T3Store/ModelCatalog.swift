@@ -22,7 +22,15 @@ public struct ProviderInstanceEntry: Hashable, Sendable, Identifiable {
 
     public var isAvailable: Bool { provider.availability != "unavailable" }
     /// `isProviderInstancePickerReady`: enabled, available and `ready`.
-    public var isReady: Bool { provider.enabled && isAvailable && provider.status == .ready }
+    /// `isProviderInstanceReady` (providerInstances.ts at 4928, #29388): a warning still offers the models of
+    /// sub-providers that report no problem of their own.
+    public var isReady: Bool {
+        guard provider.enabled, isAvailable else { return false }
+        if provider.status == .ready { return true }
+        guard provider.status == .warning, let subs = provider.subProviders else { return false }
+        let usable = Set(subs.filter { $0.unavailableReason == nil }.map(\.name))
+        return models.contains { $0.subProvider.map(usable.contains) == true }
+    }
     /// Enabled and available: may be chosen even before its probe says ready.
     public var isSelectable: Bool { provider.enabled && isAvailable }
     /// Picker rails show enabled instances only.
@@ -230,6 +238,12 @@ public enum ModelPickerRow: Hashable, Sendable {
     case model(ModelPickerItem)
     /// The "Legacy models" expander of one instance.
     case legacy(instance: ProviderInstanceId, count: Int, expanded: Bool)
+    /// A backend heading of a provider with `subProviders` (#29388): its models show while expanded, and an
+    /// unavailable one is disabled, showing its reason instead of the count.
+    case subProvider(instance: ProviderInstanceId, name: String, count: Int, expanded: Bool, unavailableReason: String?)
+
+    /// `modelPickerSubProviderSectionKey`'s identity, for the expanded set.
+    public static func subProviderKey(_ instance: ProviderInstanceId, _ name: String) -> String { "\(instance.rawValue)\u{0}\(name)" }
 }
 
 public struct ModelPickerItem: Hashable, Sendable {
@@ -259,7 +273,8 @@ public struct ModelPickerSections: Sendable {
     /// `selectedKeys` (`instance:slug`): the models a multi-model draft picked, each shown selected
     /// (`selectedModelKeySet`, ModelPickerContent.tsx:219-235); nil marks only the active model.
     public init(catalog: ProviderCatalog, active: ProviderInstanceId, activeModel: String, favorites: [ModelFavorite],
-                rail selected: ModelPickerRail, query: String, expandedLegacy: Set<ProviderInstanceId>, selectedKeys: Set<String>? = nil, preferences: JSONValue = .object([:])) {
+                rail selected: ModelPickerRail, query: String, expandedLegacy: Set<ProviderInstanceId>, selectedKeys: Set<String>? = nil, preferences: JSONValue = .object([:]),
+                expandedSubProviders: Set<String> = []) {
         let favoriteKeys = Set(favorites.map { "\($0.provider.rawValue):\($0.model)" })
         let searching = !query.trimmingCharacters(in: .whitespaces).isEmpty
         let visible = catalog.entries.filter(\.isVisibleInPicker)
@@ -281,8 +296,11 @@ public struct ModelPickerSections: Sendable {
                     let right = order.firstIndex(of: b.element.slug) ?? Int.max
                     return left == right ? a.offset < b.offset : left < right
                 }.map(\.element)
+            // A model the provider reports twice lists once (#31590).
+            var seen = Set<String>()
             for m in models {
                 let key = "\(e.id.rawValue):\(m.slug)"
+                guard seen.insert(key).inserted else { continue }
                 flat.append(ModelPickerItem(model: m, entry: e, isFavorite: favoriteKeys.contains(key),
                                             isSelected: selectedKeys.map { $0.contains(key) }
                                                 ?? (e.id == active && (m.slug == activeModel || m.aliases?.contains(activeModel) == true))))
@@ -314,6 +332,21 @@ public struct ModelPickerSections: Sendable {
             let items = flat.enumerated().filter { $0.element.entry.id == id }
                 .sorted { ($0.element.isFavorite ? 0 : 1, $0.offset) < ($1.element.isFavorite ? 0 : 1, $1.offset) }
                 .map(\.element)
+            // A provider whose models run on several backends lists each as a collapsible heading, after the
+            // models outside any (`groupModelsBySubProvider`, ModelPickerContent.tsx:750-793 at 4928).
+            if let subs = catalog.entry(id)?.provider.subProviders, !subs.isEmpty {
+                let names = Set(subs.map(\.name))
+                var grouped: [ModelPickerRow] = items.filter { !names.contains($0.model.subProvider ?? "") }.map { .model($0) }
+                for sub in subs {
+                    let models = items.filter { $0.model.subProvider == sub.name }
+                    let expanded = expandedSubProviders.contains(ModelPickerRow.subProviderKey(id, sub.name))
+                    grouped.append(.subProvider(instance: id, name: sub.name, count: models.count, expanded: expanded,
+                                                unavailableReason: sub.unavailableReason))
+                    if expanded { grouped += models.map { .model($0) } }
+                }
+                rows = grouped
+                return
+            }
             // A favorited legacy model lists with the current ones (ModelPickerContent.tsx:656-666).
             let current = items.filter { $0.model.isLegacy != true || $0.isFavorite }
             let legacy = items.filter { $0.model.isLegacy == true && !$0.isFavorite }

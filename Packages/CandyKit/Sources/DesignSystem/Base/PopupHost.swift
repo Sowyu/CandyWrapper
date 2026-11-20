@@ -12,6 +12,9 @@ public struct PopupPlacement: Equatable, Sendable {
     public enum Align: Sendable, Equatable { case start, center, end }
     /// base-ui's `collisionAvoidance.fallbackAxisSide`: `Z2` is `.none` (dropdowns), `Q2` is `.end` (popups).
     public enum FallbackAxisSide: Sendable, Equatable { case none, end }
+    /// base-ui's `collisionAvoidance.side`/`align`: `.flip` tries other sides and alignments, `.shift`
+    /// keeps both and slides the popup inside the window, over its trigger if it must.
+    public enum Collision: Sendable, Equatable { case flip, shift }
 
     public var side: Side
     public var align: Align
@@ -19,11 +22,12 @@ public struct PopupPlacement: Equatable, Sendable {
     public var alignOffset: CGFloat
     public var collisionPadding: CGFloat = 5
     public var fallbackAxisSide: FallbackAxisSide
+    public var collision: Collision
 
     public init(side: Side = .bottom, align: Align = .center, sideOffset: CGFloat = 4, alignOffset: CGFloat = 0,
-                fallbackAxisSide: FallbackAxisSide = .end) {
+                fallbackAxisSide: FallbackAxisSide = .end, collision: Collision = .flip) {
         self.side = side; self.align = align; self.sideOffset = sideOffset; self.alignOffset = alignOffset
-        self.fallbackAxisSide = fallbackAxisSide
+        self.fallbackAxisSide = fallbackAxisSide; self.collision = collision
     }
 
     /// `menu.tsx:23-28`: bottom, center, 4, Z2.
@@ -52,6 +56,7 @@ public enum PopupPositioner {
     }
 
     public static func place(size: CGSize, anchor: CGRect, in bounds: CGRect, _ p: PopupPlacement) -> Result {
+        if p.collision == .shift { return shifted(size: size, anchor: anchor, in: bounds, p) }
         // Flip: preferred side, its opposite, then (Q2 only) the perpendicular sides. The flip check uses padding + 1.
         // base-ui's default `collisionAvoidance.align` is "flip" (flip `crossAxis: 'alignment'`, flipAlignment): a
         // start or end popup that overflows across its side tries the other alignment first, so a bottom-end
@@ -117,6 +122,23 @@ public enum PopupPositioner {
         case .left: CGPoint(x: frame.width + p.sideOffset, y: anchor.midY - frame.minY)
         }
         return Result(frame: frame, side: chosen, transformOrigin: origin, available: available)
+    }
+
+    /// `collisionAvoidance: { side: "shift", align: "shift" }`: no flip on either axis; shift clamps the popup
+    /// inside the padded boundary, and floating-ui's `size` then offers the whole boundary height and width
+    /// (ProviderModelPicker.tsx:466 at 4928, #29017).
+    static func shifted(size: CGSize, anchor: CGRect, in bounds: CGRect, _ p: PopupPlacement) -> Result {
+        let inner = bounds.insetBy(dx: p.collisionPadding, dy: p.collisionPadding)
+        var frame = coords(size: size, anchor: anchor, side: p.side, p)
+        frame.origin.x = clamp(frame.origin.x, inner.minX, inner.maxX - frame.width)
+        frame.origin.y = clamp(frame.origin.y, inner.minY, inner.maxY - frame.height)
+        let origin: CGPoint = switch p.side {
+        case .bottom: CGPoint(x: anchor.midX - frame.minX, y: anchor.maxY - frame.minY)
+        case .top: CGPoint(x: anchor.midX - frame.minX, y: anchor.minY - frame.minY)
+        case .right: CGPoint(x: anchor.maxX - frame.minX, y: anchor.midY - frame.minY)
+        case .left: CGPoint(x: anchor.minX - frame.minX, y: anchor.midY - frame.minY)
+        }
+        return Result(frame: frame, side: p.side, transformOrigin: origin, available: inner.size)
     }
 
     static func coords(size: CGSize, anchor: CGRect, side: PopupPlacement.Side, _ p: PopupPlacement) -> CGRect {

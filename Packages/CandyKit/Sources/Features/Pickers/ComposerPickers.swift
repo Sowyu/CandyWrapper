@@ -34,6 +34,8 @@ public final class ComposerPickers {
     public final var onBlocked: (@MainActor (String) -> Void)?
     /// Redesign's model picker card "Manage": open that provider's settings.
     public final var onManageProvider: (@MainActor (ProviderInstanceId) -> Void)?
+    /// The model picker opened, from any trigger (ProviderModelPicker.tsx:149 at 4928).
+    public final var onModelPickerOpen: (@MainActor () -> Void)?
 
     /// Whether the draft may fan out to several models (a new thread on a server with
     /// `requiredWorktreeBootstrap`); the app sets it per draft.
@@ -217,6 +219,22 @@ public final class ComposerPickers {
         docked.footer.update(descriptors: current.descriptors, runtimeMode: current.runtimeMode)
     }
 
+    /// The new-thread strip's permissions control opens the access menu above itself, top and end aligned
+    /// (ComposerContextPermissions.tsx at 4928, #30275).
+    public func openPermissions(from trigger: NSView) {
+        if closeIfOpen(trigger) { return }
+        guard let host = trigger.popupHost else { return }
+        let menu = ComposerPermissionsMenu(modes: current.runtimeModeOptions, selected: current.runtimeMode) { [weak self] mode in
+            guard let self, mode != self.current.runtimeMode else { return }
+            store.setRuntimeMode(draftKey, mode)
+            refresh(notify: true)
+        }
+        let popup = host.open(PickerPopupView(menu), trigger: trigger, placement: PopupPlacement(side: .top, align: .end, sideOffset: 4),
+                              swallowsOutsideClick: true)
+        menu.onClose = { [weak self] in self?.closeOpenPopup() }
+        track(popup)
+    }
+
     private func openFooterPermissions(_ trigger: NSView) {
         guard let host = trigger.popupHost, let parent = openPopup else { return }
         if let open = host.popups.first(where: { $0.trigger === trigger }) { host.close(open); return }
@@ -291,13 +309,14 @@ public final class ComposerPickers {
         }
         // Docked, the popup opens above the composer and slides over it when that space is short
         // (ProviderModelPicker.tsx:462-467); the trigger grows away from its end edge (ComposerControlsBar.tsx:191-192).
-        let placement = docks ? PopupPlacement(side: .top, align: .end, sideOffset: 4, fallbackAxisSide: .none)
+        let placement = docks ? PopupPlacement(side: .top, align: .end, sideOffset: 4, fallbackAxisSide: .none, collision: .shift)
             : PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .end)
         let popup = host.open(PickerPopupView(body), trigger: modelButton, placement: placement, motion: .popover)
         track(popup)
         modelPicker = view
         syncDocked()
         modelButton.window?.makeFirstResponder(view.search)
+        onModelPickerOpen?()
     }
 
     /// The model picker's provider rail (`modelPicker.previousProvider` / `nextProvider`) while it is open.

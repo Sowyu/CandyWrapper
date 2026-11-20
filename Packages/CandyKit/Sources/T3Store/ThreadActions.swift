@@ -71,6 +71,12 @@ public enum ThreadCommands {
         command("thread.metadata.update", threadId, commandId, ["regenerateTitle": .bool(true)])
     }
 
+    /// `setModelSelection` (threadCommands.ts:291 at 4928): `updateThreadMetadata` sends a `modelSelection` as its
+    /// own `thread.model-selection.set` (commands.ts:717-724), which 3824 servers accept too.
+    public static func setModelSelection(_ threadId: ThreadId, _ selection: JSONValue, commandId: String = newCommandId()) -> JSONValue {
+        command("thread.model-selection.set", threadId, commandId, ["modelSelection": selection])
+    }
+
     /// `updateThreadMetadata` with a new title (Sidebar.tsx:3261-3290).
     public static func rename(_ threadId: ThreadId, title: String, commandId: String = newCommandId()) -> JSONValue {
         command("thread.metadata.update", threadId, commandId, ["title": .string(title)])

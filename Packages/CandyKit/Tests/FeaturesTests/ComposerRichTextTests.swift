@@ -47,31 +47,77 @@ struct ComposerRichTextTests {
         let scrollResult5 = !gesture.record(now: 2, delta: 50, eligible: true, canScroll: true, towardEnd: true)
         #expect(scrollResult5)
     }
+    /// composer-list-continuation.test.ts at 4928, case for case.
     @Test func listContinuation() {
-        let cases = [("09) abc", "\n10) "), ("- [X] done", "\n- [ ] "), ("  + abc", "\n  + "), ("9007199254740992. x", "\n9007199254740992. ")]
-        for (text, expected) in cases {
-            #expect(ComposerListContinuation.edit(text, selection: NSRange(location: text.utf16.count, length: 0))?.replacement == expected)
+        typealias L = ComposerListContinuation
+        func enter(_ v: String, _ c: Int) -> String? { L.enter(v, cursor: c)?.applied(to: v) }
+        func at(_ v: String, _ s: String) -> Int { (v as NSString).range(of: s).location }
+        #expect(enter("- foo", 5) == "- foo\n- ")
+        #expect(enter("  * foo", 7) == "  * foo\n  * ")
+        #expect(enter("- [x] done", 10) == "- [x] done\n- [ ] ")
+        #expect(enter("1. foobar", 5) == "1. fo\n2. obar")
+        #expect(enter("1. foo\n2. ", 10) == "1. foo\n")
+        #expect(enter("- ", 2) == "")
+        #expect(enter("1)\t", 3) == "")
+        #expect(enter("- [ ] ", 6) == "")
+        var value = "1. parent\n   1. child\n      1. "
+        for expected in ["1. parent\n   1. child\n   2. ", "1. parent\n   1. child\n2. ", "1. parent\n   1. child\n"] {
+            value = enter(value, (value as NSString).length) ?? ""
+            #expect(value == expected)
         }
-        #expect(ComposerListContinuation.edit("- ", selection: NSRange(location: 2, length: 0)) == .init(range: NSRange(location: 0, length: 2), replacement: ""))
-        #expect(ComposerListContinuation.edit("- abc", selection: NSRange(location: 3, length: 0))?.replacement == "\n- ")
-        #expect(ComposerListContinuation.edit("- abc", selection: NSRange(location: 1, length: 0)) == nil)
-        #expect(ComposerListContinuation.edit("- abc", selection: NSRange(location: 3, length: 1), indent: true) == nil)
+        let lifted = "1. a\n   1. \n2. b"
+        #expect(enter(lifted, at(lifted, "\n2.")) == "1. a\n2. \n3. b")
+        #expect(L.enter(lifted, cursor: at(lifted, "\n2."))?.cursorAfter == "1. a\n2. ".utf16.count)
+        #expect(L.enter("1. @README.md go", cursor: at("1. @README.md go", "README") + 2) == nil)
         // bac96aa3b2: a bare "2." is not an item, so Return adds a line; Tab still indents it.
-        #expect(ComposerListContinuation.edit("2.", selection: NSRange(location: 2, length: 0)) == nil)
-        #expect(ComposerListContinuation.edit("2.", selection: NSRange(location: 2, length: 0), indent: true) != nil)
-        // d407f5443b: the same-level items after the split count on; deeper lines are skipped.
-        let list = "1. a\n2. b\n   1. sub\n3. c\n\n9. other"
-        let split = ComposerListContinuation.edit(list, selection: NSRange(location: 4, length: 0))
-        #expect(split?.replacement == "\n2. ")
-        #expect(split?.renumber == [.init(range: NSRange(location: 5, length: 1), number: "3"),
-                                    .init(range: NSRange(location: 20, length: 1), number: "4")])
-        #expect(ComposerListContinuation.edit("1) a\n2. b", selection: NSRange(location: 4, length: 0))?.renumber == [])
+        #expect(L.enter("2.", cursor: 2) == nil)
+        #expect(L.indent("2.", cursor: 2) != nil)
+        let renumber = "1. @README.md go\n2. two\n03. three\n10. four"
+        #expect(enter(renumber, at(renumber, "go")) == "1. @README.md \n2. go\n3. two\n04. three\n5. four")
+        let parens = "  1) a\n\t1) child\n  2) b\n1) parent\n  3) untouched"
+        #expect(enter(parens, at(parens, "\n")) == "  1) a\n  2) \n\t1) child\n  3) b\n1) parent\n  3) untouched")
+        for boundary in ["", "text", "1) other list"] {
+            let v = "1. a\n2. b\n\(boundary)\n3. untouched"
+            #expect(enter(v, at(v, "\n")) == "1. a\n2. \n3. b\n\(boundary)\n3. untouched")
+        }
+        let chip = "1. a\n2. @\"file\n2. name\" \n3. b"
+        #expect(enter(chip, at(chip, "\n")) == "1. a\n2. \n3. @\"file\n2. name\" \n4. b")
         // Numbers past JavaScript's safe integers renumber nothing, and UInt64.max must not trap.
         for huge in ["18446744073709551615", "9007199254740990"] {
             let text = "\(huge). a\n2. b"
-            #expect(ComposerListContinuation.edit(text, selection: NSRange(location: huge.count + 3, length: 0))?.renumber == [])
+            #expect(L.enter(text, cursor: huge.count + 3)?.pieces.count == 1)
         }
+        #expect(L.nextOrderedMarker("09.") == "10." && L.nextOrderedMarker("001)") == "002)" && L.nextOrderedMarker("99999999999999999999.") == "99999999999999999999.")
     }
+
+    /// #17138 and #27016: Tab nests at the parent's content column, Shift+Tab undoes it.
+    @Test func listIndentAndOutdent() {
+        typealias L = ComposerListContinuation
+        for (value, expected) in [("1. parent\n2. child", "1. parent\n   1. child"), ("10. parent\n11. child", "10. parent\n    1. child"),
+                                  ("1.\tparent\n2. child", "1.\tparent\n    1. child"),
+                                  ("1. @\"file\n   9. name\"\n2. child", "1. @\"file\n   9. name\"\n   1. child")] {
+            let cursor = (value as NSString).range(of: "child", options: .backwards).location + 2
+            let edit = L.indent(value, cursor: cursor)
+            #expect(edit?.applied(to: value) == expected)
+            #expect(edit?.cursorAfter == (expected as NSString).range(of: "child", options: .backwards).location + 2)
+        }
+        let sibling = "1. parent\n   1. first\n2. second"
+        #expect(L.indent(sibling, cursor: sibling.utf16.count)?.applied(to: sibling) == "1. parent\n   1. first\n   2. second")
+        for value in ["- parent\n- child", "1. parent\n2. child", "  7. child"] {
+            let cursor = (value as NSString).range(of: "child", options: .backwards).location + 2
+            guard let nest = L.indent(value, cursor: cursor) else { Issue.record("no indent for \(value)"); continue }
+            let nested = nest.applied(to: value)
+            let out = L.outdent(nested, cursor: nest.cursorAfter)
+            #expect(out?.applied(to: nested) == value)
+            #expect(out?.cursorAfter == cursor)
+        }
+        for (value, expected) in [("1. a\n   1. b\n2. c", "1. a\n2. b\n3. c"), ("- a\n  5. b", "- a\n5. b")] {
+            let b = (value as NSString).range(of: "b").location
+            #expect(L.outdent(value, cursor: b)?.applied(to: value) == expected)
+        }
+        #expect(L.outdent("- item", cursor: 6) == nil)
+    }
+
 }
 
 @MainActor struct ComposerRichTextEditorTests {

@@ -18,8 +18,10 @@ public struct ComposerFileRow: Equatable, Sendable {
     }
 
     /// `formatAttachmentSize` (packages/client-runtime/src/state/attachments.ts:221-225).
+    /// The unit is picked after rounding, so 1023.5 KB reads "1.0 MB", not "1024 KB" (#29165).
     public static func formatSize(_ bytes: Int) -> String {
-        bytes >= 1024 * 1024 ? String(format: "%.1f MB", Double(bytes) / (1024 * 1024)) : "\(max(1, Int((Double(bytes) / 1024).rounded(.up)))) KB"
+        let kilobytes = max(1, Int((Double(bytes) / 1024).rounded(.up)))
+        return kilobytes >= 1024 ? String(format: "%.1f MB", Double(bytes) / (1024 * 1024)) : "\(kilobytes) KB"
     }
 
     /// `formatAttachmentUploadProgress`: whole percent, clamped.

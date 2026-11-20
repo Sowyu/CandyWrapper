@@ -168,7 +168,7 @@ struct BranchToolbarLogicTests {
         #expect(B.workspaceLabel(mode: .local, worktreePath: nil, modeLocked: false) == "Current checkout")
         #expect(B.workspaceLabel(mode: .local, worktreePath: "/wt", modeLocked: false) == "Current worktree")
         #expect(B.workspaceLabel(mode: .worktree, worktreePath: nil, modeLocked: false) == "New worktree")
-        #expect(B.workspaceLabel(mode: .worktree, worktreePath: "/wt", modeLocked: true) == "Worktree")
+        #expect(B.workspaceLabel(mode: .worktree, worktreePath: "/wt", modeLocked: true) == "wt") // #28459 names the folder
         #expect(B.workspaceLabel(mode: .local, worktreePath: nil, modeLocked: true) == "Local checkout")
         #expect(B.workspaceLabel(mode: .local, worktreePath: nil, modeLocked: false, forceNewWorktree: true) == "New worktree")
         #expect(B.triggerLabel(worktreePath: nil, mode: .worktree, branch: "main", branchIsRemote: false, startFromOrigin: true) == "From main (remote)")

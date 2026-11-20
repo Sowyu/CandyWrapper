@@ -18,8 +18,8 @@ import Testing
     for c in text { editor.insertText(String(c), replacementRange: editor.selectedRange()) }
 }
 
-@MainActor private func press(_ editor: ComposerEditor, keyCode: UInt16, characters: String) throws {
-    let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+@MainActor private func press(_ editor: ComposerEditor, keyCode: UInt16, characters: String, flags: NSEvent.ModifierFlags = []) throws {
+    let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0,
         context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode))
     editor.keyDown(with: event)
 }
@@ -351,6 +351,37 @@ import Testing
         #expect(storedDraft(editor) == "- a\n  - bc")
         type(editor, "x")
         #expect(editor.expandedText == "- a\n  - bxc")
+    }
+
+    /// #14870: a backtick typed over a selection formats it as code, `_` as italic; across a line it replaces.
+    @Test func typedMarkerWrapsTheSelection() {
+        let editor = makeEditor()
+        editor.setText("say hi now")
+        editor.setSelectedRange((editor.string as NSString).range(of: "hi"))
+        editor.insertText("`", replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(storedDraft(editor) == "say `hi` now")
+        editor.setSelectedRange((editor.string as NSString).range(of: "now"))
+        editor.insertText("_", replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(storedDraft(editor) == "say `hi` *now*" || storedDraft(editor) == "say `hi` _now_")
+        let lines = makeEditor()
+        lines.setText("a\nb")
+        lines.setSelectedRange(NSRange(location: 0, length: 3))
+        lines.insertText("`", replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(storedDraft(lines) == "`")
+    }
+
+    /// #17138 and #27016 in the rich editor: a numbered item nests as its parent's first child, and
+    /// Shift+Tab lifts it back with the parent list's next number.
+    @Test func tabNestsANumberedItemAndShiftTabLiftsIt() throws {
+        let editor = makeEditor()
+        editor.setText("1. a\n2. bc")
+        placeCaret(editor, "bc", 1)
+        try press(editor, keyCode: 48, characters: "\t")
+        #expect(storedDraft(editor) == "1. a\n   1. bc")
+        try press(editor, keyCode: 48, characters: "\u{19}", flags: .shift)
+        #expect(storedDraft(editor) == "1. a\n2. bc")
+        type(editor, "x")
+        #expect(editor.expandedText == "1. a\n2. bxc")
     }
 
     /// A character typed in a list item, quote or heading already looks rendered, so the

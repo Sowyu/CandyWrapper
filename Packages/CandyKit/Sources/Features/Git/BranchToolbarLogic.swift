@@ -41,9 +41,10 @@ public enum BranchToolbarLogic {
         worktreePath != nil ? "Current worktree" : envModeLabel(.local)
     }
 
-    /// `resolveLockedWorkspaceLabel`: a locked worktree thread without a path is still creating it.
+    /// `resolveLockedWorkspaceLabel`: a locked worktree thread names its folder (#28459, BranchToolbar.logic.ts:118 at
+    /// 4928); one without a path is still creating it.
     public static func lockedWorkspaceLabel(_ worktreePath: String?, mode: EnvMode) -> String {
-        if worktreePath != nil { return "Worktree" }
+        if let worktreePath { return worktreePath.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? "Worktree" }
         return mode == .worktree ? envModeLabel(.worktree) : "Local checkout"
     }
 

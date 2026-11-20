@@ -55,6 +55,7 @@ struct ModelPickerTests {
             switch $0 {
             case .model(let item): item.model.name + (item.isSelected ? " *" : "")
             case .legacy(_, let count, let expanded): "Legacy models (\(count))" + (expanded ? " open" : "")
+            case .subProvider(_, let name, let count, _, _): "\(name) (\(count))"
             }
         }
     }
@@ -232,6 +233,59 @@ struct ModelPickerTests {
         #expect(ModelTraits.applyUltrathinkPrefix("fix it") == "Ultrathink:\nfix it")
         #expect(ModelTraits.applyUltrathinkPrefix("/review now") == "/review now")
         #expect(ModelTraits.ultrathinkInBody("Ultrathink:\nplease ultrathink") && !ModelTraits.ultrathinkInBody("Ultrathink:\nfix"))
+    }
+
+    /// #29388: a provider with sub-providers lists ungrouped models, then one heading per backend that shows
+    /// its models only while expanded; a warning provider stays usable through a backend that reports no problem.
+    @Test func subProvidersGroupModelsUnderHeadings() throws {
+        var fx = ServerProvider(instanceId: "fx", driver: "fx", status: .warning, models: [
+            ServerProviderModel(slug: "default", name: "Default"),
+            ServerProviderModel(slug: "a1", name: "A1", subProvider: "Alpha"),
+            ServerProviderModel(slug: "b1", name: "B1", subProvider: "Beta"),
+        ])
+        fx.subProviders = [.init(name: "Alpha"), .init(name: "Beta", unavailableReason: "Signed out")]
+        #expect(ProviderInstanceEntry(provider: fx).isReady)
+        let catalog = ProviderCatalog([fx])
+        func rows(_ expanded: Set<String>) -> [ModelPickerRow] {
+            ModelPickerSections(catalog: catalog, active: "fx", activeModel: "default", favorites: [], rail: .instance("fx"),
+                                query: "", expandedLegacy: [], expandedSubProviders: expanded).rows
+        }
+        let collapsed = rows([])
+        #expect(collapsed.count == 3)
+        #expect(collapsed[1] == .subProvider(instance: "fx", name: "Alpha", count: 1, expanded: false, unavailableReason: nil))
+        #expect(collapsed[2] == .subProvider(instance: "fx", name: "Beta", count: 1, expanded: false, unavailableReason: "Signed out"))
+        let open = rows([ModelPickerRow.subProviderKey("fx", "Alpha")])
+        #expect(open.count == 4)
+        if case .model(let item) = open[2] { #expect(item.model.slug == "a1") } else { Issue.record("expected a1 under Alpha") }
+        fx.subProviders = [.init(name: "Alpha", unavailableReason: "Down")]
+        #expect(!ProviderInstanceEntry(provider: fx).isReady)
+        let decoded = try JSONDecoder().decode(ServerProvider.SubProvider.self, from: Data(#"{"name":"Beta","unavailableReason":"Signed out"}"#.utf8))
+        #expect(decoded == .init(name: "Beta", unavailableReason: "Signed out"))
+    }
+
+    /// #31739: a pick on a started thread's own instance applies at once; a pick it already runs, a draft
+    /// thread and a pick on another instance wait for a send (useApplyThreadModelPick.ts at 4928).
+    @Test func threadModelPickAppliesOnlyOnItsInstance() throws {
+        let config = try Self.recordedConfig()
+        let catalog = ProviderCatalog(config.providers)
+        let thread = try JSONDecoder().decode(ThreadShell.self, from: Data(baseThreadJSON.replacingOccurrences(of: "codex", with: "claudeAgent")
+            .replacingOccurrences(of: "gpt-5.4", with: "claude-haiku-5-5").utf8))
+        let key = thread.id.rawValue
+        let tctx = ComposerSelectionContext(catalog: catalog, thread: thread, serverDefaults: config.settings, hasStartedSession: true)
+        let store = ComposerSelectionStore(defaults: nil)
+        #expect(store.modelPickToApply(key, tctx) == nil)
+        store.pickModel(key, instance: "claudeAgent", model: "claude-opus-5-5", tctx)
+        #expect(store.modelPickToApply(key, tctx)?.model == "claude-opus-5-5")
+        #expect(store.modelPickToApply(key, ComposerSelectionContext(catalog: catalog, serverDefaults: config.settings)) == nil)
+        store.pickModel(key, instance: "claudeAgent", model: "claude-haiku-5-5", tctx)
+        #expect(store.modelPickToApply(key, tctx) == nil)
+        if let codex = catalog.entries.first(where: { $0.id != "claudeAgent" }), let model = codex.defaultModel {
+            store.pickModel(key, instance: codex.id, model: model, tctx)
+            #expect(store.modelPickToApply(key, tctx) == nil)
+        }
+        let command = ThreadCommands.setModelSelection(thread.id, .object(["instanceId": .string("claudeAgent")]), commandId: "c1")
+        #expect(command == .object(["type": .string("thread.model-selection.set"), "commandId": .string("c1"), "threadId": .string(thread.id.rawValue),
+                                    "modelSelection": .object(["instanceId": .string("claudeAgent")])]))
     }
 
     /// Another client moves the thread to the draft's pick: the pick drops, the access pick stays

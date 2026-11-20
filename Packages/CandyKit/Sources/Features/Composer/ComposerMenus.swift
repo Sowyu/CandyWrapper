@@ -290,12 +290,16 @@ public enum ComposerMenus {
     /// What the `/` menu offers: built-ins, the provider's commands (minus the ones a visible skill
     /// shadows, and `/compact` unless the prompt is only the command), then its skills; provider
     /// commands only at the start of the prompt (`slashCommandItemsForPromptPosition`).
+    /// `freshSessionAvailable` adds T3's `/clear` at the prompt's start and hides the provider's, which would clear a
+    /// session T3 still treats as live (useComposerMenuItems.ts:280-290 at 4928, #30325).
     public static func slashItems(trigger: ComposerTrigger, provider: String, commands: [ServerProviderSlashCommand],
-                                  skills: [ServerProviderSkill], showSkills: Bool, compactAvailable: Bool) -> [ComposerMenuItem] {
+                                  skills: [ServerProviderSkill], showSkills: Bool, compactAvailable: Bool,
+                                  freshSessionAvailable: Bool = false) -> [ComposerMenuItem] {
         let menuSkills = showSkills ? ProviderSkills.dedupe(skills.filter(ProviderSkills.isUserInvocable)) : []
         let skillNames = Set(menuSkills.map { $0.name.trimmingCharacters(in: .whitespaces).lowercased() })
         let commandItems = commands.filter { !skillNames.contains($0.name.trimmingCharacters(in: .whitespaces).lowercased()) }
             .filter { $0.name != "compact" || compactAvailable }
+            .filter { $0.name != "clear" || !freshSessionAvailable }
             .map { ComposerMenuItem(id: "provider-slash-command:\(provider):\($0.name)", kind: .providerCommand($0.name), label: "/\($0.name)",
                                     description: $0.description ?? $0.input?.hint ?? "Run provider command") }
         let skillItems = menuSkills.map { s in
@@ -303,8 +307,17 @@ public enum ComposerMenus {
                              label: "/skill:\(s.name)", description: s.shortDescription ?? s.description ?? (s.scope.map { "\($0) skill" } ?? ""))
         }
         let atStart = trigger.rangeStart == 0
-        let items = builtInCommands() + (atStart ? commandItems : []) + skillItems
+        let clear = freshSessionAvailable && atStart ? [clearCommand] : []
+        let items = builtInCommands() + clear + (atStart ? commandItems : []) + skillItems
         return searchSlash(items, query: trigger.query.trimmingCharacters(in: .whitespaces).lowercased(), skills: menuSkills)
+    }
+
+    public static let clearCommand = ComposerMenuItem(id: "slash:clear", kind: .builtIn("clear"), label: "/clear",
+                                                      description: "Start a fresh session; earlier messages stay visible")
+
+    /// `isClearComposerCommand` (packages/shared/src/composerTrigger.ts:141-143).
+    public static func isClearCommand(_ text: String) -> Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).range(of: #"^/clear\s*$"#, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     private static let slashPrefix = try! NSRegularExpression(pattern: "^/+")
@@ -414,9 +427,20 @@ public enum ComposerMenus {
     /// (composerPullRequestMatches.ts at 3814): a number filters by digits, the exact match first, then linked ones,
     /// then the newest (`filterComposerPullRequestMatches`); text ranks by `scorePullRequestMatch` and puts the linked
     /// ones that match ahead (`withLinkedComposerPullRequestsFirst`).
+    nonisolated(unsafe) private static let dateOnly: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withFullDate]
+        return f
+    }()
+
     public static func pullRequestItems(query: String, entries: [PullRequestEntry], linked: [PullRequestEntry] = [], hostSearched: Bool) -> [ComposerMenuItem] {
         let key: (PullRequestEntry) -> String = { "\($0.repository.trimmingCharacters(in: .whitespaces).lowercased())#\($0.reference.number)" }
         let linkedKeys = Set(linked.map(key))
+        // By update instant, not timestamp text, so offsets and fractions sort right (#35137, composerPullRequestMatches.ts).
+        let updated: (PullRequestEntry) -> Int64 = { entry in
+            // `Date.parse` also reads a bare date as UTC midnight.
+            T3Timestamp(entry.updatedAt).epochMs ?? dateOnly.date(from: entry.updatedAt).map { Int64($0.timeIntervalSince1970 * 1000) } ?? 0
+        }
         var picked: [PullRequestEntry]
         if query.allSatisfy(\.isNumber) {
             var seen = Set<String>()
@@ -425,7 +449,7 @@ public enum ComposerMenus {
                     let ea = String(a.reference.number) == query, eb = String(b.reference.number) == query
                     if ea != eb { return ea }
                     let la = linkedKeys.contains(key(a)), lb = linkedKeys.contains(key(b))
-                    return la != lb ? la : a.updatedAt > b.updatedAt
+                    return la != lb ? la : updated(a) > updated(b)
                 }
         } else {
             let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
@@ -435,7 +459,8 @@ public enum ComposerMenus {
             picked = filtered.enumerated().sorted { a, b in
                 let sa = pullRequestScore(a.element, needle), sb = pullRequestScore(b.element, needle)
                 if sa != sb { return sa > sb }
-                return a.element.updatedAt != b.element.updatedAt ? a.element.updatedAt > b.element.updatedAt : a.offset < b.offset
+                let ua = updated(a.element), ub = updated(b.element)
+                return ua != ub ? ua > ub : a.offset < b.offset
             }.map(\.element)
             let matchesByKey = Dictionary(picked.map { (key($0), $0) }, uniquingKeysWith: { first, _ in first })
             let words = needle.split(whereSeparator: \.isWhitespace).map(String.init)
@@ -633,7 +658,8 @@ public enum ComposerInlineTokens {
     /// `serializeComposerFileLink` (shared/composerTrigger.ts): `[basename](encoded path)`.
     public static func fileLink(_ path: String) -> String {
         let base = path.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? path
-        let label = base.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "[", with: "\\[").replacingOccurrences(of: "]", with: "\\]")
+        // Emphasis markers too, so `__init__.py` never renders bold and stays its own chip label (#31593).
+        let label = base.replacingOccurrences(of: #"[\\\[\]*_]"#, with: #"\\$0"#, options: .regularExpression)
         return "[\(label)](\(encodeURI(path)))"
     }
 

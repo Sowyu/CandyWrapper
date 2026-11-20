@@ -236,6 +236,9 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     /// `available` or `unavailable`; absent means available.
     public var availability: String?
     public var models: [ServerProviderModel]
+    /// `subProviders` (4928, contracts server.ts): the backends `models` run on, in order, matched by
+    /// `ServerProviderModel.subProvider`. Pickers group models under them.
+    public var subProviders: [SubProvider]?
     public var slashCommands: [ServerProviderSlashCommand] = []
     public var skills: [ServerProviderSkill] = []
     public var workspaceSnapshots: [ServerProviderWorkspaceSnapshot]?
@@ -260,6 +263,13 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     /// `runtimePaths` (`{homePath, shadowHomePath}`, contracts server.ts:278-283): a managed Codex instance's homes.
     public var runtimePaths: JSONValue?
 
+    /// `ServerProviderSubProvider`: a backend such as one of fx's; `unavailableReason` says why none of its models run.
+    public struct SubProvider: Decodable, Hashable, Sendable {
+        public var name: String
+        public var unavailableReason: String?
+        public init(name: String, unavailableReason: String? = nil) { self.name = name; self.unavailableReason = unavailableReason }
+    }
+
     public struct UpdateState: Hashable, Sendable {
         /// `queued`, `running`, `succeeded`, `failed` or `unchanged`.
         public var status: String
@@ -280,7 +290,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case instanceId, driver, displayName, accentColor, badgeLabel, continuation, showInteractionModeToggle
         case supportsConversationRollback, reportsContextWindow, supportedRuntimeModes, requiresNewThreadForModelChange, enabled, installed
-        case status, message, availability, models, slashCommands, skills, workspaceSnapshots, version, auth, checkedAt, usageLimits
+        case status, message, availability, models, subProviders, slashCommands, skills, workspaceSnapshots, version, auth, checkedAt, usageLimits
         case updateState, versionAdvisory, compatibilityAdvisory, setup, nativeSessions, configurableProviders, runtimePaths
     }
     private enum ContinuationKeys: String, CodingKey { case groupKey }
@@ -308,6 +318,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
         message = try c.decodeIfPresent(String.self, forKey: .message)
         availability = try c.decodeIfPresent(String.self, forKey: .availability)
         models = try c.decodeIfPresent([ServerProviderModel].self, forKey: .models) ?? []
+        subProviders = try? c.decodeIfPresent([SubProvider].self, forKey: .subProviders)
         // Lenient: a malformed entry drops the list, never the provider.
         slashCommands = (try? c.decodeIfPresent([ServerProviderSlashCommand].self, forKey: .slashCommands)) ?? []
         skills = (try? c.decodeIfPresent([ServerProviderSkill].self, forKey: .skills)) ?? []
