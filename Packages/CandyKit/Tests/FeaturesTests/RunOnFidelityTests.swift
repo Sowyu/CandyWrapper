@@ -132,7 +132,7 @@ struct RunOnFidelityTests {
         #expect(!c.interactive)
         c.options = Self.options
         c.locked = true
-        #expect(!c.interactive && c.intrinsicContentSize.width == Self.control(selected: "local").intrinsicContentSize.width + 4) // The static glyph keeps its margins; 3824 has no chevron.
+        #expect(!c.interactive && c.intrinsicContentSize.width == Self.control(selected: "local").intrinsicContentSize.width) // 4928 drops the glyph margins on both (#28083); 3824 has no chevron.
         // The hero's project name truncates at 256 (`max-w-64`), short names stay whole.
         #expect(DraftHeroView.truncated("demo-repo", kern: -0.75) == "demo-repo")
         #expect(DraftHeroView.truncated("candywrapper-sandbox/demo-repo", kern: -0.75).hasSuffix("…"))

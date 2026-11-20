@@ -4611,6 +4611,36 @@ extension ComposerController {
         if !panel.rightPanelSheetOpen { focusComposer() }
     }
 
+    /// A pull request task joins the draft (`writeHandoffToComposer`, 4928 usePullRequestActions.ts:319-331):
+    /// its prompt after what is there, its chips at the end. False while a question holds the editor.
+    @discardableResult
+    func appendHandoff(_ task: PullRequestHandoff.Task) -> Bool {
+        guard target != nil, questionRequestId == nil else { return false }
+        let existing = ComposerContext.referencedIds(composer.text).compactMap { menuState.records[$0] }
+            .filter { $0["kind"]?.stringValue == "review-comment" }
+        let next = PullRequestHandoff.append(prompt: composer.text, existing: existing, task)
+        for r in next.records { if let id = r["contextId"]?.stringValue { menuState.records[id] = r } }
+        composer.text = next.prompt
+        remember(next.prompt)
+        if !panel.rightPanelSheetOpen { focusComposer() }
+        return true
+    }
+
+    /// A deleted thread's drafts go with it, its side chats' too (`releaseComposerDraftUploads` and
+    /// `clearDraftThread`, 4928 useThreadActions.ts:493-504, 640-649): the prompt, reply target and
+    /// attachments, whose uploads are released.
+    func clearDrafts(threads ids: [ThreadId]) {
+        for id in ids {
+            let key = id.rawValue
+            for a in draftAttachments.removeValue(forKey: key) ?? [] { release(a) }
+            prompts[key] = nil
+            replyTargets[key] = nil
+            if draftKey == key { composer.text = ""; refresh() }
+        }
+        persistDraftAttachments()
+        scheduleSave()
+    }
+
     /// A moved file comment's new lines; one whose chip the user already removed stays removed.
     func updateReviewComment(_ record: JSONValue) {
         guard let id = record["contextId"]?.stringValue, ComposerContext.referencedIds(composer.text).contains(id) else { return }

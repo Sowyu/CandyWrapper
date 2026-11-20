@@ -805,6 +805,7 @@ final class ThreadController {
         pullRequests.openThreadId = { [weak self] in self?.openThreadId }
         // ponytail: dedupes the PR chip by id only; T3 also skips it when a `#` chip names the same URL.
         pullRequests.addToChat = { [weak self] records in records.forEach { self?.composer.addReviewComment($0) } }
+        pullRequests.handoff = { [weak self] task in self?.composer.appendHandoff(task) ?? false }
         automations.openThreadId = { [weak self] in self?.openThreadId }
         prCapabilities.onChange = { [weak self] in
             guard let self else { return }

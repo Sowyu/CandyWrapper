@@ -88,6 +88,16 @@ struct FileListWidthTests {
         #expect(FileListWidth.width(row: 1000, .changes, saved: nil) == 256)
     }
 
+    /// #25737: the Files explorer starts at 256, keeps the file 256, and saves under its own key.
+    @Test func filesExplorerWidth() {
+        #expect(FileListWidth.width(row: 1000, .filesExplorer, saved: nil) == 256)
+        #expect(FileListWidth.width(row: 600, .filesExplorer, saved: 500) == 344)
+        #expect(FileListWidth.width(row: 380, .filesExplorer, saved: nil) == 256)
+        #expect(FileListWidth.bounds(row: 380, .filesExplorer).max == 160)
+        #expect(FileListWidth.width(row: 2000, .filesExplorer, saved: 100) == 160)
+        #expect(FileListWidth.Sizing.filesExplorer.storageKey == "t3code.fileExplorerWidth")
+    }
+
     @Test func paneSitsOnTheRightAndTheHandleResizesIt() {
         let saved = FileListWidth.saved
         defer { FileListWidth.saved = saved }

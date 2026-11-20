@@ -14,10 +14,14 @@ public enum FileListWidth {
         public var defaultWidth: CGFloat
         public var fraction: CGFloat?
         public var minWidth: CGFloat
+        /// Where the chosen width is saved.
+        public var storageKey = FileListWidth.storageKey
         /// Changes: `defaultWidthFraction={0.4}` over the 256 default, minimum 160.
         public static let changes = Sizing(defaultWidth: 256, fraction: 0.4, minWidth: 160)
         /// PR Code: 320 at most 40% of the row, minimum 192.
         public static let pullRequestCode = Sizing(defaultWidth: 320, fraction: 0.4, minWidth: 192)
+        /// The Files explorer beside an open file (FileExplorerPane.tsx defaults, #25737): 256, minimum 160, saved apart.
+        public static let filesExplorer = Sizing(defaultWidth: 256, fraction: nil, minWidth: 160, storageKey: "t3code.fileExplorerWidth")
     }
 
     /// `measure` (FileExplorerPane.tsx:50-62): the initial width and the largest one for a row.
@@ -36,9 +40,11 @@ public enum FileListWidth {
     }
 
     public static var saved: CGFloat? {
-        get { (UserDefaults.standard.object(forKey: storageKey) as? Double).map { CGFloat($0) } }
-        set { UserDefaults.standard.set(newValue.map(Double.init), forKey: storageKey) }
+        get { saved(storageKey) }
+        set { save(newValue, storageKey) }
     }
+    public static func saved(_ key: String) -> CGFloat? { (UserDefaults.standard.object(forKey: key) as? Double).map { CGFloat($0) } }
+    public static func save(_ width: CGFloat?, _ key: String) { UserDefaults.standard.set(width.map(Double.init), forKey: key) }
     /// Tells every open list that the shared width changed.
     public static let didChange = Notification.Name("FileListWidth.didChange")
 }
@@ -183,7 +189,7 @@ public final class FileListPane: DSView {
         handle.onCommit = { [weak self] in
             guard let self, let w = self.live else { return }
             self.live = nil
-            FileListWidth.saved = w
+            FileListWidth.save(w, self.sizing.storageKey)
             NotificationCenter.default.post(name: FileListWidth.didChange, object: nil)
         }
         observer = NotificationCenter.default.addObserver(forName: FileListWidth.didChange, object: nil, queue: .main) { [weak self] _ in
@@ -196,7 +202,7 @@ public final class FileListPane: DSView {
     /// The width in a row this wide: the live drag, the saved width clamped, or the default.
     public func width(row: CGFloat) -> CGFloat {
         rowWidth = row
-        return live ?? FileListWidth.width(row: row, sizing, saved: FileListWidth.saved)
+        return live ?? FileListWidth.width(row: row, sizing, saved: FileListWidth.saved(sizing.storageKey))
     }
 
     /// Places the pane at the right of `rect` and the handle over its left border, in `host`.

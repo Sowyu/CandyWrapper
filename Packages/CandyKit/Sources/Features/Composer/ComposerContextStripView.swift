@@ -391,12 +391,14 @@ open class ComposerContextControl: ControlView {
     private var glyphAdvance: CGFloat {
         switch glyphViews.count {
         case 0: 0
-        case 1: interactive && !pillSized && !(plainChevron && ComposerDesign.uses3814(dark: effectiveAppearance.isDark)) ? 8 : 12
+        // 4928's xs control sets `[&_svg]:mx-0` (ComposerControl.tsx:15), so a lone glyph keeps its 12pt.
+        case 1: 12
         default: CGFloat(glyphViews.count) * 12 + CGFloat(glyphViews.count - 1) * 2
         }
     }
 
-    private var glyphGap: CGFloat { 4 }
+    /// `gap-1 has-[[data-composer-label]]:gap-1.5` (4928 ComposerControl.tsx:15, BranchToolbarEnvironmentSelector.tsx:73, #28083).
+    private var glyphGap: CGFloat { fullLabelWidth > 0 ? 6 : 4 }
 
     open override var intrinsicContentSize: NSSize {
         let lead = glyphViews.isEmpty ? 0 : glyphAdvance + glyphGap
@@ -417,13 +419,15 @@ open class ComposerContextControl: ControlView {
         let midY = bounds.height / 2
         var x: CGFloat = 8
         if glyphViews.count == 1 {
-            glyphViews[0].frame = NSRect(x: interactive && !pillSized && !(plainChevron && ComposerDesign.uses3814(dark: effectiveAppearance.isDark)) ? x - 2 : x, y: midY - 6, width: 12, height: 12)
+            glyphViews[0].frame = NSRect(x: x, y: midY - 6, width: 12, height: 12)
         } else {
             for (i, g) in glyphViews.enumerated() { g.frame = NSRect(x: x + CGFloat(i) * 14, y: midY - 6, width: 12, height: 12) }
         }
         if !glyphViews.isEmpty { x += glyphAdvance + glyphGap }
         let room = max(0, bounds.width - x - (interactive && !ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? 4 + 8 + 8 : 8))
-        let frame = NSRect(x: x, y: midY - 8, width: min(labelWidth, room), height: 16)
+        // `[text-box:trim-both_cap_alphabetic]` on the label (ComposerContextLabel.tsx at 4928, #28083) centers the
+        // caps, half a point above the line box's center.
+        let frame = NSRect(x: x, y: midY - 8.5, width: min(labelWidth, room), height: 16)
         // Compact keeps the text at its shown width, so it clips and fades instead of truncating again.
         if !labelsHidden {
             label.frame = NSRect(origin: .zero, size: frame.size)
@@ -459,7 +463,10 @@ open class ComposerContextControl: ControlView {
 
     private func restyle() {
         let modern = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
-        let color = modern ? (effectiveAppearance.isDark ? Themed.color(\.contrastMutedForeground) : interactive && state.hovered ? Themed.color(\.contrastForeground) : Themed.color(\.contrastForeground, 0.7))
+        // A locked label is `text-muted-foreground/70` in both themes (BranchToolbarEnvironmentSelector.tsx:73,
+        // BranchToolbarEnvModeSelector.tsx:79 at 4928).
+        let color = modern && !interactive ? Themed.color(\.contrastMutedForeground, 0.7)
+            : modern ? (effectiveAppearance.isDark ? Themed.color(\.contrastMutedForeground) : interactive && state.hovered ? Themed.color(\.contrastForeground) : Themed.color(\.contrastForeground, 0.7))
             : interactive && state.hovered ? Themed.color(\.contrastForeground, 0.8) : Themed.color(\.contrastMutedForeground, 0.7)
         chevron.alphaValue = modern ? 1 : 0.5
         label.color = color

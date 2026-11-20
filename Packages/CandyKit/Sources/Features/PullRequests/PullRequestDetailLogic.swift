@@ -368,22 +368,53 @@ public enum PullRequestDetailLogic {
     /// "1 reply", "3 replies".
     public static func replyCountLabel(_ n: Int) -> String { "\(n.formatted()) \(n == 1 ? "reply" : "replies")" }
 
-    /// The one-line preview of a collapsed remark: comments, callout markers, link targets, list and
-    /// heading marks, emphasis and runs of space stripped (2994 PullRequestSummaryTab.tsx:248-255).
+    /// The one-line preview of a collapsed remark (`pullRequestCommentPreview`, 4928 pullRequestMarkdown.logic.ts:115-153,
+    /// #32283): the text the rendered Markdown and HTML would show. Code and directives keep their characters, tags
+    /// go (an image leaves its alt text, a block tag a space), entities decode, and callout markers drop.
+    // ponytail: regex passes over protected code spans, not a Markdown and HTML parse; parse with MarkdownLayout's tree if a body still leaks markup
     public static func collapsedSummary(_ body: String) -> String {
-        var s = body
-        let steps: [(String, String)] = [
-            (#"<!--[\s\S]*?-->"#, ""),
-            (#"(?m)^\s*>?\s*\[!\w+\]\s*$"#, ""),
-            (#"!?(\[([^\]]+)\])\([^)]*\)"#, "$2"),
-            (#"(?m)^[\s>#*-]+"#, ""),
-            (#"[*`]"#, ""),
-            (#"\s+"#, " "),
-        ]
-        for (pattern, template) in steps {
-            s = s.replacingOccurrences(of: pattern, with: template, options: .regularExpression)
+        var kept: [String] = []
+        func protect(_ text: String, _ pattern: String, _ group: Int) -> String {
+            guard let re = try? NSRegularExpression(pattern: pattern) else { return text }
+            let ns = NSMutableString(string: text)
+            for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)).reversed() {
+                let inner = (text as NSString).substring(with: m.range(at: group))
+                kept.append(inner)
+                ns.replaceCharacters(in: m.range, with: " \u{E000}\(kept.count - 1)\u{E001} ")
+            }
+            return ns as String
         }
-        return s.trimmingCharacters(in: .whitespaces)
+        func protectInline(_ text: String, _ pattern: String, _ group: Int) -> String {
+            guard let re = try? NSRegularExpression(pattern: pattern) else { return text }
+            let ns = NSMutableString(string: text)
+            for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)).reversed() {
+                kept.append((text as NSString).substring(with: m.range(at: group)))
+                ns.replaceCharacters(in: m.range, with: "\u{E000}\(kept.count - 1)\u{E001}")
+            }
+            return ns as String
+        }
+        var s = body.replacingOccurrences(of: "\r\n?", with: "\n", options: .regularExpression)
+        s = protect(s, #"(?ms)^[ \t]*(```|~~~)[^\n]*\n(.*?)(?:^[ \t]*\1[ \t]*$|\z)"#, 2)
+        s = protect(s, #"(?m)(?:^(?:    |\t)[^\n]*\n?)+"#, 0)
+        s = protectInline(s, #"(`+)(.+?)\1"#, 2)
+        s = protectInline(s, #":[A-Za-z][\w-]*(?:\[[^\]\n]*\])?(?:\{[^}\n]*\})?"#, 0)
+        let steps: [(String, String)] = [
+            (#"<!--[\s\S]*?(?:-->|$)"#, ""),
+            (#"(?m)^[ \t]*>?[ \t]*\[![A-Za-z]+\][ \t]*$"#, ""),
+            (#"<img\b(?:[^>"']|"[^"]*"|'[^']*')*?\balt\s*=\s*(?:"([^"]*)"|'([^']*)')(?:[^>"']|"[^"]*"|'[^']*')*>"#, "$1$2"),
+            (#"</?(?:blockquote|br|dd|details|div|dl|dt|h[1-6]|hr|li|ol|p|pre|summary|table|td|th|tr|ul)\b(?:[^>"']|"[^"]*"|'[^']*')*/?>"#, " "),
+            (#"</?[A-Za-z][\w-]*(?:[^>"']|"[^"]*"|'[^']*')*/?>"#, ""),
+            (#"!?\[([^\]]*)\]\([^)]*\)"#, "$1"),
+            (#"(?m)^[ \t>#*+-]+"#, ""),
+            (#"(?m)^[ \t]*\d+[.)][ \t]+"#, ""),
+            (#"\*\*|__|(?<![\w*])[*_](?=\S)|(?<=\S)[*_](?![\w*])"#, ""),
+        ]
+        for (pattern, template) in steps { s = s.replacingOccurrences(of: pattern, with: template, options: .regularExpression) }
+        for (entity, char) in [("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"), ("&nbsp;", " "), ("&amp;", "&")] {
+            s = s.replacingOccurrences(of: entity, with: char)
+        }
+        for (i, text) in kept.enumerated().reversed() { s = s.replacingOccurrences(of: "\u{E000}\(i)\u{E001}", with: text) }
+        return s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
     }
 
     /// A finished remark's collapsed card (`CollapsedComment`, 2994 PullRequestSummaryTab.tsx:204-273, 568-591):

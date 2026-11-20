@@ -188,6 +188,28 @@ struct UsageTests {
         #expect(UsageLimitsLogic.remainingPercent(UsageLimitWindow(id: "x", kind: "other", label: "x", usedPercent: 140)) == 0)
     }
 
+    /// #34421 (4928 packages/shared/src/usageLimits.test.ts "preserves Cursor totals and scope").
+    @Test(arguments: [
+        ([[14, 14], [14, 14]] as [[Double?]], ["autoPercentUsed"], [86], nil as String?),
+        ([[14, 14], [80, 70]], ["totalPercentUsed", "autoPercentUsed"], [53, 58], "Cursor Models"),
+        ([[nil, 14]], ["autoPercentUsed"], [86], "Cursor Models"),
+        ([[14, nil]], ["totalPercentUsed"], [86], nil),
+    ])
+    func cursorDuplicateTotals(_ reports: [[Double?]], _ ids: [String], _ remaining: [Int], _ label: String?) {
+        let reset = "2026-10-14T00:00:00.000Z"
+        let providers = reports.enumerated().map { i, r in
+            Self.provider("cursor\(i)", driver: "cursor", email: "u\(i)@x.com", windows:
+                (r[0].map { [UsageLimitWindow(id: "totalPercentUsed", kind: "weekly", label: "Weekly", usedPercent: $0, resetsAt: reset, windowDurationMins: 10080)] } ?? [])
+                + (r[1].map { [UsageLimitWindow(id: "autoPercentUsed", kind: "weekly", label: "Weekly", usedPercent: $0, resetsAt: reset, windowDurationMins: 10080)] } ?? []))
+        }
+        let accounts = UsageLimitsLogic.accounts([UsageLimitsEnvironment(environmentId: "e1", label: "One", providers: providers, sources: [])])
+        let pool = UsageLimitsLogic.pools(accounts, nowMs: Self.now)[0]
+        let visible = UsageLimitsLogic.displayWindows(pool)
+        #expect(visible.map(\.id) == ids)
+        #expect(visible.map(\.remainingPercent) == remaining)
+        #expect(UsageLimitsLogic.cursorWindowDetails(ids.last!, pool: pool)?.label == label)
+    }
+
     @Test func poolsMergeAccountsAndOrderBySessionReset() {
         let a = Self.provider("codex", email: "A@x.com", windows: [
             UsageLimitWindow(id: "primary", kind: "session", label: "5h", usedPercent: 40, resetsAt: "2026-10-10T15:00:00.000Z", windowDurationMins: 300),

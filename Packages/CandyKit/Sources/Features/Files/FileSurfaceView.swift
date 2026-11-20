@@ -6,8 +6,9 @@ import T3Protocol
 import WebKit
 
 /// One file tab (FilePreviewPanel.tsx): the subheader with breadcrumbs and icon actions, the body
-/// for the file's preview mode, and the explorer aside on the right (`w-[min(22rem,46%)] min-w-64
-/// border-l border-border/60`, shown by default, remembered in `t3code.fileExplorerOpen`).
+/// for the file's preview mode, and the explorer aside on the right (`FileExplorerPane resizable`: 256 wide
+/// until the reader drags it, `t3code.fileExplorerWidth`; `border-l border-border/60`, shown by default,
+/// remembered in `t3code.fileExplorerOpen`).
 ///
 /// The owner sets `path` and then `content` once the read or the asset URL arrives, and answers
 /// `onEdit` (autosave), `onOpenFile` (breadcrumb picks) and `browseDirectory` (breadcrumb menus).
@@ -60,6 +61,10 @@ public final class FileSurfaceView: DSView {
     public private(set) var content = Content.loading
     /// The explorer shown beside the file, owned by the right panel.
     public weak var explorer: FilesPanelView? { didSet { needsLayout = true } }
+    /// The explorer's left edge drags its width (#25737, FileExplorerPane.tsx `resizable` beside a file).
+    private let explorerHandle = FileListResizeHandle(label: "Resize file explorer")
+    /// The width while a drag runs, before it is saved.
+    private var liveExplorerWidth: CGFloat?
 
     public var onReviewComment: ((JSONValue) -> Void)?
     /// A file comment's Delete, by context id.
@@ -133,6 +138,8 @@ public final class FileSurfaceView: DSView {
         noticeBar.isHidden = true
         for l in [noticeBar, asideBorder] { l.actions = ["frame": NSNull(), "hidden": NSNull()]; layer?.addSublayer(l) }
         [crumbs, renderToggle, wrapToggle, explorerToggle, notice].forEach(addSubview)
+        explorerHandle.isHidden = true
+        configureExplorerHandle()
         attachmentCrumbs.isHidden = true
         addSubview(attachmentCrumbs)
         for (b, label) in [(copyButton, "Copy contents"), (saveButton, "Save file"), (removeButton, "Remove from draft"), (closeButton, "Close")] {
@@ -449,7 +456,7 @@ public final class FileSurfaceView: DSView {
             top += 28
         }
         let explorerVisible = showsExplorer && explorer != nil
-        let asideWidth: CGFloat = isDirectory ? w : explorerVisible ? max(256, min(352, (w * 0.46).rounded(.down))) : 0
+        let asideWidth: CGFloat = isDirectory ? w : explorerVisible ? explorerWidth(row: w) : 0
         let bodyWidth = max(0, w - asideWidth)
         body?.frame = NSRect(x: 0, y: top, width: bodyWidth, height: max(0, bounds.height - top))
         asideBorder.isHidden = !explorerVisible || isDirectory
@@ -460,6 +467,29 @@ public final class FileSurfaceView: DSView {
             explorer.frame = NSRect(x: x, y: top, width: max(0, w - x), height: max(0, bounds.height - top))
         } else if let explorer, explorer.superview === self {
             explorer.removeFromSuperview()
+        }
+        let resizable = explorerVisible && !isDirectory
+        if resizable, explorerHandle.superview !== self { addSubview(explorerHandle, positioned: .above, relativeTo: explorer) }
+        explorerHandle.isHidden = !resizable
+        explorerHandle.frame = NSRect(x: bodyWidth - 4, y: top, width: 8, height: max(0, bounds.height - top))
+    }
+
+    /// The saved width clamped to this row, the live drag, or 256 (`useResizableWidth`).
+    private func explorerWidth(row: CGFloat) -> CGFloat {
+        liveExplorerWidth ?? FileListWidth.width(row: row, .filesExplorer, saved: FileListWidth.saved(FileListWidth.Sizing.filesExplorer.storageKey))
+    }
+
+    private func configureExplorerHandle() {
+        explorerHandle.currentWidth = { [weak self] in self.map { $0.explorerWidth(row: $0.bounds.width) } ?? 0 }
+        explorerHandle.limits = { [weak self] in
+            (FileListWidth.Sizing.filesExplorer.minWidth, FileListWidth.bounds(row: self?.bounds.width ?? 0, .filesExplorer).max)
+        }
+        explorerHandle.onResize = { [weak self] w in self?.liveExplorerWidth = w; self?.needsLayout = true }
+        explorerHandle.onCommit = { [weak self] in
+            guard let self, let w = self.liveExplorerWidth else { return }
+            self.liveExplorerWidth = nil
+            FileListWidth.save(w, FileListWidth.Sizing.filesExplorer.storageKey)
+            self.needsLayout = true
         }
     }
 

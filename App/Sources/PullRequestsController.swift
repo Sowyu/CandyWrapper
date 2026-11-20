@@ -179,9 +179,10 @@ final class PullRequestDetailBinding {
         slices = []; sliceCursor = nil; sliceError = nil; sliceLoading = false
         omittedStats = [:]; withheldReadable = false; withheldLoaded = [:]; withheldStatus = [:]
         stackFresh = false
-        // A write still running belongs to the previous pull request; its reply leaves this one alone.
-        view.pendingAction = nil
-        view.actionPending = false
+        // A write still running belongs to its own pull request: coming back to it shows it pending (#29005).
+        let running = actionKey.flatMap { runningActions[$0] }
+        view.pendingAction = running
+        view.actionPending = running != nil
         view.stackPending = false
         view.titleSaving = false
         view.bodySaving = false
@@ -439,7 +440,9 @@ final class PullRequestDetailBinding {
                      moreError: sliceError, commit: commit)
     }
 
-    private func loadViewed() {
+    /// `answered`: presses whose write landed before this read began; they yield to it even when it
+    /// disagrees (#24151, 4928 filesViewedStore.ts viewedOverlay: the next completed read wins).
+    private func loadViewed(answered: Set<String> = []) {
         guard let shell, let ref = reference, let store = detail?.capabilities.viewedFiles else {
             view.setViewed(states: nil, overlay: [:], store: nil)
             return
@@ -449,7 +452,8 @@ final class PullRequestDetailBinding {
             let result = try? reply?.decode(as: PullRequestFilesViewedResult.self)
             guard let self else { return }
             if let result { self.viewedStates = Dictionary(result.files.map { ($0.path, $0.state) }, uniquingKeysWith: { _, b in b }) }
-            self.overlay = PullRequestDetailLogic.settleOverlay(self.overlay, states: self.viewedStates, pending: self.pendingViewed, answered: [])
+            self.overlay = PullRequestDetailLogic.settleOverlay(self.overlay, states: self.viewedStates, pending: self.pendingViewed,
+                                                                answered: result == nil ? [] : answered)
             self.view.setViewed(states: self.viewedStates, overlay: self.overlay, store: store)
         }
     }
@@ -466,7 +470,7 @@ final class PullRequestDetailBinding {
             do {
                 _ = try await shell.supervisor.request("pullRequests.setFilesViewed", payload: PullRequestPayloads.setFilesViewed(ref, files: batch))
                 self?.pendingViewed.subtract(paths)
-                self?.loadViewed()
+                self?.loadViewed(answered: Set(paths))
             } catch {
                 guard let self else { return }
                 self.pendingViewed.subtract(paths)
@@ -483,8 +487,14 @@ final class PullRequestDetailBinding {
         run(action, mergeMethod: mergeMethod, shell: shell, ref: ref, shown: showing, provider: view.detail?.provider)
     }
 
+    /// Actions in flight by pull request (`pendingKeys`, 4928 usePullRequestActions.ts, #29005).
+    private var runningActions: [String: String] = [:]
+    private var actionKey: String? { environmentId.flatMap { e in target.map { "\(e) \($0.surfaceId)" } } }
+
     /// `finishAction`: the action goes to the pull request it was chosen on, even once another one shows.
     private func run(_ action: String, mergeMethod: String?, shell: ShellSession, ref: PullRequestRef, shown: Int, provider: String?) {
+        guard let key = actionKey, runningActions[key] == nil else { return }
+        runningActions[key] = action
         if stillShows(shown) {
             view.pendingAction = action
             view.actionPending = true
@@ -495,6 +505,7 @@ final class PullRequestDetailBinding {
                 // state/pullRequests.ts:1134-1137, 895-931, #25761). A 3824 server answers nothing.
                 let reply = try await shell.supervisor.request("pullRequests.runAction", payload: PullRequestPayloads.action(ref, action: action, mergeMethod: mergeMethod, replyWithSummary: true))
                 guard let self else { return }
+                self.runningActions[key] = nil
                 // 2994 shows the new state in the panel and toasts only a revert, which opens another
                 // pull request (PullRequestDetailPanel.tsx:1027-1030).
                 if action == "revert" || action == "delete-branch" { self.toast(PullRequestDetailLogic.actionSuccess(action, provider: provider), nil, .success) }
@@ -513,6 +524,7 @@ final class PullRequestDetailBinding {
                 }
             } catch {
                 guard let self else { return }
+                self.runningActions[key] = nil
                 if self.stillShows(shown) { self.view.actionPending = false }
                 self.toast(PullRequestDetailLogic.actionFailure(action, provider: provider, inPanel: true), Self.failure(error, number: ref.number, provider: provider).1, .error)
             }
@@ -866,6 +878,8 @@ final class ThreadPullRequestsController {
     var openThreadId: () -> ThreadId? = { nil }
     /// Add to chat: the review-comment records for the composer beside the panel (#30579).
     var addToChat: (([JSONValue]) -> Void)?
+    /// A pull request task for the composer beside the panel (`writeHandoffToComposer`); false when it can't take one.
+    var handoff: ((PullRequestHandoff.Task) -> Bool)?
     private var modal: ModalHost?
     /// The open Link dialog; its fields talk to it weakly, so it is held here while it shows.
     private var linkDialog: LinkPullRequestDialog?
@@ -897,6 +911,17 @@ final class ThreadPullRequestsController {
                 guard let self, self.addToChat != nil else { return }
                 self.addToChat?(records)
                 panel?.toasts.show(ToastView(title: "Added to the composer", message: nil, kind: .success))
+            }
+            // Ask, Explain, Fix findings and Resolve conflicts (4928 PullRequestDetailPanel.tsx:1048-1370) join the composer.
+            view.onHandoff = { [weak self] kind in
+                guard let self, let d = self.detail.detail else { return }
+                let term = ChangeRequestTerminology.of(kind: d.provider).singular
+                switch kind {
+                case "ask": self.handOff(PullRequestHandoff.ask(d), ask: true, term: term)
+                case "explain": self.handOff(PullRequestHandoff.explain(d), ask: true, term: term)
+                case "findings": self.handOff(PullRequestHandoff.fixFindings(d, checks: d.checks, inThisThread: true))
+                default: self.handOff(PullRequestHandoff.resolveConflicts(d, inThisThread: true))
+                }
             }
         }
         panel.onAddPullRequest = { [weak self] in self?.openCurrentPullRequest() }
@@ -1010,7 +1035,8 @@ final class ThreadPullRequestsController {
     private var cardDetails: [String: PullRequestDetail] = [:]
     private var cardDetailsTried: Set<String> = []
     private var cardDetailsThread: ThreadId?
-    private var cardActionPending: Set<String> = []
+    /// The action each row is running, so a detail that moves mid-request keeps its pending label (#38517).
+    private var cardActionPending: [String: String] = [:]
 
     /// `ThreadDetailsPrRow`'s reference: the project on the link's host that reads it (`findProjectOnChangeRequestHost`).
     private func cardReference(_ link: ThreadPullRequestLink, env: String) -> PullRequestRef? {
@@ -1043,7 +1069,8 @@ final class ThreadPullRequestsController {
 
     /// `usePullRequestActionRunner` for the row's Ready and Merge: `pullRequests.runAction`, then a fresh read.
     private func runCardAction(_ link: ThreadPullRequestLink, env: String, action: String, mergeMethod: String?) {
-        guard let ref = cardReference(link, env: env), cardActionPending.insert(link.key.id).inserted else { return }
+        guard let ref = cardReference(link, env: env), cardActionPending[link.key.id] == nil else { return }
+        cardActionPending[link.key.id] = action
         cardKey = nil
         sync()
         let thread = cardDetailsThread
@@ -1051,7 +1078,7 @@ final class ThreadPullRequestsController {
         Task { [weak self] in
             guard let self else { return }
             let ok = (try? await self.environments.request(env, "pullRequests.runAction", PullRequestPayloads.action(ref, action: action, mergeMethod: mergeMethod))) != nil
-            self.cardActionPending.remove(link.key.id)
+            self.cardActionPending[link.key.id] = nil
             self.panel.toasts.show(ToastView(title: ok ? PullRequestDetailLogic.actionSuccess(action, provider: provider) : PullRequestDetailLogic.actionFailure(action, provider: provider), kind: ok ? .success : .error))
             guard self.cardDetailsThread == thread else { return }
             self.cardDetails[link.key.id] = nil
@@ -1059,6 +1086,18 @@ final class ThreadPullRequestsController {
             self.cardKey = nil
             self.sync()
         }
+    }
+
+    /// `handOff` (ThreadDetailsPrRow.tsx:205-215, PullRequestDetailPanel.tsx:1048-1059): the task joins
+    /// the composer beside the panel, with the toast T3 shows.
+    func handOff(_ task: PullRequestHandoff.Task, ask: Bool = false, term: String = "pull request") {
+        guard handoff?(task) == true else {
+            panel.toasts.show(ToastView(title: "Unable to add to the composer", message: "The composer is busy; try again once it is ready.", kind: .error))
+            return
+        }
+        let message = !ask ? "The task is in the composer. Read it over, then send."
+            : task.prompt.isEmpty ? "The \(term) is in the composer. Type your question, then send." : "The question is in the composer. Read it over, then send."
+        panel.toasts.show(ToastView(title: "Added to the composer", message: message, kind: .success))
     }
 
     /// The two-line row (ThreadDetailsPrRow.tsx:434-476): the title, then `#n`, the checks, the watch eye
@@ -1069,7 +1108,9 @@ final class ThreadPullRequestsController {
         let conflicting = d.mergeability == "conflicting"
         let rollup = PullRequestDetailLogic.checksState(d.checks)
         let showChecks = rollup != nil && !conflicting && !d.isDraft
-        let action = PullRequestDetailLogic.threadPanelAction(d)
+        // A running Ready or Merge keeps its row action until the request finishes (ThreadDetailsPrRow.tsx:186-189 at 4928).
+        let running = cardActionPending[link.key.id]
+        let action = running == "ready" || running == "merge" ? running : PullRequestDetailLogic.threadPanelAction(d)
         let watching = watching && d.state == "open"
         guard showChecks || action != nil || watching else { return nil }
         let r = ThreadDetailsPrRowView()
@@ -1097,18 +1138,26 @@ final class ThreadPullRequestsController {
         r.watch.isHidden = !watching
         r.watch.setAccessibilityLabel("Stop watching #\(link.number)")
         r.watch.action = { [weak self] in self?.watch(link, false) }
-        let pending = cardActionPending.contains(link.key.id)
+        let pending = running != nil
         let method = PullRequestDetailLogic.selectedMergeMethod(PullRequestDetailLogic.allowedMergeMethods(d), preferred: "merge")
         r.action.isHidden = action == nil
         switch action {
         case "resolve", "fix":
-            // ponytail: Resolve and Fix hand off to a new thread in T3 (usePullRequestHandoffs); the handoff is not
-            // ported, so they show disabled as the panel's Resolve conflicts does. Port them with the handoffs
-            r.action.text = action == "resolve" ? "Resolve" : "Fix"
+            // Beside the thread's composer the task joins it (ThreadDetailsPrRow.tsx:205-249, 393-436).
+            let resolve = action == "resolve"
+            r.action.text = resolve ? "Resolve" : "Fix"
             r.action.tone = .destructive
-            r.action.suffix = IconName.arrowUpRight.definition
-            r.action.tooltipText = action == "resolve" ? "Check the branch out and resolve the conflicts in a new thread" : "Fix the failing checks in a new thread"
-            r.action.isEnabled = false
+            let here = handoff != nil
+            r.action.suffix = here ? nil : IconName.arrowUpRight.definition
+            r.action.tooltipText = resolve
+                ? (here ? "Resolve the conflicts in this thread" : "Check the branch out and resolve the conflicts in a new thread")
+                : (here ? "Fix the failing checks in this thread" : "Fix the failing checks in a new thread")
+            // ponytail: no new-thread checkout handoff yet; off a composer the row stays disabled. Port usePullRequestHandoffs.startHandoff with the page's Check out
+            r.action.isEnabled = here
+            r.action.action = { [weak self] in
+                self?.handOff(resolve ? PullRequestHandoff.resolveConflicts(d, inThisThread: true)
+                                      : PullRequestHandoff.fixChecks(d, inThisThread: true))
+            }
         case "ready":
             r.action.text = pending ? "Marking..." : "Ready"
             r.action.tone = .primary

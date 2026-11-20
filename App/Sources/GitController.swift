@@ -515,7 +515,16 @@ final class GitController {
         split.primary.isEnabled = true
         split.primary.looksDisabled = q.disabled
         split.primary.toolTip = q.disabled ? q.hint ?? "This action is currently unavailable." : nil
-        split.secondary.isEnabled = true
+        // #31972 (GitActionsControl.tsx:1517-1536, 1652-1653, 1764 at 4928): an empty menu stays shut, and the
+        // pointer coming onto the group asks for fresh status, since terminal edits and commits publish none.
+        let status = self.status
+        let hasRemote = status?.hasPrimaryRemote ?? false
+        // ponytail: canWrite is true; CW reads no `source-control:write` scope yet. Pass the scope when read-only pairings land
+        let usable = GitActionsLogic.hasUsableMenuContent(GitActionsLogic.menuItems(status, busy: isBusy, hasPrimaryRemote: hasRemote), canWrite: true,
+                                                          canPublish: isRepo && status != nil && !hasRemote,
+                                                          hasNotice: !GitActionsLogic.menuNotes(status).isEmpty)
+        split.secondary.isEnabled = usable
+        split.onPointerEnter = usable ? nil : { [weak self] in self?.refreshStatus() }
     }
 
     // MARK: Details card

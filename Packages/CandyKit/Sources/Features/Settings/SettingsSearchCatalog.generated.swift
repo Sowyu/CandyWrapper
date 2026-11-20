@@ -43,6 +43,7 @@ extension SettingsSearch {
         .item(SettingsSearchItem(id: "boring-sidebar", title: "Boring sidebar (group by project)", to: .beta, searchTerms: ["beta folders project tree classic sidebar"])),
         .item(SettingsSearchItem(id: "tool-call-visibility", title: "Tool calls in chat", to: .chat, searchTerms: ["hide tool calls commands edits searches work log activity quiet chat zen final answers only"])),
         .item(SettingsSearchItem(id: "composer-collapse", title: "Collapse composer on scroll", to: .chat, searchTerms: ["composer rest resting scroll wheel conversation timeline shrink minimize"])),
+        .item(SettingsSearchItem(id: "screen-reader-window-title", title: "Screen reader window title", to: .chat, searchTerms: ["accessibility a11y screen reader nvda jaws voiceover orca narrator window title tab title alt tab taskbar thread status order working approval"])),
         .item(SettingsSearchItem(id: "guest-links", title: "Guest links", to: .beta, scope: .environment, searchTerms: ["beta share guest invite link teammate watch t3 connect tunnel"])),
         .item(SettingsSearchItem(id: "linked-environments-beta", title: "Linked environments", to: .beta, scope: .environment, searchTerms: ["beta link another machine vps peer agents work there delegate"])),
         .item(SettingsSearchItem(id: "prompt-suggestions-beta", title: "Suggest next prompt", to: .beta, scope: .environment, searchTerms: ["beta tab autocomplete predict next message claude codex ghost text"])),
