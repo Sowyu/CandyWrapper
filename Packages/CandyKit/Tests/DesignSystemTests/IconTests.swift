@@ -25,6 +25,22 @@ struct IconTests {
         }
     }
 
+    /// Redesign draws a Tabler glyph for every lucide icon and none for brand glyphs.
+    @Test func tablerCoversEveryLucideIcon() throws {
+        for name in IconName.allCases {
+            guard let def = name.tablerDefinition else {
+                #expect(name.isBrand, "\(name) has no Tabler glyph")
+                continue
+            }
+            #expect(!name.isBrand, "\(name) is a brand glyph with a Tabler twin")
+            #expect(def.viewBox == IconViewBox(x: 0, y: 0, width: 24, height: 24))
+            for (i, e) in def.elements.enumerated() {
+                let b = try e.cgPath().boundingBoxOfPath
+                #expect(!b.isNull && b.minX >= 0 && b.minY >= 0 && b.maxX <= 24 && b.maxY <= 24, "\(name)[\(i)] bounds \(b)")
+            }
+        }
+    }
+
     @Test func pathParserBasics() throws {
         // implicit lineto after moveto, packed arc flags, scientific notation
         #expect(try SVGPath.parse("M0 0 10 0 10 10z").boundingBoxOfPath == CGRect(x: 0, y: 0, width: 10, height: 10))

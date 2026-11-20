@@ -1,0 +1,265 @@
+#!/usr/bin/env python3
+"""Generate IconDataTabler.generated.swift: Tabler Icons outline (MIT) for the Redesign theme.
+
+Usage: scripts/extract-tabler [--icons DIR] [--out FILE]
+  --icons  the outline SVG folder of @tabler/icons 3.50.0 (package/icons/outline)
+  --out    output Swift file
+
+Without --icons it downloads the pinned npm tarball from registry.npmjs.org into
+~/CandyWrapper-research/downloads/packs/tabler-icons-3.50.0 and checks its SHA-256.
+
+Each lucide IconName maps to a Tabler glyph: the name in LUCIDE_TO_TABLER, else the same name when Tabler has it.
+Every lucide icon must map, so Redesign draws only Tabler. Tabler outline icons are 24x24 with
+stroke 2, round caps and joins, like lucide, so elements use IconPaint.lucide unless they set their own fill.
+The script reads the SVGs as data only. It uses the Python standard library.
+"""
+import argparse
+import hashlib
+import os
+import re
+import sys
+import tarfile
+import urllib.request
+import xml.etree.ElementTree as ET
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+VERSION = "3.50.0"
+TARBALL = "https://registry.npmjs.org/@tabler/icons/-/icons-%s.tgz" % VERSION
+SHA256 = "4c2eb678ed71cdcbf57a3e899c4e91f3445d680fbc1d57d27c7083a321c47303"
+PACK = os.path.expanduser("~/CandyWrapper-research/downloads/packs/tabler-icons-%s" % VERSION)
+DEFAULT_OUT = os.path.join(ROOT, "Packages/CandyKit/Sources/DesignSystem/Icons/IconDataTabler.generated.swift")
+ICON_DATA = os.path.join(ROOT, "Packages/CandyKit/Sources/DesignSystem/Icons/IconData.generated.swift")
+
+# lucide name -> Tabler name where they differ, or where Tabler's same-name glyph is the wrong pick.
+# The Settings nav and grid rows follow the set the user approved on 2026-11-21 (icon-sets-2026-11-21/tabler-*.png).
+LUCIDE_TO_TABLER = {
+    "alarm-clock": "alarm",
+    "alarm-clock-off": "alarm-off",
+    "archive-x": "archive-restore",
+    "arrow-down-up": "arrows-down-up",
+    "arrow-right-left": "arrows-right-left",
+    "arrow-up-down": "arrows-up-down",
+    "at-sign": "at",
+    "book-open": "book",
+    "bot": "robot",
+    "calendar-arrow-down": "calendar-down",
+    "calendar-arrow-up": "calendar-up",
+    "chart-no-axes-column": "chart-bar",
+    "chevrons-down-up": "fold",
+    "chevrons-left-right-ellipsis": "code-dots",
+    "chevrons-up-down": "selector",
+    "circle-alert": "alert-circle",
+    "circle-dot-dashed": "hourglass-empty",
+    "circle-slash": "ban",
+    "clock-3": "clock-hour-3",
+    "code-2": "code",
+    "ellipsis": "dots",
+    "file-code-2": "file-code",
+    "file-json": "file-code-2",
+    "film": "movie",
+    "flask-conical": "flask",
+    "flask-conical-off": "flask-off",
+    "folder-closed": "folder",
+    "folder-git": "folder-root",
+    "folder-git-2": "folder-root",
+    "folder-tree": "folders",
+    "gamepad-2": "device-gamepad-2",
+    "git-branch-plus": "git-branch",
+    "git-commit-horizontal": "git-commit",
+    "git-pull-request-arrow": "git-pull-request",
+    "globe": "world",
+    "globe-2": "world",
+    "hard-drive": "database",
+    "image": "photo",
+    "info": "info-circle",
+    "laptop": "device-laptop",
+    "layers": "stack-2",
+    "lightbulb": "bulb",
+    "link-2": "link",
+    "link-2-off": "link-off",
+    "list-checks": "list-check",
+    "list-filter": "filter",
+    "list-ordered": "list-numbers",
+    "list-plus": "playlist-add",
+    "list-todo": "list-check",
+    "loader-circle": "loader-2",
+    "log-in": "login-2",
+    "mail-open": "mail-opened",
+    "maximize-2": "arrows-diagonal",
+    "memory-stick": "memory",
+    "message-square": "bubble",
+    "message-square-dashed": "message-pause",
+    "message-square-off": "message-off",
+    "message-square-plus": "message-plus",
+    "message-square-text": "message",
+    "message-square-warning": "message-exclamation",
+    "messages-square": "messages",
+    "minimize-2": "arrows-diagonal-minimize-2",
+    "monitor": "device-desktop",
+    "more-vertical": "dots-vertical",
+    "mouse-pointer-2": "pointer",
+    "mouse-pointer-click": "click",
+    "octagon-alert": "alert-octagon",
+    "octagon-x": "octagon-minus",
+    "package-plus": "package-import",
+    "paintbrush": "brush",
+    "panel-bottom": "layout-bottombar",
+    "panel-left": "layout-sidebar",
+    "panel-left-close": "layout-sidebar-left-collapse",
+    "panel-right": "layout-sidebar-right",
+    "panels-top-left": "layout-navbar",
+    "pen-line": "pencil-minus",
+    "picture-in-picture-2": "picture-in-picture",
+    "pin-off": "pinned-off",
+    "play": "player-play",
+    "plug-2": "plug-connected",
+    "qr-code": "qrcode",
+    "radio-tower": "building-broadcast-tower",
+    "redo-2": "arrow-forward-up",
+    "refresh-cw": "refresh",
+    "reply": "arrow-back-up",
+    "rotate-ccw": "rotate",
+    "rotate-cw": "rotate-clockwise",
+    "rows-3": "layout-rows",
+    "settings-2": "adjustments-horizontal",
+    "sliders-horizontal": "adjustments-horizontal",
+    "smartphone": "device-mobile",
+    "smile-plus": "mood-plus",
+    "square-arrow-out-up-right": "external-link",
+    "square-menu": "align-box-left-top",
+    "square-pen": "edit",
+    "square-split-horizontal": "layout-columns",
+    "square-split-vertical": "layout-rows",
+    "table-2": "table",
+    "terminal": "terminal-2",
+    "terminal-square": "terminal-2",
+    "text": "align-left",
+    "text-search": "list-search",
+    "timer": "stopwatch",
+    "trash-2": "trash",
+    "triangle-alert": "alert-triangle",
+    "type": "letter-t",
+    "undo-2": "arrow-back-up",
+    "unlink-2": "unlink",
+    "unplug": "plug-connected-x",
+    "user-lock": "user-shield",
+    "user-round": "user",
+    "user-round-x": "user-x",
+    "workflow": "sitemap",
+    "wrench": "tool",
+    "zap": "bolt",
+}
+
+
+
+def fetch_pack():
+    icons = os.path.join(PACK, "package/icons/outline")
+    if os.path.isdir(icons):
+        return icons
+    os.makedirs(PACK, exist_ok=True)
+    tgz = os.path.join(PACK, "tabler-icons-%s.tgz" % VERSION)
+    req = urllib.request.Request(TARBALL, headers={"User-Agent": "npm-fetch"})
+    data = urllib.request.urlopen(req, timeout=120).read()
+    got = hashlib.sha256(data).hexdigest()
+    if got != SHA256:
+        sys.exit("tarball sha256 %s, expected %s" % (got, SHA256))
+    with open(tgz, "wb") as f:
+        f.write(data)
+    with tarfile.open(tgz) as t:
+        t.extractall(PACK, filter="data")
+    return icons
+
+
+def fmt(v):
+    v = round(float(v), 3)
+    return str(int(v)) if v == int(v) else ("%.3f" % v).rstrip("0").rstrip(".")
+
+
+def compact(d):
+    """Tabler writes `-.5` with a space before each sign; the app's parser takes the same numbers with less padding."""
+    return re.sub(r"\s+", " ", d.strip())
+
+
+def convert(path):
+    root = ET.parse(path).getroot()
+    out = []
+    for el in root.iter():
+        tag = el.tag.split("}")[-1]
+        if tag == "svg":
+            continue
+        a = el.attrib
+        if a.get("stroke") == "none" and a.get("fill") == "none":
+            continue  # Tabler's 24x24 bounding box
+        if set(a) - {"d", "cx", "cy", "r", "rx", "ry", "x", "y", "width", "height", "x1", "y1", "x2", "y2", "points", "fill",
+                     "stroke-width"}:
+            raise ValueError("unsupported attributes %s on <%s>" % (sorted(a), tag))
+        if tag == "path":
+            shape = '.path(d: "%s")' % compact(a["d"])
+        elif tag == "circle":
+            shape = ".circle(cx: %s, cy: %s, r: %s)" % (fmt(a["cx"]), fmt(a["cy"]), fmt(a["r"]))
+        elif tag == "rect":
+            rx = a.get("rx", a.get("ry", "0"))
+            shape = ".rect(x: %s, y: %s, w: %s, h: %s, rx: %s, ry: %s)" % (
+                fmt(a.get("x", 0)), fmt(a.get("y", 0)), fmt(a["width"]), fmt(a["height"]), fmt(rx), fmt(a.get("ry", rx)))
+        elif tag == "line":
+            shape = ".line(x1: %s, y1: %s, x2: %s, y2: %s)" % tuple(fmt(a[k]) for k in ("x1", "y1", "x2", "y2"))
+        else:
+            raise ValueError("unsupported <%s>" % tag)
+        if a.get("fill") == "currentColor":
+            out.append("IconElement(%s, IconPaint(fill: .current, stroke: .current, strokeWidth: 2, lineCap: .round, lineJoin: .round))" % shape)
+        elif a.get("fill", "none") != "none" or "stroke-width" in a:
+            raise ValueError("unsupported paint %s" % dict(a))
+        else:
+            out.append("IconElement(%s)" % shape)
+    if not out:
+        raise ValueError("no shapes")
+    return out
+
+
+def lucide_cases(path):
+    src = open(path).read()
+    return {m.group(2): m.group(1) for m in re.finditer(r'case \.(\w+): return "([a-z0-9-]+)"', src)}
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--icons")
+    ap.add_argument("--out", default=DEFAULT_OUT)
+    args = ap.parse_args()
+    icons = args.icons or fetch_pack()
+    cases = lucide_cases(ICON_DATA)
+    lines = [
+        "// GENERATED by scripts/extract-tabler. Do not edit.",
+        "// Tabler Icons %s outline (MIT, see LICENSE-tabler.txt), https://tabler.io/icons" % VERSION,
+        "",
+        "extension IconName {",
+        "    /// Tabler glyph for this icon under Redesign; nil only for brand glyphs.",
+        "    public var tablerDefinition: IconDefinition? {",
+        "        switch self {",
+    ]
+    mapped, missing = 0, []
+    for lucide, case in sorted(cases.items(), key=lambda kv: kv[1]):
+        tabler = LUCIDE_TO_TABLER.get(lucide, lucide)
+        svg = os.path.join(icons, tabler + ".svg")
+        if not os.path.exists(svg):
+            missing.append(lucide)
+            continue
+        elements = convert(svg)
+        lines.append("        case .%s: // %s" % (case, tabler))
+        lines.append("            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [")
+        lines += ["                %s," % e for e in elements]
+        lines.append("            ])")
+        mapped += 1
+    lines += ["        default:", "            return nil", "        }", "    }", "}", ""]
+    if missing:
+        sys.exit("no Tabler glyph for: %s. Map them in LUCIDE_TO_TABLER." % ", ".join(missing))
+    stale = sorted(set(LUCIDE_TO_TABLER) - set(cases))
+    if stale:
+        sys.exit("LUCIDE_TO_TABLER names no lucide icon in IconName: %s" % ", ".join(stale))
+    with open(args.out, "w") as f:
+        f.write("\n".join(lines))
+    print("mapped %d" % mapped)
+
+
+if __name__ == "__main__":
+    main()

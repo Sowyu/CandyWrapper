@@ -52,9 +52,6 @@ public struct IconPaint: Sendable, Equatable {
         self.offsetX = offsetX; self.offsetY = offsetY
     }
 
-    /// A Hugeicons duotone tint: a see-through fill under the glyph's strokes.
-    public var isTint: Bool { stroke == .none && fill == .current && opacity < 1 }
-
     /// lucide defaults: no fill, currentColor stroke, width 2, round caps and joins.
     public static let lucide = IconPaint(stroke: .current, strokeWidth: 2, lineCap: .round, lineJoin: .round)
 }
@@ -80,7 +77,7 @@ extension IconName {
     public var isBrand: Bool { lucideName == nil }
 
     /// The lucide icon whose shapes `definition` draws, whatever its stroke, so a glyph passed around as a definition
-    /// (a menu item's) still finds its Hugeicons twin.
+    /// (a menu item's) still finds its Tabler twin.
     public static func lucide(drawing definition: IconDefinition) -> IconName? {
         byShapes[definition.elements.map(\.shape)]
     }

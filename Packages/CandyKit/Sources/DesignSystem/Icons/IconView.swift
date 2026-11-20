@@ -9,11 +9,11 @@ public final class IconView: NSView {
     private var definition: IconDefinition
     /// The definition outside Dither: the name's lucide glyph, or the one passed in.
     private let base: IconDefinition
-    /// Dither draws Hugeicons' glyph where one is mapped (IconDataHugeicons.generated.swift), lucide elsewhere.
-    private var usesHugeicons = false
-    /// The icon whose Hugeicons glyph Dither draws: `name`, or the lucide icon a passed-in definition draws.
+    /// Dither draws the icon's Tabler glyph (IconDataTabler.generated.swift) at its own glyph size and stroke.
+    private var usesDitherGlyph = false
+    /// The icon whose Tabler glyph Dither draws: `name`, or the lucide icon a passed-in definition draws.
     /// Looked up only once Dither shows, so other themes never build the lookup.
-    private lazy var hugeiconsName: IconName? = name ?? (isBrand ? IconName.lucide(drawing: base) : nil)
+    private lazy var ditherName: IconName? = name ?? (isBrand ? IconName.lucide(drawing: base) : nil)
     /// Fixed-color glyph: unfilled shapes stay unfilled.
     private let isBrand: Bool
     private var shapes: [(layer: CAShapeLayer, element: IconElement, path: CGPath)] = []
@@ -36,7 +36,7 @@ public final class IconView: NSView {
     }
 
     /// An icon outside the generated set. `currentColor` resolves to `strokeColor` (or `fillColor` for fills).
-    /// A lucide icon's definition (a menu glyph, a restroked chevron) still swaps to its Hugeicons glyph under Dither.
+    /// A lucide icon's definition (a menu glyph, a restroked chevron) still swaps to its Tabler glyph under Dither.
     public convenience init(definition: IconDefinition, size: CGFloat = 16, color: NSColor = .labelColor) {
         self.init(name: nil, definition: definition, brand: true, size: size, strokeColor: color, fillColor: nil, providerMark: false)
     }
@@ -55,9 +55,9 @@ public final class IconView: NSView {
         wantsLayer = true
         layerContentsRedrawPolicy = .never
         layer?.masksToBounds = false
-        if ThemeRuntime.isDither(dark: NSApp?.effectiveAppearance.isDark ?? true), let alt = hugeiconsName.flatMap(ditherDefinition) {
+        if ThemeRuntime.isDither(dark: NSApp?.effectiveAppearance.isDark ?? true), let alt = ditherName.flatMap(ditherDefinition) {
             self.definition = alt
-            usesHugeicons = true
+            usesDitherGlyph = true
         }
         buildShapes()
         relayout()
@@ -80,11 +80,11 @@ public final class IconView: NSView {
         }
     }
 
-    /// Swaps between lucide and Hugeicons as the Dither theme turns on or off for this view.
+    /// Swaps between the lucide glyph and Dither's as the Dither theme turns on or off for this view.
     private func syncIconSet() {
-        let alt = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? hugeiconsName.flatMap(ditherDefinition) : nil
-        guard (alt != nil) != usesHugeicons else { return }
-        usesHugeicons = alt != nil
+        let alt = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? ditherName.flatMap(ditherDefinition) : nil
+        guard (alt != nil) != usesDitherGlyph else { return }
+        usesDitherGlyph = alt != nil
         definition = alt ?? base
         buildShapes()
         relayout()
@@ -129,9 +129,10 @@ public final class IconView: NSView {
     }
 
     /// Dither's glyph for `name`: Anthropic's mark where Claude stands for the provider (the maker's logo, like
-    /// OpenAI's for Codex), Claude's own where it stands for a model, else the Hugeicons glyph.
+    /// OpenAI's for Codex), Claude's own where it stands for a model, else the Tabler glyph. Other brand glyphs keep
+    /// their own drawing.
     private func ditherDefinition(_ name: IconName) -> IconDefinition? {
-        name == .brandClaudeAI ? (providerMark ? Self.anthropicMark : nil) : name.hugeiconsDefinition
+        name == .brandClaudeAI ? (providerMark ? Self.anthropicMark : nil) : name.tablerDefinition
     }
     /// Draws Claude as its provider, Anthropic, under Dither.
     private let providerMark: Bool
@@ -150,16 +151,17 @@ public final class IconView: NSView {
         default: box
         }
     }
-    /// Dither's one stroke, in points at every glyph size; per-call `strokeWidth` overrides don't apply.
-    nonisolated static let ditherStroke: CGFloat = 1.2
+    /// Dither's one stroke, in points at every glyph size: Tabler's 2 units on a 16pt glyph. Per-call `strokeWidth`
+    /// overrides don't apply.
+    nonisolated static let ditherStroke: CGFloat = 2 * 16 / 24
 
     private func relayout() {
         let vb = definition.viewBox
         let w = bounds.width, h = bounds.height
         guard w > 0, h > 0, vb.width > 0, vb.height > 0 else { return }
         let box = min(w, h)
-        let glyph = usesHugeicons ? Self.ditherGlyphSize(box: box) : box
-        let scale = usesHugeicons ? glyph / max(vb.width, vb.height) : min(w / vb.width, h / vb.height)
+        let glyph = usesDitherGlyph ? Self.ditherGlyphSize(box: box) : box
+        let scale = usesDitherGlyph ? glyph / max(vb.width, vb.height) : min(w / vb.width, h / vb.height)
         let ox = (w - vb.width * scale) / 2, oy = (h - vb.height * scale) / 2
         withoutActions {
             for s in shapes {
@@ -171,15 +173,7 @@ public final class IconView: NSView {
                 s.layer.bounds = bounds
                 s.layer.position = CGPoint(x: bounds.midX, y: bounds.midY)
                 s.layer.path = s.path.copy(using: &t)
-                if usesHugeicons {
-                    s.layer.lineWidth = Self.ditherStroke
-                    // The duotone tint only on large glyphs: at row and toolbar sizes it made closed shapes (a clock)
-                    // read heavier than open ones (a check).
-                    s.layer.isHidden = glyph <= 16 && s.element.paint.isTint
-                } else {
-                    s.layer.lineWidth = (strokeWidth ?? s.element.paint.strokeWidth) * scale
-                    s.layer.isHidden = false
-                }
+                s.layer.lineWidth = usesDitherGlyph ? Self.ditherStroke : (strokeWidth ?? s.element.paint.strokeWidth) * scale
             }
         }
     }
