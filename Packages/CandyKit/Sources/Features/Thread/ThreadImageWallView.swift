@@ -366,7 +366,7 @@ final class GalleryViewerView: DSView {
     /// The band above the viewer's top bar that its ground covers: Redesign's tab band, where the header pill sits.
     var topInset: CGFloat = 0 { didSet { if topInset != oldValue { needsLayout = true } } }
     /// Horizontal two-finger travel at fit in the current gesture, and whether it already changed the picture.
-    private var swipe: (dx: CGFloat, dy: CGFloat, done: Bool) = (0, 0, false)
+    private var swipe: (dx: CGFloat, dy: CGFloat, done: Bool, at: TimeInterval) = (0, 0, false, 0)
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -424,7 +424,9 @@ final class GalleryViewerView: DSView {
     /// At fit, a two-finger swipe sideways changes the picture once per gesture; momentum and vertical travel do nothing.
     private func swipe(_ event: NSEvent) {
         guard event.hasPreciseScrollingDeltas, event.momentumPhase.isEmpty else { return }
-        if event.phase.contains(.began) { swipe = (0, 0, false) }
+        // A device without gesture phases starts a new swipe after a pause.
+        if event.phase.contains(.began) || (event.phase.isEmpty && event.timestamp - swipe.at > 0.3) { swipe = (0, 0, false, 0) }
+        swipe.at = event.timestamp
         swipe.dx += event.scrollingDeltaX
         swipe.dy += event.scrollingDeltaY
         guard !swipe.done, abs(swipe.dx) > 60, abs(swipe.dx) > 2 * abs(swipe.dy) else { return }
