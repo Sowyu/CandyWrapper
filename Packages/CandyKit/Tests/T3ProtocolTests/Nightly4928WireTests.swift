@@ -190,4 +190,15 @@ struct Nightly4928WireTests {
         let meta = ThreadLinkMetadata.decode(Self.json(#"{"a":{"title":"A","projectId":"p"},"b":{"title":"B","projectId":null},"c":{"oops":1}}"#))
         #expect(meta.count == 2 && meta["a"]?.projectId == "p" && meta["b"]?.title == "B" && meta["b"]?.projectId == nil)
     }
+
+    /// The HTTP shell's `projectIdentities` digest goes back on the resume as `knownProjectIdentities` (state/shell.ts:703-707).
+    /// A 3824 shell has none, and the resume then sends nothing new.
+    @Test func httpShellCarriesItsProjectIdentitiesDigest() throws {
+        let body = #"{"schemaVersion":1,"snapshotSequence":7,"threads":[],"projects":[]"#
+        let current = try JSONDecoder().decode(ShellHttpSnapshot.self, from: Data((body + #","projectIdentities":"d41d8cd9"}"#).utf8))
+        #expect(current.projectIdentities == "d41d8cd9")
+        #expect(current.snapshot.snapshotSequence == 7)
+        let older = try JSONDecoder().decode(ShellHttpSnapshot.self, from: Data((body + "}").utf8))
+        #expect(older.projectIdentities == nil)
+    }
 }

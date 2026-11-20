@@ -45,6 +45,21 @@ public struct ShellSnapshot: Codable, Hashable, Sendable {
     }
 }
 
+/// The HTTP shell (`OrchestrationV2ShellHttpSnapshot`, orchestrationV2.ts:2370-2374). A 4928 server adds
+/// `projectIdentities`, a digest of its repository identities: a resume that names it back as `knownProjectIdentities`
+/// isn't sent those identities again (state/shell.ts:703-707, server ShellStream.ts:126-141). Older servers omit it.
+public struct ShellHttpSnapshot: Decodable, Sendable {
+    public var snapshot: ShellSnapshot
+    public var projectIdentities: String?
+
+    private enum CodingKeys: String, CodingKey { case projectIdentities }
+
+    public init(from decoder: Decoder) throws {
+        snapshot = try ShellSnapshot(from: decoder)
+        projectIdentities = try decoder.container(keyedBy: CodingKeys.self).decodeIfPresent(String.self, forKey: .projectIdentities)
+    }
+}
+
 /// T3 e57c093cdd, orchestrationV2.ts:2027-2031,3464-3492.
 public struct OlderSettledThreads: Codable, Hashable, Sendable {
     public struct Count: Codable, Hashable, Sendable {
