@@ -213,9 +213,11 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         if !prefix.isHidden { w += ceil(prefix.textWidth) + 6 }
         w += ceil(title.textWidth) + 1
         if !detail.text.isEmpty { w += 4 + ceil(detail.textWidth) + 2 }
-        for b in buttons { w += 4 + b.intrinsicContentSize.width }
-        if !dismiss.isHidden { w += 4 + dismiss.intrinsicContentSize.width }
-        return ceil(w + 6 + 4)
+        var actions: CGFloat = buttons.reduce(0) { $0 + 4 + $1.intrinsicContentSize.width }
+        if !dismiss.isHidden { actions += 4 + dismiss.intrinsicContentSize.width }
+        // `layout()` keeps the actions column at least `min-w-12` plus its gap (#22236), so a lone X takes 52.
+        if actions > 0 { actions = max(actions, 4 + 48) }
+        return ceil(w + actions + 6 + 4)
     }
 
     public override func layout() {
