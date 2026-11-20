@@ -188,6 +188,12 @@ public struct EnvironmentHTTP: Sendable {
         try await get("api/connect/link-state", token: token, as: CloudLinkState.self)
     }
 
+    /// `POST /api/connect/reachability` (environmentHttp.ts:1010-1015): the server checks its T3 Connect
+    /// tunnel now and answers with the result, which the next link state also reports.
+    public func checkReachability(token: String) async throws -> ConnectReachability {
+        try await post("api/connect/reachability", Optional<JSONValue>.none, token: token, as: ConnectReachability.self)
+    }
+
     /// `POST /api/connect/preferences` (needs `relay:write`). The server applies it itself.
     public func setCloudPreferences(_ request: CloudPreferencesRequest, token: String) async throws -> CloudLinkState {
         try await post("api/connect/preferences", request, token: token, as: CloudLinkState.self)

@@ -96,6 +96,11 @@ public struct CloudLinkState: Codable, Sendable, Equatable {
     public var holdWebhooksWhileOffline: Bool?
     /// `reachability` (environmentHttp.ts:503-504): the server's latest T3 Connect check, absent until one finishes.
     public var reachability: ConnectReachability?
+    /// 4928 (environmentHttp.ts:553-559): the account revoked the link, the tunnel's own hostname on this
+    /// machine, and whether this backend can link from here.
+    public var linkRevoked: Bool?
+    public var tunnelHostname: String?
+    public var linkableHere: Bool?
 
     public init(linked: Bool, managedTunnelActive: Bool? = nil, publishAgentActivity: Bool, holdWebhooksWhileOffline: Bool? = nil) {
         self.linked = linked; self.managedTunnelActive = managedTunnelActive
@@ -104,6 +109,11 @@ public struct CloudLinkState: Codable, Sendable, Equatable {
 
     /// Older servers lack `managedTunnelActive`; for them a link always has a tunnel (useCloudLinkController.ts).
     public var tunnelActive: Bool { managedTunnelActive ?? linked }
+    /// `isManagedTunnelActive` (cloud/t3ConnectState.ts:9-19): a tunnel that is not revoked, and for a saved
+    /// machine one T3 Connect lists as a Cloudflare tunnel.
+    public func managedTunnelActive(relayProviderKind: String?) -> Bool {
+        linkRevoked != true && tunnelActive && (relayProviderKind == nil || relayProviderKind == "cloudflare_tunnel")
+    }
     public var holdsWebhooks: Bool { holdWebhooksWhileOffline ?? false }
 }
 
@@ -314,7 +324,33 @@ public struct AuthAccessSnapshot: Sendable, Equatable {
 public struct PairingCredentialRequest: Encodable, Sendable, Equatable {
     public var label: String?
     public var scopes: [String]?
-    public init(label: String?, scopes: [String]?) { self.label = label; self.scopes = scopes }
+    /// 4928 (auth.ts:515-530): a code that approves one app sign-in at this `McpClientAccess` level, or with
+    /// `purpose: "peer-link"` a link code. Servers without `mcpApprovalCodes` ignore it.
+    public var access: String?
+    public var purpose: String?
+    public init(label: String?, scopes: [String]?, access: String? = nil, purpose: String? = nil) {
+        self.label = label; self.scopes = scopes; self.access = access; self.purpose = purpose
+    }
+
+    /// `createMcpApprovalCodeCommand` (client-runtime state/peerPairingCode.ts:130-141): label "App sign-in" and the level.
+    public static func mcpApproval(_ access: McpClientAccess) -> PairingCredentialRequest {
+        PairingCredentialRequest(label: "App sign-in", scopes: nil, access: access.rawValue)
+    }
+}
+
+/// `AuthMcpClientAccess` (auth.ts:270-290): what an app signed in over MCP may do, lowest first.
+public enum McpClientAccess: String, CaseIterable, Sendable, Equatable {
+    case readOnly = "read-only", approvalRequired = "approval-required", autoAcceptEdits = "auto-accept-edits"
+    case auto, fullAccess = "full-access"
+
+    /// `mcpClientScopes`: the scopes a session at this level gets, and so the ones the minting session must hold.
+    public var scopes: [String] {
+        switch self {
+        case .readOnly: [AuthScopes.orchestrationRead]
+        case .fullAccess: [AuthScopes.orchestrationRead, AuthScopes.orchestrationOperate, AuthScopes.settingsWrite, AuthScopes.sourceControlWrite]
+        default: [AuthScopes.orchestrationRead, AuthScopes.orchestrationOperate]
+        }
+    }
 }
 
 public struct PairingCredentialResult: Decodable, Sendable, Equatable {
@@ -322,6 +358,9 @@ public struct PairingCredentialResult: Decodable, Sendable, Equatable {
     public var credential: String
     public var label: String?
     public var expiresAt: T3Timestamp
+    /// 4928: set on a peer-link code, and on an app sign-in code to its level. Older servers omit both.
+    public var purpose: String?
+    public var access: String?
 }
 
 /// `POST /api/auth/clients/revoke-others`.

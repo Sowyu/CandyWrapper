@@ -1,0 +1,22 @@
+{
+  "authorized-clients.mcp" : {
+    "height" : 46,
+    "width" : 796
+  },
+  "mcp.access" : {
+    "height" : 370,
+    "width" : 526
+  },
+  "mcp.apps" : {
+    "height" : 274,
+    "width" : 526
+  },
+  "mcp.connect" : {
+    "height" : 170,
+    "width" : 526
+  },
+  "mcp.turn-on" : {
+    "height" : 206,
+    "width" : 526
+  }
+}

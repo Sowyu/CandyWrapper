@@ -364,7 +364,8 @@ extension SettingsController {
         return .init(summary: ConnectionsPageModel.Access.summary(clients: access.clientSessions.count, links: access.sortedLinks.count),
                      canRead: canRead, canWrite: canWrite, loading: canRead && !accessLoaded, error: accessError,
                      links: links, clients: clients, revokingOthers: revokingOthers,
-                     canRevokeOthers: !known || access.clientSessions.contains { !$0.current })
+                     canRevokeOthers: !known || access.clientSessions.contains { !$0.current },
+                     offersMcp: hosts[id]?.descriptor?.capability("mcpApprovalCodes") == true)
     }
 
     /// `URLSearchParams([[key, value]]).toString()`.

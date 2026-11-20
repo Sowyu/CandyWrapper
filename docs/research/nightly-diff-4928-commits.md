@@ -631,7 +631,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 965ddc1d6c | #33196 | connections | feat(web,server): use T3 Code in another app (MCP) | port; use T3 Code in another app |
+| 965ddc1d6c | #33196 | connections | feat(web,server): use T3 Code in another app (MCP) | ported (settings-5): UseInAnotherAppDialog with the gate, app grid, access levels, Connect step and approval codes (`access` on `/api/auth/pairing-token`, `POST /api/connect/reachability`); opened from Authorized clients on `mcpApprovalCodes` servers and the palette. Turn on shows the host command, since CandyWrapper cannot link a backend |
 | 8226715813 | #33663 | thread | fix(web): "Use T3 Code in another app" opens the Grok Bot app | port |
 | 7f6ba5bd24 | #35565 | thread | fix(web): Grok Bot opens with the setup message filled in | port |
 

@@ -167,6 +167,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case pin
     case pinOff
     case play
+    case plug
     case plug2
     case plus
     case power
@@ -190,6 +191,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case settings2
     case shield
     case shieldCheck
+    case shieldOff
     case shieldQuestion
     case shoppingBag
     case slidersHorizontal
@@ -428,6 +430,7 @@ extension IconName {
         case .pin: return "pin"
         case .pinOff: return "pin-off"
         case .play: return "play"
+        case .plug: return "plug"
         case .plug2: return "plug-2"
         case .plus: return "plus"
         case .power: return "power"
@@ -451,6 +454,7 @@ extension IconName {
         case .settings2: return "settings-2"
         case .shield: return "shield"
         case .shieldCheck: return "shield-check"
+        case .shieldOff: return "shield-off"
         case .shieldQuestion: return "shield-question"
         case .shoppingBag: return "shopping-bag"
         case .slidersHorizontal: return "sliders-horizontal"
@@ -1565,6 +1569,13 @@ extension IconName {
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z")),
             ])
+        case .plug:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M12 22v-5")),
+                IconElement(.path(d: "M15 8V2")),
+                IconElement(.path(d: "M17 8a1 1 0 0 1 1 1v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1z")),
+                IconElement(.path(d: "M9 8V2")),
+            ])
         case .plug2:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "M9 2v6")),
@@ -1710,6 +1721,12 @@ extension IconName {
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z")),
                 IconElement(.path(d: "m9 12 2 2 4-4")),
+            ])
+        case .shieldOff:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "m2 2 20 20")),
+                IconElement(.path(d: "M5 5a1 1 0 0 0-1 1v7c0 5 3.5 7.5 7.67 8.94a1 1 0 0 0 .67.01c2.35-.82 4.48-1.97 5.9-3.71")),
+                IconElement(.path(d: "M9.309 3.652A12.252 12.252 0 0 0 11.24 2.28a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1v7a9.784 9.784 0 0 1-.08 1.264")),
             ])
         case .shieldQuestion:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
