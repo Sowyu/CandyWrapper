@@ -495,8 +495,25 @@ public enum WorkLog {
             || (entry.itemType == .webSearch && normalizeCompactToolLabel(entry.toolTitle ?? entry.label).contains(/\bgrep\b/.ignoresCase()))
     }
 
-    /// `toolGroupAction` (work-log/presentation.ts:428-476).
+    /// `toolGroupAction` (work-log/presentation.ts:428-476). Every row pass of a streaming thread asks again for every
+    /// tool row, so the answer is kept per item revision, like `indicatesFailure` (#29971 cached the same derivation).
     public static func toolGroupAction(_ entry: WorkLogEntry) -> ToolGroupAction {
+        guard let revision = entry.structuredPayload?.updatedAt.raw else { return deriveToolGroupAction(entry) }
+        let key = "\(entry.id)|\(revision)|\(entry.itemType?.rawValue ?? "")|\(entry.toolTitle ?? "")|\(entry.label)" as NSString
+        if let known = actionCache.object(forKey: key), let action = ToolGroupAction(rawValue: known as String) { return action }
+        let action = deriveToolGroupAction(entry)
+        actionCache.setObject(action.rawValue as NSString, forKey: key)
+        return action
+    }
+
+    // ponytail: process-wide like failureCache, key it per thread if memory shows up in profiles
+    nonisolated(unsafe) private static let actionCache: NSCache<NSString, NSString> = {
+        let cache = NSCache<NSString, NSString>()
+        cache.countLimit = 20_000
+        return cache
+    }()
+
+    private static func deriveToolGroupAction(_ entry: WorkLogEntry) -> ToolGroupAction {
         if entry.itemType == .threadCreated { return .threadCreate }
         let presentation = toolPresentation(entry)
         if let action = presentation?.action { return action }

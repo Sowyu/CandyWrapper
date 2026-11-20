@@ -1818,9 +1818,9 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 0da2bb625c | #26720 | composer | perf(web): composer serializes each draft doc once per keystroke | n/a: web composer perf |
 | 9504a09f08 | #26936 | thread | perf(clients): thread search reuses per-thread fields across keystrokes | n/a: client perf internals |
 | e8b0856870 | #27041 | terminal | perf(shared): skip parsing cached terminal styles | n/a: perf internals |
-| e4d1edaabd | #27073 | thread | perf(web): compact changed-file directories once | n/a: web perf |
+| e4d1edaabd | #27073 | thread | perf(web): compact changed-file directories once | already in CandyWrapper (thread-4): TurnDiffs.nodes compacts each directory once, bottom up (TurnDiffs.swift:175-193) |
 | bd907328f3 | #27404 | thread | fix(client): a resume no longer re-renders every home row five times | n/a: React render perf |
-| a98b6245eb | #27467 | thread | perf(client): avoid temporary arrays in inbox snapshots | n/a: client perf internals |
+| a98b6245eb | #27467 | thread | perf(client): avoid temporary arrays in inbox snapshots | n/a (thread-4): a JS temporary array; SidebarInboxReturnTracker has no copy of the states to make |
 | 7c511b3d28 | #27503 | thread | fix(shared): preserve files outside log rotation naming | n/a: server logging |
 | 8a18bbf281 | #27818 | settings | perf(client): repeated server settings keep the same settings object | n/a: client perf internals |
 | 67ff912ccd | #28288 | thread | fix(shared): opening a database waits for another process's lock | n/a: server SQLite |
@@ -1833,7 +1833,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 30084f0018 | #27833 | pr/git | perf(web): the pull request code tab derives its file model once per diff load | n/a: React render perf |
 | a036489016 | #29680 | thread | revert(web): undo hover timestamp change from #28610 | n/a: revert of #28610 |
 | d8a829e5ec | #29626 | pr/git | perf(web): PDF previews reload without starting a new pdf.js worker | n/a: pdf.js worker |
-| f981b7a226 | #27460 | thread | perf(client): skip idle inbox placement serialization | n/a: client perf internals |
+| f981b7a226 | #27460 | thread | perf(client): skip idle inbox placement serialization | ported (thread-4): SidebarInboxReturnTracker.observe builds the placement key only for working threads or ones that just were |
 | 5fa0d0be7d | #29006 | thread | fix(clients): cancel oversized project icon responses | n/a: web favicon cache |
 | 89c2a5c4dd | #29114 | thread | perf(client-runtime): expanding deferred work skips an unused timeline rebuild | ported (thread-3): with deferred work, a work page merges at its anchor only |
 | efcb937695 | #29245 | composer | fix(shared): Linux file links preserve literal backslashes | n/a: Linux only |
@@ -1847,7 +1847,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 8704966861 | #29614 | pr/git | fix(shared): preview_open reports about: and mailto: as unsupported instead of misreading them | n/a: agent tool, server side |
 | e1cd7f0e15 | #29730 | thread | fix(shared): accept whitespace after engine range operators | n/a: server semver |
 | 76f29667c6 | #29727 | thread | fix(mcp): accept CR and mixed line endings in response streams | n/a: MCP server side |
-| ebfca09e91 | #29971 | thread | perf(web): long threads stream with 70% less work-row derivation | partly in CandyWrapper: failure checks cached per revision; toolGroupAction is not, see perf-sweep-4928.md |
+| ebfca09e91 | #29971 | thread | perf(web): long threads stream with 70% less work-row derivation | ported (thread-4): WorkLog.toolGroupAction is kept per item revision like indicatesFailure; timeline_rows measured in PROGRESS |
 | 66e6217b93 | #30493 | terminal | Revert "fix(web): terminal controls no longer cover the first line" | n/a: revert of #23373 |
 | c1f91b5be1 | #26806 | thread | fix(web): keep message navigation visible on touch when there is room | n/a: touch only |
 | 0ea3c0243f | #27798 | pr/git | perf(pr): pull requests paint from data already held, on web, desktop and mobile | n/a: PR cache perf, web storage |
