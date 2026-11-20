@@ -50,22 +50,23 @@ struct SettingsScreensFidelityTests {
         return context
     }
 
-    /// The counters 39-settings-diagnostics shows in each theme's 4928 capture (they are live, so the two differ).
+    /// The counters 39-settings-diagnostics shows in each theme's 4928 PNG (they are live: the two themes differ, and the
+    /// page text the capture saved was read a moment later, so the PNG is the source).
     static func telemetryFixture(dark: Bool) -> JSONValue {
         let gb = 1024.0
         func group(_ cpu: Double, _ memory: Double, _ count: Int, _ read: Double, _ write: Double) -> JSONValue {
             .object(["currentCpuPercent": .number(cpu), "currentRssBytes": .number(memory * 1_048_576),
                      "processCount": .number(Double(count)), "processStarts": .number(Double(count)), "processExits": .number(0),
-                     "peakRssBytes": .number((dark ? 2.24 : 2.25) * gb * 1_048_576), "cpuTimeMs": .number(dark ? 770 : 1430),
+                     "peakRssBytes": .number((dark ? 2.24 : 2.25) * gb * 1_048_576), "cpuTimeMs": .number(dark ? 710 : 1400),
                      "ioReadBytesPerSecond": .number(read * 1_048_576), "ioWriteBytesPerSecond": .number(write * 1024),
-                     "ioReadBytes": .number(79.1 * 1_048_576), "ioWriteBytes": .number((dark ? 128 : 240) * 1024)])
+                     "ioReadBytes": .number(79.1 * 1_048_576), "ioWriteBytes": .number((dark ? 112 : 224) * 1024)])
         }
         return .object(["sampleIntervalMs": .number(1000), "readAt": .string(UsageFormat.isoString(TimestampFormat.nowMs())),
                         "power": .object(["thermalState": .string("unknown")]),
                         "health": .object(["native": .object(["status": .string("healthy")])]),
-                        "groups": .object(["allT3": group(dark ? 5.4 : 2.8, (dark ? 2.24 : 2.25) * gb, 14, 0, dark ? 15.8 : 15.7),
-                                           "backend": group(dark ? 3.5 : 1.8, (dark ? 2.23 : 2.24) * gb, 13, 0, dark ? 15.8 : 15.7),
-                                           "electron": group(0, 0, 0, 0, 0), "monitor": group(dark ? 2.0 : 1.1, dark ? 10.4 : 11.2, 1, 0, 0)])])
+                        "groups": .object(["allT3": group(dark ? 5.6 : 3.6, (dark ? 2.24 : 2.25) * gb, 14, 0, dark ? 77.8 : 78.3),
+                                           "backend": group(dark ? 4.1 : 2.3, (dark ? 2.23 : 2.24) * gb, 13, 0, dark ? 77.8 : 78.3),
+                                           "electron": group(0, 0, 0, 0, 0), "monitor": group(dark ? 1.6 : 1.3, dark ? 10.4 : 11.2, 1, 0, 0)])])
     }
 
     static func providerFixture(_ context: SettingsPageContext) {
