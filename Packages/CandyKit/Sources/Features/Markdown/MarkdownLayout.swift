@@ -9,6 +9,8 @@ extension NSAttributedString.Key {
     static let markdownFindText = NSAttributedString.Key("CandyMarkdownFindText")
     /// What copying puts on the pasteboard in place of these characters: a formula's TeX (MarkdownMath.tsx `data-markdown-copy`).
     static let markdownCopyText = NSAttributedString.Key("CandyMarkdownCopyText")
+    /// Marks the text of one quote card, its title and comment included: a selection across them copies the card once.
+    static let markdownCopyCard = NSAttributedString.Key("CandyMarkdownCopyCard")
 }
 
 /// Runs the few main-actor lookups a layout needs (chips, image sizes, diagrams) from any thread. A layout off the main
@@ -918,12 +920,18 @@ private struct Builder {
 
     func text(_ runs: [InlineRun], width: CGFloat, size: CGFloat, weight: NSFont.Weight = .regular, lineHeight: CGFloat,
               color: NSColor, alignment: NSTextAlignment = .natural, headIndent: CGFloat = 0, firstLineIndent: CGFloat? = nil,
-              findable: Bool = true) -> Box {
+              findable: Bool = true, cardCopy: String? = nil) -> Box {
         let inline = MarkdownStyle.inline(runs, size: size, weight: weight, color: color, alignment: alignment,
                                           headIndent: headIndent, firstLineIndent: firstLineIndent, files: files, contexts: contexts,
                                           maxChipWidth: width, findable: findable)
         let parent = MarkdownStyle.font(size, weight: weight)
-        let textBox = boxes.make(inline.string, width: width, lineHeight: lineHeight, strut: parent,
+        var string = inline.string
+        if let cardCopy {
+            let marked = NSMutableAttributedString(attributedString: string)
+            marked.addAttributes([.markdownCopyText: cardCopy, .markdownCopyCard: true], range: NSRange(location: 0, length: marked.length))
+            string = marked
+        }
+        let textBox = boxes.make(string, width: width, lineHeight: lineHeight, strut: parent,
                                  chipRanges: inline.code, chipFont: DSFont.mono(MarkdownStyle.chipFontSize),
                                  inlineBoxes: MarkdownMathStyle.inlineBoxes(inline, parent: parent, lineHeight: lineHeight))
         var box = Box(height: textBox.height, baseline: textBox.firstBaseline)
@@ -1251,19 +1259,18 @@ private struct Builder {
     /// `ResponseCard`: `rounded-lg bg-black/10 px-2.5 py-1.5 text-sm text-muted-foreground`, the passage clamped to two
     /// lines with the quoted part marked (`bg-foreground/12 px-0.5 text-foreground rounded-sm`), and the comment below as
     /// text (`mt-1.5 whitespace-pre-wrap`). Copying any of the card copies the quote's Markdown; find skips it.
-    // ponytail: the card copies its quote without the comment and the comment copies as text; T3 copies both as one link
     mutating func citationCard(_ citation: ThreadAssistantCitation, url: URL, width: CGFloat, context: Context,
                                title: String? = nil, copy: String? = nil) -> Box {
         let font = MarkdownStyle.font(14), line: CGFloat = 20
         let inner = max(1, width - 20)
-        var quoted = citation
-        quoted.comment = nil
-        let copyText = copy ?? quoted.markdown
+        // The card and its comment are one copy boundary (AssistantCitationChip.tsx at 4928, #34181): copying any of it
+        // copies the quote once, comment included.
+        let copyText = copy ?? citation.markdown
         // `text.replace(/\s+/g, " ")` (AssistantCitationChip.tsx:54): runs of space become one, the edges stay.
         let flat = { (text: String) in text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression) }
         let whole = citation.prefix.isEmpty && citation.suffix.isEmpty
         let base: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: Themed.color(\.mutedForeground),
-                                                   .markdownFindText: "", .markdownCopyText: copyText]
+                                                   .markdownFindText: "", .markdownCopyText: copyText, .markdownCopyCard: true]
         // Two lines hold a few hundred characters at most, so longer passages are cut before measuring.
         let passage = String(flat(citation.text).prefix(600))
         func string(_ passage: String, ellipsis: Bool) -> (NSAttributedString, NSRange?) {
@@ -1307,7 +1314,7 @@ private struct Builder {
         if let title, !title.isEmpty {
             let titleFont = MarkdownStyle.font(12, weight: .medium)
             let attributes: [NSAttributedString.Key: Any] = [.font: titleFont, .foregroundColor: Themed.color(\.foreground, 0.8),
-                                                             .markdownFindText: "", .markdownCopyText: copyText]
+                                                             .markdownFindText: "", .markdownCopyText: copyText, .markdownCopyCard: true]
             let flatTitle = String(flat(title).prefix(300))
             var made = boxes.make(NSAttributedString(string: flatTitle, attributes: attributes), width: inner, lineHeight: 16, strut: titleFont, wraps: true)
             if made.height > 16.5 {
@@ -1341,7 +1348,7 @@ private struct Builder {
         box.baseline = 6 + (titleBox?.firstBaseline ?? textBox.firstBaseline)
         if let comment = citation.comment, !comment.isEmpty {
             let commentBox = self.text([InlineRun(text: comment)], width: width, size: MarkdownStyle.fontSize,
-                                       lineHeight: MarkdownStyle.lineHeight, color: context.color)
+                                       lineHeight: MarkdownStyle.lineHeight, color: context.color, cardCopy: copyText)
             box.add(commentBox, at: CGPoint(x: 0, y: cardHeight + 6))
             box.height = cardHeight + 6 + commentBox.height
         }

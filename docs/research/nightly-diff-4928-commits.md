@@ -373,7 +373,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | 2c74ea6915 | #22239 | thread | fix(web): render Claude insight blocks as a callout | ported in eceea265 |
-| 1a8ecc64b7 | #34181 | thread | feat(web): a quote in a sent message shows as an inset card | ported in 4bb35432 |
+| 1a8ecc64b7 | #34181 | thread | feat(web): a quote in a sent message shows as an inset card | ported in 4bb35432; thread-4 made the card, its title and its comment one copy boundary (MarkdownLayout markdownCopyCard, MarkdownView.copiedText), so a selection copies the quote once with its comment |
 
 ## Port group server-updates (2)
 

@@ -96,6 +96,19 @@ struct ThreadCatchUp4928Part4Tests {
         #expect(FileLinks.isFileLinkLabel("src/a.ts:42", href: "src/a.ts:42-64"))
         #expect(FileLinks.endLine("a.ts#L3-L9") == 9 && FileLinks.endLine("a.ts:9-3") == nil)
     }
+
+    /// #34181 (AssistantCitationChip.tsx at 4928): a quote card and its comment are one copy boundary, so every box
+    /// of the card copies the same quote, comment included, and a selection across them copies it once.
+    @Test func quoteCardsCopyAsOneLink() throws {
+        let quote = ThreadAssistantCitation(environmentId: "e", threadId: "t", messageId: "m", text: "Hello there", start: 0, end: 11,
+                                            prefix: "", suffix: "", comment: nil).withComment("Why?")
+        let doc = MarkdownDocument(parsing: quote.markdown, preservesLineBreaks: true)
+        let layout = ThreadDesign.layout(in: NSAppearance(named: .aqua)!, design: true) { MarkdownLayout(document: doc, width: 400) }
+        let boxes = layout.items.compactMap { if case .text(let box, _) = $0 { box } else { nil } }
+        let pieces = boxes.flatMap { $0.copyPieces(NSRange(location: 0, length: ($0.text as NSString).length)) }
+        try #require(pieces.count >= 2)
+        #expect(pieces.allSatisfy { $0.card && $0.text == quote.markdown })
+    }
 }
 
 private extension NSView {
