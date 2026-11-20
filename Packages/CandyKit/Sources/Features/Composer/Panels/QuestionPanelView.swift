@@ -74,6 +74,10 @@ public final class QuestionPanelView: ComposerBannerView {
     private var questionSource = ""
     private let multiHint = glassLabel("Select one or more options.", font: DSFont.ui(12), color: Themed.color(\.secondaryLabel), lineHeight: 16)
     private var rows: [OptionRow] = []
+    /// Each option's `preview` under its button, outside it so a click there never picks the option (#34784,
+    /// ComposerPendingUserInputPanel.tsx at 4928: `ps-9 pe-2 pb-1.5 text-xs text-foreground/70 sm:ps-8`).
+    // ponytail: plain text with its line breaks; T3 renders ChatMarkdown at text-xs. Give MarkdownView a 12px body size if previews carry Markdown
+    private var previews: [TextBlockView] = []
 
     public init() {
         super.init(variant: .neutral)
@@ -247,6 +251,17 @@ public final class QuestionPanelView: ComposerBannerView {
             rows.append(row)
         }
         while rows.count > question.options.count { rows.removeLast().removeFromSuperview() }
+        while previews.count < question.options.count {
+            let preview = glassBlock(font: DSFont.ui(12), color: Themed.color(\.foreground, 0.7), lineHeight: 16)
+            body.addSubview(preview)
+            previews.append(preview)
+        }
+        while previews.count > question.options.count { previews.removeLast().removeFromSuperview() }
+        for (i, option) in question.options.enumerated() {
+            let text = option.preview?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            previews[i].text = text
+            previews[i].isHidden = text.isEmpty
+        }
         let customActive = !progress.customAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         for (i, option) in question.options.enumerated() {
             rows[i].configure(option, shortcut: i < 9 ? i + 1 : nil,
@@ -266,6 +281,7 @@ public final class QuestionPanelView: ComposerBannerView {
         h += isDither ? 8 : 6
         for (i, row) in rows.enumerated() {
             h += (isDither && i > 0 ? 2 : 0) + row.height(forWidth: textWidth + (isDither ? 0 : 6))
+            if i < previews.count, !previews[i].isHidden { h += previews[i].height(forWidth: previewWidth(textWidth + (isDither ? 0 : 6))) + 6 }
         }
         return h + Self.bodyBottom
     }
@@ -317,13 +333,24 @@ public final class QuestionPanelView: ComposerBannerView {
             y += 20
         }
         y += isDither ? 8 : 6
-        for row in rows {
+        for (i, row) in rows.enumerated() {
             let outset: CGFloat = isDither ? 0 : 6
             let h = row.height(forWidth: tw + outset)
             row.frame = NSRect(x: tx - outset, y: y, width: tw + outset, height: h)
-            y += h + (isDither ? 2 : 0)
+            y += h
+            if i < previews.count, !previews[i].isHidden {
+                let pw = previewWidth(tw + outset)
+                let ph = previews[i].height(forWidth: pw)
+                previews[i].frame = NSRect(x: tx - outset + previewInset, y: y, width: pw, height: ph)
+                y += ph + 6
+            }
+            y += isDither ? 2 : 0
         }
     }
+
+    /// `sm:ps-8 pe-2`; Dither lines the preview up with its wider label inset.
+    private var previewInset: CGFloat { isDither ? 36 : 32 }
+    private func previewWidth(_ rowWidth: CGFloat) -> CGFloat { max(0, rowWidth - previewInset - 8) }
 }
 
 /// The header row: one big button (`ComposerBanner.Row render={<button>}`), no fill of its own.

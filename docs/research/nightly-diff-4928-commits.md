@@ -1551,7 +1551,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 101e5f99a2 | #34855 | thread | fix(web): review comments in question answers reach the agent with their text | port |
 | 204b140073 | #34846 | thread | fix(web): context row under the composer hides chat text scrolling behind it | port |
 | 415e1cabe6 | #34883 | thread | fix(web): html render images open with the rest of their page in the viewer | ported in d1f3d2fc |
-| d8b0a05a74 | #34784 | thread | fix(clients): Claude question option previews are shown under their option | left: needs the option `preview` field decoded and a MarkdownView under each option in QuestionPanelView (`ps-9 pe-2 pb-1.5 text-xs text-foreground/70`), outside the option button |
+| d8b0a05a74 | #34784 | thread | fix(clients): Claude question option previews are shown under their option | ported: the option `preview` decodes (T3Store UserInputQuestion.Option) and shows under its option, outside the button, at `ps-8 pe-2 pb-1.5`, 12/16 in foreground/70 (QuestionPanelView `previews`). Plain text with its line breaks; T3 renders it as ChatMarkdown, which needs a 12px MarkdownView |
 | efd683ccc3 | #35102 | thread | fix(web): a failed send leaves the timeline when a new draft was typed | port |
 | 3d6ece2b29 | #35036 | thread | fix(web): file links the agent cited from another project open that project's file | port |
 | ced85c64ff | #35076 | thread | fix(client): a message the host never answers fails after 60 seconds instead of spinning forever | port |
