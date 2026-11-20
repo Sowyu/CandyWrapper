@@ -19,6 +19,10 @@
     "height" : 131,
     "width" : 212.0625
   },
+  "issue-badge" : {
+    "height" : 44,
+    "width" : 240
+  },
   "no-projects" : {
     "height" : 114,
     "width" : 240
@@ -33,6 +37,10 @@
   },
   "rename" : {
     "height" : 36,
+    "width" : 240
+  },
+  "title-glimmer" : {
+    "height" : 44,
     "width" : 240
   }
 }

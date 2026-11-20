@@ -8,17 +8,18 @@ import T3Store
 /// Your messages at Nightly 4928 against design/component-reference/user-message (scripts/gen-user-message-spec.py):
 /// a burst, a file card and the model switch divider. The reference leaves out the hover actions row, which
 /// is invisible at rest, so the canvas crops whatever the native row draws below the bubble.
-/// The media cases (above the bubble, image only, collage) and the quote card have references but no
-/// native harness yet: their images load through the thread's image model. See nightly-4928-fidelity.md.
+/// The media cases load the spec's own PNGs through a thread model, as the row loads sent images.
 @MainActor @Suite(.fidelity)
 struct UserMessageFidelityTests {
     /// Per-case ceilings, set 2026-11-19 in line with the thread view's neighbors (FidelitySupport.swift).
     static let ceilings: FidelityCeilings = [
         "userMessage": .init(0.06),
     ]
-    static let harnessed: Set<String> = ["burst", "file-card", "model-switch"]
+    static let harnessed: Set<String> = ["burst", "file-card", "model-switch", "quote-card", "media.above-text", "media.image-only", "media.collage"]
+    /// The rows hold their model weakly.
+    static var model: ThreadViewModel?
 
-    static func row(_ text: String, next: Bool = false, previous: Bool = false, attachments: [JSONValue] = []) -> UserMessageRowView {
+    static func row(_ text: String, next: Bool = false, previous: Bool = false, attachments: [JSONValue] = [], model: ThreadViewModel? = nil) -> UserMessageRowView {
         let message = ChatMessage(id: MessageId("m-\(text.count)-\(next)-\(previous)"), role: .user, text: text,
                                   createdAt: T3Timestamp("2026-10-29T12:00:00Z"), attachments: attachments)
         var row = TimelineRow(id: message.id.rawValue, createdAt: message.createdAt,
@@ -28,12 +29,31 @@ struct UserMessageFidelityTests {
         row.groupedWithPrevious = previous
         let view = UserMessageRowView()
         view.context = TimelineContext()
+        view.context.model = model
         view.configure(TimelineItem(row: row))
         return view
     }
 
-    static func view(_ native: [String: String], width: CGFloat) -> [NSView] {
+    static func view(_ native: [String: String], html: String, width: CGFloat) -> [NSView] {
         switch native["kind"] {
+        case "media":
+            // The spec's images in order, by the names it gives them.
+            let names = native["images"]!.split(separator: ",").map { $0 == "wide" ? "screenshot" : String($0) }
+            let data = html.components(separatedBy: "src=\"data:image/png;base64,").dropFirst().map { Data(base64Encoded: String($0.prefix { $0 != "\"" }))! }
+            var images: [String: CGImage] = [:]
+            var attachments: [JSONValue] = []
+            for (name, png) in zip(names, data) {
+                images[name] = NSBitmapImageRep(data: png)!.cgImage!
+                attachments.append(.object(["id": .string(name), "type": .string("image"), "name": .string("\(name).png"),
+                                            "mimeType": .string("image/png"), "sizeBytes": .number(Double(png.count))]))
+            }
+            let model = ThreadViewModel()
+            let loaded = images
+            model.attachmentImage = { id, _, _ in loaded[id] }
+            Self.model = model
+            let v = row(native["text"]!, attachments: attachments, model: model)
+            v.frame = NSRect(x: 8, y: 8, width: width, height: v.height(forWidth: width))
+            return [v]
         case "burst":
             let texts = native["texts"]!.split(separator: "|").map(String.init)
             let first = row(texts[0], next: true), second = row(texts[1], previous: true)
@@ -47,6 +67,14 @@ struct UserMessageFidelityTests {
             let v = row("", attachments: [file])
             v.frame = NSRect(x: 8, y: 8, width: width, height: v.height(forWidth: width))
             return [v]
+        case "quote":
+            // The spec's card quotes with context on both sides (AssistantCitationChip.tsx:59-150).
+            let citation = ThreadAssistantCitation(environmentId: "e", threadId: "t", messageId: "m", text: native["text"]!, start: 40,
+                                                   end: 40 + native["text"]!.count, prefix: "the loader reads the file, then ",
+                                                   suffix: " before it", comment: native["comment"])
+            let v = row(citation.markdown)
+            v.frame = NSRect(x: 8, y: 8, width: width, height: v.height(forWidth: width))
+            return [v]
         default:
             let divider = HandoffDividerView(frame: NSRect(x: 8, y: 8, width: width, height: 40))
             divider.configure(label: native["label"]!)
@@ -54,7 +82,7 @@ struct UserMessageFidelityTests {
         }
     }
 
-    @Test func userMessage() throws {
+    @Test func userMessage() async throws {
         let repo = SidebarFidelityTests.repo
         let refDir = repo.appendingPathComponent("design/component-reference/user-message")
         let spec = try JSONSerialization.jsonObject(with: Data(contentsOf: repo.appendingPathComponent("design/component-reference/user-message.json"))) as! [String: Any]
@@ -69,8 +97,14 @@ struct UserMessageFidelityTests {
                 let ref = try #require(NSBitmapImageRep(data: Data(contentsOf: refDir.appendingPathComponent("\(base).png"))))
                 let size = NSSize(width: CGFloat(ref.pixelsWide) / 2, height: CGFloat(ref.pixelsHigh) / 2)
                 let canvas = SidebarSearchFidelityTests.Canvas(frame: NSRect(origin: .zero, size: size))
-                for v in Self.view(native, width: 640) { canvas.addSubview(v) }
+                let views = Self.view(native, html: c["html"] as! String, width: 640)
+                for v in views { canvas.addSubview(v) }
                 canvas.layoutSubtreeIfNeeded()
+                if native["kind"] == "media" {
+                    await AsyncImageView.loadAll(in: canvas)
+                    for v in views { v.frame.size.height = (v as! UserMessageRowView).height(forWidth: 640) }
+                    canvas.layoutSubtreeIfNeeded()
+                }
                 let ours = Snapshot.image(of: canvas, size: size, scale: 2, dark: theme == "dark")
                 let (total, _, diff) = SidebarFidelityTests.compare(ref, ours, bands: [])
                 try Snapshot.writePNG(ours, to: out.appendingPathComponent("\(base).ours.png"))

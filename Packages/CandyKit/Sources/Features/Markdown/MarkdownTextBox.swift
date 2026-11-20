@@ -418,7 +418,12 @@ final class MarkdownTextBox {
                 end = max(end, positions[k].x + advances[k].width)
             }
         }
-        return { index in origins[index] ?? end }
+        // A character without a glyph (a word joiner) starts where the next glyph does.
+        return { index in
+            var i = index
+            while i < range.upperBound { if let x = origins[i] { return x }; i += 1 }
+            return end
+        }
     }
 
     /// Blink paints each baseline on the nearest whole device pixel, ties going up the page (measured on wrapped paragraphs, list items

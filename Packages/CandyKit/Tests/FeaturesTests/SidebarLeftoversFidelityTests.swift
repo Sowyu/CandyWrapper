@@ -43,10 +43,29 @@ struct SidebarLeftoversFidelityTests {
             field.begin(ThreadId("t"), title: "Create a file named approval-demo.txt")
             if state == "focus-visible" { field.input.previewState(FieldView.State(focused: true)) }
             let box = SidebarSearchFidelityTests.SidebarBox(frame: NSRect(origin: .zero, size: size))
-            field.frame = NSRect(x: 8, y: 8, width: 204, height: 22)
+            // The spec's input is 204px wide with `-mx-1` and a 20px text-sm line (SidebarThreadRow.tsx:672).
+            field.frame = NSRect(x: 4, y: 8, width: 204, height: 20)
             box.addSubview(field)
             field.layoutSubtreeIfNeeded()
             return box
+        case "glimmer":
+            // The title at rest under its glimmer: the band rests left of the title, so only the muted title shows.
+            let row = DSView(), title = LabelView(n["title"]!, font: SB.font(14, .medium))
+            title.lineHeight = 20
+            title.color = SB.c(\.mutedForeground)
+            row.addSubview(title)
+            title.frame = NSRect(x: 0, y: 4, width: size.width - 16, height: 20)
+            var glimmer: SidebarTitleGlimmer?
+            SidebarTitleGlimmer.sync(&glimmer, over: title, active: true)
+            return inBox(row, height: 28)
+        case "issue-badge":
+            let link = try! JSONDecoder().decode(ThreadIssueLink.self, from: Data(#"{"tracker":"github","host":"github.com","scope":"o/r","key":"128","projectId":"p","url":"https://github.com/o/r/issues/128","source":"manual","linkedAt":"2026-11-19T12:00:00Z","displayKey":"\#(n["key"]!)","title":"Sidebar badge"}"#.utf8))
+            let badge = SidebarIssueBadgeView()
+            badge.badge = SidebarIssueBadge([link])
+            let row = DSView()
+            row.addSubview(badge)
+            badge.frame = NSRect(x: 0, y: 6, width: badge.preferredWidth, height: 16)
+            return inBox(row, height: 28)
         case "pill":
             let pill = SidebarProviderUpdatePillView()
             pill.show(SidebarProviderUpdatePillModel(key: "k", tone: n["tone"] == "error" ? .error : .warning, title: n["title"]!,

@@ -1,0 +1,23 @@
+{
+ "component": "viewed-images",
+ "sourceVersion": "v0.1.11-nightly.20261119.4928",
+ "source": "apps/web/src/components/chat/TimelineWorkEntryRow.tsx; chat/ChatMarkdownMedia.tsx",
+ "states": [
+  "rest"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "row",
+   "html": "<div class=\"flex flex-wrap items-start gap-2 px-0.5\" data-image-gallery style=\"width:640px\"><img alt=\"home.png\" src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAADICAIAAAAWZq/8AAACkklEQVR42u3TQQ0AIAwAsSmaAnwgasaQg4SJ2A+anINL4571VVlbeqYAWAIYYAlggCWAARbAAEsAAywBDLAEMMACGGAJYIAlgAEWwABLAAMsAQywBDDAAhhgCWCAJYABlgCWAAZYAhhgCWCABTDAEsAASwADLAEMsAAGWAIYYAlggCWAJYABlgAGWAIYYAEMsAQwwBLAAEsAAyyAAZYABlgCGGABDLAEMMASwABLAAMsgAGWAAZYAhhgCWDXBTDAEsAASwADLIABlgAGWAIYYAlggAUwwBLAAEsAAywBLAEMsAQwwBLAAAtggCWAAZYABlgCGGABDLAEMMASwABLAEsAAywBDLAEMMACGGAJYIAlgAGWAAZYAAMsAQywBDDAAhhgCWCAJYABlgAGWAADLAEMsAQwwBLAEsAASwADLAEMsAAGWAIYYAlggCWAARbAAEsAAywBDLAEsAQwwBLAAEsAAyyAAZYABlgCGGAJYIAFMMASwABLAAMsASwBDLAEMMASwAALYIAlgAGWAAZYAhhgAQywBDDAEsAAC2CAJYABlgAGWAIYYAEMsAQwwBLAAEsASwADLAEMsAQwwAIYYAlggCWAAZYABlgAAywBDLAEMMASwBLAAEsAAywBDLAABlgCGGAJYIAlgAEWwABLAAMsAQywAAZYAhhgCWCAJYABFsAASwADLAEMsASw5QIYYAlggCWAARbAAEsAAywBDLAEMMACGGAJYIAlgAGWAJYABlgCGGAJYIAFMMASwABLAAMsAQywAAZYAhhgCWCAJYAlgAGWAAZYAhhgAQywBDDAEsAASwADLIABlgAGWAIYYAEMsAQwwBLAAEsAAyyAAZYABlgCGGAJYNcFMMASwABLkxr0WVzQ4K0mIgAAAABJRU5ErkJggg==\" decoding=\"sync\" draggable=\"false\" class=\"h-auto w-auto object-contain max-h-[30rem] max-w-[min(100%,30rem)] inline-block! rounded-lg border border-border/40 cursor-zoom-in\" style=\"max-height:10rem\"><img alt=\"icon.png\" src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAABaCAIAAAD8YgW4AAAAs0lEQVR42u3QMQ0AMAgAMNRxo2Q6ETEx+3BAsqNJFTRu1ZI8zQjRokWLFi1atGjRokWLFi1atGjRokWLFi1atGjRokWLFi1atGjRokWLFi1atGjRokWLFi1atGjRokWLFi1atGjRokWLFi1atGjRokWLFi1atGjRokWLFi1atGjRokWLFi1atGjRokWLFi1atGjRokWLFi1atGjRokWLFi1atGjRokWLFi1atGjRokWL/sUDnqSi40No7MUAAAAASUVORK5CYII=\" decoding=\"sync\" draggable=\"false\" class=\"h-auto w-auto object-contain max-h-[30rem] max-w-[min(100%,30rem)] inline-block! rounded-lg border border-border/40 cursor-zoom-in\" style=\"max-height:10rem\"></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "kind": "viewed-images",
+    "paths": "screens/home.png,screens/icon.png"
+   }
+  }
+ ]
+}

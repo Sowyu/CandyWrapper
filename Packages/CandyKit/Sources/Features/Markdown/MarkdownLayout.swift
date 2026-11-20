@@ -1215,7 +1215,8 @@ private struct Builder {
         let inner = max(1, width - 20)
         var quoted = citation
         quoted.comment = nil
-        let flat = { (text: String) in text.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
+        // `text.replace(/\s+/g, " ")` (AssistantCitationChip.tsx:54): runs of space become one, the edges stay.
+        let flat = { (text: String) in text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression) }
         let whole = citation.prefix.isEmpty && citation.suffix.isEmpty
         let base: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: Themed.color(\.mutedForeground),
                                                    .markdownFindText: "", .markdownCopyText: quoted.markdown]

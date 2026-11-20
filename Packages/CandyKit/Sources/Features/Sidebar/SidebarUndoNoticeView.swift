@@ -46,8 +46,15 @@ final class SidebarUndoNoticeView: DSView {
             button.showsIcon = !fits
             button.frame = NSRect(x: max(0, bounds.width - bw), y: y, width: min(bw, bounds.width), height: 16)
             // `gap-x-1`; a summary that doesn't fit wraps to the hidden second line.
-            let tx = button.frame.minX - 4 - lw
-            label.isHidden = !fits || tx < 0
+            var tx = button.frame.minX - 4 - lw
+            // 4928's `flex-row-reverse` row puts both texts flush right at their exact widths
+            // (SidebarThreadUndoNotice.tsx:52); the default themes right-align
+            // inside the rounded-up frames so no fraction of a point opens on the right.
+            let flush = !classic
+            button.label.alignment = flush ? .right : .left
+            label.alignment = flush ? .right : .left
+            if flush { tx = bounds.width - button.label.textWidth - 4 - (lw + 1) }
+            label.isHidden = !fits || tx < -1
             label.frame = NSRect(x: max(0, tx), y: y, width: lw + 1, height: 16)
             return
         }

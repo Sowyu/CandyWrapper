@@ -58,12 +58,13 @@ def effort_glyph(count, filled):
     return (f'<svg aria-hidden="true" width="{width}" height="{height}" viewBox="0 0 {width} {height}" style="width:{width}px;height:{height}px" '
             f'class="shrink-0 text-current" data-composer-effort-glyph data-composer-control-icon>{rects}</svg>')
 
-def model_trigger(bars=False, collapsed=False):
+def model_trigger(bars=False, width=None):
     effort = effort_glyph(4, 2) if bars else '<span data-composer-control-label class="max-w-24 truncate">Medium</span>'
-    cls = MODEL_TRIGGER + (" min-w-13 shrink text-xs!" if collapsed else " min-w-13")
+    cls = MODEL_TRIGGER + " min-w-13"
+    style = f' style="width:{width}px"' if width else ""
     icon_html = ('<span data-chat-provider-model-picker-icon class="contents"><span class="relative isolate z-30 inline-flex shrink-0 items-center justify-center overflow-visible size-4">'
                  + claude_icon("fill-[#d97757] shrink-0 size-4") + '</span></span>')
-    return (f'<button type="button" aria-haspopup="dialog" data-chat-provider-model-picker="true" class="{cls}">'
+    return (f'<button type="button" aria-haspopup="dialog" data-chat-provider-model-picker="true" class="{cls}"{style}>'
             '<span class="flex min-w-0 flex-1 items-center gap-1.5">' + icon_html
             + '<span class="min-w-0 flex-1 overflow-hidden truncate max-w-56" data-chat-provider-model-picker-label="true">Haiku 5.5</span>'
             + f'<span class="{SUFFIX}">{effort}</span></span></button>')
@@ -77,10 +78,11 @@ def block(trigger_icon, label, icon_only):
 OVERFLOW = (f'<div data-resting-controls-overflow class="min-w-0 shrink-0"><button type="button" aria-haspopup="menu" aria-label="More composer controls" class="{CONTROL} shrink-0">'
             f'{control_icon("ellipsis")}</button></div>')
 
-def cluster(icon_only, hidden, bars=False):
-    # icon_only 1 makes the permissions chip icon-only; 2 also collapses the model trigger, the
-    # nearest 4928 state to the old both-icon-only cluster.
-    parts = [model_trigger(bars=bars, collapsed=icon_only >= 2)]
+def cluster(icon_only, hidden, bars=False, model_width=None):
+    # icon_only 1 makes the permissions chip icon-only. The collapsed `text-xs!` trigger is mobile only
+    # (ChatComposer.tsx:1043-1048, 2468), so the desktop's narrowest state stands in for the old
+    # both-icon-only cluster: the chip in the overflow menu and the model trigger shrunk to model_width.
+    parts = [model_trigger(bars=bars, width=model_width)]
     if hidden: parts.append(OVERFLOW)
     else: parts.append(block("shield-off", "Full access", icon_only >= 1))
     return f'<div class="flex items-center gap-0.5">{"".join(parts)}</div>'
@@ -120,8 +122,11 @@ def overflow_menu(with_traits):
 
 cases = []
 # The case names keep the 3824 fits (icon-only blocks, hidden blocks); cluster() maps them to 4928.
-for icon_only, hidden, name in [(1, 0, "access-icon"), (2, 0, "both-icon"), (2, 2, "overflow-both")]:
-    cases.append({"name": f"cluster.{name}", "html": cluster(icon_only, hidden), "native": {"kind": "cluster", "iconOnly": str(icon_only), "hidden": str(hidden)}})
+cases.append({"name": "cluster.access-icon", "html": cluster(1, 0), "native": {"kind": "cluster", "iconOnly": "1", "hidden": "0"}})
+# The overflow trigger is 2px wider than the icon-only chip, so the overflow state only comes below the icon-only
+# width (composerFooterLayout.ts:76-115) and the model trigger always gives up at least 2.5px: 158.93px natural here.
+cases.append({"name": "cluster.both-icon", "html": cluster(1, 1, model_width=96), "native": {"kind": "cluster", "iconOnly": "1", "hidden": "1", "modelWidth": "96"}})
+cases.append({"name": "cluster.overflow-both", "html": cluster(1, 1, model_width=156.5), "native": {"kind": "cluster", "iconOnly": "1", "hidden": "1", "modelWidth": "156.5"}})
 cases.append({"name": "cluster.bars", "html": cluster(0, 0, bars=True), "native": {"kind":"cluster", "iconOnly":"0", "hidden":"0", "bars":"true"}})
 cases.append({"name": "menu.access", "html": overflow_menu(False), "native": {"kind": "menu", "traits": "false"}})
 cases.append({"name": "menu.traits-access", "html": overflow_menu(True), "native": {"kind": "menu", "traits": "true"}})

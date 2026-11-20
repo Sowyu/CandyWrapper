@@ -162,7 +162,8 @@ public final class ComposerPickers {
             traitsButton.adornment = nil
             accessButton.paddingOverride = (6, 8)
             modelButton.textOnly = true; traitsButton.textOnly = true
-            modelButton.paddingOverride = (8, 4)
+            // 4928's trigger keeps the control's `px-2` on both sides (ProviderModelPicker.tsx:373-379, ComposerControl.tsx:11-24).
+            modelButton.paddingOverride = (8, ComposerDesign.uses3814(dark: modelButton.effectiveAppearance.isDark) ? 8 : 4)
             modelButton.maximumLabelWidth = 224
             accessButton.icon = IconView(definition: current.runtimeMode == .fullAccess ? Self.fullAccessGlyph : mode.icon.definition, size: 16)
             accessButton.iconFollowsLabel = true

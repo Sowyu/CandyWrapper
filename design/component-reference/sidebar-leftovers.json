@@ -76,6 +76,24 @@
    }
   },
   {
+   "name": "title-glimmer",
+   "html": "<div data-app-sidebar=\"\" class=\"bg-sidebar text-sidebar-foreground\" style=\"width:240px;padding:8px\"><div class=\"flex h-7 items-center\"><span class=\"min-w-0 flex-1 text-start text-sm transition-opacity motion-reduce:transition-none font-medium relative truncate text-muted-foreground\" dir=\"ltr\">Regenerating the sidebar title<span aria-hidden=\"true\" class=\"live-activity-focus pointer-events-none absolute inset-y-0 select-none\"><span class=\"live-activity-focus-counter block\"><span class=\"live-activity-focus-aligned block text-foreground truncate\">Regenerating the sidebar title</span></span></span></span></div></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "kind": "glimmer",
+    "title": "Regenerating the sidebar title"
+   }
+  },
+  {
+   "name": "issue-badge",
+   "html": "<div data-app-sidebar=\"\" class=\"bg-sidebar text-sidebar-foreground\" style=\"width:240px;padding:8px\"><div class=\"flex h-7 items-center\"><button type=\"button\" data-slot=\"inline-button\" class=\"inline-flex shrink-0 cursor-pointer items-center gap-0.5 font-medium underline-offset-2 [text-align:var(--inline-button-text-align,center)] [white-space:var(--inline-button-white-space,nowrap)] hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-64 text-muted-foreground hover:text-foreground\" aria-label=\"Issue #128: Sidebar badge\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-dot size-3 shrink-0\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle> <circle cx=\"12\" cy=\"12\" r=\"1\"></circle></svg><span class=\"max-w-16 truncate text-xs font-normal text-secondary-label tabular-nums\">#128</span></button></div></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "kind": "issue-badge",
+    "key": "#128"
+   }
+  },
+  {
    "name": "folder.open",
    "html": "<div data-app-sidebar=\"\" class=\"bg-sidebar text-sidebar-foreground\" style=\"width:240px;padding:8px\"><div class=\"group/project-folder relative list-none\"><button type=\"button\" class=\"flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-(--control-radius) px-(--sidebar-row-content-inset) text-left outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring\"><span aria-hidden=\"true\" class=\"inline-flex shrink-0 items-center justify-center size-4 shrink-0\"><svg viewBox=\"0 0 16 16\" class=\"size-full overflow-hidden rounded-[25%] font-mono select-none text-gray-600 dark:text-gray-400\" style=\"background-color:color-mix(in srgb, currentColor 14%, transparent)\"><text x=\"8\" y=\"10.8\" text-anchor=\"middle\" fill=\"currentColor\" class=\"font-mono\" font-size=\"8.25\" font-weight=\"700\" textLength=\"12\" lengthAdjust=\"spacingAndGlyphs\" text-rendering=\"geometricPrecision\">CR</text></svg></span><span class=\"min-w-0 flex-1 truncate text-sm font-medium text-sidebar-foreground/90\">candywrapper</span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-down size-3 shrink-0 text-sidebar-muted-foreground transition-transform\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></button></div></div>",
    "wrapperStyle": "display:block",

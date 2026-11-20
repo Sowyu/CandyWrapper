@@ -17,8 +17,10 @@ public struct FileChip {
 enum FileChipStyle {
     static let accent = OKLab.oklch(0.62, 0.11, 215) // kind "mention"
     private static let legacyForeground = OKLab.mix(accent, 0.22, Themed.color(\.contrastForeground))
+    /// The default themes take T3's solved `--context-chip-mention` (ContextChipAccents).
     static let foreground = NSColor(name: nil) { appearance in
-        ThreadDesign.uses3814(dark: appearance.isDark) ? accent : legacyForeground
+        let dark = appearance.isDark
+        return ThreadDesign.uses3814(dark: dark) ? ContextChipAccents.color((dark ? ContextChipAccents.dark : ContextChipAccents.light)["mention"]!) : legacyForeground
     }
     static let border = OKLab.mix(accent, 0.34, Themed.color(\.contrastBorder))
     static let hoverBorder = OKLab.mix(accent, 0.48, Themed.color(\.contrastBorder))
