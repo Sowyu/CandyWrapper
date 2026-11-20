@@ -196,7 +196,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 3d369d5596 | #30275 | composer | feat(web): open full access menu from the new thread context strip | port |
+| 3d369d5596 | #30275 | composer | feat(web): open full access menu from the new thread context strip | ported: the new-thread strip's permissions control opens the access menu above itself (ComposerPickers `openPermissions`) |
 
 ## Port group copy-thread-link (1)
 
@@ -1032,7 +1032,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 3a873e8faf | #23475 | pr/git | fix(web): disable conflict checkout without required permissions | port |
 | a2e4524d51 | #21579 | pr/git | fix(web): preview address bar no longer ligates "://" | port |
 | e123ac644e | #26073 | pr/git | fix(web): a failed review guide keeps Try again reachable | port |
-| 7cdbb8ef59 | #27114 | pr/git | fix(web): show the worktree picker in the composer strip at default width | port |
+| 7cdbb8ef59 | #27114 | pr/git | fix(web): show the worktree picker in the composer strip at default width | left: from @xl (576pt) T3 shows the wide strip layout, machine, separator and the worktree picker (`BranchToolbarEnvModeSelector`), which CW has no control for yet; needs a 4928 reference capture |
 | 45d29b45fe | #22382 | pr/git | fix(web): a refused review shows GitHub's reason | port |
 | 1c8ada5023 | #22974 | pr/git | fix(web): composer notices no longer flicker next to a floating preview | port |
 | a24ec905c8 | #28070 | pr/git | fix(web): machine label no longer shifts between one and many machines | port |
@@ -1086,7 +1086,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 4ca10398b1 | #34140 | pr/git | fix(web): tighter outdated-conversation cards in the PR code panel | port |
 | b3fdf2b10f | #33989 | pr/git | fix(web): PR links jump to the comment, diff line, checks or commits they name | port |
 | dea8472438 | #28732 | pr/git | feat(web): label chips show the label's description on hover | port |
-| b6d3097379 | #28459 | pr/git | feat(web): composer strip names the worktree folder | port |
+| b6d3097379 | #28459 | pr/git | feat(web): composer strip names the worktree folder | ported: a started thread's strip names its worktree folder (BranchToolbarLogic `lockedWorkspaceLabel`, Features/Git) |
 | 8cbc95923a | #34168 | pr/git | fix(web): files marked Viewed stay folded when a pull request's Code tab opens again | port |
 | 75b22bf56c | #30620 | pr/git | fix(web): dismiss image path tooltips after preview and scroll | port |
 | 8c9af5418a | #31972 | pr/git | fix(web): disable the git actions menu when nothing in it is usable | port |

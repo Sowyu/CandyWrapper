@@ -43,4 +43,11 @@ struct Composer4928Tests {
     @Test func pastedLineBreaksNormalize() {
         #expect(ComposerPasteboard.normalizedLineBreaks("a\r\n\r\nb\rc") == "a\n\nb\nc")
     }
+
+    /// #28459: the strip names a started thread's worktree folder.
+    @Test func lockedWorktreeShowsItsFolder() {
+        #expect(BranchToolbarLogic.lockedWorkspaceLabel("/Users/me/.t3/worktrees/app/t3-1234/", mode: .worktree) == "t3-1234")
+        #expect(BranchToolbarLogic.lockedWorkspaceLabel("/", mode: .worktree) == "Worktree")
+        #expect(BranchToolbarLogic.lockedWorkspaceLabel(nil, mode: .local) == "Local checkout")
+    }
 }

@@ -1719,7 +1719,7 @@ final class ComposerController {
         let mode = ComposerPickers.modes[pickers.current.runtimeMode] ?? ComposerPickers.modes[.fullAccess]!
         strip.permissions.text = mode.label
         strip.permissions.glyphs = [pickers.current.runtimeMode == .fullAccess ? ComposerPickers.fullAccessGlyph : mode.icon.definition]
-        strip.permissions.action = { [weak self] in self?.pickers.openAccessMode() }
+        strip.permissions.action = { [weak self, weak strip] in if let strip { self?.pickers.openPermissions(from: strip.permissions) } }
         panel.model.providers = serverConfig.providers
         onModelChange?()
         // No enabled provider (ChatComposer.tsx:2140-2153): sending stays blocked, and once the catalog
