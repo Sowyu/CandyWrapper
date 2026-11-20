@@ -1647,13 +1647,9 @@ public final class ThreadPanelView: DSView {
             let block = height + (showsStrip ? 32 : 0) + 20
             let top = chatTop + (chatHeight - chatTop - block) / 2
             y = top.rounded()
-            // The banner stack sits between the hero and the composer: the front notice and the peek.
-            let stack = composerShown && chat > 0 ? ComposerBannerStackItem.ordered(bannerStackItems(docked: false, composerVisible: true)) : []
-            let notice = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
-                ? stack.reduce(CGFloat(0)) { $0 + $1.height(width) - ComposerBannerView.overlap }
-                : (stack.first.map { $0.height(width) - ComposerBannerView.overlap } ?? 0) + (stack.count > 1 ? ComposerBannerStackView.peekHeight : 0)
+            // The notices float below the composer, so the hero keeps its 16pt (ChatView.tsx:3897-3903 at 4928, #26958).
             let heroHeight = hero.height(forWidth: width)
-            hero.frame = NSRect(x: x, y: y - (dither ? 6 : 16) - notice - heroHeight, width: width, height: heroHeight)
+            hero.frame = NSRect(x: x, y: y - (dither ? 6 : 16) - heroHeight, width: width, height: heroHeight)
         } else {
             y = chatHeight - 20 - height
         }
@@ -1755,8 +1751,9 @@ public final class ThreadPanelView: DSView {
                                                  // moved to a new thread (screen pass 2026-11-20, item 3).
                                                  lazyFreshSessionBanner.loaded, lazyReplyBanner.loaded, lazyFallbackBanner.loaded]
         for case let view? in candidates where !ordered.contains(where: { $0.view === view }) { view.isHidden = true }
-        bannerStack.update(ordered)
-        let front = ordered.first
+        // A draft's notices are cards the draft branch below places, so the stack adopts none of them (#26958).
+        bannerStack.update(ordered, adopting: !isDraft)
+        let front = isDraft ? nil : ordered.first
         if let front {
             let view = front.view
             // Back to front: queue, the front item, then the strips and drawers below it.
@@ -1805,7 +1802,26 @@ public final class ThreadPanelView: DSView {
             // The drawer's cap counts the composer, measured here after the drawer was placed.
             if terminalOpen { needsLayout = true }
         }
-        if isDraft { timeline.isHidden = true }
+        if isDraft {
+            timeline.isHidden = true
+            // Out of flow, so a notice never moves the centered composer: whole cards in stack order, 16pt below the
+            // composer and its strip, 4pt apart (`absolute inset-x-0 top-full flex flex-col gap-1 pt-4` and
+            // `ComposerBannerStack detached`, ChatView.tsx:3897-3903 and ComposerBannerStack.tsx at 4928, #26958).
+            var cardTop = (contextStrip.isHidden ? composer.frame.maxY : contextStrip.frame.maxY) + 16
+            for item in sorted {
+                let view = item.view
+                view.isHidden = composer.isHidden
+                guard !composer.isHidden else { continue }
+                if view.superview !== self { addSubview(view, positioned: .below, relativeTo: composer) }
+                view.placement = .floating
+                view.joinsAbove = false
+                // A detached card draws no seam shade (`!detached && bg-composer-seam-above`).
+                view.dockedBelow = true
+                let h = item.height(width) - ComposerBannerView.overlap
+                view.frame = NSRect(x: x, y: cardTop, width: width, height: h)
+                cardTop += h + 4
+            }
+        }
     }
 
     /// Places the child approvals with their `mb-2` above `bottom` and returns the room they take, 0 when none show.
