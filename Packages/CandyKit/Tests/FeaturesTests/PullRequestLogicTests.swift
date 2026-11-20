@@ -532,3 +532,16 @@ struct AddProjectBrowse4928Tests {
         #expect(PaletteAddProjectPaths.tabCompletion([], filterQuery: "x") == nil)
     }
 }
+
+/// 4928 delimitedPreview.ts:31-43 (#27497): a cut never splits a surrogate pair.
+struct DelimitedPreview4928Tests {
+    @Test func truncatedCellsKeepSurrogatePairsWhole() {
+        let long = String(repeating: "a", count: 1999) + "😀" + "b"
+        let r = DelimitedTable.parse(long, delimiter: ",")
+        #expect(r.truncated)
+        #expect(r.rows[0][0] == String(repeating: "a", count: 1999))
+        let exact = String(repeating: "c", count: 2000)
+        let e = DelimitedTable.parse(exact, delimiter: ",")
+        #expect(!e.truncated && e.rows[0][0].count == 2000)
+    }
+}

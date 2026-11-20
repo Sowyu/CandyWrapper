@@ -111,25 +111,25 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| c018660572 | #27497 | files | fix(shared): preserve surrogate pairs in truncated CSV cells | port |
-| f5fe0790e7 | #31868 | pr/git | fix(web): Office previews say "1 page", "1 sheet", "1 slide" and "1 row" | port |
-| bc3eb6d2b2 | #29051 | files | fix(web): fix japanese text in file viewer not rendering | port |
-| 84478e09c1 | #34331 | files | fix(web): long merged spreadsheet selections no longer crash | port |
-| 787c59c802 | #32040 | pr/git | fix(web): Word previews no longer cut ordinary documents short | port |
-| c8e8b58ee6 | #34429 | pr/git | fix(web): improve Excel spreadsheet previews | port |
-| 6464729c56 | #34453 | files | fix(web): improve PowerPoint slide font rendering | port |
-| 4574c6013d | #36602 | files | fix(web): preserve saved notebook traceback frame boundaries | port |
-| d6244ac5a3 | #36595 | files | fix(web): preserve literal entities in EPUB CDATA | port |
-| 6effe74c59 | #36689 | pr/git | fix(web): show repeated table rows and cells in ODT previews | port |
-| 13a6782a6c | #36685 | files | fix(web): ODS time cells without display text show their value | port |
-| 0fdc99c870 | #36703 | pr/git | fix(web): notebook previews strip ANSI colors from saved tracebacks | port |
-| 10a44f5553 | #36767 | pr/git | fix(web): RTF previews keep named spaces, hyphens and joiners | port |
-| 776698a3e7 | #33294 | pr/git | fix(web): OpenDocument slide previews no longer print speaker notes | port |
-| 85e009fbc9 | #34329 | pr/git | fix(web): show TAR hard links in archive previews | port |
-| 8ab40cc88e | #31885 | pr/git | fix(web): the PDF preview says "1 / 1 page" for a one-page PDF | port |
-| 2370e338f7 | #31886 | pr/git | fix(web): the SQLite, archive and notebook previews say "1 row", "1 entry" and "1 cell" | port |
-| dde53b11f3 | #31929 | terminal | fix(web): notebook error previews no longer show terminal color codes | port |
-| d085ee5d15 | #38188 | pr/git | fix(web): decode HEIC previews under desktop CSP | port |
+| c018660572 | #27497 | files | fix(shared): preserve surrogate pairs in truncated CSV cells | ported (panels-2): a truncated cell never splits a surrogate pair, DelimitedTable.parse |
+| f5fe0790e7 | #31868 | pr/git | fix(web): Office previews say "1 page", "1 sheet", "1 slide" and "1 row" | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| bc3eb6d2b2 | #29051 | files | fix(web): fix japanese text in file viewer not rendering | left (panels-2): not checked against CodeFileView's text decoding |
+| 84478e09c1 | #34331 | files | fix(web): long merged spreadsheet selections no longer crash | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 787c59c802 | #32040 | pr/git | fix(web): Word previews no longer cut ordinary documents short | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| c8e8b58ee6 | #34429 | pr/git | fix(web): improve Excel spreadsheet previews | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 6464729c56 | #34453 | files | fix(web): improve PowerPoint slide font rendering | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 4574c6013d | #36602 | files | fix(web): preserve saved notebook traceback frame boundaries | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| d6244ac5a3 | #36595 | files | fix(web): preserve literal entities in EPUB CDATA | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 6effe74c59 | #36689 | pr/git | fix(web): show repeated table rows and cells in ODT previews | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 13a6782a6c | #36685 | files | fix(web): ODS time cells without display text show their value | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 0fdc99c870 | #36703 | pr/git | fix(web): notebook previews strip ANSI colors from saved tracebacks | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 10a44f5553 | #36767 | pr/git | fix(web): RTF previews keep named spaces, hyphens and joiners | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 776698a3e7 | #33294 | pr/git | fix(web): OpenDocument slide previews no longer print speaker notes | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 85e009fbc9 | #34329 | pr/git | fix(web): show TAR hard links in archive previews | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 8ab40cc88e | #31885 | pr/git | fix(web): the PDF preview says "1 / 1 page" for a one-page PDF | n/a (panels-2): PDFs show in Quick Look, which draws its own page count |
+| 2370e338f7 | #31886 | pr/git | fix(web): the SQLite, archive and notebook previews say "1 row", "1 entry" and "1 cell" | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| dde53b11f3 | #31929 | terminal | fix(web): notebook error previews no longer show terminal color codes | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| d085ee5d15 | #38188 | pr/git | fix(web): decode HEIC previews under desktop CSP | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
 
 ## Port group thread-media (5)
 
@@ -970,28 +970,28 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| de2b1d3358 | #23745 | files | fix(web): keep HTML prototype selection rings visible | port |
-| f06dd4bbf5 | #25737 | files | feat(web): allow resizing the file explorer | port |
-| 78f1ba8285 | #25555 | files | fix(web): preserve PDF scroll and zoom across autoreloads | port |
-| 461df465ab | #26579 | files | fix(web): file context menu actions respond to pointer clicks | port |
-| 433bff1e30 | #28521 | files | fix(web): clicking a file in the Files tree keeps focus on that row | port |
-| 09647d188d | #30601 | files | fix(shared): CSV and TSV attachments keep their table under generic file types | port |
-| 9ef52de293 | #23203 | files | fix(shared): keep spreadsheet shorthand as inline code | port |
-| 1ab3afe892 | #34360 | files | fix(web): opening a file focuses its editor so Cmd+F searches it | port |
-| eceeab4d5c | #34346 | files | fix(web): Cmd+F in the Files panel focuses its search | port |
-| f10a5029f5 | #35067 | files | fix(web): Files tree keeps expanded folders across remounts | port |
-| 08544ba3e5 | #32693 | files | fix(web): open documents no longer reload after every agent command | port |
-| 8cb551a3ce | #36664 | files | fix(web): saved files show external edits after a failed reload | port |
-| 8b633d9a9e | #29802 | files | fix(web): PDF find matches curly quotes when you type straight ones | port |
-| f05cd350d2 | #29996 | files | fix(web): opening a very large folder no longer freezes the Files panel | port |
-| 2afee52025 | #33125 | files | fix(web): distinguish media Back from window close | port |
-| 5f80af6805 | #36936 | files | fix(web): restore word selection in inline code | port |
-| 71adeef080 | #37064 | files | fix(web): open PDF links in the file viewer | port |
-| 109e9dbdfd | #37361 | files | fix(web): file tabs keep their scroll position when you switch back | port |
-| 6dd092315e | #31785 | files | fix(web): file tree icons and ignored rows follow the theme's muted text | port |
-| f4d0855a50 | #33805 | files | fix(web): PDF attachment chips no longer look like failed ones | port |
-| 0d405f664a | #38510 | files | fix(web): a ~\ home path opens as a read-only home file, not as a project file | port |
-| e48d6f3181 | #38749 | files | fix(web): PDFs in the desktop file panel can be saved again | port |
+| de2b1d3358 | #23745 | files | fix(web): keep HTML prototype selection rings visible | left (panels-2): not checked |
+| f06dd4bbf5 | #25737 | files | feat(web): allow resizing the file explorer | left (panels-2): not checked |
+| 78f1ba8285 | #25555 | files | fix(web): preserve PDF scroll and zoom across autoreloads | left (panels-2): not checked |
+| 461df465ab | #26579 | files | fix(web): file context menu actions respond to pointer clicks | left (panels-2): not checked |
+| 433bff1e30 | #28521 | files | fix(web): clicking a file in the Files tree keeps focus on that row | left (panels-2): not checked |
+| 09647d188d | #30601 | files | fix(shared): CSV and TSV attachments keep their table under generic file types | already in CandyWrapper: FilePreviewKind.of picks the table from the .csv or .tsv extension, whatever the MIME type |
+| 9ef52de293 | #23203 | files | fix(shared): keep spreadsheet shorthand as inline code | left (panels-2): not checked |
+| 1ab3afe892 | #34360 | files | fix(web): opening a file focuses its editor so Cmd+F searches it | left (panels-2): not checked |
+| eceeab4d5c | #34346 | files | fix(web): Cmd+F in the Files panel focuses its search | left (panels-2): not checked |
+| f10a5029f5 | #35067 | files | fix(web): Files tree keeps expanded folders across remounts | left (panels-2): not checked |
+| 08544ba3e5 | #32693 | files | fix(web): open documents no longer reload after every agent command | left (panels-2): not checked |
+| 8cb551a3ce | #36664 | files | fix(web): saved files show external edits after a failed reload | left (panels-2): not checked |
+| 8b633d9a9e | #29802 | files | fix(web): PDF find matches curly quotes when you type straight ones | left (panels-2): not checked |
+| f05cd350d2 | #29996 | files | fix(web): opening a very large folder no longer freezes the Files panel | left (panels-2): not checked |
+| 2afee52025 | #33125 | files | fix(web): distinguish media Back from window close | left (panels-2): not checked |
+| 5f80af6805 | #36936 | files | fix(web): restore word selection in inline code | left (panels-2): not checked |
+| 71adeef080 | #37064 | files | fix(web): open PDF links in the file viewer | left (panels-2): not checked |
+| 109e9dbdfd | #37361 | files | fix(web): file tabs keep their scroll position when you switch back | left (panels-2): not checked |
+| 6dd092315e | #31785 | files | fix(web): file tree icons and ignored rows follow the theme's muted text | left (panels-2): not checked |
+| f4d0855a50 | #33805 | files | fix(web): PDF attachment chips no longer look like failed ones | left (panels-2): not checked |
+| 0d405f664a | #38510 | files | fix(web): a ~\ home path opens as a read-only home file, not as a project file | left (panels-2): not checked |
+| e48d6f3181 | #38749 | files | fix(web): PDFs in the desktop file panel can be saved again | left (panels-2): not checked |
 
 ## Small fixes, issues (2)
 
