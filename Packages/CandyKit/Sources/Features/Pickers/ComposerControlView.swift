@@ -34,6 +34,9 @@ public final class ComposerControlView: ControlView {
     public var textOnly = false { didSet { restyle() } }
     public var paddingOverride: (CGFloat, CGFloat)? { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
     public var mutedLabel = false { didSet { restyle() } }
+    /// `SETTINGS_PICKER_TRIGGER_CLASSNAME` (settingsLayout.tsx:189): an input's border and fill, `font-normal text-foreground`,
+    /// and `hover:bg-accent/50`, for a model picker in a settings form.
+    public var settingsTrigger = false { didSet { restyle(); needsDisplay = true } }
     /// The composer's model name stops at `max-w-56` so long names don't push the composer (#28409).
     public var maximumLabelWidth: CGFloat = .infinity { didSet { if maximumLabelWidth != oldValue { invalidateIntrinsicContentSize(); needsLayout = true } } }
     private var labelWidth: CGFloat { min(label.textWidth, maximumLabelWidth) }
@@ -144,6 +147,11 @@ public final class ComposerControlView: ControlView {
 
     public override func updateLayer() {
         fill.backgroundColor = (state.hoverOrPressed || emphasized) && !(modern && textOnly) ? (capy ? Themed.color(\.foreground, 0.07) : Themed.color(\.accent)).cgColor(in: self) : nil
+        fill.borderWidth = settingsTrigger ? 1 : 0
+        if settingsTrigger {
+            fill.backgroundColor = (state.hoverOrPressed ? Themed.color(\.accent, 0.5) : Themed.color(light: \.background, 1, dark: \.contrastInput, 0.32)).cgColor(in: self)
+            fill.borderColor = Themed.color(\.contrastInput).cgColor(in: self)
+        }
         // `focus-visible:ring-2 ring-ring ring-offset-1`: a 1px offset gap, then a 2px ring.
         ring.isHidden = !state.focusVisible
         ring.borderColor = Themed.color(\.ring).cgColor(in: self)
@@ -152,6 +160,7 @@ public final class ComposerControlView: ControlView {
     public override func fontRuntimeDidChange() { super.fontRuntimeDidChange(); restyle() }
 
     private var controlFont: NSFont {
+        if settingsTrigger { return DSFont.ui(14) }
         let font = capy ? DSFont.ui(13, weight: .medium) : DSFont.ui(14, weight: .medium)
         guard modern, font.fontName.hasPrefix(".AppleSystemUIFont") else { return font }
         // ComposerControl.tsx:16 asks for CSS 500; AppKit's named medium resolves to SF 510.
@@ -168,7 +177,7 @@ public final class ComposerControlView: ControlView {
         if label.font != font { label.font = font; invalidateIntrinsicContentSize(); needsLayout = true }
         chevron.isHidden = !showsChevron || modern
         chevron.alphaValue = capy ? 0.75 : 1
-        label.color = state.hoverOrPressed || emphasized ? Themed.color(\.contrastForeground) : (modern ? (mutedLabel ? Themed.color(\.contrastMutedForeground) : Themed.color(\.contrastForeground, 0.8)) : Themed.color(\.contrastSecondaryLabel))
+        label.color = state.hoverOrPressed || emphasized || settingsTrigger ? Themed.color(\.contrastForeground) : (modern ? (mutedLabel ? Themed.color(\.contrastMutedForeground) : Themed.color(\.contrastForeground, 0.8)) : Themed.color(\.contrastSecondaryLabel))
         chevron.strokeColor = Themed.color(\.contrastIconMuted)
         if tintsIcon, let icon = icon as? IconView { icon.strokeColor = iconFollowsLabel ? label.color : Themed.color(\.contrastMutedForeground) }
         (icon as? ComposerEffortGlyphView)?.color = label.color

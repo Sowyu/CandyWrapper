@@ -38,7 +38,7 @@ public final class ButtonView: ControlView {
 
     public var variant: Variant = .default { didSet { restyle() } }
     public var size: Size = .default { didSet { restyle(); invalidateIntrinsicContentSize() } }
-    public var title: String? { didSet { label.text = title ?? ""; syncLabel(); invalidateIntrinsicContentSize() } }
+    public var title: String? { didSet { label.text = title ?? ""; syncLabel(); invalidateIntrinsicContentSize(); needsLayout = true } }
     public var icon: IconName? { didSet { updateIcons() } }
     /// Replaces the leading glyph with a visible-only, Reduce Motion-aware spinner.
     public var showsSpinner = false { didSet { if showsSpinner != oldValue { updateIcons() } } }
@@ -162,7 +162,12 @@ public final class ButtonView: ControlView {
         }
         trailingIconView?.frame = NSRect(x: x - 2, y: iconY, width: m.icon, height: m.icon)
         if justifiesBetween {
-            label.frame.origin.x = m.padding + 1
+            var start = m.padding + 1
+            if let leading = leadingIconView {
+                leading.frame.origin.x = start - 2
+                start += m.icon - 4 + m.gap
+            }
+            label.frame.origin.x = start
             trailingIconView?.frame.origin.x = bounds.width - m.padding - 1 - m.icon + 2
         }
     }
