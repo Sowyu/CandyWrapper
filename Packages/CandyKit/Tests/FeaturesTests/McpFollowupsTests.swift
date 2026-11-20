@@ -106,6 +106,13 @@ struct McpFollowupsTests {
         #expect(SubagentCardPresentation.notificationCard(try Self.notification(outcome: "completed"), records: [first, second])?.title == "First")
     }
 
+    /// #29637 (subagentDisplay.ts:183-193 at 4928): card previews drop image marks and whole link destinations.
+    @Test func subagentPreviewsDropImagesAndLinks() {
+        let record: JSONValue = .object(["id": .string("a"), "childThreadId": .string("c"), "title": .string("T"), "status": .string("completed"),
+                                         "result": .string("See ![shot](/tmp/a (1).png) and [docs](https://x.dev/a_(b)) now")])
+        #expect(SubagentCardPresentation(record: record, event: nil).detail == "See shot and docs now")
+    }
+
     @Test func notificationCardNeedsTheParentsRecord() throws {
         let e = try Self.notification(outcome: "failed")
         #expect(SubagentCardPresentation.notificationChild(e) == "child")

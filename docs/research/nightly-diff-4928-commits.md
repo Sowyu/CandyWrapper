@@ -1417,7 +1417,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 |---|---|---|---|---|
 | d464631407 | #26379 | thread | fix(web): image chips drop the pill and match other chips | port |
 | 725573f358 | #26639 | thread | fix(web): double-click selects the whole inline code span | port |
-| ecea6ca3e6 | #21878 | thread | fix(web): edit from here uses a pencil icon | port |
+| ecea6ca3e6 | #21878 | thread | fix(web): edit from here uses a pencil icon | already in CandyWrapper (thread-4): the user message's edit button draws lucide pencil (TimelineMessageRows editButton) |
 | 3d5baafecf | #22100 | thread | fix(web): respect reduced motion in thread loading controls | port |
 | 6ca95bd92a | #23626 | thread | fix(web): Enter no longer skips an unanswered question | ported: Next and Enter stay on an unanswered question (T3Store `UserInputSession.advance`) |
 | 616c426f5f | #27372 | thread | fix(shared): TypeScript files no longer show as videos | ported: `video/mp2t` and `video/vnd.dlna.mpeg-tts` attachments stay files in sent messages and their chips (thread-2, T3Store `isPlayableVideoMime`). The composer side needs nothing (thread-4): no composer chip takes its kind from a `video/` type, and the reattach check that reads one (ComposerAttachments.matchesReattachMarker) only runs on a file of the same name and size |
@@ -1613,7 +1613,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | a678948483 | #28388 | thread | fix(web): pending-question digit shortcuts ignore dialogs, menus and selects | skip (thread-4): the question panel is Features/Composer/Panels/QuestionPanelView, the composer agent's area |
 | 6cb47acfb8 | #36768 | thread | fix(web): Escape that cancels a thread rename no longer also closes the find bar | port |
 | cebdf39984 | #29570 | thread | fix(web): cancelled queued-message edits release their staged uploads | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
-| c666345bb9 | #29637 | thread | fix(web): subagent previews drop image marks and full link URLs | port |
+| c666345bb9 | #29637 | thread | fix(web): subagent previews drop image marks and full link URLs | ported (thread-4): SubagentCardPresentation's detail drops image marks and destinations with escapes or parentheses, as subagentCardDetail does |
 | e330593141 | #36779 | thread | fix(web): bare URLs no longer swallow Arabic commas and question marks | ported (thread-4): MarkdownDocument.endingBareURLsAtCJKPunctuation also ends a bare URL at the Arabic comma, semicolon, question mark and full stop |
 | 60e4be49cf | #36758 | thread | fix(shared): open relative Codex citations with filename punctuation | skip (thread-4): needs Codex file citation directives (shared/codexMarkdownDirectives.ts), which CandyWrapper doesn't render yet |
 | 154c5014a7 | #29834 | thread | fix(web): long preview annotation comments are no longer dropped from the message | skip (thread-4): the question panel is Features/Composer/Panels/QuestionPanelView, the composer agent's area |

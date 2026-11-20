@@ -110,7 +110,9 @@ struct SubagentCardPresentation {
         hoverDetail = raw.map(Self.hoverPreview)
         detail = raw.flatMap { value in
             guard value.range(of: #"^Child task ended with status\b"#, options: [.regularExpression, .caseInsensitive]) == nil else { return nil }
-            let plain = value.replacingOccurrences(of: #"\[([^\]]+)\]\([^)]*\)"#, with: "$1", options: .regularExpression)
+            // `subagentCardDetail` (client-runtime state/subagentDisplay.ts:183-193 at 4928, #29637): image marks go too, and
+            // a destination may hold escapes and one level of parentheses.
+            let plain = value.replacingOccurrences(of: #"!?\[([^\]]+)\]\((?:\\.|[^\\()]|\((?:\\.|[^\\()])*\))*\)"#, with: "$1", options: .regularExpression)
                 .replacingOccurrences(of: "`", with: "")
                 .replacingOccurrences(of: #"(?m)^[ \t]*[-*][ \t]+"#, with: "", options: .regularExpression)
                 .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
