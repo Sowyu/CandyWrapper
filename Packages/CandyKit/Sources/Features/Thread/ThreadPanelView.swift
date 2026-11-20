@@ -111,6 +111,7 @@ public final class ThreadHeaderView: TopbarDragView {
             guard newValue != project.text else { return }
             project.text = newValue
             projectButton.project = newValue
+            superview?.needsLayout = true
             if favicon.source?.title != newValue { favicon.source = nil }
             favicon.projectTitle = newValue
             needsLayout = true
@@ -159,6 +160,7 @@ public final class ThreadHeaderView: TopbarDragView {
             title.text = newValue
             titleHit.setAccessibilityLabel("Thread actions for \(newValue)")
             needsLayout = true
+            superview?.needsLayout = true
         }
     }
 
@@ -191,7 +193,6 @@ public final class ThreadHeaderView: TopbarDragView {
         toggles[0].setAccessibilityLabel("Toggle thread details panel")
         toggles[1].setAccessibilityLabel("Toggle terminal drawer")
         toggles[2].setAccessibilityLabel("Toggle right panel")
-        addSubview(frost)
         toggles.forEach(addSubview)
         addSubview(cost)
         toggleTips = toggles.map { TooltipController.attach(to: $0, text: "", placement: PopupPlacement(side: .bottom, align: .center, sideOffset: 4)) }
@@ -221,8 +222,6 @@ public final class ThreadHeaderView: TopbarDragView {
 
     /// Dither: the title alone, without the project crumb, since the tab strip and the project chip carry it.
     private var plain: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
-    /// Dither: the rows scroll on under the toggles and cost, so a blur sits behind them. It shows nothing over the bare art.
-    private let frost = BackdropBlurView()
 
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
@@ -297,14 +296,6 @@ public final class ThreadHeaderView: TopbarDragView {
             cost.isHidden = !plain || !threadVisible || cost.breakdown == nil
             let costSize = cost.intrinsicContentSize
             cost.frame = NSRect(x: x - costSize.width, y: midY - costSize.height / 2, width: costSize.width, height: costSize.height)
-        }
-        let cluster = ([cost] + toggles).filter { $0.superview === self && !$0.isHidden }.map(\.frame).reduce(nil as NSRect?) { $0?.union($1) ?? $1 }
-        frost.isHidden = !plain || cluster == nil
-        if let cluster {
-            frost.frame = cluster.insetBy(dx: -4, dy: -2)
-            frost.cornerRadius = DitherChrome.controlRadius
-            frost.layer?.borderWidth = 1
-            frost.layer?.borderColor = DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor
         }
     }
     public override func updateLayer() {
@@ -398,6 +389,10 @@ public final class ThreadPanelView: DSView {
         if timeline.revealFindEntry(entryId) { pendingCitation = nil; timeline.focusCitedEntry(entryId) }
     }
     public let timeline = TimelineView()
+    /// Redesign's reading column behind the timeline's lane.
+    private let readingColumn = DitherReadingColumnView()
+    /// The composer's lane, which the timeline's rows share (`ThreadDetailsPlacement.lane`).
+    private var readingLane = NSRect.zero
     public let composer = ComposerView()
     /// The queued messages docked above the composer; it hides itself when empty.
     public let queue = QueuedRunsView()
@@ -823,6 +818,9 @@ public final class ThreadPanelView: DSView {
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        readingColumn.isHidden = true
+        _ = ThreadTabsSetting.observe { [weak self] in self?.needsLayout = true }
+        addSubview(readingColumn)
         addSubview(timeline)
         addSubview(defaultFade)
         addSubview(header)
@@ -1626,6 +1624,7 @@ public final class ThreadPanelView: DSView {
         let height = composer.preferredHeight
         let x = placement.x.rounded()
         DitherArtView.setColumn(NSRect(x: x, y: 0, width: width, height: chatHeight), from: self)
+        readingLane = NSRect(x: x, y: 0, width: width, height: chatHeight)
         if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
             return layoutDitherComposer(chat: chat, chatHeight: chatHeight, x: x, width: width, height: height)
         }
@@ -1846,6 +1845,31 @@ public final class ThreadPanelView: DSView {
     }
 
     /// What the composer docks that is not in the banner stack.
+    /// Redesign's reading column: `Space.l` wider than the lane on each side, from `Space.s` under the window's top to
+    /// `Space.s` above the panel's bottom, so the composer sits on it.
+    private func layoutReadingColumn(chat: CGFloat, chatHeight: CGFloat, above: CGFloat) {
+        let shown = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !isDraft && !isEmbedded && chat > 0
+            && readingLane.width > 0
+        readingColumn.isHidden = !shown
+        guard shown else { return }
+        let pad = RedesignTokens.Space.l, gap = RedesignTokens.Space.s
+        let left = max(gap, readingLane.minX - pad), right = min(chat - gap, readingLane.maxX + pad)
+        let top = -above + gap
+        let column = NSRect(x: left, y: top, width: max(0, right - left), height: max(0, chatHeight - top - gap))
+        readingColumn.frame = column
+        // The title starts on the lane's left edge, centred on the header pill's line, and stops `Space.l` short of the
+        // pill. The tab strip names the thread itself while tabs show. The rows fade out above it (the timeline mask).
+        let title = readingColumn.title
+        title.set(project: header.projectTitle, title: header.threadTitle)
+        let pill = header.pill
+        let pillLeft = pill.isHidden || pill.window == nil ? chat : convert(pill.frame, from: pill.superview).minX
+        let titleX = readingLane.minX - column.minX
+        let titleRight = min(column.maxX, pillLeft - RedesignTokens.Space.l) - column.minX
+        title.isHidden = ThreadTabsSetting.isOn || title.isEmpty || titleRight - titleX < 48
+        title.frame = NSRect(x: titleX, y: (DitherChrome.band / 2 - gap - DitherThreadTitleView.height / 2).rounded(),
+                             width: max(0, titleRight - titleX), height: DitherThreadTitleView.height)
+    }
+
     private var ditherDockViews: [ComposerBannerView?] {
         [approvalPanel, lazyQuestionPanel.loaded, tasksView, lazyPlanFollowUpBanner.loaded, activityRow, queue, stashBadge,
          queueBadge, commandMenu, lazyStashMenu.loaded, lazySubagentPill.loaded, lazySubagentPanel.loaded]
@@ -2248,7 +2272,9 @@ public final class ThreadPanelView: DSView {
         // Dither's panel sits under the tab strip band, so the timeline reaches up past the panel's top to the
         // window's edge and its rows slide on under the band (the user: "my stuff is still getting covered").
         let above = ditherOverhang
-        timeline.topClearance = chatTop + above
+        // On Redesign's reading column the first row starts below the rows' fade-in (the timeline mask).
+        let columnFade = ditherHeader && !isDraft && !isEmbedded ? RedesignTokens.Space.l : 0
+        timeline.topClearance = chatTop + above + columnFade
         timeline.frame = NSRect(x: 0, y: -above, width: chat, height: max(0, chatHeight + above))
         // Mid-slide the panel keeps its width and runs past the window's right edge.
         rightPanel.frame = NSRect(x: sheet ? bounds.width - panelWidth : chat, y: panelTop, width: panelWidth, height: max(0, bounds.height - panelTop))
@@ -2303,6 +2329,7 @@ public final class ThreadPanelView: DSView {
         let inlineDetails = detailsOpen ? inlinePlacement : nil
         timeline.detailsCardLeft = inlineDetails?.minX
         layoutComposer(chat: chat, height: chatHeight)
+        layoutReadingColumn(chat: chat, chatHeight: chatHeight, above: above)
         if let findBar = lazyFindBar.loaded {
             // `top-3 right-3 w-[min(var(--thread-details-panel-width),calc(100%-1.5rem))]`: as wide as the
             // details card and lined up with it (ThreadFindBar.tsx:62-66 in 2994, f92afe79c).
@@ -2389,7 +2416,16 @@ public final class ThreadPanelView: DSView {
         // ponytail: the mask renders the timeline offscreen while it scrolls, a mask per row if Dither scrolling drops frames
         let masks = glass || dither
         fade.isHidden = masks || standard
-        if masks {
+        if dither, !readingColumn.isHidden {
+            // Redesign's reading column: the rows are gone above the tab band's bottom, so none reads under the header
+            // pill or on the bare picture above the column, then fade in over `Space.l` on the column's glass.
+            fadeMask.frame = timeline.bounds
+            let h = max(1, Double(timeline.bounds.height))
+            let clear = Double(DitherChrome.band)
+            fadeMask.locations = [0, clear / h, (clear + Double(RedesignTokens.Space.l)) / h, 1].map { NSNumber(value: min($0, 1)) }
+            fadeMask.colors = [0, 0, 1, 1].map { NSColor.black.withAlphaComponent($0).cgColor }
+            if timeline.layer?.mask !== fadeMask { timeline.layer?.mask = fadeMask }
+        } else if masks {
             fadeMask.frame = timeline.bounds
             let h = max(1, Double(timeline.bounds.height))
             // Dither fades only the last few points at the window's edge, so the rows stay readable under the header and tabs.

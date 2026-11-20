@@ -349,6 +349,7 @@ final class UserMessageRowView: TimelineRowView {
         // and a lone voice note draw without the bubble's fill and padding.
         let fill = shape.drawsBubble ? (presentation.guestName == nil ? TL.c(\.messageSurface) : GuestColors.surface) : nil
         if bubble.fill !== fill { bubble.fill = fill }
+        bubble.redesignCard = presentation.guestName == nil
         markdown.isHidden = markdown.isHidden || shape.mediaOnly || shape.fileCardsOnly || shape.audioOnly
         // A folded message is never collapsible (`collapsible={!folded}`).
         foldable = fold == nil && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
