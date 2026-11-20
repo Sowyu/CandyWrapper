@@ -439,7 +439,9 @@ final class PullRequestDetailBinding {
                      moreError: sliceError, commit: commit)
     }
 
-    private func loadViewed() {
+    /// `answered`: presses whose write landed before this read began; they yield to it even when it
+    /// disagrees (#24151, 4928 filesViewedStore.ts viewedOverlay: the next completed read wins).
+    private func loadViewed(answered: Set<String> = []) {
         guard let shell, let ref = reference, let store = detail?.capabilities.viewedFiles else {
             view.setViewed(states: nil, overlay: [:], store: nil)
             return
@@ -449,7 +451,8 @@ final class PullRequestDetailBinding {
             let result = try? reply?.decode(as: PullRequestFilesViewedResult.self)
             guard let self else { return }
             if let result { self.viewedStates = Dictionary(result.files.map { ($0.path, $0.state) }, uniquingKeysWith: { _, b in b }) }
-            self.overlay = PullRequestDetailLogic.settleOverlay(self.overlay, states: self.viewedStates, pending: self.pendingViewed, answered: [])
+            self.overlay = PullRequestDetailLogic.settleOverlay(self.overlay, states: self.viewedStates, pending: self.pendingViewed,
+                                                                answered: result == nil ? [] : answered)
             self.view.setViewed(states: self.viewedStates, overlay: self.overlay, store: store)
         }
     }
@@ -466,7 +469,7 @@ final class PullRequestDetailBinding {
             do {
                 _ = try await shell.supervisor.request("pullRequests.setFilesViewed", payload: PullRequestPayloads.setFilesViewed(ref, files: batch))
                 self?.pendingViewed.subtract(paths)
-                self?.loadViewed()
+                self?.loadViewed(answered: Set(paths))
             } catch {
                 guard let self else { return }
                 self.pendingViewed.subtract(paths)
@@ -1023,7 +1026,8 @@ final class ThreadPullRequestsController {
     private var cardDetails: [String: PullRequestDetail] = [:]
     private var cardDetailsTried: Set<String> = []
     private var cardDetailsThread: ThreadId?
-    private var cardActionPending: Set<String> = []
+    /// The action each row is running, so a detail that moves mid-request keeps its pending label (#38517).
+    private var cardActionPending: [String: String] = [:]
 
     /// `ThreadDetailsPrRow`'s reference: the project on the link's host that reads it (`findProjectOnChangeRequestHost`).
     private func cardReference(_ link: ThreadPullRequestLink, env: String) -> PullRequestRef? {
@@ -1056,7 +1060,8 @@ final class ThreadPullRequestsController {
 
     /// `usePullRequestActionRunner` for the row's Ready and Merge: `pullRequests.runAction`, then a fresh read.
     private func runCardAction(_ link: ThreadPullRequestLink, env: String, action: String, mergeMethod: String?) {
-        guard let ref = cardReference(link, env: env), cardActionPending.insert(link.key.id).inserted else { return }
+        guard let ref = cardReference(link, env: env), cardActionPending[link.key.id] == nil else { return }
+        cardActionPending[link.key.id] = action
         cardKey = nil
         sync()
         let thread = cardDetailsThread
@@ -1064,7 +1069,7 @@ final class ThreadPullRequestsController {
         Task { [weak self] in
             guard let self else { return }
             let ok = (try? await self.environments.request(env, "pullRequests.runAction", PullRequestPayloads.action(ref, action: action, mergeMethod: mergeMethod))) != nil
-            self.cardActionPending.remove(link.key.id)
+            self.cardActionPending[link.key.id] = nil
             self.panel.toasts.show(ToastView(title: ok ? PullRequestDetailLogic.actionSuccess(action, provider: provider) : PullRequestDetailLogic.actionFailure(action, provider: provider), kind: ok ? .success : .error))
             guard self.cardDetailsThread == thread else { return }
             self.cardDetails[link.key.id] = nil
@@ -1094,7 +1099,9 @@ final class ThreadPullRequestsController {
         let conflicting = d.mergeability == "conflicting"
         let rollup = PullRequestDetailLogic.checksState(d.checks)
         let showChecks = rollup != nil && !conflicting && !d.isDraft
-        let action = PullRequestDetailLogic.threadPanelAction(d)
+        // A running Ready or Merge keeps its row action until the request finishes (ThreadDetailsPrRow.tsx:186-189 at 4928).
+        let running = cardActionPending[link.key.id]
+        let action = running == "ready" || running == "merge" ? running : PullRequestDetailLogic.threadPanelAction(d)
         let watching = watching && d.state == "open"
         guard showChecks || action != nil || watching else { return nil }
         let r = ThreadDetailsPrRowView()
@@ -1122,7 +1129,7 @@ final class ThreadPullRequestsController {
         r.watch.isHidden = !watching
         r.watch.setAccessibilityLabel("Stop watching #\(link.number)")
         r.watch.action = { [weak self] in self?.watch(link, false) }
-        let pending = cardActionPending.contains(link.key.id)
+        let pending = running != nil
         let method = PullRequestDetailLogic.selectedMergeMethod(PullRequestDetailLogic.allowedMergeMethods(d), preferred: "merge")
         r.action.isHidden = action == nil
         switch action {

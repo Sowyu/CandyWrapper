@@ -247,6 +247,8 @@ public final class DetailsSplitControl: DSView {
     private let elapsed = LabelView()
     private var tracking: NSTrackingArea?
     private var hovered = false { didSet { if hovered != oldValue { needsDisplay = true } } }
+    /// The pointer came onto the group (`onPointerEnter`, GitActionsControl.tsx:1652 at 4928).
+    public var onPointerEnter: (() -> Void)?
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -307,7 +309,7 @@ public final class DetailsSplitControl: DSView {
         tracking = area
     }
 
-    public override func mouseEntered(with event: NSEvent) { hovered = true }
+    public override func mouseEntered(with event: NSEvent) { hovered = true; onPointerEnter?() }
     public override func mouseExited(with event: NSEvent) { hovered = false }
 
     public override func updateLayer() {

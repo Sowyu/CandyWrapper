@@ -153,6 +153,12 @@ public enum GitActionsLogic {
         return []
     }
 
+    /// `hasUsableGitMenuContent` (4928 GitActionsControl.logic.ts, #31972): the chevron opens a menu only
+    /// when something in it can be used, Publish shows, or a notice explains why nothing can.
+    public static func hasUsableMenuContent(_ items: [MenuItem], canWrite: Bool, canPublish: Bool, hasNotice: Bool) -> Bool {
+        canPublish || hasNotice || (canWrite && items.contains { !$0.disabled })
+    }
+
     /// `requiresDefaultBranchConfirmation` (logic.ts:407-418).
     public static func requiresDefaultBranchConfirmation(_ action: GitStackedAction, isDefaultRef: Bool) -> Bool {
         isDefaultRef && action != .commit

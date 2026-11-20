@@ -358,7 +358,9 @@ final class PullRequestsPageController {
                         if let b { reviewing? += b.entries } else { reviewing = nil }
                     }
                 } catch {
-                    failure = PullRequestDetailBinding.failure(error, number: 0).1
+                    // The failure names its environment (#27882, PullRequestsPage.tsx at 4928).
+                    let name = self.environments.label(env).flatMap { $0.isEmpty ? nil : $0 } ?? "Environment"
+                    failure = "\(name): \(PullRequestDetailBinding.failure(error, number: 0).1)"
                     merged.entries += (self.answer?.result.entries ?? []).filter { $0.environmentId == env }
                 }
             }
