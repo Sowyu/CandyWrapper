@@ -56,6 +56,8 @@ public struct ClientSettings: Equatable, Sendable {
         "confirmQuit": SettingSpec(.literals(["direct", "hold", "double-click"]), .string("hold")),
         "confirmThreadArchive": SettingSpec(.bool, .bool(false)),
         "confirmThreadDelete": SettingSpec(.bool, .bool(true)),
+        "confirmTerminalClose": SettingSpec(.bool, .bool(true)),  // 4928 settings.ts:472
+        "language": SettingSpec(.string(maxLength: 32), .string("en")),  // 4928 settings.ts:585
         "confirmThreadUnpin": SettingSpec(.bool, .bool(false)),
         "diffFilesCollapsed": SettingSpec(.bool, .bool(true)),
         "diffIgnoreWhitespace": SettingSpec(.bool, .bool(true)),
@@ -204,6 +206,8 @@ public struct ServerSettingsValues: Equatable, Sendable {
         "defaultThreadEnvMode": SettingSpec(.any, .null),
         "worktreeSubmodules": SettingSpec(.any, .null),
         "defaultModelSelection": SettingSpec(.any, .null),
+        "fallbackModelSelection": SettingSpec(.any, .null),  // 4928 settings.ts, #26164
+        "promptSuggestionsEnabled": SettingSpec(.bool, .bool(false)),  // 4928 settings.ts, #28047
         "textGenerationModelSelection": SettingSpec(.any, .object([
             "instanceId": .string("codex"), "model": .string("gpt-6-luna"),
             "options": .array([.object(["id": .string("reasoningEffort"), "value": .string("low")])]),

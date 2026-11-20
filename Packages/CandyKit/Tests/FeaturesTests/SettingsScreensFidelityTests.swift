@@ -154,9 +154,10 @@ struct SettingsScreensFidelityTests {
         modal.frame = NSRect(x: 0, y: 0, width: 1100, height: 780)
         modal.layoutSubtreeIfNeeded()
         let scroll = page.subviews.compactMap { $0 as? ScrollAreaView }.first!
-        // main-3824.log records 665.5px for screen 18. Use the captured viewport rather than a
-        // fraction of native content: account status and offscreen sections have different heights.
-        let scrollY = section == .providers ? 665.5 : max(0, scroll.scrollView.documentView!.frame.height - scroll.scrollView.contentView.bounds.height) * fraction
+        // main-3824.log recorded 665.5px for screen 18. The 4928 capture scrolls to 0.45 of a taller page
+        // (plans/main.json, `scrollTop=(scrollHeight-clientHeight)*0.45`) and logged no offset; its content lines up
+        // with this page 36pt further down, so use 701.5 rather than a fraction of native content.
+        let scrollY = section == .providers ? 701.5 : max(0, scroll.scrollView.documentView!.frame.height - scroll.scrollView.contentView.bounds.height) * fraction
         scroll.scroll(to: NSPoint(x: 0, y: scrollY))
         return modal
     }

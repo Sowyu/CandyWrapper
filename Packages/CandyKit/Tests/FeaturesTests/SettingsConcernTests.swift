@@ -18,8 +18,9 @@ struct SettingsConcernTests {
         #expect(SettingsSection.fromPath("/threads") == nil)
     }
 
-    @Test func pageNamesAndOrderFollow3814WithExperimentalLast() {
-        #expect(SettingsSection.navSections.map(\.label) == ["General", "Appearance", "Chat", "Diffs & pull requests", "Keybindings", "SnapShots", "Providers", "Threads", "Browser", "Devices", "Scheduled tasks", "Projects", "Source control", "Worktrees", "Environments", "Sharing & access", "Maintenance", "Labs", "About", "Archive", "Experimental"])
+    /// 4928 adds Voice and names source control "Source control & issues" (settingsSearch.ts:96-178).
+    @Test func pageNamesAndOrderFollow4928WithExperimentalLast() {
+        #expect(SettingsSection.navSections.map(\.label) == ["General", "Appearance", "Chat", "Diffs & pull requests", "Keybindings", "Voice", "SnapShots", "Providers", "Threads", "Browser", "Devices", "Scheduled tasks", "Projects", "Source control & issues", "Worktrees", "Environments", "Sharing & access", "Maintenance", "Labs", "About", "Archive", "Experimental"])
     }
 
     @Test func movedRowsKeepTheirSearchAnchorsAndDestinations() {

@@ -1403,11 +1403,11 @@ final class ThreadController {
             wake = 2 - reconnectingFor
         } else {
             // Waiting on device approval skips the grace and names it (useSystemComposerBanners.tsx:189-216).
-            // ponytail: T3 puts the "Approve this device…" text under the title; it is the tooltip here until the banner grows a description line
+            // T3 puts the "Approve this device…" text after the title as the banner's muted description.
             let label = environments.label(id) ?? "Remote"
             banner.text = state.awaitingApproval ? "\(label) is waiting to approve this device"
                 : "\(label) is \(reconnecting ? "reconnecting" : "offline")"
-            banner.toolTip = state.awaitingApproval ? state.presentedError : nil
+            banner.detailText = state.awaitingApproval ? state.presentedError : nil
             banner.isError = state.status == .error
             // "Retry now" while reconnecting, nothing on the first attempt (useSystemComposerBanners.tsx:215-228).
             banner.showsReconnect = state.status != .connecting

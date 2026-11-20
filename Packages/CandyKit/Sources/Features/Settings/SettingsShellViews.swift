@@ -4,7 +4,7 @@ import DesignSystem
 /// The settings pages in T3's nav order (settingsSearch.ts `SETTINGS_SECTION_LABELS`, SettingsSidebarNav.tsx
 /// icons). "Project" only shows while a project scope is chosen (`isSettingsOverviewVisible`).
 public enum SettingsSection: String, CaseIterable, Sendable {
-    case general, appearance, chat, diffs, keybindings, snapShots, providers, threads, browser, devices, scheduledTasks, projects, sourceControl, worktrees, connections, access, maintenance, beta, about, archive
+    case general, appearance, chat, diffs, keybindings, voice, snapShots, providers, threads, browser, devices, scheduledTasks, projects, sourceControl, worktrees, connections, access, maintenance, beta, about, archive
     case integrations, storage
     /// Redesign's Orchestrator tab, CandyWrapper's own; never in T3's nav.
     case orchestrator
@@ -30,11 +30,12 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .general: "General"
         case .appearance: "Appearance"
         case .keybindings: "Keybindings"
+        case .voice: "Voice"
         case .snapShots: "SnapShots"
         case .providers: "Providers"
         case .integrations: "Integrations"
         case .scheduledTasks: "Scheduled tasks"
-        case .sourceControl: "Source control"
+        case .sourceControl: "Source control & issues"
         case .storage: "Storage"
         case .connections: "Environments"
         case .beta: "Labs"
@@ -62,6 +63,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .general: .settings2
         case .appearance: .palette
         case .keybindings: .keyboard
+        case .voice: .volume2 // The default nav draws lucide `mic` (`micIcon`); Redesign uses this.
         case .snapShots: .camera
         case .providers: .bot
         case .integrations: .blocks
@@ -101,7 +103,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
 
     /// The nav lists Project only for a project scope (`isSettingsOverviewVisible`).
     static let navGroups: [(label: String?, sections: [SettingsSection])] = [
-        (nil, [.general, .appearance, .chat, .diffs, .keybindings, .snapShots]),
+        (nil, [.general, .appearance, .chat, .diffs, .keybindings, .voice, .snapShots]),
         ("Agents", [.providers, .threads, .browser, .devices, .scheduledTasks]),
         ("Code", [.projects, .sourceControl, .worktrees]),
         ("Connections", [.connections, .access]),
@@ -221,6 +223,7 @@ public final class SettingsSidebarView: DSView {
         for section in SettingsSection.navSections {
             let item = SidebarMenuButtonView(section.label, icon: section.icon)
             if section == .snapShots { item.iconDefinition = SettingsSection.snapShotIcon }
+            if section == .voice { item.iconDefinition = SettingsSection.micIcon }
             item.isEnabled = section.isAvailable
             item.isActive = section == selected
             item.isHidden = section == .projects && !showsProject

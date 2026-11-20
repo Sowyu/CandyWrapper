@@ -14,7 +14,9 @@ public struct TextBlockLayout {
     /// uses for prose). `maxLines` > 0 clamps like `line-clamp`: the last line ends in an ellipsis.
     /// `balanced` copies `text-wrap: balance`: the narrowest width that keeps the line count.
     // ponytail: balance is a binary search on width, Chromium's balancer scores line lengths; revisit if a balanced heading wraps differently
-    public init(_ string: NSAttributedString, width: CGFloat, lineHeight: CGFloat, maxLines: Int = 0, balanced: Bool = false) {
+    /// `pretty` copies the part of Chromium's `text-wrap: pretty` that shows in short text: greedy lines, except that a
+    /// last line holding one word takes a second one from the line before.
+    public init(_ string: NSAttributedString, width: CGFloat, lineHeight: CGFloat, maxLines: Int = 0, balanced: Bool = false, pretty: Bool = false) {
         self.lineHeight = lineHeight
         let typesetter = CTTypesetterCreateWithAttributedString(string)
         let length = string.length
@@ -37,14 +39,37 @@ public struct TextBlockLayout {
                 if breaks(mid).count > ranges.count { lo = mid } else { hi = mid }
             }
             ranges = breaks(hi)
+        } else if pretty, ranges.count > 1 {
+            let text = string.string as NSString
+            func lastIsOneWord(_ r: [CFRange]) -> Bool {
+                let last = text.substring(with: NSRange(location: r[r.count - 1].location, length: r[r.count - 1].length))
+                return !last.trimmingCharacters(in: .whitespacesAndNewlines).contains(where: \.isWhitespace)
+            }
+            if lastIsOneWord(ranges) {
+                let n = ranges.count
+                var lo: CGFloat = 0, hi = width
+                while hi - lo > 0.5 {
+                    let mid = (lo + hi) / 2, r = breaks(mid)
+                    if r.count == n && lastIsOneWord(r) { hi = mid } else { lo = mid }
+                }
+                let r = breaks(lo)
+                if r.count == n { ranges = r }
+            }
         }
         var lines = ranges.map { TextLine(line: CTTypesetterCreateLine(typesetter, $0)) }
         if maxLines > 0, lines.count > maxLines {
-            let start = ranges[maxLines - 1].location
-            let rest = CTTypesetterCreateLine(typesetter, CFRange(location: start, length: length - start))
-            let attributes = string.attributes(at: 0, effectiveRange: nil)
+            // Blink's line-clamp keeps the last visible line as it wrapped and appends the ellipsis; only when that
+            // doesn't fit does it cut the line's end to make room.
+            let range = ranges[maxLines - 1]
+            let attributes = string.attributes(at: range.location, effectiveRange: nil)
             let ellipsis = CTLineCreateWithAttributedString(NSAttributedString(string: "\u{2026}", attributes: attributes))
-            let last = CTLineCreateTruncatedLine(rest, Double(width), .end, ellipsis) ?? rest
+            let text = NSMutableAttributedString(attributedString: string.attributedSubstring(from: NSRange(location: range.location, length: range.length)))
+            while let c = text.string.last, c.isWhitespace { text.deleteCharacters(in: NSRange(location: text.length - 1, length: 1)) }
+            let content = CTLineCreateWithAttributedString(text)
+            text.append(NSAttributedString(string: "\u{2026}", attributes: attributes))
+            let whole = CTLineCreateWithAttributedString(text)
+            let last = CTLineGetTypographicBounds(whole, nil, nil, nil) <= Double(width) ? whole
+                : CTLineCreateTruncatedLine(content, Double(width), .end, ellipsis) ?? content
             lines = Array(lines.prefix(maxLines - 1)) + [TextLine(line: last)]
         }
         self.lines = lines
@@ -103,6 +128,8 @@ public final class TextBlockView: DSView {
     public var maxLines = 0 { didSet { invalidate() } }
     /// `text-wrap: balance`.
     public var balanced = false { didSet { invalidate() } }
+    /// `text-wrap: pretty` (see `TextBlockLayout`).
+    public var pretty = false { didSet { if pretty != oldValue { invalidate() } } }
     /// See `LabelView.smoothsFont`.
     public var smoothsFont = true { didSet { if smoothsFont != oldValue { needsDisplay = true } } }
     /// A leading run drawn semibold in `boldColor` (`<span class="font-semibold text-foreground">`).
@@ -151,7 +178,7 @@ public final class TextBlockView: DSView {
                 string.addAttribute(NSAttributedString.Key(kCTForegroundColorAttributeName as String), value: boldColor.cgColor(in: self), range: range)
             }
         }
-        let made = TextBlockLayout(string, width: width, lineHeight: resolvedLineHeight, maxLines: maxLines, balanced: balanced)
+        let made = TextBlockLayout(string, width: width, lineHeight: resolvedLineHeight, maxLines: maxLines, balanced: balanced, pretty: pretty)
         cache[width] = made
         return made
     }

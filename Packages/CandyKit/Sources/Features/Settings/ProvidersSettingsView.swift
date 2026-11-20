@@ -127,12 +127,14 @@ public enum ProvidersLogic {
     /// saved order, then the server's.
     public static func displayModels(live: [ServerProviderModel], custom: [(slug: String, name: String, raw: JSONValue)],
                                      favorites: Set<String>, hidden: Set<String>, order: [String]) -> [DisplayModel] {
-        var models = live.filter { !$0.isCustom }.map { DisplayModel(slug: $0.slug, name: $0.name, isCustom: false, capabilities: capabilities($0)) }
+        // Reasoning is the norm, so only its absence is labeled, and only when another model has it.
+        let flag = live.contains { $0.optionDescriptors.contains(where: \.isReasoningControl) }
+        var models = live.filter { !$0.isCustom }.map { DisplayModel(slug: $0.slug, name: $0.name, isCustom: false, capabilities: capabilities($0, flagMissingReasoning: flag)) }
         // A custom entry with a built-in slug only renames that built-in on the server, so the built-in row already
         // shows it (ProviderInstanceCard.tsx:183-199, T3 3105 ffb4af8d5).
         let builtIn = Set(models.map(\.slug))
         models += custom.filter { !builtIn.contains($0.slug) }.map { c in
-            DisplayModel(slug: c.slug, name: c.name, isCustom: true, capabilities: live.first { $0.slug == c.slug }.map(capabilities) ?? [])
+            DisplayModel(slug: c.slug, name: c.name, isCustom: true, capabilities: live.first { $0.slug == c.slug }.map { capabilities($0, flagMissingReasoning: false) } ?? [])
         }
         let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
         let original = Dictionary(models.enumerated().map { ($1.slug, $0) }, uniquingKeysWith: { a, _ in a })
@@ -151,15 +153,17 @@ public enum ProvidersLogic {
             + sorted.filter { !favorites.contains($0.slug) && isHidden($0) }
     }
 
-    /// `describeModelCapabilities`.
-    static func capabilities(_ m: ServerProviderModel) -> [String] {
+    /// `describeModelCapabilities` (ProviderModelsSection.tsx:39-67): Fast mode, then No reasoning for a discovered
+    /// model without a reasoning control while others have one. Custom models and the alias slugs prove nothing.
+    static func capabilities(_ m: ServerProviderModel, flagMissingReasoning: Bool) -> [String] {
         let d = m.optionDescriptors
         var labels: [String] = []
         if d.contains(where: { $0.id == "fastMode" || ($0.id == "serviceTier" && $0.type == .select && $0.options.contains { $0.id == "fast" || $0.label == "Fast" }) }) {
             labels.append("Fast mode")
         }
-        if d.contains(where: { $0.id == "thinking" }) { labels.append("Thinking") }
-        if d.contains(where: { $0.type == .select && ["reasoningEffort", "effort", "reasoning", "variant"].contains($0.id) }) { labels.append("Reasoning") }
+        if flagMissingReasoning, !m.isCustom, !["default", "auto"].contains(m.slug), !d.contains(where: \.isReasoningControl) {
+            labels.append("No reasoning")
+        }
         return labels
     }
 
@@ -182,7 +186,17 @@ public enum ProvidersLogic {
     }
 
     /// Runtime fields per driver (each driver's settings schema, `providerSettingsForm` annotations, in `order`).
-    public struct Field: Sendable { public var key, title, detail, placeholder: String; public var secret = false; public var redacted = false; public var options: [(String, String)] = []; public var defaultValue = "" }
+    public struct Field: Sendable {
+        public var key, title, detail, placeholder: String; public var secret = false; public var redacted = false; public var options: [(String, String)] = []; public var defaultValue = ""
+        /// The field schema's pattern, checked on the trimmed text (`fieldAcceptsString`, ProviderSettingsForm.tsx:96-101).
+        public var pattern: String?
+        /// `field.accepts`: an empty value clears the field, so it always passes.
+        public func accepts(_ text: String) -> Bool {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let pattern, !trimmed.isEmpty else { return true }
+            return trimmed.range(of: pattern, options: .regularExpression) != nil
+        }
+    }
     public static func fields(_ driver: String, config: JSONValue? = nil) -> [Field] {
         func binary(_ name: String, _ detail: String) -> Field { Field(key: "binaryPath", title: "Binary path", detail: detail, placeholder: name) }
         switch driver {
@@ -198,7 +212,8 @@ public enum ProvidersLogic {
                                     Field(key: "homePath", title: "CLAUDE_CONFIG_DIR path",
                                           detail: "Custom Claude home and config directory. Keeps .claude.json and .claude separate.", placeholder: "~/.claude"),
                                     Field(key: "autoCompactWindow", title: "Auto-compact after",
-                                          detail: "Compact after 100,000 to 1,000,000 tokens. Leave empty to use Claude's default.", placeholder: "e.g. 300000"),
+                                          detail: "Compact after 100,000 to 1,000,000 tokens. Leave empty to use Claude's default.", placeholder: "e.g. 300000",
+                                          pattern: #"^(?:|[1-9]\d{5}|1000000)$"#),  // contracts settings.ts:764,823-825
                                     // contracts settings.ts:710-725.
                                     Field(key: "idleCompaction", title: "Compact idle threads",
                                           detail: "When to compact an idle thread over 200,000 tokens: after you return, just before its prompt cache expires, or never. Overrides the default in General settings.",
@@ -916,15 +931,19 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
                     field.clear.action = { [weak self] in self?.upsert(row, ProvidersLogic.config(current(), set: f.key, to: ""), env: env.id) }
                     control = field
                 } else {
-                    let input = InputView(placeholder: f.placeholder, text: saved, size: .sm)
-                    input.frame.size = NSSize(width: 224, height: 28)
-                    input.isEnabled = !readOnly
-                    input.setAccessibilityLabel(f.title)
-                    input.onCommit = { [weak self] text in
+                    // `ProviderSettingsTextInput` (ProviderSettingsForm.tsx:618-662, #35100): a value the field's schema
+                    // refuses stays in the field, marked invalid, with "Enter a valid value. It was not saved." under it.
+                    let field = ValidatedFieldControl(placeholder: f.placeholder, text: saved)
+                    field.input.isEnabled = !readOnly
+                    field.input.setAccessibilityLabel(f.title)
+                    field.onHeightChange = { [weak self] in self?.onHeightChange?() }
+                    field.input.onCommit = { [weak self, weak field] text in
+                        guard f.accepts(text) else { field?.rejected = true; return }
+                        field?.rejected = false
                         guard text.trimmingCharacters(in: .whitespacesAndNewlines) != saved else { return }
                         self?.upsert(row, ProvidersLogic.config(current(), set: f.key, to: text), env: env.id)
                     }
-                    control = input
+                    control = field
                 }
                 return SettingsRowView(title: f.title, detail: f.detail, control: control)
             }
@@ -1331,6 +1350,7 @@ final class ProviderListRow: ControlView {
     }
 
     override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
 
     /// `min-h-18 py-3`: the name line, `mt-0.5`, and up to two status lines.
     func height(forWidth width: CGFloat) -> CGFloat {
@@ -1340,7 +1360,8 @@ final class ProviderListRow: ControlView {
     }
 
     private func restyle() {
-        Motion.setBackground(fill, isSelected ? Themed.color(\.muted, 0.45).cgColor(in: self) : state.hoverOrPressed ? Themed.color(\.muted, 0.25).cgColor(in: self) : nil)
+        // `bg-foreground/[0.06]` selected, `hover:bg-muted/25` (ProviderInstanceCard.tsx:1178).
+        Motion.setBackground(fill, isSelected ? Themed.color(\.foreground, 0.06).cgColor(in: self) : state.hoverOrPressed ? Themed.color(\.muted, 0.25).cgColor(in: self) : nil)
         let dim: CGFloat = !enabled && !isSelected && !state.hoverOrPressed ? 0.6 : 1
         // `opacity-60 transition-opacity group-hover:opacity-100` (ProviderInstanceCard.tsx:918-922).
         for v in [icon, name, version, status] as [NSView] { HoverReveal.fade(v, to: dim) }
@@ -1810,5 +1831,40 @@ extension ProviderBadge {
         ProviderEnvironmentLogic.accentColor(row.instance["accentColor"]?.stringValue).map {
             ProviderBadge(initials: ProviderIcon.initials(displayName), accent: $0, size: .small, overhang: 4, ring: Themed.color(\.card))
         }
+    }
+}
+
+/// A 224pt settings text field that can hold a refused value: `aria-invalid` on the input and a destructive
+/// `text-2xs` note under it (`flex flex-col gap-1`, ProviderSettingsForm.tsx:634-660).
+final class ValidatedFieldControl: DSView {
+    let input: InputView
+    private let note = LabelView("Enter a valid value. It was not saved.", font: DSFont.ui(11), color: Themed.color(\.destructive))
+    var onHeightChange: (() -> Void)?
+    var rejected = false {
+        didSet {
+            guard rejected != oldValue else { return }
+            input.isInvalid = rejected
+            note.isHidden = !rejected
+            invalidateIntrinsicContentSize()
+            superview?.invalidateIntrinsicContentSize()
+            superview?.needsLayout = true
+            onHeightChange?()
+        }
+    }
+
+    init(placeholder: String, text: String) {
+        input = InputView(placeholder: placeholder, text: text, size: .sm)
+        super.init(frame: NSRect(x: 0, y: 0, width: 224, height: 28))
+        note.lineHeight = 16
+        note.isHidden = true
+        addSubview(input)
+        addSubview(note)
+    }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: 224, height: rejected ? 28 + 4 + 16 : 28) }
+    override func layout() {
+        super.layout()
+        input.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 28)
+        note.frame = NSRect(x: 0, y: 32, width: bounds.width, height: 16)
     }
 }

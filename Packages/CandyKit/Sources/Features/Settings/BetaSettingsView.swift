@@ -45,8 +45,17 @@ public final class BetaSettingsView: SettingsPageBase {
             // Servers before Nightly 3814 can't link (settings.ts:1209, environment.ts:139-142).
             linked.isHidden = !self.context.scope.allStore("linkedEnvironmentsEnabled")
         }
+        // `PromptSuggestionsRow` (LabsSettingsPanel.tsx:189-213, #28047): the composer shows the provider's predicted next
+        // message. Servers before 4928 don't store the key, so the row waits for one that does.
+        let suggestions = serverSwitch("prompt-suggestions-beta",
+            "Show a predicted next message in the empty composer after a Claude or Codex turn. Tab uses it. Each is an extra cached request on your plan. Needs Codex 0.165+. Claude threads update on restart.",
+            key: "promptSuggestionsEnabled", reset: nil, label: "Suggest next prompt")
+        binder.add { [weak self, weak suggestions] in
+            guard let self, let suggestions else { return }
+            suggestions.isHidden = !self.context.scope.allStore("promptSuggestionsEnabled")
+        }
         // #33131 removed the Legacy features section: plan mode and the context window indicator.
-        items = [section("beta", "Beta", [folders, guest, linked])]
+        items = [section("beta", "Beta", [folders, guest, linked, suggestions])]
         binder.refresh()
     }
 }

@@ -245,7 +245,7 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
         }
         let addHost = ButtonView("Add host", icon: .plus, variant: .outline, size: .sm)
         addHost.action = { [weak self] in self?.editDeviceHost(nil) }
-        let hostRow = row("device-hosts", detail: "Add remote machines with simulator or emulator runtimes installed, and the selected environments will connect over SSH and set up device tools automatically.", control: addHost)
+        let hostRow = row("device-hosts", title: "Device hosts", detail: "Add remote machines with simulator or emulator runtimes installed, and the selected environments will connect over SSH and set up device tools automatically.", control: addHost)
         hostRow.title = "Device hosts"
         let manage = ButtonView("Manage hosts", variant: .outline, size: .sm).menuTrigger()
         manage.action = { [weak self, weak manage] in

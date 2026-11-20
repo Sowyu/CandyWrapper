@@ -167,25 +167,28 @@ final class ProviderEnvironmentVariablesView: DSView, SettingsGroupRow {
         onRowsChange?(rows)
     }
 
-    func height(forWidth width: CGFloat) -> CGFloat { rows.isEmpty ? 0 : CGFloat(rows.count) * 36 + 16 + 8 }
+    /// Each card is `p-2` around two 28pt lines `gap-1.5` apart, inside a 1pt border; cards sit `space-y-2` apart.
+    static let cardHeight: CGFloat = 1 + 8 + 28 + 6 + 28 + 8 + 1
+
+    func height(forWidth width: CGFloat) -> CGFloat { rows.isEmpty ? 0 : CGFloat(rows.count) * (Self.cardHeight + 8) + 16 + 8 }
 
     override func layout() {
         super.layout()
         var y: CGFloat = 0
         for line in lines {
-            line.frame = NSRect(x: 0, y: y, width: bounds.width, height: 28)
-            y += 36
+            line.frame = NSRect(x: 0, y: y, width: bounds.width, height: Self.cardHeight)
+            y += Self.cardHeight + 8
         }
         note.frame = NSRect(x: 0, y: y, width: bounds.width, height: 16)
     }
 
-    /// One variable: `NAME` (176 wide), `=`, the value, the lock, the remove button (`gap-1.5`).
-    final class Line: DSView {
+    /// One variable as a `rounded-lg border p-2` card: the name and the remove button on the first line, the value and
+    /// the lock on the second, `gap-1.5` apart (ProviderInstanceCard.tsx:541-553).
+    final class Line: BoxView {
         var onChange: ((ProviderEnvironmentLogic.Draft) -> Void)?
         var onRemove: (() -> Void)?
         private var row: ProviderEnvironmentLogic.Draft
         private let name = InputView(placeholder: "VARIABLE_NAME", text: "", size: .sm, font: .mono)
-        private let equals = LabelView("=", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
         private let plain = InputView(placeholder: "value", text: "", size: .sm, font: .mono)
         private let secret = SecureInputView(placeholder: "value")
         private let lock = ButtonView(nil, icon: .lock, variant: .ghostMuted, size: .iconMicro)
@@ -199,7 +202,6 @@ final class ProviderEnvironmentVariablesView: DSView, SettingsGroupRow {
             name.setAccessibilityLabel("Environment variable name \(index + 1)")
             secret.monospaced = true
             for v in [plain, secret] as [NSView] { v.setAccessibilityLabel("Environment variable value \(index + 1)") }
-            equals.lineHeight = 16
             lock.iconSize = 12
             remove.iconSize = 12
             remove.setAccessibilityLabel("Remove environment variable \(row.name.isEmpty ? "\(index + 1)" : row.name)")
@@ -216,7 +218,11 @@ final class ProviderEnvironmentVariablesView: DSView, SettingsGroupRow {
                 }
             }
             remove.action = { [weak self] in self?.onRemove?() }
-            for v in [name, equals, plain, secret, lock, remove] as [NSView] { addSubview(v) }
+            var style = BoxStyle()
+            style.radius = 8
+            style.border = Themed.color(\.border)
+            boxStyle = style
+            for v in [name, plain, secret, lock, remove] as [NSView] { addSubview(v) }
             for c in [name, plain] { c.isEnabled = enabled }
             secret.isEnabled = enabled
             lock.isEnabled = enabled
@@ -256,16 +262,15 @@ final class ProviderEnvironmentVariablesView: DSView, SettingsGroupRow {
 
         override func layout() {
             super.layout()
-            let w = bounds.width
-            name.frame = NSRect(x: 0, y: 0, width: 176, height: 28)
-            let ew = ceil(equals.textWidth) + 1
-            equals.frame = NSRect(x: 176 + 6, y: 6, width: ew, height: 16)
-            let vx = 176 + 6 + ew + 6
-            remove.frame = NSRect(x: w - 20, y: 4, width: 20, height: 20)
-            lock.frame = NSRect(x: w - 20 - 6 - 20, y: 4, width: 20, height: 20)
-            let vw = max(0, lock.frame.minX - 6 - vx)
-            plain.frame = NSRect(x: vx, y: 0, width: vw, height: 28)
-            secret.frame = NSRect(x: vx, y: 0, width: vw, height: 28)
+            let inner = bounds.insetBy(dx: 9, dy: 9)
+            let fieldWidth = max(0, inner.width - 20 - 6)
+            name.frame = NSRect(x: inner.minX, y: inner.minY, width: fieldWidth, height: 28)
+            remove.frame = NSRect(x: inner.maxX - 20, y: inner.minY + 4, width: 20, height: 20)
+            let valueY = inner.minY + 28 + 6
+            plain.frame = NSRect(x: inner.minX, y: valueY, width: fieldWidth, height: 28)
+            secret.frame = plain.frame
+            // The 4928 reference draws the lock centred on the value line.
+            lock.frame = NSRect(x: inner.maxX - 20, y: valueY + 4, width: 20, height: 20)
         }
     }
 }
