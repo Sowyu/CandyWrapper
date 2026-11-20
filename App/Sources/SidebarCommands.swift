@@ -237,6 +237,14 @@ final class SidebarCommands {
             }
             return true
         }
+        // `thread.regenerateTitle`, unbound by default (4928 useThreadLifecycle.tsx, #33987): skipped while one runs.
+        shortcuts.on("thread.regenerateTitle") { [weak self] call in
+            guard let self, self.threads.panel.window != nil else { return false }
+            if !call.isRepeat, let id = self.threads.openThreadId, let thread = self.shell(id), thread.titleRegeneration == nil {
+                self.simple(id, ThreadCommands.regenerateTitle(id.localId), failure: "Failed to regenerate thread title")
+            }
+            return true
+        }
         // `thread.copyReference`: the PR the panel shows, else the thread's current PR link, else the
         // thread ID (`resolveThreadReferenceCopyTarget`, shared/threadReference.ts:13-40).
         shortcuts.on("thread.copyReference") { [weak self] call in

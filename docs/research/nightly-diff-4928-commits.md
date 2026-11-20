@@ -297,10 +297,10 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 917ce994e4 | #32186 | thread | fix(web): agent sign-in defaults to Auto access | port |
-| dd0737d3e2 | #33600 | connections | feat: approve agent sign-ins with T3 Connect instead of a code | port; T3 Connect approval |
-| 9a0d02723c | #33632 | connections | feat: approve agent sign-ins on app.t3.codes with T3 Connect | port |
-| eb381a7d4f | #33645 | thread | fix: hosted agent approval no longer fails with "Your session cannot approve" | port |
+| 917ce994e4 | #32186 | thread | fix(web): agent sign-in defaults to Auto access | skipped: the agent sign-in page (ConnectAgentSurface) is T3's web route /connect-agent, opened in a browser; CandyWrapper has no copy of it |
+| dd0737d3e2 | #33600 | connections | feat: approve agent sign-ins with T3 Connect instead of a code | skipped: /approve-agent and /connect-agent are T3 web routes the agent opens in a browser; CandyWrapper has no agent sign-in pages |
+| 9a0d02723c | #33632 | connections | feat: approve agent sign-ins on app.t3.codes with T3 Connect | skipped: hosted approval changes T3's web sign-in pages and the Use in another app wizard, which CandyWrapper doesn't have |
+| eb381a7d4f | #33645 | thread | fix: hosted agent approval no longer fails with "Your session cannot approve" | skipped: fixes the hosted approval web page, which CandyWrapper doesn't have |
 
 ## Port group palette-search (1)
 
@@ -639,7 +639,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| cfb7cae2b9 | #33987 | settings | feat(web): bindable shortcut to regenerate a thread's title | port; needs wire: title regeneration command |
+| cfb7cae2b9 | #33987 | settings | feat(web): bindable shortcut to regenerate a thread's title | ported (settings-4928): thread.regenerateTitle is listed in Keybindings and regenerates the open thread's title; the wire command was already there |
 | 1c9ea568a1 | #31418 | sidebar | fix(clients): report title regeneration outcomes | port |
 | ccf96b2f65 | #29383 | sidebar | feat(web): sidebar titles glimmer while they regenerate | ported 9a0153d1 |
 

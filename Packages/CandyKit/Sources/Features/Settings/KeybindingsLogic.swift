@@ -55,7 +55,7 @@ public enum KeybindingsLogic {
         "modelPicker.toggle", "modelPicker.previousProvider", "modelPicker.nextProvider",
     ] + Keymap.modelPickerJumpCommands + [
         "thread.stop", "thread.steerQueuedMessage", "thread.editQueuedMessage", "thread.previous", "thread.next",
-        "thread.copyReference", "thread.settle", "thread.pin", "thread.undo",
+        "thread.copyReference", "thread.settle", "thread.pin", "thread.regenerateTitle", "thread.undo",  // 4928 keybindings.ts:38-47
     ] + Keymap.threadJumpCommands
 
     /// `keybindingSearchAnchorId`.
