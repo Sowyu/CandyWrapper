@@ -145,9 +145,54 @@ burst 1.40% light, 1.60% dark; file-card 0.93%, 1.01%; model-switch 1.90%, 1.92%
 media.above-text, media.image-only, media.collage and quote-card have references but no native harness,
 because the native row loads images through the thread's image model.
 
+## Results after look-4928 (2026-11-19)
+
+Branch `look-4928` off `catchup-4928`. `scripts/test --filter 'Fidelity|RedesignBaselineTests'` ran on the base
+commit and on the branch. Failing case-themes per surface, before and after:
+
+| Surface | Before | After |
+|---|---|---|
+| Dialogs (dialog, alert dialog, connections, git commit, PR link, plan save) | 21 | 0 |
+| Composer cluster and `overflowSkipsPermissionsOnlyState` | 8 and the check | 0 |
+| Model picker (13-model-picker against reference-3824) | 2 | 2 |
+| Sidebar rename | 4 | 0 |
+| Sidebar footer undo notice | 4 | 0 |
+| Insight callout | 2 | 0 |
+| Image chip, PR Merge pill, file chips | 6 | 0 |
+| Settings (left to the settings agent) | 5 | 5 |
+| Panel screen 22-commit-dialog against reference-3824 | 0 | 2 |
+
+What changed:
+
+- Dialog, alert dialog and sheet titles draw a 27.5pt `leading-snug` line in the default themes (dialog.tsx:227).
+- The 4928 model trigger keeps `px-2` after its effort suffix, which moved the permissions chip 4pt. The cluster
+  harness draws the whole cluster from the model trigger. The spec's `text-xs!` collapsed trigger is mobile only, so
+  `both-icon` and `overflow-both` now hold the desktop's overflow state with the model shrunk to 96 and 156.5px.
+- The rename harness placed the field 4pt right of the spec's `-mx-1` input. The native field already drew the ring.
+- The undo notice spec drew outside `data-app-sidebar`, so its colors were the page's. Both texts now sit flush right.
+- The insight harness skipped the assistant row's rewrite. CandyWrapper detected both fence forms already; it now
+  also leaves list items alone, as T3's parsed ranges do, and runs T3's own cases.
+- Chips take T3's solved `--context-chip-*` accents for the standard themes (themePalette.ts:736-772), the image chip
+  lost its bubble and the Merge action is the faint `bg-black/[0.035]` pill.
+- New native tests: media.above-text, media.image-only, media.collage and quote-card. The quote card had a real bug:
+  its context lost the spaces around the marked words and the mark started at the line's end.
+- New references and tests: `sidebar-leftovers` title-glimmer and issue-badge, and the `viewed-images` row.
+
+Still failing:
+
+- 13-model-picker, 12.32% both themes. Its reference is the 3824 full-screen capture, while CandyWrapper draws the 4928
+  docked picker. The screens-4928 task is recapturing it as a real 4928 screen (its worktree holds
+  `design/reference-4928/13-model-picker.*.png`) and is editing PickersFidelityTests, so no spec was written here.
+- 22-commit-dialog in PanelScreensFidelityTests, 7.16% light and 9.94% dark against a 6% ceiling. It crops the 3824
+  full-screen capture, whose dialog title is `leading-none`; 4928's `leading-snug` title is the change above. The
+  screens-4928 task holds a 4928 capture of it.
+
+Redesign: RedesignBaselineTests reports the same 20 differing images with the same pixel counts on the base commit
+and on the branch.
+
 ## Shapes still without a reference
 
-These were asked for and are not done. Each needs more of T3's markup than this task had room for.
+Done in look-4928 except the docked model picker (see above). These were asked for and were not done by specs-4928. Each needs more of T3's markup than this task had room for.
 
 1. The docked model picker with its effort column and footer (ModelPickerContent.tsx:473,
    ComposerModelEffort.tsx:525-560 for the column, ComposerPickerFooter for the footer).
