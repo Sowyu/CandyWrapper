@@ -36,9 +36,9 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 861a51a6c4 | #26164 | usage | feat(server,web,mobile): fall back when the default provider is out of usage | port; needs wire: default provider fallback fields |
-| cb1de7ba23 | #27593 | settings | fix(web): configure reasoning for the fallback model | port |
-| bc448b8697 | #27859 | composer | fix(web): composer fallback keeps the effort of a model saved under an alias | port |
+| 861a51a6c4 | #26164 | usage | feat(server,web,mobile): fall back when the default provider is out of usage | left: provider fallback needs the fallback settings in Settings > Project defaults (not this task's area), the usage-limit check in packages/shared/src/usageLimits.ts and the new-thread hero line; 19 files at 4928 |
+| cb1de7ba23 | #27593 | settings | fix(web): configure reasoning for the fallback model | left: provider fallback needs the fallback settings in Settings > Project defaults (not this task's area), the usage-limit check in packages/shared/src/usageLimits.ts and the new-thread hero line; 19 files at 4928 |
+| bc448b8697 | #27859 | composer | fix(web): composer fallback keeps the effort of a model saved under an alias | left: provider fallback needs the fallback settings in Settings > Project defaults (not this task's area), the usage-limit check in packages/shared/src/usageLimits.ts and the new-thread hero line; 19 files at 4928 |
 
 ## Port group usage-meter (3)
 
@@ -1419,7 +1419,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 725573f358 | #26639 | thread | fix(web): double-click selects the whole inline code span | port |
 | ecea6ca3e6 | #21878 | thread | fix(web): edit from here uses a pencil icon | port |
 | 3d5baafecf | #22100 | thread | fix(web): respect reduced motion in thread loading controls | port |
-| 6ca95bd92a | #23626 | thread | fix(web): Enter no longer skips an unanswered question | port |
+| 6ca95bd92a | #23626 | thread | fix(web): Enter no longer skips an unanswered question | ported: Next and Enter stay on an unanswered question (T3Store `UserInputSession.advance`) |
 | 616c426f5f | #27372 | thread | fix(shared): TypeScript files no longer show as videos | port |
 | 8d012a688e | #27522 | thread | fix(web): a new thread's first reply shows without reloading | port |
 | a0d6cc8ba9 | #21594 | thread | fix(client-runtime): goal token counts no longer read 1000k | port |
@@ -1537,7 +1537,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 9b98bd07ba | #23615 | thread | fix(shared): new chats use the global default when the project default model is hidden | port |
 | 25d2239f9b | #25901 | thread | fix(web): screen readers hear when a thread is pinned or an action is undone | port |
 | 4d52d321cb | #33772 | thread | fix(client-runtime): MCP App requests with undefined values reach the server | port |
-| 94f7984d2c | #23617 | thread | fix(web): preserve typed question answers when Stop cancels a turn | port |
+| 94f7984d2c | #23617 | thread | fix(web): preserve typed question answers when Stop cancels a turn | ported: answers typed into a question that closed cancelled or expired move to the end of the thread's prompt (UserInputAnswers `returningUnsent`, ComposerController `leaveQuestion`); thread chips they reference are not carried |
 | c0b67b7631 | #34649 | thread | fix(web): wrap interruption footers as one sentence | port |
 | 7271ea06a2 | #30889 | thread | fix(web): editing a queued message keeps its thread mention chips | port |
 | cc624432ac | #27781 | thread | fix(web): formatted link labels wrap inside table cells | port |

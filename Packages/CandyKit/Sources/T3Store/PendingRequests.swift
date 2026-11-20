@@ -338,6 +338,12 @@ public enum UserInputAnswers {
     }
 
     /// `buildPendingUserInputAnswers` (:137-152): nil unless every question resolves.
+    /// `returnUnsentAnswersToThreadDraft` (questionAttachments.ts at 4928, #23617): Stop cancels an open question and a
+    /// timeout expires it, so its typed answers go to the end of the thread's prompt in question order.
+    public static func returningUnsent(_ prompt: String, questions: [UserInputQuestion], drafts: [String: UserInputDraft]) -> String {
+        questions.reduce(prompt) { carryDisplaced($0, drafts[$1.id]?.customAnswer ?? "") }
+    }
+
     public static func build(_ questions: [UserInputQuestion], _ drafts: [String: UserInputDraft]) -> [String: UserInputAnswer]? {
         var answers: [String: UserInputAnswer] = [:]
         for question in questions {
@@ -450,6 +456,8 @@ public struct UserInputSession: Hashable, Sendable {
         guard request.canRespond else { return .blocked }
         let p = progress
         if p.isLastQuestion { return answers.map { .submit($0) } ?? .blocked }
+        // Enter never skips an unanswered question (usePendingThreadRequests.ts:476 at 4928, #23626).
+        guard p.canAdvance else { return .blocked }
         questionIndex = p.questionIndex + 1
         return .moved
     }

@@ -1627,7 +1627,14 @@ final class ComposerController {
 
     /// The question closed: the thread's prompt comes back to the editor.
     private func leaveQuestion() {
-        guard questionRequestId != nil else { return }
+        guard let requestId = questionRequestId else { return }
+        // A question that closed unanswered (Stop, a timeout) never sent what was typed (#23617).
+        if let status = projection?.runtimeRequests.first(where: { $0.id == requestId })?.status, status == "cancelled" || status == "expired",
+           let session = panel.lazyQuestionPanel.loaded?.session, session.request.requestId == requestId, let key = draftKey {
+            let next = UserInputAnswers.returningUnsent(prompts[key] ?? "", questions: session.request.questions, drafts: session.drafts)
+            prompts[key] = next.isEmpty ? nil : next
+            scheduleSave()
+        }
         questionRequestId = nil
         composer.fileRows = []
         composer.text = queuedEdit?.text ?? draftKey.flatMap { prompts[$0] } ?? ""
