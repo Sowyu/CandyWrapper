@@ -74,7 +74,7 @@ struct QueueFidelityTests {
         var lines: [String] = [], cases: [(String, Double)] = [], images = ""
         for theme in ["light", "dark"] {
             let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
-                "design/reference-3824/29-queued-messages.\(theme).png"))))
+                "design/reference-4928/29-queued-messages.\(theme).png"))))
             let w = Int(width * 2)
             let crop = CGRect(x: full.pixelsWide - w, y: top * 2, width: w, height: (bottom - top) * 2)
             let ref = NSBitmapImageRep(cgImage: full.cgImage!.cropping(to: crop)!)

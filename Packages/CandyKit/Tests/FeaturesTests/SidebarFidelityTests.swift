@@ -6,7 +6,7 @@ import T3Store
 @testable import Features
 
 /// Whole-sidebar comparison: our sidebar at 256x780, 2x, with the reference dataset, against the left 256pt
-/// of design/reference-3824/02-sidebar-populated.{light,dark}.png. Writes ref, ours and diff PNGs plus
+/// of design/reference-4928/02-sidebar-populated.{light,dark}.png. Writes ref, ours and diff PNGs plus
 /// report-sidebar-whole.html to `Fidelity.root`. Text differs where the data differs.
 @MainActor @Suite(.fidelity)
 struct SidebarFidelityTests {
@@ -79,7 +79,7 @@ struct SidebarFidelityTests {
         for dark in [false, true] {
             let theme = dark ? "dark" : "light"
             let full = try #require(NSBitmapImageRep(data: Data(contentsOf: Self.repo.appendingPathComponent(
-                "design/reference-3824/31-sidebar-collapsed.\(theme).png"))))
+                "design/reference-4928/31-sidebar-collapsed.\(theme).png"))))
             let ref = Self.crop(full, width: 2200, height: 104)
             // Snapshot installs a native window. Crop its extra traffic-light inset so the
             // remaining 1100pt header uses the reference web client's 52pt content start.
@@ -115,7 +115,7 @@ struct SidebarFidelityTests {
         var lines: [String] = [], cases: [(String, Double)] = []
         for theme in ["light", "dark"] {
             let full = try #require(NSBitmapImageRep(data: Data(contentsOf: Self.repo.appendingPathComponent(
-                "design/reference-3824/02-sidebar-populated.\(theme).png"))))
+                "design/reference-4928/02-sidebar-populated.\(theme).png"))))
             let ref = Self.crop(full, width: 512, height: 1560)
             let ours = Self.render(dark: theme == "dark")
             let (total, perBand, diff) = Self.compare(ref, ours, bands: bands)

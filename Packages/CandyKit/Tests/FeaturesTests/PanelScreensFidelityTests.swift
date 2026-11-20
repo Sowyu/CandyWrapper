@@ -158,7 +158,7 @@ struct PanelScreensFidelityTests {
         for theme in ["light", "dark"] {
             let (view, rect, key) = Self.surface(name, dark: theme == "dark")
             ceiling = key
-            let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent("design/reference-3824/\(name).\(theme).png"))))
+            let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent("design/reference-4928/\(name).\(theme).png"))))
             let ref = NSBitmapImageRep(cgImage: full.cgImage!.cropping(to: CGRect(x: rect.minX * 2, y: rect.minY * 2, width: rect.width * 2, height: rect.height * 2))!)
             let canvas = SidebarSearchFidelityTests.Canvas(frame: NSRect(origin: .zero, size: rect.size))
             view.frame = canvas.bounds

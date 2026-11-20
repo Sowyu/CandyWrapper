@@ -7,7 +7,7 @@ import T3Protocol
 /// The diff panel against T3. `body`: DiffListView against T3's own @pierre/diffs rendering each
 /// patch in Chromium with T3's CSS (spec from scripts/gen-diff-spec.py, references in
 /// design/component-reference/diff). `panel`: DiffPanelView against the right panel of
-/// design/reference-3824/09-diff-split and 10-diff-unified, rebuilt from the file list those captures show.
+/// design/reference-4928/09-diff-split and 10-diff-unified, rebuilt from the file list those captures show.
 /// Writes ref, ours and diff PNGs plus `Fidelity.root`/report-diff.html.
 @MainActor @Suite(.fidelity)
 struct DiffFidelityTests {
@@ -85,7 +85,7 @@ struct DiffFidelityTests {
         defer { Fidelity.pin() }
         var rows = "", cases: [(String, Double)] = []
         for theme in ["light", "dark"] {
-            let full = try #require(NSBitmapImageRep(data: Data(contentsOf: Self.repo.appendingPathComponent("design/reference-3824/\(reference).\(theme).png"))))
+            let full = try #require(NSBitmapImageRep(data: Data(contentsOf: Self.repo.appendingPathComponent("design/reference-4928/\(reference).\(theme).png"))))
             let crop = CGRect(x: 1234, y: 103, width: 966, height: 1457)
             let ref = NSBitmapImageRep(cgImage: full.cgImage!.cropping(to: crop)!)
             let panel = DiffPanelView()

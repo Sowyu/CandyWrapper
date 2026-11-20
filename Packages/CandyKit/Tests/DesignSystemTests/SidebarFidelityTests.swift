@@ -4,7 +4,7 @@ import Testing
 
 /// Sidebar batch fidelity: SidebarMenuButton, SidebarMenuSub, CommandItem and the hue slider against T3's
 /// markup in Chromium (specs from scripts/gen-sidebar-spec.py), plus the sidebar background and grain
-/// against the real app's capture (design/reference-3824/02-sidebar-populated.*.png, 2x of 1100x780).
+/// against the real app's capture (design/reference-4928/02-sidebar-populated.*.png, 2x of 1100x780).
 @MainActor @Suite(.fidelity)
 struct SidebarFidelityTests {
     /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
@@ -85,7 +85,7 @@ struct SidebarFidelityTests {
     }
 
     static func reference(_ theme: String) throws -> NSBitmapImageRep {
-        let url = FidelityTests.repo.appendingPathComponent("design/reference-3824/02-sidebar-populated.\(theme).png")
+        let url = FidelityTests.repo.appendingPathComponent("design/reference-4928/02-sidebar-populated.\(theme).png")
         return NSBitmapImageRep(data: try Data(contentsOf: url))!
     }
 

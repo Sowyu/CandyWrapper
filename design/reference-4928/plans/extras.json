@@ -1,0 +1,169 @@
+{
+ "base": "http://127.0.0.1:47404",
+ "width": 1100,
+ "height": 780,
+ "scale": 2,
+ "themes": [
+  "dark",
+  "light"
+ ],
+ "states": [
+  {
+   "name": "49-settings-modal-general",
+   "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/c80527b4-84fe-4d7e-947e-c0b9b7ab10f1",
+   "actions": [
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 600
+    },
+    {
+     "click": "[aria-label=\"Settings\"]"
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "50-floating-thread-settings",
+   "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/c80527b4-84fe-4d7e-947e-c0b9b7ab10f1",
+   "actions": [
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 600
+    },
+    {
+     "click": "[aria-label=\"Toggle thread details panel\"]"
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "22-commit-dialog",
+   "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/e86a0458-bc4b-4729-abe2-43ebd84933be",
+   "actions": [
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 600
+    },
+    {
+     "click": "[aria-label=\"Toggle thread details panel\"]"
+    },
+    {
+     "click": "[aria-label=\"Git action options\"]"
+    },
+    {
+     "js": "[...document.querySelectorAll('[role=menuitem]')].find(e=>e.textContent.trim()==='Commit').click()",
+     "log": true
+    },
+    {
+     "wait": 800
+    }
+   ]
+  },
+  {
+   "name": "26-usage-limits",
+   "path": "/usage",
+   "actions": [
+    {
+     "wait": 1200
+    },
+    {
+     "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>['All providers','No providers'].includes(e.textContent.trim())).click()"
+    },
+    {
+     "js": "(()=>{const e=[...document.querySelectorAll('[role=menuitemcheckbox]')].find(e=>e.textContent.trim()==='All providers');if(e.getAttribute('aria-checked')==='true')e.click()})()"
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 600
+    },
+    {
+     "click": "text=Limits"
+    },
+    {
+     "wait": 2500
+    }
+   ]
+  },
+  {
+   "name": "26b-usage-cost",
+   "path": "/usage",
+   "actions": [
+    {
+     "wait": 1200
+    },
+    {
+     "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>['All providers','No providers'].includes(e.textContent.trim())).click()"
+    },
+    {
+     "js": "(()=>{const e=[...document.querySelectorAll('[role=menuitemcheckbox]')].find(e=>e.textContent.trim()==='All providers');if(e.getAttribute('aria-checked')==='true')e.click()})()"
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 600
+    },
+    {
+     "click": "text=Cost"
+    },
+    {
+     "wait": 2500
+    }
+   ]
+  },
+  {
+   "name": "26b-usage-tokens",
+   "path": "/usage",
+   "actions": [
+    {
+     "wait": 1200
+    },
+    {
+     "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>['All providers','No providers'].includes(e.textContent.trim())).click()"
+    },
+    {
+     "js": "(()=>{const e=[...document.querySelectorAll('[role=menuitemcheckbox]')].find(e=>e.textContent.trim()==='All providers');if(e.getAttribute('aria-checked')==='true')e.click()})()"
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 600
+    },
+    {
+     "click": "text=Tokens"
+    },
+    {
+     "wait": 2500
+    }
+   ]
+  }
+ ]
+}

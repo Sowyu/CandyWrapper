@@ -1,0 +1,17 @@
+{
+  "environment": "51525408-a5b5-4053-aa88-c35b6354f8b8",
+  "project": "826ec3e6-5f74-45e6-b905-a3112d59dd68",
+  "threads": {
+    "md": "c80527b4-84fe-4d7e-947e-c0b9b7ab10f1",
+    "cmds": "66f82559-8a0b-4b6e-ae38-a2c7adaaf684",
+    "input": "3370c1c1-1a3f-48cd-8a4a-47b2d80bbcd0",
+    "notes": "e86a0458-bc4b-4729-abe2-43ebd84933be",
+    "approval": "6dd4b79f-fa6d-4ce5-85a1-63db0125bb97",
+    "settled": "f8e0bd43-eb0d-49ed-ad79-22c673ad112f",
+    "snoozed": "aee8690b-c462-43c6-bdac-3e2d904159b5",
+    "archived": "2429f428-75a1-4648-9863-3bb0a99e4229",
+    "scratch": "13fe081e-a960-4019-9cf2-ee17da57f4d5",
+    "story1": "73fa4405-43d4-4da6-accf-8ceb096b9a26",
+    "story2": "3ecb9fcf-4294-473d-94c5-4b9f7947db85"
+  }
+}

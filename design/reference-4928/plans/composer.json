@@ -1,0 +1,134 @@
+{
+ "base": "http://127.0.0.1:47404",
+ "width": 1100,
+ "height": 780,
+ "scale": 2,
+ "themes": [
+  "dark",
+  "light"
+ ],
+ "states": [
+  {
+   "name": "53-effort-menu-permissions",
+   "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/c80527b4-84fe-4d7e-947e-c0b9b7ab10f1",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))",
+     "log": false
+    },
+    {
+     "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/c80527b4-84fe-4d7e-947e-c0b9b7ab10f1"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 1300
+    },
+    {
+     "key": "e",
+     "meta": true,
+     "shift": true
+    },
+    {
+     "wait": 1200
+    }
+   ]
+  },
+  {
+   "name": "54-composer-effort-bars",
+   "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/c80527b4-84fe-4d7e-947e-c0b9b7ab10f1",
+   "actions": [
+    {
+     "click": "[aria-label=\"Settings\"]"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>e.textContent.trim()==='Appearance').click()"
+    },
+    {
+     "wait": 1200
+    },
+    {
+     "js": "document.querySelector('[aria-label=\"Effort display\"]').scrollIntoView({block:'center'})"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "click": "[aria-label=\"Effort display\"]"
+    },
+    {
+     "click": "text=Bars"
+    },
+    {
+     "wait": 700
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 600
+    },
+    {
+     "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/c80527b4-84fe-4d7e-947e-c0b9b7ab10f1"
+    },
+    {
+     "wait": 1000
+    },
+    {
+     "js": "document.querySelector('[data-composer-effort-glyph]')?.outerHTML",
+     "log": true
+    }
+   ],
+   "afterActions": [
+    {
+     "click": "[aria-label=\"Settings\"]"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "js": "[...document.querySelectorAll('[data-app-modal] button')].find(e=>e.textContent.trim()==='Appearance').click()"
+    },
+    {
+     "wait": 1200
+    },
+    {
+     "js": "document.querySelector('[aria-label=\"Effort display\"]').scrollIntoView({block:'center'})"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "click": "[aria-label=\"Effort display\"]"
+    },
+    {
+     "click": "text=Word (default)"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "key": "Escape"
+    }
+   ]
+  }
+ ]
+}

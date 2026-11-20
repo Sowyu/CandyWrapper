@@ -33,7 +33,7 @@ struct PanelsFidelityTests {
 
     /// The original and -3473 image sets remain unchanged.
     static func file(_ reference: String, _ theme: String) -> String {
-        "design/reference-3824/\(reference).\(theme).png"
+        "design/reference-4928/\(reference).\(theme).png"
     }
 
     static let screenPurpose = UserInputQuestion(

@@ -5,7 +5,7 @@ import T3Protocol
 import T3Store
 @testable import Features
 
-/// The changed files card and the diff panel opened from it, against design/reference-3824 47 and 48
+/// The changed files card and the diff panel opened from it, against design/reference-4928 47 and 48
 /// (the "Document Hello Demo" thread, scrolled so the card sits where T3 put it). 47 compares
 /// the main panel above the composer; 48 compares the chat column above the composer and the whole
 /// right panel, after clicking notes.md in the card. The diff comes from the recorded
@@ -81,7 +81,7 @@ struct ChangedFilesFidelityTests {
         for theme in ["light", "dark"] {
             for (reference, openDiff, cardTop) in [("47-changed-files-card", false, 351.5), ("48-diff-turn-file", true, 464.5)] {
                 let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
-                    "design/reference-3824/\(reference).\(theme).png"))))
+                    "design/reference-4928/\(reference).\(theme).png"))))
                 let (panel, image) = try await Self.render(dark: theme == "dark", openDiff: openDiff, cardTop: cardTop)
                 let x0 = full.pixelsWide - W
                 let panelRef = full
