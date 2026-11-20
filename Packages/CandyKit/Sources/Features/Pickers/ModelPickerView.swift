@@ -10,6 +10,9 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     static let width: CGFloat = 360, maxHeight: CGFloat = 346, railWidth: CGFloat = 44
     static let capyWidth: CGFloat = 420, capyHeight: CGFloat = 440, capyMinHeight: CGFloat = 300
     static func width(_ capy: Bool) -> CGFloat { capy ? capyWidth : width }
+    /// Redesign's docked picker is one column (the user's layout, 2026-11-20): provider tabs, search, the list, then the
+    /// dock's Reasoning section and footer under it.
+    static let stackedWidth: CGFloat = 335, tabsHeight: CGFloat = 40
     static let searchHeight: CGFloat = 43, rowHeight: CGFloat = 45, rowGap: CGFloat = 2
 
     var catalog: ProviderCatalog { didSet { if catalog != oldValue { reload() } } }
@@ -21,7 +24,18 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     var activeModel: String { didSet { if activeModel != oldValue { reload() } } }
     /// Docked beside the effort column: one fixed height, so a model with more options never resizes the popup
     /// (ProviderModelPicker.tsx:475-477, ModelPickerContent.tsx:944-955).
-    var docked = false
+    var docked = false {
+        didSet {
+            guard docked != oldValue else { return }
+            // Rows read the layout when they are made, so a change rebuilds them.
+            rowViews.forEach { $0.removeFromSuperview() }
+            rowViews = []
+            if stacked { search.placeholder = "Search models..."; search.paddingOverride = (20, 0) }
+            reload()
+        }
+    }
+    /// Redesign docked: tabs across the top, search under them, and the list under the search.
+    var stacked: Bool { docked && capy }
     private(set) var rail: ModelPickerRail
     private(set) var query = ""
     private var expandedLegacy: Set<ProviderInstanceId> = []
@@ -31,7 +45,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     /// Keyboard highlight in the list (`data-highlighted`).
     var highlightedRow: Int? { didSet { if highlightedRow != oldValue { restyleHighlight(from: oldValue); scrollToHighlight() } } }
     /// Keyboard focus in the rail (index into `railButtons`), nil while the search field has it.
-    private(set) var railFocus: Int? { didSet { railButtons.forEach { $0.restyle() } } }
+    private(set) var railFocus: Int? { didSet { allRailButtons.forEach { $0.restyle() } } }
 
     var onSelect: (@MainActor (ProviderInstanceId, String) -> Void)?
     /// Shift-click or Shift-Return on a model while the draft can fan out (`onToggleModel`).
@@ -70,6 +84,9 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     private var frozenHeight: CGFloat?
     private var tallestTabHeight: CGFloat = 36
     private var tracking: NSTrackingArea?
+    /// Whether the highlight follows the pointer, so a scroll, an exit or a lost key window clears it (Redesign).
+    private var pointerHighlight = false
+    private var resignObserver: NSObjectProtocol?
 
     init(catalog: ProviderCatalog, favorites: [ModelFavorite], active: ProviderInstanceId, activeModel: String, preferences: JSONValue? = nil) {
         self.catalog = catalog
@@ -139,7 +156,17 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         sections = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
                                        rail: rail, query: query, expandedLegacy: expandedLegacy, selectedKeys: selectedKeys, preferences: preferences,
                                        expandedSubProviders: expandedSubProviders)
-        if !capy, !searching {
+        if stacked, !searching {
+            // The tallest tab sets the height, so switching tabs never moves the popup's top edge.
+            let tabs: [ModelPickerRail] = sections.showsRail ? [.favorites] + sections.rail.filter { !$0.isDisabled }.map { .instance($0.entry.id) } : [rail]
+            tallestTabHeight = tabs.map { tab in
+                let rows = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
+                                               rail: tab, query: "", expandedLegacy: expandedLegacy,
+                                               selectedKeys: selectedKeys, preferences: preferences,
+                                               expandedSubProviders: expandedSubProviders).rows
+                return stackedListHeight(rows: rows.count, cardHeight: cardHeight(for: tab))
+            }.max() ?? 0
+        } else if !capy, !searching {
             // T3 3814 ModelPickerContent.tsx:583-610,832-836 fits the tallest eligible tab.
             let tabs: [ModelPickerRail] = [.favorites] + sections.rail.filter { !$0.isDisabled }.map { .instance($0.entry.id) }
             tallestTabHeight = tabs.map { tab in
@@ -182,6 +209,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         list.subviews = [emptyLabel] + [card, card == nil ? nil : sectionLabel].compactMap { $0 } + rowViews
         emptyLabel.isHidden = !sections.rows.isEmpty
         if let h = highlightedRow, h >= rowViews.count { highlightedRow = nil }
+        sectionLabel.isHidden = stacked
         railButtons.forEach { $0.restyle() }
         favoritesButton.restyle()
         needsLayout = true
@@ -194,6 +222,19 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         let info = DitherProviderCardInfo(entry)
         if card?.info == info { return }
         card = DitherProviderCardView(info: info, onManage: onManage.map { open in { open(id) } })
+    }
+
+    private func cardHeight(for tab: ModelPickerRail) -> CGFloat? {
+        guard case .instance(let id) = tab, let entry = catalog.entry(id) else { return nil }
+        let info = DitherProviderCardInfo(entry)
+        if let card, card.info == info { return card.preferredHeight }
+        return DitherProviderCardView(info: info, onManage: nil).preferredHeight
+    }
+
+    /// The list's height in the stacked layout: the card and its hairline, the rows, and the padding under them.
+    private func stackedListHeight(rows: Int, cardHeight: CGFloat?) -> CGFloat {
+        let top = cardHeight.map { $0 + 1 + 6 } ?? 6
+        return rows == 0 ? top + 36 : top + CGFloat(rows) * 32 + listBottom
     }
 
     private static func rowKey(_ row: ModelPickerRow) -> String {
@@ -211,6 +252,22 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     }
 
     func isRailSelected(_ r: ModelPickerRail) -> Bool { rail == r }
+    /// Moves keyboard focus to the selected tab, or back to the search with false.
+    func focusRail(_ on: Bool) {
+        railFocus = on && sections.showsRail ? (allRailButtons.firstIndex { isSelected($0) && !$0.isDisabled } ?? allRailButtons.firstIndex { !$0.isDisabled }) : nil
+    }
+    /// Focus left the list for the Reasoning section: a keyboard highlight goes, the pointer's stays.
+    func clearKeyboardHighlight() { if !pointerHighlight { highlightedRow = nil } }
+
+    /// Keyboard focus moved into the list: the selected model is highlighted, else the first row.
+    func highlightForKeyboard() {
+        pointerHighlight = false
+        if highlightedRow != nil { return }
+        let selected = sections.rows.indices.first { i in
+            if case .model(let item) = sections.rows[i] { return item.isSelected } else { return false }
+        }
+        highlightedRow = selected ?? (rowViews.isEmpty ? nil : 0)
+    }
     func isRailFocused(_ b: RailButtonView) -> Bool { railFocus.map { $0 < allRailButtons.count && allRailButtons[$0] === b } ?? false }
     private var allRailButtons: [RailButtonView] { [favoritesButton] + railButtons }
 
@@ -313,7 +370,11 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     private var searchH: CGFloat { capy ? 40 : Self.searchHeight }
     private var railW: CGFloat { capy ? 40 : Self.railWidth }
     /// The list's padding over the first row (Redesign: the card, its hairline and the "Models" label) and under the last.
-    private var listTop: CGFloat { capy ? (card.map { $0.preferredHeight + 1 + 28 } ?? 6) : 10 }
+    private var listTop: CGFloat {
+        if stacked { return card.map { $0.preferredHeight + 1 + 6 } ?? 6 }
+        return capy ? (card.map { $0.preferredHeight + 1 + 28 } ?? 6) : 10
+    }
+    private var tabsH: CGFloat { stacked && sections.showsRail ? Self.tabsHeight : 0 }
     private var listBottom: CGFloat { capy ? 6 : 10 }
 
     private var listContentHeight: CGFloat {
@@ -322,6 +383,12 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
 
     /// Search block plus the list (rows + 20) or the empty text (`p-2`, 36), then the ChatGPT footer.
     var naturalSize: CGSize {
+        if stacked {
+            // Content height; the host caps the popup at the space above the composer and the list scrolls.
+            if let frozenHeight { return CGSize(width: Self.stackedWidth, height: frozenHeight) }
+            let list = max(stackedListHeight(rows: sections.rows.count, cardHeight: card?.preferredHeight), tallestTabHeight)
+            return CGSize(width: Self.stackedWidth, height: tabsH + searchH + list + footerHeight)
+        }
         if docked { return CGSize(width: Self.width(capy), height: capy ? Self.capyHeight : Self.maxHeight) }
         if let frozenHeight { return CGSize(width: Self.width(capy), height: frozenHeight) }
         let list = sections.rows.isEmpty ? 36 + (capy ? listTop - 6 : 0) : listContentHeight + listTop + listBottom
@@ -351,14 +418,17 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         }
     }
 
-    private func resizePopup() {
-        guard let popupView = superview?.superview as? PickerPopupView, let host = popupView.superview?.superview as? PopupHost,
+    func resizePopup() {
+        // Docked, the picker sits one view deeper, inside the dock.
+        guard let popupView = sequence(first: superview, next: { $0?.superview }).lazy.compactMap({ $0 as? PickerPopupView }).first,
+              let host = popupView.superview?.superview as? PopupHost,
               let popup = host.popups.first(where: { $0.content === popupView }) else { return }
         host.reposition(popup)
     }
 
     override func layout() {
         super.layout()
+        if stacked { layoutStacked(); return }
         if capy { layoutCapy(); return }
         let railShown = sections.showsRail
         let mainX = railShown ? Self.railWidth : 0
@@ -443,6 +513,39 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         emptyLabel.frame = NSRect(x: 8, y: listTop + 2, width: list.bounds.width - 16, height: 20)
     }
 
+    /// Redesign docked: a row of tabs, the search with its icon over an inset hairline, then the card and the rows.
+    private func layoutStacked() {
+        for l in [railFill, mainFill, divider, indicator, mainBorder] { l.isHidden = true }
+        sharing?.frame = NSRect(x: 0, y: bodyHeight, width: bounds.width, height: footerHeight)
+        let railShown = sections.showsRail
+        for (i, b) in allRailButtons.enumerated() {
+            b.isHidden = !railShown
+            b.frame = NSRect(x: 6 + CGFloat(i) * 36, y: 4, width: 32, height: 32)
+        }
+        let top = tabsH
+        searchIcon.isHidden = false
+        searchIcon.frame = NSRect(x: 12, y: top + 12, width: 16, height: 16)
+        search.frame = NSRect(x: 12, y: top + 7, width: bounds.width - 24, height: 26)
+        underline.frame = CGRect(x: 12, y: top + searchH - 1, width: bounds.width - 24, height: 1)
+        list.frame = NSRect(x: 0, y: top + searchH, width: bounds.width, height: max(0, bodyHeight - top - searchH))
+        scrollOffset = min(scrollOffset, maxScroll)
+        let inner = list.bounds.width - 12
+        if let card {
+            let h = card.preferredHeight
+            card.frame = NSRect(x: 6, y: -scrollOffset, width: inner, height: h)
+            cardLine.frame = CGRect(x: list.frame.minX + 6, y: list.frame.minY + h - scrollOffset, width: inner, height: 1)
+            cardLine.isHidden = h - scrollOffset < 0
+        } else {
+            cardLine.isHidden = true
+        }
+        var y = listTop - scrollOffset
+        for row in rowViews {
+            row.frame = NSRect(x: 6, y: y, width: inner, height: rowH)
+            y += rowH
+        }
+        emptyLabel.frame = NSRect(x: 8, y: listTop + 2, width: list.bounds.width - 16, height: 20)
+    }
+
     private var maxScroll: CGFloat { max(0, listContentHeight + listTop + listBottom - list.bounds.height) }
 
     private func scrollToHighlight() {
@@ -457,6 +560,11 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     override func scrollWheel(with event: NSEvent) {
         scrollOffset = min(max(0, scrollOffset - event.scrollPointsY), maxScroll)
         needsLayout = true
+        // A row that scrolls out from under a still pointer loses the hover, and the one that arrives takes it.
+        if capy, pointerHighlight, let window {
+            layoutSubtreeIfNeeded()
+            syncPointerHighlight(at: window.mouseLocationOutsideOfEventStream)
+        }
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -473,6 +581,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
             cardLine.backgroundColor = Themed.color(\.contrastForeground, 0.08).cgColor(in: self)
             sectionLabel.color = Themed.color(\.contrastMutedForeground)
             emptyLabel.color = Themed.color(\.contrastMutedForeground)
+            searchIcon.strokeColor = Themed.color(\.contrastMutedForeground)
             return
         }
         cardLine.isHidden = true
@@ -502,6 +611,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         case .down, .up:
             guard !rowViews.isEmpty else { return true }
             let n = rowViews.count
+            pointerHighlight = false
             if let h = highlightedRow { highlightedRow = (h + (key == .down ? 1 : -1) + n) % n } else { highlightedRow = key == .down ? 0 : n - 1 }
             return true
         case .enter:
@@ -526,6 +636,15 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     private func handleRailKey(_ key: PopupKey, focus: Int) -> Bool {
         let enabled = allRailButtons.indices.filter { !allRailButtons[$0].isDisabled }
         switch key {
+        // Redesign's stacked tabs run across: Left and Right move, Down goes back to the search.
+        case .left where stacked, .right where stacked:
+            if let pos = enabled.firstIndex(of: focus) { railFocus = enabled[(pos + (key == .right ? 1 : -1) + enabled.count) % enabled.count] }
+            return true
+        case .up where stacked:
+            return true
+        case .down where stacked:
+            railFocus = nil
+            return true
         case .up, .down:
             if let pos = enabled.firstIndex(of: focus) { railFocus = enabled[(pos + (key == .down ? 1 : -1) + enabled.count) % enabled.count] }
             return true
@@ -559,14 +678,48 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         return rowViews.firstIndex { $0.frame.contains(p) }
     }
 
-    override func mouseMoved(with event: NSEvent) { if let i = rowIndex(at: event.locationInWindow) { highlightedRow = i } }
+    override func mouseMoved(with event: NSEvent) {
+        if capy { syncPointerHighlight(at: event.locationInWindow); return }
+        if let i = rowIndex(at: event.locationInWindow) { highlightedRow = i }
+    }
+
+    /// Redesign: the highlight is the row under the pointer, or none once the pointer is off the rows. A keyboard
+    /// highlight stays until the pointer reaches a row.
+    func syncPointerHighlight(at windowPoint: NSPoint) {
+        if let i = rowIndex(at: windowPoint) {
+            pointerHighlight = true
+            highlightedRow = i
+        } else if pointerHighlight {
+            pointerHighlight = false
+            highlightedRow = nil
+        }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver); self.resignObserver = nil }
+        guard let window else { return }
+        // A window that stops being key leaves no pointer hover behind, as the message rail (bb98b824).
+        resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pointerLeft() }
+        }
+    }
+
+    /// Clears a pointer highlight; a keyboard one stays.
+    func pointerLeft() {
+        guard capy, pointerHighlight else { return }
+        pointerHighlight = false
+        highlightedRow = nil
+    }
     /// HoverSync forwards every pointer move while the picker is hovered: AppKit sent Redesign's rows no `mouseMoved`
     /// after the popup built its area under the pointer, so they never lit (screen pass 2026-11-20, item 9).
     func hoverPointerMoved() {
-        guard let window, let i = rowIndex(at: window.mouseLocationOutsideOfEventStream) else { return }
+        guard let window else { return }
+        if capy { syncPointerHighlight(at: window.mouseLocationOutsideOfEventStream); return }
+        guard let i = rowIndex(at: window.mouseLocationOutsideOfEventStream) else { return }
         highlightedRow = i
     }
-    override func mouseExited(with event: NSEvent) { highlightedRow = nil }
+    override func mouseExited(with event: NSEvent) { pointerHighlight = false; highlightedRow = nil }
 }
 
 /// One rail button: Favorites (filled 20pt star) or a provider instance (20pt glyph in a 24pt box).
@@ -678,6 +831,8 @@ final class ModelRowView: DSView {
     private var kbd: KbdView?
     /// Redesign: one line, the model's glyph first, a check at the right on the selected model.
     private let capy: Bool
+    /// Redesign docked: the check right after the name and the jump key always at the right.
+    private let stacked: Bool
     private var check: IconView?
 
     init(picker: ModelPickerView, row: ModelPickerRow, index: Int, jumpLabel: String? = nil) {
@@ -686,6 +841,7 @@ final class ModelRowView: DSView {
         self.index = index
         self.jumpLabel = jumpLabel
         capy = picker.capy
+        stacked = picker.stacked
         super.init(frame: .zero)
         fill.cornerRadius = 6
         fill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
@@ -756,6 +912,12 @@ final class ModelRowView: DSView {
                 addSubview(v)
                 check = v
             }
+            if stacked, case .legacy(_, _, let expanded) = row {
+                // The picture's plain Show more row trails the list, as 4928's (#28076).
+                name.text = expanded ? "Show less" : "Show more"
+                secondary.isHidden = true
+                chevron?.removeFromSuperview(); chevron = nil
+            }
         }
         if ComposerDesign.uses3814(dark: effectiveAppearance.isDark) {
             // 4928 ModelListRow.tsx:57-101 (#28057): the provider's logo, the name, the check right after it on the
@@ -798,6 +960,7 @@ final class ModelRowView: DSView {
     override func layout() {
         super.layout()
         fill.frame = bounds
+        if stacked { layoutStacked(); return }
         if capy { layoutCapy(); return }
         let modern = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
         if modern, case .subProvider = row { layoutSubProvider(); return }
@@ -918,6 +1081,43 @@ final class ModelRowView: DSView {
         }
     }
 
+    /// Redesign docked: glyph, name, the check after it and the badge; the backend count and chevron, or the star on
+    /// hover and the jump key, at the right.
+    private func layoutStacked() {
+        let mid = bounds.height / 2
+        var right = bounds.width - 8
+        if let kbd {
+            let w = kbd.intrinsicContentSize.width
+            kbd.frame = NSRect(x: right - w, y: mid - 10, width: w, height: 20)
+            right = kbd.frame.minX - 4
+        }
+        if let star {
+            star.frame = NSRect(x: right - 24, y: mid - 12, width: 24, height: 24)
+            right = star.frame.minX - 4
+        }
+        if let chevron {
+            chevron.frame = NSRect(x: right - 16, y: mid - 8, width: 16, height: 16)
+            right = chevron.frame.minX - 6
+            let w = ceil(secondary.textWidth)
+            secondary.frame = NSRect(x: right - w, y: mid - 10, width: w, height: 20)
+            right = secondary.frame.minX - 8
+        }
+        var x: CGFloat = 8
+        if let providerIcon {
+            providerIcon.frame = NSRect(x: x, y: mid - 8, width: 16, height: 16)
+            x += 16 + 10
+        }
+        let fixed = (check == nil ? 0 : 8 + 14) + (newBadge.map { 8 + $0.intrinsicContentSize.width } ?? 0)
+        let nameW = max(0, min(ceil(name.textWidth), right - x - fixed))
+        name.frame = NSRect(x: x, y: mid - 10, width: nameW, height: 20)
+        x += nameW
+        if let check { check.frame = NSRect(x: x + 8, y: mid - 7, width: 14, height: 14); x += 8 + 14 }
+        if let newBadge {
+            let s = newBadge.intrinsicContentSize
+            newBadge.frame = NSRect(x: x + 8, y: mid - s.height / 2, width: s.width, height: s.height)
+        }
+    }
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         restyle()
@@ -936,7 +1136,7 @@ final class ModelRowView: DSView {
             chevron?.strokeColor = Themed.color(\.contrastMutedForeground)
             check?.strokeColor = Themed.color(\.contrastForeground)
             star?.isHidden = !highlighted && !(star?.state.hovered ?? false)
-            kbd?.isHidden = !highlighted
+            kbd?.isHidden = !highlighted && !stacked
             return
         }
         let modern = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
