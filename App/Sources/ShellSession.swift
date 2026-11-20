@@ -83,7 +83,10 @@ final class ShellSession {
         // The saved route can be a tunnel the relay has since moved; calls follow the current token's endpoint (audit TR-1).
         http.currentBaseURL = { try await authorizer.httpBaseURL(environmentId: environmentId) }
         self.init(environmentId: environmentId, http: http, token: "", cached: cached,
-                  supervisor: ConnectionSupervisor(dependencies: .init(connect: authorizer.connector(environmentId: environmentId)),
+                  supervisor: ConnectionSupervisor(dependencies: .relay(connect: authorizer.connector(environmentId: environmentId),
+                                                                        environmentId: environmentId,
+                                                                        baseURL: { try await authorizer.httpBaseURL(environmentId: environmentId) },
+                                                                        transportLost: { [http] in http.resetConnections() }),
                                                    keepalive: .ping(interval: .seconds(80))))
         isRelay = true
     }

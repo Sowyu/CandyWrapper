@@ -229,19 +229,36 @@ public actor ConnectionSupervisor {
                                   token: @escaping @Sendable () async throws -> String) -> Dependencies {
             return Dependencies(
                 connect: ConnectionSupervisor.directConnector(http: http, environmentId: environmentId, identity: identity, token: token),
-                checkHost: {
-                    // Its own session each time: a pooled connection to a host whose socket went silent is likely dead
-                    // too, and the check would wait out its timeout on it.
-                    let session = URLSession(configuration: EnvironmentHTTP.defaultSession.configuration)
-                    defer { session.finishTasksAndInvalidate() }
-                    var check = EnvironmentHTTP(baseURL: http.baseURL, session: session)
-                    check.timeout = 2.5
-                    guard let descriptor = try? await check.descriptor() else { return false }
-                    return environmentId == nil || descriptor.environmentId == environmentId
-                },
+                checkHost: { await hostAnswers(at: http.baseURL, environmentId: environmentId) },
                 answersQuickly: RouteKind.answersQuickly(http.baseURL),
                 transportLost: { http.resetConnections() },
                 ignoresOffline: RouteKind.isLoopback(http.baseURL))
+        }
+
+        /// A T3 Connect route's dependencies: `checkHost` reads the public descriptor through the tunnel, as T3's
+        /// `checkHost` does for every prepared route (driver.ts:219-228), so a silent relay socket is found in about
+        /// 2.5 s instead of at the 15 s probe deadline. `baseURL` follows the tunnel the relay currently names.
+        public static func relay(connect: @escaping @Sendable () async throws -> RPCConnection, environmentId: String?,
+                                 baseURL: @escaping @Sendable () async throws -> URL,
+                                 transportLost: @escaping @Sendable () async -> Void = {}) -> Dependencies {
+            Dependencies(connect: connect,
+                         checkHost: {
+                             guard let url = try? await baseURL() else { return false }
+                             return await hostAnswers(at: url, environmentId: environmentId)
+                         },
+                         transportLost: transportLost)
+        }
+
+        /// The descriptor at `baseURL` within T3's 2.5 s route check timeout (driver.ts:61, 186-207), on its own
+        /// session each time: a pooled connection to a host whose socket went silent is likely dead too, and the
+        /// check would wait out its timeout on it. The descriptor is public, so no credential goes out.
+        static func hostAnswers(at baseURL: URL, environmentId: String?) async -> Bool {
+            let session = URLSession(configuration: EnvironmentHTTP.defaultSession.configuration)
+            defer { session.finishTasksAndInvalidate() }
+            var check = EnvironmentHTTP(baseURL: baseURL, session: session)
+            check.timeout = 2.5
+            guard let descriptor = try? await check.descriptor() else { return false }
+            return environmentId == nil || descriptor.environmentId == environmentId
         }
     }
 

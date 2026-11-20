@@ -338,6 +338,12 @@ struct ConnectionTimingTests {
         if env["CW_TIMING_BASELINE"] == "1" {
             return .init(connect: ConnectionSupervisor.directConnector(http: http, environmentId: nil, identity: identity, token: { token }))
         }
+        // `CW_TIMING_RELAY=1` times a T3 Connect session: no route kind, and the host check reads the descriptor at the
+        // tunnel's current address, here the proxy (settings-6).
+        if env["CW_TIMING_RELAY"] == "1" {
+            return .relay(connect: ConnectionSupervisor.directConnector(http: http, environmentId: nil, identity: identity, token: { token }),
+                          environmentId: nil, baseURL: { http.baseURL }, transportLost: { http.resetConnections() })
+        }
         var deps = ConnectionSupervisor.Dependencies.direct(http: http, environmentId: nil, identity: identity, token: { token })
         // `CW_TIMING_REMOTE=1` times the proxy as a remote host: a silent socket waits 2.5 s before it is replaced.
         if env["CW_TIMING_REMOTE"] == "1" { deps.answersQuickly = false }
