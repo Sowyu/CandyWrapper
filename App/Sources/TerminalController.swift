@@ -52,6 +52,8 @@ final class TerminalController {
         let ops: AsyncStream<(String, JSONValue)>
         /// The last grid sent, so a repeated size is not sent again.
         var sentGrid: (Int, Int)?
+        /// The last resize sent, so a failed one is retried only while it is still the latest.
+        var sentResize: JSONValue?
 
         init(threadId: ThreadId, terminalId: String, surface: TerminalSurfaceView) {
             self.threadId = threadId; self.terminalId = terminalId; self.surface = surface
@@ -570,9 +572,16 @@ final class TerminalController {
             if let normalized = selection.normalized { self.onAddToChat?(normalized) }
         }
         let supervisor = shell.supervisor
-        attachment.writer = Task { [ops = attachment.ops] in
+        attachment.writer = Task { [ops = attachment.ops, weak attachment] in
             for await (tag, payload) in ops {
-                _ = try? await supervisor.request(tag, payload: payload)
+                do {
+                    _ = try await supervisor.request(tag, payload: payload)
+                } catch where tag == TerminalRPC.resize && !(error is CancellationError) {
+                    // A failed resize is sent again once, unless a newer grid replaced it (#32047, 4928
+                    // ThreadTerminalDrawer.tsx resizeTerminal and client-runtime state/terminal.ts sendResize).
+                    let latest = await MainActor.run { attachment?.sentResize == payload }
+                    if latest { _ = try? await supervisor.request(tag, payload: payload) }
+                } catch {}
             }
         }
         // An unanswered first attach retries unchanged so it can still open the shell. Once a reply arrived,
@@ -597,7 +606,7 @@ final class TerminalController {
         let outcome = attachment.model.apply(event)
         attachment.surface.setSharedGrid(cols: attachment.model.cols, rows: attachment.model.rows)
         for action in outcome.actions { attachment.surface.apply(action) }
-        if outcome.resendSize { attachment.sentGrid = nil; attachment.surface.resendSize() }
+        if outcome.resendSize { attachment.sentGrid = nil; attachment.sentResize = nil; attachment.surface.resendSize() }
         if outcome.sessionEnded {
             // `onSessionExited` runs on the next tick, after the message shows.
             let terminalId = attachment.terminalId
@@ -624,7 +633,9 @@ final class TerminalController {
         guard attachment.model.canResize, attachment.sentGrid.map({ $0 != (cols, rows) }) ?? true else { return }
         attachment.sentGrid = (cols, rows)
         let local = attachment.threadId.localId.rawValue
-        attachment.outbox.yield((TerminalRPC.resize, TerminalRPC.resizeInput(threadId: local, terminalId: attachment.terminalId, cols: cols, rows: rows)))
+        let payload = TerminalRPC.resizeInput(threadId: local, terminalId: attachment.terminalId, cols: cols, rows: rows)
+        attachment.sentResize = payload
+        attachment.outbox.yield((TerminalRPC.resize, payload))
     }
 
     /// `handleLinkActivate` (ThreadTerminalDrawer.tsx:939-990): URLs open in the browser panel or the browser.
