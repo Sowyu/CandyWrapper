@@ -1457,14 +1457,14 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | b46a4edc03 | #26398 | thread | fix(web): dark-mode <picture> images load instead of showing "Image unavailable" | port |
 | 58f8ab47a0 | #27794 | thread | fix(web): bare URL links keep trailing underscores and tildes | port |
 | 16f35ce29b | #27841 | thread | fix(shared): truncate keeps emoji whole | port |
-| 46e90bad0d | #28585 | thread | fix(web): many automations no longer hide the thread details Automations section | port |
+| 46e90bad0d | #28585 | thread | fix(web): many automations no longer hide the thread details Automations section | ported (settings-4928): automations no longer count toward the card's density fit; the list's 13.5rem scroll cap is not ported |
 | 5884d43481 | #23588 | thread | fix(web): sort pull request lists and timelines by time | port |
 | d05e4f8e8f | #28285 | thread | fix(web): streamed replies render a list's code block as the finished reply does | port |
 | 05c0ed7da6 | #28969 | thread | fix(web): clarify the waiting label for background work | port |
 | ec3ebdbb67 | #29166 | thread | fix(web): preserve scroll position when expanding work details | port |
 | 701e13cebb | #29329 | thread | fix(web): hide image action tooltip in expanded viewer | port |
 | b7ab02e0f6 | #29755 | thread | fix(web): copied code blocks keep their blank lines in lists, quotes and longer fences | port |
-| e53672d8fc | #28684 | thread | fix(web): long server lists in thread details now page 4 at a time | port |
+| e53672d8fc | #28684 | thread | fix(web): long server lists in thread details now page 4 at a time | ported (settings-4928): Servers shows four, then Show N more pages four at a time, and the extra rows stay out of the density fit |
 | ac10bb4aba | #29038 | thread | fix(web): mouse wheel over the thread minimap glides instead of jumping | port |
 | 65efae1adb | #28637 | thread | fix(shared): relative file links with routing punctuation open as files | ported in 93df13b9 |
 | 31564dece8 | #29759 | thread | fix(shared): find in thread matches a word typed with a curly apostrophe | port |

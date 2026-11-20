@@ -29,7 +29,15 @@ public final class ThreadServersView: DSView {
     private var rows: [ThreadServerRow] = []
     private let heading = LabelView("Servers", font: DSFont.ui(11, weight: .medium), color: Themed.color(\.mutedForeground))
     public var isEmpty: Bool { servers.isEmpty }
-    public var preferredHeight: CGFloat { isEmpty ? 0 : 8 + 20 + CGFloat(rows.count) * 44 + 8 }
+    /// `SERVER_PAGE_COUNT` (4928 ThreadServersPanel.tsx, #28684): four rows, then "Show N more" pages four at a time.
+    static let pageCount = 4
+    private var visibleCount = ThreadServersView.pageCount
+    private let pager = DetailsRowControl(kind: .row)
+    private var shownRows: Int { min(rows.count, visibleCount) }
+    private var showsPager: Bool { servers.count > Self.pageCount }
+    /// The rows past the first page (`data-thread-details-server-overflow`), left out of the card's density fit.
+    public var overflowHeight: CGFloat { CGFloat(max(0, shownRows - Self.pageCount)) * 44 }
+    public var preferredHeight: CGFloat { isEmpty ? 0 : 8 + 20 + CGFloat(shownRows) * 44 + (showsPager ? 32 : 0) + 8 }
     private var supportsStop = false, canOpen = false, canStop = false
     private var stopping: String?
 
@@ -37,10 +45,29 @@ public final class ThreadServersView: DSView {
         super.init(frame: frameRect)
         heading.lineHeight = 16
         addSubview(heading)
+        pager.action = { [weak self] in
+            guard let self else { return }
+            let height = self.preferredHeight
+            self.visibleCount = self.servers.count > self.visibleCount ? self.visibleCount + Self.pageCount : Self.pageCount
+            self.updatePager()
+            if self.preferredHeight != height { self.onHeightChange?() }
+        }
+        addSubview(pager)
+    }
+
+    private func updatePager() {
+        let hidden = max(0, servers.count - visibleCount)
+        pager.isHidden = !showsPager
+        pager.icons = [(hidden > 0 ? IconName.chevronDown : .chevronUp).definition]
+        pager.text = hidden > 0 ? "Show \(min(hidden, Self.pageCount)) more" : "Show less"
+        for (i, row) in rows.enumerated() { row.isHidden = i >= visibleCount }
+        needsLayout = true
     }
     public func configure(servers: [DiscoveredLocalServer], supportsStop: Bool, canOpen: Bool, canStop: Bool, stopping: String?) {
         guard self.servers != servers || self.supportsStop != supportsStop || self.canOpen != canOpen || self.canStop != canStop || self.stopping != stopping else { return }
         let height = preferredHeight
+        // Another thread's list starts at the first page again (`key` on the list).
+        if servers.isEmpty { visibleCount = Self.pageCount }
         self.servers = servers; self.supportsStop = supportsStop; self.canOpen = canOpen; self.canStop = canStop; self.stopping = stopping
         while rows.count > servers.count { rows.removeLast().removeFromSuperview() }
         while rows.count < servers.count { let row = ThreadServerRow(); rows.append(row); addSubview(row) }
@@ -55,7 +82,7 @@ public final class ThreadServersView: DSView {
                 self.onStop?(server)
             }
         }
-        needsLayout = true
+        updatePager()
         if preferredHeight != height { onHeightChange?() }
     }
     public static func key(_ server: DiscoveredLocalServer) -> String { "\(server.pid ?? 0):\(server.port)" }
@@ -63,6 +90,7 @@ public final class ThreadServersView: DSView {
         super.layout()
         heading.frame = NSRect(x: 18, y: 8, width: max(0, bounds.width - 36), height: 16)
         for (index, row) in rows.enumerated() { row.frame = NSRect(x: 8, y: 28 + CGFloat(index) * 44, width: max(0, bounds.width - 16), height: 44) }
+        pager.frame = NSRect(x: 8, y: 28 + CGFloat(shownRows) * 44, width: max(0, bounds.width - 16), height: 32)
     }
 }
 

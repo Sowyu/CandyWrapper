@@ -570,10 +570,12 @@ public final class ThreadDetailsCardView: DSView {
         return .essential
     }
 
-    /// The density for the height the card can take. Lineage scrolls as it grows, so it does not count
-    /// toward the fit (ThreadDetailsCard.tsx:93-97).
+    /// The density for the height the card can take. Lineage, automations and the servers past the first
+    /// page scroll as they grow, so they do not count toward the fit (4928 ThreadDetailsCard.tsx, #28585, #28684).
     public func density(fitting height: CGFloat) -> Density {
-        Self.resolveDensity(height: height, full: preferredHeight(.full) - (showsLineage ? lineage.preferredHeight : 0), compact: preferredHeight(.compact))
+        let growing = (showsLineage ? lineage.preferredHeight : 0) + (showsAutomations ? 1 + automations.preferredHeight : 0)
+            + (on("servers") ? servers.overflowHeight : 0)
+        return Self.resolveDensity(height: height, full: preferredHeight(.full) - growing, compact: preferredHeight(.compact))
     }
 
     private let decoration = BoxDecorationLayer()
