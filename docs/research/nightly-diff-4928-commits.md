@@ -696,7 +696,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 |---|---|---|---|---|
 | 85dcfa61ca | #19260 | issues | feat(web): add the Issues page and issue detail panel | ported 39a3ad7d, 0a5ca190: the page, the panel, the issue tab |
 | 0597b9edcd | #19270 | issues | feat(issues): link issues to threads and expose issue tools to agents | port; needs wire: issue links and tools |
-| 86863beede | #19274 | issues | feat(issues): add Linear as a standalone issue tracker | partly: Linear rows, mark and panel; connecting Linear and binding projects (`issueTrackers.*`, IssueTrackerSettings) left |
+| 86863beede | #19274 | issues | feat(issues): add Linear as a standalone issue tracker | ported: Linear rows, mark and panel; Settings > Source control > Issue trackers connects a tracker and binds projects through `issueTrackers.*` (Features/Settings/IssueTrackerSettingsView.swift, settings-4) |
 | 60f7e5d9b1 | #37760 | issues | feat(issues): filter the issue list by label and assignee, and sort it | ported 39a3ad7d: label and assignee filters and the sort; the candidate submenus have no search field |
 | bb29ee3e71 | #37963 | issues | feat(issues): save named filter views on web and mobile | ported 39a3ad7d, 1aafa321: saved views on Issues and Pull Requests |
 | b78914e4f3 | #37971 | issues | fix(client-runtime): Linear filters keep their choices when a search has no matches | ported 39a3ad7d: chosen labels lead the menu |

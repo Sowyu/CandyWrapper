@@ -332,6 +332,7 @@ public struct IssueTrackerConnectionList: Codable, Hashable, Sendable {
     public struct Binding: Codable, Hashable, Sendable {
         public var tracker: String
         public var scope: String
+        public init(tracker: String, scope: String) { self.tracker = tracker; self.scope = scope }
     }
     public var trackers: [Connection]
     public var bindings: [String: Binding]
