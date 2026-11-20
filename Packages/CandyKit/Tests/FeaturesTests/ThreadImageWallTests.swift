@@ -105,6 +105,17 @@ struct ThreadImageWallTests {
             image.source = .url(ThreadImageGalleryTests.dataURI(CGFloat(i) / 10, "\(tag)\(i)"))
             return image
         }
+        // A loader of its own: the shared decode actor is busy with every other image suite in a full run, and this
+        // checks placement, not decoding. It measures nothing on the way, like a kept copy, so the wall reads the
+        // proportions from the pixels.
+        wall.masonry.makeLoader = { image in
+            let tall = image.entryId == "e3"
+            return { @Sendable _ in
+                let ctx = CGContext(data: nil, width: tall ? 100 : 160, height: tall ? 200 : 110, bitsPerComponent: 8, bytesPerRow: 0,
+                                    space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                return ctx.makeImage()
+            }
+        }
         wall.images = images
         wall.layoutSubtreeIfNeeded()
         let end = Date().addingTimeInterval(30)
@@ -113,6 +124,8 @@ struct ThreadImageWallTests {
         let placed = wall.masonry.frames
         wall.masonry.relayout()
         #expect(wall.masonry.frames == placed)
+        // The fourth picture is twice as tall as it is wide, from its pixels alone.
+        #expect(placed.count > 3 && placed[3].height == placed[3].width * 2)
     }
 
     @Test func closingTheWallReleasesItsTilesAndDecodes() async throws {
@@ -140,6 +153,19 @@ struct ThreadImageWallTests {
         #expect(!gallery.isWallOpen)
         #expect(wall == nil, "nothing holds the wall once it closes")
         #expect(tiles.allSatisfy { $0.window == nil && $0.thumb.image == nil }, "its tiles left the window with their pixels")
+    }
+
+    /// With every size known before the card opens, as after the wall measured them, the card still makes its tiles
+    /// once its scroll view has a frame. On screen the card came up empty.
+    @Test func aCardOfMeasuredPicturesTilesOnLayout() {
+        let window = Self.window()
+        defer { window.contentView = nil; window.close() }
+        let card = ThreadImageGalleryView()
+        card.images = Self.measuredImages()
+        window.contentView!.addSubview(card)
+        card.layoutSubtreeIfNeeded()
+        #expect(card.grid.frames.count == 10)
+        #expect(!card.grid.tiles.isEmpty)
     }
 
     // MARK: Count and hover
