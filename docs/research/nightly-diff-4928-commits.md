@@ -44,9 +44,9 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 310c128552 | #26859 | usage | feat(web): Labs toggle keeps 5h, weekly, and context limits in view | port |
-| 961026c6c9 | #27892 | usage | feat(web): context meter fills up and shows tokens against the limit | port |
-| 669e2ea8e7 | #38789 | usage | feat(web): usage limit rows show your pace and open the usage page | port |
+| 310c128552 | #26859 | usage | feat(web): Labs toggle keeps 5h, weekly, and context limits in view | ported (settings-4928): the retired Labs flag threadDetailsUsageEnabled still defaults Usage and Context on |
+| 961026c6c9 | #27892 | usage | feat(web): context meter fills up and shows tokens against the limit | ported (settings-4928): the card's Context window row fills, shows tokens against the limit and ticks the auto-compact point |
+| 669e2ea8e7 | #38789 | usage | feat(web): usage limit rows show your pace and open the usage page | ported (settings-4928): usage limit rows show room left, the time-left tick, the pace and reset in the tooltip, and open the Usage page |
 
 ## Port group sidebar-undo (1)
 
@@ -58,7 +58,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| d7935f135f | #26904 | thread | feat(web): choose what the thread details card shows | ported (settings-4928): Appearance's Thread details row and the card's right-click menu choose the items; the card hides them. Usage limits, Context window and Side chats have no card section yet |
+| d7935f135f | #26904 | thread | feat(web): choose what the thread details card shows | ported (settings-4928): Appearance's Thread details row and the card's right-click menu choose the items, the card hides them, Usage limits and Context window are sections, and an empty card offers Choose what to show. Side chats has no card section yet |
 
 ## Port group thread-load (4)
 

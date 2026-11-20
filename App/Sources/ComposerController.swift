@@ -72,6 +72,8 @@ final class ComposerController {
     var openThread: ((ThreadId) -> Void)?
     /// "Open provider setup" on the provider status banner: Settings, Providers.
     var openProviderSetup: (() -> Void)?
+    /// Opens the Usage page, from a usage limit row in the thread details card.
+    var openUsagePage: (() -> Void)?
     /// The provider status the user dismissed (`dismissedProviderStatusBannerKey`).
     private var dismissedProviderBannerKey: String?
     /// Opens a new thread in the open thread's project, leaving the thread (`handleNewThreadInActiveProject`).
@@ -1489,6 +1491,7 @@ final class ComposerController {
         syncWorktreeSetup()
         panel.tasksView.steps = ThreadTaskStep.derive(projection)
         contextWindow = ThreadContextWindowUsage.derive(projection)
+        refreshDetailsUsage()
         composer.contextWindowMeter.projection = projection
         composer.contextWindowMeter.usage = meterEnabled ? contextWindow : nil
         composer.needsLayout = true
@@ -4601,6 +4604,18 @@ extension ComposerController {
     private var usageLimitsOffered: Bool {
         guard let p = menuProvider else { return false }
         return UsageLimitsLogic.hasLimits(driver: p.driver, providers: serverConfig.providers, sources: serverConfig.usageLimitSources)
+    }
+
+    /// The thread details card's Usage limits and Context window rows (4928 ThreadDetailsUsage.tsx, #27892, #38789).
+    /// Built on the first open; refreshed with the thread state and the provider config.
+    // ponytail: the rows' reset countdown and pace refresh with the thread or config, not each minute (T3 `useNowMinute`)
+    func refreshDetailsUsage() {
+        guard let card = panel.lazyDetailsCard.loaded else { return }
+        card.context.rows = contextWindow.map { [ThreadDetailsUsageRow.context($0)] } ?? []
+        card.usage.rows = ThreadDetailsUsageRow.limits(instanceId: pickers.current.instanceId?.rawValue, providers: serverConfig.providers,
+                                                       sources: serverConfig.usageLimitSources, nowMs: TimestampFormat.nowMs())
+        card.usage.onOpenUsage = { [weak self] in self?.openUsagePage?() }
+        card.usageChanged()
     }
 
     /// Opens the panel from the last snapshot, or says the provider has none.

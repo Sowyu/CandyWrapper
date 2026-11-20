@@ -283,6 +283,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environments.onSshFailure = { [weak settings] title, message in settings?.toast(title, message, .error) }
         self.settings = settings
         let commands = SidebarCommands(sidebar: sidebar, window: window, layout: layout, environments: environments, threads: threads)
+        threads.composer.openUsagePage = { [weak commands] in commands?.openUtilityPage(.usage) }
+        threads.panel.lazyDetailsCard.configure { [weak composer = threads.composer] _ in
+            DispatchQueue.main.async { composer?.refreshDetailsUsage() }
+        }
+        threads.composer.configObservers.append { [weak composer = threads.composer] _ in composer?.refreshDetailsUsage() }
         self.sidebarCommands = commands
         commands.closeSettings = { [weak settings] in settings?.close(record: false) }
         settings.willOpen = { [weak commands] in commands?.prepareForSettings() }
