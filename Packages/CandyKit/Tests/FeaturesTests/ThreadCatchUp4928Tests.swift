@@ -78,4 +78,16 @@ struct ThreadCatchUp4928Tests {
         #expect(outer.decimal && inner.decimal)
         #expect(inner.items.map(\.number) == [1, 7])
     }
+
+    /// #27794: bare URLs keep trailing underscores and tildes.
+    @Test func bareLinksKeepTrailingUnderscores() {
+        func links(_ text: String) -> [String] {
+            guard case .paragraph(let runs)? = MarkdownDocument(parsing: text).blocks.first else { return [] }
+            return runs.compactMap { $0.link?.absoluteString }
+        }
+        #expect(links("see https://x.com/dimasike_ now") == ["https://x.com/dimasike_"])
+        #expect(links("http://example.com/name__.") == ["http://example.com/name__"])
+        #expect(links("https://example.com/a~") == ["https://example.com/a~"])
+        #expect(links("[x](https://a.com/b)_c") == ["https://a.com/b"])
+    }
 }

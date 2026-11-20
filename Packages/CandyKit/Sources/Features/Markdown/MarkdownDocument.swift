@@ -316,12 +316,12 @@ public struct MarkdownDocument: Sendable, Equatable {
     private static func blocks(from node: Node) -> [MarkdownBlock] {
         switch node.kind {
         case .paragraph:
-            let runs = breakingAroundImageLines(node.runs)
+            let runs = breakingAroundImageLines(keepingBareLinkTails(node.runs))
             if runs.contains(where: { $0.math?.display == true }) { return splittingDisplayMath(runs) }
             if let image = standaloneImage(runs) { return [image] }
             return runs.isEmpty ? [] : [.paragraph(runs)]
         case .header(let level):
-            return [.heading(level: level, node.runs)]
+            return [.heading(level: level, keepingBareLinkTails(node.runs))]
         case .orderedList, .unorderedList:
             var items = node.children.compactMap(\.node).map(listItem(from:))
             if case .orderedList = node.kind {
@@ -397,6 +397,31 @@ public struct MarkdownDocument: Sendable, Equatable {
             }
         }
         flush()
+        return out
+    }
+
+    /// GFM's literal autolink drops trailing `_` and `~` (`https://x.com/name_` links `name`); remark keeps them since
+    /// 4928 (shared/markdownPipeline.ts, #27794). A bare link whose next text starts with them before a space, an end
+    /// or closing punctuation takes them back.
+    static func keepingBareLinkTails(_ runs: [InlineRun]) -> [InlineRun] {
+        guard runs.count > 1, runs.contains(where: { $0.link != nil }) else { return runs }
+        var out = runs
+        var i = 0
+        while i + 1 < out.count {
+            defer { i += 1 }
+            guard let url = out[i].link, out[i].text == url.absoluteString, !out[i].code,
+                  out[i + 1].link == nil, !out[i + 1].code, out[i + 1].image == nil else { continue }
+            let next = out[i + 1].text
+            let tail = next.prefix { $0 == "_" || $0 == "~" }
+            guard !tail.isEmpty else { continue }
+            let after = next.dropFirst(tail.count).first
+            guard after == nil || after!.isWhitespace || ".,;:!?)".contains(after!),
+                  let extended = URL(string: url.absoluteString + tail) else { continue }
+            out[i].text += tail
+            out[i].link = extended
+            out[i + 1].text.removeFirst(tail.count)
+            if out[i + 1].text.isEmpty { out.remove(at: i + 1) }
+        }
         return out
     }
 

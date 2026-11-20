@@ -1454,8 +1454,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 4ed4950b7c | #23024 | thread | fix(client): reject incomplete GitHub owner paths before lookup | port |
 | 41b3b0b1b6 | #25002 | thread | fix(clients): background work Stop stays pending until the stopped tasks leave | port |
 | 510aa5af40 | #26095 | thread | fix(web): Arabic paragraphs with many English terms now read right to left | port |
-| b46a4edc03 | #26398 | thread | fix(web): dark-mode <picture> images load instead of showing "Image unavailable" | port |
-| 58f8ab47a0 | #27794 | thread | fix(web): bare URL links keep trailing underscores and tildes | port |
+| b46a4edc03 | #26398 | thread | fix(web): dark-mode <picture> images load instead of showing "Image unavailable" | skip: CandyWrapper draws no raw HTML `<picture>` in replies yet; take it with raw HTML support |
+| 58f8ab47a0 | #27794 | thread | fix(web): bare URL links keep trailing underscores and tildes | ported: a bare URL takes back the trailing `_` and `~` that GFM's autolink drops (thread-2, MarkdownDocument `keepingBareLinkTails`) |
 | 16f35ce29b | #27841 | thread | fix(shared): truncate keeps emoji whole | port |
 | 46e90bad0d | #28585 | thread | fix(web): many automations no longer hide the thread details Automations section | ported (settings-4928): automations no longer count toward the card's density fit; the list's 13.5rem scroll cap is not ported |
 | 5884d43481 | #23588 | thread | fix(web): sort pull request lists and timelines by time | port |
@@ -1593,7 +1593,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 66ec37079a | #36298 | thread | fix(shared): hosted thread URLs inside other links stay as written | port |
 | 250d372e51 | #36321 | thread | fix(web): images in expanded tool rows page through the group's viewed images | ported in 2eb8794e |
 | cfc71e1a99 | #36357 | thread | fix(web): preview annotations in question answers reach the agent with their text | port |
-| 48cdefed5a | #32108 | thread | fix(web): size markdown media whose width and height carry a px unit | port |
+| 48cdefed5a | #32108 | thread | fix(web): size markdown media whose width and height carry a px unit | skip: CandyWrapper draws no raw HTML `<img>` in replies yet; take it with raw HTML support |
 | c8db8be305 | #36334 | thread | fix(web): a run waiting on foreground subagents says so instead of Thinking | ported: the Thinking row reads Waiting on a subagent or Waiting on N subagents while the run's newest entries are its own running subagents (thread-2, TimelineRows `.thinking(label:)`). Zen keeps Thinking since it hides the cards |
 | cf382b0c44 | #24637 | thread | fix(web,mobile): explain missing file access for host videos | port |
 | 4c7685729f | #36497 | thread | fix(web): clicking a label in an inline HTML render no longer jumps the chat | free with the runtime: the label fix is in the bootstrap the server injects |
