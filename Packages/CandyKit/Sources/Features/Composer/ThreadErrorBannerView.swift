@@ -21,6 +21,7 @@ public final class ThreadErrorBannerView: DSView {
             title.text = banner?.title ?? ""
             title.isHidden = banner?.title == nil
             setup.isHidden = banner?.setupLink != true
+            refresh.isHidden = banner?.info != true
             icon.isHidden = banner?.info == true || banner?.chatGptLimit != nil
             infoIcon.isHidden = banner?.info != true
             openAIIcon.isHidden = banner?.chatGptLimit == nil
@@ -55,6 +56,18 @@ public final class ThreadErrorBannerView: DSView {
     private let text = TextBlockView()
     /// "Open provider setup" (`InlineButton`).
     public let setup = ButtonView("Open provider setup", variant: .link, size: .xs)
+    /// The provider status banner's outline `xs` Refresh, at the end of the row under the message, after the setup
+    /// link (`flex flex-wrap items-center justify-end gap-3`, ProviderStatusBanner.tsx at 4928, #24861).
+    public let refresh = ButtonView("Refresh", icon: .refreshCw, variant: .outline, size: .xs)
+    /// Refreshing: "Refreshing..." and disabled until the probe returns.
+    public var refreshing = false {
+        didSet {
+            guard refreshing != oldValue else { return }
+            refresh.title = refreshing ? "Refreshing..." : "Refresh"
+            refresh.isEnabled = !refreshing
+            needsLayout = true
+        }
+    }
     private let close = ButtonView(nil, icon: .x, variant: .ghost, size: .iconXs)
     /// `InlineButton tone="muted"` with `mt-1` under the text.
     private let expand = ExpandTextButton()
@@ -144,6 +157,9 @@ public final class ThreadErrorBannerView: DSView {
         setup.isHidden = true
         setup.smoothsFont = false
         addSubview(setup)
+        refresh.isHidden = true
+        refresh.smoothsFont = false
+        addSubview(refresh)
         close.setAccessibilityLabel("Dismiss error")
         addSubview(close)
         expand.isHidden = true
@@ -166,6 +182,7 @@ public final class ThreadErrorBannerView: DSView {
     /// `w-fit` up to `maxWidth`.
     public func fittingWidth(max maxWidth: CGFloat) -> CGFloat {
         let column = max(ceil(text.naturalWidth), title.isHidden ? 0 : ceil(title.textWidth), setup.isHidden ? 0 : setup.intrinsicContentSize.width,
+                         actionRowWidth,
                          expand.isHidden ? 0 : expand.intrinsicContentSize.width)
         let natural = column + 2 * Self.padX + 16 + 8 + 8 + 24 + actionSpace
         return min(maxWidth, natural)
@@ -198,7 +215,16 @@ public final class ThreadErrorBannerView: DSView {
         if !expand.isHidden {
             expand.frame = NSRect(x: Self.padX + 24, y: text.frame.maxY + 4, width: min(w, expand.intrinsicContentSize.width), height: Self.line)
         }
-        if !setup.isHidden {
+        if !refresh.isHidden {
+            // `gap-2` under the text, then the row aligned to the column's end.
+            let row = text.frame.maxY + 8, r = refresh.intrinsicContentSize
+            refresh.frame = NSRect(x: Self.padX + 24 + w - r.width, y: row, width: r.width, height: 24)
+            if !setup.isHidden {
+                let s = setup.intrinsicContentSize
+                setup.frame = NSRect(x: max(Self.padX + 24, refresh.frame.minX - 12 - s.width), y: row + (24 - Self.line) / 2,
+                                     width: min(w, s.width), height: Self.line)
+            }
+        } else if !setup.isHidden {
             let s = setup.intrinsicContentSize
             setup.frame = NSRect(x: Self.padX + 24, y: text.frame.maxY + 10, width: min(w, s.width), height: Self.line)
         }
@@ -211,7 +237,14 @@ public final class ThreadErrorBannerView: DSView {
 
     /// The title row and the link under the message.
     private var extraHeight: CGFloat {
-        (title.isHidden ? 0 : Self.line + titleGap) + (setup.isHidden ? 0 : 10 + Self.line) + (expand.isHidden ? 0 : 4 + Self.line)
+        (title.isHidden ? 0 : Self.line + titleGap) + (!refresh.isHidden ? 8 + 24 : setup.isHidden ? 0 : 10 + Self.line)
+            + (expand.isHidden ? 0 : 4 + Self.line)
+    }
+
+    /// The provider row: the setup link, `gap-3`, then Refresh.
+    private var actionRowWidth: CGFloat {
+        guard !refresh.isHidden else { return 0 }
+        return refresh.intrinsicContentSize.width + (setup.isHidden ? 0 : 12 + setup.intrinsicContentSize.width)
     }
 
     public override func updateLayer() { restyle() }

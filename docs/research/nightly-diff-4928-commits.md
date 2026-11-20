@@ -190,7 +190,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| e27e12d9b4 | #24861 | settings | feat(web): add refresh to provider status banners | port |
+| e27e12d9b4 | #24861 | settings | feat(web): add refresh to provider status banners | ported: the provider status banner ends with an outline Refresh after the setup link, "Refreshing..." while `server.refreshProviders {instanceId, refreshModels}` runs (ThreadErrorBannerView, ComposerController) |
 
 ## Port group composer-context-strip (1)
 

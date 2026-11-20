@@ -50,4 +50,20 @@ struct Composer4928Tests {
         #expect(BranchToolbarLogic.lockedWorkspaceLabel("/", mode: .worktree) == "Worktree")
         #expect(BranchToolbarLogic.lockedWorkspaceLabel(nil, mode: .local) == "Local checkout")
     }
+
+    /// #24861: the provider status banner ends its message with the setup link and an outline Refresh.
+    @Test func providerBannerHasRefresh() {
+        let view = ThreadErrorBannerView()
+        view.banner = ThreadErrorState.Banner(message: "Claude is not signed in.", variant: .error, title: "Claude is unauthenticated",
+                                              info: true, setupLink: true)
+        let width = view.fittingWidth(max: 600)
+        view.frame = NSRect(x: 0, y: 0, width: width, height: view.height(forWidth: width))
+        view.layoutSubtreeIfNeeded()
+        #expect(!view.refresh.isHidden)
+        #expect(view.setup.frame.maxX + 12 <= view.refresh.frame.minX + 0.5)
+        view.refreshing = true
+        #expect(view.refresh.title == "Refreshing..." && !view.refresh.isEnabled)
+        view.banner = ThreadErrorState.Banner(message: "Boom", variant: .error)
+        #expect(view.refresh.isHidden)
+    }
 }

@@ -1573,6 +1573,18 @@ final class ComposerController {
                 self?.refresh()
             }
             panel.providerBanner.setup.action = { [weak self] in self?.openProviderSetup?() }
+            // Refresh probes that instance again (ProviderStatusBanner.tsx at 4928, #24861).
+            let refreshEnv = targetEnvironmentId, instance = provider?.instanceId
+            panel.providerBanner.refresh.action = { [weak self] in
+                guard let self, let refreshEnv, let instance, let supervisor = self.environments.session(refreshEnv)?.supervisor,
+                      self.environments.canOperate(refreshEnv), !self.panel.providerBanner.refreshing else { return }
+                self.panel.providerBanner.refreshing = true
+                Task { [weak self] in
+                    _ = try? await supervisor.request("server.refreshProviders", payload: .object([
+                        "instanceId": .string(instance.rawValue), "refreshModels": .bool(true)]))
+                    self?.panel.providerBanner.refreshing = false
+                }
+            }
             panel.needsLayout = true
         }
         panel.updateComposerShown()
