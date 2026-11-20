@@ -310,6 +310,8 @@ public struct SidebarListState: Equatable, Sendable {
     public var environments = SidebarEnvironments()
     /// Scoped thread id to its terminals running a subprocess, from `subscribeTerminalMetadata`.
     public var terminalProcesses: [ThreadId: Int] = [:]
+    /// Single linked issues' live states, by `SidebarIssueBadge.stateKey` (the app reads `issues.detail`).
+    public var issueStates: [String: IssueState] = [:]
     /// `useThreadSelectionStore.selectedThreadKeys`: Cmd-click and Shift-click selection.
     public var selectedThreadIds: Set<ThreadId> = []
     /// `renamingThreadKey`.
@@ -343,7 +345,7 @@ public struct SidebarListState: Equatable, Sendable {
             && a.projectScopeKeys == b.projectScopeKeys && a.drafts == b.drafts && a.activeDraftId == b.activeDraftId
             && a.capabilities.threadSettlement == b.capabilities.threadSettlement
             && a.capabilities.threadSnooze == b.capabilities.threadSnooze && a.environments == b.environments
-            && a.terminalProcesses == b.terminalProcesses && a.selectedThreadIds == b.selectedThreadIds
+            && a.terminalProcesses == b.terminalProcesses && a.issueStates == b.issueStates && a.selectedThreadIds == b.selectedThreadIds
             && a.renamingThreadId == b.renamingThreadId && a.scratchRoots == b.scratchRoots && a.grouping == b.grouping
             && a.boringSidebarEnabled == b.boringSidebarEnabled && a.workingShelfEnabled == b.workingShelfEnabled && a.workingExpanded == b.workingExpanded
             && a.heldOrder?.section == b.heldOrder?.section && a.heldOrder?.order == b.heldOrder?.order
@@ -701,7 +703,9 @@ public enum SidebarListBuilder {
             timeAnchorMs: anchor?.epochMs, snoozeWakeMs: wake)
         model.dither = state.dither
         model.isPreparing = t.runtime?.status == .preparing
-        model.issueBadge = SidebarIssueBadge(shell.issues?.values ?? [])
+        let issues = shell.issues?.values ?? []
+        model.issueBadge = SidebarIssueBadge(issues, state: issues.count == 1
+            ? state.issueStates[SidebarIssueBadge.stateKey(environmentId: shell.id.environmentId, issues[0])] : nil)
         return model
     }
 

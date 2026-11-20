@@ -19,13 +19,14 @@ public enum OrchestrationCommands {
     /// A plain `message.dispatch` with no attachments, queued behind a running turn when `queue`.
     /// `idleCompaction` marks a `/compact` T3 Code sends on the user's behalf (useComposerSend.ts:1197-1209).
     public static func message(threadId: String, messageId: String, text: String, selection: ModelSelection, queue: Bool,
-                               idleCompaction: String? = nil) -> JSONValue {
+                               idleCompaction: String? = nil, attachments: [JSONValue] = [], context: JSONValue? = nil) -> JSONValue {
         let (dispatchMode, deliveryIntent) = dispatchMode(queue: queue)
         var command: [String: JSONValue] = [
             "type": .string("message.dispatch"), "commandId": .string(UUID().uuidString.lowercased()),
             "threadId": .string(threadId), "messageId": .string(messageId),
             "createdBy": .string("user"), "creationSource": .string("web"), "text": .string(text),
-            "attachments": .array([]), "dispatchMode": dispatchMode, "modelSelection": encode(selection)]
+            "attachments": .array(attachments), "dispatchMode": dispatchMode, "modelSelection": encode(selection)]
+        if let context { command["context"] = context }
         if let deliveryIntent { command["deliveryIntent"] = .string(deliveryIntent) }
         if let idleCompaction { command["idleCompaction"] = .string(idleCompaction) }
         return .object(command)

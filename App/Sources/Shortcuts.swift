@@ -31,6 +31,26 @@ final class Shortcuts {
         "themeEditor.toggle", "usage.open", "sidebar.toggle", "navigation.back", "navigation.forward",
     ]
 
+    /// A side chat's own table (useChatShortcuts.ts:26-30, 75-95 at 4928): no monitor of its own; the window's
+    /// dispatcher runs it while focus is in the side chat's pane.
+    init() {}
+
+    /// The table of the side chat holding focus. Its handlers run first; of the chat's own commands only
+    /// `sideChatPaneCommands` then reach the window's chat. App commands, like the palette's, still run.
+    var nested: (() -> Shortcuts?)?
+    static let sideChatPaneCommands: Set<String> = ["rightPanel.toggle", "rightPanel.close", "rightPanel.toggleMaximized"]
+    /// The commands and key handlers the thread view registered (`registerChat`), which a side chat holds back.
+    private var chatCommands: Set<String> = []
+    private var chatKeyHandlers: Range<Int> = 0..<0
+
+    /// Registers the thread view's keys, so a focused side chat can hold them back (ChatView's `useChatShortcuts`).
+    func registerChat(_ body: () -> Void) {
+        let before = Set(handlers.keys), start = keyHandlers.count
+        body()
+        chatCommands = Set(handlers.keys).subtracting(before)
+        chatKeyHandlers = start..<keyHandlers.count
+    }
+
     init(window: NSWindow) {
         self.window = window
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged]) { [weak self] event in
@@ -145,7 +165,9 @@ final class Shortcuts {
         let stroke = KeyStroke(event)
         if stroke.flatMap(resolve) != "thread.undo" { releaseUndoShortcut() }
         let paletteOpen = paletteOpen()
-        if !paletteOpen, keyHandlers.contains(where: { $0(event) }) { return true }
+        let nested = paletteOpen ? nil : nested?()
+        if let nested, nested.keyHandlers.contains(where: { $0(event) }) { return true }
+        if !paletteOpen, keyHandlers.indices.contains(where: { (nested == nil || !chatKeyHandlers.contains($0)) && keyHandlers[$0](event) }) { return true }
         guard let stroke else { return false }
         let used = run(stroke, paletteOpen: paletteOpen)
         if used, lastCommand == "thread.undo" { heldUndoKey = event.keyCode }
@@ -184,6 +206,11 @@ final class Shortcuts {
         let invocation = Invocation(command: command, isRepeat: stroke.isRepeat)
         if paletteOpen {
             if !Self.commandsWhilePaletteOpen.contains(command) { return paletteCommand?(invocation) ?? false }
+        }
+        if command == "thread.pin", !paletteOpen, ProjectPickerPinShortcut.run() { return true }
+        if !paletteOpen, let nested = nested?() {
+            if let handler = nested.handlers[command], handler(invocation) { return true }
+            if chatCommands.contains(command), !Self.sideChatPaneCommands.contains(command) { return false }
         }
         if let handler = handlers[command] { return handler(invocation) }
         return prefixHandlers.first { command.hasPrefix($0.0) }?.1(invocation) ?? false

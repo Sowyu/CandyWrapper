@@ -407,6 +407,7 @@ final class ThreadController {
     private var checkoutStatus: SidebarCheckoutStatus!
     private(set) var lineage: ThreadLineageController!
     private(set) var sideChats: SideChatController!
+    private var issueStates: SidebarIssueStates?
     /// Signed inline URLs of HTML renders and MCP Apps, by attachment id.
     private var webAssets: [String: (url: URL, expires: Date)] = [:]
     /// Runs whose Retry is in flight: one retry per failed run (ChatView.tsx:4047-4058).
@@ -714,6 +715,7 @@ final class ThreadController {
         files = FilesController(panel: panel, sidebar: sidebar, environments: environments)
         files.openThread = { [weak self] id in self?.open(id) }
         let prCapabilities = PullRequestCapabilities(environments: environments)
+        issueStates = SidebarIssueStates(sidebar: sidebar, environments: environments, capabilities: prCapabilities)
         pullRequests = ThreadPullRequestsController(panel: panel, sidebar: sidebar, environments: environments, capabilities: prCapabilities)
         pullRequests.openThreadId = { [weak self] in self?.openThreadId }
         automations.openThreadId = { [weak self] in self?.openThreadId }
@@ -1003,6 +1005,7 @@ final class ThreadController {
             return true
         }
         composer.registerShortcuts(shortcuts)
+        sideChats.registerShortcuts(shortcuts)
         terminal.registerShortcuts(shortcuts)
         scripts.registerShortcuts(shortcuts)
         git.registerShortcuts(shortcuts)
@@ -1693,6 +1696,7 @@ final class ThreadController {
         pullRequests.sync()
         lineage.sync()
         sideChats.sync()
+        issueStates?.sync(snapshot)
         if let perf = perfOpen {
             perfOpen = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + perf.delay) { [weak self] in
@@ -1809,5 +1813,43 @@ extension ThreadSession {
             if !found.isEmpty { panel.model.linkedThreadsChanged() }
         }
         return nil
+    }
+}
+
+/// The sidebar issue badge's live state (`useLinkedIssueDetail`, SidebarThreadRow.tsx:1137-1142 at 4928): `issues.detail`
+/// for each thread with one linked issue, where the server reads issues. Read again on a shell change five minutes on.
+// ponytail: reads every single-issue row, not only rows on screen as T3's lease does; lease visible rows if lists grow
+@MainActor
+final class SidebarIssueStates {
+    private weak var sidebar: SidebarContentView?
+    private let environments: Environments
+    private let capabilities: PullRequestCapabilities
+    private var readAt: [String: Date] = [:]
+    private var inFlight: Set<String> = []
+
+    init(sidebar: SidebarContentView, environments: Environments, capabilities: PullRequestCapabilities) {
+        self.sidebar = sidebar
+        self.environments = environments
+        self.capabilities = capabilities
+    }
+
+    func sync(_ snapshot: ShellSnapshot) {
+        let now = Date()
+        for thread in snapshot.threads {
+            guard let issues = thread.issues?.values, issues.count == 1, let env = thread.id.environmentId,
+                  environments.session(env) != nil, capabilities.has(env, "issues") else { continue }
+            let link = issues[0]
+            let key = SidebarIssueBadge.stateKey(environmentId: env, link)
+            guard !inFlight.contains(key), readAt[key].map({ now.timeIntervalSince($0) > 300 }) ?? true else { continue }
+            inFlight.insert(key)
+            let ref = IssueRef(projectId: link.projectId.rawValue, tracker: link.tracker, host: link.host, scope: link.scope, key: link.key)
+            Task { [weak self, environments] in
+                let detail = try? await environments.request(env, "issues.detail", .object(ref.json)).decode(as: IssueDetail.self)
+                guard let self else { return }
+                inFlight.remove(key)
+                readAt[key] = Date()
+                if let state = detail?.state, sidebar?.state.issueStates[key] != state { sidebar?.state.issueStates[key] = state }
+            }
+        }
     }
 }

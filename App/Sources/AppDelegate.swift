@@ -683,7 +683,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                   let responder = panel.window?.firstResponder as? NSView, let diff = panel.lazyDiffPanel.loaded, responder.isDescendant(of: diff) else { return false }
             diff.showFind(); return true
         }
-        threads.registerShortcuts(shortcuts)
+        shortcuts.registerChat { threads.registerShortcuts(shortcuts) }
         commands.registerShortcuts(shortcuts) { [weak threads] in threads?.composer.pickers.isModelPickerOpen ?? false }
         palette.registerShortcuts(shortcuts)
         settings.registerShortcuts(shortcuts)

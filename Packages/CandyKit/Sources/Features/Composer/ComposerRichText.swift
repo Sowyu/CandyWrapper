@@ -17,6 +17,7 @@ enum ComposerRichText {
     /// `node_modules` or `_build_` stay as typed (composer-rich-text-doc.ts:136-148, bb76f1233c).
     static func parse(_ text: String, typing: Bool = false) -> [Span] {
         let units = Array(text.utf16)
+        let literalRuns = literalUnderscoreRuns(text)
         var root: [Span] = [], stack: [Frame] = []
         func slice(_ a: Int, _ b: Int) -> String { String(decoding: units[a..<min(b, units.count)], as: UTF16.self) }
         func push(_ text: String, _ marks: [Mark]) {
@@ -33,10 +34,17 @@ enum ComposerRichText {
         func whitespace(_ i: Int) -> Bool {
             i >= 0 && i < units.count && UnicodeScalar(units[i]).map { CharacterSet.whitespacesAndNewlines.contains($0) } == true
         }
-        func word(_ i: Int) -> Bool {
+        // A word character in any script, `[\p{L}\p{M}\p{N}_]` (#37495): `at` reads the scalar that starts at a
+        // unit, `before` the one that ends just before it, so a letter outside the BMP counts whole.
+        func word(at i: Int) -> Bool {
             guard i >= 0, i < units.count else { return false }
-            let c = units[i]
-            return (65...90).contains(c) || (97...122).contains(c) || (48...57).contains(c) || c == 95
+            if (0xD800...0xDBFF).contains(units[i]), i + 1 < units.count { return Self.isWord(units[i], units[i + 1]) }
+            return Self.isWord(units[i], nil)
+        }
+        func word(before i: Int) -> Bool {
+            guard i > 0, i <= units.count else { return false }
+            if (0xDC00...0xDFFF).contains(units[i - 1]), i >= 2 { return Self.isWord(units[i - 2], units[i - 1]) }
+            return Self.isWord(units[i - 1], nil)
         }
         var i = 0
         while i < units.count {
@@ -66,8 +74,10 @@ enum ComposerRichText {
             }
             var end = i
             while end < units.count, units[end] == c { end += 1 }
-            let canClose = i > 0 && !whitespace(i - 1) && (c != 95 || !word(end))
-            let canOpen = end < units.count && !whitespace(end) && (c != 95 || !word(i - 1))
+            // Underscores inside a URL, path or file name are text (#36363).
+            if literalRuns.contains(i) { push(slice(i, end), []); i = end; continue }
+            let canClose = i > 0 && !whitespace(i - 1) && (c != 95 || !word(at: end))
+            let canOpen = end < units.count && !whitespace(end) && (c != 95 || !word(before: i))
             while i < end {
                 let top = stack.last
                 let nestedBold = top?.mark == .italic && end - i == 2 && canOpen && (c == 42 || c == 95) && !stack.contains { $0.mark == .bold }
@@ -90,6 +100,66 @@ enum ComposerRichText {
             for span in frame.spans { push(span.text, span.marks) }
         }
         return root
+    }
+
+    static func isWord(_ a: UInt16, _ b: UInt16?) -> Bool {
+        if a == 95 { return true }
+        let scalar: Unicode.Scalar? = if let b, (0xD800...0xDBFF).contains(a), (0xDC00...0xDFFF).contains(b) {
+            Unicode.Scalar(0x10000 + ((UInt32(a) - 0xD800) << 10) + (UInt32(b) - 0xDC00))
+        } else { Unicode.Scalar(a) }
+        guard let scalar else { return false }
+        switch scalar.properties.generalCategory {
+        case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter,
+             .nonspacingMark, .spacingMark, .enclosingMark, .decimalNumber, .letterNumber, .otherNumber: return true
+        default: return false
+        }
+    }
+
+    // Brackets, quotes, commas and Markdown delimiters end a URL or path token; a lone `~` does not.
+    nonisolated(unsafe) private static let pathToken = try! NSRegularExpression(pattern: #"(?:[\p{L}\p{N}_/.:@%+=&?#-]|(?<!~)~(?!~))+"#)
+    nonisolated(unsafe) private static let fileExtension = try! NSRegularExpression(pattern: #"^\.[a-z][a-z0-9]*(?::\d+){0,2}$"#, options: .caseInsensitive)
+    // `_yes_/_no_`: each side of a slash is its own emphasis span, so the word is not a path.
+    nonisolated(unsafe) private static let emphasisAlternatives = try! NSRegularExpression(pattern: #"^_[^/]+_(?:/_[^/]+_)+$"#)
+    nonisolated(unsafe) private static let pathStart = try! NSRegularExpression(pattern: #"^~?/|[.:]"#)
+
+    /// `literalUnderscoreRuns` (composer-rich-text.ts:35-70 at 4928, #36363, #37495): UTF-16 starts of underscore runs
+    /// that belong to a URL, path or file name, not to emphasis. A run ending the token stays a delimiter, so emphasis
+    /// wrapped around the token still closes.
+    static func literalUnderscoreRuns(_ text: String) -> Set<Int> {
+        guard text.contains("_") else { return [] }
+        var literal: Set<Int> = []
+        let ns = text as NSString
+        func matches(_ re: NSRegularExpression, _ s: String) -> Bool {
+            re.firstMatch(in: s, range: NSRange(location: 0, length: (s as NSString).length)) != nil
+        }
+        for match in pathToken.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            let token = Array(ns.substring(with: match.range).utf16)
+            func string(_ a: Int, _ b: Int) -> String { String(decoding: token[a..<b], as: UTF16.self) }
+            var bodyEnd = token.count
+            while bodyEnd > 0, [46, 58, 63].contains(token[bodyEnd - 1]) { bodyEnd -= 1 }
+            if matches(emphasisAlternatives, string(0, bodyEnd)) { continue }
+            while bodyEnd > 0, token[bodyEnd - 1] == 95 { bodyEnd -= 1 }
+            let body = Array(token[0..<bodyEnd])
+            let bodyText = string(0, bodyEnd)
+            // A slash alone is prose (`and/_or_`); a path also has a dot, a scheme or port, or a root.
+            let isPath = body.contains(47) ? matches(pathStart, bodyText)
+                : matches(fileExtension, String(decoding: body[(body.lastIndex(of: 46) ?? 0)...], as: UTF16.self))
+            guard isPath else { continue }
+            var closesInside = false
+            var start = body.firstIndex(of: 95)
+            while let s = start {
+                var end = s
+                while end < body.count, body[end] == 95 { end += 1 }
+                if s > 0 {
+                    literal.insert(match.range.location + s)
+                    closesInside = closesInside || !isWord(end < body.count ? body[end] : 32, end + 1 < body.count ? body[end + 1] : nil)
+                }
+                start = body[end...].firstIndex(of: 95)
+            }
+            // A leading run could only pair with a run inside the name, as in `__init__.py`.
+            if closesInside, body.first == 95 { literal.insert(match.range.location) }
+        }
+        return literal
     }
 
     /// composer-rich-text-doc.ts:849-976: trim boundary whitespace and keep the

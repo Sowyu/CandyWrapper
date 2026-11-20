@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import T3Protocol
 import T3Store
 
 /// The project scope picker's popup (Sidebar.tsx:4990-5122): a `ComboboxPopup` anchored to the search
@@ -124,6 +125,14 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
         emptyLabel.isHidden = !shown.isEmpty
         if let h = highlighted, h >= rows.count { highlighted = nil }
         needsLayout = true
+    }
+
+    /// The open project picker the pin shortcut works on (`isProjectPinShortcut`, ProjectPinButton.tsx:11-22 at 4928).
+    fileprivate static weak var open: SidebarProjectScopeView?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { Self.open = self } else if Self.open === self { Self.open = nil }
     }
 
     /// Flips a row's pin in place and asks the owner to write it.
@@ -387,7 +396,9 @@ final class ProjectPinSlot: DSView {
         self.pinned = pinned
         super.init(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
         button.iconSize = 14
-        button.toolTip = pinned ? "Unpin \(name)" : "Pin \(name)"
+        // `{action} ({shortcut})` with the thread pin shortcut, which pins the highlighted row (ProjectPinButton.tsx:36-55).
+        let action = pinned ? "Unpin \(name)" : "Pin \(name)"
+        button.toolTip = ActiveKeymap.label(for: "thread.pin", context: KeybindingContext(["editableFocus": true])).map { "\(action) (\($0))" } ?? action
         button.setAccessibilityElement(false)
         button.action = { [weak self] in self?.onToggle?() }
         addSubview(button)
@@ -420,5 +431,18 @@ final class ProjectPinSlot: DSView {
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         super.viewWillMove(toWindow: newWindow)
         if newWindow !== window { hovered = false }
+    }
+}
+
+/// The thread pin shortcut (Mod+Shift+P) inside an open project picker pins its highlighted row instead of the open
+/// thread (DraftHeroHeadline.tsx:262-271 and Sidebar.tsx's project combobox at 4928).
+@MainActor
+public enum ProjectPickerPinShortcut {
+    /// True when an open picker took the key.
+    public static func run() -> Bool {
+        guard let view = SidebarProjectScopeView.open, view.window != nil, let h = view.highlighted,
+              view.shown.indices.contains(h), view.shown[h].canPin, let key = view.shown[h].key else { return false }
+        view.togglePin(key)
+        return true
     }
 }

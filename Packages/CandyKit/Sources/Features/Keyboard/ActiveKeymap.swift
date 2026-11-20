@@ -58,7 +58,7 @@ extension KeyStroke {
     static let specialKeys: [UInt16: String] = [
         36: "enter", 76: "enter", 53: "escape", 48: "tab", 49: " ", 51: "backspace", 117: "delete",
         123: "arrowleft", 124: "arrowright", 125: "arrowdown", 126: "arrowup",
-        115: "home", 119: "end", 116: "pageup", 121: "pagedown",
+        115: "home", 119: "end", 116: "pageup", 121: "pagedown", 97: "f6",
     ]
 
     /// `EVENT_CODE_SHORTCUT_KEYS` (shared keybindings.ts:32-54) plus `KeyA`-`KeyZ`, by ANSI key code.

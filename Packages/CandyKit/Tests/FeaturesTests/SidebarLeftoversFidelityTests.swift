@@ -61,7 +61,9 @@ struct SidebarLeftoversFidelityTests {
         case "issue-badge":
             let link = try! JSONDecoder().decode(ThreadIssueLink.self, from: Data(#"{"tracker":"github","host":"github.com","scope":"o/r","key":"128","projectId":"p","url":"https://github.com/o/r/issues/128","source":"manual","linkedAt":"2026-11-19T12:00:00Z","displayKey":"\#(n["key"]!)","title":"Sidebar badge"}"#.utf8))
             let badge = SidebarIssueBadgeView()
-            badge.badge = SidebarIssueBadge([link])
+            // The live state from `issues.detail` (#38282): open, or closed as completed.
+            let state = n["state"].map { $0 == "open" ? IssueState(category: "open", name: "open") : IssueState(category: "closed", name: "completed", closeReason: "completed") }
+            badge.badge = SidebarIssueBadge([link], state: state)
             let row = DSView()
             row.addSubview(badge)
             badge.frame = NSRect(x: 0, y: 6, width: badge.preferredWidth, height: 16)

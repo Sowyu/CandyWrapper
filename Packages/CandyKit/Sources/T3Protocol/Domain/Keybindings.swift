@@ -329,6 +329,12 @@ public struct Keymap: Sendable, Equatable {
     /// `DEFAULT_KEYBINDINGS` (packages/shared/src/keybindings.ts:123-210).
     private static let staticBindings: [Binding] = [
         ("mod+b", "sidebar.toggle", nil),
+        // Workspace focus (packages/shared/src/keybindings.ts:59-63 at 4928). CandyWrapper moves between the main
+        // chat and an open side chat with them.
+        ("f6", "workspace.focusNext", nil),
+        ("shift+f6", "workspace.focusPrevious", nil),
+        ("mod+f6", "workspace.focusNext", nil),
+        ("mod+shift+f6", "workspace.focusPrevious", nil),
         ("mod+[", "navigation.back", "!terminalFocus"),
         ("mod+]", "navigation.forward", "!terminalFocus"),
         ("mod+j", "terminal.toggle", nil),

@@ -160,6 +160,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             undoManager?.removeAllActions()
         }
         isChipifying = true
+        let text = richTextEnabled ? ComposerRichTextStyler.collapseBlockSeparators(text) : text
         textStorage?.setAttributedString(NSAttributedString(string: text, attributes: baseAttributes))
         applyStyle()
         styleRichText(registerUndo: false)
@@ -270,6 +271,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         defer { typedInsert = false }
         let range = replacementRange.location == NSNotFound ? (hasMarkedText() ? markedRange() : selectedRange()) : replacementRange
         if surroundSelection(range, with: (string as? String) ?? (string as? NSAttributedString)?.string) { return }
+        if formatCodeBeforeClosingTick(range, typed: (string as? String) ?? (string as? NSAttributedString)?.string) { return }
         let opensPair = richTextEnabled && !hasMarkedText() && range.length == 0 && ((string as? String) ?? (string as? NSAttributedString)?.string) == "`"
             && codePair(at: range.location - 1) == nil && typedPairCanOpen(before: range.location)
         // Text typed inside a typed pair joins it; anywhere else it stays out.
@@ -303,6 +305,30 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     }
 
     // MARK: Typed code pairs (`codePairCaretPlugin`, composer-rich-text-doc.ts:50-113, 7259e4f594)
+
+    /// The opening backtick typed after the closing one (#23940, composer-rich-text-doc.ts:81-124 at 4928): "`" typed
+    /// before plain `text`` on the same line formats `text` as code, with the caret at its start typing code. Doubled
+    /// ticks, code blocks, marks and chips keep the tick literal.
+    private func formatCodeBeforeClosingTick(_ range: NSRange, typed: String?) -> Bool {
+        guard richTextEnabled, typed == "`", !hasMarkedText(), range.length == 0, let storage = textStorage, range.location < storage.length else { return false }
+        let text = storage.string as NSString
+        let start = lineStart(range.location)
+        let before = text.substring(with: NSRange(location: start, length: range.location - start))
+        guard !before.hasSuffix("`") else { return false }
+        let newline = text.range(of: "\n", range: NSRange(location: range.location, length: text.length - range.location))
+        let lineEnd = newline.location == NSNotFound ? text.length : newline.location
+        let after = text.substring(with: NSRange(location: range.location, length: lineEnd - range.location)) as NSString
+        let match = after.range(of: "^[^`\n]+`(?!`)", options: .regularExpression)
+        guard match.location != NSNotFound else { return false }
+        let span = NSRange(location: range.location, length: match.length)
+        guard !storage.containsAttachments(in: span), ComposerRichTextStyler.plain(storage, span),
+              storage.attribute(.composerCodeBlock, at: range.location, effectiveRange: nil) == nil else { return false }
+        let inner = NSRange(location: range.location, length: match.length - 1)
+        let code = NSAttributedString(string: text.substring(with: inner), attributes: ComposerRichTextStyler.attributes([.code], base: baseAttributes))
+        replaceAttributed(span, with: code, caret: range.location)
+        typingAttributes = caretAttributes([.code])
+        return true
+    }
 
     private var nextCodePair = 0
     /// Between a text change's start and its `textDidChange`: caret moves then are the edit's, not the user's.

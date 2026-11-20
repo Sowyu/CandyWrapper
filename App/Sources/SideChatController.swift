@@ -5,6 +5,14 @@ import T3Client
 import T3Protocol
 import T3Store
 
+/// What `/side` sends as the side chat's first message (`SideChatMessage`, useSideChat.ts:23-26): the text,
+/// the draft's uploaded attachments and its chips' records.
+struct SideChatMessage {
+    var text: String
+    var attachments: [JSONValue] = []
+    var context: JSONValue?
+}
+
 /// Side chats (4928 #26901, useSideChat.ts and SideChatPane.tsx): forks of the open thread that run in a tab
 /// of its right panel. Starts them from the + menu and `/side`, keeps their tabs' titles and dots, and builds
 /// the shown tab's pane with its own thread subscription, torn down when the tab hides.
@@ -19,20 +27,24 @@ final class SideChatController {
     /// A start is in flight (`pendingRef`, useSideChat.ts:41): a second one waits for it.
     private var starting = false
     private var shown: Shown?
+    private weak var windowShortcuts: Shortcuts?
 
-    /// The shown tab's pane, its embedded chat, subscription and model controls.
+    /// The shown tab's pane, its embedded chat, subscription and composer. The composer is a second
+    /// `ComposerController` on the panel's shared drafts, so attachments, chips, `/` and drafts work as in the
+    /// main chat (SideChatPane.tsx:178-190 renders the full `ChatView`).
     @MainActor private final class Shown {
         let id: ThreadId
         let pane: SideChatPaneView
         let chat = ThreadPanelView()
         var session: ThreadSession?
-        let pickers: ComposerPickers
+        var composer: ComposerController?
+        /// The side chat's composer chords and F6, run while focus is in its pane.
+        let shortcuts = Shortcuts()
         var projection: ThreadProjection?
         var bringingBack = false
         var deleting = false
-        init(id: ThreadId, pickers: ComposerPickers) {
+        init(id: ThreadId) {
             self.id = id
-            self.pickers = pickers
             pane = SideChatPaneView(threadId: id.localId)
         }
     }
@@ -90,7 +102,7 @@ final class SideChatController {
     /// `useSideChat.open` (useSideChat.ts:20-130): forks the open thread's latest stable point, gives it the parent
     /// composer's permission mode, sends `message` when there is one and shows its tab. False when it did not start.
     @discardableResult
-    func start(message: String?) async -> Bool {
+    func start(message: SideChatMessage?) async -> Bool {
         guard !starting, let parent = parentId(), let env = parent.environmentId else { return false }
         if let reason = SideChats.disabledReason(parentFacts()) {
             toast("Side chat not started", reason, kind: .warning)
@@ -129,20 +141,45 @@ final class SideChatController {
         }
         // Send before showing the tab: closing a tab whose side chat has no run deletes it.
         if let message {
-            let payload = OrchestrationCommands.message(threadId: target.rawValue, messageId: UUID().uuidString.lowercased(), text: message,
-                                                        selection: selection ?? sideChat.modelSelection, queue: false)
+            let payload = OrchestrationCommands.message(threadId: target.rawValue, messageId: UUID().uuidString.lowercased(), text: message.text,
+                                                        selection: selection ?? sideChat.modelSelection, queue: false,
+                                                        attachments: message.attachments, context: message.context)
             do { _ = try await environments.dispatch(scoped, payload) } catch {
                 toast("Could not send the side chat message.", error)
                 discard()
                 return false
             }
+        } else if let selection, let composer {
+            // An empty start seeds the side chat's draft with the parent's model (useSideChat.ts:119-121).
+            composer.pickers.store.pickModel(scoped.rawValue, instance: selection.instanceId, model: selection.model,
+                                             composer.pickers.context)
         }
         // The parent may have changed while the fork ran; its own panel keeps the tab.
         guard parentId() == parent else { return true }
         panel.mutatePanel { $0.openSideChat(target); return [] }
         // A new side chat focuses its composer (#32929).
-        shown?.chat.composer.focus()
+        shown?.composer?.focusComposer()
         return true
+    }
+
+    // MARK: Keys
+
+    /// Keys pressed in the side chat's pane run its own table first (useChatShortcuts.ts:26-30, 75-95 at 4928).
+    /// F6 from the main chat moves into the shown side chat's composer.
+    // ponytail: F6 visits only the two chats; port workspaceFocus.ts's area cycle (sidebar, panel) when F6 is asked for elsewhere
+    func registerShortcuts(_ shortcuts: Shortcuts) {
+        windowShortcuts = shortcuts
+        shortcuts.nested = { [weak self] in self?.focusedShortcuts() }
+        shortcuts.on(["workspace.focusNext", "workspace.focusPrevious"]) { [weak self] call in
+            guard let s = self?.shown, s.pane.window != nil, let composer = s.composer else { return false }
+            if !call.isRepeat { composer.focusComposer() }
+            return true
+        }
+    }
+
+    private func focusedShortcuts() -> Shortcuts? {
+        guard let s = shown, let responder = s.pane.window?.firstResponder as? NSView, responder.isDescendant(of: s.pane) else { return nil }
+        return s.shortcuts
     }
 
     // MARK: The pane
@@ -151,15 +188,14 @@ final class SideChatController {
     private func show(_ local: ThreadId?) {
         if let old = shown {
             old.session?.end()
+            old.composer?.tearDown()
             old.pane.removeFromSuperview()
             shown = nil
         }
         panel.sideChatHost.show(nil)
-        guard let local, let env = parentId()?.environmentId, let composer else { return }
+        guard let local, let env = parentId()?.environmentId, let composer, let sidebar else { return }
         let id = local.scoped(to: env)
-        let pickers = ComposerPickers(store: composer.pickers.store, draftKey: "side-chat:" + id.rawValue,
-                                      context: ComposerSelectionContext(catalog: ProviderCatalog([])))
-        let s = Shown(id: id, pickers: pickers)
+        let s = Shown(id: id)
         shown = s
         s.chat.isEmbedded = true
         s.chat.model.environmentId = env
@@ -167,22 +203,28 @@ final class SideChatController {
         s.pane.onClose = { [weak self] in self?.panel.mutatePanel { $0.close("side-chat:" + local.rawValue) } }
         s.pane.onDelete = { [weak self] in self?.confirmDelete(id) }
         s.pane.onBringBack = { [weak self] in self?.bringBack(id) }
-        s.chat.composer.footerControls = [pickers.controlsView]
-        s.chat.composer.onSend = { [weak self, weak s] text, mode, _ in
-            guard let self, let s else { return }
-            self.send(text, mode: mode, in: s)
-        }
-        s.chat.composer.onStop = { [weak self, weak s] in
-            guard let self, let s, let run = s.projection?.runs.last(where: { ComposerLogic.RunState(runs: [$0]).canInterrupt })?.id else { return }
-            Task { _ = try? await self.environments.dispatch(id, ThreadRelationshipCommands.interrupt(local, runId: run)) }
+        let chatComposer = ComposerController(panel: s.chat, sidebar: sidebar, environments: environments, embeddedIn: composer)
+        s.composer = chatComposer
+        chatComposer.showThread(id)
+        s.shortcuts.context = { [weak self] in self?.windowShortcuts?.context() ?? KeybindingContext() }
+        chatComposer.registerShortcuts(s.shortcuts)
+        // Shift+F6 (and F6) from the side chat goes back to the main chat's composer.
+        s.shortcuts.on(["workspace.focusNext", "workspace.focusPrevious"]) { [weak self] call in
+            if !call.isRepeat { self?.composer?.focusComposer() }
+            return true
         }
         let session = ThreadSession(threadId: id, panel: s.chat, sidebar: nil, cache: environments.threadCache)
-        session.onProjection = { [weak self, weak s] projection, onlyStreamingText in
-            guard let self, let s, !onlyStreamingText else { return }
+        session.onProjection = { [weak self, weak s, weak chatComposer] projection, onlyStreamingText in
+            if onlyStreamingText {
+                chatComposer?.projectionTextChanged(projection, threadId: id)
+                return
+            }
+            chatComposer?.projectionChanged(projection, threadId: id)
+            guard let self, let s else { return }
             s.projection = projection
-            s.chat.composer.runState = ComposerLogic.RunState(runs: projection?.runs ?? [])
             self.syncPane()
         }
+        session.onStatus = { [weak chatComposer] status in chatComposer?.threadStatusChanged(status, threadId: id) }
         if let shellSession = environments.session(env) { session.attach(shellSession) }
         s.session = session
         panel.sideChatHost.show(s.pane)
@@ -203,30 +245,6 @@ final class SideChatController {
         s.pane.apply(.init(title: sideChat?.title, bringBackBlockedReason: blocked, bringingBack: s.bringingBack,
                            canDelete: canOperate && sideChat != nil, deleting: s.deleting,
                            deleted: sideChat == nil && sidebar?.snapshot != nil))
-        if let config = composer?.config(env) {
-            let project = sidebar?.snapshot?.projects.first { $0.id == sideChat?.projectId }
-            s.pickers.update(context: ComposerSelectionContext(
-                catalog: ProviderCatalog(config.providers, settings: ServerSettingsValues(config.settings.raw), projectId: sideChat?.projectId.localId.rawValue),
-                thread: sideChat, projectDefaultModel: project?.defaultModelSelection, serverDefaults: config.settings,
-                hasStartedSession: ComposerLogic.QueueState.hasStartedSession(s.projection),
-                supportsProviderHandoff: ComposerLogic.QueueState.supportsProviderHandoff(s.projection)))
-        }
-    }
-
-    /// The side chat's own composer: a plain `message.dispatch`, queued behind its running turn.
-    // ponytail: text only; attachments, chips, `/` commands and drafts stay with the main composer until side chats need them
-    private func send(_ text: String, mode: ComposerLogic.SendMode, in s: Shown) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let sideChat = shell(s.id) else { return }
-        let payload = OrchestrationCommands.message(threadId: s.id.localId.rawValue, messageId: UUID().uuidString.lowercased(), text: trimmed,
-                                                    selection: s.pickers.current.modelSelection ?? sideChat.modelSelection, queue: mode == .queue)
-        s.chat.composer.text = ""
-        Task { [weak self] in
-            do { _ = try await self?.environments.dispatch(s.id, payload) } catch {
-                s.chat.composer.text = text
-                self?.toast("Could not send the side chat message.", error)
-            }
-        }
     }
 
     /// `bringBack` (SideChatPane.tsx:70-92): `thread.merge_back` of the latest finished run into the parent.

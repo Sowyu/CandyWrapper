@@ -49,6 +49,10 @@ import Testing
         #expect(keymap.resolve(KeyStroke(key: "k"), context: ctx) == nil)
         // Extra modifiers never match a shorter chord.
         #expect(keymap.resolve(cmd("k", alt: true), context: ctx) == nil)
+        // F6 and Shift+F6 move between workspace areas (shared keybindings.ts:59-63 at 4928).
+        #expect(keymap.resolve(KeyStroke(key: "f6"), context: ctx) == "workspace.focusNext")
+        #expect(keymap.resolve(KeyStroke(key: "f6", shift: true), context: ctx) == "workspace.focusPrevious")
+        #expect(keymap.resolve(KeyStroke(key: "f6", meta: true, shift: true), context: KeybindingContext(["editableFocus": true])) == "workspace.focusPrevious")
     }
 
     @Test func shiftedPunctuationUsesThePhysicalKey() {

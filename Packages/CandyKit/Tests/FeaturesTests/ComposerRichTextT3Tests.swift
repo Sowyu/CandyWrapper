@@ -130,6 +130,51 @@ struct ComposerRichTextT3InlineTests {
         #expect(ComposerRichText.parse(text) == [Span(text: text, marks: [])])
     }
 
+    // #36363 and #37495 (composer-rich-text.test.ts:57-110 at 4928): underscores in URLs, paths and file names
+    // stay literal, in any script.
+    @Test(arguments: [
+        "Read https://example.com/_handle_/status/1 and open src/__test__.tsx",
+        "https://example.com/~_user_/a",
+        "_build_/file.ts",
+        "edit __init__.py, then",
+        "see __init__.py:42",
+        "open src/_a.ts_ and example.com/_handle_.",
+        "/" + String(repeating: "_", count: 50_000) + "a",
+        "привет_мир_ и_ещё",
+    ])
+    func keepsUnderscoresInsideURLsPathsAndFilenamesLiteral(_ text: String) {
+        #expect(ComposerRichText.parse(text) == [Span(text: text, marks: [])])
+    }
+
+    @Test(arguments: [
+        ("_see src/a_b.ts_ now", "see src/a_b.ts", ComposerRichText.Mark.italic, " now"),
+        ("_read/write access_ now", "read/write access", .italic, " now"),
+        ("__read/write access__ now", "read/write access", .bold, " now"),
+        ("_see src/_a.ts_(optional)", "see src/_a.ts", .italic, "(optional)"),
+        ("__see src/__a.ts__(optional)", "see src/__a.ts", .bold, "(optional)"),
+        ("_see src/_a.ts_.", "see src/_a.ts", .italic, "."),
+        ("_notes.md_ here", "notes.md", .italic, " here"),
+        ("_файл_один.py_ now", "файл_один.py", .italic, " now"),
+        ("_my_file.py is broken_ now", "my_file.py is broken", .italic, " now"),
+        ("_e.g._ this", "e.g.", .italic, " this"),
+        ("_and_/or", "and", .italic, "/or"),
+    ])
+    func emphasisAroundPathsStillCloses(_ text: String, _ styled: String, _ mark: ComposerRichText.Mark, _ rest: String) {
+        #expect(ComposerRichText.parse(text) == [Span(text: styled, marks: [mark]), Span(text: rest, marks: [])])
+    }
+
+    @Test func emphasisAlternativesAndMixedRuns() {
+        for (text, first, second, mark) in [("_yes_/_no_", "yes", "no", ComposerRichText.Mark.italic), ("__yes__/__no__.", "yes", "no", .bold),
+                                            ("_a_b_/_no_", "a_b", "no", .italic)] {
+            #expect(Array(ComposerRichText.parse(text).prefix(3)) == [Span(text: first, marks: [mark]), Span(text: "/", marks: []), Span(text: second, marks: [mark])])
+        }
+        #expect(ComposerRichText.parse("and/_or_") == [Span(text: "and/", marks: []), Span(text: "or", marks: [.italic])])
+        #expect(ComposerRichText.parse("_build_/file.ts and _x_, __init__.py and __y__") == [
+            Span(text: "_build_/file.ts and ", marks: []), Span(text: "x", marks: [.italic]),
+            Span(text: ", __init__.py and ", marks: []), Span(text: "y", marks: [.bold]),
+        ])
+    }
+
     @Test func rendersTripleMarkersAndNestedStyles() {
         #expect(ComposerRichText.parse("***both***") == [Span(text: "both", marks: [.bold, .italic])])
         #expect(ComposerRichText.parse("*a **b** c*") == [
@@ -211,7 +256,7 @@ struct ComposerRichTextT3InlineTests {
         "- [ ]\n  - [ ] child", "  - [ ] first\n - [ ] second\n  - [ ] child", "**before @README.md after**",
         "*a **b** c*", "*a**b***", "**a*b***", "**a *b* c**", "literal \u{FFFC} **before @README.md after**",
         "- [x] done\n- [ ] next", "- [ ] parent\n  - [ ] child\n  - [ ] sibling\n- [ ] uncle",
-        "- [ ] empty task follows\n- [ ]", "- [ ] **bold** task with @README.md", "para\n- [ ] task\npara",
+        "- [ ] empty task follows\n- [ ]", "- [ ] **bold** task with @README.md", "para\n- [ ] task\n\npara",
         "- [ ]No space stays literal", "-[ ] also literal", "@README.md explain this",
         "@\"docs/My File.md\" and $my-skill please", "snake_case stays literal", "unmatched ** stays literal",
         "**bold** then @README.md then *italic*",
@@ -220,7 +265,7 @@ struct ComposerRichTextT3InlineTests {
         #expect(roundTrip(value) == value)
     }
 
-    @Test(arguments: ["", "\n", "text\n\n", "- [ ]\n- [ ] next\n", "- [ ] parent\n  - [ ] child\n- [ ]", "para\n- [ ] task\npara", "**before @README.md after**"])
+    @Test(arguments: ["", "\n", "text\n\n", "- [ ]\n- [ ] next\n", "- [ ] parent\n  - [ ] child\n- [ ]", "para\n- [ ] task\n\npara", "**before @README.md after**"])
     func mapsEditablePositions(_ value: String) {
         let editor = makeEditor()
         editor.setText(value)
@@ -336,7 +381,7 @@ struct ComposerRichTextT3InlineTests {
         "3. starts at three\n4. four", "01. zero padded\n02. two", "- parent\n  - child\n  - sibling\n- uncle",
         "1. ordered\n   - bullet child\n2. next", "- outer\n  1. inner ordered\n  2. more\n- outer again",
         "-   wide space item", "-", "1.", "- \n- second", "- **bold** item with @README.md", "- [ ] task\n- bullet after",
-        "- bullet\n- [x] task after", "para\n- item\npara", "\t- tab indented\n\t- again", "  - leading indent only",
+        "- bullet\n- [x] task after", "para\n- item\n\npara", "\t- tab indented\n\t- again", "  - leading indent only",
         "- item\n\n- after a blank", "- item one\n```ts\ncode\n```\n- item two", "-no space stays literal",
         "1.no space stays literal", "10. ten\n11. eleven",
     ])
@@ -397,7 +442,7 @@ struct ComposerRichTextT3InlineTests {
         #expect(display(map, markdown: "> quoted\n".count) == 2 + "quoted".count)
     }
 
-    @Test(arguments: ["---", "***", "___", "- - -", "* * *", "-----", "---   ", "text\n---\nmore", "- item\n---\n- item two", "```\n---\n```", "--", "-- -", "---text"])
+    @Test(arguments: ["---", "***", "___", "- - -", "* * *", "-----", "---   ", "text\n\n---\nmore", "- item\n---\n- item two", "```\n---\n```", "--", "-- -", "---text"])
     func roundTripsTheRule(_ value: String) {
         #expect(roundTrip(value) == value)
     }
@@ -432,7 +477,7 @@ struct ComposerRichTextT3InlineTests {
         #expect(lineKinds(editor) == ["heading", "blockquote", "horizontalRule", "paragraph", "horizontalRule", "paragraph"])
     }
 
-    @Test(arguments: [("---", "---"), ("a\n---", "a\n---"), ("---\n", "---")])
+    @Test(arguments: [("---", "---"), ("a\n---", "a\n\n---"), ("---\n", "---")])
     func givesTheCaretALineAfterTheFinalRule(_ value: String, _ expected: String) {
         let editor = makeEditor()
         editor.setText(value)
@@ -449,7 +494,7 @@ struct ComposerRichTextT3InlineTests {
         #expect(blockSources(editor) == ["> ", "> ", ">"])
     }
 
-    @Test(arguments: ["> a\n> b", "> **q** @README.md", "text\n---\nmore", "---\ntext", "# Heading text", "## **b** @README.md"])
+    @Test(arguments: ["> a\n> b", "> **q** @README.md", "text\n\n---\nmore", "---\ntext", "# Heading text", "## **b** @README.md"])
     func mapsEveryDocumentOffsetOfTheBlock(_ value: String) {
         let editor = makeEditor()
         editor.setText(value)
@@ -699,7 +744,8 @@ struct ComposerRichTextT3InlineTests {
         let editor = makeEditor()
         editor.setText("- x")
         type(editor, "**bold** text\n- item\n> quote")
-        #expect(editor.expandedText == "- x**bold** text\n- item\n> quote")
+        // The lines land after the item's line, where 4928 writes the blank line that keeps prose out of the list (#38414).
+        #expect(editor.expandedText == "- x**bold** text\n\n- item\n> quote")
         #expect(editor.string.contains("xbold text"))
     }
 }
@@ -905,6 +951,37 @@ struct ComposerRichTextT3InlineTests {
         #expect(editor.expandedText == prefix + "`hello world`")
         type(editor, " next `typed`")
         #expect(editor.expandedText == prefix + "`hello world` next `typed`")
+    }
+
+    /// #23940 (composer-rich-text-doc.test.ts at 4928): the opening tick typed last formats the code before the closing one.
+    @Test(arguments: ["", "this is a "])
+    func formatsCodeWhenTheOpeningTickIsTypedLast(_ prefix: String) {
+        let editor = makeEditor()
+        type(editor, prefix + "test` after")
+        editor.setSelectedRange(NSRange(location: (prefix as NSString).length, length: 0))
+        type(editor, "`")
+        #expect(editor.string == prefix + "test after")
+        #expect(editor.expandedText == prefix + "`test` after")
+        #expect(editor.selectedRange().location == (prefix as NSString).length)
+        type(editor, "new ")
+        #expect(editor.expandedText == prefix + "`new test` after")
+        editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
+        type(editor, " plain")
+        #expect(editor.expandedText == prefix + "`new test` after plain")
+    }
+
+    @Test func keepsAnOpeningTickLiteralBeforeDoubledTicksAndBoldText() {
+        let doubled = makeEditor()
+        type(doubled, "test``")
+        doubled.setSelectedRange(NSRange(location: 0, length: 0))
+        type(doubled, "`")
+        #expect(doubled.string == "`test``" && codeText(doubled).isEmpty)
+        let bold = makeEditor()
+        bold.toggleMark(.bold)
+        type(bold, "test`")
+        bold.setSelectedRange(NSRange(location: 0, length: 0))
+        type(bold, "`")
+        #expect(codeText(bold).isEmpty)
     }
 
     @Test(arguments: [("````", 2), ("```", 1)])

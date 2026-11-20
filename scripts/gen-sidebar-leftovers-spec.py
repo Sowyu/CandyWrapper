@@ -124,6 +124,13 @@ ISSUE = (f'<button type="button" data-slot="inline-button" class="{INLINE}" aria
          + lucide("circle-dot", "size-3 shrink-0")
          + '<span class="max-w-16 truncate text-xs font-normal text-secondary-label tabular-nums">#128</span></button>')
 add("issue-badge", f'<div class="flex h-7 items-center">{ISSUE}</div>', {"kind": "issue-badge", "key": "#128"})
+# Once `issues.detail` answers, the glyph takes the state's icon and tone (issuePresentation.tsx:33-53, pullRequestIcons.tsx:34-55).
+for state, icon, tone in [("open", "circle-dot", "text-emerald-600 dark:text-emerald-300/90"),
+                          ("completed", "circle-check", "text-violet-600 dark:text-violet-300/90")]:
+    tinted = (f'<button type="button" data-slot="inline-button" class="{INLINE}" aria-label="Issue #128: Sidebar badge, {state}">'
+              + lucide(icon, f"size-3 shrink-0 {tone}")
+              + '<span class="max-w-16 truncate text-xs font-normal text-secondary-label tabular-nums">#128</span></button>')
+    add(f"issue-badge.{state}", f'<div class="flex h-7 items-center">{tinted}</div>', {"kind": "issue-badge", "key": "#128", "state": state})
 
 # SidebarProjectFolderHeader.tsx:65-109 (#21039): open and folded rows.
 for expanded in [True, False]:
