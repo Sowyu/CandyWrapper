@@ -37,6 +37,12 @@ I measured every one of these. The full table and how I measured are in [The num
 
 You only do this once. I sign CandyWrapper with a personal Apple developer certificate, which can't be notarized, so macOS asks the first time. After that the app updates itself from this repo.
 
+### If you have 1.14.14 or older
+
+Download the newest DMG from [Releases](https://github.com/Sowyu/CandyWrapper-native/releases) and install it by hand, once. The app's own updater can't do this step for you.
+
+The Mac I built releases on was returned, and the key that signs updates went with it. Newer versions are signed with a new key, and 1.14.14 and older only trust the old one, so they refuse the update. After one manual install the app updates itself again. Your settings, drafts and paired machines stay as they are.
+
 ## Connecting
 
 If T3 Code's server already runs on your Mac, CandyWrapper uses it. If not, it starts one from your installed T3 runtime and stops it again when you're idle.
