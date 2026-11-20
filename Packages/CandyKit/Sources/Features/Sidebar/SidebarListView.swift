@@ -456,12 +456,22 @@ public final class SidebarListView: DSView {
         // Nothing under a dialog or the palette shows a card (their backdrops cover the rows).
         if window?.contentView?.subviews.contains(where: { $0 is ModalHost || $0 is CommandPaletteOverlay }) == true { return }
         guard let model = hoverCard?(id), let host = row.popupHost else { return }
+        // An open menu (the row's context menu) or popover hides the card, as Base UI's tooltip closes on the press
+        // that opens it (reference 20-sidebar-thread-context-menu). A card due 150ms after the hover must not open
+        // beside a menu that a quick right-click opened first.
+        if host.popups.contains(where: { !$0.isPassive }) { return }
         closeHoverCard()
         let popup = host.open(SidebarThreadHoverCardView(model), trigger: row, anchorRect: (row as? SidebarCardRowView)?.surfaceFrame,
                               placement: PopupPlacement(side: .right, align: .start, sideOffset: 4),
                               // `data-instant`: a card that follows another within the provider timeout skips the motion.
                               motion: instant ? .none : .tooltip, pressesTrigger: false, returnsFocus: false, passive: true)
         hoverPopup = (id, popup)
+        // A press anywhere closes every popup through the host; the row's next hover must open a fresh card.
+        popup.onClose = { [weak self, weak popup] in
+            guard let self, let popup, self.hoverPopup?.popup === popup else { return }
+            self.hoverPopup = nil
+            self.hoverClosedAt = Date()
+        }
     }
 
     /// Data the open card waits on arrived (the checkout's branch): the card updates in place.
