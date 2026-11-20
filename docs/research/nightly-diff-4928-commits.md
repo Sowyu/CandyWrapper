@@ -1004,10 +1004,10 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 1cfd23e7cb | #25236 | palette | fix(web): keep palette project lookups in their environment | left (panels-2): not checked |
-| 977d613611 | #29288 | palette | fix(web): command palette footer hints wrap instead of clipping on narrow viewports | left (panels-2): not checked |
-| b732621b51 | #37315 | palette | fix(clients): command palette skips tasks shown under their parent | left (panels-2): not checked |
-| e0f5acd178 | #38968 | palette | fix(web): the command palette lists a failed thread as Failed, not Waiting | left (panels-2): not checked |
+| 1cfd23e7cb | #25236 | palette | fix(web): keep palette project lookups in their environment | already in CandyWrapper (panels-3): ProjectId carries its environment, so PaletteCommands looks projects up per environment |
+| 977d613611 | #29288 | palette | fix(web): command palette footer hints wrap instead of clipping on narrow viewports | n/a (panels-3): the palette is a fixed 576pt panel and the window's 840pt minimum (MainWindow.swift:40) keeps its hints on one line |
+| b732621b51 | #37315 | palette | fix(clients): command palette skips tasks shown under their parent | already in CandyWrapper (panels-3): PaletteCommands drops threads with !lineage.isListed, which includes delegatedUnderParent (ThreadShell.swift:279) |
+| e0f5acd178 | #38968 | palette | fix(web): the command palette lists a failed thread as Failed, not Waiting | ported (panels-3): a failed run outranks background work's Waiting, SidebarModel.resolveThreadStatusPill, shared by the palette and the sidebar |
 
 ## Small fixes, pr/git (161)
 

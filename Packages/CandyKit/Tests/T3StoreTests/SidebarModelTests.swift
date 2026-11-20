@@ -202,6 +202,9 @@ private func pill(
         #expect(pill(mode: .default, run: failed, runtime: done, visited: "2026-03-09T10:04:00.000Z")?.label == .failed)
         #expect(pill(mode: .default, run: failed, runtime: done, visited: "2026-03-09T10:06:00.000Z") == nil)
         #expect(pill(input: true, run: failed, runtime: done)?.label == .awaitingInput)
+        // #38968: background work holding the thread no longer hides the failure.
+        let watching = [PendingBackgroundTask(taskId: "bg-1", description: "Watch build", kind: .monitor, awaited: true)]
+        #expect(pill(mode: .default, run: failed, runtime: done, tasks: watching)?.label == .failed)
         #expect(S.resolveProjectStatusIndicator([ThreadStatusPill(label: .working, pulse: true), ThreadStatusPill(label: .failed, pulse: false)])?.label == .failed)
     }
 
