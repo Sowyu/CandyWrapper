@@ -362,6 +362,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                           providers: { [weak threads] env in threads?.composer.config(env)?.providers ?? [] })
         updates?.checkEnvironmentUpdates = { [weak everything] in await everything?.check() ?? false }
         updateEverything = everything
+        updates?.trackSwitch = UpdateTrackSwitch(updater: updater, environments: environments, serverUpdates: threads.serverUpdates, window: window,
+                                                 toasts: { [weak settings, weak threads] in settings?.visibleToasts ?? threads?.panel.toasts })
+        environments.observe { [weak self] in self?.updates?.refresh() }
         everything.account = sidebar.accountRow
         sidebar.updatePill.onShowServerUpdates = { [weak settings] in settings?.open(.connections) }
         updates?.holdsServerUpdates = { [weak everything] in everything?.holdsServerUpdates ?? false }

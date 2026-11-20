@@ -127,10 +127,14 @@ extension ConnectionsPageModel {
         public var revokingOthers: Bool
         /// `canRevokeOtherClients`: unknown lists allow it, known ones need another session.
         public var canRevokeOthers: Bool
+        /// "Use in another app (MCP)" first in the header (AuthorizedClientsSettings.tsx:668-672 at 4928). Shown on
+        /// servers with `mcpApprovalCodes`; an older server would only answer the wizard with "Update T3 Code".
+        public var offersMcp: Bool
         public init(summary: String, canRead: Bool, canWrite: Bool, loading: Bool = false, error: String? = nil, links: [PairingLink] = [],
-                    clients: [Client] = [], revokingOthers: Bool = false, canRevokeOthers: Bool = true) {
+                    clients: [Client] = [], revokingOthers: Bool = false, canRevokeOthers: Bool = true, offersMcp: Bool = false) {
             self.summary = summary; self.canRead = canRead; self.canWrite = canWrite; self.loading = loading; self.error = error
             self.links = links; self.clients = clients; self.revokingOthers = revokingOthers; self.canRevokeOthers = canRevokeOthers
+            self.offersMcp = offersMcp
         }
 
         /// `summarizeAuthorizedClients`.
@@ -436,6 +440,7 @@ final class AuthorizedClientsSectionView: BoxView, SettingsGroupRow {
     private let header = FoldHeader()
     private let revokeOthers = ButtonView("Revoke others", variant: .destructiveOutline, size: .xs)
     private let createLink = ButtonView("Create link", icon: .plus, variant: .default, size: .xs)
+    private let useInAnotherApp = ButtonView("Use in another app (MCP)", icon: .plug, variant: .outline, size: .xs)
     private let rule = CALayer()
     private var rows: [NSView & SettingsGroupRow] = []
     private var dividers: [CALayer] = []
@@ -459,17 +464,21 @@ final class AuthorizedClientsSectionView: BoxView, SettingsGroupRow {
         rule.actions = ["position": NSNull(), "bounds": NSNull(), "hidden": NSNull()]
         layer?.addSublayer(rule)
         createLink.iconSize = 12
-        for v in [header, revokeOthers, createLink] as [NSView] { addSubview(v) }
+        useInAnotherApp.iconSize = 12
+        useInAnotherApp.isHidden = true
+        for v in [header, useInAnotherApp, revokeOthers, createLink] as [NSView] { addSubview(v) }
         // `FoldedSettingsSection`'s `CollapsiblePanel` (FoldedSettingsSection.tsx:90): rows slide open over 200 ms.
         header.action = { [weak self] in guard let self else { return }; CollapseMotion.run(in: self) { self.isOpen.toggle() } }
         revokeOthers.action = { [weak self] in self?.actions.revokeOtherClients() }
         createLink.action = { [weak self] in self?.actions.createPairingLink() }
+        useInAnotherApp.action = { [weak self] in self?.actions.useInAnotherApp() }
     }
 
     func configure(_ a: ConnectionsPageModel.Access) {
         header.summary = a.summary
         revokeOthers.isHidden = !a.canWrite
         createLink.isHidden = !a.canWrite
+        useInAnotherApp.isHidden = !a.canWrite || !a.offersMcp
         revokeOthers.title = a.revokingOthers ? "Revoking…" : "Revoke others"
         revokeOthers.isEnabled = !a.revokingOthers && a.canRevokeOthers
         var next: [NSView & SettingsGroupRow] = []
@@ -552,7 +561,7 @@ final class AuthorizedClientsSectionView: BoxView, SettingsGroupRow {
         let w = bounds.width
         // `flex items-center gap-4 px-3 sm:px-4`; the control is `flex shrink-0 items-center` with `gap-2`.
         var x = w - 1 - 16
-        for b in [createLink, revokeOthers] where !b.isHidden {
+        for b in [createLink, revokeOthers, useInAnotherApp] where !b.isHidden {
             let s = b.intrinsicContentSize
             x -= s.width
             b.frame = NSRect(x: x, y: 1 + (44 - s.height) / 2, width: s.width, height: s.height)

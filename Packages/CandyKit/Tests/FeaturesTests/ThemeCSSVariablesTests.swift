@@ -93,4 +93,27 @@ struct ThemeCSSVariablesTests {
         bg.apply(environmentId: "e", themeId: "t", revision: nil)
         #expect(bg.image == nil)
     }
+
+    /// #37843: coming back online retries a download that gave up; a shown image is not fetched again.
+    @Test func backgroundRetriesWhenTheNetworkComesBack() async {
+        let bg = ThemeBackground()
+        bg.sleep = { _ in }
+        var calls = 0
+        var online = false
+        bg.fetch = { _, _ in calls += 1; return online ? Self.png() : nil }
+        bg.apply(environmentId: "e", themeId: "t", revision: "1")
+        while bg.shownKey != nil { await Task.yield() }
+        #expect(calls == 5 && bg.image == nil)
+        online = true
+        bg.networkOnline()
+        while bg.image == nil { await Task.yield() }
+        #expect(calls == 6)
+        bg.networkOnline()
+        await Task.yield()
+        #expect(calls == 6)
+        // Nothing wanted: nothing to retry.
+        let idle = ThemeBackground()
+        idle.fetch = { _, _ in Issue.record("fetched with nothing wanted"); return nil }
+        idle.networkOnline()
+    }
 }

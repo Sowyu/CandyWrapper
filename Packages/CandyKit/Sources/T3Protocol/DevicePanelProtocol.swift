@@ -41,6 +41,9 @@ public struct DevicePanelToolVersions: Codable, Sendable, Equatable {
 public struct DevicePanelHostStatus: Codable, Sendable, Equatable {
     public var status: String
     public var detail: String?
+    /// 4928 (device.ts:254-262): platforms whose listing on a ready host may miss devices.
+    public var incompletePlatforms: [String]? = nil
+    public var androidDiscoveryIncomplete: Bool? = nil
     public var message: String {
         detail ?? (status == "failed" ? "Device support could not start." : status == "installing" ? "Installing device tools…" : status == "starting" ? "Starting device tools…" : status.capitalized)
     }
@@ -60,6 +63,8 @@ public struct DevicePanelState: Codable, Sendable, Equatable {
     public var supportsHostRetry: Bool? = nil
     public var supportsToolUpdate: Bool? = nil
     public var supportsToolInspection: Bool? = nil
+    /// Servers from before Expo hosts ignore `easDeviceHosts` (device.ts:266-268).
+    public var supportsEasHosts: Bool? = nil
     public var devices: [DevicePanelDevice]
     public var sessions: [DevicePanelSession]
     public var onboardingCompleted: Bool

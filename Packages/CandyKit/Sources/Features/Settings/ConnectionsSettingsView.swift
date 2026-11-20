@@ -177,6 +177,8 @@ public struct ConnectionsActions {
     public var revokePairingLink: (String) -> Void = { _ in }
     public var revokeClient: (String) -> Void = { _ in }
     public var revokeOtherClients: () -> Void = {}
+    /// Opens "Use T3 Code in another app (MCP)" on this machine.
+    public var useInAnotherApp: () -> Void = {}
     /// A pending T3 Connect device, by its pairing link id.
     public var approveConnectDevice: (String) -> Void = { _ in }
     public var denyConnectDevice: (String) -> Void = { _ in }

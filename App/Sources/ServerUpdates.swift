@@ -206,19 +206,25 @@ final class ServerUpdates {
         return Task { _ = try? await shell.supervisor.request("server.updateServer", payload: input) }
     }
 
-    func updateQuietly(_ environmentId: String, serverLabel: String) async -> QuietOutcome {
+    /// A Stable/Nightly switch's request for one server: its version, the desktop app's track and the checked migration.
+    struct SwitchTarget { var version: String; var channel: String?; var databaseMigration: Int? }
+
+    func updateQuietly(_ environmentId: String, serverLabel: String, switchTarget: SwitchTarget? = nil) async -> QuietOutcome {
         guard tasks[environmentId] == nil else { return .skipped }
         quietFailures[environmentId] = nil
-        start(environmentId, serverLabel: serverLabel, quiet: true)
+        start(environmentId, serverLabel: serverLabel, quiet: true, switchTarget: switchTarget)
         guard let task = tasks[environmentId] else { return .skipped }
         await task.value
         return quietFailures.removeValue(forKey: environmentId).map { .failed($0) } ?? .updated
     }
 
-    private func start(_ environmentId: String, serverLabel: String, failureTitle: String = ServerUpdateCopy.failureTitle, quiet: Bool = false) {
+    private func start(_ environmentId: String, serverLabel: String, failureTitle: String = ServerUpdateCopy.failureTitle, quiet: Bool = false,
+                       switchTarget: SwitchTarget? = nil) {
         guard ownRuntimeState(environmentId) == nil, !isOwnServer(environmentId),
-              tasks[environmentId] == nil, canUpdate(environmentId), let shell = environments.session(environmentId),
-              let mismatch = mismatch(environmentId) else { return }
+              tasks[environmentId] == nil, canUpdate(environmentId), let shell = environments.session(environmentId) else { return }
+        // A track switch names its own target, which may be older than this client or than the server.
+        let found = switchTarget.flatMap { t in descriptor(environmentId).map { (server: $0.serverVersion, client: t.version) } }
+        guard let mismatch = found ?? mismatch(environmentId) else { return }
         let caps = capabilities(environmentId)
         let from = mismatch.server
         let continueThreads = caps.threadContinuation && continueThreads(environmentId)
@@ -227,7 +233,8 @@ final class ServerUpdates {
         tasks[environmentId] = Task { [weak self] in
             do {
                 let result = try await ServerUpdater.run(supervisor: shell.supervisor, targetVersion: mismatch.client,
-                                                         continueRunningThreads: continueThreads, capabilities: caps) { stage, target in
+                                                         continueRunningThreads: continueThreads, capabilities: caps,
+                                                         channel: switchTarget?.channel, targetDatabaseMigration: switchTarget?.databaseMigration) { stage, target in
                     await MainActor.run {
                         self?.states[environmentId] = .running(stage: stage, fromVersion: from, targetVersion: target)
                         self?.changed()

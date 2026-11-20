@@ -562,6 +562,24 @@ public final class GeneralSettingsView: SettingsPageBase {
             track.isEnabled = !self.context.changingUpdateTrack
         }
         let trackRow = row("update-track", title: "Update track", detail: "Use stable releases or nightly builds. Switch back anytime.", control: track)
+        binder.add { [weak self, weak trackRow] in
+            guard let self, let trackRow else { return }
+            guard self.context.trackSwitchAvailable else {
+                trackRow.detailLink = nil
+                trackRow.detail = "Use stable releases or nightly builds. Switch back anytime."
+                return
+            }
+            let selected = (self.context.update?.channel ?? .latest).rawValue
+            let n = self.context.unswitchedMachines
+            let line = UpdateTrackSwitchLogic.trackLine(unswitched: n, selected: selected)
+            if trackRow.detail != line { trackRow.detail = line }
+            if n > 0 {
+                let review: @MainActor () -> Void = { [weak self] in self?.context.reviewTrackSwitch?() }
+                trackRow.detailLink = (title: "Review", action: review)
+            } else {
+                trackRow.detailLink = nil
+            }
+        }
         let policy = ButtonView("View policy", variant: .outline, size: .sm)
         policy.action = { [weak self] in self?.context.openURL?(URL(string: "https://t3.codes/privacy")!) }
         let privacy = row("privacy-policy", detail: "How we handle your data, including the anonymous usage data T3 Code collects.", control: policy)
@@ -701,8 +719,15 @@ final class SettingsModelPickerControl: DSView {
     private var catalog: ProviderCatalog {
         let target = context.scope.target
         let settings = target.flatMap { t in context.scope.environments.first { $0.id == t.environmentId }?.settings }
-        return ProviderCatalog(context.providers, settings: settings, projectId: target?.projectId)
+        guard Self.textKeys.contains(key) else { return ProviderCatalog(context.providers, settings: settings, projectId: target?.projectId) }
+        // The text pickers also offer the environment's text generators (useTextGenerationTargets, textGenerators.ts:294-349).
+        let env = target?.environmentId ?? context.scope.primaryId
+        let envSettings = context.scope.environments.first { $0.id == env }?.settings
+        let selected = [key, "textGenerationModelSelection"].compactMap { try? context.scope.values[$0].decode(as: ModelSelection.self) }
+        let providers = context.textGenerationProviders(environment: env, settings: envSettings, selected: selected)
+        return ProviderCatalog(providers, settings: settings, projectId: target?.projectId)
     }
+    static let textKeys: Set<String> = ["textGenerationModelSelection", "sourceControlWriterModelSelection"]
 
     /// The selection shown: the setting, else the first ready provider's default (`resolveDefaultProviderModelSelection`).
     private var selection: (ProviderInstanceEntry, String)? {

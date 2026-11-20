@@ -51,6 +51,11 @@ final class UpdateUI {
         pill?.update = showsRuntime ? runtime.state : updater.state
         settings?.pageContext.update = updater.state
         settings?.pageContext.runtimeUpdate = runtime.state.enabled ? runtime.state : nil
+        if let trackSwitch, let c = settings?.pageContext {
+            c.trackSwitchAvailable = trackSwitch.available
+            c.unswitchedMachines = c.trackSwitchAvailable ? trackSwitch.unswitched(selected: updater.state.channel) : 0
+            c.reviewTrackSwitch = { [weak self] in guard let self else { return }; self.trackSwitch?.present(self.updater.state.channel) }
+        }
         settings?.refreshPages()
     }
 
@@ -171,7 +176,16 @@ final class UpdateUI {
         }
     }
 
+    /// The Stable/Nightly switch for every machine; set once the app has its environments.
+    var trackSwitch: UpdateTrackSwitch?
+
     private func setTrack(_ channel: DesktopUpdateState.Channel) {
+        // A 4928 primary server can look up the release, so the switch moves every machine (SettingsPanels.tsx:401-406).
+        if let trackSwitch, trackSwitch.available {
+            trackSwitch.present(channel)
+            refresh()
+            return
+        }
         setSettingsFlag { $0.changingUpdateTrack = true }
         do { _ = try updater.setChannel(channel) } catch {
             toast("Could not change update track", error.localizedDescription)

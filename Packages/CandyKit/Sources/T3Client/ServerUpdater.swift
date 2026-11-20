@@ -21,11 +21,14 @@ public enum ServerUpdater {
     }
 
     /// `onStage` runs on every stage change. Throws `Failure`, or `CancellationError` when cancelled.
+    /// `channel` and `targetDatabaseMigration` go only with a Stable/Nightly switch (ServerUpdateAction.tsx:146-156 at 4928).
     public static func run(supervisor: ConnectionSupervisor, targetVersion requested: String, continueRunningThreads: Bool,
-                           capabilities: ServerUpdateCapabilities, resumeTimeout: Duration = ServerUpdateLogic.resumeTimeout,
+                           capabilities: ServerUpdateCapabilities, channel: String? = nil, targetDatabaseMigration: Int? = nil,
+                           resumeTimeout: Duration = ServerUpdateLogic.resumeTimeout,
                            nudgeInterval: Duration = .seconds(1),
                            onStage: @escaping @Sendable (ServerUpdateStage, String) async -> Void) async throws -> ServerSelfUpdateResult {
-        let input = ServerUpdateLogic.input(targetVersion: requested, continueRunningThreads: continueRunningThreads)
+        let input = ServerUpdateLogic.input(targetVersion: requested, continueRunningThreads: continueRunningThreads,
+                                            channel: channel, targetDatabaseMigration: targetDatabaseMigration)
         // Without a session a lost unary call would pass for the handoff.
         guard let connection = await supervisor.currentConnection else { throw Failure("The server is not connected.") }
         await onStage(.downloading, requested)

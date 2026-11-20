@@ -483,6 +483,14 @@ final class PaletteCommands {
                                             DispatchQueue.main.async { if let window = self?.window { guestShare?.present(id, in: window) } }
                                         }, keepOpen: false)))
         }
+        // "Use T3 Code in another app (MCP)" (CommandPalette.tsx:1710-1736 at 4928), on the open thread's environment.
+        actions.append(PaletteEntry(value: "action:use-in-another-app",
+                                    searchTerms: ["mcp", "connector", "another app", "poke", "claude", "chatgpt", "grok", "muse", "instinct", "openclaw", "hermes"],
+                                    title: "Use T3 Code in another app (MCP)", icon: .plug,
+                                    action: .run({ [weak self] in
+                                        let env = self?.threads.openThreadId?.environmentId
+                                        DispatchQueue.main.async { self?.settings.presentUseInAnotherApp(env) }
+                                    }, keepOpen: false)))
         // "Restart agent session" (CommandPalette.tsx:1993-2036).
         if let id = threads.openThreadId, let thread = sidebar?.snapshot?.threads.first(where: { $0.id == id }) {
             actions.append(PaletteEntry(value: "action:restart-agent-session",

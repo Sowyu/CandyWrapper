@@ -478,7 +478,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| be6ff17f51 | #25259 | device | feat(devices): lease simulators and emulators from a Simlock pool (alpha) | skip: alpha simulator pool, new feature list |
+| be6ff17f51 | #25259 | device | feat(devices): lease simulators and emulators from a Simlock pool (alpha) | partly (settings-5): the Device sources section this commit introduced (DeviceSourcesSettings.tsx) replaces Device hosts: local simulators, SSH hosts grouped across environments, Expo rows on supporting servers; the Simlock pool stays out by the user's choice |
 | be7d86fa66 | #26706 | device | feat(devices): Simlock setup uses each machine's agent-device token, checks tokens, and lists the pool through worker reconnects | skip: alpha simulator pool |
 | 812c0a71c7 | #26797 | device | feat(devices): support Android EAS Simulator sessions | skip: EAS simulator sessions, device alpha |
 | d06ba27166 | #35994 | device | fix(device): Simlock viewer stops retrying an ended lease and keeps its reason | skip: Simlock viewer |
@@ -496,7 +496,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| f2943ee90e | #26288 | connections | feat(updates): switch your whole fleet between Stable and Nightly in one step | left (settings-3): wire ready (ServerNpmRelease, ServerUpdateLogic.input channel/targetDatabaseMigration); needs UpdateTrackSwitchDialog.tsx:43-227 as a native dialog, updateTrackSwitch.logic.ts and the Sparkle reinstall for this app |
+| f2943ee90e | #26288 | connections | feat(updates): switch your whole fleet between Stable and Nightly in one step | ported (settings-5): UpdateTrackSwitchLogic (collectChannelSwitchTargets, database checks, awaitsTrackSwitch, nothingToMove) and App UpdateTrackSwitch: the Update track select asks the primary for `server.getNpmRelease`, shows who moves and who stays, saves the Sparkle channel and updates each server with `channel` and `targetDatabaseMigration`; Nightly to Stable keeps this app's build until Stable passes it, no Sparkle downgrade; CandyWrapper's own server keeps its runtime's track |
 
 ## New feature secrets (10)
 
@@ -619,7 +619,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| eb97d82156 | #33147 | pr/git | feat: text generators let model APIs write titles, commits, and transcript cleanup | port; needs wire: text generator settings |
+| eb97d82156 | #33147 | pr/git | feat: text generators let model APIs write titles, commits, and transcript cleanup | ported (settings-5): Text generators section on Providers with the Connect and Use it wizard, Show models and Remove; `server.listTextGeneratorModels`; generators join the text generation and commit message pickers. The key goes to the server in `server.updateSettings` like the usage hub key; voice cleanup and 1Password secret sources left out |
 
 ## New feature model-mentions (1)
 
@@ -686,7 +686,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | 7d32075e37 | #36680 | settings | feat(web): themes can use full-size background images | ported (settings-4): ThemeBackground mints environment-theme-background through assets.createUrl on the primary environment, decodes once, retries at 1, 2, 4 and 8 s and shows it behind the main panel while the theme's CSS uses var(--theme-background-image); App/Sources/ThemeBackgroundController.swift |
-| b75424062a | #37843 | settings | fix(web): retry a failed theme wallpaper download when back online | partly (settings-4): failed downloads retry on the next theme change and when the window shows again; no network-online hook yet |
+| b75424062a | #37843 | settings | fix(web): retry a failed theme wallpaper download when back online | ported (settings-5): PlatformSignals posts NetworkSignals.online on an offline-to-online path change and ThemeBackground.networkOnline retries a download that gave up; no timer |
 | 49c3ab8632 | #37981 | settings | fix(web): published background no longer shows under a saved theme with the same id | ported (settings-4): ThemeBackground mints environment-theme-background through assets.createUrl on the primary environment, decodes once, retries at 1, 2, 4 and 8 s and shows it behind the main panel while the theme's CSS uses var(--theme-background-image); App/Sources/ThemeBackgroundController.swift |
 | 28d2262083 | #38132 | pr/git | fix(web): theme wallpaper stays in the live preview when connectivity returns | port |
 
@@ -938,7 +938,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 09ace626bb | #28323 | device | fix(web): device tools keep the typed text when a command fails | already in CandyWrapper (panels-3): DeviceToolsDrawerView never clears a field after a command, so a failure keeps the text; T3 also clears it after success, which CW does not |
 | a821f039c1 | #29352 | device | fix(client-runtime): connection diagnosis no longer blames the host while this device's sign-in loads | left (settings-6): ConnectionDiagnosis should not blame the host while this device's sign-in loads (diagnosis.ts); needs the T3 Connect loading state passed in |
 | 3ee55151e0 | #29912 | device | fix(web): device host checks show the error without a stack trace | n/a (panels-3): CandyWrapper shows the server's message for a host check, never an Effect cause with a stack |
-| 202d5b5616 | #25971 | device | fix(devices): keep devices listed when simulator discovery fails | skip (panels-3): the discovery warning popover with Retry needs a device host whose discovery fails to check; the sandbox has no device runtime |
+| 202d5b5616 | #25971 | device | fix(devices): keep devices listed when simulator discovery fails | skip (panels-3): the discovery warning popover with Retry needs a device host whose discovery fails to check; the sandbox has no device runtime; settings-5 shows "iOS/Android list may be incomplete" in Device sources |
 | f475de2f75 | #27030 | device | fix(web): device tool update buttons fit their popovers | n/a (panels-3): CandyWrapper has no device tool update buttons yet (parity-checklist Device tools drawer, tool versions remain) |
 | aa37097093 | #35664 | device | fix(web): streamed device toolbar starts at the panel size | n/a (panels-3): a streamed browser tab in CandyWrapper sizes from its own view's bounds, not a published panel rect |
 | 9e32c95576 | #33199 | device | fix(client-runtime): show routes whose host refused this device's sign-in | left (settings-6): routes a host refused this device's sign-in need the driver's refusal state in EnvironmentRoutesList |
@@ -1236,7 +1236,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 0815d98cd7 | #34178 | settings | fix(web): make Q&A option outlines visible across themes | held for the composer agent: Q&A option outlines are ComposerPendingUserInputPanel's |
 | 43821388a9 | #18187 | settings | fix(web): focus the primary action when confirmation dialogs open | ported (settings-6): a confirmation dialog opens with its primary action focused (ModalHost.trapFocus) |
 | 0e1f01ec85 | #14493 | settings | fix(web): keep grouped project icons consistent in settings | left: Settings > Projects shows the first connected member's icon; matching T3 needs the sidebar group's own representative (`scopeProjectSettingsGroup`) passed in SettingsScopeProject |
-| 477845733d | #27484 | settings | fix(web): track switch dialog no longer offers a switch that moves nothing | left (settings-3): with #26288, nothingToMove in updateTrackSwitch.logic.ts |
+| 477845733d | #27484 | settings | fix(web): track switch dialog no longer offers a switch that moves nothing | ported (settings-5): nothingToMove in UpdateTrackSwitchLogic |
 | 940b7a4160 | #30841 | settings | fix(web): screen readers can browse and Tab through the settings sections again | left: Tab already moves through the route modal (AppRouteModalView.moveFocus); browsing sections with VoiceOver needs the nav groups above |
 | cff8bfcef0 | #23479 | settings | fix(web): keep model favorites usable after disabling a provider | ported (settings-6): Settings > Providers keeps a row for a favorite the provider no longer reports, so its star can be cleared (ProvidersLogic.displayModels); the composer picker half is held for the pickers agent |
 | 338e73859a | #23568 | settings | fix(web): thread shortcuts work with the narrow sidebar closed | held for the sidebar agent: thread shortcuts with the narrow sidebar closed |

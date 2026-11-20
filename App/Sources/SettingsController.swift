@@ -97,6 +97,8 @@ final class SettingsController {
     var linkPollVisibility: NSObjectProtocol?
     /// Linked environments by host environment id, read once per visit (SettingsLinkedEnvironments.swift).
     var peerLinks: [String: PeerLinkLoad] = [:]
+    /// The open "Use T3 Code in another app (MCP)" wizard.
+    var mcpWizard: McpWizardState?
     /// "host/peer" keys whose Forget is in flight.
     var forgettingLinks: Set<String> = []
     /// The open Add Environment form, for errors and the Adding state.
@@ -107,10 +109,10 @@ final class SettingsController {
         self.threadPanel = threadPanel
         self.environments = environments
         self.t3 = t3
-        environments.observe { [weak self] in self?.refresh() }
+        environments.observe { [weak self] in self?.refresh(); self?.mcpRefresh() }
         environments.observeShell { [weak self] in self?.shellChanged() }
         t3.toast = { [weak self] title, message, kind in self?.toast(title, message, kind) }
-        t3.observe { [weak self] in self?.refresh() }
+        t3.observe { [weak self] in self?.refresh(); self?.mcpRefresh() }
     }
 
     private func buildViews() {
@@ -149,6 +151,7 @@ final class SettingsController {
         actions.revokePairingLink = { [weak self] id in self?.revokePairingLink(id) }
         actions.revokeClient = { [weak self] id in self?.requestRevokeClient(id) }
         actions.revokeOtherClients = { [weak self] in self?.requestRevokeOtherClients() }
+        actions.useInAnotherApp = { [weak self] in self?.presentUseInAnotherApp() }
         actions.approveConnectDevice = { [weak self] id in self?.approveConnectDevice(id) }
         actions.denyConnectDevice = { [weak self] id in self?.denyConnectDevice(id) }
         actions.revokeConnectDevice = { [weak self] id in self?.requestRevokeConnectDevice(id) }

@@ -107,7 +107,7 @@ public final class ConcernSettingsView: SettingsPageBase {
             .init(.integrations, [G("browser", "Browsing", rows: ["browser-profiles", "browser-default-profile", "browser-manage-profiles", "browser-link-target", "browser-auto-show-floating-preview", "browser-search-engine", "browser-default-viewport", "browser-default-zoom", "browser-default-appearance"])]),
             .init(.integrations, [G("browser", "Recordings", rows: ["browser-recording-frame-rate", "browser-recording-key-presses", "browser-recording-mouse-presses"])])
         ]
-        case .devices: return [.init(.integrations, scope: true, [G("devices", nil)])]
+        case .devices: return [.init(.integrations, scope: true, [G("devices", nil), G("device-sources", nil), G("device-hosts", nil)])]
         case .worktrees: return [
             .init(.storage, scope: true, [G("storage-notice", nil), G("storage-worktrees", "Creation", rows: ["storage-worktrees-location"])]),
             .init(.general, [G("projects-and-threads", "Defaults", rows: ["start-from-origin"]), G("project-defaults", "Submodules", rows: ["worktree-submodules"])]),

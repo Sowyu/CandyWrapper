@@ -28,6 +28,11 @@ public final class SettingsPageContext {
     /// `isUpdateActionPending` and `isChangingUpdateChannel` (SettingsPanels.tsx:282-283).
     public var updateActionPending = false
     public var changingUpdateTrack = false
+    /// The Stable/Nightly switch (4928): whether the primary server can look up releases, the connected machines still on the
+    /// other track, and Review, which opens the switch again (SettingsPanels.tsx:198-215, 370-395).
+    public var trackSwitchAvailable = false
+    public var unswitchedMachines = 0
+    public var reviewTrackSwitch: (() -> Void)?
     /// The Version row's button: download, install (after the confirm) or check (SettingsPanels.tsx:323-391).
     public var updateButton: (() -> Void)?
     /// `bridge.setUpdateChannel` from the Update track select.
@@ -117,6 +122,53 @@ public final class SettingsPageContext {
     func observe(_ block: @escaping () -> Void) { observers.append(block) }
     /// The app calls this after it changed the context.
     public func didChange() { observers.forEach { $0() } }
+
+    /// Text generator model lists by "environment:id" (`textGeneratorModelsAtom`), shared by the pickers and the
+    /// models dialog. A loaded list stays until `rereadTextGeneratorModels` drops it; nothing refreshes it in the background.
+    var textGeneratorModels: [String: Result<[(id: String, name: String)], TextGeneratorError>] = [:]
+    private var textGeneratorLoads: Set<String> = []
+    struct TextGeneratorError: Error { let detail: String }
+
+    /// Lists a saved generator's models once; `refresh` asks the API again past the server's cache.
+    func loadTextGeneratorModels(environment: String, id: String, refresh: Bool = false, done: ((String?) -> Void)? = nil) {
+        let key = "\(environment):\(id)"
+        guard let request, refresh || (textGeneratorModels[key] == nil && !textGeneratorLoads.contains(key)) else { return }
+        textGeneratorLoads.insert(key)
+        Task { @MainActor [weak self] in
+            var failure: String?
+            do {
+                let result = try await request(environment, "server.listTextGeneratorModels", TextGenerators.listInput(id: id, refresh: refresh))
+                self?.textGeneratorModels[key] = .success(TextGenerators.models(result))
+            } catch {
+                let detail = "\(error)"
+                self?.textGeneratorModels[key] = .failure(TextGeneratorError(detail: detail))
+                failure = detail
+            }
+            self?.textGeneratorLoads.remove(key)
+            done?(failure)
+            self?.didChange()
+        }
+    }
+
+    /// `rereadTextGeneratorModels`: a saved key changed, which the redacted settings cannot show, so lists load again.
+    func rereadTextGeneratorModels(environment: String, id: String) {
+        textGeneratorModels["\(environment):\(id)"] = nil
+    }
+
+    /// The text generation targets of `environment`: its providers plus its enabled generators, loading their lists.
+    func textGenerationProviders(environment: String?, settings: ServerSettingsValues?, selected: [ModelSelection]) -> [ServerProvider] {
+        guard let environment, let settings, TextGenerators.supported(settings) else { return providers }
+        let generators = TextGenerators.list(settings)
+        var models: [String: [(id: String, name: String)]] = [:], errors: [String: String] = [:]
+        for g in generators where g.config.enabled {
+            switch textGeneratorModels["\(environment):\(g.id)"] {
+            case .success(let list)?: models[g.id] = list
+            case .failure(let e)?: errors[g.id] = e.detail
+            case nil: loadTextGeneratorModels(environment: environment, id: g.id)
+            }
+        }
+        return TextGenerators.targets(providers: providers, generators: generators, models: models, errors: errors, selected: selected)
+    }
 
     func patchClient(_ key: String, _ value: JSONValue) { writeClient?([key: value]) }
     func patchServer(_ patch: [String: JSONValue]) { writeServer?(patch) }

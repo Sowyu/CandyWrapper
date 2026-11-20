@@ -108,6 +108,22 @@ struct ServerUpdaterTests {
         await #expect(throws: ServerUpdater.Failure("Server update failed: A server update is already in progress.")) { try await update.value }
     }
 
+    /// A Stable/Nightly switch sends the desktop track and the checked migration with the target (ServerUpdateAction.tsx:146-156).
+    @Test func aTrackSwitchCarriesTheChannelAndMigration() async throws {
+        let (s, h) = await connected(1)
+        let caps = ServerUpdateCapabilities(["serverSelfUpdate": .string("boot-service")])
+        let update = Task {
+            try await ServerUpdater.run(supervisor: s, targetVersion: new, continueRunningThreads: false, capabilities: caps,
+                                        channel: "nightly", targetDatabaseMigration: 42) { _, _ in }
+        }
+        let socket = h.lastSocket!
+        let call = try #require(await request(socket, "server.updateServer"))
+        #expect(call.payload == .object(["targetVersion": .string(new), "channel": .string("nightly"), "targetDatabaseMigration": .number(42)]))
+        let error = RPCTypedError(tag: "ServerSelfUpdateError", fields: ["reason": .string("stop here")])
+        socket.deliver(.exit(requestId: call.id, exit: .failure([.fail(error)])))
+        _ = try? await update.value
+    }
+
     /// Older servers can drop the socket before the unary answer; the ready event's version proves it.
     @Test func aLegacyUnaryHandoffLossCountsAsAccepted() async throws {
         let (s, h) = await connected(2)

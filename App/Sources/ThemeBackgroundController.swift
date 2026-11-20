@@ -34,6 +34,10 @@ final class ThemeBackgroundController {
                 MainActor.assumeIsolated { [weak self] in self?.updateVisibility() }
             })
         }
+        // A failed download retries when the network comes back (#37843); the path monitor pushes this, nothing polls.
+        tokens.append(center.addObserver(forName: NetworkSignals.online, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { ThemeBackground.shared.networkOnline() }
+        })
         update()
     }
 
