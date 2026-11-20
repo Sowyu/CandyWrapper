@@ -37,6 +37,14 @@ struct DitherSettingsLayoutTests {
         }
     }
 
+    /// Translation is not ported: Language says so in one line instead of offering English alone.
+    @Test func languageRowSaysOtherLanguagesAreNotAvailable() {
+        let general = GeneralSettingsView(context: SettingsPagesFidelityTests.context())
+        let row = general.anchor("language") as? SettingsRowView
+        #expect(row?.control == nil)
+        #expect(row?.detail == "Other languages are not available yet in CandyWrapper.")
+    }
+
     @Test func slicesHideTheRestOfThePage() {
         let view = Self.build(.notifications, page: .general)
         let general = view.pages[0] as! GeneralSettingsView

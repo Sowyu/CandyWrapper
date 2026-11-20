@@ -190,7 +190,9 @@ public final class IssuesPageView: DSView {
                 empty.content = ButtonRow([b])
                 bodyView = empty
             case .noTrackers:
-                bodyView = EmptyView(title: "No trackers to read", message: "Add a project whose remote is on a supported tracker.", icon: .circleDot)
+                let empty = EmptyView(title: "No trackers to read", message: "Add a project whose remote is on a supported tracker.", icon: .circleDot)
+                empty.mediaOutsideHeader = true
+                bodyView = empty
             case .list:
                 bodyView = nil
             }
@@ -261,7 +263,7 @@ public final class IssuesPageView: DSView {
                 return item
             }
             var item = MenuItem.submenu(label, icon: current.2, sub)
-            item.shortcut = current.1
+            item.trailingDetail = current.1
             return item
         }
         var items: [MenuItem] = [
@@ -299,7 +301,7 @@ public final class IssuesPageView: DSView {
         }
         var labels = MenuItem.submenu("Labels", icon: .tag, labelItems(""))
         labels.submenuSearch = MenuSearch(placeholder: "Search labels", filter: labelItems)
-        labels.shortcut = chosen.isEmpty ? "Any" : chosen.count == 1 ? chosen[0] : "\(chosen.count) labels"
+        labels.trailingDetail = chosen.isEmpty ? "Any" : chosen.count == 1 ? chosen[0] : "\(chosen.count) labels"
         items.append(labels)
         let assigneeItems: @MainActor (String) -> [MenuItem] = { [weak self] query in
             let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
@@ -322,7 +324,7 @@ public final class IssuesPageView: DSView {
         }
         var assignee = MenuItem.submenu("Assignee", icon: .userRound, assigneeItems(""))
         assignee.submenuSearch = MenuSearch(placeholder: "Search people", filter: assigneeItems)
-        assignee.shortcut = m.assignee ?? "Anyone"
+        assignee.trailingDetail = m.assignee ?? "Anyone"
         items.append(assignee)
         MenuPopupView.show(items, from: filtersButton, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))
     }

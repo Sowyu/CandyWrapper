@@ -21,6 +21,7 @@ final class WelcomeOnboardingController {
     private var lifecycle: (ShellSession, UUID)?
     private var settingsObserver: Int?
     private var page: WelcomePageView?
+    private var waitsForConnection = false
     /// The project to open once its environment's shell lists it.
     private var landing: (env: String, projectId: String)?
     private let landingWait = OnboardingProjectWait()
@@ -119,6 +120,8 @@ final class WelcomeOnboardingController {
         }
     }
     func show() {
+        // Turn on writes through Settings' context, which Settings otherwise wires on its first open.
+        settings?.setUpPageContext()
         guard page == nil, let window, let content = window.contentView, let context = settings?.pageContext,
               let env = environments.primaryId ?? environments.environmentIds.first else { return }
         let model = WelcomePageModel(environmentId: env, label: environments.label(env) ?? "this computer")
@@ -155,11 +158,20 @@ final class WelcomeOnboardingController {
         let page = WelcomePageView(model: model, context: context)
         page.frame = content.bounds
         page.autoresizingMask = [.width, .height]
-        page.topInset = 28
+        page.topInset = SidebarMetrics.topbarHeight // `--workspace-topbar-height` on macOS desktop (index.css:123, WelcomePage.tsx:278)
         content.addSubview(page)
         self.page = page
+        waitsForConnection = true
         sync()
-        readScopes(env)
+    }
+
+    /// `useProjectScans` waits for the connection (WelcomePage.tsx:153), so a page opened before the socket
+    /// keeps its pending scan instead of failing with "not connected"; `sync` runs this on each change.
+    private func startWhenConnected() {
+        guard waitsForConnection, let model = page?.model,
+              environments.state(model.environmentId)?.phase == .connected else { return }
+        waitsForConnection = false
+        readScopes(model.environmentId)
         model.refreshProviders?(nil)
         model.refreshScan()
     }
@@ -176,6 +188,7 @@ final class WelcomeOnboardingController {
         model.cwd = config?.cwd
         model.connectSignedOut = settings?.t3.signedIn == nil
         model.projectRoots = environments.snapshot(env)?.projects.map(\.workspaceRoot) ?? []
+        startWhenConnected()
     }
 
     /// The session's scopes: terminals, providers, imports and the relay (Settings → Sharing & access).

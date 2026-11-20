@@ -573,17 +573,38 @@ final class ScheduledTaskFormView: DSView {
     }
 
     private var baseBranchTask: Task<Void, Never>?
+    /// Whether each ref the picker has read is remote, for the trigger's "(remote)" (BranchToolbar.logic.ts:205-227).
+    private var refIsRemote: [String: Bool] = [:]
+    private func baseBranchLabel(_ d: ScheduledTaskDraft) -> String {
+        d.baseRef.isEmpty ? "Select ref" : BranchToolbarLogic.triggerLabel(worktreePath: nil, mode: .worktree, branch: d.baseRef,
+                                                                          branchIsRemote: refIsRemote[d.baseRef], startFromOrigin: d.startFromOrigin)
+    }
+    /// `WorktreeBaseBranchPicker` reads the refs when it mounts, so its label knows a local branch before the popup opens.
+    private func lookUpBaseRef(_ button: ButtonView) {
+        guard let e = editor, let request = e.context.request, !e.draft.baseRef.isEmpty, refIsRemote[e.draft.baseRef] == nil,
+              let cwd = e.projects.first(where: { $0.projectId == e.selectedProjectId })?.workspaceRoot else { return }
+        let ref = e.draft.baseRef, environmentId = e.environmentId
+        Task { [weak self, weak button] in
+            guard let json = try? await request(environmentId, VcsRPC.listRefs, VcsRPC.listRefsInput(cwd: cwd, query: ref, cursor: nil)),
+                  let page = try? json.decode(as: VcsListRefsResult.self), let self else { return }
+            for r in page.refs { self.refIsRemote[r.name] = r.isRemote == true }
+            if let d = self.editor?.draft, d.baseRef == ref { button?.title = self.baseBranchLabel(d) }
+        }
+    }
     private func showBaseBranch(from trigger: NSView) {
         guard let e = editor, let request = e.context.request,
               let project = e.projects.first(where: { $0.projectId == e.selectedProjectId }) else { return }
         let picker = BranchPickerView()
         picker.selectedValue = e.draft.baseRef
         picker.startFromOrigin = e.draft.startFromOrigin
-        picker.onStartFromOrigin = { [weak e] in e?.draft.startFromOrigin = $0 }
+        picker.onStartFromOrigin = { [weak self, weak e, weak trigger] in
+            e?.draft.startFromOrigin = $0
+            if let self, let d = e?.draft { (trigger as? ButtonView)?.title = self.baseBranchLabel(d) }
+        }
         let popup = picker.present(from: trigger, placement: .dropdown)
-        picker.onPick = { [weak e, weak trigger, weak popup] value in
+        picker.onPick = { [weak self, weak e, weak trigger, weak popup] value in
             e?.draft.baseRef = value
-            (trigger as? ButtonView)?.title = value
+            if let self, let d = e?.draft { (trigger as? ButtonView)?.title = self.baseBranchLabel(d) }
             if let popup { trigger?.popupHost?.close(popup) }
         }
         var query = "", cursor: Int?, refs: [VcsRef] = []
@@ -601,6 +622,7 @@ final class ScheduledTaskFormView: DSView {
                     if next == nil { refs = [] }
                     var known = Set(refs.map(\.name))
                     refs += page.refs.filter { known.insert($0.name).inserted }
+                    for r in page.refs { self.refIsRemote[r.name] = r.isRemote == true }
                     cursor = page.nextCursor
                     picker.rows = refs.map { BranchPickerView.Row(value: $0.name, title: $0.name, badge: $0.isRemote == true ? "Remote" : nil) }
                     picker.hasNextPage = cursor != nil
@@ -651,8 +673,13 @@ final class ScheduledTaskFormView: DSView {
         let pair = ScheduledTaskPairView(field("Project", project, height: 28), field("Workspace", workspace, height: 28))
         rows.append((pair, 50))
         if d.workspaceMode == .worktree {
-            let base = ButtonView(d.baseRef.isEmpty ? "Select branch" : d.baseRef, icon: .gitBranch, variant: .outline, size: .sm)
+            // `Button variant="outline" size="sm" className="w-full justify-between"` (WorktreeBaseBranchPicker.tsx:126-131).
+            let base = ButtonView(baseBranchLabel(d), icon: .gitBranch, variant: .outline, size: .sm)
+            base.trailingIcon = .chevronDown
+            base.justifiesBetween = true
+            base.iconColor = Themed.color(\.mutedForeground)
             base.action = { [weak self, weak base] in if let base { self?.showBaseBranch(from: base) } }
+            lookUpBaseRef(base)
             rows.append(field("Base branch", base, height: 28))
         } else if d.workspaceMode == .existingWorktree {
             let path = InputView(placeholder: "/path/to/checkout", text: d.existingWorktreePath)
@@ -1213,6 +1240,7 @@ final class ScheduledTaskModelPicker: DSView {
         self.editor = editor
         super.init(frame: .zero)
         button.tintsIcon = false
+        button.settingsTrigger = true
         button.action = { [weak self] in self?.open() }
         addSubview(button)
         refresh()
@@ -1223,7 +1251,7 @@ final class ScheduledTaskModelPicker: DSView {
     func refresh() {
         guard let editor else { return }
         if let sel = editor.activeSelection, let entry = catalog.entry(ProviderInstanceId(rawValue: sel.instanceId)) {
-            button.title = entry.models.first { $0.slug == sel.model }.map(ModelNames.trigger) ?? sel.model
+            button.title = entry.models.first { $0.slug == sel.model }.map { ModelNames.trigger($0, driver: entry.driver) } ?? sel.model
             button.icon = ProviderIcon.make(driver: entry.driver, displayName: entry.displayName, size: 16, color: Themed.color(\.contrastMutedForeground))
         } else {
             button.title = "No providers available"

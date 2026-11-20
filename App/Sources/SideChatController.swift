@@ -27,6 +27,9 @@ final class SideChatController {
     /// A start is in flight (`pendingRef`, useSideChat.ts:41): a second one waits for it.
     private var starting = false
     private var shown: Shown?
+    /// The side chat the right panel shows. At launch the panel restores its tab before the parent thread is known,
+    /// and asks only once, so `sync` builds the pane when it can.
+    private var requested: ThreadId?
     private weak var windowShortcuts: Shortcuts?
 
     /// The shown tab's pane, its embedded chat, subscription and composer. The composer is a second
@@ -36,6 +39,8 @@ final class SideChatController {
         let id: ThreadId
         let pane: SideChatPaneView
         let chat = ThreadPanelView()
+        /// "Context from · parent", the chat's list header.
+        let contextDivider = TimelineParentLinkView()
         var session: ThreadSession?
         var composer: ComposerController?
         /// The side chat's composer chords and F6, run while focus is in its pane.
@@ -46,6 +51,8 @@ final class SideChatController {
         init(id: ThreadId) {
             self.id = id
             pane = SideChatPaneView(threadId: id.localId)
+            contextDivider.sideChat = true
+            chat.timeline.setHeader(contextDivider, height: TimelineParentLinkView.height)
         }
     }
 
@@ -94,6 +101,7 @@ final class SideChatController {
             }
         }
         panel.setSideChatTabs(titles: titles, states: states, offered: facts.offered, disabledReason: SideChats.disabledReason(facts))
+        if let requested, shown?.id.localId != requested { show(requested) }
         syncPane()
     }
 
@@ -186,6 +194,7 @@ final class SideChatController {
 
     /// Builds the shown side chat's pane or tears the last one down, so a hidden tab holds nothing.
     private func show(_ local: ThreadId?) {
+        requested = local
         if let old = shown {
             old.session?.end()
             old.composer?.tearDown()
@@ -236,6 +245,9 @@ final class SideChatController {
         guard let s = shown, let env = s.id.environmentId else { return }
         let sideChat = shell(s.id)
         let parent = parentId().flatMap(shell)
+        // The list header of an embedded side chat (ChatView.tsx:918-928, MessagesTimeline.tsx:1206-1230): "Context from"
+        // and the parent's title, which opens nothing since the parent is the view around it.
+        s.contextDivider.parentTitle = parent?.title ?? "Parent thread"
         let canOperate = environments.canOperate(env)
         let mergeRun = s.projection.flatMap(ThreadRelationships.latestMergeBackRun)
         let parentActive = parent.map { [.preparing, .queued, .starting, .running, .waiting].contains($0.activityRunStatus ?? $0.status) } ?? false

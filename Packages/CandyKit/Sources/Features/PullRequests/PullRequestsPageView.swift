@@ -350,7 +350,7 @@ public final class PullRequestsPageView: DSView {
             var item = MenuItem.submenu("\(label)  ·  \(current.label)", icon: PullRequestStyle.optionIcon(current.icon), sub)
             item.title = label
             item.subtitle = nil
-            item.shortcut = current.label
+            item.trailingDetail = current.label
             return item
         }
         var f = m.menuFilters
@@ -366,13 +366,13 @@ public final class PullRequestsPageView: DSView {
         authorItems[0].closesOnClick = true
         for a in m.authors.prefix(10) {
             var item = MenuItem.radio(a.actor.login, checked: f.author?.lowercased() == a.actor.login.lowercased()) { _ in var n = f; n.author = a.actor.login; update(n) }
-            item.shortcut = "\(a.mergedCount) \(a.mergedCount == 1 ? "merge" : "merges") loaded"  // #37651
+            item.trailingDetail = "\(a.mergedCount) \(a.mergedCount == 1 ? "merge" : "merges") loaded"  // #37651
             item.closesOnClick = true
             authorItems.append(item)
         }
         if m.authors.isEmpty { authorItems.append(MenuItem("No authors found", disabled: true)) }
         var author = MenuItem.submenu("Author", icon: .userRound, authorItems)
-        author.shortcut = f.author ?? "Anyone"
+        author.trailingDetail = f.author ?? "Anyone"
         items.append(author)
         // Labels.
         let selected = (f.labels ?? []).flatMap { $0 }
@@ -384,12 +384,12 @@ public final class PullRequestsPageView: DSView {
                 f.labels = names.isEmpty ? nil : names.prefix(10).map { [$0] }
                 update(f)
             }
-            item.shortcut = "\(l.count)"
+            item.trailingDetail = "\(l.count)"
             return item
         }
         if labelItems.isEmpty { labelItems = [MenuItem("No labels found", disabled: true)] }
         var labels = MenuItem.submenu("Labels", icon: .tag, labelItems)
-        labels.shortcut = selected.isEmpty ? "Any" : "\(selected.count) selected"
+        labels.trailingDetail = selected.isEmpty ? "Any" : "\(selected.count) selected"
         items.append(labels)
         items.append(radios("Draft", PullRequestListLogic.draftOptions, f.draft ?? "all") { v in var n = f; n.draft = v == "all" ? nil : v; update(n) })
         items.append(radios("Review", PullRequestListLogic.reviewOptions, f.review ?? "all") { v in var n = f; n.review = v == "all" ? nil : v; update(n) })
@@ -405,7 +405,7 @@ public final class PullRequestsPageView: DSView {
                 return item
             }
             var host = MenuItem.submenu("Host", icon: .plug2, sub)
-            host.shortcut = current?.label
+            host.trailingDetail = current?.label
             items.append(host)
         }
         items.append(.separator)
@@ -428,7 +428,7 @@ public final class PullRequestsPageView: DSView {
             projectItems.append(item)
         }
         var project = MenuItem.submenu("Project", icon: .folderGit2, projectItems)
-        project.shortcut = m.projects.first { $0.key == m.projectKey }?.title ?? "All projects"
+        project.trailingDetail = m.projects.first { $0.key == m.projectKey }?.title ?? "All projects"
         items.append(project)
         MenuPopupView.show(items, from: filtersButton, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))
     }

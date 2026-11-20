@@ -190,8 +190,9 @@ public final class AppRouteModalView: DSView {
     }
     public override func scrollWheel(with event: NSEvent) {}
 
+    /// A tooltip doesn't count: the one a clicked theme card shows kept Escape from closing Settings.
     private var hasPopup: Bool {
-        window?.contentView?.subviews.compactMap { $0 as? PopupHost }.contains { !$0.popups.isEmpty } ?? false
+        window?.contentView?.subviews.compactMap { $0 as? PopupHost }.contains { $0.popups.contains { !$0.isPassive } } ?? false
     }
 
     private func moveFocus(backward: Bool) {

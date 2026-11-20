@@ -61,4 +61,20 @@ struct BackgroundWorkBannerTests {
         #expect(try short([task(.command, "npm test")]) == "Running a command")
         #expect(try short([task(.subagent, "a"), task(.command, "b")]) == "Waiting")
     }
+
+    /// `isBackgroundWorkStopPending` (threadExecution.ts:612-620): Stop reads "Stopping..." until the server answers,
+    /// then while a task it named is listed, for at most 10 s.
+    @Test func stopStaysPendingWhileItsTasksAreListed() {
+        let id = ThreadId("t1"), now = Date()
+        let listed = task(.command, "sleep 60")
+        var request = BackgroundWorkPresentation.StopRequest(threadId: id, taskIds: [listed.taskId])
+        #expect(BackgroundWorkPresentation.stopPending(request, threadId: id, tasks: [listed], now: now))
+        #expect(!BackgroundWorkPresentation.stopPending(request, threadId: ThreadId("t2"), tasks: [listed], now: now))
+        request.retryAt = now.addingTimeInterval(BackgroundWorkPresentation.stopRetryAfter)
+        #expect(BackgroundWorkPresentation.stopPending(request, threadId: id, tasks: [listed], now: now.addingTimeInterval(9)))
+        #expect(!BackgroundWorkPresentation.stopPending(request, threadId: id, tasks: [], now: now))
+        #expect(!BackgroundWorkPresentation.stopPending(request, threadId: id, tasks: [task(.command, "other")], now: now))
+        #expect(!BackgroundWorkPresentation.stopPending(request, threadId: id, tasks: [listed], now: now.addingTimeInterval(10)))
+        #expect(!BackgroundWorkPresentation.stopPending(nil, threadId: id, tasks: [listed], now: now))
+    }
 }

@@ -57,6 +57,26 @@ public enum ThreadUsageLimitRecovery {
 /// `presentPendingBackgroundWork` (threadExecution.ts:281-357): the background work banner's title and items,
 /// subagents first, then commands, monitors and other tasks.
 public enum BackgroundWorkPresentation {
+    /// `BackgroundWorkStopRequest`: the tasks Stop named, and once the server accepted it, when Stop may be tried again.
+    public struct StopRequest: Equatable, Sendable {
+        public var threadId: ThreadId
+        public var taskIds: Set<String>
+        public var retryAt: Date?
+        public init(threadId: ThreadId, taskIds: Set<String>, retryAt: Date? = nil) {
+            self.threadId = threadId; self.taskIds = taskIds; self.retryAt = retryAt
+        }
+    }
+    /// `BACKGROUND_WORK_STOP_RETRY_AFTER_MS`: the Claude adapter forces a stuck query closed after 10 seconds.
+    public static let stopRetryAfter: TimeInterval = 10
+
+    /// `isBackgroundWorkStopPending` (threadExecution.ts:612-620): acceptance does not end the tasks, so an accepted
+    /// Stop stays pending while a task it named is still listed, until its retry time.
+    public static func stopPending(_ request: StopRequest?, threadId: ThreadId, tasks: [PendingBackgroundTask], now: Date = Date()) -> Bool {
+        guard let request, request.threadId == threadId else { return false }
+        guard let retryAt = request.retryAt else { return true }
+        return now < retryAt && tasks.contains { request.taskIds.contains($0.taskId) }
+    }
+
     public struct Item: Equatable {
         public var taskId: String
         public var kind: BackgroundTaskKind

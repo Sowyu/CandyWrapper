@@ -6,6 +6,60 @@ Images live in `~/CandyWrapper-research/sandbox/screen-pass-2-2026-11-20/`, call
 
 The app ran in a 1100 by 780 pt window on a 1x screen. The 4928 sandbox is on port 47392 and the 3824 sandbox on 47391, both with `--fake-t3-connect`. The reconnect test used a private 4928 server on port 47430 with its own `SANDBOX_DIR`. I used 9 real Haiku 5.5 turns. Turn 9 asked for two subagents, and the sandbox's Haiku used `delegate_task`, which started two Sonnet 5.5 children and a few parent continuations.
 
+## Fixes and new verdicts, screen-fixes-2
+
+Branch `screen-fixes-2` from `catchup-4928` fixed and rechecked these items in a real window on the 4928 sandbox. Before and after crops are in `~/CandyWrapper-research/sandbox/screen-fixes-2-2026-11-20/`, called `$F` below. Six Haiku 5.5 turns, each one sentence that asked for one word, no tools and no delegation.
+
+| # | Item | New verdict | Cause and fix | Crops |
+|---|---|---|---|---|
+| 1 | Welcome Turn on | fixed | Settings wired its page context only on its first open, so `request` was nil and the click returned silently. The Welcome page now wires it when it shows. Antigravity turned on, showed "Not installed" with Set up, and appeared in Settings > Providers (turned back off after) | `$F/01-welcome-turn-on-before.png`, `$F/01-welcome-turn-on-after.png` |
+| 2 | Side chat "Context from" | fixed | SideChatController sets the divider as the side chat's list header, a plain label with no hover or tooltip, so the empty placeholder no longer shows (MessagesTimeline.tsx:791, :1206-1230) | `$O/side-chat-pane-default-dark-ours-vs-t3.png`, `$F/02-side-chat-context-divider-after.png` |
+| 3 | Stopping on background work | fixed offscreen, not seen | Stop cleared "Stopping..." as soon as the server accepted it. It now stays while a stopped task is listed, up to 10 s (threadExecution.ts:604-620), tested in BackgroundWorkBannerTests. The sandbox cannot make a background command, since every allowed prompt forbids tools | |
+| 4 | Escape after a theme click | fixed | The clicked card's tooltip sat in the popup host, and the route modal ignored Escape while any popup was open. Tooltips no longer count | `$F/04-settings-theme-click-then-escape-step1-after.png`, `$F/04-settings-theme-click-then-escape-step2-after.png` |
+| 5 | Welcome before the socket | fixed | The scan, provider refresh and scope read now wait for the first connected sync (WelcomePage.tsx:153) | `$F/05-welcome-projects-before-socket-before.png`, `$F/05-welcome-projects-before-socket-after.png` |
+| 6 | Filter values letter-spaced | fixed | Values move from the shortcut slot to `trailingDetail`, on Issues and Pull Requests | `$F/06-issues-filter-values-before.png`, `$F/06-issues-filter-values-after.png` |
+| 7 | One-time task Model and Base branch | fixed | Model uses T3's short name in a bordered settings trigger. Base branch is a full-width button reading "From main (remote)". ButtonView's `justifiesBetween` keeps a leading icon, and a new title lays the label out again | `$O/WRONG-scheduled-task-once-model-and-branch-rows-default-dark-ours-vs-t3.png`, `$F/07-scheduled-once-base-branch-after.png`, `$F/07-scheduled-once-model-after.png` |
+| 8 | "No trackers to read" icon | fixed | The icon was already T3's 18pt glyph in a 36pt card. The gap was the bug: T3 puts the media beside the header, so the gap is 48pt, not 24 | `$F/08-issues-no-trackers-before.png`, `$F/08-issues-no-trackers-after.png` |
+| 9 | Welcome under the traffic lights | fixed | The inset is now T3's 52pt `--workspace-topbar-height` instead of 28 | `$F/09-welcome-scroll-title-bar-before.png`, `$F/09-welcome-scroll-title-bar-after.png` |
+| 10 | Voice | left as the notice | The user does not use dictation | |
+| 11 | Filters focus ring after Views | not reproduced | Six sequences of clicks, Escape and Tab left no ring on Filters. Tab in the search field kept focus there, which may be worth a look | |
+| 12 | Language | fixed | The row now says "Other languages are not available yet in CandyWrapper." with no picker | `$F/11-settings-language-after.png` |
+| | Quote card tooltip | fixed, seen on a reply card | A sent reply card, made with Reply to this response, shows no URL tooltip after a 2 s rest. A quote made from selected text still needs a drag | `$F/quote-reply-card-hover-no-url-tooltip-after.png` |
+
+Found and fixed on the way:
+
+- `/side` with an image moved the image into the side chat but left its chip in the main composer, `$F/side-with-image-sent-image-left-in-composer-before.png`, `$F/side-with-image-composer-cleared-after.png`.
+- A side chat tab restored at launch showed a blank pane until another tab was picked, also on the base build, `$F/side-chat-restored-tab-blank-before.png`, `$F/side-chat-restored-tab-after.png`.
+
+Found and not fixed:
+
+- The Diff panel's Copy path button stays on the last file while the pointer rests in the empty list space below it, and hides once the pointer leaves the panel. T3 hides it off the file (index.css:1312-1316). Bounding `DiffListView.updateFileHover` to the rows did not change it, so the cause is elsewhere. `$F/WRONG-diff-copy-path-stays-below-files.png`.
+- A Diff panel restored at launch read "Loading changes..." and then showed no files until refresh, though the checkout had two changes.
+- The draft hero's "or start without a project" is inert by design (DraftHeroView.swift:133), so the 4928 sandbox cannot get a No project thread.
+
+## Items neither pass reached, screen-fixes-2
+
+| Item | Verdict |
+|---|---|
+| Storage Reclaim confirm dialog | not reached: the sandbox server sends no reclaim recommendation |
+| Turn into project | not reached: 3824 lacks the capability, and 4928 has no No project thread while CandyWrapper's "start without a project" link is inert |
+| Title glimmer | not reached: the new thread's row appeared about 3.5 s after send already titled "Blue", so no rename happened on screen |
+| Folder drop | not reached: needs a Finder drag, outside this task's rules |
+| Project filter notice | not reached: no trigger found |
+| Click after a row slides under the pointer | works as T3: Settle then an immediate click settled the next row, which T3 allows for moves within 500 ms of the user's own press (Sidebar.shiftGuard.ts:5-7). A move the server causes was not produced |
+| Reply card in a sent message | works, `$F/quote-reply-card-hover-no-url-tooltip-after.png` |
+| Model chip in a sent message | not reached: every message used the thread's model |
+| Slow upload's sending state | not reached: with `CANDY_SLOW_LINK=300:0.3` the upload finished before the send. The sent image showed a named placeholder until it loaded, `$F/slow-link-sent-image-placeholder.png` |
+| Resume's click guard | not reached: no interrupted thread |
+| Fallback banner | not reached: needs a provider out of usage |
+| Force stop | not reached: needs an unresponsive Stop |
+| Hide-tests toggle in the Diff panel | works: with a test file added to the sandbox checkout, the tooltip reads "Hide test files" and the toggle hides it, `$F/diff-hide-tests-hover-tooltip.png`, `$F/diff-hide-tests-on.png` |
+| Thread picker dialog | not reached: needs a pull request or issue, and the sandbox has neither |
+| Issue hover card | works as T3's fallback: demo-repo has no GitHub remote, so a GitHub issue link shows its URL tooltip, `$F/issue-link-url-tooltip-no-tracker.png` |
+| Draft picker pin buttons | works: the pin shows on hover, a pinned project keeps it at rest, and unpin restores it, `$F/draft-picker-pin-hover.png`, `$F/draft-picker-pinned-at-rest.png` |
+| F6 and Shift+F6 | works: text typed after each landed in the side chat and then the main composer |
+| `/side` with an image | works after the fix above |
+
 ## Ten images that show the state of the app
 
 1. `/Users/administrator/CandyWrapper-research/sandbox/screen-pass-2-2026-11-20/BROKEN-welcome-turn-on-agent-does-nothing-default-dark.png`

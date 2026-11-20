@@ -27,6 +27,8 @@ final class SettingsController {
     var chooseIconFile: ((String, String, String, Bool, @escaping (String) -> Void) -> Void)?
     // Pages and their shared context (SettingsPages.swift).
     let pageContext = SettingsPageContext()
+    /// Set once the context's closures are wired, which the Welcome page needs before Settings first opens.
+    var pageContextReady = false
     /// Server setting saves, one at a time (audit SU1).
     let settingsWrites = SettingsWriteQueue()
     var scopeSelection = SettingsScopeSelection()
