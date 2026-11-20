@@ -332,6 +332,8 @@ class SidebarRowBase: ControlView {
     /// A press on a thread row moved `dragDistance`: the list starts a thread drag. The point is the
     /// press, in window coordinates.
     final var onBeginDrag: (@MainActor (SidebarRowBase, ThreadId, NSEvent, NSPoint) -> Void)?
+    /// A search result dragged out as thread context (Sidebar.tsx search results `DndContext` at 4928, #28016).
+    final var onBeginSearchDrag: (@MainActor (SidebarRowBase, SidebarSearchResultModel, NSEvent) -> Void)?
     /// A press on a Dither project header moved `dragDistance`: the list starts a section drag.
     final var onBeginGroupDrag: (@MainActor (SidebarProjectHeaderModel, NSEvent) -> Void)?
     /// The lifted row of an in-list drag (Sidebar.tsx:1599-1640, 1755-1757), nil at rest.
@@ -405,6 +407,15 @@ class SidebarRowBase: ControlView {
             released.active = false
             previewState(released)
             onBeginDrag(self, r.id, event, p)
+            return
+        }
+        if let p = pressPoint, case .searchResult(let r)? = item, let onBeginSearchDrag,
+           hypot(event.locationInWindow.x - p.x, event.locationInWindow.y - p.y) >= SidebarListView.dragDistance {
+            pressPoint = nil
+            var released = state
+            released.active = false
+            previewState(released)
+            onBeginSearchDrag(self, r, event)
             return
         }
         if let p = pressPoint, case .projectHeader(let h)? = item, !h.isPinned, !h.folder, let onBeginGroupDrag,
