@@ -683,8 +683,7 @@ final class PaletteCommands {
                     throw SidebarCommands.CommandMessage(errorDescription: "This machine cannot start threads without a project.")
                 }
                 try await TriageLogic.prepare(supported: supportsTriage(env), prepare: {
-                    let client: JSONValue = .object(["label": .string("CandyWrapper"), "deviceType": .string("desktop"),
-                        "os": .string("macOS"), "appVersion": .string(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0")])
+                    let client = TriageLogic.clientMetadata(appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0")
                     let reply = try await environments.request(env, "server.prepareTriage", .object(["client": client]))
                     guard let prompt = reply["prompt"]?.stringValue else { throw SidebarCommands.CommandMessage(errorDescription: "The server returned no triage prompt.") }
                     return prompt

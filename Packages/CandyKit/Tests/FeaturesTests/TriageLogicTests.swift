@@ -24,4 +24,15 @@ struct TriageLogicTests {
         })
         #expect(calls == ["prepare", "show"])
     }
+
+    @Test func playbookLinkFollowsThePreparedMachine() {
+        let old = "Look at [triage-playbook.md](/a/old/triage-playbook.md) and [triage-playbook.md](/a/old/x) now"
+        let prepared = "Start with [triage-playbook.md](/b/new/triage-playbook.md)."
+        #expect(TriageLogic.isTriagePrompt(old))
+        #expect(!TriageLogic.isTriagePrompt("plain"))
+        #expect(TriageLogic.replacePlaybookLink(old, with: prepared)
+            == "Look at [triage-playbook.md](/b/new/triage-playbook.md) and [triage-playbook.md](/b/new/triage-playbook.md) now")
+        #expect(TriageLogic.replacePlaybookLink(old, with: "no link") == old)
+        #expect(TriageLogic.replacePlaybookLink("[triage-playbook.md](unclosed", with: prepared) == "[triage-playbook.md](unclosed")
+    }
 }
