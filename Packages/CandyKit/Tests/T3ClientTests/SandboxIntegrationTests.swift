@@ -8,9 +8,11 @@ import T3Protocol
 /// live service. Opt-in: scripts/test-integration, which fails here when the sandbox isn't running.
 @Suite(.serialized, .integration)
 struct SandboxIntegrationTests {
-    static let baseURL = URL(string: "http://127.0.0.1:47391")!
+    // CW_SANDBOX_URL and CW_SANDBOX_TOKEN point it at another sandbox, like the 4928 one on 47392.
+    static let baseURL = URL(string: ProcessInfo.processInfo.environment["CW_SANDBOX_URL"] ?? "http://127.0.0.1:47391")!
     // From the home folder, not from this file: a worktree under /tmp has no CandyWrapper-research beside it.
-    static let tokenFile = URL(filePath: NSHomeDirectory()).appending(path: "CandyWrapper-research/sandbox/session.token")
+    static let tokenFile = ProcessInfo.processInfo.environment["CW_SANDBOX_TOKEN"].map { URL(filePath: $0) }
+        ?? URL(filePath: NSHomeDirectory()).appending(path: "CandyWrapper-research/sandbox/session.token")
 
     /// Descriptor and cached bearer, or nil when the sandbox isn't usable.
     static func sandbox() async -> (EnvironmentHTTP, EnvironmentDescriptor, String)? {

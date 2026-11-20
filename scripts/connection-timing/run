@@ -1,0 +1,34 @@
+#!/bin/zsh
+# Times CandyWrapper's connection against sandbox servers, headless (ConnectionTimingTests).
+# Usage: scripts/connection-timing/run <out.jsonl> [test filter]
+# Needs the 4928 sandbox on 47392, the 3824 sandbox on 47391, and a private 4928 server for the restart test:
+#   SANDBOX_DIR=~/CandyWrapper-research/sandbox-connection SANDBOX_PORT=47411 scripts/sandbox-server 0.1.11-nightly.20261119.4928
+# Thread ids come from CW_TIMING_SHORT and CW_TIMING_LONG for the private server.
+set -eu
+here="${0:A:h}"
+repo="${here:h:h}"
+out="${1:A}"
+filter="${2:-ConnectionTimingTests}"
+research="$HOME/CandyWrapper-research"
+private="$research/sandbox-connection"
+control="$(mktemp -t cw-freeze)"
+/usr/bin/python3 "$here/freeze-proxy.py" 47421 47411 "$control" > "${out}.proxy.log" 2>&1 &
+proxy=$!
+trap 'kill $proxy 2>/dev/null; rm -f "$control"' EXIT
+sleep 0.5
+cd "$repo/Packages/CandyKit"
+"$repo/scripts/wait-origin"
+run() {
+  CW_TIMING=1 CW_TIMING_OUT="$out" "$@" swift test --no-parallel --filter "$filter" >> "${out}.log" 2>&1 || echo "swift test failed, see ${out}.log"
+}
+# The private 4928 server: threads, restart and half-open.
+run env CW_TIMING_URL=http://127.0.0.1:47411 CW_TIMING_TOKEN="$private/session.token" \
+  CW_TIMING_SHORT="${CW_TIMING_SHORT:-}" CW_TIMING_LONG="${CW_TIMING_LONG:-}" \
+  CW_TIMING_SERVER_DIR="$private" CW_TIMING_SERVER_PORT=47411 CW_TIMING_SERVER_VERSION=0.1.11-nightly.20261119.4928 CW_TIMING_REPO="$repo" \
+  CW_TIMING_PROXY_URL=http://127.0.0.1:47421 CW_TIMING_PROXY_CONTROL="$control"
+# The shared sandboxes: cold connect and config only, nothing that restarts them.
+export CW_TIMING_SHORT= CW_TIMING_LONG=
+for pair in "47392 $research/sandbox-4928/session.token" "47391 $research/sandbox/session.token"; do
+  set -- ${=pair}
+  run env CW_TIMING_URL=http://127.0.0.1:$1 CW_TIMING_TOKEN="$2"
+done
