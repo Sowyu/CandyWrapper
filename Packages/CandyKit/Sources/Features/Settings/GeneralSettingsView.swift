@@ -282,11 +282,9 @@ public final class GeneralSettingsView: SettingsPageBase {
         let time = clientSelect("time-format", "System default follows your browser or OS clock preference.", key: "timestampFormat",
                                 options: [("locale", "System default"), ("12-hour", "12-hour"), ("24-hour", "24-hour")], width: 160,
                                 reset: "time format", label: "Timestamp format")
-        // 4928's Language row (SettingsPanels.tsx:1118-1157). CandyWrapper ships English only, so the choices are
-        // System default and English, and both read in English.
-        let language = clientSelect("language", "System default follows your browser or OS language.", key: "language",
-                                    options: [("system", "System default"), ("en", "English")], width: 160,
-                                    reset: "language", label: "Language")
+        // 4928's Language row (SettingsPanels.tsx:1118-1157) offers ten locales. Translation is not ported, so the row
+        // says so instead of a one-item choice.
+        let language = row("language", detail: "Other languages are not available yet in CandyWrapper.")
         let (streaming, _) = serverSelect("response-streaming", nil, key: "responseStreamingMode",
                                           options: [("turn", "Wait for the full response"), ("paragraph", "Show finished paragraphs")], width: 224,
                                           reset: "response streaming")
