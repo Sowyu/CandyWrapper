@@ -168,77 +168,81 @@ Captures from the desktop app on a real screen instead need the screen lock, the
 
 ## Full-screen tests against reference-4928
 
-Written 2026-11-19 (task screens-4928). `design/reference-4928` now holds the full-screen set, captured from 4928's web client against a sandbox seeded from scratch (its README has the details). Every test that read `design/reference-3824` reads `design/reference-4928`. No ceiling was raised and no app code changed. The test fixtures changed in two places to match the new seed: `fixtures/screen-4928-markdown.md` holds the new Markdown reply, and `Screen3824Fixtures.sidebar` lists the new sidebar rows. Every other fixture still draws 3824's seed data, such as the diff's file list, the palette results and the approval text, so some failures below mix data with real UI changes.
+Rewritten 2026-11-19 (task screens-port). Each line gives the share of differing pixels, then the ceiling, at three points: before alignment (the screens-4928 run), after the fixtures took the 4928 sandbox's data, and after the ports on branch `screens-port`. No ceiling was raised and no case was removed.
 
-I ran `scripts/test --filter` with QueueFidelityTests, ChangedFilesFidelityTests, PickersFidelityTests, ComposerFidelityTests, SettingsScreensFidelityTests, SidebarFidelityTests (both modules), PanelsFidelityTests, ThreadFidelityTests, ReferenceScreensFidelityTests, DiffFidelityTests and PanelScreensFidelityTests. Only QueueFidelityTests passes. The other 10 suites fail on 65 cases, and the DesignSystemTests sidebar fails 2 sampled checks. The numbers are the share of pixels that differ, then the ceiling.
+### Where the data comes from
 
-### Thread, `ThreadFidelityTests` wholePanel, 8 cases
+- The markdown, commands and notes threads are recorded from `sandbox-4928-ref` through `orchestration.subscribeThread` into `fixtures/transcripts/4928-screen-threads.jsonl`. The notes thread's collapsed work rows held the repo's old path under the home folder, and the transcript rewrites it to `/Users/Shared/cw-sandbox-4928/demo-repo`.
+- `fixtures/4928-panel.patch` is `git diff` of that repo, the notes thread's two one-line edits.
+- The sidebar's snoozed and settled threads and the branch per row come from the sandbox's shell snapshot.
+- Palette rows, ages, approval command, questions, commit files, provider versions and the archived thread come from the page text the capture run saved per state. The diagnostics counters come from the PNGs, because that text was read a moment after the screenshot.
+- The screen pickers decode `26-nightly-4928`'s server config, which lists Fable 5.2 as the 4928 picker does.
 
-The text matches the new fixture. The dark panel differs most.
+Failing ceiling cases went from 61 to 36 after alignment and to 35 after the ports. The two DesignSystemTests sidebar checks pass after alignment: their sample rects moved to the 4928 gutter (y 620 px) and the open row (y 1320 px).
 
-- `03a-kitchen-sink-top` light 8.33%, dark 17.51%, ceiling 5.5%
-- `03b-kitchen-sink-middle` light 6.12%, dark 15.30%
-- `03c-kitchen-sink-bottom` light 5.65%, dark 6.30%
-- `03d-kitchen-sink-commands` light 8.61%, dark 8.65%
+The sandbox server was stopped at 17:21 after the captures, and its restart marked the input and approval threads' requests cancelled with a "Server shut down" notice. The fixtures don't read those two threads, but a later capture of 05 or 06 needs them seeded again.
 
-### Sidebar, 4 cases and 2 checks
+### Thread, `ThreadFidelityTests` wholePanel, ceiling 5.5%
 
-4928's default theme draws art behind the sidebar header, and each row puts the project line above the title.
+All pass.
 
-- `SidebarFidelityTests` wholeSidebar `list` light 12.36%, dark 22.03%, ceiling 11%
-- `SidebarFidelityTests` wholeSidebar `below the art` light 14.26%, dark 22.39%, ceiling 11%
-- DesignSystemTests `sidebarGrainAgainstCapture`: the mean differs by 25.7 (light) and 27.6 (dark) against 1.0, and the deviation by 65.6 and 70.1 against 0.5. Its sample rect now lands on the header art.
-- DesignSystemTests `selectedRowFillAgainstCapture`: the mean differs by 24.0 and 26.0 against 1.5. The selected markdown row moved to the bottom of the list.
+- `03a-kitchen-sink-top` light 8.33 → 1.72 → 1.72, dark 17.51 → 1.80 → 1.80
+- `03b-kitchen-sink-middle` light 6.12 → 5.19 → 1.10, dark 15.30 → 5.77 → 1.22. The task items of a loose list had lost their paragraph margins (fabe84dd).
+- `03c-kitchen-sink-bottom` light 5.65 → 2.84 → 4.01, dark 6.30 → 2.61 → 2.45. Light rose with the loose-list fix: its diff outlines every glyph and box from the list down (y 38 to 1144 px), a sub-point vertical offset at the end of the scroll range, not a missing surface.
+- `03d-kitchen-sink-commands` light 8.61 → 1.98 → 1.98, dark 8.65 → 1.97 → 1.97. Still visible: T3 breaks `ls /nonexistent-dir` after `ls`, and AppKit breaks after the slash (Markdown inline code, UAX 14 LB13).
 
-### Composer pickers, `PickersFidelityTests`, 8 cases
+### Narrow, `ReferenceScreensFidelityTests`, ceiling 5.5%
 
-At 4928, 13, 41 and 53 show one docked picker (models, effort column, footer). CandyWrapper still draws 41 and 53 as the 3824 effort popup.
+- `03n-narrow` light 7.36 → 5.36 → 1.67, dark 18.44 → 5.28 → 1.79
 
-- `41-traits-picker` light 29.73%, dark 24.77%, ceiling 5.5%
-- `53-effort-menu-permissions` light 29.73%, dark 24.77%
-- `03c-footer-controls` light 21.43%, dark 21.45%
-- `13-model-picker` light 6.64%, dark 6.62%. The popup is 362x283 in T3 and 362x267 here.
-- `ComposerFidelityTests` `54-composer-effort-bars` dark 13.33%, ceiling 11.5%
+### Diff and changed files, ceilings 8.5% and 7.5%
 
-### Settings, `SettingsScreensFidelityTests`, 22 cases, ceiling 5%
+All pass on the ceilings.
 
-4928 adds settings sections to the sidebar and changes the row grid (see "Settings rows" above).
+- `09-diff-split` light 23.67 → 2.04, dark 24.17 → 2.05
+- `10-diff-unified` light 20.38 → 1.48, dark 20.52 → 1.48
+- `47-changed-files-card.main` dark 14.23 → 1.87 → 1.86
+- `48-diff-turn-file.chat` light 19.45 → 4.19 → 4.16, dark 25.05 → 3.94 → 3.91. "Worked for 4.0s" now reads "4s" (33a1a21a).
+- `48-diff-turn-file.panel` light 13.35 → 0.56, dark 13.32 → 0.53
 
-- `16a-settings-general` light 6.55%, dark 7.13%
-- `16b-settings-general-mid` light 8.50%, dark 9.25%
-- `16c-settings-general-bottom` light 6.21%, dark 7.12%
-- `18-settings-providers` light 7.53%, dark 14.01%
-- `19-settings-keybindings` light 5.23%, dark 5.31%
-- `32-settings-source-control` light 6.13%, dark 6.74%
-- `39-settings-diagnostics` light 6.10%, dark 43.03%. The counters are live, and the dark capture's first card differs most.
-- `40-settings-integrations` light 5.81%, dark 6.28%
-- `49-settings-modal-general` light 6.55%, dark 7.13%
+`cardAndDiff` still fails one expectation: the card can't reach T3's top of 409.25pt in 48, because the timeline stops scrolling with it at 408.5pt. Above the card, the "Worked for" row of a turn with tools sits 1pt higher under the user message than in T3 (03d shows the same 2 px), while 03a's tool-free turn matches. I didn't find the cause.
 
-### Panels and dialogs, `PanelScreensFidelityTests` 9 cases and `PanelsFidelityTests` 2 cases
+### Panels and dialogs, `PanelScreensFidelityTests` and `PanelsFidelityTests`
 
-The fixtures still hold 3824's approval command, palette results and commit file list. Compare the data before reading these as UI changes.
+- `05-approval-request` light 14.16 → 11.82 → 4.80, dark 14.23 → 12.07 → 4.89, ceiling 4%. Still failing. The command now breaks only at spaces as T3's does, with T3's line positions and the font smoothing setting (b3b8eb92). The rows line up at whole pixels, and the per-band means match within 1%. What remains is glyph placement inside the mono text, drifting up to a pixel by the line's end (diff box x 16 to 1232, y 9 to 111 px, spread over all three lines).
+- `22-commit-dialog` light 6.73 → 6.72 → 6.72, dark 7.53 → 7.53 → 7.52, ceiling 6%. Still failing. The description under the title starts 2pt higher than T3's and everything below follows it (diff over the whole crop, 0 to 1135 px). That is the dialogs' shared title style, which the look-4928 agent owns. The total now reads `+2/-0` (8f2060cd).
+- `08-palette-search` light 20.96 → 5.30, dark 11.68 → 5.44, ceiling 6.5%. The palette ends at 326pt with four matches.
+- `45-go-to-file` light 17.06 → 2.49, dark 20.40 → 2.53. The palette ends at 278pt with three files, first row highlighted.
+- `46-project-search` dark 9.35 → 0.86
+- `06-user-input-request` light 5.63 → 2.64, dark 5.75 → 2.79, ceiling 4%
 
-- `05-approval-request` light 14.16%, dark 14.23%, ceiling 4%
-- `22-commit-dialog` light 6.73%, dark 7.53%, ceiling 6%
-- `08-palette-search` light 20.96%, dark 11.68%, ceiling 6.5%
-- `45-go-to-file` light 17.06%, dark 20.40%, ceiling 6.5%
-- `46-project-search` dark 9.35%, ceiling 6.5%
-- `06-user-input-request` light 5.63%, dark 5.75%, ceiling 4%
+### Sidebar, `SidebarFidelityTests` wholeSidebar, ceiling 11%
 
-### Diff and changed files, `DiffFidelityTests` 4 cases and `ChangedFilesFidelityTests` 5 cases
+Left for look-4928. The data matches now, and the difference is the 4928 row and header design.
 
-The diff fixture is 3824's two-file patch with +3 each. The new seed changes one line in each file.
+- `list` light 12.36 → 12.63, dark 22.03 → 13.52. Each 4928 row puts the project line above the title and the branch under it.
+- `below the art` light 14.26 → 14.51, dark 22.39 → 14.61. Same rows, below the header art.
 
-- `09-diff-split` light 23.67%, dark 24.17%, ceiling 8.5%
-- `10-diff-unified` light 20.38%, dark 20.52%, ceiling 8.5%
-- `47-changed-files-card.main` dark 14.23%, ceiling 7.5%
-- `48-diff-turn-file.chat` light 19.45%, dark 25.05%, ceiling 7.5%
-- `48-diff-turn-file.panel` light 13.35%, dark 13.32%, ceiling 7.5%
+### Composer pickers and composer
 
-### Narrow, `ReferenceScreensFidelityTests`, 2 cases
+Left for look-4928.
 
-- `03n-narrow` light 7.36%, dark 18.44%, ceiling 5.5%
+- `41-traits-picker` light 29.73, dark 24.77, and `53-effort-menu-permissions` the same, ceiling 5.5%. Both render the 3824 effort popup into the 3824 rect, while 4928 shows the docked picker (models, Reasoning column, footer) as in 13.
+- `13-model-picker` light 6.65, dark 6.63. The docked popup is 362x283 in T3 and 362x267 here.
+- `03c-footer-controls` light 21.43, dark 21.45. The closed control is one "Haiku 5.5 Medium" trigger at 4928.
+- `54-composer-effort-bars` dark 13.33 → 14.35 → 13.83, ceiling 11.5%. Diff spread over the composer band (x 110 to 1577 px).
 
-### Next step
+### Settings, `SettingsScreensFidelityTests`, ceiling 5%
 
-Before porting from these numbers, bring the remaining fixtures to the 4928 seed: the diff patch from the notes thread, the approval command under `/Users/Shared/cw-sandbox-4928/demo-repo`, the palette thread names and the commit dialog's files. The sandbox stays seeded for that, and the IDs are in `design/reference-4928/plans/sandbox-ids.json`. Then whatever still fails is a real 4928 difference. The dark thread panel and the sidebar header art look like the largest real differences.
+Left for settings-4928. In every case the diff covers the whole 2040x1400 crop: the settings sidebar has 4928's new sections, and the row grid changed.
+
+- `16a` light 6.55, dark 7.13. `16b` light 8.50, dark 9.25. `16c` light 6.21, dark 7.12. `49` as 16a.
+- `18-settings-providers` light 7.53, dark 14.02
+- `19-settings-keybindings` light 5.23, dark 5.31
+- `32-settings-source-control` light 6.13, dark 6.74
+- `39-settings-diagnostics` light 6.10 → 5.71, dark 43.03 → 42.80. The dark cards fill with 8/255 in T3 and 17/255 here, which covers most of the page. Below the counters T3 shows "Host & collection" where CandyWrapper shows "Live Processes".
+- `40-settings-integrations` light 5.81, dark 6.28
+
+### Inventory sections
+
+No failing screen led into 1.7 (subagents) or 5.2 (pull requests), and the diff screens pass, so no row of 5.1 was ported. Rows ported here: orchestrationTiming.ts formatDuration (33a1a21a).
