@@ -496,7 +496,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| f2943ee90e | #26288 | connections | feat(updates): switch your whole fleet between Stable and Nightly in one step | left (settings-3): wire ready (ServerNpmRelease, ServerUpdateLogic.input channel/targetDatabaseMigration); needs UpdateTrackSwitchDialog.tsx:43-227 as a native dialog, updateTrackSwitch.logic.ts and the Sparkle reinstall for this app |
+| f2943ee90e | #26288 | connections | feat(updates): switch your whole fleet between Stable and Nightly in one step | ported (settings-5): UpdateTrackSwitchLogic (collectChannelSwitchTargets, database checks, awaitsTrackSwitch, nothingToMove) and App UpdateTrackSwitch: the Update track select asks the primary for `server.getNpmRelease`, shows who moves and who stays, saves the Sparkle channel and updates each server with `channel` and `targetDatabaseMigration`; Nightly to Stable keeps this app's build until Stable passes it, no Sparkle downgrade; CandyWrapper's own server keeps its runtime's track |
 
 ## New feature secrets (10)
 
@@ -1236,7 +1236,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 0815d98cd7 | #34178 | settings | fix(web): make Q&A option outlines visible across themes | port |
 | 43821388a9 | #18187 | settings | fix(web): focus the primary action when confirmation dialogs open | port |
 | 0e1f01ec85 | #14493 | settings | fix(web): keep grouped project icons consistent in settings | port |
-| 477845733d | #27484 | settings | fix(web): track switch dialog no longer offers a switch that moves nothing | left (settings-3): with #26288, nothingToMove in updateTrackSwitch.logic.ts |
+| 477845733d | #27484 | settings | fix(web): track switch dialog no longer offers a switch that moves nothing | ported (settings-5): nothingToMove in UpdateTrackSwitchLogic |
 | 940b7a4160 | #30841 | settings | fix(web): screen readers can browse and Tab through the settings sections again | port |
 | cff8bfcef0 | #23479 | settings | fix(web): keep model favorites usable after disabling a provider | port |
 | 338e73859a | #23568 | settings | fix(web): thread shortcuts work with the narrow sidebar closed | port |

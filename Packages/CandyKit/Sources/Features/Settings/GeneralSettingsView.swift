@@ -561,6 +561,24 @@ public final class GeneralSettingsView: SettingsPageBase {
             track.isEnabled = !self.context.changingUpdateTrack
         }
         let trackRow = row("update-track", title: "Update track", detail: "Use stable releases or nightly builds. Switch back anytime.", control: track)
+        binder.add { [weak self, weak trackRow] in
+            guard let self, let trackRow else { return }
+            guard self.context.trackSwitchAvailable else {
+                trackRow.detailLink = nil
+                trackRow.detail = "Use stable releases or nightly builds. Switch back anytime."
+                return
+            }
+            let selected = (self.context.update?.channel ?? .latest).rawValue
+            let n = self.context.unswitchedMachines
+            let line = UpdateTrackSwitchLogic.trackLine(unswitched: n, selected: selected)
+            if trackRow.detail != line { trackRow.detail = line }
+            if n > 0 {
+                let review: @MainActor () -> Void = { [weak self] in self?.context.reviewTrackSwitch?() }
+                trackRow.detailLink = (title: "Review", action: review)
+            } else {
+                trackRow.detailLink = nil
+            }
+        }
         let policy = ButtonView("View policy", variant: .outline, size: .sm)
         policy.action = { [weak self] in self?.context.openURL?(URL(string: "https://t3.codes/privacy")!) }
         let privacy = row("privacy-policy", detail: "How we handle your data, including the anonymous usage data T3 Code collects.", control: policy)

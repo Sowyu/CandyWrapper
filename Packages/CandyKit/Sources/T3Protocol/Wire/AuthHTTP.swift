@@ -17,6 +17,8 @@ public struct EnvironmentDescriptor: Codable, Sendable, Equatable {
     public var serverVersion: String
     /// Absent on old hosts, which means 1.
     public var orchestrationProtocolVersion: Int?
+    /// Highest migration the server's database holds (environment.ts:224-225 at 4928); absent on older servers.
+    public var databaseMigration: Int?
     /// Every key but `repositoryIdentity` is optional; absent means unsupported.
     public var capabilities: [String: JSONValue]
 

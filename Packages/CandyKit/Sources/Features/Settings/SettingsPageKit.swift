@@ -28,6 +28,11 @@ public final class SettingsPageContext {
     /// `isUpdateActionPending` and `isChangingUpdateChannel` (SettingsPanels.tsx:282-283).
     public var updateActionPending = false
     public var changingUpdateTrack = false
+    /// The Stable/Nightly switch (4928): whether the primary server can look up releases, the connected machines still on the
+    /// other track, and Review, which opens the switch again (SettingsPanels.tsx:198-215, 370-395).
+    public var trackSwitchAvailable = false
+    public var unswitchedMachines = 0
+    public var reviewTrackSwitch: (() -> Void)?
     /// The Version row's button: download, install (after the confirm) or check (SettingsPanels.tsx:323-391).
     public var updateButton: (() -> Void)?
     /// `bridge.setUpdateChannel` from the Update track select.
