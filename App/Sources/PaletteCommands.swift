@@ -617,27 +617,31 @@ final class PaletteCommands {
 
     private func isScratch(_ project: ProjectShell) -> Bool { threads.composer.isScratch(project) }
 
-    /// `startScratchThread`: `projects.ensureScratch`, wait for the project in the shell (10 s), then a draft in it.
+    /// `startScratchThread`: the scratch project, then a draft in it.
     func startScratchThread(_ env: String, then opened: (@MainActor () -> Void)? = nil) {
         Task { [weak self] in
-            guard let self else { return }
-            do {
-                let reply = try await self.environments.request(env, "projects.ensureScratch", .object([:]))
-                guard let localId = reply["projectId"]?.stringValue else { throw SidebarCommands.CommandMessage(errorDescription: "An error occurred.") }
-                let id = ProjectId(EnvironmentScope.key(env, localId))
-                var project: ProjectShell?
-                for _ in 0..<100 {
-                    project = self.sidebar?.snapshot?.projects.first { $0.id == id }
-                    if project != nil { break }
-                    try await Task.sleep(for: .milliseconds(100))
-                }
-                guard let project else { throw SidebarCommands.CommandMessage(errorDescription: "The scratch project did not load.") }
-                self.newThread(in: project)
-                opened?()
-            } catch {
-                let message = (error as? RPCClientError)?.typedError?.message ?? (error as? LocalizedError)?.errorDescription
-                self.threads.panel.toasts.show(ToastView(title: "Could not start without a project", message: message ?? "An error occurred.", kind: .error))
+            guard let self, let project = await self.openScratchProject(env) else { return }
+            self.newThread(in: project)
+            opened?()
+        }
+    }
+
+    /// `openScratchProject` (useScratchProject.ts:62-79 at 4928): `projects.ensureScratch`, then wait for the project
+    /// in the shell (10 s). A failure shows a toast and returns nil.
+    func openScratchProject(_ env: String) async -> ProjectShell? {
+        do {
+            let reply = try await environments.request(env, "projects.ensureScratch", .object([:]))
+            guard let localId = reply["projectId"]?.stringValue else { throw SidebarCommands.CommandMessage(errorDescription: "An error occurred.") }
+            let id = ProjectId(EnvironmentScope.key(env, localId))
+            for _ in 0..<100 {
+                if let project = sidebar?.snapshot?.projects.first(where: { $0.id == id }) { return project }
+                try await Task.sleep(for: .milliseconds(100))
             }
+            throw SidebarCommands.CommandMessage(errorDescription: "The scratch project did not load.")
+        } catch {
+            let message = (error as? RPCClientError)?.typedError?.message ?? (error as? LocalizedError)?.errorDescription
+            threads.panel.toasts.show(ToastView(title: "Could not start without a project", message: message ?? "An error occurred.", kind: .error))
+            return nil
         }
     }
 

@@ -36,4 +36,35 @@ struct ThreadPanelChromeTests {
         #expect(lines.contains { $0.start <= project && project + 9 <= $0.start + $0.length })
         #expect(hero.height(forWidth: 380) == DraftHeroView.height + 36)
     }
+
+    /// Screen pass 3: "or start without a project" was drawn but inert (DraftHeroHeadline.tsx:189-203, 323-346 at 4928).
+    @Test func startWithoutAProjectIsAButton() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 68), styleMask: [.borderless], backing: .buffered, defer: false)
+        let hero = DraftHeroView(frame: NSRect(x: 0, y: 0, width: 800, height: 68))
+        hero.projectTitle = "demo-repo"
+        window.contentView = hero
+        var started = 0
+        hero.onStartWithoutProject = { started += 1 }
+        hero.displayIfNeeded()
+        func press(_ point: NSPoint) {
+            let event = NSEvent.mouseEvent(with: .leftMouseDown, location: hero.convert(point, to: nil), modifierFlags: [], timestamp: 0,
+                                           windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+            hero.mouseDown(with: event)
+        }
+        // Hover: foreground text and an underline (`InlineButton tone="muted"`, button.tsx:103-113).
+        func render() -> NSBitmapImageRep {
+            let rep = hero.bitmapImageRepForCachingDisplay(in: hero.bounds)!
+            hero.cacheDisplay(in: hero.bounds, to: rep)
+            return rep
+        }
+        let resting = render().tiffRepresentation
+        let move = NSEvent.mouseEvent(with: .mouseMoved, location: hero.convert(NSPoint(x: 400, y: 56), to: nil), modifierFlags: [],
+                                      timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)!
+        hero.mouseMoved(with: move)
+        #expect(render().tiffRepresentation != resting)
+        press(NSPoint(x: 400, y: 56))
+        #expect(started == 1)
+        press(NSPoint(x: 20, y: 56))
+        #expect(started == 1)
+    }
 }
