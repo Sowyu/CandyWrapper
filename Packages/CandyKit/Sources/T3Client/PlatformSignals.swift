@@ -4,24 +4,34 @@ import Network
 /// Feeds the supervisor the events that reveal a dead socket: network path changes, system
 /// wake and app activation. All are push notifications, so idle cost is zero.
 final class PlatformSignals: @unchecked Sendable {
-    // @unchecked: every stored property is set once in init and only read afterwards.
+    // @unchecked: the stored properties are set once in init, except `lastPath` and `pathSequence`, which only the
+    // monitor's serial queue touches.
     private let monitor = NWPathMonitor()
     private var tokens: [(NotificationCenter, NSObjectProtocol)] = []
-    /// Only the monitor's queue touches it.
+    /// Only the monitor's queue touches these two.
     private var lastPath: PathKey?
+    private var pathSequence = 0
+
+    /// Only `unsatisfied` is offline. `requiresConnection` (a VPN on demand, a cellular path that wakes on use) can
+    /// carry a socket, like Chromium's `navigator.onLine`, which T3 reads (apps/web/src/connection/platform.ts:74).
+    static func isOnline(_ status: NWPath.Status) -> Bool { status != .unsatisfied }
 
     init(supervisor: ConnectionSupervisor) {
         monitor.pathUpdateHandler = { [weak self, weak supervisor] path in
-            let online = path.status == .satisfied
+            guard let self else { return }
+            let online = Self.isOnline(path.status)
             let key = PathKey(path)
-            let moved = PathKey.moved(from: self?.lastPath, to: key, online: online)
-            self?.lastPath = key
-            Task {
-                await supervisor?.networkChanged(online: online)
-                if moved { await supervisor?.networkPathChanged() }
-            }
+            let moved = PathKey.moved(from: lastPath, to: key, online: online)
+            lastPath = key
+            pathSequence += 1
+            // Each update hops to the actor in its own task, so they can land out of order: the sequence keeps a late
+            // "offline" from overriding the "online" that followed it.
+            let sequence = pathSequence
+            Task { await supervisor?.pathUpdated(online: online, moved: moved, sequence: sequence) }
+            if moved { Task { @MainActor in InputQuietGate.shared.networkPathChanged() } }
         }
         monitor.start(queue: DispatchQueue(label: "dev.candywrapper.t3.path", qos: .utility))
+        Task { @MainActor [weak supervisor] in if let supervisor { InputQuietGate.shared.register(supervisor) } }
 
         let workspace = NSWorkspace.shared.notificationCenter
         let app = NotificationCenter.default

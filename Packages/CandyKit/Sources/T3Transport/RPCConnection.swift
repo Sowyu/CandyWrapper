@@ -66,6 +66,8 @@ public actor RPCConnection {
     private let livenessInterval: Duration
     private let clock: SleepClock
     private var lastInbound: ContinuousClock.Instant
+    /// The last frame or frame part, or the open. Unlike `lastInbound`, a reply becoming owed doesn't move it.
+    private var lastFrameAt: ContinuousClock.Instant
     private var watchdog: Task<Void, Never>?
     private(set) var pingOutstanding = false
     /// Set while the owner expects traffic, like a running turn. See `livenessInterval`.
@@ -85,6 +87,7 @@ public actor RPCConnection {
         self.livenessInterval = livenessInterval
         self.clock = clock
         lastInbound = clock.now()
+        lastFrameAt = lastInbound
         (outboxStream, outbox) = AsyncStream<Data>.makeStream()
     }
 
@@ -317,15 +320,20 @@ public actor RPCConnection {
     /// (client-runtime rpc/session.ts:228-238).
     public private(set) var inboundFrames = 0
 
+    /// How long since the socket delivered anything.
+    public var quietFor: Duration { clock.now() - lastFrameAt }
+
     private func partReceived() {
         inboundFrames += 1
         lastInbound = clock.now()
+        lastFrameAt = lastInbound
         pingOutstanding = false
     }
 
     private func handle(_ messages: [RPCServerMessage]) {
         inboundFrames += 1
         lastInbound = clock.now()
+        lastFrameAt = lastInbound
         pingOutstanding = false
         defer { if watchdog != nil, !needsWatchdog { watchdog?.cancel(); watchdog = nil } }
         for message in messages {

@@ -127,7 +127,7 @@ final class ThreadSession {
         let store = self.store
         let wireSubscription = UUID()
         let loader = ThreadSnapshotLoader(http: shell.http, token: shell.token, threadId: threadId.localId)
-        subscription = shell.supervisor.subscribe("orchestration.subscribeThread", payload: {
+        subscription = shell.supervisor.subscribe("orchestration.subscribeThread", resubscribesOnActivation: true, payload: {
             if await store.subscribeInput(subscription: wireSubscription).afterSequence == nil, let snapshot = await loader.load(), !Task.isCancelled {
                 await store.applySnapshot(snapshot, subscription: wireSubscription)
             }
@@ -1409,7 +1409,9 @@ final class ThreadController {
                 : "\(label) is \(reconnecting ? "reconnecting" : "offline")"
             banner.toolTip = state.awaitingApproval ? state.presentedError : nil
             banner.isError = state.status == .error
-            banner.showsReconnect = !reconnecting
+            // "Retry now" while reconnecting, nothing on the first attempt (useSystemComposerBanners.tsx:215-228).
+            banner.showsReconnect = state.status != .connecting
+            banner.reconnect.title = state.status == .reconnecting ? "Retry now" : "Reconnect"
             banner.showsDisconnect = remote && elapsed >= 20
             panel.showsEnvironmentBanner = true
             if remote && elapsed < 20 { wake = 20 - elapsed }

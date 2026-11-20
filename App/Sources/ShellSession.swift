@@ -140,7 +140,7 @@ final class ShellSession {
 
     private func subscribeShell() {
         guard !stopped else { return }
-        subscription = supervisor.subscribe("orchestration.subscribeShell", payload: { [weak self] in
+        subscription = supervisor.subscribe("orchestration.subscribeShell", resubscribesOnActivation: true, payload: { [weak self] in
             await self?.subscribeInput() ?? .object([:])
         }, handler: { [weak self] event in
             guard let self else { return }

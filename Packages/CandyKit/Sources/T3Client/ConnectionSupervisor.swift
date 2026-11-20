@@ -201,6 +201,9 @@ public actor ConnectionSupervisor {
         /// Runs before the reconnect that follows a socket which died without a close: drop pooled HTTP
         /// connections, which usually died with it.
         public var transportLost: @Sendable () async -> Void
+        /// A host on this device: the device reporting offline, often wrongly, never parks it. The report still
+        /// probes a live session (supervisor.ts:323-327).
+        public var ignoresOffline: Bool
 
         public init(connect: @escaping @Sendable () async throws -> RPCConnection,
                     sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
@@ -208,7 +211,8 @@ public actor ConnectionSupervisor {
                     random: @escaping @Sendable () -> Double = { Double.random(in: 0..<1) },
                     checkHost: (@Sendable () async -> Bool)? = nil,
                     answersQuickly: Bool = false,
-                    transportLost: @escaping @Sendable () async -> Void = {}) {
+                    transportLost: @escaping @Sendable () async -> Void = {},
+                    ignoresOffline: Bool = false) {
             self.connect = connect
             self.sleep = sleep
             self.now = now
@@ -216,6 +220,7 @@ public actor ConnectionSupervisor {
             self.checkHost = checkHost
             self.answersQuickly = answersQuickly
             self.transportLost = transportLost
+            self.ignoresOffline = ignoresOffline
         }
 
         /// A direct route's dependencies: `checkHost` reads the descriptor with T3's 2.5 s route check timeout
@@ -235,12 +240,19 @@ public actor ConnectionSupervisor {
                     return environmentId == nil || descriptor.environmentId == environmentId
                 },
                 answersQuickly: RouteKind.answersQuickly(http.baseURL),
-                transportLost: { http.resetConnections() })
+                transportLost: { http.resetConnections() },
+                ignoresOffline: RouteKind.isLoopback(http.baseURL))
         }
     }
 
     /// T3's route kinds for probe timing (connection/routes.ts `connectionRouteKind`).
     public enum RouteKind {
+        /// This device: `localhost`, 127/8 and ::1.
+        public static func isLoopback(_ url: URL) -> Bool {
+            guard let host = url.host?.lowercased() else { return false }
+            return host == "localhost" || host == "::1" || host == "[::1]" || host.hasPrefix("127.")
+        }
+
         /// Loopback and private LAN addresses, and `.local` names.
         public static func answersQuickly(_ url: URL) -> Bool {
             guard let host = url.host?.lowercased() else { return false }
@@ -259,12 +271,24 @@ public actor ConnectionSupervisor {
     public static let establishTimeout: Duration = .seconds(15)
     public static let probeTimeout: Duration = .seconds(15)
     public static let quickProbeTimeout: Duration = .seconds(3)
+    /// Input after the socket said nothing this long probes it: T3 drops a socket after 15 s without a frame
+    /// (client-runtime rpc/protocol.ts:10-12), and this finds the same socket on the user's next input, without a timer.
+    public static let inputQuietThreshold: Duration = .seconds(15)
 
     private let deps: Dependencies
     private let keepalive: KeepalivePolicy
     private(set) public var state = ConnectionState() { didSet { if state != oldValue { publish() } } }
     private var desired = false
     private var online = true
+    /// The last NWPathMonitor update applied. Updates reach the actor through separate tasks, so an older one can
+    /// arrive after a newer one; it must not undo it.
+    private var pathSequence = 0
+    /// The next attempt runs even while the device reports offline: a Reconnect press, or replacing a socket a
+    /// probe found dead. The platform's report can stay wrong after the network is back (supervisor.ts:1213-1221).
+    private var ignoreOfflineOnce = false
+    /// Bumped on app activation; durable subscriptions that opt in subscribe again on the same session.
+    private var resubscribeEpoch = 0
+    private var resubscribeWaiters: [UUID: (after: Int, continuation: CheckedContinuation<Void, Never>)] = [:]
     private var appActive = true
     private var expectingTraffic = false
     /// Orders `applyWatch` calls, which reach the connection through separate tasks.
@@ -343,8 +367,17 @@ public actor ConnectionSupervisor {
         failures = 0; backoffFailures = 0; approvalWaits = 0
         skipNextDelay = false
         if connection != nil { probe(.retry); return }
+        ignoreOfflineOnce = true
         cancelAttempt()
         evaluate()
+    }
+
+    /// One NWPathMonitor update, numbered in the order the monitor delivered it. A late older update is dropped.
+    public func pathUpdated(online isOnline: Bool, moved: Bool, sequence: Int) {
+        guard sequence > pathSequence else { return }
+        pathSequence = sequence
+        networkChanged(online: isOnline)
+        if moved { networkPathChanged() }
     }
 
     public func networkChanged(online isOnline: Bool) {
@@ -389,11 +422,55 @@ public actor ConnectionSupervisor {
         failures = 0; backoffFailures = 0; approvalWaits = 0
         if connection != nil {
             probe(reason == .systemWake ? .retry : .foreground)
+            // Shell and thread subscribe again on the same session, so one that died while the app was in the
+            // background is live again (wakeups.ts:25-27, state/shell.ts:629, state/threads.ts:984).
+            if reason == .applicationActive { resubscribe() }
             startPinging()
         } else if attemptTask == nil {
             cancelTimer()
             evaluate()
         }
+    }
+
+    /// The user acted (a key, click, scroll or the pointer entering the window). A socket silent for
+    /// `threshold` gets a probe with the silent socket check, which is how an idle socket that died without a
+    /// close is found without a timer. Returns how long until the socket would be silent for `threshold`, so
+    /// the caller can skip the next inputs until then, and whether it probed; nil while there is no session.
+    public func inputAfterQuiet(threshold: Duration = inputQuietThreshold) async -> (recheckIn: Duration, probed: Bool)? {
+        guard let connection else { return nil }
+        let quiet = await connection.quietFor
+        guard self.connection === connection else { return nil }
+        if quiet < threshold { return (threshold - quiet, false) }
+        if probeTask == nil { probe(.input) }
+        return (threshold, true)
+    }
+
+    /// Subscriptions made with `resubscribesOnActivation` interrupt their stream and subscribe again from their cursor.
+    public func resubscribe() {
+        resubscribeEpoch += 1
+        let ready = resubscribeWaiters
+        resubscribeWaiters = [:]
+        for waiter in ready.values { waiter.continuation.resume() }
+    }
+
+    var currentResubscribeEpoch: Int { resubscribeEpoch }
+
+    /// Returns once `resubscribe` runs after `epoch`, or when the waiting task is cancelled.
+    func waitForResubscribe(after epoch: Int) async {
+        if resubscribeEpoch > epoch { return }
+        let id = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { c in
+                if Task.isCancelled || resubscribeEpoch > epoch { return c.resume() }
+                resubscribeWaiters[id] = (epoch, c)
+            }
+        } onCancel: {
+            Task { await self.cancelResubscribeWaiter(id) }
+        }
+    }
+
+    private func cancelResubscribeWaiter(_ id: UUID) {
+        resubscribeWaiters.removeValue(forKey: id)?.continuation.resume()
     }
 
     public func applicationResignedActive() {
@@ -499,10 +576,11 @@ public actor ConnectionSupervisor {
             return
         }
         if connection != nil || attemptTask != nil { return }
-        guard online else {
+        guard online || deps.ignoresOffline || ignoreOfflineOnce else {
             setPhase(.offline)
             return
         }
+        ignoreOfflineOnce = false
         startAttempt()
     }
 
@@ -578,7 +656,7 @@ public actor ConnectionSupervisor {
         pingTask = nil
         if let connectedAt, deps.now() - connectedAt >= Backoff.resetAfter { failures = 0; backoffFailures = 0; approvalWaits = 0 }
         if case .transport(.pingTimedOut) = reason { transportSuspect = true }
-        if desired && online {
+        if desired && (online || deps.ignoresOffline || ignoreOfflineOnce) {
             // The first loss of a live session retries almost at once; the ladder still counts it (supervisor.ts:1286-1298).
             scheduleRetry(reason.description, ConnectionFailureInfo(reason: "transport", blocked: false, detail: reason.description),
                           firstLoss: failures == 0)
@@ -632,6 +710,8 @@ public actor ConnectionSupervisor {
         case retry
         /// Another network path: 3 s on loopback and LAN, 15 s elsewhere, where a tailnet or VPN can be slower.
         case networkChanged
+        /// Input after a silent stretch (`inputAfterQuiet`): the network change's deadlines.
+        case input
     }
 
     private func probe(_ kind: ProbeKind) {
@@ -641,7 +721,7 @@ public actor ConnectionSupervisor {
         let timeout: Duration = switch kind {
         case .foreground: Self.probeTimeout
         case .retry: Self.quickProbeTimeout
-        case .networkChanged: quick ? Self.quickProbeTimeout : Self.probeTimeout
+        case .networkChanged, .input: quick ? Self.quickProbeTimeout : Self.probeTimeout
         }
         let checkHost = deps.checkHost
         probeTask = Task {
@@ -713,6 +793,7 @@ public actor ConnectionSupervisor {
         // T3 reconnects at once after a failed probe, then resumes the normal ladder.
         skipNextDelay = true
         transportSuspect = true
+        ignoreOfflineOnce = true
         await conn.close(reason: "health check failed")
         // connectionClosed runs from the close watcher.
     }
@@ -804,9 +885,13 @@ extension ConnectionSupervisor {
     /// Cancel the returned task to unsubscribe; that sends `Interrupt`.
     /// Ends on a normal stream completion or an `EnvironmentAuthorizationError`.
     /// `snapshotFirst`: see `RPCConnection.stream`.
+    /// `resubscribesOnActivation`: app activation (`resubscribe`) interrupts the stream and subscribes again on the same
+    /// session, as T3 does for the shell and threads (client-runtime rpc/client.ts:284-330, state/shell.ts:629,
+    /// state/threads.ts:984). One small round trip, and a subscription that died without an error is live again.
     public nonisolated func subscribe(
         _ tag: String,
         snapshotFirst: Bool = false,
+        resubscribesOnActivation: Bool = false,
         payload: @escaping @Sendable () async -> JSONValue,
         handler: @escaping @Sendable (SubscriptionEvent) async throws -> Void
     ) -> Task<Void, Never> {
@@ -821,18 +906,38 @@ extension ConnectionSupervisor {
                     generation = next.1
                 }
                 guard let (connection, gen) = session else { return }
+                let progress = SubscriptionProgress()
                 do {
+                    let epoch = await self.currentResubscribeEpoch
                     try await handler(.subscribed(generation: gen))
-                    for try await value in await connection.stream(tag, payload: await payload(), snapshotFirst: snapshotFirst) {
-                        try await handler(.value(value))
-                        retryDelay = .milliseconds(250)
+                    let stream = await connection.stream(tag, payload: await payload(), snapshotFirst: snapshotFirst)
+                    // True when activation asked for a new subscription; false when the stream ended.
+                    let resubscribe = try await withThrowingTaskGroup(of: Bool.self) { group in
+                        group.addTask {
+                            for try await value in stream {
+                                try await handler(.value(value))
+                                progress.sawValue = true
+                            }
+                            return false
+                        }
+                        if resubscribesOnActivation {
+                            group.addTask {
+                                await self.waitForResubscribe(after: epoch)
+                                return !Task.isCancelled
+                            }
+                        }
+                        defer { group.cancelAll() }
+                        return try await group.next() ?? false
                     }
+                    retryDelay = .milliseconds(250)
                     if Task.isCancelled { return }
+                    if resubscribe { continue }
                     // A clean end of a durable stream: the server finished it on purpose.
                     if await connection.isClosed { session = nil; continue }
                     return
                 } catch let error as RPCClientError {
                     if Task.isCancelled { return }
+                    if progress.sawValue { retryDelay = .milliseconds(250) }
                     try? await handler(.interrupted(error))
                     let closed = await connection.isClosed
                     if error.isTransport || closed {
@@ -844,6 +949,7 @@ extension ConnectionSupervisor {
                     retryDelay = min(retryDelay * 2, .seconds(30))
                 } catch {
                     if Task.isCancelled { return }
+                    if progress.sawValue { retryDelay = .milliseconds(250) }
                     // The consumer rejected a wire value. Rebuild its payload and subscribe
                     // again, so a cleared resume cursor requests an authoritative snapshot.
                     do { try await Task.sleep(for: retryDelay) } catch { return }
@@ -852,4 +958,9 @@ extension ConnectionSupervisor {
             }
         }
     }
+}
+
+/// Set by a subscription's stream task, read by its loop once that task has finished.
+private final class SubscriptionProgress: @unchecked Sendable {
+    var sawValue = false
 }
