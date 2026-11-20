@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import T3Protocol
 import T3Store
 
 /// One palette entry (`CommandPaletteActionItem` / `CommandPaletteSubmenuItem`,
@@ -20,6 +21,8 @@ public struct PaletteEntry {
     public var timestamp: String?
     /// What a thread row ranks by (`threadSearch`, CommandPalette.logic.ts:431-439).
     public var threadSearch: PaletteScoring.ThreadSearchSubject?
+    /// A thread row drags out as thread context onto the composer (#33990).
+    public var dragThread: ThreadId?
     /// Why the row matched when its title shows no match ("Branch: fix-sidebar"), set by `filter`.
     public var matchHint: PaletteScoring.SearchMatchHint?
     public var icon: IconName
@@ -263,6 +266,20 @@ public enum PaletteSearch {
             var item = item
             item.shortcutCommand = index < 9 ? "thread.jump.\(index + 1)" : nil
             return item
+        }
+    }
+
+    /// The project picker's jump shortcuts number its project rows as shown after a search, so mod+1 runs the first
+    /// row on screen; "No project" keeps its own shortcut (CommandPalette.tsx `filteredGroups` at 4928, #31174).
+    public static func renumberProjectJumps(_ groups: [PaletteGroup]) -> [PaletteGroup] {
+        groups.map { group in
+            guard group.value == "projects" else { return group }
+            var group = group, index = 0
+            for i in group.items.indices where group.items[i].value.hasPrefix("new-thread-in:") && group.items[i].value != "new-thread-in:no-project" {
+                group.items[i].shortcutCommand = index < 9 ? "thread.jump.\(index + 1)" : nil
+                index += 1
+            }
+            return group
         }
     }
 

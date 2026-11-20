@@ -21,6 +21,9 @@ public final class CommandPaletteController {
         public var now: Double
         /// True while the thread message search for the query has not settled.
         public var threadSearchPending: (String) -> Bool
+        /// True when every machine asked failed the message search for the query, so an empty list says so
+        /// (`isSearchFailed`, CommandPalette.tsx and threadSearch.ts at 4928, #38155).
+        public var threadSearchFailed: (String) -> Bool = { _ in false }
         /// `settingsSearchItems`: settings matching a non-empty query.
         public var settingsItems: (String) -> [PaletteEntry]
         public init(rootGroups: @escaping () -> [PaletteGroup], projectItems: @escaping () -> [PaletteEntry] = { [] },
@@ -140,6 +143,12 @@ public final class CommandPaletteController {
             self.highlightedValue = self.flat[index].value
         }
         view.onBack = { [weak self] in self?.pop() }
+        // The palette closes as the drag starts, like `SetOpen false` in `onStart` (CommandPalette.drag.ts at 4928, #33990).
+        view.onDragItem = { [weak self] index, row, event in
+            guard let self, index < self.flat.count, let id = self.flat[index].dragThread else { return }
+            SidebarThreadDrag.begin([id], title: self.flat[index].threadSearch?.title ?? self.flat[index].title, from: row, event: event)
+            DispatchQueue.main.async { [weak self] in self?.onClose?() }
+        }
         refresh()
         // Base UI's `autoHighlight="always"` puts the first row on show.
         highlightedValue = firstEnabled?.value
@@ -213,10 +222,13 @@ public final class CommandPaletteController {
                                          threadItems: hasQuery || (isInSubmenu && hasText) ? source.threadItems(query) : [],
                                          threadMessageItems: hasQuery || (isInSubmenu && hasText) ? source.threadMessageItems(query) : [],
                                          now: source.now)
+        displayed = PaletteSearch.renumberProjectJumps(displayed)
         flat = displayed.flatMap(\.items)
         if displayed.isEmpty {
             let pending = searching && source.threadSearchPending(query)
-            view.content = .empty(message: pending ? "Searching thread messages\u{2026}" : nil, actionsOnly: query.hasPrefix(">"))
+            let failed = searching && !pending && source.threadSearchFailed(query)
+            view.content = .empty(message: pending ? "Searching thread messages\u{2026}" : failed ? "Couldn't search thread messages." : nil,
+                                  actionsOnly: query.hasPrefix(">"))
         } else {
             view.content = .results(displayed.map { CommandPaletteGroup($0.label.isEmpty ? nil : $0.label, $0.items.map(Self.item)) })
         }
@@ -243,6 +255,7 @@ public final class CommandPaletteController {
         item.titleHighlights = entry.titleHighlights
         item.descriptionHighlights = entry.descriptionHighlights
         item.isStatic = entry.isStatic
+        item.isDraggable = entry.dragThread != nil
         item.trailingIcon = entry.trailingIcon
         item.trailingCheckbox = entry.trailingCheckbox
         item.noteIsWarning = entry.noteIsWarning

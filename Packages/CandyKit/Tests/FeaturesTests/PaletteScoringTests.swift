@@ -143,6 +143,18 @@ struct PaletteScoringTests {
             #expect(rankTitles("lakebed", named) == ["Lakebed", "Lakebed perf audit"])
         }
 
+        @Test("ignores the t3 prefix of flat temporary branches (#35430)")
+        func flatBranchPrefix() {
+            let flat = thread("Add search", branch: "t3-abcd1234")
+            #expect(PS.scoreThreadSearch(PS.foldSearchQuery("t3"), flat, now: now) == nil)
+            #expect(PS.scoreThreadSearch(PS.foldSearchQuery("t3 connect"), flat, now: now) == nil)
+            #expect(PS.scoreThreadSearch(PS.foldSearchQuery("abcd1234"), flat, now: now) != nil)
+            let connect = thread("Add search", branch: "t3-abcd1234", projectTitle: "connect")
+            for query in ["t3-abcd", "t3-abcd1234 connect", "connect t3-abcd1234"] {
+                #expect(PS.scoreThreadSearch(PS.foldSearchQuery(query), connect, now: now) != nil)
+            }
+        }
+
         @Test("finds a branch pasted with the app's worktree prefix")
         func pastedBranch() {
             let subject = thread("Cmd+K search", branch: "t3/cmdk-search-v2")

@@ -42,6 +42,8 @@ public struct CommandPaletteItem: Sendable {
     public var noteIsWarning = false
     /// `titleTrailingContent` as a view, sized by its `intrinsicContentSize` (a thread's pull request badge).
     public var makeTrailing: (@MainActor @Sendable () -> NSView)?
+    /// The row drags out of the palette once the pointer moves 6pt with the button down (a thread row, #33990).
+    public var isDraggable = false
 
     public init(_ title: String, icon: IconName? = nil, description: String? = nil, shortcut: String? = nil,
                 timestamp: String? = nil, isSubmenu: Bool = false, isDisabled: Bool = false,
@@ -103,6 +105,8 @@ public final class CommandPaletteView: DSView {
     }
     public final var onExecute: (@MainActor (Int) -> Void)?
     public final var onHighlight: (@MainActor (Int) -> Void)?
+    /// A draggable row's press moved far enough to drag: the item index, the row and the drag event.
+    public final var onDragItem: (@MainActor (Int, NSView, NSEvent) -> Void)?
     public final var onBack: (@MainActor () -> Void)?
 
     public let input = InputView(placeholder: CommandPaletteView.rootPlaceholder, size: .lg)
@@ -276,6 +280,12 @@ public final class CommandPaletteView: DSView {
         layoutSubtreeIfNeeded()
         let frame = NSRect(x: 0, y: rowSlots[i].y, width: 1, height: rowSlots[i].height).insetBy(dx: 0, dy: -24)
         let visible = scroll.scrollView.contentView.bounds
+        // The first result scrolls the list to its top, so its group heading shows (scrollCommandPaletteRowIntoView,
+        // CommandPaletteResults.tsx at 4928, #34113).
+        if i == enabledIndices.first {
+            if visible.minY != 0 { scroll.scroll(to: .zero) }
+            return
+        }
         var y = visible.minY
         if frame.minY < visible.minY { y = frame.minY } else if frame.maxY > visible.maxY { y = frame.maxY - visible.height }
         y = max(0, min(y, document.frame.height - visible.height))
@@ -440,6 +450,7 @@ public final class CommandPaletteView: DSView {
                 self.onHighlight?(i)
             }
             row.onClick = { [weak self] in if !item.isDisabled, !item.isStatic { self?.onExecute?(i) } }
+            if item.isDraggable { row.onDrag = { [weak self] row, event in self?.onDragItem?(i, row, event) } }
             row.isHighlighted = i == highlightedIndex
             row.frame = frame
             document.addSubview(row)
@@ -480,6 +491,9 @@ final class CommandRowView: DSView {
     var isHighlighted = false { didSet { if isHighlighted != oldValue { needsDisplay = true; restyle() } } }
     final var onHover: (@MainActor () -> Void)?
     final var onClick: (@MainActor () -> Void)?
+    /// Set on a draggable row: the press moved 6pt (`distance: 6`, CommandPalette.drag.ts at 4928).
+    final var onDrag: (@MainActor (NSView, NSEvent) -> Void)?
+    private var press: NSPoint?
     private let title = LabelView()
     private let matchLine = LabelView()
     private let detail = LabelView()
@@ -681,10 +695,19 @@ final class CommandRowView: DSView {
 
     override func mouseEntered(with event: NSEvent) { onHover?() }
     override func mouseMoved(with event: NSEvent) { onHover?() }
-    override func mouseDown(with event: NSEvent) {} // `onMouseDown preventDefault`: focus stays in the input
+    // `onMouseDown preventDefault`: focus stays in the input
+    override func mouseDown(with event: NSEvent) { press = onDrag == nil ? nil : event.locationInWindow }
+    override func mouseDragged(with event: NSEvent) {
+        guard let start = press, let onDrag else { return }
+        let p = event.locationInWindow
+        guard hypot(p.x - start.x, p.y - start.y) >= 6 else { return }
+        press = nil
+        onDrag(self, event)
+    }
     // The row takes every click, the trailing checkbox's too (it only mirrors the row's state).
     override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
     override func mouseUp(with event: NSEvent) {
+        press = nil
         if bounds.contains(convert(event.locationInWindow, from: nil)) { onClick?() }
     }
 }

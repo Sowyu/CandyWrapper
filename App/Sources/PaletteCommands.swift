@@ -28,6 +28,8 @@ final class PaletteCommands {
     private var searchTask: Task<Void, Never>?
     private var triageTask: Task<Void, Never>?
     private var pendingQuery: String?
+    /// The query whose message search failed on every machine asked (#38155).
+    private var failedQuery: String?
     private var searchConnections: [String: Int] = [:]
     /// When the palette opened: titles and messages rank against it, so rows don't reorder as time passes.
     private var openedAt = 0.0
@@ -369,7 +371,7 @@ final class PaletteCommands {
 
     private func makeSource() -> CommandPaletteController.Source {
         openedAt = Double(nowMs)
-        return CommandPaletteController.Source(
+        var source = CommandPaletteController.Source(
             rootGroups: { [weak self] in self?.rootGroups() ?? [] },
             projectItems: { [weak self] in self?.projectSearchItems() ?? [] },
             threadItems: { [weak self] query in self?.threadItems(query: query) ?? [] },
@@ -377,6 +379,8 @@ final class PaletteCommands {
             settingsItems: { [weak self] query in self?.settingsItems(query) ?? [] },
             threadMessageItems: { [weak self] query in self?.threadMessageItems(query) ?? [] },
             now: openedAt)
+        source.threadSearchFailed = { [weak self] query in self?.failedQuery == query.trimmingCharacters(in: .whitespaces) }
+        return source
     }
 
     var snapshot: ShellSnapshot? { sidebar?.snapshot }
@@ -746,6 +750,7 @@ final class PaletteCommands {
                                      timestamp: TimestampFormat.formatRelativeTimeLabel(stamp, nowMs: ms), icon: .messageSquare,
                                      action: .run({ [weak self] in self?.pickThread(id, query: query) }, keepOpen: false))
             entry.threadSearch = subject
+            entry.dragThread = thread.id
             entry.subtitleProject = projects[thread.projectId].map(ProjectIconSource.init)
             entry.subtitleDriver = thread.id.environmentId.flatMap { ProviderCatalog(threads.composer.providers($0)).entry(thread.providerInstanceId)?.driver }
             entry.leadingStatus = SidebarModel.resolveThreadStatusPill(SidebarThread(thread), lastVisitedAt: thread.lastVisitedAt.value)
@@ -859,6 +864,7 @@ final class PaletteCommands {
             guard !Task.isCancelled, self.pendingQuery == trimmed else { return }
             // Failed reads retain the last answer; a reconnect retries it (runtime.ts:724-752, 3814).
             if let found { self.search = (trimmed, found.filter { $0.source == "user" || $0.source == "assistant" }) }
+            self.failedQuery = found == nil ? trimmed : nil
             self.pendingQuery = nil
             self.overlay?.controller.refresh()
         }

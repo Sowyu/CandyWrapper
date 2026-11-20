@@ -778,9 +778,11 @@ public enum PaletteScoring {
         return exact ?? latest
     }
 
-    /// Most threads' branches start with the app's own worktree prefix ("t3/", and "t3code/" before it), so only
-    /// before more text does it come off.
-    static let worktreeBranchPrefix = try! NSRegularExpression(pattern: "^(?:t3|t3code)/(?=\(jsNotSpace))")
+    /// Most threads' branches start with the app's own worktree prefix ("t3/", and "t3code/" before it, "t3-<hex>" when a
+    /// "t3" branch blocks nested refs), so only before more text does it come off (paletteSearch.ts:923-938 at 4928, #35430).
+    static let worktreeBranchPrefix = try! NSRegularExpression(pattern: "^(?:(?:t3|t3code)/(?=\(jsNotSpace))|t3-(?=[0-9a-f]{8}$))")
+    /// The flat prefix anywhere in a query while its hex is still being typed, so "t3-abcd" reaches the stripped branch.
+    static let flatBranchQueryPrefix = try! NSRegularExpression(pattern: "(^| )t3-(?=[0-9a-f]{1,8}(?: |$))")
     static let pullRequestPrefix = try! NSRegularExpression(pattern: "^(?:pr|pull request|pull)\(jsSpace)*(?=#?[0-9])")
     static let hashPrefix = try! NSRegularExpression(pattern: "^#\(jsSpace)*")
 
@@ -821,7 +823,8 @@ public enum PaletteScoring {
         if let project = thread.projectTitle, !project.isEmpty { fields.append(WeightedSearchField(value: project, weight: 0.25, context: true)) }
         if let env = thread.environmentLabel, !env.isEmpty { fields.append(WeightedSearchField(value: env, weight: 0.25, context: true)) }
         // Strip pull request prefixes and the worktree prefix so queries match the stored fields.
-        let fieldQuery = replacing(worktreeBranchPrefix, in: replacing(hashPrefix, in: replacing(pullRequestPrefix, in: normalizedQuery)))
+        let fieldQuery = replacing(flatBranchQueryPrefix, in: replacing(worktreeBranchPrefix, in: replacing(hashPrefix, in: replacing(pullRequestPrefix, in: normalizedQuery))),
+                                   with: "$1")
         let fieldMatch = matchSearchFields(fieldQuery, fields, typos: typos)
         let referenceMatch = fieldMatch == nil ? matchReference(normalizedQuery, thread) : nil
         guard let match = fieldMatch ?? referenceMatch else { return nil }

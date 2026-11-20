@@ -11,6 +11,33 @@ extension NSPasteboard.PasteboardType {
 
 /// Reads the dragged sidebar threads off a pasteboard.
 public enum SidebarThreadDrag {
+    /// Drags `ids` as thread context from a view outside the sidebar list, with the sidebar's ghost (the command
+    /// palette's thread rows, `startPaletteThreadDrag`, CommandPalette.drag.ts at 4928, #33990). The source outlives
+    /// `view`, which may leave the window as the drag starts.
+    @MainActor static func begin(_ ids: [ThreadId], title: String, from view: NSView, event: NSEvent) {
+        let item = NSPasteboardItem()
+        item.setString(ids.map(\.rawValue).joined(separator: "\n"), forType: .sidebarThreads)
+        let dragging = NSDraggingItem(pasteboardWriter: item)
+        let ghostView = SidebarThreadDragGhostView(title: title.isEmpty ? "Thread" : title, count: ids.count)
+        ghostView.appearance = view.effectiveAppearance
+        let ghost = ghostView.image()
+        let point = view.convert(event.locationInWindow, from: nil)
+        dragging.setDraggingFrame(NSRect(x: point.x + 12, y: point.y + 12, width: ghost.size.width, height: ghost.size.height), contents: ghost)
+        let source = OutsideSource()
+        OutsideSource.active = source
+        view.beginDraggingSession(with: [dragging], event: event, source: source).animatesToStartingPositionsOnCancelOrFail = false
+    }
+
+    private final class OutsideSource: NSObject, NSDraggingSource {
+        @MainActor static var active: OutsideSource?
+        func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+            context == .withinApplication ? [.copy] : []
+        }
+        func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+            MainActor.assumeIsolated { if Self.active === self { Self.active = nil } }
+        }
+    }
+
     public static func threads(_ pasteboard: NSPasteboard) -> [ThreadId]? {
         guard let text = pasteboard.string(forType: .sidebarThreads) else { return nil }
         let ids = text.split(separator: "\n").map { ThreadId(String($0)) }

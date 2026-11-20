@@ -160,6 +160,39 @@ import T3Protocol
         #expect(items[9].shortcutCommand == nil)
     }
 
+    /// #31174 (CommandPalette.browser.test.tsx at 4928): a filtered project picker numbers the rows it shows.
+    @Test func projectJumpsFollowTheFilteredRows() {
+        var none = action("new-thread-in:no-project", ["No project"])
+        none.shortcutCommand = "chat.newWithoutProject"
+        let page = PaletteGroup(value: "projects", label: "Projects",
+                                items: PaletteSearch.enumerate(["alpha", "beta", "gamma"].map { action("new-thread-in:\($0)", [$0]) }) + [none])
+        let filtered = PaletteSearch.filter([page], query: "gam", isInSubmenu: true, projectItems: [], threadItems: [])
+        let shown = PaletteSearch.renumberProjectJumps(filtered).flatMap(\.items)
+        #expect(shown.first?.value == "new-thread-in:gamma")
+        #expect(shown.first?.shortcutCommand == "thread.jump.1")
+        let all = PaletteSearch.renumberProjectJumps([page]).flatMap(\.items)
+        #expect(all.map(\.shortcutCommand) == ["thread.jump.1", "thread.jump.2", "thread.jump.3", "chat.newWithoutProject"])
+        var other = page
+        other.value = "projects-search"
+        #expect(PaletteSearch.renumberProjectJumps([other]).flatMap(\.items).map(\.shortcutCommand) == page.items.map(\.shortcutCommand))
+    }
+
+    /// #38155 (CommandPalette.browser.test.tsx at 4928): a message search that failed everywhere says so.
+    @Test func failedMessageSearchSaysSo() {
+        var failed = false
+        var source = CommandPaletteController.Source(rootGroups: { [] })
+        source.threadSearchFailed = { _ in failed }
+        let palette = CommandPaletteController(source: source)
+        func message() -> String? { if case .empty(let m, _) = palette.view.content { m } else { "not empty" } }
+        palette.view.input.onChange?("zzqx")
+        palette.flushRefresh()
+        #expect(message() == nil)
+        failed = true
+        palette.view.input.onChange?("zzqxy")
+        palette.flushRefresh()
+        #expect(message() == "Couldn't search thread messages.")
+    }
+
     @Test func keyboardRouting() {
         var ran: [String] = []
         var closed = 0
