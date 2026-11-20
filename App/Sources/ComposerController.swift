@@ -68,6 +68,32 @@ final class ComposerController {
     /// Where the next find starts: the message a palette match came from (`PendingFind.start`).
     private var threadFindStartEntryId: String?
 
+    /// A side chat's pane left (`init(embeddedIn:)`): its draft is saved and nothing it started keeps running.
+    /// An upload still under way fails retryably, so the next send from the side chat uploads it again.
+    // ponytail: the observers `environments` and `QuestionDraftResolution` keep a dead weak closure per pane; add tokens if panes churn
+    func tearDown() {
+        flushPrompt()
+        saveWork?.cancel()
+        save()
+        if let settingsObserver { ClientSettingsStore.shared.removeObserver(settingsObserver) }
+        settingsObserver = nil
+        suggestionSubscription?.cancel()
+        threadFindTask?.cancel()
+        setStashMenu(false)
+        for (id, task) in attachmentTasks {
+            task.cancel()
+            for key in draftAttachments.keys where draftAttachments[key]?.contains(where: { $0.id == id }) == true {
+                draftAttachments[key] = draftAttachments[key]?.map { a in
+                    var a = a
+                    if a.id == id, case .uploading = a.status { a.status = .failed("The upload stopped when the side chat closed.") }
+                    return a
+                }
+            }
+        }
+        attachmentTasks = [:]
+        persistDraftAttachments()
+    }
+
     /// Opens a thread in the panel (the launch's new thread).
     var openThread: ((ThreadId) -> Void)?
     /// "Open provider setup" on the provider status banner: Settings, Providers.
@@ -94,7 +120,7 @@ final class ComposerController {
     /// Side chats (`SideChatController`): the `/side` menu rows, why one can't start, and the start itself.
     var sideChatSlash: (() -> ComposerMenus.SideChatSlash?)?
     var sideChatDisabledReason: (() -> String?)?
-    var onSideChat: ((String?) async -> Bool)?
+    var onSideChat: ((SideChatMessage?) async -> Bool)?
     /// The model the next send uses.
     var selectedModel: ModelSelection? { pickers.current.modelSelection }
     /// After thread state or prompt content presence changes: the branch notice follows the prompt.
@@ -201,12 +227,36 @@ final class ComposerController {
         onTargetChange?()
     }
 
+    /// What every composer in the window shares: the thread panel's and an open side chat's
+    /// (`init(embeddedIn:)`, SideChatPane.tsx renders the full ChatView composer). One copy, so neither
+    /// overwrites the other's saved drafts and only the panel's controller follows the server configs.
+    @MainActor final class Shared {
+        var prompts: [String: String] = [:]
+        var sessions: [String: DraftSession] = [:]
+        var replyTargets: [String: JSONValue] = [:]
+        var draftAttachments: [String: [ComposerAttachment]] = [:]
+        var savedDraftAttachments: [DraftAttachmentRecord] = []
+        var restoredUploads: [String: DraftAttachmentRecord.Pending] = [:]
+        var unverifiedUploads: Set<String> = []
+        var serverConfigs: [String: ServerProviderConfig] = [:]
+        var workspaceSnapshots: [String: ProviderWorkspaceSnapshots] = [:]
+        var capabilities: [String: (questionAttachments: Bool, uploadLimit: Int?, threadStop: Bool, queuedRunStart: Bool, compactionSteer: Bool)] = [:]
+        let selections = ComposerSelectionStore()
+        lazy var stash = PromptStashStore(directory: ComposerController.supportDirectory.appendingPathComponent("PromptStash", isDirectory: true))
+    }
+    private let shared: Shared
+    /// The thread panel's controller, for a side chat's; it saves and syncs the sidebar for both.
+    private weak var host: ComposerController?
+    /// The open side chat's controller, refreshed when a config or capability it reads changes.
+    private weak var embedded: ComposerController?
+    private var settingsObserver: Int?
+
     /// Model, traits and access: the footer controls and the per-draft picks they own.
-    let pickers = ComposerPickers(store: ComposerSelectionStore(), draftKey: "", context: ComposerSelectionContext(catalog: ProviderCatalog([])))
+    let pickers: ComposerPickers
     /// `server.getConfig` providers and settings per environment, followed through `subscribeServerConfig`
     /// on each environment's session (T3 follows every environment's config, CR/state/server.ts:437).
-    private var serverConfigs: [String: ServerProviderConfig] = [:]
-    private var workspaceSnapshots: [String: ProviderWorkspaceSnapshots] = [:]
+    private var serverConfigs: [String: ServerProviderConfig] { get { shared.serverConfigs } _modify { yield &shared.serverConfigs } }
+    private var workspaceSnapshots: [String: ProviderWorkspaceSnapshots] { get { shared.workspaceSnapshots } _modify { yield &shared.workspaceSnapshots } }
     private var configSubscriptions: [String: (shell: ShellSession, task: Task<Void, Never>)] = [:]
     private var serverConfig: ServerProviderConfig {
         targetEnvironmentId.flatMap { serverConfigs[$0] } ?? ServerProviderConfig(providers: [])
@@ -253,7 +303,9 @@ final class ComposerController {
     fileprivate var questionFiles: [String: [QuestionFile]] = [:]
     /// Each environment's `questionAttachments` capability and upload limit (`fileAttachmentStagingLimit`),
     /// read from `/.well-known/t3/environment` when its session changes.
-    fileprivate var capabilities: [String: (questionAttachments: Bool, uploadLimit: Int?, threadStop: Bool, queuedRunStart: Bool, compactionSteer: Bool)] = [:]
+    fileprivate var capabilities: [String: (questionAttachments: Bool, uploadLimit: Int?, threadStop: Bool, queuedRunStart: Bool, compactionSteer: Bool)] {
+        get { shared.capabilities } _modify { yield &shared.capabilities }
+    }
     /// Redesign's "+" > Threads set it: the bare `@` it inserts lists threads, not files.
     fileprivate var browsingThreads = false
     fileprivate var supportsQuestionAttachments: Bool { targetEnvironmentId.flatMap { capabilities[$0]?.questionAttachments } ?? false }
@@ -262,14 +314,14 @@ final class ComposerController {
 
     /// Draft attachments by draft key (extension "Attachments" below), saved with the drafts
     /// (`DraftAttachmentRecord`). Restored ones wait here for their environment to connect.
-    private var restoredUploads: [String: DraftAttachmentRecord.Pending] = [:]
+    private var restoredUploads: [String: DraftAttachmentRecord.Pending] { get { shared.restoredUploads } _modify { yield &shared.restoredUploads } }
     /// Restored files whose upload the server has not confirmed yet: they keep their upload id when saved.
-    private var unverifiedUploads: Set<String> = []
+    private var unverifiedUploads: Set<String> { get { shared.unverifiedUploads } _modify { yield &shared.unverifiedUploads } }
     /// #32910: ready uploads checked against the server for the send in progress, by attachment id and when.
     private var sendVerified: [String: Date] = [:]
     private var verifyingForSend: Set<String> = []
-    private var savedDraftAttachments: [DraftAttachmentRecord] = []
-    private var draftAttachments: [String: [ComposerAttachment]] = [:]
+    private var savedDraftAttachments: [DraftAttachmentRecord] { get { shared.savedDraftAttachments } _modify { yield &shared.savedDraftAttachments } }
+    private var draftAttachments: [String: [ComposerAttachment]] { get { shared.draftAttachments } _modify { yield &shared.draftAttachments } }
     private var attachmentTasks: [String: Task<Void, Never>] = [:]
     /// A send that is retrying failed uploads, by draft key; it goes once they are all ready.
     private var sendAfterRetry: [String: (text: String, mode: ComposerLogic.SendMode, background: Bool)] = [:]
@@ -279,7 +331,7 @@ final class ComposerController {
     /// The value tells a send's arm from one made while it was in flight.
     private var freshSessionArms: [String: UUID] = [:]
     /// The response each thread's draft replies to (`replyTo` in composerDraftStore.ts at 4928), saved to `composer.replyTo.v1`.
-    private var replyTargets: [String: JSONValue] = [:]
+    private var replyTargets: [String: JSONValue] { get { shared.replyTargets } _modify { yield &shared.replyTargets } }
     /// A send made while images were being prepared, by draft key; it goes with the composer's text once they join.
     private var sendAfterPreparing: [String: (mode: ComposerLogic.SendMode, background: Bool)] = [:]
     /// Uploaded attachment ids to their local file, so a sent image shows before the server copy is fetched.
@@ -287,7 +339,7 @@ final class ComposerController {
     /// Server copies being fetched, so a cell and a chip asking for one image share one download.
     private var attachmentFetches: [String: Task<URL?, Never>] = [:]
     /// The prompt stash (`usePromptStashStore`), shared by every thread and environment like T3's.
-    private lazy var stash = PromptStashStore(directory: Self.supportDirectory.appendingPathComponent("PromptStash", isDirectory: true))
+    private var stash: PromptStashStore { shared.stash }
     private var stashInFlight: Set<String> = []
     private var stashPulseWork: DispatchWorkItem?
     private var stashKeyMonitor: Any?
@@ -302,38 +354,52 @@ final class ComposerController {
     // v2 sessions hold scoped ids; v1 (one environment) is read once and scoped by its key's prefix.
     private static let promptsKey = "composer.prompts.v1", sessionsKey = "composer.draftSessions.v2"
     private static let sessionsKeyV1 = "composer.draftSessions.v1"
-    private var prompts: [String: String]
-    private var sessions: [String: DraftSession]
+    private var prompts: [String: String] { get { shared.prompts } _modify { yield &shared.prompts } }
+    private var sessions: [String: DraftSession] { get { shared.sessions } _modify { yield &shared.sessions } }
     private var saveWork: DispatchWorkItem?
     private lazy var refreshes = ComposerRefreshCoordinator(
         threadState: { [weak self] in self?.refreshThreadState() },
         promptState: { [weak self] in self?.refreshPromptState() })
 
-    init(panel: ThreadPanelView, sidebar: SidebarContentView, environments: Environments) {
+    /// `host` set: a side chat's composer in `panel`, sharing the host's drafts, uploads, picks and configs.
+    init(panel: ThreadPanelView, sidebar: SidebarContentView, environments: Environments, embeddedIn host: ComposerController? = nil) {
         self.panel = panel
         self.sidebar = sidebar
         self.environments = environments
-        let defaults = UserDefaults.standard
-        prompts = defaults.dictionary(forKey: Self.promptsKey) as? [String: String] ?? [:]
-        replyTargets = defaults.data(forKey: "composer.replyTo.v1").flatMap { try? JSONDecoder().decode([String: JSONValue].self, from: $0) } ?? [:]
-        func decode(_ key: String) -> [String: DraftSession]? {
-            defaults.data(forKey: key).flatMap { try? JSONDecoder().decode([String: DraftSession].self, from: $0) }
-        }
-        sessions = decode(Self.sessionsKey) ?? Self.scopeV1(decode(Self.sessionsKeyV1) ?? [:])
-        restoreDraftAttachments(defaults)
-        if let data = defaults.data(forKey: "composer.identities.v1"),
-           let records = try? JSONDecoder().decode([String: JSONValue].self, from: data) {
-            menuState.records.merge(ComposerContext.persistedIdentityRecords(prompts: Array(prompts.values), records: records)) { current, _ in current }
-        }
-        if let data = defaults.data(forKey: "composer.reviewComments.v1"),
-           let records = try? JSONDecoder().decode([String: JSONValue].self, from: data) {
-            menuState.records.merge(records.filter { $0.value["kind"]?.stringValue == "review-comment" }) { current, _ in current }
+        self.host = host
+        shared = host?.shared ?? Shared()
+        pickers = ComposerPickers(store: shared.selections, draftKey: "", context: ComposerSelectionContext(catalog: ProviderCatalog([])))
+        if let host {
+            menuState.records = host.menuState.records
+            menuState.pullRequestsSupported = host.menuState.pullRequestsSupported
+            menuState.peerLinks = host.menuState.peerLinks
+            openThread = host.openThread
+            openProviderSetup = host.openProviderSetup
+            openUsagePage = host.openUsagePage
+            host.embedded = self
+        } else {
+            let defaults = UserDefaults.standard
+            prompts = defaults.dictionary(forKey: Self.promptsKey) as? [String: String] ?? [:]
+            replyTargets = defaults.data(forKey: "composer.replyTo.v1").flatMap { try? JSONDecoder().decode([String: JSONValue].self, from: $0) } ?? [:]
+            func decode(_ key: String) -> [String: DraftSession]? {
+                defaults.data(forKey: key).flatMap { try? JSONDecoder().decode([String: DraftSession].self, from: $0) }
+            }
+            sessions = decode(Self.sessionsKey) ?? Self.scopeV1(decode(Self.sessionsKeyV1) ?? [:])
+            restoreDraftAttachments(defaults)
+            if let data = defaults.data(forKey: "composer.identities.v1"),
+               let records = try? JSONDecoder().decode([String: JSONValue].self, from: data) {
+                menuState.records.merge(ComposerContext.persistedIdentityRecords(prompts: Array(prompts.values), records: records)) { current, _ in current }
+            }
+            if let data = defaults.data(forKey: "composer.reviewComments.v1"),
+               let records = try? JSONDecoder().decode([String: JSONValue].self, from: data) {
+                menuState.records.merge(records.filter { $0.value["kind"]?.stringValue == "review-comment" }) { current, _ in current }
+            }
         }
         applyClientSettings()
         pickers.favorites = { [unowned self] in self.modelPreferences(self.targetEnvironmentId).favorites }
         pickers.modelPreferences = { [unowned self] in self.modelPreferences(self.targetEnvironmentId).providers }
         pickers.toggleFavorite = { [unowned self] id, model in self.toggleModelFavorite(self.targetEnvironmentId, id, model) }
-        ClientSettingsStore.shared.observe { [weak self] keys in
+        settingsObserver = ClientSettingsStore.shared.observe { [weak self] keys in
             guard let self else { return }
             self.applyClientSettings()
             if keys.contains("effortDisplay") { self.refresh() }
@@ -621,6 +687,7 @@ final class ComposerController {
         environments.setIconOverride(environmentId, config.settings.environmentIcon)
         switch event { case .snapshot, .settingsUpdated: migrateModelPreferences(environmentId); default: break }
         if refreshComposer && environmentId == targetEnvironmentId { refresh() }
+        if environmentId == embedded?.targetEnvironmentId { embedded?.refresh() }
         onConfigChange?(environmentId)
         configObservers.forEach { $0(environmentId) }
         let snapshot: Bool = if case .snapshot = event { true } else { false }
@@ -1290,7 +1357,10 @@ final class ComposerController {
         let active = groups.first { $0.memberProjectIds.contains(currentId) }
         // `onValueChange` (DraftHeroHeadline.tsx:282-295 in 2994): "Add project" opens the add flow, the current
         // project does nothing, another opens its draft.
-        DraftHeroView.showProjectPicker(groups: groups, selectedKey: active?.key, environments: envs, from: anchor) { [weak self] key in
+        let actions = sidebar?.actions
+        DraftHeroView.showProjectPicker(groups: groups, selectedKey: active?.key, environments: envs, from: anchor,
+                                        canPin: { actions?.canPinProject($0) ?? false },
+                                        onTogglePin: { actions?.setProjectPinned($0, $1) }) { [weak self] key in
             guard let self else { return }
             guard let key else { self.onAddProject?(); return }
             guard key != active?.key, let group = groups.first(where: { $0.key == key }) else { return }
@@ -1352,9 +1422,10 @@ final class ComposerController {
     }
 
     /// `/side` and `/btw` start a side chat with the rest as its message, ahead of an open question or a plan follow-up
-    /// (useComposerSend.ts:436-680 at 4928). True when the text was handled here.
-    // ponytail: text only; a draft with attachments says to remove them, as T3 does while answering, until side chats carry them (#38350)
-    private func sendSideChat(_ prompt: String, text: String) -> Bool {
+    /// (useComposerSend.ts:436-680 at 4928). True when the text was handled here. The draft's attachments, chips
+    /// and reply go with it once their uploads are ready (:580-690); only an answer refuses them, since its files
+    /// live in the question's draft (:595-612).
+    private func sendSideChat(_ prompt: String, text: String, mode: ComposerLogic.SendMode) -> Bool {
         guard let onSideChat else { return false }
         if queuedEdit != nil {
             // A queued message stays in its thread, so saving `/side` would send it to main (:790-797).
@@ -1365,15 +1436,66 @@ final class ComposerController {
             toast(.warning, "Side chat not started", reason)
             return true
         }
-        if !currentAttachments.isEmpty {
+        let key = draftKey
+        let attachments = currentAttachments
+        let reply = replyAvailable ? key.flatMap { replyTargets[$0] } : nil
+        let records = contextRecords(for: prompt)
+        if questionRequestId != nil, !attachments.isEmpty || reply != nil || !ComposerContext.referencedIds(prompt).isEmpty {
             toast(.warning, "Side chat not started", "Remove the attachments and context, then send it again.")
             return true
+        }
+        // Uploads finish first, as a plain send's do: the send comes back here once they are ready.
+        if let key, !attachments.isEmpty {
+            let failed = ComposerAttachmentRules.retryableFailures(attachments)
+            if !failed.isEmpty {
+                sendAfterRetry[key] = (text, mode, false)
+                for a in failed { retryAttachment(a.id) }
+                return true
+            }
+            if let reason = ComposerAttachmentRules.sendBlockReason(attachments, redirectsApproval: false) {
+                threadErrors.set(key, reason)
+                refresh()
+                return true
+            }
+            if ComposerAttachmentRules.uploadBlockReason(attachments) != nil {
+                sendAfterRetry[key] = (text, mode, false)
+                refresh()
+                return true
+            }
+        }
+        var messageText = prompt
+        var context = ComposerContext.referencedIds(prompt).compactMap { records[$0] }
+        if let reply, let id = reply["contextId"]?.stringValue {
+            messageText = ComposerReply.prompt(messageText, replyingTo: reply)
+            context.insert(reply, at: 0)
+            menuState.records[id] = reply
+        }
+        context += attachments.compactMap(\.contextRecord)
+        let trimmed = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message: SideChatMessage? = trimmed.isEmpty && attachments.isEmpty ? nil : SideChatMessage(
+            text: trimmed.isEmpty ? ComposerAttachmentRules.attachmentOnlyPrompt : trimmed,
+            attachments: attachments.compactMap(\.chatAttachment),
+            context: context.isEmpty ? nil : .object(["version": .number(1), "records": .array(context)]))
+        // Cleared at send like a regular message, so nothing in it changes mid-start; a failed start puts it back.
+        if let key {
+            draftAttachments[key] = nil
+            if replyTargets.removeValue(forKey: key) != nil { updateReplyBanner() }
         }
         composer.text = ""
         remember("")
         Task { [weak self] in
+            let started = await onSideChat(message)
+            guard let self else { return }
+            if started {
+                sentSnapShots(attachments)
+                return
+            }
             // A start that failed gives the draft back, unless something new was typed meanwhile.
-            if await !onSideChat(prompt.isEmpty ? nil : prompt), let self, self.composer.text.isEmpty { self.composer.text = text }
+            guard draftKey == key, composer.text.isEmpty else { return }
+            composer.text = text
+            remember(text)
+            restoreAttachments(attachments, key: key)
+            if let key, let reply { replyTargets[key] = reply; updateReplyBanner() }
         }
         return true
     }
@@ -1433,6 +1555,12 @@ final class ComposerController {
     }
 
     private func save() {
+        // A side chat's records and drafts are saved with the panel's, from the one copy.
+        if let host {
+            host.menuState.records.merge(menuState.records) { _, new in new }
+            host.save()
+            return
+        }
         // ponytail: prompts of threads deleted elsewhere stay stored; prune against the shell if it grows
         UserDefaults.standard.set(prompts, forKey: Self.promptsKey)
         UserDefaults.standard.set(try? JSONEncoder().encode(sessions), forKey: Self.sessionsKey)
@@ -1820,7 +1948,6 @@ final class ComposerController {
     /// `redirecting`: the pending approvals were just declined for this send, which now goes.
     private func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool = false, redirecting: Bool = false, compactConfirmed: Bool = false) {
         guard !threadRewindBusy, !declineInFlight else { return }
-        if case .thread = target, let prompt = SideChats.parseCommand(text), sendSideChat(prompt, text: text) { return }
         let sentText = text
         // A send now would leave a still-compressing image out of the turn, so it waits and goes once they finish
         // (#37547, ChatComposer.tsx `useSubmitAfterPreparingImages` at 4928).
@@ -1828,6 +1955,7 @@ final class ComposerController {
             sendAfterPreparing[key] = (mode, background)
             return
         }
+        if case .thread = target, let prompt = SideChats.parseCommand(text), sendSideChat(prompt, text: text, mode: mode) { return }
         if case .draft(let draft) = target, draft.envMode == nil, let task = settingsWorkspaceTask {
             guard !settingsWorkspaceSendPending else { return }
             settingsWorkspaceSendPending = true
@@ -2966,6 +3094,7 @@ final class ComposerController {
 extension ComposerController {
     /// Drafts with a prompt, for `SidebarDraftBlock` (Sidebar.tsx:962-1066), and the open draft.
     func syncSidebarDrafts() {
+        if let host { host.syncSidebarDrafts(); return }
         // Draft rows show for every environment in the merged shell, each under its own (scoped) project.
         let projects = Set(sidebar?.snapshot?.projects.map(\.id) ?? [])
         let drafts = sessions.values.compactMap { s -> SidebarDraft? in
@@ -3078,6 +3207,8 @@ extension ComposerController {
             capabilities[environmentId] = (descriptor.capability("questionAttachments"), limit, descriptor.capability("threadStop"), queuedRunStart, compactionSteer)
             menuState.pullRequestsSupported[environmentId] = descriptor.capability("pullRequests")
             refresh()
+            embedded?.menuState.pullRequestsSupported[environmentId] = menuState.pullRequestsSupported[environmentId]
+            embedded?.refresh()
         }
     }
 

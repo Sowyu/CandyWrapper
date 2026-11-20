@@ -526,7 +526,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 50c1c5dc53 | #26901 | browser | feat: side chats beside the main thread | ported (side-chats): the right panel's Side chat tab with its state dot, the + menu row behind `sideChats`, the pane's header with Bring back, Delete and Close over the side chat's embedded chat, the fork, mode and send sequence with the unused-thread cleanup, closing a never-run side chat deletes it, opening a side chat routes to its parent's tab. Left: the details card's Side chats section (Features/Git), the side chat composer's attachments, chips and `/` menu |
+| 50c1c5dc53 | #26901 | browser | feat: side chats beside the main thread | ported (side-chats, composer-4): the right panel's Side chat tab with its state dot, the + menu row behind `sideChats`, the pane's header with Bring back, Delete and Close over the side chat's embedded chat, the fork, mode and send sequence with the unused-thread cleanup, closing a never-run side chat deletes it, opening a side chat routes to its parent's tab. composer-4: the pane's composer is a second ComposerController on the panel's shared drafts, so attachments, chips, `/`, reply and drafts work there. Left: the details card's Side chats section (Features/Git) |
 | b5c83cdb95 | #28326 | thread | Show the full title in lineage/side-chat row tooltips | left: planned in side-chats-4928.md (sidebar-2) |
 | 171f78b879 | #29917 | thread | fix(client): project removal counts only listed threads, not side chats or subagents | already in CandyWrapper: SettingsPages.swift:80 counts only lineage.isListed threads (sidebar-2) |
 | 12ec17ce4c | #29891 | thread | fix(web): opening a project from the command palette no longer lands in a subagent or side chat | already in CandyWrapper: PaletteCommands.swift:717 skips threads that are not listed (sidebar-2) |
@@ -540,17 +540,17 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 76ae36ef8c | #36800 | pr/git | fix(web): deleting a thread with side chats offers to delete its worktree | left: planned in side-chats-4928.md (sidebar-2) |
 | 2dd810d0f6 | #36932 | thread | fix(web,mobile): /btw and /side drafts show the send arrow while a turn runs | left: needs the composer's primary button to read `/side` text while a turn runs |
 | a31fab93a2 | #31360 | thread | fix(web): focus side-chat composer when selecting its tab | left: planned in side-chats-4928.md (sidebar-2) |
-| d23f479a87 | #32117 | thread | fix(web): right panel shortcuts work while a side chat has focus | left: planned in side-chats-4928.md (sidebar-2) |
-| def3722faa | #31931 | thread | fix(web): Shift+F6 moves from a side chat back to the main chat | left: planned in side-chats-4928.md (sidebar-2) |
+| d23f479a87 | #32117 | thread | fix(web): right panel shortcuts work while a side chat has focus | ported (composer-4): keys inside a side chat run its own composer table; of the chat's commands only rightPanel.toggle, close and toggleMaximized reach the main chat (useChatShortcuts.ts:26-30, 75-95); app commands still run |
+| def3722faa | #31931 | thread | fix(web): Shift+F6 moves from a side chat back to the main chat | ported (composer-4): F6 and Shift+F6 (shared keybindings.ts:59-63) move between the main chat's and the side chat's composers; the full workspace-area cycle (workspaceFocus.ts) is not ported |
 | 4fa5f0e0e6 | #32907 | thread | fix(web): a side chat's subagent opens its parent as a side chat tab, not a bare page | left: planned in side-chats-4928.md (sidebar-2) |
 | 0de6ddb823 | #37228 | thread | fix(web): editing a queued message into /btw no longer saves it to the main thread | ported (side-chats): ComposerController.sendSideChat refuses in a queued edit with T3's toast |
-| 052ca497cf | #38350 | composer | fix(web,mobile): side chats keep your attachments and context | left: `/side` with attachments says to remove them; carrying them needs the upload path in ComposerController |
+| 052ca497cf | #38350 | composer | fix(web,mobile): side chats keep your attachments and context | ported (composer-4): `/side` carries the draft's attachments, chips and reply once uploads are ready (useComposerSend.ts:580-690); only an open question's answer asks to remove them |
 
 ## New feature pin-archive-projects (1)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| ffaa1dba76 | #26154 | sidebar | feat: pin favorite projects and archive old ones | ported (side-chats): pinnedAt and archivedAt, pickable groups in the filter, draft picker and palette, pin buttons and Pin project in the filter, the project menu and the palette, pinned and archived folder order, unarchive on re-add. Left: Project settings' Pin and Archive rows (Features/Settings), the pin shortcut in pickers, the draft picker's pin button |
+| ffaa1dba76 | #26154 | sidebar | feat: pin favorite projects and archive old ones | ported (side-chats, composer-4): pinnedAt and archivedAt, pickable groups in the filter, draft picker and palette, pin buttons and Pin project in the filter, the project menu and the palette, pinned and archived folder order, unarchive on re-add. composer-4: the draft picker's pin buttons, Mod+Shift+P on a picker's highlighted row (DraftHeroHeadline.tsx:262-299, ProjectPinButton.tsx:11-55) and the shortcut in the pin's tooltip. Left: Project settings' Pin and Archive rows (Features/Settings) |
 
 ## New feature managed-policy (2)
 

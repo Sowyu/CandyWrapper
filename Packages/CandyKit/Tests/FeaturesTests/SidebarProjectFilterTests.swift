@@ -67,6 +67,27 @@ struct SidebarProjectFilterTests {
         #expect(writes.count == 1 && writes[0].0 == key && writes[0].1)
     }
 
+    /// Mod+Shift+P in an open picker pins the highlighted row (DraftHeroHeadline.tsx:262-271 at 4928); with no
+    /// highlighted row, or no picker in a window, the key stays with the open thread.
+    @Test func pinShortcutPinsTheHighlightedRow() {
+        let groups = SidebarListBuilder.projectScopeGroups(snapshot: Self.snapshot())
+        let view = SidebarProjectScopeView(groups: groups, selectedKey: nil, minimumWidth: 200, extra: .addProject, canPin: { _ in true })
+        var writes: [(String, Bool)] = []
+        view.onTogglePin = { writes.append(($0, $1)) }
+        #expect(!ProjectPickerPinShortcut.run())
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 300), styleMask: [], backing: .buffered, defer: true)
+        window.contentView?.addSubview(view)
+        #expect(!ProjectPickerPinShortcut.run())
+        view.highlighted = 0
+        #expect(ProjectPickerPinShortcut.run())
+        #expect(writes.count == 1 && writes[0].0 == view.items[0].key && writes[0].1)
+        // "Add project" has nothing to pin.
+        view.highlighted = view.shown.count - 1
+        #expect(!ProjectPickerPinShortcut.run())
+        view.removeFromSuperview()
+        #expect(!ProjectPickerPinShortcut.run())
+    }
+
     @Test func pinWaitsForTheCapability() {
         let groups = SidebarListBuilder.projectScopeGroups(snapshot: Self.snapshot())
         let view = SidebarProjectScopeView(groups: groups, selectedKey: nil, minimumWidth: 200)

@@ -998,6 +998,7 @@ final class ThreadController {
             return true
         }
         composer.registerShortcuts(shortcuts)
+        sideChats.registerShortcuts(shortcuts)
         terminal.registerShortcuts(shortcuts)
         scripts.registerShortcuts(shortcuts)
         git.registerShortcuts(shortcuts)
