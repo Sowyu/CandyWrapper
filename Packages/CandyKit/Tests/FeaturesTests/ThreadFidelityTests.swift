@@ -34,10 +34,11 @@ struct ThreadFidelityTests {
         return surface
     }
 
-    /// The two seeded replies captured in the 3814/3824 screen references. Redesign keeps ThreadPreview's old data.
+    /// The two seeded threads in the 4928 screen references, recorded from sandbox-4928-ref
+    /// (design/reference-4928/plans/sandbox-ids.json). Redesign keeps ThreadPreview's old data.
     static func projection(_ title: String) throws -> ThreadProjection? {
-        let expected = title == ThreadPreview.markdownThread ? "Format a Markdown Reply" : "Run Basic Shell Commands"
-        return try ThreadPreview.projections(transcript: "3814-design-threads.jsonl").last { $0.thread.title == expected }
+        let expected = title == ThreadPreview.markdownThread ? "Markdown Response Formatting Request" : "Run Shell Commands"
+        return try ThreadPreview.projections(transcript: "4928-screen-threads.jsonl").last { $0.thread.title == expected }
     }
 
     /// The real 3824 screens use fontSmoothing=true (appearanceFonts.ts:96-100), which means antialiased text.

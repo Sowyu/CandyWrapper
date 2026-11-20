@@ -50,8 +50,8 @@ struct SidebarFidelityTests {
         for theme in ["light", "dark"] {
             let ref = try Self.reference(theme)
             // 2x pixels: a 300x20 strip between thread rows, no text.
-            // The 3824 rows moved this text-free gutter; retain the 300x20 sample.
-            let crop = (x: 20, y: 716, w: 300, h: 20)
+            // The text-free gutter between the third and fourth rows of the 4928 capture, below the header art.
+            let crop = (x: 20, y: 620, w: 300, h: 20)
             let surface = GrainSurfaceView(fill: Themed.color(\.sidebar, sidebar: true))
             let ours = Snapshot.image(of: surface, size: NSSize(width: 256, height: 128), scale: 2, dark: theme == "dark")
             let r = Self.stats(ref, crop), o = Self.stats(ours, (x: 0, y: 0, w: 512, h: 256))
@@ -70,8 +70,8 @@ struct SidebarFidelityTests {
     @Test func selectedRowFillAgainstCapture() throws {
         for theme in ["light", "dark"] {
             let ref = try Self.reference(theme)
-            // 3824 selects the last row. Dark was captured before the additional story thread.
-            let crop = (x: 60, y: theme == "dark" ? 1244 : 1376, w: 320, h: 24)
+            // 4928 selects the last row, "Markdown Response Formatting Request"; this strip sits above its text.
+            let crop = (x: 60, y: 1320, w: 320, h: 16)
             let button = SidebarMenuButtonView("", size: .default)
             let box = GrainSurfaceView(fill: Themed.color(\.sidebar, sidebar: true))
             box.addSubview(button)

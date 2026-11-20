@@ -26,7 +26,7 @@ struct SidebarFidelityTests {
         content.windowedMac = false // the reference is the web client: no traffic lights
         content.stage = .nightly
         content.now = { SidebarPreview.referenceNow }
-        content.state = SidebarListState(activeThreadId: ThreadId("t9"))
+        content.state = SidebarListState(activeThreadId: ThreadId("t7")) // the markdown thread, open in 02
         content.setSnapshot(Screen3824Fixtures.sidebar(dark: dark), animated: false)
         container.content = content
         return Snapshot.image(of: container, size: NSSize(width: 256, height: 780), scale: 2, dark: dark)

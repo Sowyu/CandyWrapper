@@ -6,10 +6,10 @@ import T3Store
 @testable import Features
 
 /// The changed files card and the diff panel opened from it, against design/reference-4928 47 and 48
-/// (the "Document Hello Demo" thread, scrolled so the card sits where T3 put it). 47 compares
+/// (the "Document greet and update notes" thread, scrolled so the card sits where T3 put it). 47 compares
 /// the main panel above the composer; 48 compares the chat column above the composer and the whole
 /// right panel, after clicking notes.md in the card. The diff comes from the recorded
-/// sandbox snapshot and fixtures/3824-panel.patch. Writes ref, ours and diff PNGs
+/// sandbox snapshot and fixtures/4928-panel.patch. Writes ref, ours and diff PNGs
 /// plus report-changed-files.html to `Fidelity.root`.
 @MainActor @Suite(.fidelity)
 struct ChangedFilesFidelityTests {
@@ -19,17 +19,17 @@ struct ChangedFilesFidelityTests {
     ]
     static let out = Fidelity.root.appendingPathComponent("changed-files")
     static let size = ThreadFidelityTests.size
-    static let thread = "Add notes and docstring"
+    static let thread = "Document greet and update notes"
 
     /// The panel with the card's top edge at `cardTop` (window points, from the capture plan's log).
     static func render(dark: Bool, openDiff: Bool, cardTop: CGFloat) async throws -> (ThreadPanelView, NSBitmapImageRep) {
-        let projection = try #require(try ThreadPreview.projections(transcript: "3824-panel-threads.jsonl").first { $0.thread.title == "Document Hello Demo" })
+        let projection = try #require(try ThreadPreview.projections(transcript: "4928-screen-threads.jsonl").first { $0.thread.title == "Document greet and update notes" })
         let panel = ThreadPanelView(frame: NSRect(origin: .zero, size: size))
         // The reference is a 1100pt window, including its 256pt sidebar.
         panel.referenceViewportWidth = size.width + 256
         panel.bottomInset = ThreadFidelityTests.composerInset
         panel.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-        let patch = try String(contentsOf: SidebarFidelityTests.repo.appendingPathComponent("fixtures/3824-panel.patch"), encoding: .utf8)
+        let patch = try String(contentsOf: SidebarFidelityTests.repo.appendingPathComponent("fixtures/4928-panel.patch"), encoding: .utf8)
         panel.diffPanel.loader = { request in
             let json = try JSONSerialization.data(withJSONObject: ["threadId": projection.thread.id.rawValue, "fromTurnCount": 0, "toTurnCount": 1, "diff": patch])
             return try JSONDecoder().decode(ThreadTurnDiff.self, from: json)
@@ -79,7 +79,7 @@ struct ChangedFilesFidelityTests {
         let chat = 360 * 2
         var lines: [String] = [], cases: [(String, Double)] = [], images = ""
         for theme in ["light", "dark"] {
-            for (reference, openDiff, cardTop) in [("47-changed-files-card", false, 351.5), ("48-diff-turn-file", true, 464.5)] {
+            for (reference, openDiff, cardTop) in [("47-changed-files-card", false, 272.75), ("48-diff-turn-file", true, 409.25)] {
                 let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
                     "design/reference-4928/\(reference).\(theme).png"))))
                 let (panel, image) = try await Self.render(dark: theme == "dark", openDiff: openDiff, cardTop: cardTop)

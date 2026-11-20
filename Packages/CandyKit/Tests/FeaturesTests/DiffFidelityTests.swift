@@ -79,7 +79,7 @@ struct DiffFidelityTests {
     /// The panel area of the 2200x1560 captures: x from the panel's left border (1234 px) to the
     /// window edge, y from the header row (103 px, under the right panel's tab strip, which is not
     /// part of DiffPanel) to the bottom.
-    /// 3824 expands both sandbox files. 09 uses split layout and 10 uses stacked layout.
+    /// 4928 expands both sandbox files. 09 uses split layout and 10 uses stacked layout.
     @Test(arguments: ["10-diff-unified", "09-diff-split"])
     func panel(_ reference: String) async throws {
         defer { Fidelity.pin() }
@@ -93,16 +93,19 @@ struct DiffFidelityTests {
             panel.statStyle = .pierre
             panel.layoutStyle = reference == "09-diff-split" ? .split : .unified
             panel.bodyOffset = 0.5
-            let patch = try String(contentsOf: Self.repo.appendingPathComponent("fixtures/3824-panel.patch"), encoding: .utf8)
-            panel.workspaceRoot = "/sandbox/demo-repo"
+            // The notes thread's two uncommitted edits in sandbox-4928-ref (`git diff` in its demo-repo).
+            let patch = try String(contentsOf: Self.repo.appendingPathComponent("fixtures/4928-panel.patch"), encoding: .utf8)
+            panel.workspaceRoot = "/Users/Shared/cw-sandbox-4928/demo-repo"
             panel.gitLoader = { cwd, _, _ in
                 ReviewDiffPreview(cwd: cwd, sources: [.init(id: "branch", kind: "branch-range", title: "Changes",
-                    baseRef: nil, headRef: nil, diff: patch, diffHash: "3824-panel", truncated: false)])
+                    baseRef: nil, headRef: nil, diff: patch, diffHash: "4928-panel", truncated: false)])
             }
             panel.fileContentsLoader = { _, _, file in
-                let old = "def greet(name):\n    return f\"Hello, {name}!\"\n"
-                return ReviewDiffFileContents(oldContents: old, newContents: file.path == "hello.py"
-                    ? "\"\"\"Small demo module with a greeting helper.\"\"\"\n\n\n" + old : "")
+                let greet = "def greet(name):\n", body = "    return f\"Hello, {name}!\"\n\n\nif __name__ == \"__main__\":\n    print(greet(\"world\"))\n"
+                let notes = "# Notes\n\n- Demo project for reference captures.\n"
+                return file.path == "hello.py"
+                    ? ReviewDiffFileContents(oldContents: greet + body, newContents: greet + "    \"\"\"Return a greeting for the given name.\"\"\"\n" + body)
+                    : ReviewDiffFileContents(oldContents: notes, newContents: notes + "- Added a docstring.\n")
             }
             panel.selectGitScope(.branch)
             for _ in 0..<200 where panel.list.diff.files.isEmpty { try await Task.sleep(for: .milliseconds(10)) }

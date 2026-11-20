@@ -93,7 +93,7 @@ struct PickersFidelityTests {
 
     static let cases: [Case] = [
         Case(reference: "13-model-picker", rect: CGRect(x: 578, y: 434, width: 362, height: 283), backdropAt: CGPoint(x: 575, y: 440)) { p in
-            let config = try! PickersFidelityTests.recordedConfig(transcript: "24-nightly-3814")
+            let config = try! PickersFidelityTests.recordedConfig(transcript: "26-nightly-4928")
             let view = ModelPickerView(catalog: ProviderCatalog(config.providers), favorites: [], active: "claudeAgent", activeModel: "claude-haiku-5-5")
             // The capture focuses the search field on open (blue underline).
             var focused = view.search.state

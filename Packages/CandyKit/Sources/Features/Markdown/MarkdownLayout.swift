@@ -994,7 +994,7 @@ private struct Builder {
         for (index, item) in list.items.enumerated() {
             var content: Box
             if let checked = item.task {
-                content = taskItem(item, checked: checked, width: width - gutter, gutter: gutter, context: inner)
+                content = taskItem(item, checked: checked, width: width - gutter, gutter: gutter, context: inner, tight: !list.loose)
             } else {
                 // A loose list's items hold their text in a `<p>`, whose margins collapse with `li + li`.
                 content = flow(item.blocks, width: width - gutter, context: inner, tight: !list.loose)
@@ -1053,7 +1053,8 @@ private struct Builder {
 
     /// A task item: the disabled checkbox sits inline where the bullet would be
     /// (`margin: 0 0.35em 0.15em calc(-1 * var(--list-gutter))`, `vertical-align: middle`), then a space.
-    mutating func taskItem(_ item: MarkdownListItem, checked: Bool, width: CGFloat, gutter: CGFloat, context: Context) -> Box {
+    /// In a loose list the checkbox and text sit in a `<p>` whose margins collapse with `li + li`, as other items' do.
+    mutating func taskItem(_ item: MarkdownListItem, checked: Bool, width: CGFloat, gutter: CGFloat, context: Context, tight: Bool) -> Box {
         let body = MarkdownStyle.font(MarkdownStyle.fontSize)
         let space = TextLine(NSAttributedString(string: " ", attributes: [.font: body])).width
         let lead = -gutter + 13 + 0.35 * MarkdownStyle.fontSize + space
@@ -1067,10 +1068,16 @@ private struct Builder {
             box = Box()
             box.add(first, at: CGPoint(x: -gutter, y: 0))
             box.height = first.height
-            let rest = flow(blocks, width: width, context: context, tight: true)
-            if !blocks.isEmpty { box.add(rest, at: CGPoint(x: 0, y: box.height + rest.top)); box.height += rest.top + rest.height }
+            let margin = tight ? 0 : MarkdownStyle.blockMargin
+            box.top = margin; box.bottom = margin
+            let rest = flow(blocks, width: width, context: context, tight: tight)
+            if !blocks.isEmpty {
+                let gap = max(margin, rest.top)
+                box.add(rest, at: CGPoint(x: 0, y: box.height + gap)); box.height += gap + rest.height
+                if !tight { box.bottom = rest.bottom }
+            }
         } else {
-            box = flow(blocks, width: width, context: context, tight: true)
+            box = flow(blocks, width: width, context: context, tight: tight)
         }
         // vertical-align: middle puts the margin box's middle at baseline - x-height / 2.
         let baseline = box.baseline ?? TextLine(NSAttributedString(string: " ", attributes: [.font: body])).baseline(top: 0, lineHeight: MarkdownStyle.lineHeight)

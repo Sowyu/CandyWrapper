@@ -18,19 +18,24 @@ public func normalizeCompactToolLabel(_ value: String) -> String {
     value.replacing(/\s+(?:complete|completed)\s*$/.ignoresCase(), with: "").jsTrimmed
 }
 
-/// `formatDuration` (packages/shared/src/orchestrationTiming.ts:36-53).
+/// `formatDuration` (packages/shared/src/orchestrationTiming.ts:22-37 at 4928). Seconds under ten print as JS
+/// numbers do, so 4000ms reads "4s", and seconds show whenever minutes do ("1m 0s", "1h 1m 0s", but "1h").
 public func formatDuration(_ ms: Double) -> String {
     guard ms.isFinite, ms >= 0 else { return "0ms" }
     if ms < 1_000 { return "\(max(1, Int(ms.rounded())))ms" }
     if ms < 10_000 {
-        let tenths = (ms / 100).rounded() / 10
-        return tenths >= 10 ? "10s" : String(format: "%.1fs", tenths)
+        let tenths = Int((ms / 100).rounded())
+        return tenths % 10 == 0 ? "\(tenths / 10)s" : "\(tenths / 10).\(tenths % 10)s"
     }
     let total = Int((ms / 1_000).rounded())
     // The unit follows the rounded seconds, so 59.5 seconds never reads "60s" (bd93830550, :41-43).
     if total < 60 { return "\(total)s" }
-    let parts = [(total / 3_600, "h"), ((total % 3_600) / 60, "m"), (total % 60, "s")]
-    return parts.filter { $0.0 > 0 }.map { "\($0.0)\($0.1)" }.joined(separator: " ")
+    let hours = total / 3_600, minutes = (total % 3_600) / 60, seconds = total % 60
+    var parts: [String] = []
+    if hours > 0 { parts.append("\(hours)h") }
+    if minutes > 0 { parts.append("\(minutes)m") }
+    if seconds > 0 || minutes > 0 { parts.append("\(seconds)s") }
+    return parts.joined(separator: " ")
 }
 
 /// `formatTokens` (packages/shared/src/usageFormat.ts:32-45): three significant figures with a

@@ -5,7 +5,8 @@ import T3Protocol
 import T3Store
 @testable import Features
 
-/// Fixed surface crops from the 3824 full-window captures. These complement the component
+/// Fixed surface crops from the 4928 full-window captures. The data comes from the seeded sandbox-4928-ref
+/// (design/reference-4928/README.md) and the text the capture run saved for each state. These complement the component
 /// references and retain their existing per-surface ceilings. Coordinates are CSS points.
 @MainActor @Suite(.fidelity)
 struct PanelScreensFidelityTests {
@@ -23,9 +24,11 @@ struct PanelScreensFidelityTests {
         switch name {
         case "05-approval-request":
             let view = PendingApprovalInlineView()
-            view.configure(PendingApproval(requestId: "r", requestKind: .fileChange, createdAt: nil, detail: "approval-3824.txt",
+            let path = "/Users/Shared/cw-sandbox-4928/demo-repo/approval-4928.txt"
+            view.configure(PendingApproval(requestId: "r", requestKind: .command, createdAt: nil, detail: "printf 'hello' > \(path) && cat \(path)",
                                            appName: nil, options: nil, canRespond: true), threadId: "t", enabled: true)
-            return (view, CGRect(x: 310, y: 242, width: 736, height: 40), "approval")
+            // At 4928 the command wraps to two lines above the status row.
+            return (view, CGRect(x: 310, y: 242, width: 736, height: view.height(forWidth: 736)), "approval")
         case "07-palette-default":
             let items = [
                 CommandPaletteItem("New thread in ", icon: .squarePen, shortcut: "⇧⌘N", titleEmphasis: "demo-repo"),
@@ -37,37 +40,38 @@ struct PanelScreensFidelityTests {
                 CommandPaletteItem("New project", icon: .folderGit2),
                 CommandPaletteItem("Add project", icon: .folderPlus),
                 CommandPaletteItem("Change theme", icon: .palette, shortcut: "⌥⌘A", isSubmenu: true),
-                CommandPaletteItem("Open settings", icon: .settings),
+                CommandPaletteItem("Change appearance", icon: .monitor, shortcut: "⌥⇧⌘A", isSubmenu: true),
+                CommandPaletteItem("Toggle theme editor", icon: .palette, shortcut: "⌥⇧⌘T"),
             ]
             let view = CommandPaletteView(content: .results([CommandPaletteGroup("Actions", items)]))
             view.highlightedIndex = 0
             return (view, CGRect(x: 262, y: 78, width: 576, height: 420), "palette")
         case "08-palette-search":
-            var thread = CommandPaletteItem("Document Hello Demo", icon: .messageSquare, description: "demo-repo · Local", timestamp: "1h ago")
-            thread.makeDescription = { PaletteThreadSubtitleView(project: ProjectIconSource(title: "demo-repo", workspaceRoot: "/tmp/demo-repo"), text: "demo-repo · Local", driver: "claudeAgent") }
-            var rows: [(String, String, Bool, String)] = [
-                ("Create Approval Text File", "You: …containing hello.", true, dark ? "2m ago" : "7m ago"),
-                ("Create Approval Demo File", "You: …containing hello.", true, "1h ago"),
-                ("Run Basic Shell Commands", "Agent: The directory has hello.py, README.md, and src, with no uncommitted changes.", false, "1h ago"),
-                ("Format a Markdown Reply", "Agent: …-> str: return f\"hello {name}\" typescript const greet = (name: string): string", false, "1h ago"),
+            // No thread title contains "hello" at 4928, so only "In messages" shows. Ages from the capture's text.
+            let ages = dark ? ["17m ago", "16m ago", "18m ago", "19m ago"] : ["23m ago", "22m ago", "24m ago", "25m ago"]
+            let rows: [(String, String, Bool, String)] = [
+                ("Document greet and update notes", "You: …docstring to greet in hello.py and append the line '- Added a docstring.' to notes.md. No other changes. Reply in one short line.", true, ages[0]),
+                ("Create Approval File", "You: …containing hello.", true, ages[1]),
+                ("Run Shell Commands", "Agent: …three ran: ls shows hello.py, notes.md, README.md; git status --short is empty (clean); ls /nonexistent-dir failed with \"No such file or directory\".", false, ages[2]),
+                ("Markdown Response Formatting Request", "Agent: …python print(\"hello from python\") typescript const add = (a: number, b: number): number => a + b; bash git status --short > [!NOTE] > This reply used no tools. Nothing in the repo changed.", false, ages[3]),
             ]
-            if !dark { rows = [rows[3]] + Array(rows.prefix(3)) }
             let matches = rows.map { title, match, user, time in
                 var row = CommandPaletteItem(title, icon: .messageSquare, timestamp: time, match: match)
                 row.matchIsUser = user
                 row.note = "demo-repo"
                 row.noteAfterTitle = true
-                if title == "Create Approval Text File" { row.makeLeading = { PaletteThreadStatusView(.init(label: .pendingApproval, pulse: false)) } }
-                if title == "Create Approval Demo File" { row.makeLeading = { PaletteThreadStatusView(.init(label: .completed, pulse: false)) } }
+                if title == "Create Approval File" { row.makeLeading = { PaletteThreadStatusView(.init(label: .pendingApproval, pulse: false)) } }
+                if title == "Document greet and update notes" { row.makeLeading = { PaletteThreadStatusView(.init(label: .completed, pulse: false)) } }
                 if let r = match.range(of: "hello", options: .caseInsensitive) {
                     row.matchHighlights = Array(match.distance(from: match.startIndex, to: r.lowerBound)..<match.distance(from: match.startIndex, to: r.upperBound))
                 }
                 return row
             }
-            let view = CommandPaletteView(content: .results([CommandPaletteGroup("Threads", [thread]), CommandPaletteGroup("In messages", matches)]))
+            let view = CommandPaletteView(content: .results([CommandPaletteGroup("In messages", matches)]))
             view.input.text = "hello"
             view.footerActionLabel = "Select"
-            return (view, CGRect(x: 262, y: 78, width: 576, height: 410), "palette")
+            // Four matches: the 4928 palette ends at 326pt (its bottom border, measured on both captures).
+            return (view, CGRect(x: 262, y: 78, width: 576, height: 326), "palette")
         case "11-terminal-drawer":
             let view = TerminalDrawerView()
             let surface = TerminalSurfaceView()
@@ -96,8 +100,8 @@ struct PanelScreensFidelityTests {
             return (view, CGRect(x: 817, y: 252, width: 260, height: 64), "git")
         case "22-commit-dialog":
             let view = CommitDialog(branch: "main", isDefaultRef: true,
-                                    files: [VcsStatus.File(path: "hello.py", insertions: 3, deletions: 0),
-                                            VcsStatus.File(path: "notes.md", insertions: 0, deletions: 0)], canChangeBranch: true, canWrite: true)
+                                    files: [VcsStatus.File(path: "hello.py", insertions: 1, deletions: 0),
+                                            VcsStatus.File(path: "notes.md", insertions: 1, deletions: 0)], canChangeBranch: true, canWrite: true)
             return (view.dialog, CGRect(x: 294, y: 106, width: 512, height: 568), "git")
         case "43-find-in-thread":
             let view = ThreadFindBarView()
@@ -107,14 +111,14 @@ struct PanelScreensFidelityTests {
             return (view, CGRect(x: 808, y: 64, width: 280, height: 36), "find")
         case "44-thread-details-panel", "50-floating-thread-settings":
             let view = ThreadViewFidelityTests.card(.full, size: CGSize(width: 280, height: 230))
-            view.runContext.text = "miniko"
+            view.runContext.text = "Sandbox Mac"
             view.runContext.icons = [EnvironmentMachineIcon.definition("mac-mini"), IconName.folder.definition]
             view.scriptsRow = .add
-            view.totals.insertions = 6
+            view.totals.insertions = 2
             view.openIn.primary.icon = IconName.brandFinder.definition
             return (view, CGRect(x: 808, y: 60, width: 280, height: 230), "git")
         case "45-go-to-file":
-            let paths = ["hello.py", "README.md", "src/answer.ts", "notes.md"]
+            let paths = ["hello.py", "notes.md", "README.md"]
             let items = paths.map { path in
                 var row = CommandPaletteItem((path as NSString).lastPathComponent, icon: .file, description: path)
                 row.glyph = FileTypeIcon.icon(for: path)
@@ -124,14 +128,14 @@ struct PanelScreensFidelityTests {
             view.input.placeholder = "Search files..."
             view.footerActionLabel = "Open file"
             view.escapeLabel = "Back"
-            return (view, CGRect(x: 262, y: 78, width: 576, height: 328), "palette")
+            view.highlightedIndex = 0
+            // Three files: the 4928 palette ends at 278pt (its bottom border, measured on both captures).
+            return (view, CGRect(x: 262, y: 78, width: 576, height: 278), "palette")
         case "46-project-search":
             let body = ContentSearchView()
             let python = "    return f\"Hello, {name}!\""
-            let notes = "- `hello.py` holds a single `greet(name)` helper that returns a greeting string."
-            body.apply(matches: [ProjectContentMatch(path: "hello.py", lineNumber: 5, lineContent: python, matchRanges: [.init(start: 13, end: 18)]),
-                                 ProjectContentMatch(path: "notes.md", lineNumber: 2, lineContent: notes, matchRanges: [.init(start: 3, end: 8)])],
-                       status: .results(count: 2, truncated: false, files: 2), empty: "No results found.")
+            body.apply(matches: [ProjectContentMatch(path: "hello.py", lineNumber: 3, lineContent: python, matchRanges: [.init(start: 13, end: 18)])],
+                       status: .results(count: 1, truncated: false, files: 1), empty: "No results found.")
             let view = CommandPaletteView(content: .custom(body))
             view.inputAccessory = body.accessory
             view.input.text = "hello"

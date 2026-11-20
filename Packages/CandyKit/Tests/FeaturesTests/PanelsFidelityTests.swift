@@ -5,7 +5,7 @@ import T3Protocol
 import T3Store
 @testable import Features
 
-/// The 3824 question and composer at their established crops. The old approval drawer crop now
+/// The 4928 question and composer at their established crops. The old approval drawer crop now
 /// checks that the drawer is absent; PanelScreensFidelityTests also checks its new inline row.
 /// Redesign's question fixtures remain separate from these sandbox screen fixtures.
 @MainActor @Suite(.fidelity)
@@ -36,13 +36,23 @@ struct PanelsFidelityTests {
         "design/reference-4928/\(reference).\(theme).png"
     }
 
-    static let screenPurpose = UserInputQuestion(
-        id: "purpose", header: "Purpose", question: "What is the purpose of this session?",
+    /// The two AskUserQuestion questions of the "CLI Tool Clarification" thread in sandbox-4928-ref (turn 3).
+    static let screenLanguage = UserInputQuestion(
+        id: "Which language should the CLI be written in?", header: "Language", question: "Which language should the CLI be written in?",
         options: [
-            .init(label: "Learning", description: "Walk through the code and explain how it works."),
-            .init(label: "Automation", description: "Script repeated tasks so they run without manual steps."),
-            .init(label: "Integration", description: "Connect this project to another service, API, or tool."),
-            .init(label: "General use", description: "Everyday coding and edits with no specific goal."),
+            .init(label: "Node.js (Recommended)", description: "Runs anywhere Node is installed. Easy to publish to npm and ships with a large set of CLI libraries."),
+            .init(label: "Python", description: "Single-file scripts and good stdlib (argparse). Needs a Python install on the target machine."),
+            .init(label: "Go", description: "Compiles to one static binary with no runtime needed. Slower to iterate on than a script."),
+            .init(label: "Bash", description: "No install step. Fine for simple wrappers, but gets hard to test and maintain past a few commands."),
+        ])
+    static let screenPurpose = UserInputQuestion(
+        id: "What should the tool do? Describe its main job in a sentence or two, and say whether it reads from files, the network, or both.",
+        header: "Purpose",
+        question: "What should the tool do? Describe its main job in a sentence or two, and say whether it reads from files, the network, or both.",
+        options: [
+            .init(label: "Work on local files", description: "Reads, transforms, or renames files in the current project or a given directory."),
+            .init(label: "Call an API", description: "Sends requests to a web service and prints or saves the response."),
+            .init(label: "Something else", description: "I'll describe it in my answer."),
         ])
 
     /// The banner view and the composer top (css px) measured on the capture.
@@ -54,7 +64,7 @@ struct PanelsFidelityTests {
             return (panel, panel.preferredHeight(width: bannerWidth), 616)
         }
         let panel = QuestionPanelView()
-        panel.configure(PendingUserInput(requestId: "q", createdAt: nil, questions: [screenPurpose, language], responseCapability: "live",
+        panel.configure(PendingUserInput(requestId: "q", createdAt: nil, questions: [screenLanguage, screenPurpose], responseCapability: "live",
                                          dismissible: true), threadId: "t")
         return (panel, panel.preferredHeight(width: bannerWidth), 644.5)
     }
