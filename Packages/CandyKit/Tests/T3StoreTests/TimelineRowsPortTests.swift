@@ -667,3 +667,21 @@ private func messageFlags(_ row: TimelineRow?) -> (meta: Bool, copy: Bool, strea
         #expect(rows.last.map(kind) == "thinking")
     }
 }
+
+/// "Tool calls in chat" (4928 #30000, client-runtime work-log/presentation.ts:355-370).
+struct ToolCallVisibilityTests {
+    @Test func hidesToolRowsByTheSetting() {
+        let at: T3Timestamp = "2026-01-01T00:00:00Z"
+        let entries: [TimelineEntry] = [
+            work("ok", at: at) { $0.itemType = .commandExecution; $0.toolLifecycleStatus = .completed },
+            work("failed", at: at) { $0.itemType = .commandExecution; $0.toolLifecycleStatus = .completed; $0.detail = "error: no such file" },
+            work("running", at: at) { $0.itemType = .fileChange; $0.toolLifecycleStatus = .inProgress },
+            work("thinking", at: at) { $0.itemType = .reasoning; $0.toolLifecycleStatus = .completed },
+            message("m", role: .assistant, at: at),
+        ]
+        func ids(_ v: String) -> [String] { TimelineRows.filteringToolCalls(entries, visibility: v).map(\.id) }
+        #expect(ids("showAll") == ["ok", "failed", "running", "thinking", "m"])
+        #expect(ids("hideSuccessful") == ["failed", "running", "thinking", "m"])
+        #expect(ids("hideAll") == ["thinking", "m"])
+    }
+}

@@ -19,6 +19,8 @@ final class TimelinePipeline: @unchecked Sendable {
         var expandedWorkGroupIds: Set<String>
         /// Optimistic user messages, shown after the server's rows.
         var pending: [ChatMessage]
+        /// The "Tool calls in chat" setting (`toolCallVisibility`, 4928 #30000).
+        var toolCallVisibility = "showAll"
     }
 
     struct Result: Sendable {
@@ -39,6 +41,7 @@ final class TimelinePipeline: @unchecked Sendable {
     private var prependedSinceShown: Int?
     /// Full row passes run so far. Tests read it to check that streaming updates patch rows instead.
     private(set) var fullPasses = 0
+    private var shownVisibility = "showAll"
 
     /// The rows for `request`, or nil when nothing changed.
     func run(_ request: Request) -> Result? {
@@ -68,10 +71,18 @@ final class TimelinePipeline: @unchecked Sendable {
                 source?.isCompacting = true
             }
         }
-        let changed = changedSinceShown
+        var changed = changedSinceShown
         changedSinceShown = []
-        let prepended = prependedSinceShown
+        var prepended = prependedSinceShown
         prependedSinceShown = nil
+        // Hidden tool calls shift entry indexes, so the in-place patch and the page splice don't apply:
+        // a filtered thread, and the switch back, take the full row pass.
+        // ponytail: a full pass per streaming update while tool calls are hidden; filter inside the patch if long threads lag
+        if request.toolCallVisibility != "showAll" || shownVisibility != "showAll" {
+            if let entries = source?.entries { source?.entries = TimelineRows.filteringToolCalls(entries, visibility: request.toolCallVisibility) }
+            if request.toolCallVisibility != shownVisibility || request.toolCallVisibility != "showAll" { changed = nil; prepended = nil }
+        }
+        shownVisibility = request.toolCallVisibility
         guard let source else {
             shown = nil
             shownPending = []

@@ -277,7 +277,16 @@ public final class ThreadViewModel {
     /// T3 drops a result 60 s after the last open row lets go of it (`idleTtlMs`, state/orchestration.ts:47-53).
     var outputIdleTTL: Duration = .seconds(60)
 
-    public init() {}
+    public init() {
+        // "Tool calls in chat" refilters the open thread (4928 #30000).
+        settingsObserver = ClientSettingsStore.shared.observe { [weak self] keys in
+            if keys.contains("toolCallVisibility") { self?.derive() }
+        }
+    }
+
+    isolated deinit { ClientSettingsStore.shared.removeObserver(settingsObserver) }
+
+    private var settingsObserver = 0
 
     /// The row passes of this thread; a new one per thread.
     private var pipeline = TimelinePipeline()
@@ -431,7 +440,8 @@ public final class ThreadViewModel {
         }
         let request = TimelinePipeline.Request(
             projection: projection, projectionChanged: projectionDirty, expandedRunIds: expandedRunIds,
-            expandedAttemptIds: expandedAttemptIds, expandedWorkGroupIds: expandedWorkGroupIds, pending: pending)
+            expandedAttemptIds: expandedAttemptIds, expandedWorkGroupIds: expandedWorkGroupIds, pending: pending,
+            toolCallVisibility: ClientSettingsStore.shared.current.string("toolCallVisibility"))
         projectionDirty = false
         let pipeline = self.pipeline
         guard (projection?.visibleTurnItems.count ?? 0) >= backgroundRowsThreshold else {

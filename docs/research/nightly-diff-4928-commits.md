@@ -600,7 +600,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 3d78e915e3 | #30000 | settings | feat(web): a Labs setting hides tool calls so threads read like a chat | partly ported: the `toolCallVisibility` setting and its row; the timeline filter (MessagesTimeline.logic.ts) is still to port in Features/Thread |
+| 3d78e915e3 | #30000 | settings | feat(web): a Labs setting hides tool calls so threads read like a chat | ported (settings-4928): Show all, Hide successful and Hide all filter the timeline; Zen filters like Hide all until its final-answer pass is ported |
 
 ## New feature reclaim-db (1)
 
