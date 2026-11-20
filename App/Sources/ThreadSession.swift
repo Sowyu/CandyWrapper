@@ -1100,6 +1100,13 @@ final class ThreadController {
             self.gallery.toggle()
             return true
         }
+        // ⌥⌘I: the full image gallery over the thread panel. Free in T3's keybindings and in our menus.
+        shortcuts.onKey { [weak self] event in
+            guard event.keyCode == 34, event.modifierFlags.intersection([.command, .control, .option, .shift]) == [.command, .option],
+                  let self, self.gallery.isWallOpen || self.gallery.images.count > 0, !self.panel.header.pill.isHidden else { return false }
+            self.gallery.toggleWall()
+            return true
+        }
         composer.registerShortcuts(shortcuts)
         sideChats.registerShortcuts(shortcuts)
         terminal.registerShortcuts(shortcuts)
