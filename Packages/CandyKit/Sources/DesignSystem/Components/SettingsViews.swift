@@ -173,7 +173,9 @@ public final class SettingsRowView: DSView {
         }
         if width >= 512 {
             // grid-cols-[minmax(0,1fr)_auto] gap-8 items-center, and a select trigger takes min-w-40 (settingsLayout.tsx:538,567).
-            let controlColumn = control == nil ? 0 : Self.containsSelect(control!) ? max(160, controlSize.width) : controlSize.width
+            // Redesign keeps the 3824 column (`minmax(10rem,auto)`) it was drawn with.
+            let minimum: CGFloat = DesignGeometry.usesClassic(self) || Self.containsSelect(control ?? self) ? 160 : 0
+            let controlColumn = control == nil ? 0 : max(minimum, controlSize.width)
             let textWidth = max(0, inner - controlColumn - (control == nil ? 0 : 32))
             let th = textHeight(textWidth)
             let rowHeight = max(th, controlSize.height)

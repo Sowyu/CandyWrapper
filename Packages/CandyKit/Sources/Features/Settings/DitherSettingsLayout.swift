@@ -94,7 +94,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         switch self {
         case .project: return [.init(.projects)]
         case .general: return [
-            .init(.general, scope: true, [G("behavior", "Composer and chat", rows: ["time-format", "response-streaming", "skills-in-slash-menu",
+            .init(.general, scope: true, [G("behavior", "Composer and chat", rows: ["language", "time-format", "response-streaming", "skills-in-slash-menu",
                                                                                "composer-rich-text", "composer-collapse", "send-shortcut",
                                                                                "follow-up-behavior"])]),
             .init(.general, [G("behavior", "Diffs and panels", rows: ["hide-whitespace-changes", "default-diff-file-state", "diff-layout",
@@ -106,7 +106,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .notifications: return [.init(.general, [G("behavior", "Alerts", rows: ["thread-notifications", "in-app-notifications", "menu-bar"])])]
         case .keyboard: return [.init(.keybindings)]
         case .models: return [
-            .init(.general, scope: true, [G("project-defaults", "New threads", rows: ["default-model", "default-permissions"]),
+            .init(.general, scope: true, [G("project-defaults", "New threads", rows: ["default-model", "fallback-model", "default-permissions"]),
                                           G("text-generation", nil, rows: ["text-generation-model", "thread-title-instructions"])]),
             .init(.providers),
         ]

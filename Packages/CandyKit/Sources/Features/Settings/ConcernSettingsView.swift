@@ -95,7 +95,7 @@ public final class ConcernSettingsView: SettingsPageBase {
         ]
         case .threads: return [
             .init(.general, scope: true, [G("projects-and-threads", "New projects", rows: ["add-project-starts-in"])]),
-            .init(.general, [G("project-defaults", "New threads", rows: ["default-model", "default-permissions", "new-threads"])]),
+            .init(.general, [G("project-defaults", "New threads", rows: ["default-model", "fallback-model", "default-permissions", "new-threads"])]),
             .init(.general, [G("organization", "Snooze", rows: ["snooze-options"])]),
             .init(.general, [G("organization", "Usage limits", rows: ["auto-resume-limited-threads", "snooze-limited-threads"])]),
             .init(.general, [G("organization", "Auto-settle", rows: ["auto-settle-merged-threads", "auto-settle-inactive-threads", "days-before-auto-settle", "auto-settle-keep-pull-requests"])]),
