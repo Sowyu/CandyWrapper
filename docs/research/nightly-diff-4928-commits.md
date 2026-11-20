@@ -221,7 +221,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| af54fe2344 | #30421 | thread | fix(web): make styled composer Markdown markers editable | port |
+| af54fe2344 | #30421 | thread | fix(web): make styled composer Markdown markers editable | left: 4928 reveals a styled range's Markdown as editable text while the caret is in it (composer-markdown-source.ts, 593 lines); CW keeps markers beside the styled words |
 
 ## Port group snooze-requests (1)
 
@@ -807,7 +807,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 6a5d6085ba | #32959 | composer | fix(web): prompt links work for encoded thread IDs | port |
 | 3de3c9ffff | #34307 | composer | fix(web): keep a leading blank line selected when indenting code | port |
 | ea3e20a0e2 | #27287 | composer | fix(web): double-clicking another thread in the sidebar renames it instead of focusing its composer | port |
-| 4e6924753c | #27280 | composer | fix(web): pasted CRLF text keeps its blank lines and caret in the composer | port |
+| 4e6924753c | #27280 | composer | fix(web): pasted CRLF text keeps its blank lines and caret in the composer | ported: pasted CRLF and CR read as LF before the paste is handled (ComposerPasteboard `normalizedLineBreaks`) |
 | 6a03ef6568 | #34493 | composer | fix(web): app keybindings on Mod+B, Mod+I and Mod+E win over composer formatting | already in CandyWrapper: App/Sources/ComposerController.swift:789 lets a bound app command beat the editor formatting, and Mod+B over selected text still bolds as in 4928 AppSidebarLayout.tsx:342-350 |
 | 4ae66e2e86 | #24585 | composer | fix(opencode): project-defined models appear in that project's picker | port |
 | d9a54ec645 | #34724 | composer | fix(web): file breadcrumbs keep backslashes in POSIX folder names | port |
@@ -873,7 +873,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | f39ecd3df8 | #29663 | composer | fix(web): a rule typed under a line stays a rule when sent | port |
 | 8753e4d36b | #31283 | composer | fix(web,mobile): Send now tells you why it could not send | ported: a failed Send now on a queued message shows "Could not send queued message" with the reason (ComposerFeedback `queueSendNow`) |
 | 3e1b7c4e93 | #38414 | composer | fix(web): a line typed after a composer list is sent after the list | port |
-| 01cfac429d | #38475 | composer | fix(web): Paste as Text pastes text when the clipboard also holds an image | port |
+| 01cfac429d | #38475 | composer | fix(web): Paste as Text pastes text when the clipboard also holds an image | ported: Paste as Text skips the image attachment when the clipboard also holds text (ComposerEditor `paste`) |
 | ad77fd88e2 | #37547 | composer | fix(web): Enter during image compression sends once it finishes | ported: Enter while an image is being prepared holds the send and sends the composer once it joins (ComposerController `sendAfterPreparing`) |
 | a5090a7576 | #38684 | composer | fix(web): Default effort no longer shows as the lowest bar | ported: ComposerEffortGlyph names Default |
 

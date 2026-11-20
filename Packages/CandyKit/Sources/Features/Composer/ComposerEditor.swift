@@ -759,11 +759,14 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         let pboard = NSPasteboard.general
         let bypass = pasteAsTextPending
         pasteAsTextPending = false
-        // Images, and files without text, become attachments (`shouldHandleComposerAttachmentPaste`).
-        if onPasteAttachments?(pboard) == true { return }
+        // CRLF and CR become LF, as ProseMirror's clipboard parser does (`readPastedPlainText`, #27280).
+        let plain = pboard.string(forType: .string).map(ComposerPasteboard.normalizedLineBreaks)
+        // Images, and files without text, become attachments (`shouldHandleComposerAttachmentPaste`); Paste as Text
+        // keeps the text even when the source also put an image of it on the clipboard (#38475).
+        if !(bypass && plain?.isEmpty == false), onPasteAttachments?(pboard) == true { return }
         // Large text becomes a text file unless Cmd+Shift+V asked for it inline (`foldPastedText`).
-        if let text = pboard.string(forType: .string), onPasteText?(text, bypass) == true { return }
-        guard let text = pboard.string(forType: .string) else { return super.pasteAsPlainText(sender) }
+        if let text = plain, onPasteText?(text, bypass) == true { return }
+        guard let text = plain else { return super.pasteAsPlainText(sender) }
         if let html = pboard.string(forType: .html) {
             let records = ComposerContext.pastedRecords(html: html, pastedText: text)
             if !records.isEmpty { onPasteRecords?(records) }

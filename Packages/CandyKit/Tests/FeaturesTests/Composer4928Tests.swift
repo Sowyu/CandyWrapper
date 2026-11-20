@@ -38,4 +38,9 @@ struct Composer4928Tests {
         #expect(ComposerMenus.isClearCommand("  /CLEAR  "))
         #expect(!ComposerMenus.isClearCommand("/clear now"))
     }
+
+    /// #27280: pasted CRLF keeps its blank lines.
+    @Test func pastedLineBreaksNormalize() {
+        #expect(ComposerPasteboard.normalizedLineBreaks("a\r\n\r\nb\rc") == "a\n\nb\nc")
+    }
 }
