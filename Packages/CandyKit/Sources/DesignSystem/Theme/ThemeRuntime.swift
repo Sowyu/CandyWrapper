@@ -116,7 +116,8 @@ public enum ThemeRuntime {
             || next.glassLight != old.glassLight || next.glassDark != old.glassDark
             || next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark
             || (next.glassOpacity != old.glassOpacity && (next.glassLight || next.glassDark || next.ditherLight || next.ditherDark))
-            || (next.ditherDim != old.ditherDim && (next.ditherLight || next.ditherDark)) {
+            || (next.ditherDim != old.ditherDim && (next.ditherLight || next.ditherDark))
+            || (next.ditherBlur != old.ditherBlur && (next.ditherLight || next.ditherDark)) {
             let resolved = resolve(next)
             if !resolved.isSame(as: palettes) {
                 palettes = resolved
@@ -224,6 +225,18 @@ public enum ThemeRuntime {
             if !dark, input.ditherLight {
                 let members = palette.members, icon = palette.iconMuted
                 palette = Palette(members: { Palette.memberNames[$0] == "--sidebar-icon-color" ? icon : members[$0] })
+            }
+            // Blur: the sidebar sits on the picture too, so its muted text keeps 4.5:1 over the brightest (dark) or
+            // darkest (light) blurred pixel, which is never past the dots' reach.
+            if sidebar, input.ditherBlur, dark ? input.ditherDark : input.ditherLight {
+                let worst = WindowGlass.linear(DitherArt.worstBackground(palette.background, dark: dark,
+                                                                         dim: Double(min(max(input.ditherDim, 0), 90)) / 100, veiled: false))
+                let members = palette.members
+                return Palette(members: { i in
+                    let c = members[i]
+                    guard DitherArt.readableMembers.contains(Palette.memberNames[i]), c.srgb.w >= 1 else { return c }
+                    return WindowGlass.readable(c, over: worst, ratio: 4.6, dark: dark)
+                })
             }
             // Dither: the main panel's cards, bubbles and popovers become frosted panes over its art. The sidebar and
             // the panel's own background stay solid.

@@ -192,7 +192,8 @@ public enum WindowGlass {
     /// subviews while Dither shows and takes it out otherwise. Pass the blur it returned last time.
     @MainActor
     public static func syncBubbleBlur(_ blur: BackdropBlurView?, in view: NSView, radius: CGFloat) -> BackdropBlurView? {
-        let on = view.window != nil && ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark)
+        // Blur's picture is soft already, so a bubble there gets no blur of its own.
+        let on = view.window != nil && ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) && !ThemeRuntime.ditherBlur
         guard on else { blur?.removeFromSuperview(); return nil }
         let made = blur ?? {
             let b = BackdropBlurView(frame: view.bounds)

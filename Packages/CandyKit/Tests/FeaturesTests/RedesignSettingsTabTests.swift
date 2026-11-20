@@ -42,11 +42,16 @@ import T3Protocol
         let old = ClientSettings(decoding: .object(["glassOpacity": .number(60)]))
         #expect(old.bool("redesignStackedPicker"))
         #expect(!old.bool("redesignPickerAccount"))
+        // Background is Dither, as 1.15.1 drew it, and Blur reaches the theme runtime.
+        #expect(old.string("redesignBackground") == "dither")
+        #expect(!library().runtimeInput(client: old).0.ditherBlur)
+        let blur = ClientSettings(decoding: .object(["redesignBackground": .string("blur")]))
+        #expect(library().runtimeInput(client: blur).0.ditherBlur)
     }
 
     @Test func searchFindsTheTabAndEveryRow() {
         let ids = ["redesign", "redesign-picture", "background-dim", "accent-color", "ignore-reduce-transparency", "composer-collapse",
-                   "redesign-stacked-picker", "redesign-picker-account"]
+                   "redesign-stacked-picker", "redesign-picker-account", "redesign-background"]
         #expect(SettingsSearch.search("redesign").first?.id == "redesign")
         for id in ids {
             let item = SettingsSearch.item(id)

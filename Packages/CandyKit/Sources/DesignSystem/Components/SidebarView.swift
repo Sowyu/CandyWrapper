@@ -201,7 +201,8 @@ public final class SidebarLayoutView: DSView {
     /// calls `viewDidChangeEffectiveAppearance` on every view when the theme changes, so switching is instant.
     private func updateGlass() {
         glassBackdrop = WindowGlass.syncBackdrop(glassBackdrop, in: self)
-        ditherArt = DitherArtView.sync(ditherArt, in: main)
+        // Blur draws the picture behind the whole window, sidebar included; Dither only in the main panel.
+        ditherArt = DitherArtView.sync(ditherArt, in: ThemeRuntime.ditherBlur ? self : main)
         needsLayout = true // Dither frames the main panel
     }
 
@@ -271,8 +272,13 @@ public final class SidebarLayoutView: DSView {
         main.layer?.cornerRadius = dither ? DitherChrome.panelRadius : 0
         main.layer?.maskedCorners = dither ? [.layerMinXMinYCorner, .layerMinXMaxYCorner]
             : [.layerMinXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMinYCorner, .layerMaxXMaxYCorner]
-        layoutPanelRim(dither: dither)
+        // Blur: the sidebar and the panel are transparent over one blurred picture, with no edge between them.
+        let blur = dither && ThemeRuntime.ditherBlur
+        layoutPanelRim(dither: dither && !blur)
         layer?.backgroundColor = dither ? DitherChrome.bandColor(in: self) : nil
+        if main.clearsFill != blur { main.clearsFill = blur }
+        if sidebar.surface.clearsFill != blur { sidebar.surface.clearsFill = blur }
+        if blur { ditherArt?.frame = bounds }
         sidebar.showsBorder = !dither
         // The band and frame around the panel are flat, so the sidebar drops its grain to match them.
         if sidebar.surface.showsGrain == dither { sidebar.surface.showsGrain = !dither }

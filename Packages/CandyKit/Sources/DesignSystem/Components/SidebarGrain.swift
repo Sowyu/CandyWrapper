@@ -166,6 +166,8 @@ struct Turbulence {
 public final class GrainSurfaceView: DSView {
     public var fill: NSColor { didSet { needsDisplay = true } }
     public var showsGrain = true { didSet { columns.isHidden = !showsGrain } }
+    /// Draws no fill, for Redesign's Blur, where the picture behind the whole window shows through.
+    public var clearsFill = false { didSet { needsDisplay = true } }
     /// Repeats `rows` across; `rows` repeats `tile` down.
     private let columns = CAReplicatorLayer(), rows = CAReplicatorLayer(), tile = CALayer()
 
@@ -185,7 +187,7 @@ public final class GrainSurfaceView: DSView {
     }
 
     public override func updateLayer() {
-        layer?.backgroundColor = resolving { fill.cgColor }
+        layer?.backgroundColor = clearsFill ? nil : resolving { fill.cgColor }
     }
 
     // ponytail: tiles start at the layer origin, not T3's top left; invisible at 3.5% opacity

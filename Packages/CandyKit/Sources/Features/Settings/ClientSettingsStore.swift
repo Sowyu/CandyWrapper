@@ -22,7 +22,13 @@ public final class ClientSettingsStore {
     public init(defaults: UserDefaults = .standard, ephemeral: Bool = false) {
         self.defaults = defaults
         self.ephemeral = ephemeral
-        let json = ephemeral ? nil : defaults.data(forKey: Self.defaultsKey).flatMap { try? JSONValue(parsing: $0) }
+        var json = ephemeral ? nil : defaults.data(forKey: Self.defaultsKey).flatMap { try? JSONValue(parsing: $0) }
+        #if DEBUG
+        // `CANDY_CLIENT_SETTINGS='{"redesignBackground":"blur"}'` seeds a test app's in-memory settings, for snapshots.
+        if ephemeral, let seed = ProcessInfo.processInfo.environment["CANDY_CLIENT_SETTINGS"].flatMap({ try? JSONValue(parsing: Data($0.utf8)) }) {
+            json = seed
+        }
+        #endif
         current = ClientSettings(decoding: json)
         readFailed = !ephemeral && defaults.data(forKey: Self.defaultsKey) != nil && json?.objectValue == nil
     }

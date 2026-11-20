@@ -182,8 +182,28 @@ struct RedesignBaselineTests {
                 }
                 try capture(name, AppRouteModalView(label: "Settings", content: page, navigation: nav), NSSize(width: 1100, height: 780))
             }
+            // Background set to Blur: the same picture blurred, under a thread, the new-thread page, the sidebar and Settings.
+            input.ditherBlur = true
+            ThemeRuntime.apply(input)
+            defer { input.ditherBlur = false; ThemeRuntime.apply(input) }
+            let blurThread = ComposerFidelityTests.panel(width: 844, dark: dark)
+            blurThread.timeline.context.now = { Self.now }
+            blurThread.setProjection(try ThreadPreview.projection(titled: ThreadPreview.markdownThread), projectTitle: "demo-repo", workspaceRoot: nil)
+            blurThread.layoutSubtreeIfNeeded(); blurThread.timeline.scroll(toFraction: 0)
+            try capture("thread-markdown-top-blur", blurThread, panelSize)
+            let blurDraft = ComposerFidelityTests.panel(width: 844, dark: dark)
+            blurDraft.setDraft(projectTitle: "demo-repo")
+            blurDraft.composer.footerControls = [try PickersFidelityTests.pickers().controlsView]
+            try capture("composer-empty-blur", blurDraft, panelSize)
+            try capture("sidebar-many-threads-blur", sidebar, NSSize(width: 280, height: 900))
+            var redesignPages: [NSView & SettingsGroupRow] = []
+            NSAppearance(named: .aqua)!.performAsCurrentDrawingAppearance {
+                redesignPages = DitherSettingsSection.redesign.slices.map { Self.page($0.page, context: context) as NSView & SettingsGroupRow }
+            }
+            let redesignPage = DitherSettingsSectionView(section: .redesign, pages: redesignPages)
+            try capture("settings-redesign-blur", redesignPage, NSSize(width: 800, height: min(1800, max(100, redesignPage.height(forWidth: 800)))))
         }
-        #expect(count == 86)
+        #expect(count == 94)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 
@@ -254,10 +274,12 @@ struct RedesignBaselineTests {
             v.displayIfNeeded()
             if let art = v as? DitherArtView, let layer = art.layer?.sublayers?.first {
                 let bg = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background.srgb
+                let blur = ThemeRuntime.ditherBlur, unit = DitherArt.unit(blur: blur)
                 layer.frame = art.bounds
+                layer.magnificationFilter = blur ? .linear : .nearest
                 layer.contents = DitherArt.render(.init(url: ComposerAttachmentsFidelityTests.fixture,
-                    width: Int(ceil(art.bounds.width / DitherArt.dot)), height: Int(ceil(art.bounds.height / DitherArt.dot)),
-                    background: [bg.x, bg.y, bg.z], scale: 2))
+                    width: Int(ceil(art.bounds.width / unit)), height: Int(ceil(art.bounds.height / unit)),
+                    background: [bg.x, bg.y, bg.z], scale: 2, blur: blur))
             }
             if let scroller = v as? ScrollAreaScroller { scroller.isHidden = true }
             v.subviews.forEach(display)
