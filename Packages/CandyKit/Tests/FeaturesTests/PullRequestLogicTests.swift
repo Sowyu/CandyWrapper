@@ -475,3 +475,41 @@ struct PullRequest4928LogicTests {
         #expect(PullRequestDetailLogic.mergeMethodLabel("fast-forward") == "Fast-forward merge")
     }
 }
+
+/// 4928 Usage: the summary payload's new fields and the drawn tables' accessibility rows
+/// (usage.ts:145-147, UsagePage.tsx and UsageProviderChart.tsx, #28952, #33993, #37238, #37241).
+@MainActor
+struct Usage4928Tests {
+    @Test func payloadSendsProvisionalAndAFilterOnlyWhenSet() {
+        let w = UsageWindow(sinceDay: "2026-11-01", untilDay: "2026-11-19", timeZone: "UTC")
+        #expect(w.payload().objectValue?["provisional"] == nil && w.payload().objectValue?["modelFilter"] == nil)
+        let f = JSONValue.object(["include": .array([.object(["provider": .string("claude")])])])
+        let p = w.payload(provisional: true, modelFilter: f).objectValue
+        #expect(p?["provisional"] == .bool(true) && p?["modelFilter"] == f)
+        #expect(w.payload(modelFilter: .object([:])).objectValue?["modelFilter"] == nil)
+    }
+
+    @Test func drawnTableRowsReachVoiceOver() {
+        let t = UsageBreakdownTableView()
+        t.frame = NSRect(x: 0, y: 0, width: 600, height: 200)
+        var opened: String?
+        t.onSelect = { opened = $0 }
+        t.content = .models([.init(key: "k", provider: .claude, model: "sonnet", cost: "$2.00", costMuted: false, share: "50%", tokens: "1M", fraction: 0.5, loading: false)])
+        let rows = t.subviews.compactMap { $0 as? UsageTableRowElement }
+        #expect(rows.count == 1)
+        #expect(rows.first?.accessibilityLabel() == "sonnet, Cost $2.00, Share 50%, Tokens 1M")
+        #expect(rows.first?.accessibilityPerformPress() == true && opened == "k")
+    }
+}
+
+struct UsageRanking4928Tests {
+    @Test func providersRankByTheShownMetricAndCommasAreDecimals() {
+        let totals = [UsageProviderTotals(provider: .claude, costUsd: 1, totalTokens: 900, records: 1, sessions: 1, costShare: 0, tokenShare: 0),
+                      UsageProviderTotals(provider: .codex, costUsd: 5, totalTokens: 10, records: 1, sessions: 1, costShare: 0, tokenShare: 0)]
+        #expect(UsageMerge.rankProviders([.claude, .codex], totals, tokens: false) == [.codex, .claude])
+        #expect(UsageMerge.rankProviders([.claude, .codex], totals, tokens: true) == [.claude, .codex])
+        let parsed = UsagePriceLogic.parse(model: "m", [.input: "2,5", .output: "0,075"])
+        #expect(parsed?.price.input == 2.5 && parsed?.price.output == 0.075)
+        #expect(UsagePriceLogic.parse(model: "m", [.input: "1,2,3", .output: "1"]) == nil)
+    }
+}

@@ -65,7 +65,7 @@ public final class UsageBreakdownTableView: DSView {
         case periods(header: String, providers: [UsageProviderKind], rows: [PeriodRow], loading: Bool)
     }
 
-    public var content: Content = .models([]) { didSet { if content != oldValue { cacheIcons(); needsDisplay = true; onHeightChange?() } } }
+    public var content: Content = .models([]) { didSet { if content != oldValue { cacheIcons(); syncAccessibility(); needsDisplay = true; onHeightChange?() } } }
     /// `sm:table-cell`: the Share column shows from 640pt.
     public var showsShare = true { didSet { if showsShare != oldValue { needsDisplay = true } } }
     public var onSelect: ((String) -> Void)?
@@ -121,6 +121,9 @@ public final class UsageBreakdownTableView: DSView {
 
     public override func layout() {
         super.layout()
+        for e in rowElements {
+            e.frame = NSRect(x: 0, y: Self.headerHeight + CGFloat(e.rowIndex) * e.rowHeight, width: bounds.width, height: e.rowHeight)
+        }
         guard case .models(let rows) = content else { return }
         let cols = modelColumns
         for (i, r) in rows.enumerated() {
@@ -138,6 +141,51 @@ public final class UsageBreakdownTableView: DSView {
         addTrackingArea(t)
         tracking = t
     }
+
+    // MARK: Accessibility
+
+    /// The drawn rows as accessibility elements: T3's tables reach screen readers with each figure under
+    /// its column (4928 UsagePage.tsx, #37241), and a model row opens its dialog with VoiceOver's press,
+    /// as a click does.
+    private func syncAccessibility() {
+        setAccessibilityElement(true)
+        setAccessibilityRole(.table)
+        rowElements.forEach { $0.removeFromSuperview() }
+        var children: [UsageTableRowElement] = []
+        switch content {
+        case .models(let rows):
+            setAccessibilityLabel("Models")
+            for (i, r) in rows.enumerated() {
+                let e = UsageTableRowElement()
+                var parts = [r.model, "Cost \(r.cost)"]
+                if showsShare, !r.share.isEmpty { parts.append("Share \(r.share)") }
+                parts.append("Tokens \(r.tokens)")
+                e.setAccessibilityRole(.button)
+                e.setAccessibilityLabel(parts.joined(separator: ", "))
+                let key = r.key
+                e.onPress = { [weak self] in self?.onSelect?(key) }
+                e.rowIndex = i
+                e.rowHeight = Self.modelRowHeight
+                children.append(e)
+            }
+        case .periods(let header, let providers, let rows, _):
+            setAccessibilityLabel(header)
+            for (i, r) in rows.enumerated() {
+                let e = UsageTableRowElement()
+                var parts = zip(providers, r.providers).map { "\($0.label) \($1)" }
+                parts += ["Total \(r.total)", "Tokens \(r.tokens)"]
+                e.setAccessibilityRole(.staticText)
+                e.setAccessibilityLabel("\(r.label): " + parts.joined(separator: ", "))
+                e.rowIndex = i
+                e.rowHeight = Self.periodRowHeight
+                children.append(e)
+            }
+        }
+        rowElements = children
+        children.forEach(addSubview)
+        needsLayout = true
+    }
+    private var rowElements: [UsageTableRowElement] = []
 
     private func row(at p: CGPoint) -> Int? {
         let h: CGFloat
@@ -245,5 +293,20 @@ public final class UsageBreakdownTableView: DSView {
                 rule(y + Self.periodRowHeight - 1, strong: false)
             }
         }
+    }
+}
+
+/// One drawn table row for VoiceOver: an invisible view over the row that lets the pointer through.
+final class UsageTableRowElement: NSView {
+    var onPress: (() -> Void)?
+    var rowIndex = 0
+    var rowHeight: CGFloat = 0
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityPerformPress() -> Bool {
+        guard let onPress else { return false }
+        onPress()
+        return true
     }
 }

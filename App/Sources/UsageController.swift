@@ -145,7 +145,29 @@ final class UsageController {
             if s.pending || (!force && s.summary != nil && Date().timeIntervalSince(s.fetchedAt) < 60) { continue }
             s.pending = true
             statuses[id, default: [:]][w] = s
-            fetch(id, w, awaitRefresh: false)
+            if s.summary == nil { fetchProvisional(id, w) } else { fetch(id, w, awaitRefresh: false) }
+        }
+    }
+
+    /// The environment's `usageModelFilter` server setting, sent with each summary read (4928 #28952).
+    private func modelFilter(_ id: String) -> JSONValue? { composer?.config(id)?.settings.raw["usageModelFilter"] }
+
+    /// With nothing to show yet, the server's last scan answers first, then a plain read
+    /// (client-runtime state/server.ts usageSummary `execute`, 4928 #33993). A failed or settled
+    /// saved answer ends there or falls back to the plain read.
+    private func fetchProvisional(_ id: String, _ w: UsageWindow) {
+        Task { [weak self] in
+            guard let self else { return }
+            let json = try? await self.environments.request(id, "server.getUsageSummary", w.payload(provisional: true, modelFilter: self.modelFilter(id)))
+            guard let json, let saved = UsageSummary(json: json) else { self.fetch(id, w, awaitRefresh: false); return }
+            var s = self.statuses[id]?[w] ?? Status()
+            s.summary = saved
+            s.error = nil
+            s.fetchedAt = Date()
+            s.pending = saved.hasRefreshingSource
+            self.statuses[id, default: [:]][w] = s
+            self.render()
+            if saved.hasRefreshingSource { self.fetch(id, w, awaitRefresh: false) }
         }
     }
 
@@ -153,7 +175,7 @@ final class UsageController {
         Task { [weak self] in
             guard let self else { return }
             do {
-                let json = try await self.environments.request(id, "server.getUsageSummary", w.payload(awaitRefresh: awaitRefresh))
+                let json = try await self.environments.request(id, "server.getUsageSummary", w.payload(awaitRefresh: awaitRefresh, modelFilter: self.modelFilter(id)))
                 var s = self.statuses[id]?[w] ?? Status()
                 let summary = UsageSummary(json: json)
                 s.summary = summary ?? s.summary
@@ -223,7 +245,7 @@ final class UsageController {
                         s.pending = true
                         self.statuses[id, default: [:]][w] = s
                         do {
-                            let json = try await self.environments.request(id, "server.getUsageSummary", w.payload(awaitRefresh: true))
+                            let json = try await self.environments.request(id, "server.getUsageSummary", w.payload(awaitRefresh: true, modelFilter: self.modelFilter(id)))
                             s.summary = UsageSummary(json: json) ?? s.summary
                             s.error = nil
                             s.fetchedAt = Date()

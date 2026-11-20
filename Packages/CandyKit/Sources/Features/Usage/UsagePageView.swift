@@ -452,8 +452,10 @@ final class UsageSummarySectionView: DSView, UsageSectionSizing {
         for v in [big, caption, chartTitle, chart] as [NSView] { addSubview(v) }
         info.map(addSubview)
         // Cursor's Enable rows go right after Codex and Claude (`cursorInsertAt`).
-        var providerRows: [NSView & SettingsGroupRow] = m.activeProviders.map { UsageProviderSummaryRow(provider: $0, model: m) }
-        let insertAt = max(m.activeProviders.firstIndex(of: .codex) ?? -1, m.activeProviders.firstIndex(of: .claude) ?? -1) + 1
+        // Ranked by the metric shown (`rankProvidersByMetric`, 4928 usageProviders.ts:69-82, #15632).
+        let ranked = UsageMerge.rankProviders(m.activeProviders, m.merged.providers, tokens: m.metric == "tokens")
+        var providerRows: [NSView & SettingsGroupRow] = ranked.map { UsageProviderSummaryRow(provider: $0, model: m) }
+        let insertAt = max(ranked.firstIndex(of: .codex) ?? -1, ranked.firstIndex(of: .claude) ?? -1) + 1
         let cursor = m.cursorRows.map { e -> NSView & SettingsGroupRow in
             UsageCursorEnableRow(environmentId: e.id, label: e.label, showEnvironment: m.cursorShowsEnvironment) { [weak owner] id in owner?.onEnableCursor?(id) }
         }

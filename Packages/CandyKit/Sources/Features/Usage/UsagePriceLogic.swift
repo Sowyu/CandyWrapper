@@ -108,7 +108,9 @@ public enum UsagePriceLogic {
         guard !m.isEmpty else { return nil }
         var rates: [Field: Double] = [:]
         for field in Field.allCases {
-            let raw = (form[field] ?? "").trimmingCharacters(in: .whitespaces)
+            var raw = (form[field] ?? "").trimmingCharacters(in: .whitespaces)
+            // A comma reads as the decimal point, the first one only (`.replace(",", ".")`, 4928 usagePriceForm.ts:44, #21939).
+            if let comma = raw.firstIndex(of: ",") { raw.replaceSubrange(comma...comma, with: ".") }
             if raw.isEmpty {
                 if field.optional { continue }
                 return nil
