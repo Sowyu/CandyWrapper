@@ -66,6 +66,12 @@ final class PullRequestDetailBinding {
     private var pendingViewed: Set<String> = []
     /// The Code tab's slices (`sliceState`): patches in order and the cursor of the next one.
     private var slices: [String] = []
+    // Withheld files (#37007, 4928 PullRequestCodeTab.tsx): the host's stats, whether it reads one file with `path`,
+    // and each file read so far.
+    private var omittedStats: [String: (additions: Int, deletions: Int)] = [:]
+    private var withheldReadable = false
+    private var withheldLoaded: [String: String] = [:]
+    private var withheldStatus: [String: PullRequestWithheldFileNotice.Status] = [:]
     private var sliceCursor: String?
     private var sliceLoading = false
     private var sliceError: String?
@@ -112,6 +118,7 @@ final class PullRequestDetailBinding {
             view.onPickLabels = { [weak self] anchor in self?.openPicker(.labels, from: anchor) }
             view.onPickReviewers = { [weak self] anchor in self?.openPicker(.reviewers, from: anchor) }
             view.onLoadMoreDiff = { [weak self] in self?.loadNextSlice() }
+            view.onLoadWithheldFile = { [weak self] path in self?.loadWithheld(path) }
             view.onRetryDiff = { [weak self] in self?.patchKey = nil; self?.loadCode() }
             view.onStackAction = { [weak self] action in self?.runStackAction(action) }
             view.onStackRetry = { [weak self] in self?.loadStack() }
@@ -153,6 +160,7 @@ final class PullRequestDetailBinding {
         viewedStates = nil
         overlay = [:]
         slices = []; sliceCursor = nil; sliceError = nil; sliceLoading = false
+        omittedStats = [:]; withheldReadable = false; withheldLoaded = [:]; withheldStatus = [:]
         stackFresh = false
         // A write still running belongs to the previous pull request; its reply leaves this one alone.
         view.pendingAction = nil
@@ -238,7 +246,7 @@ final class PullRequestDetailBinding {
     /// page and where threads link many pull requests (`threadPullRequests`). A 4928 server signals link
     /// changes on its own stream (`linkedThreadRefreshes`, client-runtime state/pullRequests.ts:833-850);
     /// an older one is read again on each detail read, with no timer, where T3 polls every 10 s.
-    private func readLinkedThreads() {
+    func readLinkedThreads() {
         guard view.context == .page, let env = environmentId, let shell, var ref = reference, let target,
               capabilities.has(env, "threadPullRequests") else { stopLinkedRefreshes(); return }
         ref.host = target.host
@@ -326,6 +334,9 @@ final class PullRequestDetailBinding {
         guard patchKey != key else { return }
         patchKey = key
         slices = []; sliceCursor = nil; sliceError = nil
+        // ponytail: a new head forgets the files read on their own, T3 reads them again; keep them if reviewers ask
+        omittedStats = [:]; withheldReadable = false; withheldLoaded = [:]; withheldStatus = [:]
+        showWithheld()
         view.setDiff(patches: [], loading: true, error: nil, commit: commit)
         fetchSlice(cursor: nil, key: key)
         loadViewed()
@@ -351,6 +362,9 @@ final class PullRequestDetailBinding {
                 self.sliceLoading = false
                 self.slices.append(result.patch)
                 self.sliceCursor = result.nextCursor
+                for stat in result.omittedFileStats ?? [] { self.omittedStats[stat.path] = (Int(stat.additions), Int(stat.deletions)) }
+                if cursor == nil { self.withheldReadable = result.withheldFilesReadable == true }
+                if !(result.omittedFileStats ?? []).isEmpty { self.showWithheld() }
                 self.showSlices(loading: false, error: nil)
             } catch {
                 guard let self, self.generation == gen, self.patchKey == key else { return }
@@ -358,6 +372,35 @@ final class PullRequestDetailBinding {
                 let message = Self.failure(error, number: ref.number).1
                 if cursor == nil { self.showSlices(loading: false, error: message) } else { self.sliceError = message; self.showSlices(loading: false, error: nil) }
             }
+        }
+    }
+
+    private func showWithheld() {
+        view.setWithheld(omitted: omittedStats, readable: withheldReadable, loaded: withheldLoaded, status: withheldStatus)
+    }
+
+    /// One read per withheld file, so only that file's diff crosses the wire (`withheldFileDiffsAtom`).
+    private func loadWithheld(_ path: String) {
+        guard let shell, let ref = reference, let key = patchKey, withheldStatus[path] != .loading else { return }
+        let commit = self.commit
+        let gen = generation
+        withheldStatus[path] = .loading
+        showWithheld()
+        Task { [weak self] in
+            let result = try? await shell.http.post("api/pull-requests/diff", PullRequestPayloads.diff(ref, commit: commit, path: path),
+                                                    token: shell.token, as: PullRequestDiffResult.self)
+            guard let self, self.generation == gen, self.patchKey == key else { return }
+            if let result {
+                if UnifiedDiff(result.patch).files.first?.hunks.isEmpty ?? true {
+                    self.withheldStatus[path] = .empty
+                } else {
+                    self.withheldStatus[path] = nil
+                    self.withheldLoaded[path] = result.patch
+                }
+            } else {
+                self.withheldStatus[path] = .error
+            }
+            self.showWithheld()
         }
     }
 
@@ -789,6 +832,7 @@ final class ThreadPullRequestsController {
     private var linkDialog: LinkPullRequestDialog?
     // ponytail: preview details are cached for the session with no eviction; bound it if long sessions grow
     fileprivate var previewCache: [String: PullRequestDetail] = [:]
+    fileprivate var issuePreviewCache: [String: IssueDetail] = [:]
     fileprivate weak var previewAnchor: NSView?
     fileprivate var previewPopup: OpenPopup?
 
@@ -1397,11 +1441,32 @@ extension ThreadPullRequestsController: MarkdownLinkHandler {
         }
     }
 
-    func previewsLink(_ url: URL, from markdown: MarkdownView) -> Bool { previewTarget(url) != nil }
+    func previewsLink(_ url: URL, from markdown: MarkdownView) -> Bool { previewTarget(url) != nil || issuePreviewTarget(url) != nil }
+
+    /// An issue link a project here reads (ChatMarkdown.tsx, `resolveIssueLinkTarget`, #38294), on servers with issues.
+    private func issuePreviewTarget(_ url: URL) -> (env: String, ref: IssueRef)? {
+        guard let thread, let env = thread.id.environmentId, capabilities.has(env, "issues") else { return nil }
+        let projects = (sidebar?.snapshot?.projects ?? []).filter { $0.id.environmentId == env }.map { (id: $0.id.localId.rawValue, identity: $0.repositoryIdentity) }
+        return IssueLinkLogic.target(url: url.absoluteString, projects: projects).map { (env, $0) }
+    }
+
+    /// `IssueLinkPreview`: reads `issues.detail` once the card opens; a failed read shows nothing.
+    private func showIssuePreview(_ url: URL, anchor: NSView) {
+        guard let target = issuePreviewTarget(url) else { return }
+        let key = "\(target.env) \(url.absoluteString)"
+        previewAnchor = anchor
+        if let d = issuePreviewCache[key] { previewPopup = IssueLinkPreviewView(detail: d, nowMs: TimestampFormat.nowMs()).present(over: anchor); return }
+        Task { [weak self, weak anchor] in
+            guard let self, let d = try? await self.environments.request(target.env, "issues.detail", .object(target.ref.json)).decode(as: IssueDetail.self) else { return }
+            self.issuePreviewCache[key] = d
+            guard let anchor, self.previewAnchor === anchor, anchor.window != nil else { return }
+            self.previewPopup = IssueLinkPreviewView(detail: d, nowMs: TimestampFormat.nowMs()).present(over: anchor)
+        }
+    }
 
     /// The card reads `pullRequests.detail` once it opens; a failed read shows nothing (the URL tooltip is T3's fallback).
     func showLinkPreview(_ url: URL, anchor: NSView, from markdown: MarkdownView) {
-        guard let target = previewTarget(url) else { return }
+        guard let target = previewTarget(url) else { showIssuePreview(url, anchor: anchor); return }
         let key = "\(target.env) \(url.absoluteString)"
         previewAnchor = anchor
         if let d = previewCache[key] { previewPopup = PullRequestLinkPreviewView(detail: d, nowMs: TimestampFormat.nowMs()).present(over: anchor); return }

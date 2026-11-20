@@ -60,7 +60,19 @@ struct DiffLayout {
             headerRow.append(rows.count)
             rows.append(Row(kind: .header, file: Int32(f), left: -1, right: -1, top: y))
             y += DiffStyle.headerHeight
-            guard !collapsed.contains(f), !file.hunks.isEmpty else { continue }
+            guard !collapsed.contains(f) else { continue }
+            // A file sent without hunks (a withheld one) shows only what is pinned to line 0 under its header.
+            if file.hunks.isEmpty {
+                let pinned = (anchors[f] ?? []).filter { $0.line == 0 }
+                guard !pinned.isEmpty else { continue }
+                for a in pinned {
+                    rows.append(Row(kind: .annotation, file: Int32(f), left: Int32(a.index), right: -1, top: y))
+                    y += anchorHeight(a.index)
+                }
+                rows.append(Row(kind: .footer, file: Int32(f), left: -1, right: -1, top: y))
+                y += DiffStyle.fileBottomPadding
+                continue
+            }
             func lines(_ index: Int32, _ column: Int) -> Int {
                 guard index >= 0, let perLine = cols.columns[min(column, cols.columns.count - 1)] else { return 1 }
                 return Self.visualLines(diff, Int(index), columns: perLine)

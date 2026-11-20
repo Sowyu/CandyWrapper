@@ -28,9 +28,9 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| a5448f4c50 | #26730 | pr/git | fix(web): pull request diff follows the file tree, with a hide-tests filter | left (panels-2): the PR diff follows the file tree with a hide-tests filter; needs a tree order in PullRequestCodeView and the test classifier (diffFileTree.logic.ts) |
+| a5448f4c50 | #26730 | pr/git | fix(web): pull request diff follows the file tree, with a hide-tests filter | ported (panels-3): the PR Code tab follows the file tree order, and the Diff panel and Code tab hide tests behind a flask toggle with "N test files hidden", ChangedFileKind.swift, DiffPanelView, PullRequestCodeView; no spec case yet for the toggle |
 | 5ef56853ef | #19941 | pr/git | feat(web): review local commits in the Diff pane | left (panels-2): reviewing local commits needs the A23 wire (`review.getBranchCommits`, source kind `commit`) and a commit scope in DiffPanelView |
-| 348009de22 | #29083 | pr/git | fix(prs): include Storybook files in the test filter and counts | left (panels-2): Storybook files in the test filter, with #26730 |
+| 348009de22 | #29083 | pr/git | fix(prs): include Storybook files in the test filter and counts | ported (panels-3): Storybook `.stories.` files count as tests, ChangedFileKind |
 
 ## Port group provider-fallback (3)
 
@@ -400,7 +400,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| cf906e1fcf | #34644 | pr/git | feat(web): resolved review conversations fold into avatars on their diff line | left (panels-2): resolved conversations fold into avatars on their diff line, PullRequestReviewAnnotation.tsx |
+| cf906e1fcf | #34644 | pr/git | feat(web): resolved review conversations fold into avatars on their diff line | ported (panels-3): a line's resolved conversations fold behind up to three author avatars at the line's right, a click or Space shows them, a conversation seen open stays; PullRequestResolvedThreadsButton, DiffAnnotationContent.lineOverlayWidth |
 
 ## Port group add-project (2)
 
@@ -440,7 +440,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| f12e8206f5 | #37007 | pr/git | fix(web): load a too-large PR file's diff on demand | left (panels-2): load a withheld file's diff on demand; the wire (`path`, `withheldFilesReadable`, `withheldFileDiff`) is in, the Code tab's per-file load (PullRequestCodeTab.tsx, cutLineNotes.ts) is not |
+| f12e8206f5 | #37007 | pr/git | fix(web): load a too-large PR file's diff on demand | ported (panels-3): a withheld file shows "Diff too large to display." with Load diff, read alone with `path`, its header counts from `omittedFileStats`; PullRequestWithheldFileNotice, PullRequestsController.loadWithheld; a new head forgets the reads |
 
 ## Port group pr-prefetch (2)
 
@@ -708,8 +708,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 2d558c4dad | #38537 | issues | fix(web): the issue viewer shows why a refresh failed | ported 39a3ad7d: "Could not refresh this issue" |
 | 6a29d58d14 | #38493 | issues | fix(client-runtime): closed issue searches no longer build up in memory | n/a: client-runtime cache internals; CandyWrapper holds one answer per environment |
 | f1d64aa0b6 | #38263 | pr/git | fix(azure-devops): legacy and project-less remotes list their work items | port |
-| 378584a760 | #38294 | issues | feat(web): hovering an issue link shows its preview card | left (panels-2): the issue link hover card needs an issue branch in the Markdown link handler (Features/Markdown, another agent); the card itself is not built |
-| b6a0fd6d62 | #38771 | issues | feat(issues): an issue shows every thread it is linked to | ported 0a5ca190: the linked-threads count opens the palette on the issue URL |
+| 378584a760 | #38294 | issues | feat(web): hovering an issue link shows its preview card | ported (panels-3): hovering a GitHub or GitLab issue link a project here reads shows IssueLinkPreviewView after issues.detail, spec, reference and IssueLinkPreviewFidelityTests; the branch is in App PullRequestsController's MarkdownLinkHandler (showIssuePreview), Features/Markdown untouched; Linear links and the PR card's issue fallback left (need tracker bindings) |
+| b6a0fd6d62 | #38771 | issues | feat(issues): an issue shows every thread it is linked to | ported 0a5ca190: the linked-threads count opens the palette on the issue URL; the thread picker that links from the Pull Requests and Issues pages is in (panels-3, ThreadLinkPicker with spec, reference and test) |
 | c350ee7e15 | #38256 | issues | feat(web): filter the issues list by project | ported 39a3ad7d: the Project filter |
 | 2e3d9fccdd | #38282 | issues | feat(web): show linked issues beside thread pull requests | ported 9a0153d1, composer-4: the sidebar badge, and since composer-4 its state icon and tone from `issues.detail` for a single issue (SidebarThreadRow.tsx:1137-1171, issuePresentation.tsx:33-53); new issue-badge.open and .completed spec cases. Left: the hover list of issues (ThreadDetailsIssueRows), with #38160 in Features/Thread |
 | 63899c16b9 | #38654 | issues | fix(web): retrying a failed Issues list no longer restarts another environment's read | ported 0a5ca190: Retry reads every environment again in one generation |
@@ -733,24 +733,24 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 8f6c9b7144 | #23338 | browser | fix(web): preserve typed dimensions with the aspect ratio locked | left (panels-2): not checked |
-| 083c903950 | #26233 | browser | fix(web): right panel's tab bar no longer slides under the title bar controls | left (panels-2): not checked |
-| cde3620577 | #26633 | browser | fix(web): forward native Copy and Cut from server browser tabs | left (panels-2): not checked |
-| 9cb59bf858 | #22328 | browser | fix(web): mod+L focuses the browser address bar from a focused page | left (panels-2): not checked |
-| 17948307cc | #28064 | browser | fix(client): the folder browser shows folders added or removed while T3 runs | left (panels-2): not checked |
+| 8f6c9b7144 | #23338 | browser | fix(web): preserve typed dimensions with the aspect ratio locked | already in CandyWrapper (panels-3): with the lock on, BrowserDeviceToolbarView.edit keeps the typed field's text and rewrites only the other field |
+| 083c903950 | #26233 | browser | fix(web): right panel's tab bar no longer slides under the title bar controls | left (panels-3): the right panel's close motion lives in Features/Thread RightPanelView, another agent's area; needs an on-screen check of the tab bar against the title bar controls |
+| cde3620577 | #26633 | browser | fix(web): forward native Copy and Cut from server browser tabs | ported (panels-3): Edit menu Copy and Cut send Control+C or X to a server tab the user controls, ServerBrowserView.copy/cut |
+| 9cb59bf858 | #22328 | browser | fix(web): mod+L focuses the browser address bar from a focused page | already in CandyWrapper (panels-3): the shortcut registry runs preview.focusUrl whatever has focus (BrowserController.swift:907-911); on-screen check wanted with the page focused |
+| 17948307cc | #28064 | browser | fix(client): the folder browser shows folders added or removed while T3 runs | already in CandyWrapper (panels-3): PaletteAddProject drops its folder listings each time the palette closes (reset(), browseCache), so a reopened browser reads folders fresh |
 | 6717d92cf3 | #28243 | browser | fix(web): Tab completes folder names in the add-project browser | ported (panels-2): Tab opens the highlighted or only folder, or extends to the common prefix, Mode.onTab in CommandPaletteController |
-| b5d9f85b9a | #26027 | browser | fix(web): keep inward mini browser resizes from growing | left (panels-2): not checked |
-| 1436c4571f | #29347 | browser | fix(client-runtime): connect to the primary environment while the browser reports offline | left (panels-2): not checked |
-| 350ecd63be | #32569 | browser | fix(web): closing the right panel returns focus to where it was | left (panels-2): not checked |
-| 7c76c9ddc2 | #30882 | browser | fix(web): mouse back/forward over the right panel no longer moves the main chat | left (panels-2): not checked |
-| 2e18418abf | #34859 | browser | fix(web): Incognito browser visits stay out of project history | left (panels-2): not checked |
-| e6119fdf68 | #35143 | browser | fix(web): browser settings changed in project scope no longer overwrite the global default | left (panels-2): not checked |
-| ff1eead6f4 | #35947 | browser | fix(web): zoom shortcuts work while a desktop browser page has focus | left (panels-2): not checked |
-| 0f13d638af | #29475 | browser | fix(browser): Stop cancels loading pages | left (panels-2): not checked |
-| be5f805964 | #34943 | browser | fix(web): new desktop browser tabs open at the default zoom and appearance | left (panels-2): not checked |
-| 651accb100 | #25874 | browser | fix(web): new browser tabs open at your default zoom and appearance | left (panels-2): not checked |
-| 675fb1d9a7 | #36846 | browser | fix(web): show Browser device preferences read-only for projects | left (panels-2): not checked |
-| 6fc2fb192c | #35299 | browser | fix(web): desktop browser tabs show native navigation immediately | left (panels-2): not checked |
+| b5d9f85b9a | #26027 | browser | fix(web): keep inward mini browser resizes from growing | ported (panels-3): an inward drag keeps a player already under the 240pt minimum, BrowserMiniPlayerResizeDirection.resized |
+| 1436c4571f | #29347 | browser | fix(client-runtime): connect to the primary environment while the browser reports offline | already in CandyWrapper (panels-3): a loopback primary ignores offline reports (ConnectionSupervisor ignoresOffline, RouteKind.isLoopback) |
+| 350ecd63be | #32569 | browser | fix(web): closing the right panel returns focus to where it was | left (panels-3): returning focus when the right panel closes belongs to Features/Thread RightPanelView, another agent's area |
+| 7c76c9ddc2 | #30882 | browser | fix(web): mouse back/forward over the right panel no longer moves the main chat | ported (panels-3): the mouse's back and forward buttons over a server tab move its history and nothing else, ServerBrowserView.onThumbNavigate; CandyWrapper's chat has no thumb navigation to move |
+| 2e18418abf | #34859 | browser | fix(web): Incognito browser visits stay out of project history | ported (panels-3): an address bar visit in an Incognito tab stays out of the project's history, BrowserController onSubmit |
+| e6119fdf68 | #35143 | browser | fix(web): browser settings changed in project scope no longer overwrite the global default | left (panels-3): browser settings in project scope live in Features/Settings, held for the Settings agent |
+| ff1eead6f4 | #35947 | browser | fix(web): zoom shortcuts work while a desktop browser page has focus | already in CandyWrapper (panels-3): zoom shortcuts go through the same registry as preview.focusUrl, so a focused page keeps them; on-screen check wanted |
+| 0f13d638af | #29475 | browser | fix(browser): Stop cancels loading pages | ported (panels-3): the refresh button stops a loading page and its tooltip says Stop; sends `stopLoading`, which 3824 servers ignore |
+| be5f805964 | #34943 | browser | fix(web): new desktop browser tabs open at the default zoom and appearance | n/a (panels-3): desktop (Electron) tabs; CandyWrapper's server tabs get the same defaults through #25874 |
+| 651accb100 | #25874 | browser | fix(web): new browser tabs open at your default zoom and appearance | ported (panels-3): preview.open carries browserDefaultZoomFactor and browserDefaultAppearance, PreviewRPC.openPayload |
+| 675fb1d9a7 | #36846 | browser | fix(web): show Browser device preferences read-only for projects | left (panels-3): Browser device preferences read-only for projects is a Features/Settings change, held for the Settings agent |
+| 6fc2fb192c | #35299 | browser | fix(web): desktop browser tabs show native navigation immediately | n/a (panels-3): Electron tab navigation state; CandyWrapper has only server tabs |
 
 ## Small fixes, composer (120)
 
@@ -932,16 +932,16 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| a3df6044a4 | #21430 | device | fix(web): preserve the active pointer in the flat Device view | left (panels-2): not checked |
-| 9bd5e12242 | #24106 | device | fix(web): restored Device view waits for device state before setup | left (panels-2): not checked |
-| 43b56b1790 | #23339 | device | fix(device): forward numeric keypad keys to iOS simulators | left (panels-2): not checked |
-| 09ace626bb | #28323 | device | fix(web): device tools keep the typed text when a command fails | left (panels-2): not checked |
-| a821f039c1 | #29352 | device | fix(client-runtime): connection diagnosis no longer blames the host while this device's sign-in loads | left (panels-2): not checked |
-| 3ee55151e0 | #29912 | device | fix(web): device host checks show the error without a stack trace | left (panels-2): not checked |
-| 202d5b5616 | #25971 | device | fix(devices): keep devices listed when simulator discovery fails | left (panels-2): not checked |
-| f475de2f75 | #27030 | device | fix(web): device tool update buttons fit their popovers | left (panels-2): not checked |
-| aa37097093 | #35664 | device | fix(web): streamed device toolbar starts at the panel size | left (panels-2): not checked |
-| 9e32c95576 | #33199 | device | fix(client-runtime): show routes whose host refused this device's sign-in | left (panels-2): not checked |
+| a3df6044a4 | #21430 | device | fix(web): preserve the active pointer in the flat Device view | already in CandyWrapper (panels-3): AppKit sends every drag to the view that took the mouse-down, so DevicePanelStreamView keeps the touch (DevicePanelView.swift:255-261) |
+| 9bd5e12242 | #24106 | device | fix(web): restored Device view waits for device state before setup | skip (panels-3): restoring a Device view needs a live device host to check; the sandbox has no simulator runtime or Android SDK (parity-checklist Device panel) |
+| 43b56b1790 | #23339 | device | fix(device): forward numeric keypad keys to iOS simulators | ported (panels-3): the numeric keypad's keys map to HID usages 0x54-0x63 and 0x67 on iOS, DevicePanelStreamClient.key |
+| 09ace626bb | #28323 | device | fix(web): device tools keep the typed text when a command fails | already in CandyWrapper (panels-3): DeviceToolsDrawerView never clears a field after a command, so a failure keeps the text; T3 also clears it after success, which CW does not |
+| a821f039c1 | #29352 | device | fix(client-runtime): connection diagnosis no longer blames the host while this device's sign-in loads | left (panels-3): diagnosis while this device's sign-in loads lives in Features/Settings ConnectionDiagnosis.swift, held for the Settings agent |
+| 3ee55151e0 | #29912 | device | fix(web): device host checks show the error without a stack trace | n/a (panels-3): CandyWrapper shows the server's message for a host check, never an Effect cause with a stack |
+| 202d5b5616 | #25971 | device | fix(devices): keep devices listed when simulator discovery fails | skip (panels-3): the discovery warning popover with Retry needs a device host whose discovery fails to check; the sandbox has no device runtime |
+| f475de2f75 | #27030 | device | fix(web): device tool update buttons fit their popovers | n/a (panels-3): CandyWrapper has no device tool update buttons yet (parity-checklist Device tools drawer, tool versions remain) |
+| aa37097093 | #35664 | device | fix(web): streamed device toolbar starts at the panel size | n/a (panels-3): a streamed browser tab in CandyWrapper sizes from its own view's bounds, not a published panel rect |
+| 9e32c95576 | #33199 | device | fix(client-runtime): show routes whose host refused this device's sign-in | left (panels-3): routes a host refused this device's sign-in need the connection driver's refusal state and Settings EnvironmentRoutesList, held for the Settings agent |
 
 ## Small fixes, diff (18)
 
@@ -952,7 +952,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | dc9b1a5a63 | #27635 | diff | fix(web): keep diff base selector available after errors | ported (panels-2): the Changes head and base selector stays after a failed read, HEAD and Automatic as fallbacks |
 | 5651d76818 | #28091 | diff | fix(web): horizontal scrolling inside diff and file panes no longer switches threads | left (panels-2): goes with the history-swipe group (#30173) outside the diff views |
 | 1c0cc439ff | #28386 | diff | fix(web): deleting a thread clears its saved right-panel, diff-panel and mini-player state | skipped (panels-2): CandyWrapper keeps panel and diff selection per open thread in memory; only the diff base choice persists (DiffPanelView baseRefsKey), and clearing it needs the delete path in Features/Sidebar |
-| 300101f7e5 | #29309 | diff | fix(web): open files from Claude and ACP tool-call diffs | left (panels-2): not checked against ToolCallDiff's open path |
+| 300101f7e5 | #29309 | diff | fix(web): open files from Claude and ACP tool-call diffs | skip (panels-3): CandyWrapper's diff file headers offer no Open or Reveal (DiffPanelView.onOpenFile is unset in the app); port with that action |
 | 8b44f42b14 | #30567 | diff | fix(web): load selected diff metadata before file patches | n/a (panels-2): CandyWrapper reads the whole patch, with no metadata-first file list |
 | 996b43f01b | #22347 | diff | fix(web): retain diff selection across navigation | left (panels-2): diff selection across navigation lives in Features/Thread ThreadPanelView |
 | bd02e64b5f | #28056 | diff | fix(web): expanding a diff whose files changed no longer crashes | n/a: React render crash |
@@ -963,35 +963,35 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 953ce60d12 | #36606 | diff | fix(web): changed root files with a leading space open in the diff panel | already in CandyWrapper: DiffPanelView.open passes the file path untrimmed |
 | bef412cff6 | #33310 | diff | fix(web): diff file tree shows added and deleted files before their patches load | n/a (panels-2): CandyWrapper reads the whole patch, so files and change types arrive together |
 | b96a511067 | #35304 | diff | fix(web): repeated diff blocks no longer crash the viewer | n/a: React key crash |
-| 2b6c14bbf1 | #23167 | diff | fix(web): diff file Open and Reveal reach a file whose name has a backslash | left (panels-2): not checked |
-| 9a79883979 | #32684 | diff | fix(web): a file opened from a diff in a project folder inside a repository opens that file | left (panels-2): not checked |
+| 2b6c14bbf1 | #23167 | diff | fix(web): diff file Open and Reveal reach a file whose name has a backslash | skip (panels-3): needs the diff header's Open and Reveal, which CandyWrapper lacks; port with that action |
+| 9a79883979 | #32684 | diff | fix(web): a file opened from a diff in a project folder inside a repository opens that file | skip (panels-3): needs the diff header's Open and Reveal, which CandyWrapper lacks; port with that action |
 
 ## Small fixes, files (22)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| de2b1d3358 | #23745 | files | fix(web): keep HTML prototype selection rings visible | left (panels-2): not checked |
-| f06dd4bbf5 | #25737 | files | feat(web): allow resizing the file explorer | left (panels-2): not checked |
-| 78f1ba8285 | #25555 | files | fix(web): preserve PDF scroll and zoom across autoreloads | left (panels-2): not checked |
-| 461df465ab | #26579 | files | fix(web): file context menu actions respond to pointer clicks | left (panels-2): not checked |
-| 433bff1e30 | #28521 | files | fix(web): clicking a file in the Files tree keeps focus on that row | left (panels-2): not checked |
+| de2b1d3358 | #23745 | files | fix(web): keep HTML prototype selection rings visible | n/a (panels-3): HTML prototype selection rings belong to T3's design-mode overlay, which CandyWrapper's HTML preview does not have |
+| f06dd4bbf5 | #25737 | files | feat(web): allow resizing the file explorer | left (panels-3): a resizable Files tree needs a drag handle in FilesPanelView between tree and file (160-560pt, file at least 256pt) |
+| 78f1ba8285 | #25555 | files | fix(web): preserve PDF scroll and zoom across autoreloads | skip (panels-3): PDFs open in Quick Look in CandyWrapper, which keeps its own scroll and zoom |
+| 461df465ab | #26579 | files | fix(web): file context menu actions respond to pointer clicks | n/a (panels-3): base-ui pointer handling; CandyWrapper's context menus are AppKit menus |
+| 433bff1e30 | #28521 | files | fix(web): clicking a file in the Files tree keeps focus on that row | left (panels-3): not checked on screen; a clicked file row should keep keyboard focus in FileTreeView |
 | 09647d188d | #30601 | files | fix(shared): CSV and TSV attachments keep their table under generic file types | already in CandyWrapper: FilePreviewKind.of picks the table from the .csv or .tsv extension, whatever the MIME type |
-| 9ef52de293 | #23203 | files | fix(shared): keep spreadsheet shorthand as inline code | left (panels-2): not checked |
-| 1ab3afe892 | #34360 | files | fix(web): opening a file focuses its editor so Cmd+F searches it | left (panels-2): not checked |
-| eceeab4d5c | #34346 | files | fix(web): Cmd+F in the Files panel focuses its search | left (panels-2): not checked |
-| f10a5029f5 | #35067 | files | fix(web): Files tree keeps expanded folders across remounts | left (panels-2): not checked |
-| 08544ba3e5 | #32693 | files | fix(web): open documents no longer reload after every agent command | left (panels-2): not checked |
-| 8cb551a3ce | #36664 | files | fix(web): saved files show external edits after a failed reload | left (panels-2): not checked |
-| 8b633d9a9e | #29802 | files | fix(web): PDF find matches curly quotes when you type straight ones | left (panels-2): not checked |
-| f05cd350d2 | #29996 | files | fix(web): opening a very large folder no longer freezes the Files panel | left (panels-2): not checked |
-| 2afee52025 | #33125 | files | fix(web): distinguish media Back from window close | left (panels-2): not checked |
-| 5f80af6805 | #36936 | files | fix(web): restore word selection in inline code | left (panels-2): not checked |
-| 71adeef080 | #37064 | files | fix(web): open PDF links in the file viewer | left (panels-2): not checked |
-| 109e9dbdfd | #37361 | files | fix(web): file tabs keep their scroll position when you switch back | left (panels-2): not checked |
-| 6dd092315e | #31785 | files | fix(web): file tree icons and ignored rows follow the theme's muted text | left (panels-2): not checked |
-| f4d0855a50 | #33805 | files | fix(web): PDF attachment chips no longer look like failed ones | left (panels-2): not checked |
-| 0d405f664a | #38510 | files | fix(web): a ~\ home path opens as a read-only home file, not as a project file | left (panels-2): not checked |
-| e48d6f3181 | #38749 | files | fix(web): PDFs in the desktop file panel can be saved again | left (panels-2): not checked |
+| 9ef52de293 | #23203 | files | fix(shared): keep spreadsheet shorthand as inline code | left (panels-3): spreadsheet shorthand staying inline code is FileLinks.inlineCodeCandidate in Features/Markdown, held for the Markdown agent |
+| 1ab3afe892 | #34360 | files | fix(web): opening a file focuses its editor so Cmd+F searches it | left (panels-3): focusing the opened file's code view so Cmd+F searches it needs a first-responder hand-off in FileSurfaceView |
+| eceeab4d5c | #34346 | files | fix(web): Cmd+F in the Files panel focuses its search | left (panels-3): Cmd+F in the Files panel focusing its search needs the panel's find shortcut routed to FilesPanelView's search field |
+| f10a5029f5 | #35067 | files | fix(web): Files tree keeps expanded folders across remounts | left (panels-3): keeping expanded folders across remounts needs FileTreeModel's expanded set stored per environment and cwd |
+| 08544ba3e5 | #32693 | files | fix(web): open documents no longer reload after every agent command | left (panels-3): not checked whether FilesController reloads open documents after agent commands |
+| 8cb551a3ce | #36664 | files | fix(web): saved files show external edits after a failed reload | left (panels-3): showing external edits after a failed reload needs CodeFileView's saved state checked against FileSaveFailureTests |
+| 8b633d9a9e | #29802 | files | fix(web): PDF find matches curly quotes when you type straight ones | skip (panels-3): PDF find runs in Quick Look in CandyWrapper |
+| f05cd350d2 | #29996 | files | fix(web): opening a very large folder no longer freezes the Files panel | already in CandyWrapper (panels-3): FileTreeModel caps expandable ignored folders (expandableDirectoryPaths) and the tree is virtualized |
+| 2afee52025 | #33125 | files | fix(web): distinguish media Back from window close | skip (panels-3): media open in Quick Look in CandyWrapper, which has its own close |
+| 5f80af6805 | #36936 | files | fix(web): restore word selection in inline code | left (panels-3): word selection in inline code is Features/Markdown, held for the Markdown agent |
+| 71adeef080 | #37064 | files | fix(web): open PDF links in the file viewer | skip (panels-3): PDF links open in Quick Look in CandyWrapper |
+| 109e9dbdfd | #37361 | files | fix(web): file tabs keep their scroll position when you switch back | left (panels-3): keeping a file tab's scroll position needs FileSurfaceView to store each path's scroll offset when it hides |
+| 6dd092315e | #31785 | files | fix(web): file tree icons and ignored rows follow the theme's muted text | ported (panels-3): the tree's chevrons, guides and ignored rows take the theme's contrast muted text, FilesPanelView |
+| f4d0855a50 | #33805 | files | fix(web): PDF attachment chips no longer look like failed ones | skip (panels-3): PDF chips hand off to Quick Look in CandyWrapper; the chip look is the composer's |
+| 0d405f664a | #38510 | files | fix(web): a ~\ home path opens as a read-only home file, not as a project file | left (panels-3): a ~\\ home path needs FilesLogic's relative path split to read ~\\ as home |
+| e48d6f3181 | #38749 | files | fix(web): PDFs in the desktop file panel can be saved again | skip (panels-3): PDFs open in Quick Look in CandyWrapper, which saves them itself |
 
 ## Small fixes, issues (2)
 
@@ -1004,37 +1004,37 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 1cfd23e7cb | #25236 | palette | fix(web): keep palette project lookups in their environment | left (panels-2): not checked |
-| 977d613611 | #29288 | palette | fix(web): command palette footer hints wrap instead of clipping on narrow viewports | left (panels-2): not checked |
-| b732621b51 | #37315 | palette | fix(clients): command palette skips tasks shown under their parent | left (panels-2): not checked |
-| e0f5acd178 | #38968 | palette | fix(web): the command palette lists a failed thread as Failed, not Waiting | left (panels-2): not checked |
+| 1cfd23e7cb | #25236 | palette | fix(web): keep palette project lookups in their environment | already in CandyWrapper (panels-3): ProjectId carries its environment, so PaletteCommands looks projects up per environment |
+| 977d613611 | #29288 | palette | fix(web): command palette footer hints wrap instead of clipping on narrow viewports | n/a (panels-3): the palette is a fixed 576pt panel and the window's 840pt minimum (MainWindow.swift:40) keeps its hints on one line |
+| b732621b51 | #37315 | palette | fix(clients): command palette skips tasks shown under their parent | already in CandyWrapper (panels-3): PaletteCommands drops threads with !lineage.isListed, which includes delegatedUnderParent (ThreadShell.swift:279) |
+| e0f5acd178 | #38968 | palette | fix(web): the command palette lists a failed thread as Failed, not Waiting | ported (panels-3): a failed run outranks background work's Waiting, SidebarModel.resolveThreadStatusPill, shared by the palette and the sidebar |
 
 ## Small fixes, pr/git (161)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 5b89a53585 | #25588 | pr/git | feat(pull-requests): manage GitHub maintainer edits | ported (panels-2): "Allow edits from maintainers" checkbox in the ⋯ menu, `pullRequests.update` `maintainerCanModify`; the hint is a one-line subtitle plus tooltip |
-| 9d38d68d04 | #23225 | pr/git | fix(web): wait for fresh diff pages in review guides | left (panels-2): not checked |
-| a8d6b0e66b | #22522 | pr/git | fix(web): mouse Back/Forward over a streamed preview navigate the preview | left (panels-2): not checked |
+| 5b89a53585 | #25588 | pr/git | feat(pull-requests): manage GitHub maintainer edits | ported (panels-2): "Allow edits from maintainers" checkbox in the ⋯ menu, `pullRequests.update` `maintainerCanModify`; the hint wraps at 320pt with "Saving…" under it (panels-3, MenuItem.subtitleWrapWidth) |
+| 9d38d68d04 | #23225 | pr/git | fix(web): wait for fresh diff pages in review guides | n/a (panels-3): CandyWrapper has no review guide view, only its settings rows |
+| a8d6b0e66b | #22522 | pr/git | fix(web): mouse Back/Forward over a streamed preview navigate the preview | ported (panels-3): the mouse's back and forward buttons over a streamed tab move its history, with #30882 (ServerBrowserView.onThumbNavigate) |
 | 1c99a55444 | #23577 | pr/git | fix(web): report invalid preview addresses | left (panels-2): not checked |
 | 13f9bc4e55 | #23678 | pr/git | fix(web): label inherited worktree cleanup modes correctly | left (panels-2): not checked |
-| be43da4c0d | #23732 | pr/git | fix(web): PDF previews keep their page when the agent responds | left (panels-2): not checked |
+| be43da4c0d | #23732 | pr/git | fix(web): PDF previews keep their page when the agent responds | skip (panels-3): CandyWrapper hands this format to Quick Look |
 | 3e7277e7e8 | #23742 | pr/git | fix(web): release discarded draft image previews after Undo expires | left (panels-2): not checked |
 | 64968b3109 | #24060 | pr/git | fix(web): a branch restore in one thread no longer blocks another thread | left (panels-2): not checked |
 | bc216e4675 | #24081 | pr/git | fix(web): closed preview sessions no longer keep syncing for the rest of the session | left (panels-2): not checked |
 | e9dd8a68ee | #24117 | pr/git | fix(clients): offer Commit when the branch is behind upstream | left (panels-2): not checked |
-| c9246445e0 | #24189 | pr/git | fix(web): long guide Next buttons wrap instead of overflowing | left (panels-2): not checked |
+| c9246445e0 | #24189 | pr/git | fix(web): long guide Next buttons wrap instead of overflowing | n/a (panels-3): CandyWrapper has no review guide view, only its settings rows |
 | f5bc64b7b7 | #24489 | pr/git | fix(web): deleting a thread no longer offers to remove a shared worktree | left (panels-2): not checked |
 | 9474bcbae1 | #25303 | pr/git | fix(web): preserve trailing whitespace in review diffs | left (panels-2): not checked |
 | e428a2c1f5 | #26060 | pr/git | fix(web,mobile): pull request text breaks lines when providers do | left (panels-2): not checked |
 | 4dd2f735f2 | #26441 | pr/git | fix(web): Load balancing and PR sharing name the route in use | left (panels-2): not checked |
-| 6e72f540f6 | #26563 | pr/git | fix(prs): classify generated files and evals correctly | left (panels-2): not checked |
+| 6e72f540f6 | #26563 | pr/git | fix(prs): classify generated files and evals correctly | ported (panels-3): ChangedFileKind follows 4928's generated and evals rules for the hide-tests filter; the PR breakdown itself comes from the server |
 | 3a873e8faf | #23475 | pr/git | fix(web): disable conflict checkout without required permissions | left (panels-2): not checked |
-| a2e4524d51 | #21579 | pr/git | fix(web): preview address bar no longer ligates "://" | left (panels-2): not checked |
-| e123ac644e | #26073 | pr/git | fix(web): a failed review guide keeps Try again reachable | left (panels-2): not checked |
+| a2e4524d51 | #21579 | pr/git | fix(web): preview address bar no longer ligates "://" | n/a (panels-3): the address field draws with the UI font, which has no "://" ligature |
+| e123ac644e | #26073 | pr/git | fix(web): a failed review guide keeps Try again reachable | n/a (panels-3): CandyWrapper has no review guide view, only its settings rows |
 | 7cdbb8ef59 | #27114 | pr/git | fix(web): show the worktree picker in the composer strip at default width | left (not reached in composer-3): from @xl (576pt) T3 shows the wide strip layout, machine, separator and the worktree picker (`BranchToolbarEnvModeSelector`), which CW has no control for yet; needs a 4928 reference capture |
 | 45d29b45fe | #22382 | pr/git | fix(web): a refused review shows GitHub's reason | left (panels-2): not checked |
-| 1c8ada5023 | #22974 | pr/git | fix(web): composer notices no longer flicker next to a floating preview | left (panels-2): not checked |
+| 1c8ada5023 | #22974 | pr/git | fix(web): composer notices no longer flicker next to a floating preview | n/a (panels-3): React render flicker |
 | a24ec905c8 | #28070 | pr/git | fix(web): machine label no longer shifts between one and many machines | left (panels-2): not checked |
 | 793bbf47b3 | #28077 | pr/git | fix(web): long titles no longer overflow the pull request list tooltip | left (panels-2): not checked |
 | 78aa0d5ca5 | #27925 | pr/git | feat(mcp): unlink every PR in given states with one call | n/a: T3's MCP tools, which run on the server |
@@ -1046,7 +1046,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 9ff0fac0f4 | #28244 | pr/git | fix(web): make Changes and PR Code file lists resizable | left (panels-2): resizable Changes and PR Code file lists, 5.1 |
 | b50d8a1b15 | #28573 | pr/git | fix(web): add spacing above PR detail metadata | left (panels-2): not checked |
 | 82b10d546c | #28665 | pr/git | fix(web): align pull request file viewed checkboxes | left (panels-2): not checked |
-| f482dc5c57 | #25496 | pr/git | fix(web): PDF previews keep their page across thread switches | left (panels-2): not checked |
+| f482dc5c57 | #25496 | pr/git | fix(web): PDF previews keep their page across thread switches | skip (panels-3): CandyWrapper hands this format to Quick Look |
 | 5b5bd169e0 | #26077 | pr/git | fix(web): PR merge buttons stay in place while the stack loads | left (panels-2): not checked |
 | 7816a0fa81 | #27434 | pr/git | fix(web): Enter selects the first branch search result | left (panels-2): not checked |
 | 716e1c071c | #28439 | pr/git | fix(web): Changes row no longer shows +0 while Diff has edits | left (panels-2): not checked |
@@ -1069,28 +1069,28 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | d929e726f2 | #31741 | pr/git | fix(pr): GitCafe attachments render in pull request bodies | left (panels-2): not checked |
 | c52df24d28 | #22489 | pr/git | fix(prs): reviewer menu searches past the first page and keeps GitLab's requested reviewers | ported (panels-2): the reviewer picker asks the host with `query` past a truncated page where `reviewers.searchCandidates`, with T3's four truncation notes |
 | 4821696509 | #30352 | pr/git | fix(client-runtime): pull request bodies with CRLF line endings keep their code blocks whole | left (panels-2): not checked |
-| e5193ac0a2 | #30345 | pr/git | fix(web): preview annotation chip labels no longer end in a broken character | left (panels-2): not checked |
-| cae7e5cc57 | #30717 | pr/git | fix(review-guide): preserve excerpt line terminators | left (panels-2): not checked |
+| e5193ac0a2 | #30345 | pr/git | fix(web): preview annotation chip labels no longer end in a broken character | n/a (panels-3): CandyWrapper has no preview annotation tool |
+| cae7e5cc57 | #30717 | pr/git | fix(review-guide): preserve excerpt line terminators | n/a (panels-3): CandyWrapper has no review guide view, only its settings rows |
 | 0aae72244e | #31814 | pr/git | fix(web): keep change totals aligned beside the label | left (panels-2): not checked |
 | 0a2f59056b | #31858 | pr/git | fix(web): improve Changes row text and spacing | left (panels-2): not checked |
 | 32a0531748 | #25988 | pr/git | fix(web): PR bodies keep before/after video tables intact | left (panels-2): not checked |
-| e74b410e29 | #29642 | pr/git | fix(web): keybinding settings recognize the previewOpen condition | left (panels-2): not checked |
+| e74b410e29 | #29642 | pr/git | fix(web): keybinding settings recognize the previewOpen condition | left (panels-3): keybinding settings in Features/Settings, held for the Settings agent |
 | 75200f45c6 | #29678 | pr/git | fix(web): thread navigation shortcuts honor previewFocus and previewOpen conditions | left (panels-2): not checked |
-| daa6984fd6 | #30392 | pr/git | fix(web): review findings handed to a thread no longer end in a broken character | left (panels-2): not checked |
+| daa6984fd6 | #30392 | pr/git | fix(web): review findings handed to a thread no longer end in a broken character | n/a (panels-3): CandyWrapper has no review guide view, only its settings rows |
 | 6647b0a761 | #30812 | pr/git | fix(web): rich text previews keep paragraphs that end with a backslash | left (panels-2): not checked |
-| 8ab427c607 | #33113 | pr/git | fix(web): settings say custom instructions cover pull request descriptions | left (panels-2): not checked |
+| 8ab427c607 | #33113 | pr/git | fix(web): settings say custom instructions cover pull request descriptions | left (panels-3): settings copy in Features/Settings, held for the Settings agent |
 | a88a0adfa1 | #34003 | pr/git | fix(web): keep HTML previews anchored when accordions expand | left (panels-2): not checked |
-| 44e894ffd7 | #34017 | pr/git | fix(web): preserve search result titles in drag previews | left (panels-2): not checked |
+| 44e894ffd7 | #34017 | pr/git | fix(web): preserve search result titles in drag previews | n/a (panels-3): HTML drag previews of search results; CandyWrapper drags no search results |
 | 8fc6fd01d7 | #33949 | pr/git | fix(web): preserve previews during attachment preparation | left (panels-2): not checked |
 | d152d2c824 | #30150 | pr/git | fix(client-runtime): a search query pasted from github.com lists pull requests again | ported (panels-2): GitHub's own qualifiers (is, state, repo, org, user, sort, archived) are ignored, two different authors name none, a negated draft flips, PullRequestListLogic.parseQuery |
 | 4ca10398b1 | #34140 | pr/git | fix(web): tighter outdated-conversation cards in the PR code panel | left (panels-2): not checked |
 | b3fdf2b10f | #33989 | pr/git | fix(web): PR links jump to the comment, diff line, checks or commits they name | left (panels-2): PR links that jump to a comment, line, checks or commits, 5.2 |
 | dea8472438 | #28732 | pr/git | feat(web): label chips show the label's description on hover | left (panels-2): not checked |
 | b6d3097379 | #28459 | pr/git | feat(web): composer strip names the worktree folder | ported: a started thread's strip names its worktree folder (BranchToolbarLogic `lockedWorkspaceLabel`, Features/Git) |
-| 8cbc95923a | #34168 | pr/git | fix(web): files marked Viewed stay folded when a pull request's Code tab opens again | left (panels-2): Viewed files folding on reopen, with #37605, 5.2 |
+| 8cbc95923a | #34168 | pr/git | fix(web): files marked Viewed stay folded when a pull request's Code tab opens again | ported (panels-3): Viewed marks that load after the diff fold their files, the reader's fold wins, PullRequestCodeView.applyFolds |
 | 75b22bf56c | #30620 | pr/git | fix(web): dismiss image path tooltips after preview and scroll | left (panels-2): not checked |
 | 8c9af5418a | #31972 | pr/git | fix(web): disable the git actions menu when nothing in it is usable | left (panels-2): not checked |
-| 1bdf470328 | #34048 | pr/git | fix(web): project actions auto-open Preview in web clients | left (panels-2): not checked |
+| 1bdf470328 | #34048 | pr/git | fix(web): project actions auto-open Preview in web clients | n/a (panels-3): web clients only |
 | 49bab9936e | #19553 | pr/git | fix(web): Changes row matches the diff comparison | left (panels-2): not checked |
 | fcddd737e2 | #22208 | pr/git | fix(web): don't save retention age until committed | left (panels-2): not checked |
 | 27188274e7 | #26992 | pr/git | fix(web): pull request search keeps partial-word matches after GitHub answers | left (panels-2): not checked |
@@ -1100,11 +1100,11 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 9411a71ec0 | #34509 | pr/git | fix(web): dismissing the pull request checkout toast stops the handoff | left (panels-2): not checked |
 | 8214342385 | #32283 | pr/git | fix(web): collapsed PR comments no longer show raw HTML | left (panels-2): not checked |
 | afe0528039 | #34727 | pr/git | fix(web): keep git action loading rows at idle height | left (panels-2): not checked |
-| fd033dfec3 | #34722 | pr/git | fix(web): improve Word document previews | left (panels-2): not checked |
+| fd033dfec3 | #34722 | pr/git | fix(web): improve Word document previews | skip (panels-3): CandyWrapper hands this format to Quick Look |
 | 3a30b011c3 | #34734 | pr/git | fix(web): cancelled PR checks show a gray stop sign instead of the failed X | ported (panels-2): cancelled checks wear `octagon-x` in muted/70, PullRequestStyle.checkStatus |
-| 3bd7b04544 | #34796 | pr/git | fix(web): Escape and tool keys work as soon as preview annotation starts | left (panels-2): not checked |
+| 3bd7b04544 | #34796 | pr/git | fix(web): Escape and tool keys work as soon as preview annotation starts | n/a (panels-3): CandyWrapper has no preview annotation tool |
 | 0ac41eecad | #34878 | pr/git | fix(web): sidebar rows drop a branch and worktree that were deleted | left (panels-2): not checked |
-| ee90bdc940 | #34992 | pr/git | fix(web): CSV/TSV and large-text previews say "1 row", "1 column" and "1 line" | left (panels-2): not checked |
+| ee90bdc940 | #34992 | pr/git | fix(web): CSV/TSV and large-text previews say "1 row", "1 column" and "1 line" | n/a (panels-3): CandyWrapper shows CSV, TSV and large text as code, with no row, column or line counts |
 | abbd967c4b | #35111 | pr/git | fix(web): PR comment hover excerpts no longer end in a replacement character | left (panels-2): not checked |
 | bf8e5e61b6 | #35066 | pr/git | fix(web): a failed page in the floating browser preview shows the error instead of a blank panel | left (panels-2): not checked |
 | 167d41c094 | #35376 | pr/git | fix(web): a numeric author or labels in the URL no longer crashes Pull Requests | left (panels-2): not checked |
@@ -1157,7 +1157,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 3a1dfb7acb | #37072 | pr/git | fix(web): HTML file previews use the current canvas color | left (panels-2): not checked |
 | 06150a08ec | #37392 | pr/git | fix(web): No project threads in New worktree mode send without a base branch | left (panels-2): not checked |
 | 558790aae5 | #37498 | pr/git | fix(web): stashed prompt previews show thread mentions by name, not as raw links | left (panels-2): not checked |
-| 1f698f01d9 | #37605 | pr/git | fix: PR diffs fold Viewed files the way GitHub does, on web and mobile | left (panels-2): Viewed files fold the way GitHub does, PullRequestCodeView |
+| 1f698f01d9 | #37605 | pr/git | fix: PR diffs fold Viewed files the way GitHub does, on web and mobile | ported (panels-3): `isFileDiffCollapsed` with `diffFilesCollapsed` folding all and Viewed folding otherwise, PullRequestDetailLogic |
 | cd42e1a497 | #37651 | pr/git | fix(web): the PR author filter says "1 merge loaded", not "1 merges loaded" | left (panels-2): not checked |
 | 0a842b222d | #37704 | pr/git | fix(web): list each pull request once across servers | left (panels-2): not checked |
 | 15271c8d00 | #37733 | pr/git | fix(pr): label and reviewer pickers send picks once, when they close | left (panels-2): not checked |
@@ -1375,41 +1375,41 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| bfee44655c | #22106 | terminal | fix(web): keep a closed split terminal's tab in view | left (panels-2): not checked |
+| bfee44655c | #22106 | terminal | fix(web): keep a closed split terminal's tab in view | left (panels-3): not checked on screen; TerminalDrawerView's tab strip needs a split closed while scrolled to confirm the tab stays in view |
 | 947916887c | #27515 | terminal | feat(pi): import terminal Pi sessions during setup | n/a: Pi session import runs in the server's setup |
-| 8f79233ccb | #24020 | terminal | fix(web): keep terminal close confirmations on their original thread | left (panels-2): not checked |
-| cd7791de1e | #24251 | terminal | fix(web): expired terminal context toasts say "them" for several contexts | left (panels-2): not checked |
+| 8f79233ccb | #24020 | terminal | fix(web): keep terminal close confirmations on their original thread | already in CandyWrapper (panels-3): the close confirmation is a modal dialog (TerminalController.confirmClose), so the thread cannot change while it is open |
+| cd7791de1e | #24251 | terminal | fix(web): expired terminal context toasts say "them" for several contexts | n/a (panels-3): CandyWrapper shows no expired terminal context toast |
 | f513369612 | #28189 | terminal | fix(web): terminal URLs like redis:// no longer become broken file links | ported (panels-2): the tail of a non-web URL such as redis:// or file:/// is no file link, TerminalLinks.extract |
-| d7171d30a4 | #27843 | terminal | fix(shared): inverted terminal ranges emit no fake lines | left (panels-2): not checked |
-| ee265cc539 | #29696 | terminal | fix(client-runtime): terminals fit their pane again after a reconnect | left (panels-2): not checked |
-| 77b948e3e7 | #29804 | terminal | fix(web): big terminal selections no longer break sending | left (panels-2): not checked |
-| 7f92cb0e49 | #29736 | terminal | fix(shared): ignore unsupported command output control parameters | left (panels-2): not checked |
-| 16ca47b3d3 | #29737 | terminal | fix(shared): ignore unsupported command output erase modes | left (panels-2): not checked |
-| 059804dfda | #30526 | terminal | fix(web): validate terminal links against filesystem metadata | left (panels-2): not checked |
+| d7171d30a4 | #27843 | terminal | fix(shared): inverted terminal ranges emit no fake lines | n/a (panels-3): CandyWrapper shows a terminal record's text as sent and slices no lines from its range (MarkdownContextChips) |
+| ee265cc539 | #29696 | terminal | fix(client-runtime): terminals fit their pane again after a reconnect | left (panels-3): refitting after a reattach snapshot needs a check of TerminalController's attach stream against a server restart |
+| 77b948e3e7 | #29804 | terminal | fix(web): big terminal selections no longer break sending | n/a (panels-3): xterm.js selection size limit; SwiftTerm's selection goes to Add to chat as text |
+| 7f92cb0e49 | #29736 | terminal | fix(shared): ignore unsupported command output control parameters | ported (panels-3): private parameters and colons outside SGR are ignored, CommandOutputBuffer |
+| 16ca47b3d3 | #29737 | terminal | fix(shared): ignore unsupported command output erase modes | ported (panels-3): erase modes other than 0, 1 and 2 (K) and 0-3 (J) leave the text, CommandOutputBuffer |
+| 059804dfda | #30526 | terminal | fix(web): validate terminal links against filesystem metadata | left (panels-3): validating path links against filesystem metadata needs a stat RPC before TerminalLinks marks a path |
 | 1b14cb3d8c | #30603 | terminal | fix(web): terminal links keep route and pnpm paths in one piece | ported (panels-2): route segments like [id] and (group)/ and pnpm paths with @ stay in one link |
-| a3cd0aa823 | #29164 | terminal | fix(web): deleting an archived thread also clears its draft, staged uploads and terminal state | left (panels-2): not checked |
+| a3cd0aa823 | #29164 | terminal | fix(web): deleting an archived thread also clears its draft, staged uploads and terminal state | left (panels-3): deleting an archived thread clearing its terminal state touches the thread delete path in the app, not checked |
 | 9cd7a04797 | #33440 | terminal | fix(web): sending from an empty citation comment clears the composer | left (panels-2): composer, outside the terminal |
-| facd190640 | #33129 | terminal | fix(web): opening the terminal with Cmd+J no longer re-renders the whole sidebar | left (panels-2): not checked |
+| facd190640 | #33129 | terminal | fix(web): opening the terminal with Cmd+J no longer re-renders the whole sidebar | n/a (panels-3): React re-render cost |
 | 05adc163fc | #34182 | terminal | fix(web): hide empty replies when renders show the result | left (panels-2): thread timeline, outside the terminal |
 | f697d4db3e | #34050 | terminal | fix(web): local server cards in the browser empty state take pointer clicks | left (panels-2): browser empty state, see the browser batch |
-| 3445b0b400 | #24773 | terminal | fix(web): terminal output no longer edits a hidden question draft | left (panels-2): not checked |
+| 3445b0b400 | #24773 | terminal | fix(web): terminal output no longer edits a hidden question draft | n/a (panels-3): CandyWrapper's terminal output never writes into a composer draft |
 | 34de974868 | #34899 | terminal | fix(web): clicking the timeline's empty padding keeps following a streaming reply | left (panels-2): thread timeline, outside the terminal |
 | a2685e64d3 | #35404 | terminal | fix(web): SCP-style Git remotes no longer become terminal file links | ported (panels-2): an SCP-style Git remote's tail is no file link |
-| 8a38c63706 | #26433 | terminal | fix(web): thread navigation shortcuts work from the terminal and macOS composer | left (panels-2): not checked |
-| 1acee5b8be | #36025 | terminal | fix(web): terminal OSC 8 file URIs open the file they name | left (panels-2): not checked |
-| ed7e5010ba | #36117 | terminal | fix(web): terminal "Add to chat" now adds to a queued message being edited | left (panels-2): not checked |
+| 8a38c63706 | #26433 | terminal | fix(web): thread navigation shortcuts work from the terminal and macOS composer | already in CandyWrapper (panels-3): thread navigation shortcuts go through the app-wide Shortcuts registry, which runs with the terminal focused |
+| 1acee5b8be | #36025 | terminal | fix(web): terminal OSC 8 file URIs open the file they name | ported (panels-3): an OSC 8 file:// link opens the file it names with its #L position, TerminalController.openLink through FileLinks.resolveLink |
+| ed7e5010ba | #36117 | terminal | fix(web): terminal "Add to chat" now adds to a queued message being edited | left (panels-3): Add to chat into a queued message being edited is a Features/Composer change, held for the composer agent |
 | 764c0475b5 | #36174 | terminal | fix(web): terminal TypeScript links preserve error locations | ported (panels-2): `file(42,7): error TS…:` links to file:42:7 |
-| 1721f187c6 | #36380 | terminal | fix(web): clearing a running terminal keeps its screen and input modes | left (panels-2): not checked |
-| 43a71d9b1a | #29654 | terminal | fix(web): a terminal reopened while its open is pending no longer closes itself | left (panels-2): not checked |
-| 382312aba8 | #29612 | terminal | fix(web): the sidebar shortcut honors terminal and preview focus conditions | left (panels-2): not checked |
-| e0ca4fcecb | #32047 | terminal | fix(web, mobile): a failed terminal resize is sent again | left (panels-2): not checked |
+| 1721f187c6 | #36380 | terminal | fix(web): clearing a running terminal keeps its screen and input modes | n/a (panels-3): SwiftTerm keeps its modes through a clear; T3's fix replays its own retained buffer |
+| 43a71d9b1a | #29654 | terminal | fix(web): a terminal reopened while its open is pending no longer closes itself | left (panels-3): reopening a terminal while its open is pending needs a check of TerminalController's open and attach ordering |
+| 382312aba8 | #29612 | terminal | fix(web): the sidebar shortcut honors terminal and preview focus conditions | already in CandyWrapper (panels-3): sidebar.toggle runs through the Shortcuts registry with its when-clauses, whatever has focus |
+| e0ca4fcecb | #32047 | terminal | fix(web, mobile): a failed terminal resize is sent again | left (panels-3): resending a failed resize needs a retry in TerminalController's outbox on a failed terminal.resize |
 | 2cb2fa1385 | #37071 | terminal | fix(web): terminal links open bare compiler filenames | ported (panels-2): a bare `name.ext:line:col` links |
-| e101cae1b9 | #37088 | terminal | fix(terminal): show shell startup failures across attachments | left (panels-2): not checked |
-| 8dba23e420 | #37103 | terminal | fix(web): large terminal pastes reach the program intact | left (panels-2): not checked |
-| 46f3ab39f2 | #37133 | terminal | fix(web): open terminal file links naming the server hostname | left (panels-2): not checked |
+| e101cae1b9 | #37088 | terminal | fix(terminal): show shell startup failures across attachments | left (panels-3): shell startup failures across attachments need the attach snapshot's failure state shown in TerminalSurfaceView |
+| 8dba23e420 | #37103 | terminal | fix(web): large terminal pastes reach the program intact | already in CandyWrapper (panels-3): pastes go out in ordered chunks through TerminalRPC.writeChunks and the attachment outbox |
+| 46f3ab39f2 | #37133 | terminal | fix(web): open terminal file links naming the server hostname | left (panels-3): file URIs naming the server's hostname need the server config hostname passed to the link resolver |
 | 304cf149c8 | #37201 | terminal | fix(web): terminal file links preserve numeric filename suffixes | ported (panels-2): `$`, `+` and `@` in names keep numeric suffixes in the link |
 | 48a64a8b68 | #35305 | terminal | feat(web): make terminal close confirmation optional | ported (settings-2): General > Confirmations > Terminal close confirmation, and TerminalController.confirmClose skips the dialog when it is off |
-| 17c401ddc0 | #38998 | terminal | fix(web): drawer drops a background terminal closed by another client | left (panels-2): not checked |
+| 17c401ddc0 | #38998 | terminal | fix(web): drawer drops a background terminal closed by another client | left (panels-3): dropping a background terminal another client closed needs the drawer to follow the session list's closed state |
 
 ## Small fixes, thread (266)
 
@@ -1687,39 +1687,39 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | fe219c4de1 | #24937 | usage | fix(web): keep tool groups collapsed after a usage-limit pause | left (panels-2): thread timeline, outside Features/Usage |
-| 061dc79e3b | #23963 | usage | fix(usage): reject cyclic model mappings before saving | left (panels-2): not checked against UsagePriceLogic's alias validation |
-| 06ded0b600 | #23767 | usage | fix(web): keep usage hubs that share a host | left (panels-2): Limits hubs, not checked |
-| 90235549bf | #23768 | usage | fix(usage): explain price edits blocked by model mappings | left (panels-2): not checked against UsagePriceLogic's alias validation |
-| 87c33c8990 | #24940 | usage | fix(web): Limits ChatGPT usage card names the connected accounts | left (panels-2): Limits, not checked |
-| 8f258f0216 | #24630 | usage | fix(usage): use each account accent colour in limit bars | left (panels-2): Limits bar colors, not checked |
+| 061dc79e3b | #23963 | usage | fix(usage): reject cyclic model mappings before saving | ported (panels-3): a save whose final mappings form a cycle is refused per row, UsagePriceLogic.changes |
+| 06ded0b600 | #23767 | usage | fix(web): keep usage hubs that share a host | left (panels-3): hubs sharing a host is AddUsageLimitSourceDialog logic in Features/Settings, held for the Settings agent |
+| 90235549bf | #23768 | usage | fix(usage): explain price edits blocked by model mappings | ported (panels-3): prices typed for a model a destination maps get "X maps this model…", UsagePriceLogic.changes |
+| 87c33c8990 | #24940 | usage | fix(web): Limits ChatGPT usage card names the connected accounts | left (panels-3): the ChatGPT external-usage card listing its connected accounts needs the accounts on UsageLimitsLogic.externalUsageLinks and a line in UsageLimitsView |
+| 8f258f0216 | #24630 | usage | fix(usage): use each account accent colour in limit bars | left (panels-3): per-account accent colours need ProviderEnvironmentLogic.accentColor parsed to NSColor in UsageLimitWindowBar and the pooled member bars |
 | 9cee35ac4a | #21939 | usage | fix(web): accept comma as decimal in usage price entry | ported (panels-2): price entry reads the first comma as the decimal point, UsagePriceLogic.parse |
-| 9f52b7d419 | #25214 | usage | fix(usage): use the freshest reported pooled plan | left (panels-2): Limits pooled plan, not checked |
-| b010581aea | #23411 | usage | fix(usage): combine duplicated skipped-record warnings | left (panels-2): not checked |
+| 9f52b7d419 | #25214 | usage | fix(usage): use the freshest reported pooled plan | ported (panels-3): the freshest report naming a plan gives the merged account's plan, UsageLimitsLogic.accounts |
+| b010581aea | #23411 | usage | fix(usage): combine duplicated skipped-record warnings | left (panels-3): combining duplicated skipped-record warnings needs usageFormat.ts's grouping in UsagePageView's warning list |
 | 5ffcb86798 | #24260 | usage | fix(web): usage limit toast shows the Limited icon | left (panels-2): composer and thread toast, outside Features/Usage |
 | 213b39198f | #25659 | usage | fix(web): composer emphasis shortcuts ignore delimiters inside inline code | left (panels-2): composer, outside Features/Usage |
 | 689bdb82e9 | #23029 | usage | fix(web): usage-limit retry notice shows the timezone | left (panels-2): thread notice, outside Features/Usage |
 | 31eb1d0076 | #29013 | usage | fix(web): closing Settings or Usage no longer jumps back to a quote's source | left (panels-2): thread quote navigation, outside Features/Usage |
-| 58cf69c835 | #28065 | usage | fix(usage): label a proxied Claude account by its e-mail, and drop .json from hub rows | left (panels-2): Limits labels, not checked |
+| 58cf69c835 | #28065 | usage | fix(usage): label a proxied Claude account by its e-mail, and drop .json from hub rows | ported (panels-3): a hub e-mail replaces the driver's default instance name, and hub rows drop .json; UsageLimitsLogic.accounts |
 | 3368dd70f2 |  | usage | fix(web): align usage table padding and thread status rows | port |
 | 935818e422 | #25341 | usage | fix(codex): sharing usage limits offer the existing recovery options | left (panels-2): thread recovery notice, outside Features/Usage |
 | c7537d0264 | #29292 | usage | fix(chat): show one usage-limit recovery notice | left (panels-2): thread recovery notice, outside Features/Usage |
 | e9233b01bb | #15632 | usage | fix(web): rank usage provider summaries by the selected metric | ported (panels-2): provider summary rows rank by the shown metric, UsageMerge.rankProviders |
-| 0f4a130710 | #30322 | usage | fix(codex): explain speed limits on managed connections | left (panels-2): Limits, not checked |
-| 4c3a9d5818 | #32448 | usage | fix(cursor): use the SDK account for usage data | left (panels-2): not checked |
-| ee21337d84 | #34243 | usage | fix(shared): a zero-credit cap no longer marks seat-based Codex out of usage | left (panels-2): Limits, not checked |
-| 5099695673 | #25755 | usage | fix(web): price dialog no longer flags a model before a price is entered | left (panels-2): not checked |
-| f28dc8ee94 | #34506 | usage | fix(cursor): unified usage plans show one meter | left (panels-2): Limits Cursor meters, not checked |
-| 489fa8c052 | #34421 | usage | fix(cursor): hide duplicate pooled usage limits | left (panels-2): Limits Cursor meters, not checked |
+| 0f4a130710 | #30322 | usage | fix(codex): explain speed limits on managed connections | left (panels-3): the speed-limit explanation is in ChatGptSharingControl, a Features/Composer control held for the composer agent |
+| 4c3a9d5818 | #32448 | usage | fix(cursor): use the SDK account for usage data | left (panels-3): removing Cursor's usage settings touches Features/Settings, held for the Settings agent; the meter side is free with the runtime |
+| ee21337d84 | #34243 | usage | fix(shared): a zero-credit cap no longer marks seat-based Codex out of usage | ported (panels-3): a zero-credit cap no longer exhausts seat-based Codex with plan windows, UsageFallback.exhaustedWindow |
+| 5099695673 | #25755 | usage | fix(web): price dialog no longer flags a model before a price is entered | ported (panels-3): a new price row shows its error only once a price or mapping is typed, UsageDialogs row |
+| f28dc8ee94 | #34506 | usage | fix(cursor): unified usage plans show one meter | ported (panels-3): Cursor's Overall and Cursor Models descriptions, UsageLimitsLogic.cursorWindows |
+| 489fa8c052 | #34421 | usage | fix(cursor): hide duplicate pooled usage limits | left (panels-3): hiding Cursor's duplicate total needs hasDuplicateCursorTotal in UsageLimitsLogic.displayWindows and a label-less card |
 | c17ec829d0 | #35020 | usage | fix(web): overlong content search queries explain the 256-character limit | left (panels-2): files content search, see the files batch |
 | d9a97e7c49 | #28703 | usage | fix(web): sidebar keeps the open thread active while Settings or Usage is open | left (panels-2): sidebar, outside Features/Usage |
-| 350753afac | #35341 | usage | fix(usage): Claude accounts with a $0 monthly cap no longer leave a blank cell | left (panels-2): not checked |
+| 350753afac | #35341 | usage | fix(usage): Claude accounts with a $0 monthly cap no longer leave a blank cell | left (panels-3): the $0 cap cell needs the limits' zeroSpendCap field on the wire and a dashed cell in the pooled grid |
 | 46b508d119 | #23584 | usage | fix(web): keep long ACP registry searches within the query limit | left (panels-2): settings ACP registry, outside Features/Usage |
-| 4192234c34 | #36561 | usage | fix(usage): distinct email-less hub accounts no longer collapse | left (panels-2): Limits hubs, not checked |
+| 4192234c34 | #36561 | usage | fix(usage): distinct email-less hub accounts no longer collapse | left (panels-3): keying email-less hub accounts by a remote endpoint needs the source endpoint and host classification in UsageLimitsLogic.accounts |
 | 2b596b8690 | #28581 | usage | fix(web): context meter no longer keeps the retired provider's usage | left (panels-2): thread context meter, outside Features/Usage |
 | 16854a766c | #37238 | usage | fix(web): usage chart and share-bar figures reach screen readers | ported (panels-2): the chart is a group labeled like T3's sr-only caption with one row per period; the share bar's strip is hidden and its legend is a labeled list |
 | b5d9c71e1c | #37241 | usage | fix(web): screen readers announce each Usage figure with its label | ported (panels-2): the drawn model and period tables expose one element per row with each figure under its column, model rows open their dialog on press; dialog stats read label and value together |
 | 2579c3c4dd | #37272 | usage | fix(web): close Usage without reloading | n/a: browser history navigation |
-| 310baf7c99 | #38731 | usage | fix(web): closing Settings or Usage with Esc returns focus to the opener | left (panels-2): focus return after Esc, not checked |
+| 310baf7c99 | #38731 | usage | fix(web): closing Settings or Usage with Esc returns focus to the opener | left (panels-3): Esc returning focus to the opener is the route modal in App, which the Settings agent changed this week |
 
 ## Skipped (32)
 

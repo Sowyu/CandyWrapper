@@ -160,6 +160,11 @@ public enum UsagePriceLogic {
             }
             let alias = (draft.alias ?? currentAlias ?? "").trimmingCharacters(in: .whitespaces)
             if !alias.isEmpty {
+                // Prices typed for a model a destination maps say why they cannot apply (usagePriceTable.ts:98-108, #23768).
+                if draft.alias == nil, !draft.values.isEmpty {
+                    errors[draft.id] = "\(target.label) maps this model. Remove it from \"Apply to\" or clear its mapping first."
+                    continue
+                }
                 if model.isEmpty { errors[draft.id] = "Enter a model ID." }
                 else if alias == model { errors[draft.id] = "Map to a different model." }
                 else {
@@ -182,6 +187,19 @@ public enum UsagePriceLogic {
             }
             let next = form(parsed.price)
             if Field.allCases.contains(where: { original[$0] != next[$0] }) { changes.append(.price(model: parsed.model, parsed.price)) }
+        }
+        // The final batch's mappings may not form a cycle; checking after every change lets clearing a mapping and
+        // reversing it in one save stay valid (usagePriceTable.ts:151-171, #23963).
+        var aliases = target.aliases ?? [:]
+        for case let .alias(model, alias) in changes { aliases[model] = alias }
+        for draft in drafts where !draft.removed && errors[draft.id] == nil {
+            var model = draft.model.trimmingCharacters(in: .whitespaces)
+            var seen = Set<String>()
+            while let next = aliases[model] {
+                if seen.contains(model) { errors[draft.id] = "Model mappings cannot form a cycle on \(target.label)."; break }
+                seen.insert(model)
+                model = next
+            }
         }
         return (changes, errors)
     }

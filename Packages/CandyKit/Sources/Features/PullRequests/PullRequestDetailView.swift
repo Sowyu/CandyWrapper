@@ -375,6 +375,12 @@ public final class PullRequestDetailView: DSView {
 
     /// The Code tab wants the next slice.
     public var onLoadMoreDiff: (() -> Void)? { get { code.onLoadMore } set { code.onLoadMore = newValue } }
+    /// "Load diff" on a withheld file (#37007).
+    public var onLoadWithheldFile: ((String) -> Void)? { get { code.onLoadWithheld } set { code.onLoadWithheld = newValue } }
+    public func setWithheld(omitted: [String: (additions: Int, deletions: Int)], readable: Bool, loaded: [String: String],
+                            status: [String: PullRequestWithheldFileNotice.Status]) {
+        code.setWithheld(omitted: omitted, readable: readable, loaded: loaded, status: status)
+    }
     /// The Code tab's first slice failed and the reader asked again.
     public var onRetryDiff: (() -> Void)? { get { code.onRetry } set { code.onRetry = newValue } }
 
@@ -698,10 +704,10 @@ public final class PullRequestDetailView: DSView {
             var item = MenuItem.checkbox("Allow edits from maintainers", checked: (maintainerEditsChoice ?? d.maintainerCanModify) == true) { [weak self] value in
                 self?.onMaintainerEdits?(value)
             }
-            // ponytail: one-line subtitle with the full hint as tooltip, T3 wraps it at max-w-xs; add wrapping subtitles if a reference shows it
+            // The hint wraps in T3's 320pt column, with "Saving…" as its own line under it (:334-349).
             let hint = "Maintainers can push to this branch. If your fork has workflows, this can also give access to its secrets."
-            item.subtitle = maintainerEditsSaving ? "Saving…" : hint
-            item.tooltip = hint
+            item.subtitle = maintainerEditsSaving ? hint + "\nSaving…" : hint
+            item.subtitleWrapWidth = 320
             item.isDisabled = maintainerEditsSaving || onMaintainerEdits == nil
             items += [item, .separator]
         }

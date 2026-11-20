@@ -26,7 +26,7 @@ public final class DiffPanelView: DSView {
             fileTree.model = FileTreeModel(); fileTree.changes = [:]
             searchMatches = []; searchIndex = 0
             list.annotations = []; reviewDraft = nil; reviewStart = nil; reviewDraftAnchor = nil; editingReviewId = nil
-            hasDiff = false
+            hasDiff = false; hideTestsToggle.isHidden = true; shownFull = nil
             shownSection = nil
             gitSource = nil
             list.loadDiffFiles = nil
@@ -339,6 +339,11 @@ public final class DiffPanelView: DSView {
     private let wrapToggle = ToggleView(nil, icon: .textWrap, variant: .ghost, size: .sm, pressed: true)
     private let whitespaceToggle = ToggleView(nil, icon: .pilcrow, variant: .ghost, size: .sm, pressed: true)
     private let treeToggle = ToggleView(nil, icon: .folderTree, variant: .ghost, size: .sm)
+    /// "Hide test files", shown while the diff has any (DiffPanel.tsx:1315-1338, #26730). Display only.
+    private let hideTestsToggle = ToggleView(nil, icon: .flaskConicalOff, variant: .ghost, size: .sm, pressed: DiffHideTestFiles.value)
+    private var hideTestsTooltip: TooltipController?
+    /// The last diff `show` got, before test files were hidden.
+    private var shownFull: (diff: UnifiedDiff, collapsed: Bool)?
     let message = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground, 0.7))
     /// The failed request's message above the empty state (DiffPanel.tsx:1093-1097, `text-2xs text-error/80`).
     let errorLine = LabelView("", font: DSFont.ui(11), color: Themed.color(\.error, 0.8))
@@ -378,7 +383,15 @@ public final class DiffPanelView: DSView {
             // The toolbar toggle writes the `diffLayout` setting (DiffPanel.tsx:982-986).
             ClientSettingsStore.shared.update(["diffLayout": .string(index == 0 ? "stacked" : "split")])
         }
-        for toggle in [wrapToggle, whitespaceToggle, treeToggle] { toggle.iconSize = 14 }
+        for toggle in [wrapToggle, whitespaceToggle, hideTestsToggle, treeToggle] { toggle.iconSize = 14 }
+        hideTestsToggle.isHidden = true
+        hideTestsToggle.setAccessibilityLabel("Hide test files")
+        hideTestsTooltip = TooltipController.attach(to: hideTestsToggle, text: "Hide test files", placement: PopupPlacement(side: .top, align: .center, sideOffset: 4))
+        hideTestsToggle.onPressedChange = { [weak self] hide in
+            DiffHideTestFiles.value = hide
+            guard let self, let full = self.shownFull else { return }
+            self.show(full.diff, collapsed: full.collapsed)
+        }
         wrapToggle.onPressedChange = { [weak self] in self?.wrapOverride = $0; self?.wrapLines = $0 }
         whitespaceToggle.onPressedChange = { [weak self] in self?.ignoreWhitespace = $0 }
         treeToggle.onPressedChange = { [weak self] shown in self?.treeScroll.isHidden = !shown; self?.needsLayout = true }
@@ -434,7 +447,7 @@ public final class DiffPanelView: DSView {
         message.alignment = .center
         message.lineHeight = 16
         errorLine.lineHeight = 16.5
-        [treeTitle, treeCount, treeExpansion, treeScroll, scroll, scopeButton, totals, refreshButton, collapseButton, layoutToggle, wrapToggle, whitespaceToggle, treeToggle, message, errorLine,
+        [treeTitle, treeCount, treeExpansion, treeScroll, scroll, scopeButton, totals, refreshButton, collapseButton, layoutToggle, wrapToggle, whitespaceToggle, hideTestsToggle, treeToggle, message, errorLine,
          compareHead, compareArrow, baseRefButton, truncatedNotice, omittedNotice, findWidget].forEach(addSubview)
         baseRefButton.trailingIcon = .chevronDown
         baseRefButton.iconSize = 14
@@ -626,7 +639,15 @@ public final class DiffPanelView: DSView {
         }
     }
 
-    private func show(_ diff: UnifiedDiff, collapsed: Bool) {
+    private func show(_ full: UnifiedDiff, collapsed: Bool) {
+        shownFull = (full, collapsed)
+        // Hiding is display only, and a file asked for stays (DiffPanel.tsx, #26730).
+        let testCount = full.files.filter { ChangedFileKind.isTest($0.path) }.count
+        let hide = DiffHideTestFiles.value && testCount > 0
+        hideTestsToggle.isPressed = DiffHideTestFiles.value
+        hideTestsToggle.isHidden = testCount == 0
+        hideTestsTooltip?.text = hide ? "Show \(testCount) hidden test \(testCount == 1 ? "file" : "files")" : "Hide test files"
+        let diff = hide ? full.selecting(full.files.indices.filter { full.files[$0].path == pendingFile || !ChangedFileKind.isTest(full.files[$0].path) }) : full
         recordedScroll.isHidden = true; recordedText.string = ""
         hasDiff = true
         message.isHidden = true
@@ -657,9 +678,9 @@ public final class DiffPanelView: DSView {
         if truncated, let files = gitSource?.files {
             totals.setInline(additions: files.reduce(0) { $0 + $1.additions }, deletions: files.reduce(0) { $0 + $1.deletions })
         } else {
-            totals.setInline(additions: diff.additions, deletions: diff.deletions)
+            totals.setInline(additions: full.additions, deletions: full.deletions)
         }
-        totals.isHidden = diff.files.isEmpty
+        totals.isHidden = full.files.isEmpty
         updateCollapseButton()
         needsLayout = true
         if let file = pendingFile {
@@ -686,7 +707,7 @@ public final class DiffPanelView: DSView {
         errorLine.text = error ?? ""
         errorLine.isHidden = error == nil
         scroll.isHidden = true
-        totals.isHidden = true
+        totals.isHidden = true; hideTestsToggle.isHidden = true; shownFull = nil
         truncatedNotice.isHidden = true
         truncatedBar.isHidden = true
         omittedNotice.isHidden = true
@@ -865,6 +886,7 @@ public final class DiffPanelView: DSView {
             x -= 4
         }
         place(treeToggle, width: 28, height: 28)
+        if !hideTestsToggle.isHidden { place(hideTestsToggle, width: 28, height: 28) }
         place(whitespaceToggle, width: 28, height: 28)
         place(wrapToggle, width: 28, height: 28)
         let group = layoutToggle.intrinsicContentSize

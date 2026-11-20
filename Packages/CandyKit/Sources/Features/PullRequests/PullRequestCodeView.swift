@@ -19,6 +19,22 @@ public final class PullRequestCodeView: DSView {
     private let footer = LabelView("", font: DSFont.ui(12))
     private let footerRetry = ButtonView("Retry", variant: .outline, size: .xs)
     private let orphanToggle = LinkLabel()
+    /// "N test files hidden" after the file count, a link that shows them again (PullRequestCodeTab.tsx:1447-1454).
+    private let hiddenTestsLink = LinkLabel()
+    private let viewedCounts = LabelView("", font: DSFont.ui(12))
+    /// "Hide test files" at the toolbar's end while the loaded diff has any (:1686-1703, #26730).
+    private let hideTestsToggle = ToggleView(nil, icon: .flaskConicalOff, variant: .ghost, size: .sm, pressed: DiffHideTestFiles.value)
+    private var hideTestsTooltip: TooltipController?
+    private var testFileCount = 0
+    // Withheld files (#37007): left out of the paged diff, each loadable on its own.
+    private var omitted: [String: (additions: Int, deletions: Int)] = [:]
+    private var withheldReadable = false
+    private var withheldLoaded: [String: String] = [:]
+    private var withheldStatus: [String: PullRequestWithheldFileNotice.Status] = [:]
+    private var withheldNotices: [String: PullRequestWithheldFileNotice] = [:]
+    /// "Load diff" or "Retry" on a withheld file: read it with `path`.
+    var onLoadWithheld: ((String) -> Void)?
+    private var hiddenTestFileCount = 0
     private let orphanChevron = IconView(name: .chevronRight, size: 14)
     private let orphanRule = CALayer()
     private let orphanScroll: ScrollAreaView
@@ -42,6 +58,9 @@ public final class PullRequestCodeView: DSView {
     private var nowMs: Int64 = 0
     private var draft: (target: DiffLineTarget, view: PullRequestDraftCommentView)?
     private var threadCards: [String: PullRequestReviewThreadCardView] = [:]
+    /// Conversations shown on their line. Open ones join when seen, so one resolved under the reader stays (#34644).
+    private var shownThreads: Set<String> = []
+    private var resolvedButtons: [String: PullRequestResolvedThreadsButton] = [:]
     private var orphanCards: [PullRequestReviewThreadCardView] = []
     private var reviewObserver: NSObjectProtocol?
     isolated deinit { if let reviewObserver { NotificationCenter.default.removeObserver(reviewObserver) } }
@@ -49,6 +68,8 @@ public final class PullRequestCodeView: DSView {
     var onSetViewed: (([String], Bool) -> Void)?
     /// The file last marked viewed or not, where a shift-click's range starts. A new scope forgets it.
     private var viewedAnchor: String?
+    /// The reader's own folds by path (`FileDiffFoldChoices`). A new scope forgets them (PullRequestCodeTab.tsx:494-500).
+    private var foldChoices: [String: Bool] = [:]
     /// The next slice is wanted (`loadNextSlice`), or a failed one again.
     var onLoadMore: (() -> Void)?
     /// The first slice failed and "Try again" was pressed (`diffQuery.refresh`).
@@ -73,7 +94,17 @@ public final class PullRequestCodeView: DSView {
         footer.alignment = .center
         orphanToggle.font = DSFont.ui(12)
         orphanToggle.underlines = false
-        [scope, counts, scroll, status, footer, footerRetry, orphanToggle, orphanChevron, orphanScroll].forEach(addSubview)
+        [scope, counts, hiddenTestsLink, viewedCounts, hideTestsToggle, scroll, status, footer, footerRetry, orphanToggle, orphanChevron, orphanScroll].forEach(addSubview)
+        viewedCounts.lineHeight = 16
+        hiddenTestsLink.font = DSFont.ui(12)
+        hiddenTestsLink.underlines = false
+        hiddenTestsLink.isHidden = true
+        hiddenTestsLink.onClick = { [weak self] in self?.setHideTests(false) }
+        hideTestsToggle.iconSize = 14
+        hideTestsToggle.isHidden = true
+        hideTestsToggle.setAccessibilityLabel("Hide test files")
+        hideTestsTooltip = TooltipController.attach(to: hideTestsToggle, text: "Hide test files", placement: PopupPlacement(side: .top, align: .center, sideOffset: 4))
+        hideTestsToggle.onPressedChange = { [weak self] in self?.setHideTests($0) }
         scope.action = { [weak self] in self?.showScopeMenu() }
         footerRetry.action = { [weak self] in self?.onLoadMore?() }
         // `CollapsiblePanel` (PullRequestCodeTab.tsx:1500): the list slides open over 200 ms and the diff rides it.
@@ -86,9 +117,16 @@ public final class PullRequestCodeView: DSView {
             let range = PullRequestDetailLogic.viewedRange(self.paths, path: path,
                                                           anchor: NSEvent.modifierFlags.contains(.shift) ? self.viewedAnchor : nil)
             self.viewedAnchor = path
-            // The list folds the clicked file itself; the rest of the range folds the same way.
+            // The list folds the clicked file itself; the rest of the range folds the same way. With the setting off a
+            // press drops the reader's fold, so the file follows its mark; with it on, the press is the choice (:1020-1026).
+            let folded = self.defaultFold
+            for p in (range.isEmpty ? [path] : range) { self.foldChoices[p] = folded == nil ? nil : viewed }
             for other in range where other != path { if let i = self.paths.firstIndex(of: other) { self.list.setCollapsed(i, viewed) } }
             self.onSetViewed?(range.isEmpty ? [path] : range, viewed)
+        }
+        list.onUserToggle = { [weak self] file, collapsed in
+            guard let self, self.paths.indices.contains(file) else { return }
+            self.foldChoices[self.paths[file]] = collapsed
         }
         list.annotationView = { [weak self] a in self?.annotationView(a) }
         list.onNearEnd = { [weak self] in
@@ -101,7 +139,8 @@ public final class PullRequestCodeView: DSView {
     }
 
     func reset() {
-        commit = nil; paths = []; patches = []; nextCursor = nil; draft = nil; threadCards = [:]; viewedAnchor = nil
+        commit = nil; paths = []; patches = []; nextCursor = nil; draft = nil; threadCards = [:]; viewedAnchor = nil; foldChoices = [:]
+        omitted = [:]; withheldReadable = false; withheldLoaded = [:]; withheldStatus = [:]; withheldNotices = [:]
         list.annotations = []
         list.setDiff(UnifiedDiff(""))
     }
@@ -110,7 +149,7 @@ public final class PullRequestCodeView: DSView {
     func set(patches: [String], loading: Bool, error: String?, nextCursor: String?, moreLoading: Bool, moreError: String?,
              commit: String?, commits: [PullRequestCommit]) {
         self.commits = commits.sorted { (T3Timestamp($0.committedDate).epochMs ?? 0) > (T3Timestamp($1.committedDate).epochMs ?? 0) }
-        if commit != self.commit { draft = nil; viewedAnchor = nil }
+        if commit != self.commit { draft = nil; viewedAnchor = nil; foldChoices = [:]; withheldNotices = [:] }
         self.commit = commit
         self.nextCursor = nextCursor
         self.moreLoading = moreLoading
@@ -118,21 +157,10 @@ public final class PullRequestCodeView: DSView {
         scope.title = commit.flatMap { oid in commits.first { $0.oid == oid }?.messageHeadline } ?? "All commits"
         scope.isHidden = commits.isEmpty
         if patches != self.patches {
-            let grew = !self.patches.isEmpty && patches.count > self.patches.count && Array(patches.prefix(self.patches.count)) == self.patches
-            let wasCollapsed = list.collapsed
             self.patches = patches
-            let diff = UnifiedDiff(patches.joined(separator: patches.allSatisfy { $0.hasSuffix("\n") } ? "" : "\n"))
-            let oldCount = paths.count
-            paths = diff.files.map(\.path)
-            list.setDiff(diff, collapsedByDefault: false)
-            if grew {
-                // An appended slice keeps what the reader already folded.
-                for f in wasCollapsed where f < oldCount { list.setCollapsed(f, true) }
-                for (i, p) in paths.enumerated() where i >= oldCount && PullRequestDetailLogic.isFileViewed(p, states: states, overlay: overlay) { list.setCollapsed(i, true) }
-            } else {
-                // Viewed files start folded.
-                for (i, p) in paths.enumerated() where PullRequestDetailLogic.isFileViewed(p, states: states, overlay: overlay) { list.setCollapsed(i, true) }
-            }
+            rebuildDiff()
+            // An appended slice keeps what the reader folded: the choices are by path.
+            applyFolds()
         }
         let empty = !loading && error == nil && patches.allSatisfy(\.isEmpty) && nextCursor == nil
         let failed = !loading && error != nil && patches.isEmpty
@@ -161,6 +189,8 @@ public final class PullRequestCodeView: DSView {
     func setViewed(states: [String: String]?, overlay: [String: Bool], store: String?) {
         guard states != self.states || overlay != self.overlay || store != self.store else { return }
         self.states = states; self.overlay = overlay; self.store = store
+        // Marks that load after the diff still fold their files, unless the reader chose (#34168).
+        applyFolds()
         if store == nil {
             list.viewedState = nil
         } else {
@@ -174,9 +204,69 @@ public final class PullRequestCodeView: DSView {
         updateCounts()
     }
 
+    /// The loaded files in file tree order, tests left out while hidden (PullRequestCodeTab.tsx, #26730, #29083).
+    private func rebuildDiff() {
+        let joined = patches.joined(separator: patches.allSatisfy { $0.hasSuffix("\n") } ? "" : "\n")
+        var full = UnifiedDiff(PullRequestDetailLogic.splicingWithheld(joined, loaded: withheldLoaded))
+        // A withheld file's header counts come from the host's stats (:1152-1159).
+        for i in full.files.indices where full.files[i].hunks.isEmpty && full.files[i].additions == 0 && full.files[i].deletions == 0 {
+            if let stat = omitted[full.files[i].path] { full.files[i].additions = stat.additions; full.files[i].deletions = stat.deletions }
+        }
+        let order = orderDiffPathsLikeTree(full.files.map(\.path))
+        let tests = Set(full.files.indices.filter { ChangedFileKind.isTest(full.files[$0].path) })
+        testFileCount = tests.count
+        let shown = DiffHideTestFiles.value ? order.filter { !tests.contains($0) } : order
+        hiddenTestFileCount = order.count - shown.count
+        let diff = full.selecting(shown)
+        paths = diff.files.map(\.path)
+        list.setDiff(diff, collapsedByDefault: false)
+        hideTestsToggle.isPressed = DiffHideTestFiles.value
+        hideTestsToggle.isHidden = testFileCount == 0
+        hideTestsTooltip?.text = DiffHideTestFiles.value ? "Show test files" : "Hide test files"
+    }
+
+    /// The host's withheld files and what has been read of them. `loaded` holds each read file's patch.
+    func setWithheld(omitted: [String: (additions: Int, deletions: Int)], readable: Bool, loaded: [String: String],
+                     status: [String: PullRequestWithheldFileNotice.Status]) {
+        let patchesChanged = loaded != withheldLoaded || omitted.keys.sorted() != self.omitted.keys.sorted()
+        self.omitted = omitted; withheldReadable = readable; withheldStatus = status
+        withheldLoaded = loaded
+        for (path, notice) in withheldNotices { notice.update(status[path] ?? .idle) }
+        if patchesChanged {
+            rebuildDiff()
+            applyFolds()
+            updateCounts()
+        }
+        updateAnnotations()
+    }
+
+    private func setHideTests(_ hide: Bool) {
+        guard hide != DiffHideTestFiles.value else { return }
+        DiffHideTestFiles.value = hide
+        rebuildDiff()
+        applyFolds()
+        updateCounts()
+        updateAnnotations()
+    }
+
+    /// `diffFilesCollapsed` on folds every file; off leaves it to the Viewed marks (PullRequestCodeTab.tsx:458).
+    private var defaultFold: Bool? { ClientSettingsStore.shared.current.bool("diffFilesCollapsed") ? true : nil }
+
+    private func foldsAsViewed(_ path: String) -> Bool {
+        store != nil && PullRequestDetailLogic.isFileViewed(path, states: states, overlay: overlay)
+            && !(overlay[path] == nil && PullRequestDetailLogic.isStale(path, states: states))
+    }
+
+    private func applyFolds() {
+        let folded = defaultFold
+        list.setCollapsedFiles(Set(paths.indices.filter {
+            PullRequestDetailLogic.isFileDiffCollapsed(paths[$0], folded: folded, choices: foldChoices, viewed: foldsAsViewed(paths[$0]))
+        }))
+    }
+
     /// The conversations and the review being written (PullRequestCodeTab.tsx:478-560).
     func setReview(_ d: PullRequestDetail, reviewKey: String, actions: PullRequestReviewThreadActions, nowMs: Int64) {
-        if detail?.url != d.url { threadCards = [:]; draft = nil }
+        if detail?.url != d.url { threadCards = [:]; draft = nil; shownThreads = []; resolvedButtons = [:] }
         detail = d
         self.reviewKey = reviewKey
         self.actions = actions
@@ -221,7 +311,27 @@ public final class PullRequestCodeView: DSView {
         var annotations: [DiffAnnotation] = []
         // A commit's diff counts lines within that commit; review comments anchor to the head diff.
         if let d = detail, commit == nil {
-            for t in d.reviewThreads { if let line = t.line { annotations.append(DiffAnnotation(path: t.path, right: t.side == "right", line: line, id: "thread:\(t.id)")) } }
+            // `InlineReviewThreads`: a line's resolved conversations fold behind their authors' avatars.
+            let lined = d.reviewThreads.filter { $0.line != nil }
+            for t in lined where !t.isResolved { shownThreads.insert(t.id) }
+            var groups: [String: [PullRequestReviewThread]] = [:]
+            var order: [String] = []
+            for t in lined {
+                let key = PullRequestDetailLogic.threadLineKey(t)
+                if groups[key] == nil { order.append(key) }
+                groups[key, default: []].append(t)
+            }
+            for key in order {
+                let threads = groups[key]!
+                let resolved = threads.filter(\.isResolved)
+                if !resolved.isEmpty, let first = threads.first, let line = first.line {
+                    annotations.append(DiffAnnotation(path: first.path, right: first.side == "right", line: line,
+                                                      id: "resolved:\(key):\(resolved.map(\.id).joined(separator: ","))"))
+                }
+                for t in threads where !t.isResolved || shownThreads.contains(t.id) {
+                    annotations.append(DiffAnnotation(path: t.path, right: t.side == "right", line: t.line!, id: "thread:\(t.id)"))
+                }
+            }
             for c in reviewKey.map(PullRequestReviewStore.shared.comments) ?? [] {
                 let a = c.position.anchor
                 annotations.append(DiffAnnotation(path: c.path, right: a.side == "right", line: a.line, id: "pending:\(c.id):\(c.body.hashValue)"))
@@ -231,6 +341,11 @@ public final class PullRequestCodeView: DSView {
                 annotations.append(DiffAnnotation(path: t.path, right: t.right, line: t.right ? t.newLine : t.oldLine, id: "draft"))
             }
         }
+        // A withheld file's notice sits under its header (`lineNumber: 0`, :867-878).
+        for f in list.diff.files where f.hunks.isEmpty && omitted[f.path] != nil {
+            annotations.append(DiffAnnotation(path: f.path, right: true, line: 0, id: "withheld:\(f.path)"))
+        }
+        for b in resolvedButtons.values { b.expanded = b.threadIds.allSatisfy(shownThreads.contains) }
         list.annotations = annotations
         list.reloadAnnotations()
         rebuildOrphans()
@@ -243,7 +358,7 @@ public final class PullRequestCodeView: DSView {
             thread: t, canReply: d.capabilities.review.reply, canResolve: d.capabilities.review.resolve && PullRequestWriteLogic.canResolveThread(d, t),
             canReact: d.capabilities.reactions == true,
             canEdit: { c in PullRequestWriteLogic.canEditComment(d, author: c.author?.login, kind: "review-comment", hostAnswer: c.canEdit) },
-            actions: actions, cwd: d.workspaceRoot, nowMs: nowMs)
+            actions: actions, cwd: d.workspaceRoot, nowMs: nowMs, startsExpanded: t.line != nil ? true : nil)
         card.onResize = { [weak self] in self?.list.reloadAnnotations(); self?.needsLayout = true }
         threadCards[t.id] = card
         return card
@@ -251,6 +366,33 @@ public final class PullRequestCodeView: DSView {
 
     private func annotationView(_ a: DiffAnnotation) -> DiffAnnotationContent? {
         if a.id == "draft" { return draft?.view }
+        if a.id.hasPrefix("resolved:"), let d = detail {
+            let key = String(a.id.dropFirst("resolved:".count)).components(separatedBy: ":").dropLast().joined(separator: ":")
+            let threads = d.reviewThreads.filter { $0.line != nil && PullRequestDetailLogic.threadLineKey($0) == key }
+            let resolved = threads.filter(\.isResolved)
+            let expanded = resolved.allSatisfy { shownThreads.contains($0.id) }
+            if let b = resolvedButtons[a.id] { b.expanded = expanded; return b }
+            let b = PullRequestResolvedThreadsButton(threads: resolved, expanded: expanded)
+            b.onToggle = { [weak self] in
+                guard let self else { return }
+                if resolved.allSatisfy({ self.shownThreads.contains($0.id) }) {
+                    self.shownThreads.subtract(resolved.map(\.id))
+                } else {
+                    self.shownThreads.formUnion(threads.map(\.id))
+                }
+                self.updateAnnotations()
+            }
+            resolvedButtons[a.id] = b
+            return b
+        }
+        if a.id.hasPrefix("withheld:") {
+            let path = String(a.id.dropFirst("withheld:".count))
+            if let notice = withheldNotices[path] { return notice }
+            let notice = PullRequestWithheldFileNotice(path: path, status: withheldStatus[path] ?? .idle,
+                                                       onLoad: withheldReadable ? { [weak self] p in self?.onLoadWithheld?(p) } : nil)
+            withheldNotices[path] = notice
+            return notice
+        }
         if a.id.hasPrefix("thread:"), let t = detail?.reviewThreads.first(where: { "thread:\($0.id)" == a.id }) { return threadCard(t) }
         if a.id.hasPrefix("pending:"), let key = reviewKey,
            let c = PullRequestReviewStore.shared.comments(key).first(where: { a.id.hasPrefix("pending:\($0.id):") }) {
@@ -266,7 +408,11 @@ public final class PullRequestCodeView: DSView {
         orphanCards.forEach { $0.removeFromSuperview() }
         guard let d = detail else { orphanCards = []; return }
         let placed = list.placedAnnotationIds
-        let orphans = d.reviewThreads.filter { !placed.contains("thread:\($0.id)") }
+        // A folded resolved conversation is on its line, behind the avatars.
+        let foldedLines = Set(placed.filter { $0.hasPrefix("resolved:") }.map { $0.dropFirst("resolved:".count).components(separatedBy: ":").dropLast().joined(separator: ":") })
+        let orphans = d.reviewThreads.filter { t in
+            !placed.contains("thread:\(t.id)") && !(t.isResolved && t.line != nil && foldedLines.contains(PullRequestDetailLogic.threadLineKey(t)))
+        }
         orphanCards = orphans.compactMap { t in
             // A card shows in one place: the list takes it while its line is not drawn.
             guard let card = threadCard(t) else { return nil }
@@ -281,12 +427,18 @@ public final class PullRequestCodeView: DSView {
     }
 
     private func updateCounts() {
-        var text = "\(paths.count) \(paths.count == 1 ? "file" : "files")" + (nextCursor == nil ? "" : "+")
+        let files = "\(paths.count) \(paths.count == 1 ? "file" : "files")" + (nextCursor == nil ? "" : "+")
+        var viewed = ""
         if store != nil && !paths.isEmpty {
-            text += "  ·  \(PullRequestDetailLogic.countViewed(paths, states: states, overlay: overlay)) / \(paths.count) "
-            text += store == "environment" ? "viewed in T3 Code" : "viewed"
+            viewed = "  ·  \(PullRequestDetailLogic.countViewed(paths, states: states, overlay: overlay)) / \(paths.count) "
+            viewed += store == "environment" ? "viewed in T3 Code" : "viewed"
         }
-        counts.text = text
+        hiddenTestsLink.isHidden = hiddenTestFileCount == 0
+        hiddenTestsLink.text = "\(hiddenTestFileCount) test \(hiddenTestFileCount == 1 ? "file" : "files") hidden"
+        // Without hidden tests the line stays one label, as before.
+        counts.text = hiddenTestsLink.isHidden ? files + viewed : files + "  ·  "
+        viewedCounts.text = hiddenTestsLink.isHidden || viewed.isEmpty ? "" : "·  " + viewed.dropFirst(5)
+        viewedCounts.isHidden = viewedCounts.text.isEmpty
         needsLayout = true
     }
 
@@ -314,7 +466,19 @@ public final class PullRequestCodeView: DSView {
             let sw = min(256, ceil(scope.intrinsicContentSize.width))
             scope.frame = NSRect(x: x, y: 8, width: sw, height: 24); x += sw + 12
         }
-        counts.frame = NSRect(x: x, y: 12, width: max(0, w - 16 - x), height: 16)
+        var right = w - 16
+        if !hideTestsToggle.isHidden {
+            hideTestsToggle.frame = NSRect(x: right - 28, y: 6, width: 28, height: 28); right -= 28 + 8
+        }
+        if hiddenTestsLink.isHidden {
+            counts.frame = NSRect(x: x, y: 12, width: max(0, right - x), height: 16)
+        } else {
+            let cw = ceil(counts.textWidth), lw = ceil(hiddenTestsLink.textWidth) + 1
+            counts.frame = NSRect(x: x, y: 12, width: min(cw, max(0, right - x)), height: 16)
+            hiddenTestsLink.frame = NSRect(x: x + cw, y: 12, width: min(lw, max(0, right - x - cw)), height: 16)
+            let vx = x + cw + lw + 6
+            viewedCounts.frame = NSRect(x: vx, y: 12, width: max(0, right - vx), height: 16)
+        }
         var top: CGFloat = 41
         let hasOrphans = !orphanCards.isEmpty
         [orphanToggle, orphanChevron].forEach { $0.isHidden = !hasOrphans }
@@ -357,9 +521,11 @@ public final class PullRequestCodeView: DSView {
         rule.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
         orphanRule.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
         counts.color = Themed.color(\.mutedForeground)
+        viewedCounts.color = Themed.color(\.mutedForeground)
         status.color = Themed.color(\.mutedForeground)
         footer.color = Themed.color(\.mutedForeground)
         orphanToggle.color = Themed.color(\.mutedForeground)
+        hiddenTestsLink.color = Themed.color(\.primary)
         orphanChevron.strokeColor = Themed.color(\.mutedForeground)
     }
 }

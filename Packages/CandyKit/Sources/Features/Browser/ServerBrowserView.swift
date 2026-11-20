@@ -315,7 +315,13 @@ public final class ServerBrowserView: DSView {
     }
     public override func rightMouseUp(with event: NSEvent) { if pressedButtons & 2 != 0 { mouse("up", event, button: .right, bit: 2) } }
     public override func otherMouseDown(with event: NSEvent) { if event.buttonNumber == 2 { mouse("down", event, button: .middle, bit: 4) } }
-    public override func otherMouseUp(with event: NSEvent) { if event.buttonNumber == 2, pressedButtons & 4 != 0 { mouse("up", event, button: .middle, bit: 4) } }
+    public override func otherMouseUp(with event: NSEvent) {
+        if event.buttonNumber == 2, pressedButtons & 4 != 0 { mouse("up", event, button: .middle, bit: 4) }
+        // The mouse's back and forward buttons move this page's history (4928 thumbButtons.ts, #30882).
+        if event.buttonNumber == 3 || event.buttonNumber == 4 { onThumbNavigate?(event.buttonNumber == 3 ? -1 : 1) }
+    }
+    /// A thumb button released over the page: -1 back, 1 forward.
+    public var onThumbNavigate: ((Int) -> Void)?
     public override func mouseMoved(with event: NSEvent) { queueMove(event) }
     public override func mouseDragged(with event: NSEvent) { queueMove(event) }
     public override func rightMouseDragged(with event: NSEvent) { queueMove(event) }
@@ -395,6 +401,16 @@ public final class ServerBrowserView: DSView {
     }
 
     public override func resignFirstResponder() -> Bool { true }
+
+    /// Edit menu Copy and Cut fire no key, so the page gets the Control shortcut the server copies on
+    /// (4928 ServerBrowserSurface.tsx `handleClipboard`, #26633).
+    @objc func copy(_ sender: Any?) { clipboardKey("c", code: "KeyC", keyCode: 67) }
+    @objc func cut(_ sender: Any?) { clipboardKey("x", code: "KeyX", keyCode: 88) }
+
+    private func clipboardKey(_ key: String, code: String, keyCode: Int) {
+        guard hasControl else { return }
+        for action in ["down", "up"] { onInput?(.key(action: action, key: key, code: code, keyCode: keyCode, text: nil, modifiers: 2)) }
+    }
 }
 
 /// Where a view point lands on the page (`pagePoint`, ServerBrowserSurface.tsx:254-275): the frame is

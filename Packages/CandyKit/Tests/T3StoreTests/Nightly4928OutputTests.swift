@@ -21,6 +21,15 @@ struct Nightly4928OutputTests {
         #expect(output.text == "Ex")
     }
 
+    /// #29736 and #29737: private parameters and unknown erase modes leave the text alone.
+    @Test func ignoresUnsupportedControls() throws {
+        var output = CommandOutputBuffer()
+        try output.apply(frame("replace", "abc\u{1b}[2D\u{1b}[?1K\u{1b}[>2J\u{1b}[5K\u{1b}[4J"))
+        #expect(output.text == "abc")
+        try output.apply(frame("replace", "abc\u{1b}[2D\u{1b}[K"))
+        #expect(output.text == "a")
+    }
+
     /// #38946: Windows launchers unwrap like `sh -c`.
     @Test func windowsLaunchersUnwrap() {
         #expect(commandDisplayText("pwsh.exe -NoProfile -Command Get-ChildItem") == "Get-ChildItem")

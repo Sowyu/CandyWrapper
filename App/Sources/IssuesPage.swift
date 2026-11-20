@@ -72,6 +72,7 @@ final class IssuesPageController {
         detail.onChanged = { [weak self] in self?.reload(keepRows: true) }
         detail.onOpenPullRequest = { [weak self] target in self?.container.mutate { $0.openPullRequest(target) } }
         detail.onSearchThreads = { [weak self] url in self?.onSearchThreads?(url) }
+        detail.pickerSnapshot = { [weak self] in self?.sidebar?.snapshot }
         detail.cwd = { [weak self] env, projectId in
             self?.sidebar?.snapshot?.projects.first { $0.id.environmentId == env && $0.id.localId.rawValue == projectId }?.workspaceRoot
         }

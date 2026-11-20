@@ -43,6 +43,9 @@ public struct MenuItem {
     public var subtitle: String?
     /// The menu widens to show the whole subtitle, instead of sizing to the title and cutting the subtitle short.
     public var widensForSubtitle = false
+    /// The subtitle wraps in a column this wide (`flex max-w-xs flex-col gap-0.5`, PullRequestActionsMenu.tsx:334-349)
+    /// instead of sitting on one 16pt line. The title sits 2pt above it.
+    public var subtitleWrapWidth: CGFloat?
     /// A tooltip on the row, shown even while it is disabled (disabled reasons, side left).
     public var tooltip: String?
     /// Controls at the row's end (the browser menu's zoom cluster), made when the row is built.
@@ -676,6 +679,7 @@ final class MenuRowView: DSView {
     var wrapWidth: CGFloat = 256
     private var note: TextBlockView?
     private var subtitleLabel: LabelView?
+    private var wrappedSubtitle: TextBlockView?
     private var tooltipController: TooltipController?
 
     /// Row height: 28 for items and labels, 9 for separators (1px + 4px margins), 44 with a subtitle, and a note's
@@ -683,6 +687,9 @@ final class MenuRowView: DSView {
     var height: CGFloat {
         if isSeparator { return 9 }
         if isNote, let note { return note.height(forWidth: wrapWidth - 16) + 12 }
+        if let wrapped = wrappedSubtitle, let w = item.subtitleWrapWidth {
+            return 4 + (label.lineHeight ?? 20) + 2 + wrapped.height(forWidth: w) + 4 + item.extraBottom
+        }
         return (item.subtitle != nil ? 44 : 28) + item.extraBottom
     }
 
@@ -695,7 +702,10 @@ final class MenuRowView: DSView {
     /// max-content width of the row.
     var naturalWidth: CGFloat {
         if isSeparator || isNote { return 16 }
-        let text = item.widensForSubtitle ? max(label.textWidth, subtitleLabel?.textWidth ?? 0) : label.textWidth
+        var text = item.widensForSubtitle ? max(label.textWidth, subtitleLabel?.textWidth ?? 0) : label.textWidth
+        if let w = item.subtitleWrapWidth, let wrapped = wrappedSubtitle {
+            text = min(w, max(label.textWidth, wrapped.naturalWidth))
+        }
         var w = paddingLeading + paddingTrailing + text
         if isCheckbox { w += 16 + 8 }
         if iconView != nil || imageView != nil { w += 12 + 8 }
@@ -722,6 +732,7 @@ final class MenuRowView: DSView {
         check?.removeFromSuperlayer(); check = nil
         note?.removeFromSuperview(); note = nil
         subtitleLabel?.removeFromSuperview(); subtitleLabel = nil
+        wrappedSubtitle?.removeFromSuperview(); wrappedSubtitle = nil
         label.isHidden = isNote
         if isNote {
             let t = TextBlockView()
@@ -731,7 +742,14 @@ final class MenuRowView: DSView {
             addSubview(t)
             note = t
         }
-        if let subtitle = item.subtitle {
+        if let subtitle = item.subtitle, item.subtitleWrapWidth != nil {
+            let t = TextBlockView()
+            t.text = subtitle
+            t.font = DSFont.ui(12)
+            t.lineHeight = 16
+            addSubview(t)
+            wrappedSubtitle = t
+        } else if let subtitle = item.subtitle {
             let l = LabelView(subtitle, font: DSFont.ui(12))
             l.lineHeight = 16
             addSubview(l)
@@ -860,6 +878,7 @@ final class MenuRowView: DSView {
         if let check { check.strokeColor = text.cgColor(in: self) }
         note?.color = item.isDestructive ? Themed.color(\.destructive) : Themed.color(\.warning)
         subtitleLabel?.color = Themed.color(\.contrastMutedForeground)
+        wrappedSubtitle?.color = Themed.color(\.contrastMutedForeground)
         needsDisplay = true
     }
 
@@ -928,6 +947,12 @@ final class MenuRowView: DSView {
             trailingX -= w + (item.detail != nil ? 16 : 8)
         }
         let lh = label.lineHeight ?? 20
+        if let wrappedSubtitle {
+            let w = max(0, trailingX - x)
+            label.frame = NSRect(x: x, y: 4, width: max(0, min(label.textWidth, w)), height: lh)
+            wrappedSubtitle.frame = NSRect(x: x, y: 4 + lh + 2, width: w, height: wrappedSubtitle.height(forWidth: w))
+            return
+        }
         if let subtitleLabel {
             label.frame = NSRect(x: x, y: 4, width: max(0, min(label.textWidth, trailingX - x)), height: lh)
             subtitleLabel.frame = NSRect(x: x, y: 4 + lh, width: max(0, trailingX - x), height: 16)

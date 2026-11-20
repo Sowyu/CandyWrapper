@@ -16,6 +16,13 @@ public struct DiffAnnotation: Equatable, Sendable {
 @MainActor
 public protocol DiffAnnotationContent: NSView {
     func height(forWidth width: CGFloat) -> CGFloat
+    /// Set for a control drawn on the line above at the list's right edge (`absolute right-3 bottom-full`) instead
+    /// of a card under it: its width. Such an annotation adds no height.
+    var lineOverlayWidth: CGFloat? { get }
+}
+
+public extension DiffAnnotationContent {
+    var lineOverlayWidth: CGFloat? { nil }
 }
 
 /// A line number clicked: the file and both of the line's numbers (0 where the side has none).
@@ -51,6 +58,8 @@ public final class DiffListView: DSView {
     public var viewedState: (@MainActor (String) -> (viewed: Bool, stale: Bool)?)? { didSet { updateViewedHeaders() } }
     /// A tick pressed: viewing a file folds it, clearing the tick opens it (`toggleFileDiffFoldForViewed`).
     public var onSetViewed: (@MainActor (String, Bool) -> Void)?
+    /// The reader folded or unfolded a file from its header, with its new state (`onItemCollapsedChange`).
+    public var onUserToggle: (@MainActor (Int, Bool) -> Void)?
     /// Cards under lines. Their views come from `annotationView` and are kept while their id stays.
     public var annotations: [DiffAnnotation] = [] { didSet { if annotations != oldValue { relayout() } } }
     public var annotationView: (@MainActor (DiffAnnotation) -> DiffAnnotationContent?)?
@@ -219,6 +228,17 @@ public final class DiffListView: DSView {
         layer.add(fade, forKey: "expand-fade")
     }
 
+    /// Sets every file's fold at once, with one relayout; files that open fade in.
+    public func setCollapsedFiles(_ files: Set<Int>) {
+        let files = files.filter { diff.files.indices.contains($0) }
+        guard files != collapsed else { return }
+        fadingFiles = collapsed.subtracting(files)
+        collapsed = files
+        relayoutKeepingAnchor()
+        fadingFiles = []
+        onCollapsedChange?()
+    }
+
     public func toggle(_ file: Int) { setCollapsed(file, !collapsed.contains(file)) }
 
     public var allCollapsed: Bool { !diff.files.isEmpty && collapsed.count == diff.files.count }
@@ -295,7 +315,11 @@ public final class DiffListView: DSView {
             guard let view = views[Int(row.left)] else { continue }
             if view.superview !== self { addSubview(view) }
             view.layer?.zPosition = 1
-            view.frame = NSRect(x: 0, y: row.top, width: width, height: rowLayout.bottom(of: i) - row.top)
+            if let w = view.lineOverlayWidth {
+                view.frame = NSRect(x: width - 12 - w, y: row.top - DiffStyle.lineHeight, width: w, height: DiffStyle.lineHeight)
+            } else {
+                view.frame = NSRect(x: 0, y: row.top, width: width, height: rowLayout.bottom(of: i) - row.top)
+            }
             placed.insert(annotations[Int(row.left)].id)
         }
         // A card whose line is not in a rendered hunk is drawn nowhere here; the caller lists it.
@@ -473,7 +497,11 @@ public final class DiffListView: DSView {
         switch poolKind {
         case .header:
             let header = DiffFileHeaderView()
-            header.onToggle = { [weak self] in self?.toggle($0) }
+            header.onToggle = { [weak self] file in
+                guard let self else { return }
+                self.toggle(file)
+                self.onUserToggle?(file, self.collapsed.contains(file))
+            }
             header.onOpenFile = { [weak self] path in self?.onOpenFile?(path) ?? self?.togglePath(path) }
             header.onViewed = { [weak self] path, viewed in
                 guard let self else { return }

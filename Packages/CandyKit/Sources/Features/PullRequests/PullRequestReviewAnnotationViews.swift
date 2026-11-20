@@ -194,11 +194,13 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
     private let replySend = ButtonView("Reply", variant: .default, size: .xs)
 
     public init(thread: PullRequestReviewThread, canReply: Bool, canResolve: Bool, canReact: Bool,
-                canEdit: @escaping (PullRequestThreadComment) -> Bool, actions: PullRequestReviewThreadActions, cwd: String, nowMs: Int64) {
+                canEdit: @escaping (PullRequestThreadComment) -> Bool, actions: PullRequestReviewThreadActions, cwd: String, nowMs: Int64,
+                startsExpanded: Bool? = nil) {
         self.thread = thread
         self.canReply = canReply; self.canResolve = canResolve; self.canReact = canReact
         self.canEdit = canEdit; self.actions = actions; self.cwd = cwd; self.nowMs = nowMs
-        expanded = !thread.isResolved
+        // On a diff line a card opens expanded; resolved ones fold behind avatars instead (#34644).
+        expanded = startsExpanded ?? !thread.isResolved
         super.init(frame: .zero)
         headButton.font = DSFont.ui(12)
         headButton.underlines = false

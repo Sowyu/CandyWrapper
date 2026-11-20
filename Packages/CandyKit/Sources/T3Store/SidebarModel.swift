@@ -263,11 +263,13 @@ public enum SidebarModel {
         if runtime?.status == .preparing || runtime?.status == .starting || runtime?.status == .queued {
             return ThreadStatusPill(label: .connecting, pulse: true)
         }
-        if blocked || backgroundWorkHoldsCompletion(pendingBackgroundTasks, awaitedMarked: awaitedMarked) {
-            return ThreadStatusPill(label: .waiting, pulse: false)
-        }
+        if blocked { return ThreadStatusPill(label: .waiting, pulse: false) }
+        // A failed run goes to the inbox even while background work holds the thread (4928 Sidebar.logic.ts, #38968).
         if hasUnseenFailure(latestRun: latestRun, lastVisitedAt: lastVisitedAt) {
             return ThreadStatusPill(label: .failed, pulse: false)
+        }
+        if backgroundWorkHoldsCompletion(pendingBackgroundTasks, awaitedMarked: awaitedMarked) {
+            return ThreadStatusPill(label: .waiting, pulse: false)
         }
         if interactionMode == .plan, isLatestRunSettled(latestRun, runtime), hasActionableProposedPlan {
             return ThreadStatusPill(label: .planReady, pulse: false)

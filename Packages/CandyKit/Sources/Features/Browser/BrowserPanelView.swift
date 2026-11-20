@@ -95,6 +95,7 @@ public final class BrowserChromeRowView: DSView {
     public var onBack: (@MainActor () -> Void)?
     public var onForward: (@MainActor () -> Void)?
     public var onRefresh: (@MainActor () -> Void)?
+    public var onStopLoading: (@MainActor () -> Void)?
     public var onSubmit: (@MainActor (String) -> Void)?
     public var onOpenExternal: (@MainActor () -> Void)? { didSet { needsLayout = true } }
     public var onPictureInPicture: (@MainActor () -> Void)? { didSet { pictureInPicture.isHidden = onPictureInPicture == nil; needsLayout = true } }
@@ -133,7 +134,8 @@ public final class BrowserChromeRowView: DSView {
         pictureInPicture.iconSize = 14
         back.action = { [weak self] in self?.onBack?() }
         forward.action = { [weak self] in self?.onForward?() }
-        refresh.action = { [weak self] in self?.onRefresh?() }
+        // While the page loads the button stops it (PreviewChromeRow.tsx, #29475).
+        refresh.action = { [weak self] in guard let self else { return }; if self.loading { self.onStopLoading?() } else { self.onRefresh?() } }
         openExternal.action = { [weak self] in self?.onOpenExternal?() }
         pictureInPicture.action = { [weak self] in self?.onPictureInPicture?() }
         more.action = { [weak self] in guard let self else { return }; self.onMore?(self.more) }
@@ -198,7 +200,7 @@ public final class BrowserChromeRowView: DSView {
     /// `RefreshIcon refreshing`: the glyph spins while the page loads, and the bar grows from 4% to
     /// 90% over 5.3 s, then fades 220 ms after loading stops.
     private func loadingChanged() {
-        refresh.toolTip = loading ? "Loading\u{2026}" : "Refresh"
+        refresh.toolTip = loading ? "Stop" : "Refresh"
         refresh.setAccessibilityLabel(loading ? "Stop" : "Refresh")
         guard !Motion.reduced else {
             progress.opacity = loading ? 1 : 0

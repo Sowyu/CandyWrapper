@@ -559,6 +559,7 @@ final class BrowserController {
             guard let s = mini ? self?.miniStream : self?.panelStream else { return }
             s.client.send(input)
         }
+        viewer.onThumbNavigate = { [weak self] delta in (mini ? self?.miniStream : self?.panelStream)?.client.send(.history(delta: delta)) }
         viewer.onSizeChange = { [weak self] size in
             guard let self, let s = mini ? self.miniStream : self.panelStream else { return }
             // The floating player scales the page instead of resizing it (`followSize={false}`).
@@ -654,13 +655,16 @@ final class BrowserController {
         chrome.onBack = { [weak self] in self?.panelStream?.client.send(.history(delta: -1)) }
         chrome.onForward = { [weak self] in self?.panelStream?.client.send(.history(delta: 1)) }
         chrome.onRefresh = { [weak self] in self?.panelStream?.client.send(.reload(ignoreCache: false)) }
+        chrome.onStopLoading = { [weak self] in self?.panelStream?.client.send(.stopLoading) }
         chrome.onSubmit = { [weak self] text in
             // Only empty input or an unsupported scheme fails; the bar keeps the text.
             // The search engine setting picks the template (PreviewView.tsx, preview.ts:136-145).
             let settings = ClientSettingsStore.shared.current
             let template = PreviewURL.searchTemplate(engine: settings.string("browserSearchEngine"), customURL: settings.string("browserCustomSearchUrl"))
             guard let self, let url = PreviewURL.resolveAddressBarInput(text, searchTemplate: template) else { return }
-            if self.navigate(to: url) { self.recordVisit(url) }
+            // Incognito visits stay out of the project's history (PreviewView.tsx, #34859).
+            let profile = self.panelTab?.tabId.flatMap { self.currentState?.sessions[$0] }?.profileId
+            if self.navigate(to: url), profile != "incognito" { self.recordVisit(url) }
         }
         view.empty.onOpen = { [weak self] raw in
             // A server tab's browser runs on the environment, where loopback is already right.
@@ -717,7 +721,7 @@ final class BrowserController {
         guard let id = threadId, let env = id.environmentId, let shell = environments.session(env) else { return }
         Task { [weak self] in
             do {
-                let reply = try await shell.supervisor.request(PreviewRPC.open, payload: PreviewRPC.openPayload(threadId: id.localId.rawValue, url: url, profileId: profileId ?? BrowserProfiles.defaultId(ClientSettingsStore.shared.current), viewport: ClientSettingsStore.shared.current["browserDefaultViewport"]))
+                let reply = try await shell.supervisor.request(PreviewRPC.open, payload: PreviewRPC.openPayload(threadId: id.localId.rawValue, url: url, profileId: profileId ?? BrowserProfiles.defaultId(ClientSettingsStore.shared.current), viewport: ClientSettingsStore.shared.current["browserDefaultViewport"], zoomFactor: ClientSettingsStore.shared.current["browserDefaultZoomFactor"], colorScheme: ClientSettingsStore.shared.current.string("browserDefaultAppearance")))
                 let snapshot = try JSONValueDecoder().decode(PreviewSessionSnapshot.self, from: reply)
                 guard let self else { return }
                 self.mutateState(id) { $0.applyOpened(snapshot) }

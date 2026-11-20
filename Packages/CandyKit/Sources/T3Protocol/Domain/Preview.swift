@@ -218,11 +218,16 @@ public enum PreviewRPC {
 
     /// `preview.open` for a new server tab (openPreviewSession.ts:50-56): the configured default viewport
     /// (`browserDefaultOpenViewport`) and profile.
+    /// `zoomFactor` and `colorScheme` are the user's browser defaults, so a new tab opens at them (4928
+    /// openPreviewSession.ts:44-58, #25874, #34943). Servers before 4928 ignore the two fields.
     public static func openPayload(threadId: String, url: String? = nil, profileId: String = "default",
-                                   viewport: JSONValue = .object(["_tag": .string("fill")])) -> JSONValue {
+                                   viewport: JSONValue = .object(["_tag": .string("fill")]),
+                                   zoomFactor: JSONValue? = nil, colorScheme: String? = nil) -> JSONValue {
         var p: [String: JSONValue] = ["threadId": .string(threadId), "viewport": viewport,
                                       "profileId": .string(profileId), "runtime": .string("server")]
         if let url { p["url"] = .string(url) }
+        if let zoomFactor { p["zoomFactor"] = zoomFactor }
+        if let colorScheme { p["colorScheme"] = .string(colorScheme) }
         return .object(p)
     }
 }
@@ -389,9 +394,12 @@ public enum PreviewStream {
         case navigate(url: String)
         case history(delta: Int)
         case reload(ignoreCache: Bool)
+        /// Stop a loading page (4928 serverBrowserStream.ts, ServerBrowser.ts:3141, #29475). Older servers ignore it.
+        case stopLoading
 
         public var json: JSONValue {
             switch self {
+            case .stopLoading: return .object(["type": .string("stopLoading")])
             case .takeControl: return .object(["type": .string("takeControl")])
             case .releaseControl: return .object(["type": .string("releaseControl")])
             case .dialog(let accept, let promptText):
