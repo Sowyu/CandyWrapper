@@ -27,6 +27,9 @@ final class SideChatController {
     /// A start is in flight (`pendingRef`, useSideChat.ts:41): a second one waits for it.
     private var starting = false
     private var shown: Shown?
+    /// The side chat the right panel shows. At launch the panel restores its tab before the parent thread is known,
+    /// and asks only once, so `sync` builds the pane when it can.
+    private var requested: ThreadId?
     private weak var windowShortcuts: Shortcuts?
 
     /// The shown tab's pane, its embedded chat, subscription and composer. The composer is a second
@@ -98,6 +101,7 @@ final class SideChatController {
             }
         }
         panel.setSideChatTabs(titles: titles, states: states, offered: facts.offered, disabledReason: SideChats.disabledReason(facts))
+        if let requested, shown?.id.localId != requested { show(requested) }
         syncPane()
     }
 
@@ -190,6 +194,7 @@ final class SideChatController {
 
     /// Builds the shown side chat's pane or tears the last one down, so a hidden tab holds nothing.
     private func show(_ local: ThreadId?) {
+        requested = local
         if let old = shown {
             old.session?.end()
             old.composer?.tearDown()
