@@ -178,6 +178,16 @@ public struct EnvironmentHTTP: Sendable {
         _ = try await post("api/auth/clients/revoke", ["sessionId": sessionId], token: token, as: JSONValue.self)
     }
 
+    /// `POST /api/auth/connect-devices/approve {pairingLinkId}` (4928 environmentHttp.ts:653-659).
+    public func approveConnectDevice(pairingLinkId: String, token: String) async throws {
+        _ = try await post("api/auth/connect-devices/approve", ["pairingLinkId": pairingLinkId], token: token, as: JSONValue.self)
+    }
+
+    /// `POST /api/auth/connect-devices/revoke {proofKeyThumbprint}` (environmentHttp.ts:661-667).
+    public func revokeConnectDevice(proofKeyThumbprint: String, token: String) async throws {
+        _ = try await post("api/auth/connect-devices/revoke", ["proofKeyThumbprint": proofKeyThumbprint], token: token, as: JSONValue.self)
+    }
+
     /// `POST /api/auth/clients/revoke-others`, the count of revoked sessions.
     public func revokeOtherClients(token: String) async throws -> Int {
         try await post("api/auth/clients/revoke-others", String?.none, token: token, as: RevokeOthersResult.self).revokedCount

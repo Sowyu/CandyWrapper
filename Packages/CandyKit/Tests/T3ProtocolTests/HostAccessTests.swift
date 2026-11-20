@@ -32,6 +32,24 @@ struct HostAccessTests {
         #expect(AuthScopes.standard.count == 16 && Set(AuthScopes.standard) == Set(AuthScopes.options.map(\.scope)))
     }
 
+    /// 4928 device approval: requests ride on pairing links, trusted devices on the snapshot (auth.ts:362-406).
+    @Test func connectDevicesDecodeFromTheSnapshot() throws {
+        func event(_ s: String) throws -> JSONValue { try JSONValue(parsing: Data(s.utf8)) }
+        var a = AuthAccessSnapshot()
+        try a.apply(event(#"{"version":1,"revision":1,"type":"snapshot","payload":{"pairingLinks":[]  ,"clientSessions":[]}}"#))
+        #expect(a.connectDevices == nil)  // a 3824 server: no device approval
+        try a.apply(event(#"{"version":1,"revision":2,"type":"snapshot","payload":{"pairingLinks":[{"id":"l1","subject":"s","scopes":[],"createdAt":"2026-10-10T10:00:00.000Z","expiresAt":"2026-10-10T10:05:00.000Z"},{"id":"r1","subject":"cloud-connect","scopes":[],"createdAt":"2026-10-10T10:01:00.000Z","expiresAt":"2026-10-10T10:06:00.000Z","connectDeviceRequest":{"verificationCode":"ABCD-EFGH","client":{"deviceType":"mobile","os":"iOS","label":"iPhone"}}}],"clientSessions":[],"connectDevices":[{"proofKeyThumbprint":"tp","verificationCode":"WXYZ-2345","client":{"deviceType":"desktop","os":"macOS","browser":"macOS","ipAddress":"10.0.0.2"},"approvedAt":"2026-10-09T10:00:00.000Z"}]}}"#))
+        #expect(a.sortedLinks.map(\.id) == ["l1"])
+        #expect(a.connectDeviceRequests.map(\.id) == ["r1"])
+        #expect(a.connectDeviceRequests.first?.connectDeviceRequest?.verificationCode == "ABCD-EFGH")
+        #expect(a.connectDevices?.map(\.proofKeyThumbprint) == ["tp"])
+        // `describeConnectDeviceClient` drops repeats; `connectDeviceName` prefers the label.
+        #expect(ConnectDeviceNames.describe(a.connectDevices?.first?.client) == "macOS · 10.0.0.2")
+        #expect(ConnectDeviceNames.name(a.connectDeviceRequests.first?.connectDeviceRequest?.client) == "iPhone")
+        #expect(ConnectDeviceNames.describe(nil) == "Unknown device")
+        #expect(ConnectDeviceNames.name(nil) == "this device")
+    }
+
     @Test func accessStreamFoldsIntoASnapshot() throws {
         func event(_ s: String) throws -> JSONValue { try JSONValue(parsing: Data(s.utf8)) }
         var a = AuthAccessSnapshot()

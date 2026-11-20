@@ -679,7 +679,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| a2edd281df | #36419 | device | feat(connect): require approval for new T3 Connect devices | port; needs wire: device approval |
+| a2edd281df | #36419 | device | feat(connect): require approval for new T3 Connect devices | ported (settings-4928): Connections lists requests and trusted devices with Approve, Deny and Revoke, the Require approval switch, the revoke dialog, and the waiting text on the client |
 
 ## New feature theme-backgrounds (4)
 
