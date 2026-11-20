@@ -246,7 +246,7 @@ final class PullRequestDetailBinding {
     /// page and where threads link many pull requests (`threadPullRequests`). A 4928 server signals link
     /// changes on its own stream (`linkedThreadRefreshes`, client-runtime state/pullRequests.ts:833-850);
     /// an older one is read again on each detail read, with no timer, where T3 polls every 10 s.
-    private func readLinkedThreads() {
+    func readLinkedThreads() {
         guard view.context == .page, let env = environmentId, let shell, var ref = reference, let target,
               capabilities.has(env, "threadPullRequests") else { stopLinkedRefreshes(); return }
         ref.host = target.host

@@ -30,6 +30,9 @@ final class IssueDetailBinding {
     var threadId: ThreadId?
     /// The thread's linked issues, so the link button knows its state.
     var threadIssues: () -> [ThreadIssueLink] = { [] }
+    /// On the Issues page, with no thread beside it: the shell to pick a thread from (IssueThreadLinks.tsx:168-171).
+    var pickerSnapshot: (() -> ShellSnapshot?)?
+    private var pickerHost: ModalHost?
     /// The workspace root of the reading project, for file links in Markdown.
     var cwd: (String, String) -> String? = { _, _ in nil }
     private(set) var environmentId: String?
@@ -135,7 +138,7 @@ final class IssueDetailBinding {
         let key = ThreadIssueKey(tracker: d.tracker, host: d.host, scope: d.scope, key: d.key)
         if let threadId { m.linkedHere = threadIssues().contains { $0.issueKey.normalized == key.normalized } } else { m.linkedHere = nil }
         // The Issues page links through a thread picker; beside a thread the button toggles that thread.
-        m.canLink = threadId != nil && threadId?.environmentId == env
+        m.canLink = threadId == nil ? pickerSnapshot != nil : threadId?.environmentId == env
         m.linkPending = linkPending
         m.linkedThreadCount = linkedCount
         m.linkedThreadsFailed = linkedFailed
@@ -299,6 +302,7 @@ final class IssueDetailBinding {
 
     /// `changeLink` (IssueThreadLinks.tsx:55-90) for the thread beside the panel.
     private func toggleLink() {
+        if threadId == nil { openThreadPicker(); return }
         guard let threadId, let d = detail, let t = target, !linkPending else { return }
         let key = ThreadIssueKey(tracker: d.tracker, host: d.host, scope: d.scope, key: d.key)
         let linked = threadIssues().contains { $0.issueKey.normalized == key.normalized }
@@ -316,6 +320,41 @@ final class IssueDetailBinding {
             self?.linkPending = false
             self?.render()
         }
+    }
+
+    /// `ThreadLinkPicker` in a dialog (IssueThreadLinks.tsx:193-207): link the issue to a thread of its environment.
+    private func openThreadPicker() {
+        guard pickerHost == nil, let d = detail, let t = target, let env = environmentId, let window = view.window,
+              let snapshot = pickerSnapshot?() else { return }
+        let key = ThreadIssueKey(tracker: d.tracker, host: d.host, scope: d.scope, key: d.key)
+        let projects = Dictionary(snapshot.projects.map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a })
+        // ponytail: lists threads the shell holds; T3 also mounts older settled title matches (useThreadSearch), add when asked
+        let threads = snapshot.threads.filter { $0.id.environmentId == env && $0.archivedAt == nil }
+            .sorted { ($0.updatedAt.epochMs ?? 0) > ($1.updatedAt.epochMs ?? 0) }
+        let picker = ThreadLinkPicker(title: "Link issue to a thread")
+        picker.candidates = threads.map { th in
+            .init(id: th.id.localId.rawValue, title: th.title, project: projects[th.projectId],
+                  linked: (th.issues?.values ?? []).contains { $0.issueKey.normalized == key.normalized })
+        }
+        let host = ModalHost.present(picker.dialog, in: window)
+        pickerHost = host
+        host.onDismiss = { [weak self] in self?.pickerHost = nil }
+        picker.onSelect = { [weak self, weak picker] localId in
+            guard let self, let picker, let thread = threads.first(where: { $0.id.localId.rawValue == localId }) else { return }
+            picker.pending = true
+            let payload = IssueWrites.link(threadId: localId, key: key, projectId: t.projectId, url: d.url, displayKey: d.displayKey, title: d.title)
+            Task { [weak self] in
+                do {
+                    _ = try await self?.environments.dispatch(thread.id, payload)
+                    host.close()
+                    self?.readLinkedThreads()
+                } catch {
+                    picker.pending = false
+                    self?.toast("Could not link the issue", Self.message(error, fallback: "The server refused it."), .error)
+                }
+            }
+        }
+        DispatchQueue.main.async { window.makeFirstResponder(picker.input) }
     }
 
     /// The thread's links changed (`thread.issue-synced`): the button follows.

@@ -26,6 +26,8 @@ final class PullRequestsPageController {
 
     // The route's search params.
     private var query = ""
+    /// The open thread picker (`PullRequestThreadLinks display="picker"`), while it shows.
+    private var pickerHost: ModalHost?
     private var sentQuery = ""
     private var sort: String
     private var state: String
@@ -87,6 +89,8 @@ final class PullRequestsPageController {
         // The count opens the palette on the pull request's link (PullRequestThreadLinks.tsx:163-171).
         container.lazyDetail.configure { [weak self] view in
             view.onShowLinkedThreads = { [weak self] in if let url = self?.detail.detail?.url { self?.onSearchThreads?(url) } }
+            // With no thread beside the page, "Link to thread" opens the thread picker (PullRequestThreadLinks.tsx:186-200).
+            view.onLinkThread = { [weak self] in self?.openThreadPicker() }
         }
         detail.onStatus = { [weak self] id, tone in self?.container.pullRequestStatus[id] = tone }
         detail.onActed = { [weak self] action in
@@ -648,8 +652,46 @@ final class PullRequestsPageController {
             render()
             return
         }
+        container.lazyDetail.set(\.linkItemTitle, capabilities.has(env, "threadPullRequests") ? "Link to thread" : nil)
         detail.show(environmentId: env, target: target)
         render()
+    }
+
+    /// `ThreadLinkPicker` in a dialog: the environment's unarchived threads, newest first, those already linked
+    /// disabled. A pick links the pull request and closes it; a failure toasts (PullRequestThreadLinks.tsx:95-131).
+    private func openThreadPicker() {
+        guard pickerHost == nil, let target = container.panelState.active?.pullRequest, let env = target.environmentId,
+              let d = detail.detail, let parsed = ChangeRequestURL.parse(d.url), let window = container.window,
+              let snapshot = sidebar?.snapshot else { return }
+        let key = ThreadPullRequestKey(host: parsed.host, repository: parsed.repository, number: parsed.number).normalized
+        let projects = Dictionary(snapshot.projects.map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a })
+        // ponytail: lists threads the shell holds; T3 also mounts older settled title matches (useThreadSearch), add when asked
+        let threads = snapshot.threads.filter { $0.id.environmentId == env && $0.archivedAt == nil }
+            .sorted { ($0.updatedAt.epochMs ?? 0) > ($1.updatedAt.epochMs ?? 0) }
+        let term = ChangeRequestTerminology.of(kind: d.provider).singular
+        let picker = ThreadLinkPicker(title: "Link \(term) to a thread")
+        picker.candidates = threads.map { t in
+            .init(id: t.id.localId.rawValue, title: t.title, project: projects[t.projectId],
+                  linked: (t.pullRequests ?? []).contains { ThreadPullRequestKey(host: $0.host, repository: $0.repository, number: $0.number).normalized == key })
+        }
+        let host = ModalHost.present(picker.dialog, in: window)
+        pickerHost = host
+        host.onDismiss = { [weak self] in self?.pickerHost = nil }
+        picker.onSelect = { [weak self, weak picker] localId in
+            guard let self, let picker, let thread = threads.first(where: { $0.id.localId.rawValue == localId }) else { return }
+            picker.pending = true
+            Task { [weak self] in
+                do {
+                    _ = try await self?.environments.dispatch(thread.id, PullRequestPayloads.link(threadId: localId, key: key, url: d.url))
+                    host.close()
+                    self?.detail.readLinkedThreads()
+                } catch {
+                    picker.pending = false
+                    self?.toast("Could not link the \(term)", (error as? RPCClientError)?.description ?? "\(error)", .error)
+                }
+            }
+        }
+        DispatchQueue.main.async { window.makeFirstResponder(picker.input) }
     }
 
     /// Shift's quick actions (PullRequestSpeedActions.tsx): close, merge, ready, reopen.

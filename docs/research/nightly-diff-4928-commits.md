@@ -709,7 +709,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 6a29d58d14 | #38493 | issues | fix(client-runtime): closed issue searches no longer build up in memory | n/a: client-runtime cache internals; CandyWrapper holds one answer per environment |
 | f1d64aa0b6 | #38263 | pr/git | fix(azure-devops): legacy and project-less remotes list their work items | port |
 | 378584a760 | #38294 | issues | feat(web): hovering an issue link shows its preview card | left (panels-2): the issue link hover card needs an issue branch in the Markdown link handler (Features/Markdown, another agent); the card itself is not built |
-| b6a0fd6d62 | #38771 | issues | feat(issues): an issue shows every thread it is linked to | ported 0a5ca190: the linked-threads count opens the palette on the issue URL |
+| b6a0fd6d62 | #38771 | issues | feat(issues): an issue shows every thread it is linked to | ported 0a5ca190: the linked-threads count opens the palette on the issue URL; the thread picker that links from the Pull Requests and Issues pages is in (panels-3, ThreadLinkPicker with spec, reference and test) |
 | c350ee7e15 | #38256 | issues | feat(web): filter the issues list by project | ported 39a3ad7d: the Project filter |
 | 2e3d9fccdd | #38282 | issues | feat(web): show linked issues beside thread pull requests | ported 9a0153d1 in the sidebar: generic issue glyph, no state tint or hover list until CW has issues |
 | 63899c16b9 | #38654 | issues | fix(web): retrying a failed Issues list no longer restarts another environment's read | ported 0a5ca190: Retry reads every environment again in one generation |
