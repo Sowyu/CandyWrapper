@@ -33,8 +33,11 @@ def notice(summary):
 
 CASES = []
 for name, summary, width in [("undo.archived", "Archived,", 150), ("undo.archived-many.narrow", "Archived 3,", 76)]:
-    CASES.append({"name": name, "html": f'<ul class="flex w-full min-w-0 flex-row items-center gap-1" style="width:{width}px">{notice(summary)}</ul>',
-                  "wrapperStyle": "display:block;background:var(--sidebar)",
+    # The notice sits in the sidebar subtree, where --sidebar and the sidebar text tokens differ from the page's
+    # (#000000 against #111111 in dark). The 8px shadow paints the capture padding in the sidebar color too.
+    CASES.append({"name": name, "html": f'<div data-app-sidebar class="bg-sidebar text-sidebar-foreground" style="width:{width}px;box-shadow:0 0 0 8px var(--sidebar)">'
+                  f'<ul class="flex w-full min-w-0 flex-row items-center gap-1" style="width:{width}px">{notice(summary)}</ul></div>',
+                  "wrapperStyle": "display:block",
                   "native": {"kind": "undo", "summary": summary, "width": str(width)}})
 
 spec = {"component": "sidebar-footer", "sourceVersion": "v0.1.11-nightly.20261119.4928",
