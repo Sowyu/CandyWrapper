@@ -28,9 +28,9 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| a5448f4c50 | #26730 | pr/git | fix(web): pull request diff follows the file tree, with a hide-tests filter | port |
-| 5ef56853ef | #19941 | pr/git | feat(web): review local commits in the Diff pane | port |
-| 348009de22 | #29083 | pr/git | fix(prs): include Storybook files in the test filter and counts | port |
+| a5448f4c50 | #26730 | pr/git | fix(web): pull request diff follows the file tree, with a hide-tests filter | left (panels-2): the PR diff follows the file tree with a hide-tests filter; needs a tree order in PullRequestCodeView and the test classifier (diffFileTree.logic.ts) |
+| 5ef56853ef | #19941 | pr/git | feat(web): review local commits in the Diff pane | left (panels-2): reviewing local commits needs the A23 wire (`review.getBranchCommits`, source kind `commit`) and a commit scope in DiffPanelView |
+| 348009de22 | #29083 | pr/git | fix(prs): include Storybook files in the test filter and counts | left (panels-2): Storybook files in the test filter, with #26730 |
 
 ## Port group provider-fallback (3)
 
@@ -240,15 +240,15 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | e1494ae25b | #25761 | thread | perf(pr): actions update every client from the host's reply instead of re-reads | ported (panels-2): `runAction` asks `replyWithSummary` and the panel shows the reply without a re-read unless it reopened or moved the head; App/Sources/PullRequestsController.swift run(), T3Protocol PullRequestSummary |
-| d5a50a1d0d | #32774 | pr/git | perf(pr): actions, title edits and labels show the moment you click, on every host | port |
+| d5a50a1d0d | #32774 | pr/git | perf(pr): actions, title edits and labels show the moment you click, on every host | left (panels-2): optimistic title, label and state edits on every host; the action reply patch (#25761) is in, the instant local edit is not |
 
 ## Port group pr-composer (3)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 7bc2a40ced | #30747 | pr/git | feat(pull-requests): PR composers complete @user mentions | port |
-| f08d8dd0a5 | #30579 | pr/git | feat(web): add pull request comments to the chat | port |
-| e4ff5da0d3 | #30857 | pr/git | feat(pull-requests): PR composers complete #123 and GitLab !123 references | port |
+| 7bc2a40ced | #30747 | pr/git | feat(pull-requests): PR composers complete @user mentions | left (panels-2): @mention completion in PR composers (PullRequestMarkdownTextarea.tsx:40), needs a completion popup on PullRequestMarkdownEditorView |
+| f08d8dd0a5 | #30579 | pr/git | feat(web): add pull request comments to the chat | left (panels-2): add a PR comment to the chat, needs the composer's context insertion from Features/Composer |
+| e4ff5da0d3 | #30857 | pr/git | feat(pull-requests): PR composers complete #123 and GitLab !123 references | left (panels-2): #123 and !123 completion, with #30747; needs `references` filter options and `referenceSigils` (decoded) |
 
 ## Port group pi (4)
 
@@ -400,7 +400,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| cf906e1fcf | #34644 | pr/git | feat(web): resolved review conversations fold into avatars on their diff line | port |
+| cf906e1fcf | #34644 | pr/git | feat(web): resolved review conversations fold into avatars on their diff line | left (panels-2): resolved conversations fold into avatars on their diff line, PullRequestReviewAnnotation.tsx |
 
 ## Port group add-project (2)
 
@@ -413,8 +413,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| c9f0caca1b | #33942 | terminal | perf(server,client): attaching to a terminal with a large history over a slow link drops from 5,555 ms to 751 ms median (7.4x) | port; needs wire: terminal attach history paging |
-| 93cbca3fcb | #36368 | terminal | fix(terminal): trimmed history no longer replays half of a control sequence | port |
+| c9f0caca1b | #33942 | terminal | perf(server,client): attaching to a terminal with a large history over a slow link drops from 5,555 ms to 751 ms median (7.4x) | left (panels-2): terminal attach history paging needs wire |
+| 93cbca3fcb | #36368 | terminal | fix(terminal): trimmed history no longer replays half of a control sequence | left (panels-2): trimmed history replaying half a control sequence, SwiftTerm side not checked |
 
 ## Port group resume (3)
 
@@ -440,20 +440,20 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| f12e8206f5 | #37007 | pr/git | fix(web): load a too-large PR file's diff on demand | port |
+| f12e8206f5 | #37007 | pr/git | fix(web): load a too-large PR file's diff on demand | left (panels-2): load a withheld file's diff on demand; the wire (`path`, `withheldFilesReadable`, `withheldFileDiff`) is in, the Code tab's per-file load (PullRequestCodeTab.tsx, cutLineNotes.ts) is not |
 
 ## Port group pr-prefetch (2)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 238678951a | #32842 | thread | perf(web): resting on a PR row also reads its activity, so the timeline shows on click | port |
-| 4b22bb47d4 | #32911 | pr/git | perf(pr): PR panel paints from saved data and reads ahead on intent | port |
+| 238678951a | #32842 | thread | perf(web): resting on a PR row also reads its activity, so the timeline shows on click | left (panels-2): hover prefetch of PR activity |
+| 4b22bb47d4 | #32911 | pr/git | perf(pr): PR panel paints from saved data and reads ahead on intent | left (panels-2): PR panel paints from saved data and reads ahead on intent |
 
 ## Port group pr-links (1)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| b0f0c44d22 | #37703 | pr/git | fix(shared): open Forgejo and Gitea /pulls/ tab and commit links | port |
+| b0f0c44d22 | #37703 | pr/git | fix(shared): open Forgejo and Gitea /pulls/ tab and commit links | left (panels-2): Forgejo and Gitea /pulls/ links, needs the change request URL parser in T3Protocol RepositoryIdentity+PullRequests |
 
 ## Port group keybindings-unassign (1)
 
@@ -465,7 +465,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 14d57b451e | #38865 | browser | fix(web): server browser pane reports when Chromium draws no frames | port |
+| 14d57b451e | #38865 | browser | fix(web): server browser pane reports when Chromium draws no frames | left (panels-2): the server browser pane's no-frames report |
 
 ## Port group connect-settings (2)
 
@@ -708,7 +708,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 2d558c4dad | #38537 | issues | fix(web): the issue viewer shows why a refresh failed | ported 39a3ad7d: "Could not refresh this issue" |
 | 6a29d58d14 | #38493 | issues | fix(client-runtime): closed issue searches no longer build up in memory | n/a: client-runtime cache internals; CandyWrapper holds one answer per environment |
 | f1d64aa0b6 | #38263 | pr/git | fix(azure-devops): legacy and project-less remotes list their work items | port |
-| 378584a760 | #38294 | issues | feat(web): hovering an issue link shows its preview card | port |
+| 378584a760 | #38294 | issues | feat(web): hovering an issue link shows its preview card | left (panels-2): the issue link hover card needs an issue branch in the Markdown link handler (Features/Markdown, another agent); the card itself is not built |
 | b6a0fd6d62 | #38771 | issues | feat(issues): an issue shows every thread it is linked to | ported 0a5ca190: the linked-threads count opens the palette on the issue URL |
 | c350ee7e15 | #38256 | issues | feat(web): filter the issues list by project | ported 39a3ad7d: the Project filter |
 | 2e3d9fccdd | #38282 | issues | feat(web): show linked issues beside thread pull requests | ported 9a0153d1 in the sidebar: generic issue glyph, no state tint or hover list until CW has issues |
@@ -733,24 +733,24 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 8f6c9b7144 | #23338 | browser | fix(web): preserve typed dimensions with the aspect ratio locked | port |
-| 083c903950 | #26233 | browser | fix(web): right panel's tab bar no longer slides under the title bar controls | port |
-| cde3620577 | #26633 | browser | fix(web): forward native Copy and Cut from server browser tabs | port |
-| 9cb59bf858 | #22328 | browser | fix(web): mod+L focuses the browser address bar from a focused page | port |
-| 17948307cc | #28064 | browser | fix(client): the folder browser shows folders added or removed while T3 runs | port |
+| 8f6c9b7144 | #23338 | browser | fix(web): preserve typed dimensions with the aspect ratio locked | left (panels-2): not checked |
+| 083c903950 | #26233 | browser | fix(web): right panel's tab bar no longer slides under the title bar controls | left (panels-2): not checked |
+| cde3620577 | #26633 | browser | fix(web): forward native Copy and Cut from server browser tabs | left (panels-2): not checked |
+| 9cb59bf858 | #22328 | browser | fix(web): mod+L focuses the browser address bar from a focused page | left (panels-2): not checked |
+| 17948307cc | #28064 | browser | fix(client): the folder browser shows folders added or removed while T3 runs | left (panels-2): not checked |
 | 6717d92cf3 | #28243 | browser | fix(web): Tab completes folder names in the add-project browser | ported (panels-2): Tab opens the highlighted or only folder, or extends to the common prefix, Mode.onTab in CommandPaletteController |
-| b5d9f85b9a | #26027 | browser | fix(web): keep inward mini browser resizes from growing | port |
-| 1436c4571f | #29347 | browser | fix(client-runtime): connect to the primary environment while the browser reports offline | port |
-| 350ecd63be | #32569 | browser | fix(web): closing the right panel returns focus to where it was | port |
-| 7c76c9ddc2 | #30882 | browser | fix(web): mouse back/forward over the right panel no longer moves the main chat | port |
-| 2e18418abf | #34859 | browser | fix(web): Incognito browser visits stay out of project history | port |
-| e6119fdf68 | #35143 | browser | fix(web): browser settings changed in project scope no longer overwrite the global default | port |
-| ff1eead6f4 | #35947 | browser | fix(web): zoom shortcuts work while a desktop browser page has focus | port |
-| 0f13d638af | #29475 | browser | fix(browser): Stop cancels loading pages | port |
-| be5f805964 | #34943 | browser | fix(web): new desktop browser tabs open at the default zoom and appearance | port |
-| 651accb100 | #25874 | browser | fix(web): new browser tabs open at your default zoom and appearance | port |
-| 675fb1d9a7 | #36846 | browser | fix(web): show Browser device preferences read-only for projects | port |
-| 6fc2fb192c | #35299 | browser | fix(web): desktop browser tabs show native navigation immediately | port |
+| b5d9f85b9a | #26027 | browser | fix(web): keep inward mini browser resizes from growing | left (panels-2): not checked |
+| 1436c4571f | #29347 | browser | fix(client-runtime): connect to the primary environment while the browser reports offline | left (panels-2): not checked |
+| 350ecd63be | #32569 | browser | fix(web): closing the right panel returns focus to where it was | left (panels-2): not checked |
+| 7c76c9ddc2 | #30882 | browser | fix(web): mouse back/forward over the right panel no longer moves the main chat | left (panels-2): not checked |
+| 2e18418abf | #34859 | browser | fix(web): Incognito browser visits stay out of project history | left (panels-2): not checked |
+| e6119fdf68 | #35143 | browser | fix(web): browser settings changed in project scope no longer overwrite the global default | left (panels-2): not checked |
+| ff1eead6f4 | #35947 | browser | fix(web): zoom shortcuts work while a desktop browser page has focus | left (panels-2): not checked |
+| 0f13d638af | #29475 | browser | fix(browser): Stop cancels loading pages | left (panels-2): not checked |
+| be5f805964 | #34943 | browser | fix(web): new desktop browser tabs open at the default zoom and appearance | left (panels-2): not checked |
+| 651accb100 | #25874 | browser | fix(web): new browser tabs open at your default zoom and appearance | left (panels-2): not checked |
+| 675fb1d9a7 | #36846 | browser | fix(web): show Browser device preferences read-only for projects | left (panels-2): not checked |
+| 6fc2fb192c | #35299 | browser | fix(web): desktop browser tabs show native navigation immediately | left (panels-2): not checked |
 
 ## Small fixes, composer (120)
 
@@ -881,67 +881,67 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| e6ca17001d | #26917 | connections | fix(web): update everything no longer waits on npm for service hosts | port |
-| de386ada9e | #23244 | connections | fix(web): create tasks on a permitted connected environment | port |
-| 4092c4ac56 | #27008 | connections | fix(client): retry the permissions check after a reconnect | port |
-| 65b0ab8c91 | #27101 | connections | fix(client): dead connection routes are probed 30x less often | port |
-| ebd1265ccf | #21706 | connections | fix(connect): the remove dialog says whether a T3 Connect environment is still on the account | port |
-| 503bcaaf99 | #22887 | connections | fix: keep offline environments out of thread reorder writes | port |
-| b1b3c10e24 | #23532 | connections | fix(clients): keep accepted server updates through disconnects | port |
-| fd78ea42fc | #23753 | connections | fix(web): show an error when merge-back or disconnect fails | port |
-| e5871b6719 | #24691 | connections | fix(web): Reconnect on a switched-off environment switches it back on | port |
-| 9e97921ad8 | #24716 | connections | fix(clients): a route added after a reorder no longer disappears | port |
-| d2d1e4f50e | #27847 | connections | fix(updates): version checks respect your configured npm registry | port |
-| a05e8fde08 | #26160 | connections | fix(web): Add Environment dialog reopens on Remote link instead of a stale SSH selection | port |
-| 1aa46d0cdf | #27998 | connections | fix(connect): T3 Connect sockets no longer drop every hour | port |
-| 8f0d66de5f | #26109 | connections | fix(web): servers still restarting after an app update no longer offer the update again | port |
+| e6ca17001d | #26917 | connections | fix(web): update everything no longer waits on npm for service hosts | left (panels-2): not checked |
+| de386ada9e | #23244 | connections | fix(web): create tasks on a permitted connected environment | left (panels-2): not checked |
+| 4092c4ac56 | #27008 | connections | fix(client): retry the permissions check after a reconnect | left (panels-2): not checked |
+| 65b0ab8c91 | #27101 | connections | fix(client): dead connection routes are probed 30x less often | left (panels-2): not checked |
+| ebd1265ccf | #21706 | connections | fix(connect): the remove dialog says whether a T3 Connect environment is still on the account | left (panels-2): not checked |
+| 503bcaaf99 | #22887 | connections | fix: keep offline environments out of thread reorder writes | left (panels-2): not checked |
+| b1b3c10e24 | #23532 | connections | fix(clients): keep accepted server updates through disconnects | left (panels-2): not checked |
+| fd78ea42fc | #23753 | connections | fix(web): show an error when merge-back or disconnect fails | left (panels-2): not checked |
+| e5871b6719 | #24691 | connections | fix(web): Reconnect on a switched-off environment switches it back on | left (panels-2): not checked |
+| 9e97921ad8 | #24716 | connections | fix(clients): a route added after a reorder no longer disappears | left (panels-2): not checked |
+| d2d1e4f50e | #27847 | connections | fix(updates): version checks respect your configured npm registry | left (panels-2): not checked |
+| a05e8fde08 | #26160 | connections | fix(web): Add Environment dialog reopens on Remote link instead of a stale SSH selection | left (panels-2): not checked |
+| 1aa46d0cdf | #27998 | connections | fix(connect): T3 Connect sockets no longer drop every hour | left (panels-2): not checked |
+| 8f0d66de5f | #26109 | connections | fix(web): servers still restarting after an app update no longer offer the update again | left (panels-2): not checked |
 | 7cd9a73b2f | #24493 | connections | fix(web): thread alerts missed during a disconnect fire on reconnect | ported (panels-2): a stale shell pauses its environment's tracker instead of forgetting it, so what changed during the disconnect notifies once on reconnect |
-| aa46f7ada4 | #25591 | connections | fix(client-runtime): re-pairing at a new address uses the new token | port |
-| 95d4da5a93 | #28592 | connections | fix(clients): open a delegated child's approval on the environment it runs in | port |
-| 322f6544df | #30498 | connections | feat(web): show a newly created pairing link without expanding the client list | port |
-| d520d5bb85 | #26464 | connections | fix(web): show saved service access with Local environment off | port |
-| dff0b1159b | #25198 | connections | fix(connect): show why relay unlink failed | port |
-| 7fe1310ee5 | #32937 | connections | fix(web): Copy MCP URL uses the T3 Connect address | port |
-| b5256ad09c | #22839 | connections | fix(opencode): verify CLI updates when loopback server is still running | port |
-| 25f4c9d44e | #23194 | connections | fix(web): offer retry while an environment reconnects | port |
-| ba32aabf62 | #23111 | connections | fix(scheduler): show short server timezone on fixed-time labels | port |
-| 54a5c51a58 | #21530 | connections | fix(web): fall back to a readable server for shared repositories | port |
-| 42d645ae9e | #32924 | connections | fix(web): update Retry stops re-sending servers already on the target version | port |
-| 7eca0ed885 | #29462 | connections | fix(web): hand-started t3 servers get an update command that updates them | port |
-| 6790f85f53 | #27692 | connections | fix(web): point pairing copy at Sharing & access | port |
+| aa46f7ada4 | #25591 | connections | fix(client-runtime): re-pairing at a new address uses the new token | left (panels-2): not checked |
+| 95d4da5a93 | #28592 | connections | fix(clients): open a delegated child's approval on the environment it runs in | left (panels-2): not checked |
+| 322f6544df | #30498 | connections | feat(web): show a newly created pairing link without expanding the client list | left (panels-2): not checked |
+| d520d5bb85 | #26464 | connections | fix(web): show saved service access with Local environment off | left (panels-2): not checked |
+| dff0b1159b | #25198 | connections | fix(connect): show why relay unlink failed | left (panels-2): not checked |
+| 7fe1310ee5 | #32937 | connections | fix(web): Copy MCP URL uses the T3 Connect address | left (panels-2): not checked |
+| b5256ad09c | #22839 | connections | fix(opencode): verify CLI updates when loopback server is still running | left (panels-2): not checked |
+| 25f4c9d44e | #23194 | connections | fix(web): offer retry while an environment reconnects | left (panels-2): not checked |
+| ba32aabf62 | #23111 | connections | fix(scheduler): show short server timezone on fixed-time labels | left (panels-2): not checked |
+| 54a5c51a58 | #21530 | connections | fix(web): fall back to a readable server for shared repositories | left (panels-2): not checked |
+| 42d645ae9e | #32924 | connections | fix(web): update Retry stops re-sending servers already on the target version | left (panels-2): not checked |
+| 7eca0ed885 | #29462 | connections | fix(web): hand-started t3 servers get an update command that updates them | left (panels-2): not checked |
+| 6790f85f53 | #27692 | connections | fix(web): point pairing copy at Sharing & access | left (panels-2): not checked |
 | fa9d85fad5 | #35327 | connections | fix(web): a server updated with the app reconnects as soon as it is ready | left (settings-4928): reconnect as soon as the updated server answers instead of the backoff ladder |
-| 00f617db4e | #24400 | connections | fix(client-runtime): recover subscriptions that stop on a healthy connection | port |
-| cbf0f0a83f | #36445 | connections | fix(web): screen readers read the Update everything machine list as a table | port |
-| 757f71a7f6 | #29788 | connections | fix(client-runtime): new T3 Connect machines appear without signing in again | port |
-| bd9ff7eb2a | #33244 | connections | fix(client-runtime): recover thread list updates after stream defects | port |
-| ca7a9448b8 | #24932 | connections | fix(client-runtime): Reconnect works while the network reports offline | port |
-| efae4e9da1 | #36559 | connections | fix(client): retry unread thread visits after reconnect | port |
-| ead133ce70 | #28297 | connections | fix(web): SSH port field no longer turns 22.5 into port 22 | port |
-| acd192fc64 | #36726 | connections | fix(web): removing an environment dismisses its notification toasts | port |
-| 12102c74a3 | #28907 | connections | fix(web,mobile): Linked environments shows links made outside the app | port |
-| 5583b26460 | #36793 | connections | fix(server,client): preserve literal JSON command output | port |
-| a6765d41d5 | #33795 | connections | fix(web): audio and server spinners respect reduced motion | port |
-| e1458f25e2 | #32048 | connections | fix(web): track switch no longer blocked when Local environment is off | port |
-| 1672b51630 | #32157 | connections | fix(web): Add Environment drops the old tab's error when switching mode | port |
+| 00f617db4e | #24400 | connections | fix(client-runtime): recover subscriptions that stop on a healthy connection | left (panels-2): not checked |
+| cbf0f0a83f | #36445 | connections | fix(web): screen readers read the Update everything machine list as a table | left (panels-2): not checked |
+| 757f71a7f6 | #29788 | connections | fix(client-runtime): new T3 Connect machines appear without signing in again | left (panels-2): not checked |
+| bd9ff7eb2a | #33244 | connections | fix(client-runtime): recover thread list updates after stream defects | left (panels-2): not checked |
+| ca7a9448b8 | #24932 | connections | fix(client-runtime): Reconnect works while the network reports offline | already in CandyWrapper: connection-2 made Reconnect work while the device reports offline (ConnectionSignalTests) |
+| efae4e9da1 | #36559 | connections | fix(client): retry unread thread visits after reconnect | left (panels-2): not checked |
+| ead133ce70 | #28297 | connections | fix(web): SSH port field no longer turns 22.5 into port 22 | left (panels-2): not checked |
+| acd192fc64 | #36726 | connections | fix(web): removing an environment dismisses its notification toasts | left (panels-2): not checked |
+| 12102c74a3 | #28907 | connections | fix(web,mobile): Linked environments shows links made outside the app | left (panels-2): not checked |
+| 5583b26460 | #36793 | connections | fix(server,client): preserve literal JSON command output | left (panels-2): not checked |
+| a6765d41d5 | #33795 | connections | fix(web): audio and server spinners respect reduced motion | left (panels-2): not checked |
+| e1458f25e2 | #32048 | connections | fix(web): track switch no longer blocked when Local environment is off | left (panels-2): not checked |
+| 1672b51630 | #32157 | connections | fix(web): Add Environment drops the old tab's error when switching mode | left (panels-2): not checked |
 | 399ea10f4e | #37490 | connections | fix(web): Update everything no longer offers a Nightly build to a Stable desktop app | left (settings-4928): updateEverything.logic.ts stops offering Nightly to a Stable desktop; port with the track switch |
-| 27411651a4 | #37825 | connections | fix(auth): bind automatic pairing codes to peer links | port |
-| c48825322d | #38442 | connections | fix(web): pairing links never use the desktop app's t3code:// address | port |
-| dcaff67177 | #38980 | connections | fix(web): removing a connection withdraws its permission update notice | port |
+| 27411651a4 | #37825 | connections | fix(auth): bind automatic pairing codes to peer links | left (panels-2): not checked |
+| c48825322d | #38442 | connections | fix(web): pairing links never use the desktop app's t3code:// address | left (panels-2): not checked |
+| dcaff67177 | #38980 | connections | fix(web): removing a connection withdraws its permission update notice | left (panels-2): not checked |
 
 ## Small fixes, device (10)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| a3df6044a4 | #21430 | device | fix(web): preserve the active pointer in the flat Device view | port |
-| 9bd5e12242 | #24106 | device | fix(web): restored Device view waits for device state before setup | port |
-| 43b56b1790 | #23339 | device | fix(device): forward numeric keypad keys to iOS simulators | port |
-| 09ace626bb | #28323 | device | fix(web): device tools keep the typed text when a command fails | port |
-| a821f039c1 | #29352 | device | fix(client-runtime): connection diagnosis no longer blames the host while this device's sign-in loads | port |
-| 3ee55151e0 | #29912 | device | fix(web): device host checks show the error without a stack trace | port |
-| 202d5b5616 | #25971 | device | fix(devices): keep devices listed when simulator discovery fails | port |
-| f475de2f75 | #27030 | device | fix(web): device tool update buttons fit their popovers | port |
-| aa37097093 | #35664 | device | fix(web): streamed device toolbar starts at the panel size | port |
-| 9e32c95576 | #33199 | device | fix(client-runtime): show routes whose host refused this device's sign-in | port |
+| a3df6044a4 | #21430 | device | fix(web): preserve the active pointer in the flat Device view | left (panels-2): not checked |
+| 9bd5e12242 | #24106 | device | fix(web): restored Device view waits for device state before setup | left (panels-2): not checked |
+| 43b56b1790 | #23339 | device | fix(device): forward numeric keypad keys to iOS simulators | left (panels-2): not checked |
+| 09ace626bb | #28323 | device | fix(web): device tools keep the typed text when a command fails | left (panels-2): not checked |
+| a821f039c1 | #29352 | device | fix(client-runtime): connection diagnosis no longer blames the host while this device's sign-in loads | left (panels-2): not checked |
+| 3ee55151e0 | #29912 | device | fix(web): device host checks show the error without a stack trace | left (panels-2): not checked |
+| 202d5b5616 | #25971 | device | fix(devices): keep devices listed when simulator discovery fails | left (panels-2): not checked |
+| f475de2f75 | #27030 | device | fix(web): device tool update buttons fit their popovers | left (panels-2): not checked |
+| aa37097093 | #35664 | device | fix(web): streamed device toolbar starts at the panel size | left (panels-2): not checked |
+| 9e32c95576 | #33199 | device | fix(client-runtime): show routes whose host refused this device's sign-in | left (panels-2): not checked |
 
 ## Small fixes, diff (18)
 
@@ -997,17 +997,17 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 0c676d95b1 | #38160 | issues | fix(web): screen readers name thread details issue and PR rows by number and title | port |
-| 05e3674636 | #38995 | issues | fix(web): screen readers read a linked issue's key once in thread details | port |
+| 0c676d95b1 | #38160 | issues | fix(web): screen readers name thread details issue and PR rows by number and title | left (panels-2): not checked |
+| 05e3674636 | #38995 | issues | fix(web): screen readers read a linked issue's key once in thread details | left (panels-2): not checked |
 
 ## Small fixes, palette (4)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 1cfd23e7cb | #25236 | palette | fix(web): keep palette project lookups in their environment | port |
-| 977d613611 | #29288 | palette | fix(web): command palette footer hints wrap instead of clipping on narrow viewports | port |
-| b732621b51 | #37315 | palette | fix(clients): command palette skips tasks shown under their parent | port |
-| e0f5acd178 | #38968 | palette | fix(web): the command palette lists a failed thread as Failed, not Waiting | port |
+| 1cfd23e7cb | #25236 | palette | fix(web): keep palette project lookups in their environment | left (panels-2): not checked |
+| 977d613611 | #29288 | palette | fix(web): command palette footer hints wrap instead of clipping on narrow viewports | left (panels-2): not checked |
+| b732621b51 | #37315 | palette | fix(clients): command palette skips tasks shown under their parent | left (panels-2): not checked |
+| e0f5acd178 | #38968 | palette | fix(web): the command palette lists a failed thread as Failed, not Waiting | left (panels-2): not checked |
 
 ## Small fixes, pr/git (161)
 
@@ -1157,7 +1157,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 3a1dfb7acb | #37072 | pr/git | fix(web): HTML file previews use the current canvas color | left (panels-2): not checked |
 | 06150a08ec | #37392 | pr/git | fix(web): No project threads in New worktree mode send without a base branch | left (panels-2): not checked |
 | 558790aae5 | #37498 | pr/git | fix(web): stashed prompt previews show thread mentions by name, not as raw links | left (panels-2): not checked |
-| 1f698f01d9 | #37605 | pr/git | fix: PR diffs fold Viewed files the way GitHub does, on web and mobile | left (panels-2): not checked |
+| 1f698f01d9 | #37605 | pr/git | fix: PR diffs fold Viewed files the way GitHub does, on web and mobile | left (panels-2): Viewed files fold the way GitHub does, PullRequestCodeView |
 | cd42e1a497 | #37651 | pr/git | fix(web): the PR author filter says "1 merge loaded", not "1 merges loaded" | left (panels-2): not checked |
 | 0a842b222d | #37704 | pr/git | fix(web): list each pull request once across servers | left (panels-2): not checked |
 | 15271c8d00 | #37733 | pr/git | fix(pr): label and reviewer pickers send picks once, when they close | left (panels-2): not checked |
