@@ -66,6 +66,12 @@ final class PullRequestDetailBinding {
     private var pendingViewed: Set<String> = []
     /// The Code tab's slices (`sliceState`): patches in order and the cursor of the next one.
     private var slices: [String] = []
+    // Withheld files (#37007, 4928 PullRequestCodeTab.tsx): the host's stats, whether it reads one file with `path`,
+    // and each file read so far.
+    private var omittedStats: [String: (additions: Int, deletions: Int)] = [:]
+    private var withheldReadable = false
+    private var withheldLoaded: [String: String] = [:]
+    private var withheldStatus: [String: PullRequestWithheldFileNotice.Status] = [:]
     private var sliceCursor: String?
     private var sliceLoading = false
     private var sliceError: String?
@@ -112,6 +118,7 @@ final class PullRequestDetailBinding {
             view.onPickLabels = { [weak self] anchor in self?.openPicker(.labels, from: anchor) }
             view.onPickReviewers = { [weak self] anchor in self?.openPicker(.reviewers, from: anchor) }
             view.onLoadMoreDiff = { [weak self] in self?.loadNextSlice() }
+            view.onLoadWithheldFile = { [weak self] path in self?.loadWithheld(path) }
             view.onRetryDiff = { [weak self] in self?.patchKey = nil; self?.loadCode() }
             view.onStackAction = { [weak self] action in self?.runStackAction(action) }
             view.onStackRetry = { [weak self] in self?.loadStack() }
@@ -153,6 +160,7 @@ final class PullRequestDetailBinding {
         viewedStates = nil
         overlay = [:]
         slices = []; sliceCursor = nil; sliceError = nil; sliceLoading = false
+        omittedStats = [:]; withheldReadable = false; withheldLoaded = [:]; withheldStatus = [:]
         stackFresh = false
         // A write still running belongs to the previous pull request; its reply leaves this one alone.
         view.pendingAction = nil
@@ -326,6 +334,9 @@ final class PullRequestDetailBinding {
         guard patchKey != key else { return }
         patchKey = key
         slices = []; sliceCursor = nil; sliceError = nil
+        // ponytail: a new head forgets the files read on their own, T3 reads them again; keep them if reviewers ask
+        omittedStats = [:]; withheldReadable = false; withheldLoaded = [:]; withheldStatus = [:]
+        showWithheld()
         view.setDiff(patches: [], loading: true, error: nil, commit: commit)
         fetchSlice(cursor: nil, key: key)
         loadViewed()
@@ -351,6 +362,9 @@ final class PullRequestDetailBinding {
                 self.sliceLoading = false
                 self.slices.append(result.patch)
                 self.sliceCursor = result.nextCursor
+                for stat in result.omittedFileStats ?? [] { self.omittedStats[stat.path] = (Int(stat.additions), Int(stat.deletions)) }
+                if cursor == nil { self.withheldReadable = result.withheldFilesReadable == true }
+                if !(result.omittedFileStats ?? []).isEmpty { self.showWithheld() }
                 self.showSlices(loading: false, error: nil)
             } catch {
                 guard let self, self.generation == gen, self.patchKey == key else { return }
@@ -358,6 +372,35 @@ final class PullRequestDetailBinding {
                 let message = Self.failure(error, number: ref.number).1
                 if cursor == nil { self.showSlices(loading: false, error: message) } else { self.sliceError = message; self.showSlices(loading: false, error: nil) }
             }
+        }
+    }
+
+    private func showWithheld() {
+        view.setWithheld(omitted: omittedStats, readable: withheldReadable, loaded: withheldLoaded, status: withheldStatus)
+    }
+
+    /// One read per withheld file, so only that file's diff crosses the wire (`withheldFileDiffsAtom`).
+    private func loadWithheld(_ path: String) {
+        guard let shell, let ref = reference, let key = patchKey, withheldStatus[path] != .loading else { return }
+        let commit = self.commit
+        let gen = generation
+        withheldStatus[path] = .loading
+        showWithheld()
+        Task { [weak self] in
+            let result = try? await shell.http.post("api/pull-requests/diff", PullRequestPayloads.diff(ref, commit: commit, path: path),
+                                                    token: shell.token, as: PullRequestDiffResult.self)
+            guard let self, self.generation == gen, self.patchKey == key else { return }
+            if let result {
+                if UnifiedDiff(result.patch).files.first?.hunks.isEmpty ?? true {
+                    self.withheldStatus[path] = .empty
+                } else {
+                    self.withheldStatus[path] = nil
+                    self.withheldLoaded[path] = result.patch
+                }
+            } else {
+                self.withheldStatus[path] = .error
+            }
+            self.showWithheld()
         }
     }
 

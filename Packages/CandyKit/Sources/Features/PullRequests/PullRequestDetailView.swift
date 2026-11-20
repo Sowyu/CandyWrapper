@@ -375,6 +375,12 @@ public final class PullRequestDetailView: DSView {
 
     /// The Code tab wants the next slice.
     public var onLoadMoreDiff: (() -> Void)? { get { code.onLoadMore } set { code.onLoadMore = newValue } }
+    /// "Load diff" on a withheld file (#37007).
+    public var onLoadWithheldFile: ((String) -> Void)? { get { code.onLoadWithheld } set { code.onLoadWithheld = newValue } }
+    public func setWithheld(omitted: [String: (additions: Int, deletions: Int)], readable: Bool, loaded: [String: String],
+                            status: [String: PullRequestWithheldFileNotice.Status]) {
+        code.setWithheld(omitted: omitted, readable: readable, loaded: loaded, status: status)
+    }
     /// The Code tab's first slice failed and the reader asked again.
     public var onRetryDiff: (() -> Void)? { get { code.onRetry } set { code.onRetry = newValue } }
 

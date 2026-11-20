@@ -558,6 +558,25 @@ public enum PullRequestDetailLogic {
         choices[path] ?? (folded ?? viewed)
     }
 
+    /// Swaps each hunkless file in `patch` whose path has a patch in `loaded` for that patch: a withheld file read on
+    /// its own (4928 PullRequestCodeTab.tsx, #37007, "a refreshed page may carry the file's patch itself now").
+    public static func splicingWithheld(_ patch: String, loaded: [String: String]) -> String {
+        guard !loaded.isEmpty else { return patch }
+        var chunks: [Substring] = []
+        var start = patch.startIndex
+        var search = patch.startIndex
+        while let r = patch.range(of: "\ndiff --git ", range: search..<patch.endIndex) {
+            let next = patch.index(after: r.lowerBound)
+            chunks.append(patch[start..<next]); start = next; search = r.upperBound
+        }
+        chunks.append(patch[start...])
+        return chunks.map { chunk -> String in
+            let text = String(chunk)
+            guard let file = UnifiedDiff(text).files.first, file.hunks.isEmpty, let replacement = loaded[file.path] else { return text }
+            return replacement.hasSuffix("\n") || replacement.isEmpty ? replacement : replacement + "\n"
+        }.joined()
+    }
+
     /// `getFileViewedRange` (pullRequestDiff.logic.ts:43-53, T3 3824 #26349): a shift-click marks every file from the
     /// last one toggled to this one; without that anchor in the list, only this file.
     public static func viewedRange(_ paths: [String], path: String, anchor: String?) -> [String] {

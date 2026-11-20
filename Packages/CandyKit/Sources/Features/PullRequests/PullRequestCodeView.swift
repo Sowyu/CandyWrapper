@@ -26,6 +26,14 @@ public final class PullRequestCodeView: DSView {
     private let hideTestsToggle = ToggleView(nil, icon: .flaskConicalOff, variant: .ghost, size: .sm, pressed: DiffHideTestFiles.value)
     private var hideTestsTooltip: TooltipController?
     private var testFileCount = 0
+    // Withheld files (#37007): left out of the paged diff, each loadable on its own.
+    private var omitted: [String: (additions: Int, deletions: Int)] = [:]
+    private var withheldReadable = false
+    private var withheldLoaded: [String: String] = [:]
+    private var withheldStatus: [String: PullRequestWithheldFileNotice.Status] = [:]
+    private var withheldNotices: [String: PullRequestWithheldFileNotice] = [:]
+    /// "Load diff" or "Retry" on a withheld file: read it with `path`.
+    var onLoadWithheld: ((String) -> Void)?
     private var hiddenTestFileCount = 0
     private let orphanChevron = IconView(name: .chevronRight, size: 14)
     private let orphanRule = CALayer()
@@ -129,6 +137,7 @@ public final class PullRequestCodeView: DSView {
 
     func reset() {
         commit = nil; paths = []; patches = []; nextCursor = nil; draft = nil; threadCards = [:]; viewedAnchor = nil; foldChoices = [:]
+        omitted = [:]; withheldReadable = false; withheldLoaded = [:]; withheldStatus = [:]; withheldNotices = [:]
         list.annotations = []
         list.setDiff(UnifiedDiff(""))
     }
@@ -137,7 +146,7 @@ public final class PullRequestCodeView: DSView {
     func set(patches: [String], loading: Bool, error: String?, nextCursor: String?, moreLoading: Bool, moreError: String?,
              commit: String?, commits: [PullRequestCommit]) {
         self.commits = commits.sorted { (T3Timestamp($0.committedDate).epochMs ?? 0) > (T3Timestamp($1.committedDate).epochMs ?? 0) }
-        if commit != self.commit { draft = nil; viewedAnchor = nil; foldChoices = [:] }
+        if commit != self.commit { draft = nil; viewedAnchor = nil; foldChoices = [:]; withheldNotices = [:] }
         self.commit = commit
         self.nextCursor = nextCursor
         self.moreLoading = moreLoading
@@ -194,7 +203,12 @@ public final class PullRequestCodeView: DSView {
 
     /// The loaded files in file tree order, tests left out while hidden (PullRequestCodeTab.tsx, #26730, #29083).
     private func rebuildDiff() {
-        let full = UnifiedDiff(patches.joined(separator: patches.allSatisfy { $0.hasSuffix("\n") } ? "" : "\n"))
+        let joined = patches.joined(separator: patches.allSatisfy { $0.hasSuffix("\n") } ? "" : "\n")
+        var full = UnifiedDiff(PullRequestDetailLogic.splicingWithheld(joined, loaded: withheldLoaded))
+        // A withheld file's header counts come from the host's stats (:1152-1159).
+        for i in full.files.indices where full.files[i].hunks.isEmpty && full.files[i].additions == 0 && full.files[i].deletions == 0 {
+            if let stat = omitted[full.files[i].path] { full.files[i].additions = stat.additions; full.files[i].deletions = stat.deletions }
+        }
         let order = orderDiffPathsLikeTree(full.files.map(\.path))
         let tests = Set(full.files.indices.filter { ChangedFileKind.isTest(full.files[$0].path) })
         testFileCount = tests.count
@@ -206,6 +220,21 @@ public final class PullRequestCodeView: DSView {
         hideTestsToggle.isPressed = DiffHideTestFiles.value
         hideTestsToggle.isHidden = testFileCount == 0
         hideTestsTooltip?.text = DiffHideTestFiles.value ? "Show test files" : "Hide test files"
+    }
+
+    /// The host's withheld files and what has been read of them. `loaded` holds each read file's patch.
+    func setWithheld(omitted: [String: (additions: Int, deletions: Int)], readable: Bool, loaded: [String: String],
+                     status: [String: PullRequestWithheldFileNotice.Status]) {
+        let patchesChanged = loaded != withheldLoaded || omitted.keys.sorted() != self.omitted.keys.sorted()
+        self.omitted = omitted; withheldReadable = readable; withheldStatus = status
+        withheldLoaded = loaded
+        for (path, notice) in withheldNotices { notice.update(status[path] ?? .idle) }
+        if patchesChanged {
+            rebuildDiff()
+            applyFolds()
+            updateCounts()
+        }
+        updateAnnotations()
     }
 
     private func setHideTests(_ hide: Bool) {
@@ -289,6 +318,10 @@ public final class PullRequestCodeView: DSView {
                 annotations.append(DiffAnnotation(path: t.path, right: t.right, line: t.right ? t.newLine : t.oldLine, id: "draft"))
             }
         }
+        // A withheld file's notice sits under its header (`lineNumber: 0`, :867-878).
+        for f in list.diff.files where f.hunks.isEmpty && omitted[f.path] != nil {
+            annotations.append(DiffAnnotation(path: f.path, right: true, line: 0, id: "withheld:\(f.path)"))
+        }
         list.annotations = annotations
         list.reloadAnnotations()
         rebuildOrphans()
@@ -309,6 +342,14 @@ public final class PullRequestCodeView: DSView {
 
     private func annotationView(_ a: DiffAnnotation) -> DiffAnnotationContent? {
         if a.id == "draft" { return draft?.view }
+        if a.id.hasPrefix("withheld:") {
+            let path = String(a.id.dropFirst("withheld:".count))
+            if let notice = withheldNotices[path] { return notice }
+            let notice = PullRequestWithheldFileNotice(path: path, status: withheldStatus[path] ?? .idle,
+                                                       onLoad: withheldReadable ? { [weak self] p in self?.onLoadWithheld?(p) } : nil)
+            withheldNotices[path] = notice
+            return notice
+        }
         if a.id.hasPrefix("thread:"), let t = detail?.reviewThreads.first(where: { "thread:\($0.id)" == a.id }) { return threadCard(t) }
         if a.id.hasPrefix("pending:"), let key = reviewKey,
            let c = PullRequestReviewStore.shared.comments(key).first(where: { a.id.hasPrefix("pending:\($0.id):") }) {

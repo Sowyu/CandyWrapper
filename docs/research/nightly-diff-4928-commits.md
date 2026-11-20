@@ -440,7 +440,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| f12e8206f5 | #37007 | pr/git | fix(web): load a too-large PR file's diff on demand | left (panels-2): load a withheld file's diff on demand; the wire (`path`, `withheldFilesReadable`, `withheldFileDiff`) is in, the Code tab's per-file load (PullRequestCodeTab.tsx, cutLineNotes.ts) is not |
+| f12e8206f5 | #37007 | pr/git | fix(web): load a too-large PR file's diff on demand | ported (panels-3): a withheld file shows "Diff too large to display." with Load diff, read alone with `path`, its header counts from `omittedFileStats`; PullRequestWithheldFileNotice, PullRequestsController.loadWithheld; a new head forgets the reads |
 
 ## Port group pr-prefetch (2)
 
