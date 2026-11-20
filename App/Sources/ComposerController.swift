@@ -2085,6 +2085,7 @@ final class ComposerController {
         let title = ComposerLogic.threadTitleSeed(trimmed, attachments: attachments.map { ($0.kind == .image, $0.name) })
         let selectionJSON = ThreadSession.encode(selection)
         let supervisor = shell.supervisor
+        let hostLabel = environments.label(shell.environmentId) ?? "The environment"
 
         switch target {
         case .draft(let stored):
@@ -2181,7 +2182,7 @@ final class ComposerController {
                             threadId: threadId, messageId: MessageId(UUID().uuidString.lowercased()), text: "/compact",
                             selection: selection, queue: false, idleCompaction: "onReturn"))
                     }
-                    _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object(command))
+                    _ = try await supervisor.dispatchMessage(.object(command), hostLabel: hostLabel)
                     // The turn is under way: the chip's off state for this thread is spent (ChatView.tsx:9984-9986).
                     if let picksKey { self?.fullHistoryThreadKeys.remove(picksKey) }
                     if let picksKey, let freshArm { self?.disarmFreshSession(picksKey, arm: freshArm) }

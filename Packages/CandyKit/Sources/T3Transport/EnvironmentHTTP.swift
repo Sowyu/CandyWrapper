@@ -47,7 +47,8 @@ public struct EnvironmentHTTP: Sendable {
     /// The origin calls go to. A relay environment's follows `currentBaseURL`, shared by every copy of this value.
     public var baseURL: URL { base.value }
     private let base: BaseBox
-    private let session: URLSession
+    private let sessions: SessionBox
+    private var session: URLSession { sessions.value }
     /// Asked before each call that carries a token, when set. A T3 Connect tunnel's endpoint can change between
     /// tokens, and T3 replaces a relay target's base with the current one before it builds and signs a request
     /// (client-runtime environmentHttpAuth.ts:155-177, audit TR-1). The answer also becomes `baseURL`.
@@ -71,7 +72,27 @@ public struct EnvironmentHTTP: Sendable {
 
     public init(baseURL: URL, session: URLSession = EnvironmentHTTP.defaultSession) {
         base = BaseBox(baseURL)
-        self.session = session
+        sessions = SessionBox(session)
+    }
+
+    /// The session every copy of this value shares, swapped by `resetConnections`.
+    private final class SessionBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var current: URLSession
+        /// Made by `replace`, so this box may invalidate it. The shared default session is never invalidated.
+        private var owned = false
+        init(_ session: URLSession) { current = session }
+        var value: URLSession { lock.withLock { current } }
+        func replace() {
+            let (old, wasOwned): (URLSession, Bool) = lock.withLock {
+                let old = (current, owned)
+                current = URLSession(configuration: current.configuration)
+                owned = true
+                return old
+            }
+            // Calls already running on the old session finish there.
+            if wasOwned { old.finishTasksAndInvalidate() }
+        }
     }
 
     private final class BaseBox: @unchecked Sendable {
@@ -97,6 +118,15 @@ public struct EnvironmentHTTP: Sendable {
         base.value = url
         return url
     }
+
+    /// Moves this environment's calls to a new session, so the next call opens a new connection. After a socket died
+    /// without a close, the keep-alive connections to the same host are usually dead too, and a call on one waits out
+    /// its whole timeout (T3 handles the same case with LONG_RESUME_PROBE_TIMEOUT, connection/supervisor.ts:60-62).
+    /// `URLSession.reset` doesn't help: a pooled connection that never failed is reused after it.
+    public func resetConnections() {
+        sessions.replace()
+    }
+
 
     /// `GET /.well-known/t3/environment`, no auth.
     public func descriptor() async throws -> EnvironmentDescriptor {
@@ -242,6 +272,8 @@ public struct EnvironmentHTTP: Sendable {
             URLQueryItem(name: "clientOs", value: identity.os),
             URLQueryItem(name: "connectionMethod", value: identity.connectionMethod),
             URLQueryItem(name: "orchestrationProtocol", value: String(T3Protocol.orchestrationProtocolVersion)),
+            // Large frames arrive in parts on 4928 servers; older ones ignore it (rpc/session.ts:250, ws.ts frameParts).
+            URLQueryItem(name: "frameParts", value: "1"),
         ]
         // URLComponents leaves `+` alone in queries; the ticket is base64url so it has none.
         return c.url!

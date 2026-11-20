@@ -36,6 +36,10 @@ final class ShellSession {
     private(set) var omissions = ShellOmissions()
     private var completionMarker = false
     private var resumingConnection = false
+    /// The cold start's HTTP shell, asked for while the socket opens and the config downloads, when the descriptor
+    /// names the shell flags (#35071, client-runtime state/shell.ts:562-611, environment.ts shellThreadFamilies).
+    /// Used once, and only when the live config confirms the same omissions and build.
+    private var earlyShell: (omissions: ShellOmissions, version: String, load: Task<ShellSnapshot?, Never>)?
     private var familyConsumers: [UUID: ThreadId] = [:]
     private var familyReads: [ThreadId: Task<Void, Never>] = [:]
     private var loadedFamilies: [ThreadId: Int] = [:]
@@ -64,9 +68,8 @@ final class ShellSession {
         let http = EnvironmentHTTP(baseURL: baseURL)
         let identity = ClientIdentity(appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0", connectionMethod: connectionMethod)
         self.init(environmentId: environmentId, http: http, token: token, cached: cached,
-                  supervisor: ConnectionSupervisor(dependencies: .init(
-                    connect: ConnectionSupervisor.directConnector(http: http, environmentId: environmentId, identity: identity,
-                                                                  token: { token }))))
+                  supervisor: ConnectionSupervisor(dependencies: .direct(http: http, environmentId: environmentId, identity: identity,
+                                                                         token: { token })))
     }
 
     /// A T3 Connect session: the socket comes from `authorizer` over the tunnel at `baseURL`, and every
@@ -126,6 +129,7 @@ final class ShellSession {
                 for observer in self.lifecycleObservers.values { observer(json) }
             }
         }
+        startEarlyShellLoad()
         // `stop` can run before this task reaches the supervisor; its disconnect must win.
         Task { [supervisor] in
             await supervisor.observePlatform()
@@ -146,6 +150,26 @@ final class ShellSession {
             case .interrupted: break
             }
         })
+    }
+
+    /// One descriptor read, then the shell snapshot with the omissions the descriptor names. A 3824 server's
+    /// descriptor names no shell flags, so it loads nothing here and the config decides, as before.
+    private func startEarlyShellLoad() {
+        var transport = http
+        transport.timeout = 20
+        let token = token
+        let ready = Task { () -> (ShellOmissions, String)? in
+            guard let descriptor = try? await transport.descriptor(),
+                  descriptor.capabilities["shellThreadFamilies"] != nil || descriptor.capabilities["shellOlderSettled"] != nil
+            else { return nil }
+            return (ShellOmissions(config: .object(descriptor.capabilities)), descriptor.serverVersion)
+        }
+        Task { [weak self] in
+            guard let (policy, version) = await ready.value else { return }
+            let load = Task { try? await transport.get(policy.snapshotPath, token: token, as: ShellSnapshot.self) }
+            guard let self, !self.stopped, !self.negotiatedConfig else { load.cancel(); return }
+            self.earlyShell = (policy, version, load)
+        }
     }
 
     private func configurationChanged(_ config: JSONValue, generation: Int) async {
@@ -200,7 +224,15 @@ final class ShellSession {
         var transport = http
         transport.timeout = 20
         let policy = omissions
-        let snapshot = try? await transport.get(policy.snapshotPath, token: token, as: ShellSnapshot.self)
+        let early = earlyShell
+        earlyShell = nil
+        let snapshot: ShellSnapshot?
+        if let early, early.omissions == policy, early.version == version, let loaded = await early.load.value {
+            snapshot = loaded
+        } else {
+            early?.load.cancel()
+            snapshot = try? await transport.get(policy.snapshotPath, token: token, as: ShellSnapshot.self)
+        }
         guard !Task.isCancelled, !stopped, preparingGeneration == generation, await supervisor.state.generation == generation else { return }
         if var snapshot {
             missingThreads = []
@@ -403,6 +435,8 @@ final class ShellSession {
     /// Final: a stopped session never connects again.
     func stop() {
         stopped = true
+        earlyShell?.load.cancel()
+        earlyShell = nil
         subscription?.cancel()
         configurationWatch?.cancel()
         lifecycleSubscription?.cancel()

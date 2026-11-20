@@ -101,11 +101,26 @@ public actor RPCConnection {
         let socket = socket
         let traceNumber = traceNumber
         receiveTask = Task.detached { [weak self] in
+            // 4928 servers split frames over 48 KiB into parts that start with U+001E when the socket URL names
+            // `frameParts` (shared/src/socketFrameParts.ts:7-81, #23758). No JSON message starts with that byte, so
+            // joining is safe on every server. Each part counts as inbound traffic, so a big snapshot on a slow
+            // link keeps the liveness watchdog fed instead of tripping it halfway through.
+            var parts = Data()
             while true {
                 let messages: [RPCServerMessage]
                 var frame = Data()
                 do {
                     frame = try await socket.receive()
+                    if frame.first == 0x1E {
+                        parts.append(frame.dropFirst())
+                        await self?.partReceived()
+                        continue
+                    }
+                    if !parts.isEmpty {
+                        parts.append(frame)
+                        frame = parts
+                        parts = Data()
+                    }
                     if OpenTiming.active {
                         // The socket hands over whole messages: first and last byte arrive before this line.
                         OpenTiming.mark("frame received", "\(frame.count) bytes")
@@ -298,7 +313,18 @@ public actor RPCConnection {
         return value
     }
 
+    /// Frames received so far, parts included: proof the socket is alive that needs no reply
+    /// (client-runtime rpc/session.ts:228-238).
+    public private(set) var inboundFrames = 0
+
+    private func partReceived() {
+        inboundFrames += 1
+        lastInbound = clock.now()
+        pingOutstanding = false
+    }
+
     private func handle(_ messages: [RPCServerMessage]) {
+        inboundFrames += 1
         lastInbound = clock.now()
         pingOutstanding = false
         defer { if watchdog != nil, !needsWatchdog { watchdog?.cancel(); watchdog = nil } }

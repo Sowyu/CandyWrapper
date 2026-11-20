@@ -136,11 +136,11 @@ struct SupervisorTests {
         #expect(h.recordedSleeps.last == .milliseconds(3_000))
         #expect(await eventually { let st = await s.state; return st.generation == 2 && st.phase == .connected })
 
-        // Stable: up for 30 s, then lost. The ladder restarts at the first rung.
+        // Stable: up for 30 s, then lost. The ladder restarts, and a first loss retries in 125-250 ms.
         h.advance(.seconds(31))
         h.lastSocket?.close()
         #expect(await eventually { h.recordedSleeps.count == 3 })
-        #expect(h.recordedSleeps.last == .milliseconds(1_500))
+        #expect(h.recordedSleeps.last == .milliseconds(188))
         #expect(await eventually { await s.state.generation == 3 })
         await s.disconnect()
     }
