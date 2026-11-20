@@ -86,7 +86,8 @@ public final class PullRequestComposerView: DSView {
     public var onReview: ((_ verdict: String, _ body: String, _ comments: [PullRequestReviewCommentDraft]) -> Void)?
     public var onClose: (() -> Void)?
 
-    public init(detail d: PullRequestDetail, reviewKey: String, store: PullRequestReviewStore = .shared) {
+    public init(detail d: PullRequestDetail, reviewKey: String, store: PullRequestReviewStore = .shared,
+                completionScope: (@MainActor () -> PullRequestCompletionScope?)? = nil) {
         self.terminology = ChangeRequestTerminology.of(kind: d.provider)
         self.reviewKey = reviewKey
         self.store = store
@@ -146,6 +147,9 @@ public final class PullRequestComposerView: DSView {
         reviewBox.onChange = { [weak self] text in guard let self else { return }; self.store.setSummary(self.reviewKey, text) }
         commentBox.onCommand = { [weak self] sel in self?.commandEnter(sel, submit: { self?.sendComment("comment") }) ?? false }
         commentButton.action = { [weak self] in self?.sendComment("comment") }
+        // The popover sits outside the detail panel, so the scope comes in (PullRequestComposer.tsx).
+        PullRequestCompletion.attach(to: commentBox, scope: completionScope ?? { nil })
+        PullRequestCompletion.attach(to: reviewBox, scope: completionScope ?? { nil })
         followUpButton?.action = { [weak self] in
             guard let self, let f = self.followUp else { return }
             guard f == "close" else { self.sendComment(f); return }

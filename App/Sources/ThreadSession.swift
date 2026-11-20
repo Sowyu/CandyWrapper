@@ -108,6 +108,8 @@ final class ThreadSession {
             panel?.lazyDiffPanel.set(\.gitLoader, Self.gitDiffLoader(shell.supervisor))
             panel?.lazyDiffPanel.set(\.fileContentsLoader, Self.diffFileContentsLoader(shell.supervisor))
             panel?.lazyDiffPanel.set(\.refLoader, Self.baseRefLoader(shell.supervisor))
+            panel?.lazyDiffPanel.set(\.commitLoader, Self.commitDiffLoader(shell.supervisor))
+            panel?.lazyDiffPanel.set(\.branchCommitsLoader, Self.branchCommitsLoader(shell.supervisor))
             panel?.lazyDiffPanel.set(\.toolCallLoader, Self.toolCallDiffLoader(shell.supervisor))
             panel?.model.turnItemLoader = Self.turnItemLoader(shell.supervisor)
             let supervisor = shell.supervisor
@@ -336,6 +338,32 @@ final class ThreadSession {
                 let json = try await supervisor.request(ReviewDiffPreview.method,
                                                         payload: ReviewDiffPreview.input(cwd: cwd, baseRef: baseRef, ignoreWhitespace: ignoreWhitespace))
                 return try JSONDecoder().decode(ReviewDiffPreview.self, from: JSONEncoder().encode(json))
+            } catch let error as RPCClientError {
+                throw DiffLoadError(errorDescription: error.description)
+            }
+        }
+    }
+
+    /// `review.getDiffPreview` with `commitSha` for one local commit (4928 DiffPanel.tsx:375-388, #19941).
+    nonisolated static func commitDiffLoader(_ supervisor: ConnectionSupervisor) -> DiffPanelView.CommitLoader {
+        { cwd, sha, baseRef, ignoreWhitespace in
+            do {
+                let json = try await supervisor.request(ReviewDiffPreview.method,
+                                                        payload: ReviewDiffPreview.input(cwd: cwd, commitSha: sha, baseRef: baseRef, ignoreWhitespace: ignoreWhitespace))
+                return try json.decode(as: ReviewDiffPreview.self)
+            } catch let error as RPCClientError {
+                throw DiffLoadError(errorDescription: error.description)
+            }
+        }
+    }
+
+    /// `review.getBranchCommits` (4928 rpc.ts:1767). A 3824 server does not serve it; its refusal
+    /// reaches the Commits submenu as the reason.
+    nonisolated static func branchCommitsLoader(_ supervisor: ConnectionSupervisor) -> DiffPanelView.BranchCommitsLoader {
+        { cwd, baseRef in
+            do {
+                return try await supervisor.request(ReviewBranchCommits.method, payload: ReviewBranchCommits.input(cwd: cwd, baseRef: baseRef))
+                    .decode(as: ReviewBranchCommits.self)
             } catch let error as RPCClientError {
                 throw DiffLoadError(errorDescription: error.description)
             }
@@ -750,6 +778,8 @@ final class ThreadController {
         issueStates = SidebarIssueStates(sidebar: sidebar, environments: environments, capabilities: prCapabilities)
         pullRequests = ThreadPullRequestsController(panel: panel, sidebar: sidebar, environments: environments, capabilities: prCapabilities)
         pullRequests.openThreadId = { [weak self] in self?.openThreadId }
+        // ponytail: dedupes the PR chip by id only; T3 also skips it when a `#` chip names the same URL.
+        pullRequests.addToChat = { [weak self] records in records.forEach { self?.composer.addReviewComment($0) } }
         automations.openThreadId = { [weak self] in self?.openThreadId }
         prCapabilities.onChange = { [weak self] in
             guard let self else { return }
@@ -1124,6 +1154,7 @@ final class ThreadController {
         // A forced open reloads the thread already showing, as after a reconnect.
         if !force, opensElsewhere?(id) == true { return }
         sidebar?.state.activeThreadId = id
+        defer { onOpenThreadChange?() }
         UserDefaults.standard.set(id.rawValue, forKey: Self.lastThreadKey)
         guard force || id != session?.threadId || panel.isDraft || noActiveThread.superview != nil else { return }
         OpenTiming.begin(id.rawValue)
@@ -1356,6 +1387,8 @@ final class ThreadController {
 
     /// The thread the panel shows, nil on a draft (the route's thread in T3).
     var openThreadId: ThreadId? { panel.isDraft ? nil : session?.threadId }
+    /// The open thread changed, for the window title (#34697).
+    var onOpenThreadChange: (() -> Void)?
 
     /// The thread view is back after Settings or a utility page: T3 mounts ChatView again, which focuses
     /// the composer unless the terminal is open (ChatView.tsx:6837-6845).
@@ -1708,6 +1741,7 @@ final class ThreadController {
         files.show(nil)
         panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
         sidebar?.state.activeThreadId = nil
+        onOpenThreadChange?()
         noActiveThread.frame = panel.bounds
         // Under `NoProjectsHero` when that shows too.
         if noProjectsHero.superview === panel {

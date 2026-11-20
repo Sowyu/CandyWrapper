@@ -76,6 +76,26 @@ public final class PullRequestDetailView: DSView {
     public var onReview: ((_ verdict: String, _ body: String, _ comments: [PullRequestReviewCommentDraft]) -> Void)?
     /// The review store's key for this pull request (`pullRequestReviewKey`); set with the detail.
     public var reviewKey: String?
+    /// Add to chat (#30579): the pull request chip and the remark's record, for the composer beside
+    /// the panel. Nil on the standalone page, where no composer is (`attachTarget === null`).
+    public var onAddToChat: (([JSONValue]) -> Void)? {
+        didSet {
+            let on = onAddToChat != nil
+            summary.onAddToChat = on ? { [weak self] id in self?.addToChat(commentId: id) } : nil
+            timeline.onAddToChat = on ? { [weak self] id in self?.addToChat(commentId: id) } : nil
+            code.onAddToChat = on ? { [weak self] t in
+                guard let self, let d = self.detail, let r = PullRequestChatContext.threadRecord(d, t) else { return }
+                self.onAddToChat?([PullRequestChatContext.pullRequestRecord(d), r])
+            } : nil
+        }
+    }
+    private func addToChat(commentId: String) {
+        guard let d = detail else { return }
+        let records = PullRequestChatContext.records(d, commentId: commentId)
+        if !records.isEmpty { onAddToChat?(records) }
+    }
+    /// `pullRequests.filterOptions` for this detail's host, set by the app; nil completes nothing.
+    public var completionSearch: (@MainActor (PullRequestFilterOptionsInput) async throws -> PullRequestFilterOptions)?
     /// The composer for the pull request on screen; it outlives its popover so drafts survive.
     public private(set) var composer: PullRequestComposerView?
     private var composerPopup: OpenPopup?
@@ -820,7 +840,7 @@ public final class PullRequestDetailView: DSView {
         guard let d = detail else { return }
         let key = reviewKey ?? d.url
         if composer?.reviewKey != key {
-            let c = PullRequestComposerView(detail: d, reviewKey: key)
+            let c = PullRequestComposerView(detail: d, reviewKey: key, completionScope: { [weak self] in self?.completionScope })
             c.onComment = { [weak self] body in self?.onComment?(body) }
             c.onCommentAction = { [weak self] body, action in self?.onCommentAction?(body, action) }
             c.onReview = { [weak self] verdict, body, comments in self?.onReview?(verdict, body, comments) }
@@ -1367,5 +1387,43 @@ final class PullRequestDetailGhostView: DSView {
             (16, 145, 200, 24), (16, 196, 120, 12), (16, 222, w - 32, 12), (16, 244, w * 0.7, 12), (16, 266, w * 0.5, 12),
         ]
         for (bar, s) in zip(bars, specs) { bar.frame = NSRect(x: s.0, y: s.1, width: max(0, s.2), height: s.3) }
+    }
+}
+
+extension PullRequestDetailView: PullRequestCompletionScopeProviding {
+    /// `pullRequestCompletionScope` (PullRequestMarkdownTextarea.tsx:40).
+    public var completionScope: PullRequestCompletionScope? {
+        guard let d = detail, let search = completionSearch, let support = PullRequestCompletionLogic.Support(d.capabilities) else { return nil }
+        return PullRequestCompletionScope(projectId: d.projectId, support: support, search: search)
+    }
+}
+
+extension PullRequestDetailView {
+    /// `linkedTab` (4928 PullRequestDetailPanel.tsx:321).
+    public static func linkedTab(_ anchor: PullRequestAnchor?) -> Tab? {
+        switch anchor {
+        case .code, .diff: .code
+        case .commits, .timeline: .timeline
+        case .checks, .summary: .summary
+        case nil: nil
+        }
+    }
+
+    /// Follows a pull request link to the comment, diff line, checks or commits it names (#33989):
+    /// selects the tab, then marks and scrolls to the place. Each call is a new navigation.
+    /// Returns the commit a diff permalink is scoped to, for the caller to load.
+    @discardableResult
+    public func reveal(url: String) -> String? {
+        let anchor = PullRequestAnchor.parse(url)
+        guard let next = Self.linkedTab(anchor) else { return nil }
+        if next == .code, detail?.capabilities.diff == false { return nil }
+        tab = next
+        switch anchor {
+        case .diff(let digest, let range): code.reveal(digest: digest, range: range)
+        case .timeline(let a): timeline.reveal(anchor: a)
+        case .checks: summary.revealChecks()
+        default: break
+        }
+        return next == .code ? PullRequestAnchor.linkCommit(url) : nil
     }
 }

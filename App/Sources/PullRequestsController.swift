@@ -116,6 +116,15 @@ final class PullRequestDetailBinding {
             view.onSaveComment = { [weak self] comment, body in self?.updateComment(comment, body) }
             view.onReact = { [weak self] subject, content, reacted, bar in self?.react(subject, content, reacted, bar) }
             view.onPickLabels = { [weak self] anchor in self?.openPicker(.labels, from: anchor) }
+            // @ and # completion in the composers (4928 PullRequestMarkdownTextarea.tsx:72-88).
+            view.completionSearch = { [weak self] input in
+                guard let shell = self?.shell else { throw CancellationError() }
+                var o: [String: JSONValue] = ["kind": .string(input.kind)]
+                if let p = input.projectId { o["projectId"] = .string(p) }
+                if let q = input.query { o["query"] = .string(q) }
+                if let s = input.sigil { o["sigil"] = .string(s) }
+                return try await shell.supervisor.request("pullRequests.filterOptions", payload: .object(o)).decode(as: PullRequestFilterOptions.self)
+            }
             view.onPickReviewers = { [weak self] anchor in self?.openPicker(.reviewers, from: anchor) }
             view.onLoadMoreDiff = { [weak self] in self?.loadNextSlice() }
             view.onLoadWithheldFile = { [weak self] path in self?.loadWithheld(path) }
@@ -150,7 +159,15 @@ final class PullRequestDetailBinding {
 
     /// Shows a pull request; the same one again keeps what is loaded.
     func show(environmentId: String, target: PullRequestSurfaceTarget) {
-        if self.environmentId == environmentId, self.target?.surfaceId == target.surfaceId { return }
+        if self.environmentId == environmentId, self.target?.surfaceId == target.surfaceId {
+            // Another link to the shown pull request jumps to what it names (#33989).
+            if let url = target.url, url != self.target?.url {
+                self.target = target
+                if detail != nil { follow(url) } else { pendingReveal = url }
+            }
+            return
+        }
+        pendingReveal = target.url.flatMap { PullRequestAnchor.parse($0) == nil ? nil : $0 }
         showing += 1
         self.environmentId = environmentId
         self.target = target
@@ -195,6 +212,18 @@ final class PullRequestDetailBinding {
     /// `reference` (PullRequestDetailPanel.tsx:616-685).
     private func stillShows(_ shown: Int) -> Bool { showing == shown }
 
+    /// A link waiting for the detail before it jumps.
+    private var pendingReveal: String?
+
+    /// `followLink` (4928 PullRequestDetailPanel.tsx:501-512): the tab and place a link names, and a
+    /// diff permalink's commit scope.
+    private func follow(_ url: String) {
+        let commit = view.reveal(url: url)
+        if PullRequestDetailView.linkedTab(PullRequestAnchor.parse(url)) == .code, commit != self.commit {
+            self.commit = commit; patchKey = nil; loadCode()
+        }
+    }
+
     func clear() {
         showing += 1
         generation += 1
@@ -225,6 +254,7 @@ final class PullRequestDetailBinding {
                 self.view.activityError = nil
                 if let ref = self.reference { self.view.reviewKey = PullRequestReviewStore.key(ref) }
                 self.view.show(d)
+                if let url = self.pendingReveal { self.pendingReveal = nil; self.follow(url) }
                 self.loadStack()
                 self.onStatus?(target.surfaceId, PullRequestStateTone(state: d.state, isDraft: d.isDraft))
                 self.loadActivity(gen: gen)
@@ -834,6 +864,8 @@ final class ThreadPullRequestsController {
     private let detail: PullRequestDetailBinding
     /// The open thread (nil on a draft).
     var openThreadId: () -> ThreadId? = { nil }
+    /// Add to chat: the review-comment records for the composer beside the panel (#30579).
+    var addToChat: (([JSONValue]) -> Void)?
     private var modal: ModalHost?
     /// The open Link dialog; its fields talk to it weakly, so it is held here while it shows.
     private var linkDialog: LinkPullRequestDialog?
@@ -858,7 +890,15 @@ final class ThreadPullRequestsController {
         detail.toast = { [weak panel] title, message, kind in panel?.toasts.show(ToastView(title: title, message: message, kind: kind)) }
         detail.onStatus = { [weak self] id, tone in self?.panel.pullRequestStatus[id] = tone }
         panel.lazyPullRequestView.set(\.context, .thread)
-        panel.lazyPullRequestView.configure { [weak self] view in view.onLinkThread = { [weak self] in self?.toggleLinkFromPanel() } }
+        panel.lazyPullRequestView.configure { [weak self] view in
+            view.onLinkThread = { [weak self] in self?.toggleLinkFromPanel() }
+            // `addCommentToChat` (4928 PullRequestDetailPanel.tsx): only beside a thread's composer.
+            view.onAddToChat = { [weak self, weak panel] records in
+                guard let self, self.addToChat != nil else { return }
+                self.addToChat?(records)
+                panel?.toasts.show(ToastView(title: "Added to the composer", message: nil, kind: .success))
+            }
+        }
         panel.onAddPullRequest = { [weak self] in self?.openCurrentPullRequest() }
         panel.lazyLinkedPullRequestsView.configure { [weak self] list in
             list.onOpen = { [weak self] link in self?.open(link) }
@@ -940,6 +980,9 @@ final class ThreadPullRequestsController {
             detail.show(environmentId: target.environmentId ?? env, target: target)
         case .pullRequests:
             panel.linkedPullRequestsView.onWatch = capabilities.has(env, "threadPullRequestWatch") ? { [weak self] link, w in self?.watch(link, w) } : nil
+            // The server refuses new watches on settled, archived and subagent threads (4928 threadPullRequestCompatibility.ts, #29867).
+            panel.linkedPullRequestsView.canStartWatch = thread.archivedAt == nil && thread.settledAt == nil
+                && thread.settledOverride != .settled && thread.lineage.relationshipToParent != .subagent
             panel.linkedPullRequestsView.set(links, nowMs: TimestampFormat.nowMs())
             panel.linkedPullRequestsView.setIssues(issues, states: issueStates)
         case .issue(let target):

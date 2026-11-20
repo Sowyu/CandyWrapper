@@ -345,9 +345,14 @@ public final class GeneralSettingsView: SettingsPageBase {
                                      key: "toolCallVisibility",
                                      options: [("showAll", "Show all"), ("hideSuccessful", "Hide successful"), ("hideAll", "Hide all"), ("zen", "Zen")],
                                      width: 160, reset: "tool calls in chat", hideIndicator: false, label: "Tool calls in chat")
+        // `ScreenReaderWindowTitleRow` (SettingsPanels.tsx:1527-1561 at 4928, #34697).
+        let windowTitle = clientSwitch("screen-reader-window-title",
+                                       "Start the window title with the thread's status, like Needs approval, and its name, so screen readers read them first when you switch apps. Taskbars, shared screens, and time trackers see it too.",
+                                       key: "screenReaderWindowTitle", reset: "screen reader window title", label: "Screen reader window title",
+                                       title: "Screen reader window title")
         return section("behavior", "Behavior", [notifications, inApp, language, time, streaming, whitespace, fileState, layout, proactive, skills, rich]
                        + (ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? [collapse] : [])
-                       + [send, followUp, toolCalls, updates, continueRow, backgroundActivityRow(), menuBar])
+                       + [send, followUp, toolCalls, windowTitle, updates, continueRow, backgroundActivityRow(), menuBar])
     }
 
     /// A select over a boolean client key.

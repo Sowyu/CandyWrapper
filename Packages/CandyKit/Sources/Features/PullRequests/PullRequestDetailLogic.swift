@@ -500,6 +500,21 @@ public enum PullRequestDetailLogic {
         case comments([TimelineEvent])
     }
 
+    /// `canReactPullRequestComment` (4928 client-runtime pullRequestReactions.ts, #36171): GitCafe takes
+    /// no reactions on a review.
+    public static func canReact(_ d: PullRequestDetail, kind: String) -> Bool {
+        d.capabilities.reactions == true && !(d.provider == "gitcafe" && kind == "review")
+    }
+
+    /// `chatSubject` (4928 PullRequestSummaryTab.tsx:254): whether Add to chat has words to hand
+    /// over, from the comment's whole conversation when it heads one.
+    public static func chatSubject(_ c: PullRequestComment, _ d: PullRequestDetail) -> Bool {
+        if let t = d.reviewThreads.first(where: { $0.comments.contains { $0.id == c.id } }) {
+            return t.comments.contains { visibleBody($0.body) != nil }
+        }
+        return visibleBody(c.body) != nil
+    }
+
     /// `visibleBody`: a body that is only HTML comments is no body.
     public static func visibleBody(_ body: String) -> String? {
         let stripped = body.replacingOccurrences(of: #"<!--[\s\S]*?-->"#, with: "", options: .regularExpression)

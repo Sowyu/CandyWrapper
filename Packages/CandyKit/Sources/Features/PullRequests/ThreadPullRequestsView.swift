@@ -40,6 +40,8 @@ public final class ThreadPullRequestsListView: DSView {
     public var onOpenExternal: ((String) -> Void)?
     /// Watching (`thread.pull-request.watch`); nil where the server has no watch.
     public var onWatch: ((ThreadPullRequestLink, Bool) -> Void)?
+    /// False where the server refuses a new watch; a running watch can still stop (#29867).
+    public var canStartWatch = true
 
     public override init(frame frameRect: NSRect) {
         scroll = ScrollAreaView(documentView: document)
@@ -122,7 +124,7 @@ public final class ThreadPullRequestsListView: DSView {
         open.action = { [weak self] in self?.onOpen?(link) }
         var items = [copy, open]
         let isOpen = link.snapshot == nil || link.snapshot?.state == .open
-        if let onWatch, isOpen {
+        if let onWatch, isOpen, link.watch != nil || canStartWatch {
             let watching = link.watch != nil
             var w = MenuItem(watching ? "Stop watching" : "Watch for changes", icon: watching ? .eyeOff : .eye)
             w.action = { onWatch(link, !watching) }

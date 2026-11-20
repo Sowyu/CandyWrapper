@@ -21,6 +21,8 @@ public final class PullRequestMarkdownEditorView: DSView {
     public var onCancel: (() -> Void)?
     /// The height changed (preview toggled, text grew); the host relays out.
     public var onResize: (() -> Void)?
+    /// The preview breaks lines where the host does (`lineBreaks` from the panel's context, #26060).
+    public var lineBreaks = false
 
     public init(value: String, label: String, placeholder: String? = nil, allowEmpty: Bool = false, cwd: String? = nil) {
         self.allowEmpty = allowEmpty
@@ -41,7 +43,7 @@ public final class PullRequestMarkdownEditorView: DSView {
             guard let self else { return }
             guard let i else { self.modes.selectedIndex = self.previewing ? 1 : 0; return }
             self.previewing = i == 1
-            if self.previewing { self.preview.setMarkdown(self.textarea.text) }
+            if self.previewing { self.preview.setMarkdown(self.textarea.text, preservesLineBreaks: self.lineBreaks) }
             self.update()
             self.onResize?()
         }
@@ -55,6 +57,7 @@ public final class PullRequestMarkdownEditorView: DSView {
             }
             return false
         }
+        PullRequestCompletion.attach(to: textarea)
         cancel.action = { [weak self] in self?.onCancel?() }
         save.action = { [weak self] in
             guard let self, self.save.isEnabled else { return }

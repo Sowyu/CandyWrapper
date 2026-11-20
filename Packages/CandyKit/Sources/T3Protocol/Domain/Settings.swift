@@ -106,6 +106,8 @@ public struct ClientSettings: Equatable, Sendable {
         // Opt-in TeX typesetting in messages (settings.ts:475-477, T3 #18735).
         "mathRenderingEnabled": SettingSpec(.bool, .bool(false)),
         // Tool calls in chat (settings.ts:352-353, 534-536 at 4928, #30000).
+        // Leads the window title with the open thread's status (4928 settings.ts:540, #34697).
+        "screenReaderWindowTitle": SettingSpec(.bool, .bool(false)),
         "toolCallVisibility": SettingSpec(.literals(["showAll", "hideSuccessful", "hideAll", "zen"]), .string("showAll")),
         // Settings > SnapShots (settings.ts:493-505).
         "onboardingCompletedAt": SettingSpec(.any, .null),

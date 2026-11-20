@@ -29,7 +29,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | a5448f4c50 | #26730 | pr/git | fix(web): pull request diff follows the file tree, with a hide-tests filter | ported (panels-3): the PR Code tab follows the file tree order, and the Diff panel and Code tab hide tests behind a flask toggle with "N test files hidden", ChangedFileKind.swift, DiffPanelView, PullRequestCodeView; no spec case yet for the toggle |
-| 5ef56853ef | #19941 | pr/git | feat(web): review local commits in the Diff pane | left (panels-2): reviewing local commits needs the A23 wire (`review.getBranchCommits`, source kind `commit`) and a commit scope in DiffPanelView |
+| 5ef56853ef | #19941 | pr/git | feat(web): review local commits in the Diff pane | ported (panels-5): a Commits submenu in the diff scope menu over `review.getBranchCommits`, and a commit scope over `review.getDiffPreview` with `commitSha`; hidden on servers that refuse it |
 | 348009de22 | #29083 | pr/git | fix(prs): include Storybook files in the test filter and counts | ported (panels-3): Storybook `.stories.` files count as tests, ChangedFileKind |
 
 ## Port group provider-fallback (3)
@@ -246,9 +246,9 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 7bc2a40ced | #30747 | pr/git | feat(pull-requests): PR composers complete @user mentions | left (panels-2): @mention completion in PR composers (PullRequestMarkdownTextarea.tsx:40), needs a completion popup on PullRequestMarkdownEditorView |
-| f08d8dd0a5 | #30579 | pr/git | feat(web): add pull request comments to the chat | left (panels-2): add a PR comment to the chat, needs the composer's context insertion from Features/Composer |
-| e4ff5da0d3 | #30857 | pr/git | feat(pull-requests): PR composers complete #123 and GitLab !123 references | left (panels-2): #123 and !123 completion, with #30747; needs `references` filter options and `referenceSigils` (decoded) |
+| 7bc2a40ced | #30747 | pr/git | feat(pull-requests): PR composers complete @user mentions | ported (panels-5): @login completion in every PR textarea over `pullRequests.filterOptions` authors, PullRequestCompletion.swift, gated on `capabilities.mentions` |
+| f08d8dd0a5 | #30579 | pr/git | feat(web): add pull request comments to the chat | ported (panels-5): Add to chat on Summary cards, Timeline cards (icon) and Code tab threads, beside a thread only; PullRequestChatContext builds the PR chip and the remark records |
+| e4ff5da0d3 | #30857 | pr/git | feat(pull-requests): PR composers complete #123 and GitLab !123 references | ported (panels-5): #123 and !123 completion with `references` and `sigil`, gated on `capabilities.referenceSigils` |
 
 ## Port group pi (4)
 
@@ -453,7 +453,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| b0f0c44d22 | #37703 | pr/git | fix(shared): open Forgejo and Gitea /pulls/ tab and commit links | left (panels-2): Forgejo and Gitea /pulls/ links, needs the change request URL parser in T3Protocol RepositoryIdentity+PullRequests |
+| b0f0c44d22 | #37703 | pr/git | fix(shared): open Forgejo and Gitea /pulls/ tab and commit links | ported (panels-5): PullRequestAnchor reads /pulls/ tab and commit links at 4928; ChangeRequestURL already parsed /pulls/ |
 
 ## Port group keybindings-unassign (1)
 
@@ -490,7 +490,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | 58e60bf5e8 | #26767 | thread | feat: turn a No project thread into a project | ported (sidebar-2): projects.createFromThread behind threadProjectFromScratch; thread menu Turn into project with its toasts |
-| 84e69da395 | #34788 | pr/git | fix(web): No project threads offer no Initialize Git, and their linked PRs show and act in the thread | left (composer-4, checked): nothing on the sidebar side; the commit changes ThreadDetailsPanel and ThreadDetailsPrRow(s) (Features/Thread), BranchToolbarBranchSelector (Features/Git) and PullRequestDetailPanel (Features/PullRequests) composer-5: rechecked, the reason holds (that area's agent is still working there). |
+| 84e69da395 | #34788 | pr/git | fix(web): No project threads offer no Initialize Git, and their linked PRs show and act in the thread | ported (panels-5): `offersGit` on ThreadDetailsCardView hides the branch, git actions and Initialize Git for a scratch-root thread, and linked PR rows show without a branch selector; Redesign pill too. Left: the rows' Fix and Resolve writing to the composer, with the PR handoff prompts |
 
 ## New feature fleet-channel (1)
 
@@ -1026,7 +1026,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | c9246445e0 | #24189 | pr/git | fix(web): long guide Next buttons wrap instead of overflowing | n/a (panels-3): CandyWrapper has no review guide view, only its settings rows |
 | f5bc64b7b7 | #24489 | pr/git | fix(web): deleting a thread no longer offers to remove a shared worktree | left (panels-4): thread delete worktree prompt, held for the Sidebar agent |
 | 9474bcbae1 | #25303 | pr/git | fix(web): preserve trailing whitespace in review diffs | already in CandyWrapper (panels-4): UnifiedDiff keeps each line's text as sent, trailing whitespace included |
-| e428a2c1f5 | #26060 | pr/git | fix(web,mobile): pull request text breaks lines when providers do | ported (panels-4): PR descriptions keep single line breaks on GitHub, Forgejo and Azure DevOps (PullRequestDetailLogic.hardLineBreaks); comment bodies still need the provider threaded into CommentCard and ConversationRow |
+| e428a2c1f5 | #26060 | pr/git | fix(web,mobile): pull request text breaks lines when providers do | ported (panels-4, panels-5): descriptions (panels-4), then comment cards, Timeline cards and verdicts, Code tab thread comments and every editor preview break lines where the host does |
 | 4dd2f735f2 | #26441 | pr/git | fix(web): Load balancing and PR sharing name the route in use | left (panels-4): Load balancing and PR routing settings rows, held for the Settings agent |
 | 6e72f540f6 | #26563 | pr/git | fix(prs): classify generated files and evals correctly | ported (panels-3): ChangedFileKind follows 4928's generated and evals rules for the hide-tests filter; the PR breakdown itself comes from the server |
 | 3a873e8faf | #23475 | pr/git | fix(web): disable conflict checkout without required permissions | left (panels-4): conflict checkout needs the canPrepareWorktree permission, which CW's PR panel doesn't read yet |
@@ -1043,7 +1043,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 85133dc578 | #23129 | pr/git | fix(web): PR diffs list a `.logic.test.ts` file beside the source it covers | left (panels-4): CW lists PR files in host order; needs T3's import-ordered orderDiffFiles (pullRequestFileOrder.logic.ts:142) first |
 | 3331b93937 | #23156 | pr/git | fix(web): show linked pull request state in command palette rows | left (panels-4): command palette thread rows, outside these areas |
 | 665351fc39 | #24118 | pr/git | fix(web): show readable errors when a stack action fails | ported (panels-4): stack merge and rebase failures show the host's reason or what usually stops each (PullRequestsController) |
-| 9ff0fac0f4 | #28244 | pr/git | fix(web): make Changes and PR Code file lists resizable | left (panels-2): resizable Changes and PR Code file lists, 5.1 |
+| 9ff0fac0f4 | #28244 | pr/git | fix(web): make Changes and PR Code file lists resizable | ported (panels-5): the Changes list moves to the right as T3 has it and both lists resize from a drag handle with keys, sharing the saved `t3code:diff-file-tree-width`; PR Code gains its file tree toggle and list (FileListPane) |
 | b50d8a1b15 | #28573 | pr/git | fix(web): add spacing above PR detail metadata | left (panels-4): ThreadDetailsPrRow metadata spacing; the row has no component reference to check mt-1.5 against |
 | 82b10d546c | #28665 | pr/git | fix(web): align pull request file viewed checkboxes | ported (panels-4): the Viewed tick sits in a fixed 72pt box so Viewed and Changed line up (DiffRowViews FileHeaderRow) |
 | f482dc5c57 | #25496 | pr/git | fix(web): PDF previews keep their page across thread switches | skip (panels-3): CandyWrapper hands this format to Quick Look |
@@ -1068,7 +1068,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 444921eb71 | #30483 | pr/git | fix(gitlab): merge requests can edit their labels | free with the runtime (panels-4): GitLab label edits are server side; CW's label picker already sends them |
 | d929e726f2 | #31741 | pr/git | fix(pr): GitCafe attachments render in pull request bodies | left (panels-4): GitCafe attachment rendering in PR bodies, needs the PR media rewrite (pullRequestMarkdown.ts) |
 | c52df24d28 | #22489 | pr/git | fix(prs): reviewer menu searches past the first page and keeps GitLab's requested reviewers | ported (panels-2): the reviewer picker asks the host with `query` past a truncated page where `reviewers.searchCandidates`, with T3's four truncation notes |
-| 4821696509 | #30352 | pr/git | fix(client-runtime): pull request bodies with CRLF line endings keep their code blocks whole | left (panels-4): CRLF normalisation of PR bodies before markdown parse (pullRequestMarkdown.ts); one line in PullRequestTabs once checked against MarkdownDocument |
+| 4821696509 | #30352 | pr/git | fix(client-runtime): pull request bodies with CRLF line endings keep their code blocks whole | left (panels-5, checked): it fixes the fence check in splitPullRequestBody (pullRequestMarkdown.ts), which CW does not have; it comes with the PR media rewrite (#36660) |
 | e5193ac0a2 | #30345 | pr/git | fix(web): preview annotation chip labels no longer end in a broken character | n/a (panels-3): CandyWrapper has no preview annotation tool |
 | cae7e5cc57 | #30717 | pr/git | fix(review-guide): preserve excerpt line terminators | n/a (panels-3): CandyWrapper has no review guide view, only its settings rows |
 | 0aae72244e | #31814 | pr/git | fix(web): keep change totals aligned beside the label | ported (panels-4): totals stay right-aligned after the base label in the Changes row (DetailsRowControl layout) |
@@ -1084,7 +1084,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 8fc6fd01d7 | #33949 | pr/git | fix(web): preserve previews during attachment preparation | left (panels-4): attachment previews during preparation, held for the Composer agent |
 | d152d2c824 | #30150 | pr/git | fix(client-runtime): a search query pasted from github.com lists pull requests again | ported (panels-2): GitHub's own qualifiers (is, state, repo, org, user, sort, archived) are ignored, two different authors name none, a negated draft flips, PullRequestListLogic.parseQuery |
 | 4ca10398b1 | #34140 | pr/git | fix(web): tighter outdated-conversation cards in the PR code panel | left (panels-4): tighter outdated-conversation cards; PullRequestReviewAnnotationViews has no reference case for the folded card yet |
-| b3fdf2b10f | #33989 | pr/git | fix(web): PR links jump to the comment, diff line, checks or commits they name | left (panels-4): PR link jumps, see the feature list in PROGRESS |
+| b3fdf2b10f | #33989 | pr/git | fix(web): PR links jump to the comment, diff line, checks or commits they name | ported (panels-5): PullRequestAnchor parses the link; the panel selects its tab, scrolls to the diff file and line, the Checks section or the Timeline comment, and loads a permalink commit scope |
 | dea8472438 | #28732 | pr/git | feat(web): label chips show the label's description on hover | ported (panels-4): label chips show the label description on hover and to VoiceOver (PullRequestLabel.description, PullRequestLabelChip) |
 | b6d3097379 | #28459 | pr/git | feat(web): composer strip names the worktree folder | ported: a started thread's strip names its worktree folder (BranchToolbarLogic `lockedWorkspaceLabel`, Features/Git) |
 | 8cbc95923a | #34168 | pr/git | fix(web): files marked Viewed stay folded when a pull request's Code tab opens again | ported (panels-3): Viewed marks that load after the diff fold their files, the reader's fold wins, PullRequestCodeView.applyFolds |
@@ -1096,7 +1096,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 27188274e7 | #26992 | pr/git | fix(web): pull request search keeps partial-word matches after GitHub answers | left (panels-4): PR search baseline rows; needs the text-free baseline read in PullRequestsPage |
 | 479ee74135 | #15848 | pr/git | fix(web): a thread started from a pull request links it | left (panels-4): a thread started from a PR links it; needs the PR draft-thread flow (usePullRequestDraftThread) CW doesn't have |
 | 7e565c510d | #34218 | pr/git | fix(git): stop new threads inheriting historical branch PRs | left (panels-4): resolveDisplayedThreadPr only shows a branch PR for the thread's own branch; GitController reads status.pr directly |
-| 3a0bcba00a | #34607 | pr/git | fix(shared): GitLab merge request file and line links open that file | left (panels-4): GitLab merge request anchors; part of the PR link jumps (#33989) |
+| 3a0bcba00a | #34607 | pr/git | fix(shared): GitLab merge request file and line links open that file | ported (panels-5): GitLab file and line codes and `?file=` in PullRequestAnchor.gitLab |
 | 9411a71ec0 | #34509 | pr/git | fix(web): dismissing the pull request checkout toast stops the handoff | n/a (panels-4): CW has no PR checkout handoff toast (handoffs not ported, PullRequestsController.swift:1062) |
 | 8214342385 | #32283 | pr/git | fix(web): collapsed PR comments no longer show raw HTML | left (panels-4): collapsed PR comments strip raw HTML; needs pullRequestMarkdown.logic's summary text in PullRequestTabs |
 | afe0528039 | #34727 | pr/git | fix(web): keep git action loading rows at idle height | left (panels-4): git action loading row height; no reference for the loading state |
@@ -1131,20 +1131,20 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 2a1caac438 | #34446 | pr/git | fix(web): NVDA browse mode reads the current thread's branch, not the previous one | n/a (panels-4): NVDA browse mode; VoiceOver reads the AX value as it changes |
 | a9fd0b2511 | #36466 | pr/git | fix(web): copying a file preview selection returns the selected lines after scrolling | already in CandyWrapper (panels-4): NSTextView copies the selected range regardless of scroll |
 | 34cf030e5e | #27882 | pr/git | fix(web): pull requests error names the environment that failed | left (panels-4): PR list errors should name the failed environment; PullRequestsPage keeps one failure string |
-| 058eea9246 | #36171 | pr/git | fix(pr): hide unsupported GitCafe review reactions | left (panels-4): PR reaction permissions; PullRequestReactionBarView takes canReact from the detail |
+| 058eea9246 | #36171 | pr/git | fix(pr): hide unsupported GitCafe review reactions | ported (panels-5): PullRequestDetailLogic.canReact hides reactions on GitCafe reviews in Summary cards |
 | 0516493a91 | #36528 | pr/git | fix(web): align status text and tighten pull request menu spacing | left (panels-4): status text alignment across the git menu, banner and PR row; no 4928 reference for those states |
 | 70be20493b | #24151 | pr/git | fix: re-ticking a file after a push no longer shows it Viewed | left (panels-4): re-ticking after a push; needs the viewed-files revision field in PullRequestDetailLogic.isFileViewed |
 | 1159aa2991 | #36660 | pr/git | fix(client-runtime): preserve PR reference links across embedded media | left (panels-4): PR reference links across embedded media, part of the PR media rewrite |
 | 92c91aac8f | #28095 | pr/git | fix(client-runtime): keep inherited qualifier values as PR search text | n/a (panels-4): a JS prototype lookup bug; Swift dictionaries have no inherited keys (PullRequestListLogic.reviewValues) |
 | a575d45286 | #28575 | pr/git | fix(web,server): the branch label no longer flips back after a switch | left (panels-4): branch hold after a switch so the label doesn't flip back; needs BranchHold in GitController |
 | 3d9aeaf757 | #36738 | pr/git | fix(shared): preview semicolon-separated CSV files as tables | ported (panels-4): CSV previews detect semicolon-separated files (DelimitedTable.csvDelimiter) |
-| c342f3dec2 | #29867 | pr/git | fix(web): settled threads no longer offer a PR watch the server refuses | left (panels-4): hide the PR watch for settled threads; needs threadPullRequestCompatibility in PullRequestWatchToggle |
+| c342f3dec2 | #29867 | pr/git | fix(web): settled threads no longer offer a PR watch the server refuses | ported (panels-5): the Linked items row menu offers no new watch on settled, archived or subagent threads (canStartWatch) |
 | 732198d3a9 | #36786 | pr/git | fix(web): a disabled Push names the real reason when there are local changes | ported (panels-4): disabled Push and Create PR name the real reason with local changes (GitActionsLogic.disabledReason) |
 | 170c1f7e2d | #29845 | pr/git | fix(web): Push on the default branch no longer offers a feature branch the server rejects | ported (panels-4): Push and Create PR on the default branch say a feature branch can't be named (GitActionsLogic.featureBranchUnavailableReason) |
 | 49eb9c8adc | #29871 | pr/git | fix(web,mobile): pull request project filter lists pinned projects first | left (panels-4): pinned projects first in the PR project filter, after the Sidebar agent's pin work lands |
 | 69525bf895 | #33692 | pr/git | fix(web): a pull request whose title holds a numeric search ranks above description-only matches | ported (panels-4): a number in a PR title ranks as a title match (PullRequestListLogic.score) |
 | 73cbc6b1ed | #35527 | pr/git | fix(web): dropdown hover fills expanded Git action rows | left (panels-4): dropdown hover on expanded git rows; no 4928 reference for that state |
-| 62a51e26a4 | #34662 | pr/git | fix(web): more GitLab merge request links open their file, line or commit | left (panels-4): more GitLab anchors, part of the PR link jumps (#33989) |
+| 62a51e26a4 | #34662 | pr/git | fix(web): more GitLab merge request links open their file, line or commit | ported (panels-5): Rapid Diffs `line_` anchors, `diffs?commit_id=` and a removed old line (PullRequestAnchor.resolve) |
 | ed101ef641 | #35135 | pr/git | fix(preview): unload desktop pages before removing their tabs | n/a (panels-4): Electron page unload before tab removal |
 | c041761d89 | #30107 | pr/git | fix(web,server): picking the previous branch after an agent's checkout switches back | left (panels-4): resolveConfirmedSelectedRef after an agent's checkout; same work as #36347 |
 | 3808e2d77e | #30571 | pr/git | fix(client-runtime): a line of inline triple-backtick code no longer breaks media in PR descriptions | left (panels-4): inline triple-backtick lines in PR media rewrite, part of the PR media work |
@@ -1165,7 +1165,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 26f70e72fa | #37853 | pr/git | fix(web): a failed reaction toggle no longer clears a newer reaction choice | left (panels-4): a failed reaction toggle keeps a newer choice; needs per-toggle pending entries in PullRequestReactionBarView |
 | 47c95c2812 | #37864 | pr/git | fix(web): a rewritten review guide no longer shows code from the previous push | skip (panels-4): CW has no PR review guide |
 | ed80c2fe66 | #29658 | pr/git | fix(web): screen readers name the file checkboxes in the commit dialog | ported (panels-4): the commit dialog's file checkboxes say "Include <path>" and "Include all files" (GitDialogs) |
-| e9d5bae5cf | #37881 | pr/git | fix(web): linked PR comment highlight keeps its full outline | left (panels-4): linked comment highlight outline, part of the PR link jumps (#33989) |
+| e9d5bae5cf | #37881 | pr/git | fix(web): linked PR comment highlight keeps its full outline | ported (panels-5): the linked comment card wears a primary/40 outline inside its own border |
 | d848e4b2b2 | #26566 | pr/git | fix(web): show the change breakdown on the floating Changes button | left (panels-4): the change breakdown on the floating Changes button; needs ChangeBreakdownGrid, no reference yet |
 | 5b91a5a00e | #37950 | pr/git | fix(web): HTML file previews no longer flash white after agent commands | n/a (panels-4): a web iframe white flash; CW's WKWebView keeps the page between commands |
 | 6ec1d31b1e | #36624 | pr/git | fix(web): preserve literal XML declarations in EPUB previews | skip (panels-4): CW has no EPUB preview; Quick Look shows those files |
@@ -1247,7 +1247,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | b2e86d7902 | #35100 | settings | fix(web): an invalid provider setting is refused at its field instead of taking the provider offline | ported (settings-2): a refused value stays in the field marked invalid with "Enter a valid value. It was not saved." (ProvidersSettingsView.swift `ValidatedFieldControl`, `Field.pattern`) |
 | 32f3d8b160 | #35116 | settings | fix(client-runtime): Diagnostics Resource History keeps updating while open | port |
 | a30cb3283a | #35161 | settings | fix(web): Esc in the keybindings search clears it without closing Settings | port |
-| 1d218d1525 | #34697 | settings | feat(web): screen reader window title leads with the thread's status and name | left (panels-2): needs the `screenReaderWindowTitle` client setting and its Settings switch (Features/Settings), then status first in the window title (branding.logic.ts, Sidebar.logic.ts resolveWindowTitleThreadStatus) |
+| 1d218d1525 | #34697 | settings | feat(web): screen reader window title leads with the thread's status and name | ported (panels-5): WindowTitle ports resolveWindowTitle and resolveWindowTitleThreadStatus; the window now reads project / thread, and with Settings > Behavior > Screen reader window title, status: thread - project. Left: the Settings search catalog entry |
 | 4f555c746c | #28584 | settings | fix(web): choosing a project icon again re-reads it from disk | port |
 | 817b92f13a | #24110 | settings | fix(pi): stop offering extension-only models for text generation | port |
 | 141de5e9f4 | #25513 | settings | fix(web): a dismissed provider banner stays dismissed when you switch threads | port |

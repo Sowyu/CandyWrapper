@@ -129,6 +129,7 @@ public final class PullRequestDraftCommentView: DSView, DiffAnnotationContent {
             if sel == #selector(NSResponder.insertNewline(_:)), NSApp.currentEvent?.modifierFlags.contains(.command) == true { self.send(); return true }
             return false
         }
+        PullRequestCompletion.attach(to: textarea)
         cancel.action = { [weak self] in self?.onCancel?() }
         submit.action = { [weak self] in self?.send() }
         update()
@@ -171,6 +172,7 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
     private let canReply: Bool
     private let canResolve: Bool
     private let canReact: Bool
+    private let lineBreaks: Bool
     private let canEdit: (PullRequestThreadComment) -> Bool
     private let actions: PullRequestReviewThreadActions
     private let cwd: String
@@ -186,6 +188,9 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
     private let headButton = LinkLabel()
     private let outdated = LabelView("outdated", font: DSFont.ui(12))
     private let resolve = ButtonView("Resolve", variant: .ghost, size: .xs)
+    /// Add to chat (4928 PullRequestReviewAnnotation.tsx:349-358), handed every comment loaded so far.
+    private let chat = ButtonView("Add to chat", icon: .messageSquarePlus, variant: .ghost, size: .xs)
+    public var onAddToChat: ((PullRequestReviewThread) -> Void)? { didSet { needsLayout = true } }
     private var commentViews: [PullRequestThreadCommentView] = []
     private let loadMore = ButtonView("Load more comments", variant: .ghost, size: .xs)
     private let replyButton = ButtonView("Reply", variant: .ghost, size: .xs)
@@ -195,7 +200,8 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
 
     public init(thread: PullRequestReviewThread, canReply: Bool, canResolve: Bool, canReact: Bool,
                 canEdit: @escaping (PullRequestThreadComment) -> Bool, actions: PullRequestReviewThreadActions, cwd: String, nowMs: Int64,
-                startsExpanded: Bool? = nil) {
+                startsExpanded: Bool? = nil, lineBreaks: Bool = false) {
+        self.lineBreaks = lineBreaks
         self.thread = thread
         self.canReply = canReply; self.canResolve = canResolve; self.canReact = canReact
         self.canEdit = canEdit; self.actions = actions; self.cwd = cwd; self.nowMs = nowMs
@@ -206,6 +212,15 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
         headButton.underlines = false
         headButton.onClick = { [weak self] in self?.toggleExpanded() }
         outdated.lineHeight = 16
+        chat.iconSize = 12
+        chat.isHidden = true
+        chat.action = { [weak self] in
+            guard let self else { return }
+            var t = self.thread
+            if let loaded = self.loaded { t.comments = loaded.comments }
+            self.onAddToChat?(t)
+        }
+        addSubview(chat)
         replyBox.placeholder = "Reply"
         replyBox.setAccessibilityLabel("Reply to this conversation")
         [stateIcon, resolvedIcon, headButton, outdated, resolve, loadMore, replyButton, replyBox, replyCancel, replySend].forEach(card.addSubview)
@@ -221,6 +236,7 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
             if sel == #selector(NSResponder.insertNewline(_:)), NSApp.currentEvent?.modifierFlags.contains(.command) == true { self.sendReply(); return true }
             return false
         }
+        PullRequestCompletion.attach(to: replyBox)
         rebuild()
     }
 
@@ -277,7 +293,7 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
         resolve.title = thread.isResolved ? "Unresolve" : "Resolve"
         commentViews.forEach { $0.removeFromSuperview() }
         commentViews = expanded ? comments.map { c in
-            let v = PullRequestThreadCommentView(c, cwd: cwd, nowMs: nowMs, canReact: canReact, canEdit: canEdit(c), editing: editingId == c.id)
+            let v = PullRequestThreadCommentView(c, cwd: cwd, nowMs: nowMs, canReact: canReact, canEdit: canEdit(c), editing: editingId == c.id, lineBreaks: lineBreaks)
             v.onEdit = { [weak self] in self?.editingId = c.id; self?.rebuild() }
             v.onCancel = { [weak self] in self?.editingId = nil; self?.rebuild() }
             v.onSave = { [weak self] body in
@@ -337,8 +353,14 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
         let hw = ceil(headButton.textWidth) + 1
         headButton.frame = NSRect(x: r.minX + 22, y: r.minY + 4, width: hw, height: 16)
         outdated.frame = NSRect(x: headButton.frame.maxX + 8, y: r.minY + 4, width: ceil(outdated.textWidth) + 1, height: 16)
-        let rw = ceil(resolve.intrinsicContentSize.width)
-        resolve.frame = NSRect(x: r.maxX - rw, y: r.minY, width: rw, height: 24)
+        let rw = resolve.isHidden ? -8 : ceil(resolve.intrinsicContentSize.width)
+        resolve.frame = NSRect(x: r.maxX - max(0, rw), y: r.minY, width: max(0, rw), height: 24)
+        let shown = loaded?.comments ?? thread.comments
+        chat.isHidden = onAddToChat == nil || !shown.contains { PullRequestDetailLogic.visibleBody($0.body) != nil }
+        if !chat.isHidden {
+            let cw = ceil(chat.intrinsicContentSize.width)
+            chat.frame = NSRect(x: r.maxX - max(0, rw) - 8 - cw, y: r.minY, width: cw, height: 24)
+        }
         var y = r.minY + 24
         if !commentViews.isEmpty {
             y += 8
@@ -396,7 +418,7 @@ final class PullRequestThreadCommentView: DSView, FocusWithinObserver {
     private var hover: HoverGroup?
     private var focusWithin = false
 
-    init(_ c: PullRequestThreadComment, cwd: String, nowMs: Int64, canReact: Bool, canEdit: Bool, editing: Bool) {
+    init(_ c: PullRequestThreadComment, cwd: String, nowMs: Int64, canReact: Bool, canEdit: Bool, editing: Bool, lineBreaks: Bool = false) {
         super.init(frame: .zero)
         avatar.actor = c.author
         login.text = c.author?.login ?? "ghost"
@@ -405,7 +427,7 @@ final class PullRequestThreadCommentView: DSView, FocusWithinObserver {
         reactions.canReact = canReact
         reactions.reactions = c.reactions ?? []
         body.cwd = cwd
-        body.setMarkdown(c.body)
+        body.setMarkdown(c.body, preservesLineBreaks: lineBreaks)
         edit.iconSize = 12
         edit.setAccessibilityLabel("Edit comment")
         edit.isHidden = !canEdit || editing
@@ -415,6 +437,7 @@ final class PullRequestThreadCommentView: DSView, FocusWithinObserver {
         [avatar, login, time, reactions, body, edit].forEach(addSubview)
         if editing {
             let e = PullRequestMarkdownEditorView(value: c.body, label: "Edit comment", cwd: cwd)
+            e.lineBreaks = lineBreaks
             e.onCancel = { [weak self] in self?.onCancel?() }
             e.onSave = { [weak self] text in self?.onSave?(text) }
             e.onResize = { [weak self] in self?.onResize?() }

@@ -563,6 +563,10 @@ public final class ThreadDetailsCardView: DSView {
     public var isRepo = true { didSet { if isRepo != oldValue { updateRows() } } }
     /// Hides the Version Control section (`gitCwd` is null).
     public var showsVersionControl = true { didSet { if showsVersionControl != oldValue { updateRows() } } }
+    /// False for a No project thread, whose folder sits in the shared scratch root and must never
+    /// get git: no branch, git actions or Initialize Git, while its linked pull requests still show
+    /// (4928 ThreadDetailsPanel.tsx:104-112, 169-176, #34788).
+    public var offersGit = true { didSet { if offersGit != oldValue { updateRows() } } }
     /// The git actions need a project (`activeProjectName`).
     public var showsGitActions = true { didSet { if showsGitActions != oldValue { updateRows() } } }
 
@@ -725,11 +729,12 @@ public final class ThreadDetailsCardView: DSView {
         lineage.showsSideChats = on("sideChats")
         runContext.isHidden = density != .full || relationsOnly || !on("environment")
         openIn.isHidden = !showsOpenIn || density == .essential || relationsOnly || !on("openIn")
-        branch.isHidden = !showsVersionControl || !isRepo || relationsOnly || !on("branch")
-        gitActions.isHidden = !showsVersionControl || !isRepo || !showsGitActions || (density != .full && gitActions.primary.mode == .idle)
+        let repo = showsVersionControl && offersGit && isRepo
+        branch.isHidden = !repo || relationsOnly || !on("branch")
+        gitActions.isHidden = !repo || !showsGitActions || (density != .full && gitActions.primary.mode == .idle)
             || relationsOnly || !on("gitActions")
-        changes.isHidden = !showsVersionControl || !isRepo || relationsOnly || !on("changes")
-        initGit.isHidden = !showsVersionControl || isRepo || !showsGitActions || relationsOnly || !on("gitActions")
+        changes.isHidden = !repo || relationsOnly || !on("changes")
+        initGit.isHidden = !showsVersionControl || !offersGit || isRepo || !showsGitActions || relationsOnly || !on("gitActions")
         scripts.isHidden = scriptsRow == nil || scriptsRow == .add || relationsOnly || !on("scripts")
         addScript.isHidden = scriptsRow != .add || relationsOnly || !on("scripts")
         pullRequestRows.forEach { $0.isHidden = !on("branch") }
@@ -744,8 +749,10 @@ public final class ThreadDetailsCardView: DSView {
     private func versionRows(_ density: Density) -> [NSView] {
         let prs = on("branch") ? pullRequestRows : []
         if relationsOnly { return prs }
-        guard showsVersionControl else { return [] }
-        guard isRepo else { return showsGitActions && on("gitActions") ? [initGit] : [] }
+        // Without a branch selector the linked pull requests still need somewhere to show, then Initialize Git.
+        guard showsVersionControl, offersGit, isRepo else {
+            return prs + (showsVersionControl && offersGit && !isRepo && showsGitActions && on("gitActions") ? [initGit] : [])
+        }
         let actions: [NSView] = showsGitActions && on("gitActions") && (density == .full || gitActions.primary.mode != .idle) ? [gitActions] : []
         return (on("branch") ? [branch] : []) + prs + actions + (on("changes") ? [changes] : [])
     }
@@ -774,7 +781,7 @@ public final class ThreadDetailsCardView: DSView {
         let workspace = workspaceRows(density)
         var h: CGFloat = 2 + (workspace > 0 ? 8 + CGFloat(workspace) * 32 + 10 : 0)
         let rows = versionRows(density)
-        if showsVersionControl, !rows.isEmpty {
+        if !rows.isEmpty {
             h += (density == .full && workspace > 0 ? 1 : 0) + 8 + 10 + rows.reduce(0) { $0 + rowHeight($1) }
         }
         guard density == .full else { return h }
@@ -845,7 +852,7 @@ public final class ThreadDetailsCardView: DSView {
         let rows = versionRows
         // No empty section steals the rule (ThreadDetailsPanel.tsx:166-169).
         let separated = density == .full && workspace
-        divider.isHidden = rows.isEmpty || !showsVersionControl || !separated
+        divider.isHidden = rows.isEmpty || !separated
         divider.frame = CGRect(x: 0, y: y, width: width, height: 1)
         y += (separated ? 1 : 0) + 8
         for row in rows {

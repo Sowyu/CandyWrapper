@@ -24,6 +24,12 @@ public final class PullRequestCodeView: DSView {
     private let viewedCounts = LabelView("", font: DSFont.ui(12))
     /// "Hide test files" at the toolbar's end while the loaded diff has any (:1686-1703, #26730).
     private let hideTestsToggle = ToggleView(nil, icon: .flaskConicalOff, variant: .ghost, size: .sm, pressed: DiffHideTestFiles.value)
+    /// Show or hide the file list, remembered (`t3code.pullRequestFileTreeOpen`, 4928 PullRequestCodeTab.tsx:190, 463, 1706-1723).
+    private let treeToggle = ToggleView(nil, icon: .folderTree, variant: .ghost, size: .sm, pressed: UserDefaults.standard.bool(forKey: "t3code.pullRequestFileTreeOpen"))
+    private var treeTooltip: TooltipController?
+    /// The resizable list on the right, min(320, 40%), at least 192 (PullRequestCodeTab.tsx:1960-2003, #28244).
+    private let filePane = FileListPane(sizing: .pullRequestCode, resizeLabel: "Resize PR Code files", listLabel: "Pull request files")
+    private let loadMoreFiles = ButtonView("Load more files", variant: .outline, size: .xs)
     private var hideTestsTooltip: TooltipController?
     private var testFileCount = 0
     // Withheld files (#37007): left out of the paged diff, each loadable on its own.
@@ -94,7 +100,7 @@ public final class PullRequestCodeView: DSView {
         footer.alignment = .center
         orphanToggle.font = DSFont.ui(12)
         orphanToggle.underlines = false
-        [scope, counts, hiddenTestsLink, viewedCounts, hideTestsToggle, scroll, status, footer, footerRetry, orphanToggle, orphanChevron, orphanScroll].forEach(addSubview)
+        [scope, counts, hiddenTestsLink, viewedCounts, hideTestsToggle, treeToggle, filePane, scroll, status, footer, footerRetry, orphanToggle, orphanChevron, orphanScroll].forEach(addSubview)
         viewedCounts.lineHeight = 16
         hiddenTestsLink.font = DSFont.ui(12)
         hiddenTestsLink.underlines = false
@@ -105,6 +111,20 @@ public final class PullRequestCodeView: DSView {
         hideTestsToggle.setAccessibilityLabel("Hide test files")
         hideTestsTooltip = TooltipController.attach(to: hideTestsToggle, text: "Hide test files", placement: PopupPlacement(side: .top, align: .center, sideOffset: 4))
         hideTestsToggle.onPressedChange = { [weak self] in self?.setHideTests($0) }
+        treeToggle.iconSize = 14
+        treeTooltip = TooltipController.attach(to: treeToggle, text: treeToggle.isPressed ? "Hide file tree" : "Show file tree", placement: PopupPlacement(side: .top, align: .center, sideOffset: 4))
+        treeToggle.setAccessibilityLabel(treeToggle.isPressed ? "Hide file tree" : "Show file tree")
+        treeToggle.onPressedChange = { [weak self] open in
+            guard let self else { return }
+            UserDefaults.standard.set(open, forKey: "t3code.pullRequestFileTreeOpen")
+            self.treeTooltip?.text = open ? "Hide file tree" : "Show file tree"
+            self.treeToggle.setAccessibilityLabel(self.treeTooltip?.text)
+            self.needsLayout = true
+        }
+        filePane.onWidthChange = { [weak self] in self?.needsLayout = true }
+        filePane.tree.onOpenFile = { [weak self] path in self?.filePane.tree.selectedPath = path; self?.list.reveal(path: path) }
+        list.onVisibleFile = { [weak self] path in self?.filePane.tree.selectedPath = path }
+        loadMoreFiles.action = { [weak self] in self?.onLoadMore?() }
         scope.action = { [weak self] in self?.showScopeMenu() }
         footerRetry.action = { [weak self] in self?.onLoadMore?() }
         // `CollapsiblePanel` (PullRequestCodeTab.tsx:1500): the list slides open over 200 ms and the diff rides it.
@@ -204,6 +224,22 @@ public final class PullRequestCodeView: DSView {
         updateCounts()
     }
 
+    /// A linked file or line waiting for its patch slice (#33989).
+    private var pendingReveal: (digest: String, range: PullRequestAnchor.Range?)?
+
+    /// `useCodeViewFileReveal`: scrolls to the file whose path hashes to `digest`, and to the line
+    /// range's start. A file not loaded yet waits for the slice that brings it.
+    func reveal(digest: String, range: PullRequestAnchor.Range?) {
+        guard let path = paths.first(where: { PullRequestAnchor.pathMatches(digest, $0) }) else { pendingReveal = (digest, range); return }
+        pendingReveal = nil
+        guard var range else { list.reveal(path: path); return }
+        // A GitLab line code whose old line was removed names that old line (resolvePullRequestAnchorRange).
+        let removed = Set(list.diff.files.first { $0.path == path }.map { f in f.hunks.flatMap { h in h.lines.compactMap { i -> Int? in
+            let l = list.diff.lines[i]; return l.kind == .deletion ? Int(l.oldNumber) : nil } } } ?? [])
+        range = PullRequestAnchor.resolve(range) { removed.contains($0) }
+        list.reveal(path: path, line: range.start, side: range.side)
+    }
+
     /// The loaded files in file tree order, tests left out while hidden (PullRequestCodeTab.tsx, #26730, #29083).
     private func rebuildDiff() {
         let joined = patches.joined(separator: patches.allSatisfy { $0.hasSuffix("\n") } ? "" : "\n")
@@ -220,6 +256,9 @@ public final class PullRequestCodeView: DSView {
         let diff = full.selecting(shown)
         paths = diff.files.map(\.path)
         list.setDiff(diff, collapsedByDefault: false)
+        filePane.tree.changes = Dictionary(diff.files.map { ($0.path, $0.change) }, uniquingKeysWith: { a, b in a == b ? a : .change })
+        filePane.tree.model = DiffPanelSearch.tree(diff)
+        if let pendingReveal { DispatchQueue.main.async { [weak self] in self?.reveal(digest: pendingReveal.digest, range: pendingReveal.range) } }
         hideTestsToggle.isPressed = DiffHideTestFiles.value
         hideTestsToggle.isHidden = testFileCount == 0
         hideTestsTooltip?.text = DiffHideTestFiles.value ? "Show test files" : "Hide test files"
@@ -351,6 +390,11 @@ public final class PullRequestCodeView: DSView {
         rebuildOrphans()
     }
 
+    /// Add to chat on a line's conversation; nil where no composer sits beside the panel.
+    var onAddToChat: ((PullRequestReviewThread) -> Void)? {
+        didSet { threadCards.values.forEach { $0.onAddToChat = onAddToChat } }
+    }
+
     private func threadCard(_ t: PullRequestReviewThread) -> PullRequestReviewThreadCardView? {
         guard let d = detail, let actions else { return nil }
         if let card = threadCards[t.id] { return card }
@@ -358,8 +402,10 @@ public final class PullRequestCodeView: DSView {
             thread: t, canReply: d.capabilities.review.reply, canResolve: d.capabilities.review.resolve && PullRequestWriteLogic.canResolveThread(d, t),
             canReact: d.capabilities.reactions == true,
             canEdit: { c in PullRequestWriteLogic.canEditComment(d, author: c.author?.login, kind: "review-comment", hostAnswer: c.canEdit) },
-            actions: actions, cwd: d.workspaceRoot, nowMs: nowMs, startsExpanded: t.line != nil ? true : nil)
+            actions: actions, cwd: d.workspaceRoot, nowMs: nowMs, startsExpanded: t.line != nil ? true : nil,
+            lineBreaks: PullRequestDetailLogic.hardLineBreaks(d.provider))
         card.onResize = { [weak self] in self?.list.reloadAnnotations(); self?.needsLayout = true }
+        if let onAddToChat { card.onAddToChat = { onAddToChat($0) } }
         threadCards[t.id] = card
         return card
     }
@@ -467,6 +513,11 @@ public final class PullRequestCodeView: DSView {
             scope.frame = NSRect(x: x, y: 8, width: sw, height: 24); x += sw + 12
         }
         var right = w - 16
+        // `fileKeys.length > 0`: the toggle sits last, after Hide test files.
+        treeToggle.isHidden = paths.isEmpty
+        if !treeToggle.isHidden {
+            treeToggle.frame = NSRect(x: right - 28, y: 6, width: 28, height: 28); right -= 28 + 8
+        }
         if !hideTestsToggle.isHidden {
             hideTestsToggle.frame = NSRect(x: right - 28, y: 6, width: 28, height: 28); right -= 28 + 8
         }
@@ -505,7 +556,13 @@ public final class PullRequestCodeView: DSView {
             top += 1
         }
         let footerH: CGFloat = footer.text.isEmpty ? 0 : 32
-        scroll.frame = NSRect(x: 0, y: top, width: w, height: max(0, bounds.height - top - footerH))
+        filePane.isHidden = !treeToggle.isPressed || treeToggle.isHidden
+        // Load more files under the tree (`border-t p-2`, outline, full width), Retry after a failure.
+        loadMoreFiles.title = moreError != nil ? "Retry" : moreLoading ? "Loading more files..." : "Load more files"
+        loadMoreFiles.isEnabled = !moreLoading
+        if (filePane.footer == nil) != (nextCursor == nil) { filePane.footer = nextCursor == nil ? nil : loadMoreFiles }
+        let paneW = filePane.isHidden ? 0 : filePane.place(in: NSRect(x: 0, y: top, width: w, height: max(0, bounds.height - top)), host: self)
+        scroll.frame = NSRect(x: 0, y: top, width: w - paneW, height: max(0, bounds.height - top - footerH))
         status.frame = NSRect(x: 16, y: top + 24, width: max(0, w - 32), height: 16)
         unavailable?.frame = NSRect(x: 0, y: top, width: w, height: max(0, bounds.height - top))
         footer.isHidden = footerH == 0

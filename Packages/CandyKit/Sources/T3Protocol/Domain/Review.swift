@@ -29,9 +29,11 @@ public struct ReviewDiffPreview: Decodable, Hashable, Sendable {
     }
     public struct Source: Decodable, Hashable, Sendable {
         public var id: String
-        /// `working-tree` or `branch-range`.
+        /// `working-tree`, `branch-range` or `commit` (4928 review.ts:42).
         public var kind: String
         public var title: String
+        /// A `commit` source's subject line (4928 review.ts:72).
+        public var commitSubject: String?
         public var baseRef: String?
         public var headRef: String?
         public var diff: String
@@ -54,6 +56,34 @@ public struct ReviewDiffPreview: Decodable, Hashable, Sendable {
     /// `ReviewDiffPreviewInput`: the base ref only when one was picked (DiffPanel.tsx:342-358).
     public static func input(cwd: String, baseRef: String?, ignoreWhitespace: Bool) -> JSONValue {
         var o: [String: JSONValue] = ["cwd": .string(cwd), "ignoreWhitespace": .bool(ignoreWhitespace)]
+        if let baseRef, !baseRef.trimmingCharacters(in: .whitespaces).isEmpty { o["baseRef"] = .string(baseRef) }
+        return .object(o)
+    }
+
+    /// One local commit's own changes (`commitSha`, 4928 review.ts:9, #19941).
+    public static func input(cwd: String, commitSha: String, baseRef: String?, ignoreWhitespace: Bool) -> JSONValue {
+        guard case .object(var o) = input(cwd: cwd, baseRef: baseRef, ignoreWhitespace: ignoreWhitespace) else { return .null }
+        o["commitSha"] = .string(commitSha)
+        return .object(o)
+    }
+}
+
+/// `review.getBranchCommits` (4928 review.ts:24-40, rpc.ts:1767): the branch's own commits, newest
+/// first, for the diff panel's Commits menu. 3824 servers do not serve it.
+public struct ReviewBranchCommits: Decodable, Hashable, Sendable {
+    public struct Commit: Decodable, Hashable, Sendable {
+        public var sha: String
+        public var subject: String
+        public var committedAt: String
+        public init(sha: String, subject: String, committedAt: String) { self.sha = sha; self.subject = subject; self.committedAt = committedAt }
+    }
+    public var commits: [Commit]
+    public var truncated: Bool
+    public init(commits: [Commit], truncated: Bool) { self.commits = commits; self.truncated = truncated }
+
+    public static let method = "review.getBranchCommits"
+    public static func input(cwd: String, baseRef: String?) -> JSONValue {
+        var o: [String: JSONValue] = ["cwd": .string(cwd)]
         if let baseRef, !baseRef.trimmingCharacters(in: .whitespaces).isEmpty { o["baseRef"] = .string(baseRef) }
         return .object(o)
     }

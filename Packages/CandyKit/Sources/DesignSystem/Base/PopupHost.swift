@@ -453,6 +453,8 @@ public final class PopupHost: DSView {
     /// Routes a key to the topmost popup. Unhandled Escape closes it and returns focus to its trigger.
     @discardableResult
     public func handleKey(_ key: PopupKey) -> Bool {
+        // A passive list that rides on a focused field (pull request @ and # completion) sees keys first.
+        for p in popups.reversed() where p.isPassive && p.content.popupHandleKey(key) { return true }
         guard let top = popups.last(where: { !$0.isPassive }) ?? popups.last else { return false }
         if top.content.popupHandleKey(key) { return true }
         if key == .escape { close(top); return true }

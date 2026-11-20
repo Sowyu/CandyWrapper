@@ -404,7 +404,7 @@ final class GitController {
     /// Redesign's header pill: whether it shows the git controls, and the totals.
     private func renderPill() {
         let pill = panel.header.pill
-        pill.showsVersionControl = target != nil
+        pill.showsVersionControl = target != nil && !isScratchTarget
         pill.isRepo = isRepo
         let totals = GitActionsLogic.changesTotals(status).map { ($0.insertions, $0.deletions) } ?? (0, 0)
         if pill.totals.insertions != totals.0 || pill.totals.deletions != totals.1 {
@@ -415,12 +415,19 @@ final class GitController {
         }
     }
 
+    /// A No project thread's folder is the shared scratch root: never offer git there (4928 ThreadDetailsPanel.tsx:104-112, #34788).
+    private var isScratchTarget: Bool {
+        guard let target, let sidebar, let project = sidebar.snapshot?.projects.first(where: { $0.id == target.projectId }) else { return false }
+        return SidebarListBuilder.isScratch(project, state: sidebar.state)
+    }
+
     /// The details card, while it is built.
     private func renderCard() {
         renderPill()
         renderGitActions()
         guard let card = panel.lazyDetailsCard.loaded else { return }
         guard let target else { card.showsVersionControl = false; return }
+        card.offersGit = !isScratchTarget
         let label = BranchToolbarLogic.workspaceLabel(mode: target.envMode, worktreePath: target.worktreePath, modeLocked: !target.isDraft)
         let env = environmentOption
         // With an environment, the workspace icon trails the label so every row's label starts on the same edge

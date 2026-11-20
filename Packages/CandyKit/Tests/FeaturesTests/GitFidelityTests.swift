@@ -45,6 +45,8 @@ struct GitFidelityTests {
             card.gitActions.primary.text = n["quick"]!
             card.totals.insertions = Int(n["plus"]!)!
             card.totals.deletions = Int(n["minus"]!)!
+            // The 4928 card shows the working tree's base label (GitActionsControl.tsx:1143, #30085).
+            card.changesBase = "Uncommitted"
             card.layoutSubtreeIfNeeded()
             return [card]
         case "menu":
