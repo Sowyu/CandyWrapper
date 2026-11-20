@@ -952,7 +952,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | dc9b1a5a63 | #27635 | diff | fix(web): keep diff base selector available after errors | ported (panels-2): the Changes head and base selector stays after a failed read, HEAD and Automatic as fallbacks |
 | 5651d76818 | #28091 | diff | fix(web): horizontal scrolling inside diff and file panes no longer switches threads | left (panels-2): goes with the history-swipe group (#30173) outside the diff views |
 | 1c0cc439ff | #28386 | diff | fix(web): deleting a thread clears its saved right-panel, diff-panel and mini-player state | skipped (panels-2): CandyWrapper keeps panel and diff selection per open thread in memory; only the diff base choice persists (DiffPanelView baseRefsKey), and clearing it needs the delete path in Features/Sidebar |
-| 300101f7e5 | #29309 | diff | fix(web): open files from Claude and ACP tool-call diffs | left (panels-2): not checked against ToolCallDiff's open path |
+| 300101f7e5 | #29309 | diff | fix(web): open files from Claude and ACP tool-call diffs | skip (panels-3): CandyWrapper's diff file headers offer no Open or Reveal (DiffPanelView.onOpenFile is unset in the app); port with that action |
 | 8b44f42b14 | #30567 | diff | fix(web): load selected diff metadata before file patches | n/a (panels-2): CandyWrapper reads the whole patch, with no metadata-first file list |
 | 996b43f01b | #22347 | diff | fix(web): retain diff selection across navigation | left (panels-2): diff selection across navigation lives in Features/Thread ThreadPanelView |
 | bd02e64b5f | #28056 | diff | fix(web): expanding a diff whose files changed no longer crashes | n/a: React render crash |
@@ -963,8 +963,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 953ce60d12 | #36606 | diff | fix(web): changed root files with a leading space open in the diff panel | already in CandyWrapper: DiffPanelView.open passes the file path untrimmed |
 | bef412cff6 | #33310 | diff | fix(web): diff file tree shows added and deleted files before their patches load | n/a (panels-2): CandyWrapper reads the whole patch, so files and change types arrive together |
 | b96a511067 | #35304 | diff | fix(web): repeated diff blocks no longer crash the viewer | n/a: React key crash |
-| 2b6c14bbf1 | #23167 | diff | fix(web): diff file Open and Reveal reach a file whose name has a backslash | left (panels-2): not checked |
-| 9a79883979 | #32684 | diff | fix(web): a file opened from a diff in a project folder inside a repository opens that file | left (panels-2): not checked |
+| 2b6c14bbf1 | #23167 | diff | fix(web): diff file Open and Reveal reach a file whose name has a backslash | skip (panels-3): needs the diff header's Open and Reveal, which CandyWrapper lacks; port with that action |
+| 9a79883979 | #32684 | diff | fix(web): a file opened from a diff in a project folder inside a repository opens that file | skip (panels-3): needs the diff header's Open and Reveal, which CandyWrapper lacks; port with that action |
 
 ## Small fixes, files (22)
 
