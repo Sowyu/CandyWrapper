@@ -670,9 +670,10 @@ public final class SidebarListView: DSView {
     }
 
     /// The frame of the item with this key, for scrolling a search highlight into view.
-    func scrollItemToVisible(_ key: String) {
+    /// `inset` trims the item's frame first: T3 reveals a thread row's card, inside the `li`'s `py-0.5`.
+    func scrollItemToVisible(_ key: String, inset: CGFloat = 0) {
         guard let i = indexByKey[key] else { return }
-        scrollToVisible(frame(at: i))
+        scrollToVisible(frame(at: i).insetBy(dx: 0, dy: inset))
         tile(oldTops: nil)
     }
 

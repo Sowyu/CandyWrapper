@@ -607,7 +607,9 @@ public final class SidebarContentView: DSView {
         // Before the list is on screen with a size, every row reads as out of view; the launch reveal waits for one.
         guard window != nil, list.visibleRect.height > 0 else { return }
         initialRevealOwed = false
-        list.scrollItemToVisible("thread:\(id.rawValue)") // `scrollIntoView({ block: "nearest" })`
+        // `row.scrollIntoView({ block: "nearest" })` on the card, not its `py-0.5` item (routeReveal.ts:66,
+        // SidebarThreadRow.tsx:1541-1560).
+        list.scrollItemToVisible("thread:\(id.rawValue)", inset: 2)
     }
 
     private func searchItems(nowMs: Int64) -> [SidebarItem] {
@@ -1148,6 +1150,12 @@ public final class SidebarContentView: DSView {
         scrollArea.frame = NSRect(x: 0, y: listTop, width: w, height: max(0, footerTop - listTop))
         list.frame.size.width = w
         list.needsLayout = true
+        // T3 scrolls the open row into view on mount (sidebar/routeReveal.ts:36-66). A snapshot set before the
+        // sidebar had a window reveals on its first sized layout instead of waiting for the next rebuild.
+        if initialRevealOwed, window != nil, state.activeThreadId != nil, scrollArea.frame.height > 0 {
+            list.layoutSubtreeIfNeeded()
+            revealRouteRow()
+        }
     }
 }
 

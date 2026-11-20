@@ -22,9 +22,12 @@ enum Screen3824Fixtures {
             ("Markdown Response Formatting Request", .read, 17, 23),
         ]
         var threads = rows.enumerated().map { i, row in
-            // Every seeded thread but "Scratch idea" ran on main.
-            SidebarPreview.thread("t\(i)", row.0, project: p, kind: row.1, minutesAgo: dark ? row.2 : row.3,
-                                  extra: row.0 == "Scratch idea" ? [:] : ["branch": "main"])
+            // Every seeded thread but "Scratch idea" ran on main. T3 orders active rows by creation
+            // (client-runtime state/threadSort.ts:254-275), so the second story sorts above the older scratch thread
+            // although its reply is a minute older.
+            var extra: [String: Any] = row.0 == "Scratch idea" ? [:] : ["branch": "main"]
+            extra["createdAt"] = SidebarPreview.iso(Double(40 + i))
+            return SidebarPreview.thread("t\(i)", row.0, project: p, kind: row.1, minutesAgo: dark ? row.2 : row.3, extra: extra)
         }
         // The footer's Snoozed 1 and Settled 1: "Tidy the README" snoozed until 2027-01-04, "Plan release notes" settled.
         threads.append(SidebarPreview.thread("t8", "Tidy the README", project: p, kind: .waiting, minutesAgo: 30,
