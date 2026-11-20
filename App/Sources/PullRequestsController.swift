@@ -866,6 +866,8 @@ final class ThreadPullRequestsController {
     var openThreadId: () -> ThreadId? = { nil }
     /// Add to chat: the review-comment records for the composer beside the panel (#30579).
     var addToChat: (([JSONValue]) -> Void)?
+    /// A pull request task for the composer beside the panel (`writeHandoffToComposer`); false when it can't take one.
+    var handoff: ((PullRequestHandoff.Task) -> Bool)?
     private var modal: ModalHost?
     /// The open Link dialog; its fields talk to it weakly, so it is held here while it shows.
     private var linkDialog: LinkPullRequestDialog?
@@ -897,6 +899,17 @@ final class ThreadPullRequestsController {
                 guard let self, self.addToChat != nil else { return }
                 self.addToChat?(records)
                 panel?.toasts.show(ToastView(title: "Added to the composer", message: nil, kind: .success))
+            }
+            // Ask, Explain, Fix findings and Resolve conflicts (4928 PullRequestDetailPanel.tsx:1048-1370) join the composer.
+            view.onHandoff = { [weak self] kind in
+                guard let self, let d = self.detail.detail else { return }
+                let term = ChangeRequestTerminology.of(kind: d.provider).singular
+                switch kind {
+                case "ask": self.handOff(PullRequestHandoff.ask(d), ask: true, term: term)
+                case "explain": self.handOff(PullRequestHandoff.explain(d), ask: true, term: term)
+                case "findings": self.handOff(PullRequestHandoff.fixFindings(d, checks: d.checks, inThisThread: true))
+                default: self.handOff(PullRequestHandoff.resolveConflicts(d, inThisThread: true))
+                }
             }
         }
         panel.onAddPullRequest = { [weak self] in self?.openCurrentPullRequest() }
@@ -1061,6 +1074,18 @@ final class ThreadPullRequestsController {
         }
     }
 
+    /// `handOff` (ThreadDetailsPrRow.tsx:205-215, PullRequestDetailPanel.tsx:1048-1059): the task joins
+    /// the composer beside the panel, with the toast T3 shows.
+    func handOff(_ task: PullRequestHandoff.Task, ask: Bool = false, term: String = "pull request") {
+        guard handoff?(task) == true else {
+            panel.toasts.show(ToastView(title: "Unable to add to the composer", message: "The composer is busy; try again once it is ready.", kind: .error))
+            return
+        }
+        let message = !ask ? "The task is in the composer. Read it over, then send."
+            : task.prompt.isEmpty ? "The \(term) is in the composer. Type your question, then send." : "The question is in the composer. Read it over, then send."
+        panel.toasts.show(ToastView(title: "Added to the composer", message: message, kind: .success))
+    }
+
     /// The two-line row (ThreadDetailsPrRow.tsx:434-476): the title, then `#n`, the checks, the watch eye
     /// and the one action that unblocks the merge next. Nil when the host has not answered or the second
     /// line would be empty, so the row stays the one-line link.
@@ -1102,13 +1127,21 @@ final class ThreadPullRequestsController {
         r.action.isHidden = action == nil
         switch action {
         case "resolve", "fix":
-            // ponytail: Resolve and Fix hand off to a new thread in T3 (usePullRequestHandoffs); the handoff is not
-            // ported, so they show disabled as the panel's Resolve conflicts does. Port them with the handoffs
-            r.action.text = action == "resolve" ? "Resolve" : "Fix"
+            // Beside the thread's composer the task joins it (ThreadDetailsPrRow.tsx:205-249, 393-436).
+            let resolve = action == "resolve"
+            r.action.text = resolve ? "Resolve" : "Fix"
             r.action.tone = .destructive
-            r.action.suffix = IconName.arrowUpRight.definition
-            r.action.tooltipText = action == "resolve" ? "Check the branch out and resolve the conflicts in a new thread" : "Fix the failing checks in a new thread"
-            r.action.isEnabled = false
+            let here = handoff != nil
+            r.action.suffix = here ? nil : IconName.arrowUpRight.definition
+            r.action.tooltipText = resolve
+                ? (here ? "Resolve the conflicts in this thread" : "Check the branch out and resolve the conflicts in a new thread")
+                : (here ? "Fix the failing checks in this thread" : "Fix the failing checks in a new thread")
+            // ponytail: no new-thread checkout handoff yet; off a composer the row stays disabled. Port usePullRequestHandoffs.startHandoff with the page's Check out
+            r.action.isEnabled = here
+            r.action.action = { [weak self] in
+                self?.handOff(resolve ? PullRequestHandoff.resolveConflicts(d, inThisThread: true)
+                                      : PullRequestHandoff.fixChecks(d, inThisThread: true))
+            }
         case "ready":
             r.action.text = pending ? "Marking..." : "Ready"
             r.action.tone = .primary

@@ -69,6 +69,9 @@ public final class PullRequestDetailView: DSView {
     /// The ⋯ menu's thread link item, nil where there is no thread to link to.
     public var linkItemTitle: String?
     public var onCheckout: ((_ worktree: Bool) -> Void)?
+    /// Beside a thread's composer: "ask", "explain", "findings" or "conflicts" hand the composer a task
+    /// (4928 PullRequestDetailPanel.tsx:1201-1370). Nil on the page, where they need a new thread.
+    public var onHandoff: ((String) -> Void)? { didSet { if (oldValue == nil) != (onHandoff == nil), window != nil { rebuildActions() } } }
     public var onMergeMethod: ((String) -> Void)?
     public var onComment: ((String) -> Void)?
     /// "Close with comment" or "Reopen with comment": post, then run the action.
@@ -571,8 +574,11 @@ public final class PullRequestDetailView: DSView {
         case "resolve":
             let b = ButtonView("Resolve conflicts", icon: .triangleAlert, variant: .destructiveOutline, size: .xs)
             b.iconSize = 14
-            b.isEnabled = false
+            // ponytail: the page's Resolve needs the new-thread checkout handoff (usePullRequestHandoffs); disabled there until it's ported
+            b.isEnabled = onHandoff != nil
             b.toolTip = "Resolve conflicts"
+            b.setAccessibilityLabel("Resolve conflicts")
+            b.action = { [weak self] in self?.onHandoff?("conflicts") }
             primary = b
         case "ready":
             let b = ButtonView("Ready for review", icon: .gitPullRequestArrow, variant: .default, size: .xs)
@@ -718,6 +724,19 @@ public final class PullRequestDetailView: DSView {
         var refresh = MenuItem("Refresh", icon: .refreshCw, disabled: refreshing)
         refresh.action = { [weak self] in self?.onRefresh?() }
         items.append(refresh)
+        // Ask, Explain and Fix findings (4928 PullRequestActionsMenu.tsx:266-303), here beside a composer only.
+        if onHandoff != nil {
+            let t = ChangeRequestTerminology.of(kind: d.provider)
+            var ask = MenuItem("Ask a question", icon: .messageCircleQuestion)
+            ask.subtitle = "Adds the \(t.singular) to this thread's composer."
+            ask.action = { [weak self] in self?.onHandoff?("ask") }
+            var explain = MenuItem("Explain this \(t.singular == "change request" ? t.singular : t.shortLabel)", icon: .bookOpen)
+            explain.subtitle = "A walk through the diff and what to read closely."
+            explain.action = { [weak self] in self?.onHandoff?("explain") }
+            var fix = MenuItem(PullRequestHandoff.labels(inThisThread: true).fixFindings, icon: .hammer)
+            fix.action = { [weak self] in self?.onHandoff?("findings") }
+            items += [ask, explain, fix]
+        }
         items.append(.separator)
         // "Allow edits from maintainers" (4928 PullRequestActionsMenu.tsx:323-351, pullRequestEditing.ts:28-40).
         if PullRequestDetailLogic.canEditMaintainerEdits(d) {

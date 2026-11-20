@@ -490,7 +490,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | 58e60bf5e8 | #26767 | thread | feat: turn a No project thread into a project | ported (sidebar-2): projects.createFromThread behind threadProjectFromScratch; thread menu Turn into project with its toasts |
-| 84e69da395 | #34788 | pr/git | fix(web): No project threads offer no Initialize Git, and their linked PRs show and act in the thread | ported (panels-5): `offersGit` on ThreadDetailsCardView hides the branch, git actions and Initialize Git for a scratch-root thread, and linked PR rows show without a branch selector; Redesign pill too. Left: the rows' Fix and Resolve writing to the composer, with the PR handoff prompts |
+| 84e69da395 | #34788 | pr/git | fix(web): No project threads offer no Initialize Git, and their linked PRs show and act in the thread | ported (panels-5, panels-6): offersGit on ThreadDetailsCardView hides the branch, git actions and Initialize Git for a scratch-root thread, and linked PR rows show without a branch selector; Redesign pill too. The rows' Fix and Resolve write to the composer through ComposerController.appendHandoff (panels-6, ThreadDetailsPrRow.tsx:205-249) |
 
 ## New feature fleet-channel (1)
 
@@ -1097,7 +1097,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 479ee74135 | #15848 | pr/git | fix(web): a thread started from a pull request links it | left (panels-4): a thread started from a PR links it; needs the PR draft-thread flow (usePullRequestDraftThread) CW doesn't have |
 | 7e565c510d | #34218 | pr/git | fix(git): stop new threads inheriting historical branch PRs | left (panels-4): resolveDisplayedThreadPr only shows a branch PR for the thread's own branch; GitController reads status.pr directly |
 | 3a0bcba00a | #34607 | pr/git | fix(shared): GitLab merge request file and line links open that file | ported (panels-5): GitLab file and line codes and `?file=` in PullRequestAnchor.gitLab |
-| 9411a71ec0 | #34509 | pr/git | fix(web): dismissing the pull request checkout toast stops the handoff | n/a (panels-4): CW has no PR checkout handoff toast (handoffs not ported, PullRequestsController.swift:1062) |
+| 9411a71ec0 | #34509 | pr/git | fix(web): dismissing the pull request checkout toast stops the handoff | left (panels-6): the cancelling toast belongs to the page's new-thread checkout handoff (usePullRequestHandoffs.startHandoff: a new draft, git.preparePullRequestThread, a second draft on the branch), which CW doesn't have; beside a thread the handoff writes to the composer with no toast to dismiss |
 | 8214342385 | #32283 | pr/git | fix(web): collapsed PR comments no longer show raw HTML | left (panels-4): collapsed PR comments strip raw HTML; needs pullRequestMarkdown.logic's summary text in PullRequestTabs |
 | afe0528039 | #34727 | pr/git | fix(web): keep git action loading rows at idle height | left (panels-4): git action loading row height; no reference for the loading state |
 | fd033dfec3 | #34722 | pr/git | fix(web): improve Word document previews | skip (panels-3): CandyWrapper hands this format to Quick Look |
@@ -1170,7 +1170,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 5b91a5a00e | #37950 | pr/git | fix(web): HTML file previews no longer flash white after agent commands | n/a (panels-4): a web iframe white flash; CW's WKWebView keeps the page between commands |
 | 6ec1d31b1e | #36624 | pr/git | fix(web): preserve literal XML declarations in EPUB previews | skip (panels-4): CW has no EPUB preview; Quick Look shows those files |
 | f98249acad | #38004 | pr/git | fix(web): unsaved PR review comments survive a light/dark switch | already in CandyWrapper (panels-4): pending review comments live in the composer model, which a theme switch keeps (PullRequestComposerView) |
-| f92c5e8f98 | #38276 | pr/git | fix(web): review summary line comments keep which side they refer to | left (panels-4): the before side in review summaries belongs to the PR handoff prompts, not ported (PullRequestsController.swift:1062) |
+| f92c5e8f98 | #38276 | pr/git | fix(web): review summary line comments keep which side they refer to | ported (panels-6): a finding on the base side reads L12 (before) in the Fix findings handoff (PullRequestHandoff.findingRecord, pullRequestDetail.logic.ts:965-990) |
 | f5f8c8d18b | #38470 | pr/git | fix(web): opening a file in the preview browser shows its current contents | left (panels-4): opening a file in the preview browser with refresh, BrowserController's open-file path |
 | 75514dfa55 | #38517 | pr/git | fix(web): keep Ready pending label until its request finishes | left (panels-4): keep Ready pending until done; needs the pending action name in ThreadDetailsPrRowView |
 | 523a98447e | #38858 | pr/git | fix(web): files under "Also in this stop" in a review guide can be commented on | skip (panels-4): CW has no PR review guide |
