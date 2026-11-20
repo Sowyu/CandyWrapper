@@ -568,13 +568,6 @@ public final class ThreadPanelView: DSView {
     /// The stash count tab on the dock's right (`ComposerStashBadge`); hidden at zero.
     public let stashBadge = ComposerStashBadgeView()
     public var showsStashBadge = false { didSet { if showsStashBadge != oldValue { needsLayout = true } } }
-    /// Redesign's Queued pill, left of Stash: it opens `queue` as a panel over the row (the user, 2026-10-22: "integrate
-    /// this to be the left of Stash"). Other themes dock the queue as T3's card and never show it.
-    public let queueBadge = ComposerStashBadgeView(icon: .listOrdered, title: "Queued",
-                                                   describe: { "Queued messages: \($0). Open queue." })
-    private var queueBadgeCount = 0
-    /// While the queue panel is open, a click outside it or its pill closes it, as the stash list does.
-    private var queueClickMonitor: Any?
     /// While the subagent panel is open: a click outside it or its pill closes it, Esc disarms a Stop or closes it.
     private var subagentPanelMonitor: Any?
     /// Redesign's subagent strip: a pill left of Queued while subagents run or wait, which opens the panel over the
@@ -841,9 +834,6 @@ public final class ThreadPanelView: DSView {
         addSubview(activityRow)
         stashBadge.isHidden = true
         addSubview(stashBadge)
-        queueBadge.isHidden = true
-        queueBadge.onToggleMenu = { [weak self] in self?.queue.toggle() }
-        addSubview(queueBadge)
         lazyParentPill.configure { [weak self] pill in
             pill.isHidden = true
             pill.action = { [weak self] in self?.onOpenParentPill?() }
@@ -1635,11 +1625,9 @@ public final class ThreadPanelView: DSView {
         deviceRow.isHidden = true
         waitingIndicator.isHidden = true
         ringPill.isHidden = true
-        queueBadge.isHidden = true
         lazySubagentPill.loaded?.isHidden = true
         lazySubagentPanel.loaded?.isHidden = true
         lazyParentPill.loaded?.isHidden = true
-        watchQueueClicks(false)
         watchSubagentPanel(false)
         if composer.contextWindowMeter.superview !== composer {
             composer.addSubview(composer.contextWindowMeter)
@@ -1865,8 +1853,8 @@ public final class ThreadPanelView: DSView {
     }
 
     private var ditherDockViews: [ComposerBannerView?] {
-        [approvalPanel, lazyQuestionPanel.loaded, tasksView, lazyPlanFollowUpBanner.loaded, activityRow, queue, stashBadge,
-         queueBadge, commandMenu, lazyStashMenu.loaded, lazySubagentPill.loaded, lazySubagentPanel.loaded]
+        [approvalPanel, lazyQuestionPanel.loaded, tasksView, lazyPlanFollowUpBanner.loaded, activityRow, stashBadge,
+         commandMenu, lazyStashMenu.loaded, lazySubagentPill.loaded, lazySubagentPanel.loaded]
     }
     /// The pills and cards Redesign showed on the last pass, to animate what comes and goes.
     private var ditherShown: [NSView] = []
@@ -1879,8 +1867,6 @@ public final class ThreadPanelView: DSView {
     /// panel, tasks, wide notices, the queue). The checkout and branch pills float `DitherPill.gap` below it, from its
     /// left edge, where T3's strip sits. The composer never moves for any of them; they fade in and out.
     private func layoutDitherComposer(chat: CGFloat, chatHeight: CGFloat, x: CGFloat, width: CGFloat, height: CGFloat) {
-        timeline.setQueueFooter(nil)
-        if queue.superview !== self { addSubview(queue, positioned: .below, relativeTo: composer) }
         let gap = DitherPill.gap, pillH = DitherPill.height, spacing = DitherPill.spacing
         let overlap = ComposerBannerView.overlap
         // Pill rows sit inside the composer's corners; cards keep its full width.
@@ -1895,6 +1881,12 @@ public final class ThreadPanelView: DSView {
         composer.joinsContextStrip = false
         let visible = !composer.isHidden
         let docked = visible && !isDraft
+        // Queued messages sit at the end of the timeline as the default themes draw them (the user, 2026-11-21:
+        // "port it to redesign"), in Redesign's colors and corners.
+        let hasQueuedMessages = docked && !queue.state.items.isEmpty
+        queue.placement = .attached
+        timeline.setQueueFooter(hasQueuedMessages ? queue : nil)
+        queue.isHidden = !hasQueuedMessages
         var shown: [NSView] = []
         var top = y
 
@@ -1956,12 +1948,6 @@ public final class ThreadPanelView: DSView {
         }
         let badgeShown = showsStashBadge && visible
         stashBadge.placement = .floating
-        let queued = docked ? queue.state.items.count : 0
-        queueBadge.placement = .floating
-        queueBadge.count = queued
-        queueBadge.menuOpen = queue.expanded
-        if queued > queueBadgeCount, queueBadgeCount > 0 { queueBadge.animateCount() }
-        queueBadgeCount = queued
         // Capy's machine and workspace row takes the strip's place under the composer, in threads and on the draft;
         // its menu holds the strip's machine, workspace and ref.
         let deviceShown = visible && showsDeviceRow
@@ -2010,12 +1996,12 @@ public final class ThreadPanelView: DSView {
         }
 
 
-        // Queued then Stash at the row's right. Both drop their labels to the glyph and count when that lets the hero
-        // or the first status pill fit beside them.
+        // Stash at the row's right. It drops its label to the glyph and count when that lets the hero
+        // or the first status pill fit beside it.
         let strip: SubagentStripPillView? = stripOn ? lazySubagentPill.view : nil
         if let strip, strip.superview !== self { addSubview(strip, positioned: .above, relativeTo: queue) }
-        let badges = [(queueBadge, queued > 0), (stashBadge, badgeShown)].filter(\.1).map(\.0)
-        // The subagent pill leads the cluster and keeps its width; only Queued and Stash drop their labels.
+        let badges = badgeShown ? [stashBadge] : []
+        // The subagent pill leads the cluster and keeps its width; only Stash drops its label.
         let rightPills: [ComposerBannerView] = (strip.map { [$0] } ?? []) + badges
         func pillWidth(_ view: ComposerBannerView, _ titled: Bool) -> CGFloat {
             (view as? ComposerStashBadgeView)?.width(showingTitle: titled) ?? (view as? SubagentStripPillView)?.preferredWidth ?? 0
@@ -2053,21 +2039,13 @@ public final class ThreadPanelView: DSView {
         let approvalsHeight = placeChildApprovals(shown: docked && visible, x: x, width: width, bottom: top)
         if approvalsHeight > 0 { top -= approvalsHeight }
 
-        // The queue opens from its pill as a panel over everything above the row, floating over the timeline like the
-        // stash list. The `/` menu and the stash list win while open.
+        // The `/` menu and the stash list float as panels over the timeline and win while open.
         let menuShown = menus.isOpen && visible
         let stashShown = !menuShown && stashMenuOpen && visible
-        let queueOpen = queued > 0 && queue.expanded && !menuShown && !stashShown
-        if queueOpen {
-            let h = min(queue.preferredHeight - overlap, max(96, top - gap - 24))
-            queue.frame = NSRect(x: x, y: top - gap - h, width: width, height: h)
-            shown.append(queue)
-        }
-        watchQueueClicks(queueOpen)
-        // The subagent panel opens from its pill the same way; the queue, the `/` menu and the stash list win.
-        // While the queue or this panel is open the timeline's inset grows by its height, so it covers no last lines.
-        var insetTop = queueOpen ? queue.frame.minY : top
-        if stripOn && subagentStripExpanded && !queueOpen && !menuShown && !stashShown {
+        // The subagent panel opens from its pill the same way; the `/` menu and the stash list win.
+        // While this panel is open the timeline's inset grows by its height, so it covers no last lines.
+        var insetTop = top
+        if stripOn && subagentStripExpanded && !menuShown && !stashShown {
             let panel = lazySubagentPanel.view
             if panel.superview !== self { addSubview(panel, positioned: .above, relativeTo: queue) }
             let maxH = min((window?.contentView?.bounds.height ?? bounds.height) * 0.4, max(96, top - gap - 24))
@@ -2142,22 +2120,6 @@ public final class ThreadPanelView: DSView {
                 return false
             }
             return swallow ? nil : event
-        }
-    }
-
-    private func watchQueueClicks(_ on: Bool) {
-        guard on != (queueClickMonitor != nil) else { return }
-        if let monitor = queueClickMonitor { NSEvent.removeMonitor(monitor); queueClickMonitor = nil; return }
-        queueClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
-            nonisolated(unsafe) let event = event
-            MainActor.assumeIsolated {
-                guard let self, event.window === self.window, self.queue.expanded else { return }
-                for view in [self.queue, self.queueBadge] as [NSView] where !view.isHidden {
-                    if view.bounds.contains(view.convert(event.locationInWindow, from: nil)) { return }
-                }
-                self.queue.toggle()
-            }
-            return event
         }
     }
 

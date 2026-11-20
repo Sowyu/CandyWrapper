@@ -159,6 +159,18 @@ private typealias Mark = ComposerRichText.Mark
         #expect(host.text(with: .bold) == ["bo", "ld"])
     }
 
+    /// T3 c83e78fe07 (#36285): a caret after the closing markers is outside the style.
+    @Test(arguments: [("`Test`", "`Test`\nf", Mark.code), ("**Test**", "**Test**\nf", Mark.bold)])
+    func aLineBreakAfterTypedStyledTextLeavesTheNextLinePlain(typed: String, expected: String, mark: ComposerRichText.Mark) throws {
+        let host = Host("")
+        host.type(typed)
+        try host.press(36, "\r", flags: .shift)
+        host.type("f")
+        host.end()
+        #expect(host.value == expected)
+        #expect(host.text(with: mark) == ["Test"])
+    }
+
     @Test func splittingAListItemInsideBoldKeepsBothHalvesBold() throws {
         let host = Host("- **bold** after")
         host.caret(3)

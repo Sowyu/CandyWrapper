@@ -61,13 +61,14 @@ struct RedesignBaselineTests {
                 panel.composer.footerControls = [pickers.controlsView]
                 if mode == "typing" { panel.composer.text = "Refactor the upload queue so retries keep their place" }
                 if mode == "queued" {
-                    panel.queue.placement = .floating
+                    // T3's queue at the end of the timeline (the user, 2026-11-21), the second message being edited.
                     panel.composer.runState = .init(activeRunId: RunId("run"), running: true)
                     panel.queue.state = .init(items: [
                         .init(runId: RunId("q1"), messageId: nil, text: "second queued message"),
                         .init(runId: RunId("q2"), messageId: nil, text: "third queued message")],
                         activeRunId: RunId("run"), canReorder: true, canPromoteToSteer: true)
-                    panel.queue.expand()
+                    panel.queue.editingRunId = RunId("q2")
+                    panel.layoutSubtreeIfNeeded(); panel.timeline.scroll(toFraction: 1)
                 }
                 if mode == "approval" || mode == "question" {
                     if mode == "approval" {
@@ -91,7 +92,7 @@ struct RedesignBaselineTests {
                 try capture("composer-" + mode, panel, panelSize)
                 if mode == "approval" { #expect(!panel.approvalPanel.isHidden) }
                 if mode == "question" { #expect(!panel.questionPanel.isHidden) }
-                if mode == "queued" { #expect(panel.queueBadge.count == 2) }
+                if mode == "queued" { #expect(panel.queue.superview != nil && !panel.queue.isHidden) }
             }
             for (name, title, fraction) in [("markdown-top", ThreadPreview.markdownThread, CGFloat(0)),
                                             ("code-bottom", ThreadPreview.markdownThread, 1),

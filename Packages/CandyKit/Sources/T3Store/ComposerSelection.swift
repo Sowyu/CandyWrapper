@@ -429,3 +429,18 @@ public final class ComposerSelectionStore {
         save()
     }
 }
+
+extension ComposerSelectionContext {
+    /// `resolveProjectOverrides` (shared/projectSettings.ts:152-166 at 4928, #23615): a project default model the user
+    /// hid is no override, so a new chat takes the global default. Custom models count as visible even when hidden.
+    public static func visibleProjectDefault(_ selection: ModelSelection?, settings: JSONValue) -> ModelSelection? {
+        guard let selection else { return nil }
+        let id = selection.instanceId.rawValue
+        let hidden = settings["providerModelPreferences"]?[id]?["hiddenModels"]?.arrayValue ?? []
+        guard hidden.contains(.string(selection.model)) else { return selection }
+        let custom = (settings["providerInstances"]?[id]?["config"]?["customModels"]?.arrayValue ?? []).contains {
+            ($0.stringValue ?? $0["slug"]?.stringValue)?.trimmingCharacters(in: .whitespacesAndNewlines) == selection.model
+        }
+        return custom ? selection : nil
+    }
+}

@@ -112,6 +112,9 @@ public struct Run: Codable, Hashable, Sendable, Identifiable {
     public var status: ThreadStatus
     public var queuePosition: Int?
     public var queueHeld: Bool?
+    /// The run starts a fresh provider session (`freshContext`, orchestrationV2.ts at 4928): queued, it may skip
+    /// compaction but never steers into a turn.
+    public var freshContext: Bool?
     public var requestedAt: T3Timestamp
     public var startedAt: T3Timestamp?
     public var completedAt: T3Timestamp?
