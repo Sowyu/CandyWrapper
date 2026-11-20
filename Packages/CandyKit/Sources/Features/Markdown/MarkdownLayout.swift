@@ -1508,7 +1508,7 @@ private struct Builder {
             return MarkdownStyle.inline(runs, size: size, weight: header ? .semibold : .regular, color: context.color, alignment: alignment, files: files, contexts: contexts)
         }
         func natural(_ s: NSAttributedString) -> CGFloat {
-            boxes.make(s, width: 0, lineHeight: line, strut: MarkdownStyle.font(size), wraps: false).usedWidth
+            boxes.natural(s, lineHeight: line, strut: MarkdownStyle.font(size))
         }
         var widths = [CGFloat](repeating: 0, count: columns)
         for row in [table.header] + table.rows {
@@ -1739,6 +1739,25 @@ final class TextBoxCache {
     init(previous: [Key: MarkdownTextBox]?, records: Bool) {
         self.previous = previous ?? [:]
         self.records = records
+    }
+
+    /// Unwrapped widths measured during this layout. A table measures each cell for its column, then again with every
+    /// word for the expanded widths, and words repeat across cells and tables: a 1 MiB reply built a TextKit stack for
+    /// each. Kept with the cache, so it lives for one layout; each parallel worker has its own.
+    private var naturals: [NaturalKey: CGFloat] = [:]
+    private struct NaturalKey: Hashable {
+        var string: NSAttributedString
+        var lineHeight: CGFloat
+        var strut: NSFont
+    }
+
+    /// The width `string` takes on one line: `make(width: 0, wraps: false).usedWidth`, remembered.
+    func natural(_ string: NSAttributedString, lineHeight: CGFloat, strut: NSFont) -> CGFloat {
+        let key = NaturalKey(string: string, lineHeight: lineHeight, strut: strut)
+        if let width = naturals[key] { return width }
+        let width = make(string, width: 0, lineHeight: lineHeight, strut: strut, wraps: false).usedWidth
+        naturals[key] = width
+        return width
     }
 
     /// `inlineBoxes` follow from the string (its formulas), so they stay out of the key.
