@@ -1,5 +1,5 @@
+import Accelerate
 import AppKit
-import CoreImage
 import ImageIO
 import os
 
@@ -618,16 +618,21 @@ public enum DitherArt {
         return ctx.makeImage()
     }
 
-    nonisolated(unsafe) private static let blurContext = CIContext(options: [.cacheIntermediates: false])
-
-    /// Blurs `ctx`'s pixels in place by `blurSigma`, the edges clamped so no dark rim creeps in. Runs once per render.
-    nonisolated static func blur(_ ctx: CGContext, width w: Int, height h: Int) {
-        guard let image = ctx.makeImage(), let data = ctx.data else { return }
-        let extent = CGRect(x: 0, y: 0, width: w, height: h)
-        let blurred = CIImage(cgImage: image).clampedToExtent()
-            .applyingGaussianBlur(sigma: Double(blurSigma / blurPixel)).cropped(to: extent)
-        blurContext.render(blurred, toBitmap: data, rowBytes: ctx.bytesPerRow, bounds: extent, format: .RGBA8,
-                           colorSpace: CGColorSpace(name: CGColorSpace.sRGB))
+    /// Blurs `ctx`'s pixels in place by about `blurSigma`, the edges extended so no dark rim creeps in. Runs once per
+    /// render. Two tent passes are four box passes, which match a Gaussian closely; vImage needs no GPU context.
+    nonisolated static func blur(_ ctx: CGContext, width w: Int, height h: Int, sigma points: CGFloat = blurSigma) {
+        guard let data = ctx.data else { return }
+        let sigma = Double(points / blurPixel)
+        // A box of width b has variance (b² - 1) / 12, and four of them make the Gaussian's σ². A tent of width 2b - 1 is
+        // two such boxes.
+        let box = Int((sqrt(12 * sigma * sigma / 4 + 1)).rounded()) | 1
+        var buffer = vImage_Buffer(data: data, height: vImagePixelCount(h), width: vImagePixelCount(w), rowBytes: ctx.bytesPerRow)
+        guard let scratch = malloc(ctx.bytesPerRow * h) else { return }
+        defer { free(scratch) }
+        var temp = vImage_Buffer(data: scratch, height: vImagePixelCount(h), width: vImagePixelCount(w), rowBytes: ctx.bytesPerRow)
+        let k = UInt32(2 * box - 1)
+        vImageTentConvolve_ARGB8888(&buffer, &temp, nil, 0, 0, k, k, nil, vImage_Flags(kvImageEdgeExtend))
+        vImageTentConvolve_ARGB8888(&temp, &buffer, nil, 0, 0, k, k, nil, vImage_Flags(kvImageEdgeExtend))
     }
 
     /// The art partly resolved, one frame per reveal: a dot whose Bayer threshold is above the reveal shows the
