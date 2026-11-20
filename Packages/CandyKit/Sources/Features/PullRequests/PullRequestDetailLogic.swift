@@ -558,6 +558,9 @@ public enum PullRequestDetailLogic {
         choices[path] ?? (folded ?? viewed)
     }
 
+    /// The diff line a conversation sits on, grouping the conversations `InlineReviewThreads` folds together.
+    public static func threadLineKey(_ t: PullRequestReviewThread) -> String { "\(t.side):\(t.line ?? 0):\(t.path)" }
+
     /// Swaps each hunkless file in `patch` whose path has a patch in `loaded` for that patch: a withheld file read on
     /// its own (4928 PullRequestCodeTab.tsx, #37007, "a refreshed page may carry the file's patch itself now").
     public static func splicingWithheld(_ patch: String, loaded: [String: String]) -> String {

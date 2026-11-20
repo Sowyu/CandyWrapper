@@ -16,6 +16,13 @@ public struct DiffAnnotation: Equatable, Sendable {
 @MainActor
 public protocol DiffAnnotationContent: NSView {
     func height(forWidth width: CGFloat) -> CGFloat
+    /// Set for a control drawn on the line above at the list's right edge (`absolute right-3 bottom-full`) instead
+    /// of a card under it: its width. Such an annotation adds no height.
+    var lineOverlayWidth: CGFloat? { get }
+}
+
+public extension DiffAnnotationContent {
+    var lineOverlayWidth: CGFloat? { nil }
 }
 
 /// A line number clicked: the file and both of the line's numbers (0 where the side has none).
@@ -308,7 +315,11 @@ public final class DiffListView: DSView {
             guard let view = views[Int(row.left)] else { continue }
             if view.superview !== self { addSubview(view) }
             view.layer?.zPosition = 1
-            view.frame = NSRect(x: 0, y: row.top, width: width, height: rowLayout.bottom(of: i) - row.top)
+            if let w = view.lineOverlayWidth {
+                view.frame = NSRect(x: width - 12 - w, y: row.top - DiffStyle.lineHeight, width: w, height: DiffStyle.lineHeight)
+            } else {
+                view.frame = NSRect(x: 0, y: row.top, width: width, height: rowLayout.bottom(of: i) - row.top)
+            }
             placed.insert(annotations[Int(row.left)].id)
         }
         // A card whose line is not in a rendered hunk is drawn nowhere here; the caller lists it.

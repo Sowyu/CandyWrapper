@@ -400,7 +400,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| cf906e1fcf | #34644 | pr/git | feat(web): resolved review conversations fold into avatars on their diff line | left (panels-2): resolved conversations fold into avatars on their diff line, PullRequestReviewAnnotation.tsx |
+| cf906e1fcf | #34644 | pr/git | feat(web): resolved review conversations fold into avatars on their diff line | ported (panels-3): a line's resolved conversations fold behind up to three author avatars at the line's right, a click or Space shows them, a conversation seen open stays; PullRequestResolvedThreadsButton, DiffAnnotationContent.lineOverlayWidth |
 
 ## Port group add-project (2)
 

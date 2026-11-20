@@ -58,6 +58,9 @@ public final class PullRequestCodeView: DSView {
     private var nowMs: Int64 = 0
     private var draft: (target: DiffLineTarget, view: PullRequestDraftCommentView)?
     private var threadCards: [String: PullRequestReviewThreadCardView] = [:]
+    /// Conversations shown on their line. Open ones join when seen, so one resolved under the reader stays (#34644).
+    private var shownThreads: Set<String> = []
+    private var resolvedButtons: [String: PullRequestResolvedThreadsButton] = [:]
     private var orphanCards: [PullRequestReviewThreadCardView] = []
     private var reviewObserver: NSObjectProtocol?
     isolated deinit { if let reviewObserver { NotificationCenter.default.removeObserver(reviewObserver) } }
@@ -263,7 +266,7 @@ public final class PullRequestCodeView: DSView {
 
     /// The conversations and the review being written (PullRequestCodeTab.tsx:478-560).
     func setReview(_ d: PullRequestDetail, reviewKey: String, actions: PullRequestReviewThreadActions, nowMs: Int64) {
-        if detail?.url != d.url { threadCards = [:]; draft = nil }
+        if detail?.url != d.url { threadCards = [:]; draft = nil; shownThreads = []; resolvedButtons = [:] }
         detail = d
         self.reviewKey = reviewKey
         self.actions = actions
@@ -308,7 +311,27 @@ public final class PullRequestCodeView: DSView {
         var annotations: [DiffAnnotation] = []
         // A commit's diff counts lines within that commit; review comments anchor to the head diff.
         if let d = detail, commit == nil {
-            for t in d.reviewThreads { if let line = t.line { annotations.append(DiffAnnotation(path: t.path, right: t.side == "right", line: line, id: "thread:\(t.id)")) } }
+            // `InlineReviewThreads`: a line's resolved conversations fold behind their authors' avatars.
+            let lined = d.reviewThreads.filter { $0.line != nil }
+            for t in lined where !t.isResolved { shownThreads.insert(t.id) }
+            var groups: [String: [PullRequestReviewThread]] = [:]
+            var order: [String] = []
+            for t in lined {
+                let key = PullRequestDetailLogic.threadLineKey(t)
+                if groups[key] == nil { order.append(key) }
+                groups[key, default: []].append(t)
+            }
+            for key in order {
+                let threads = groups[key]!
+                let resolved = threads.filter(\.isResolved)
+                if !resolved.isEmpty, let first = threads.first, let line = first.line {
+                    annotations.append(DiffAnnotation(path: first.path, right: first.side == "right", line: line,
+                                                      id: "resolved:\(key):\(resolved.map(\.id).joined(separator: ","))"))
+                }
+                for t in threads where !t.isResolved || shownThreads.contains(t.id) {
+                    annotations.append(DiffAnnotation(path: t.path, right: t.side == "right", line: t.line!, id: "thread:\(t.id)"))
+                }
+            }
             for c in reviewKey.map(PullRequestReviewStore.shared.comments) ?? [] {
                 let a = c.position.anchor
                 annotations.append(DiffAnnotation(path: c.path, right: a.side == "right", line: a.line, id: "pending:\(c.id):\(c.body.hashValue)"))
@@ -322,6 +345,7 @@ public final class PullRequestCodeView: DSView {
         for f in list.diff.files where f.hunks.isEmpty && omitted[f.path] != nil {
             annotations.append(DiffAnnotation(path: f.path, right: true, line: 0, id: "withheld:\(f.path)"))
         }
+        for b in resolvedButtons.values { b.expanded = b.threadIds.allSatisfy(shownThreads.contains) }
         list.annotations = annotations
         list.reloadAnnotations()
         rebuildOrphans()
@@ -334,7 +358,7 @@ public final class PullRequestCodeView: DSView {
             thread: t, canReply: d.capabilities.review.reply, canResolve: d.capabilities.review.resolve && PullRequestWriteLogic.canResolveThread(d, t),
             canReact: d.capabilities.reactions == true,
             canEdit: { c in PullRequestWriteLogic.canEditComment(d, author: c.author?.login, kind: "review-comment", hostAnswer: c.canEdit) },
-            actions: actions, cwd: d.workspaceRoot, nowMs: nowMs)
+            actions: actions, cwd: d.workspaceRoot, nowMs: nowMs, startsExpanded: t.line != nil ? true : nil)
         card.onResize = { [weak self] in self?.list.reloadAnnotations(); self?.needsLayout = true }
         threadCards[t.id] = card
         return card
@@ -342,6 +366,25 @@ public final class PullRequestCodeView: DSView {
 
     private func annotationView(_ a: DiffAnnotation) -> DiffAnnotationContent? {
         if a.id == "draft" { return draft?.view }
+        if a.id.hasPrefix("resolved:"), let d = detail {
+            let key = String(a.id.dropFirst("resolved:".count)).components(separatedBy: ":").dropLast().joined(separator: ":")
+            let threads = d.reviewThreads.filter { $0.line != nil && PullRequestDetailLogic.threadLineKey($0) == key }
+            let resolved = threads.filter(\.isResolved)
+            let expanded = resolved.allSatisfy { shownThreads.contains($0.id) }
+            if let b = resolvedButtons[a.id] { b.expanded = expanded; return b }
+            let b = PullRequestResolvedThreadsButton(threads: resolved, expanded: expanded)
+            b.onToggle = { [weak self] in
+                guard let self else { return }
+                if resolved.allSatisfy({ self.shownThreads.contains($0.id) }) {
+                    self.shownThreads.subtract(resolved.map(\.id))
+                } else {
+                    self.shownThreads.formUnion(threads.map(\.id))
+                }
+                self.updateAnnotations()
+            }
+            resolvedButtons[a.id] = b
+            return b
+        }
         if a.id.hasPrefix("withheld:") {
             let path = String(a.id.dropFirst("withheld:".count))
             if let notice = withheldNotices[path] { return notice }
@@ -365,7 +408,11 @@ public final class PullRequestCodeView: DSView {
         orphanCards.forEach { $0.removeFromSuperview() }
         guard let d = detail else { orphanCards = []; return }
         let placed = list.placedAnnotationIds
-        let orphans = d.reviewThreads.filter { !placed.contains("thread:\($0.id)") }
+        // A folded resolved conversation is on its line, behind the avatars.
+        let foldedLines = Set(placed.filter { $0.hasPrefix("resolved:") }.map { $0.dropFirst("resolved:".count).components(separatedBy: ":").dropLast().joined(separator: ":") })
+        let orphans = d.reviewThreads.filter { t in
+            !placed.contains("thread:\(t.id)") && !(t.isResolved && t.line != nil && foldedLines.contains(PullRequestDetailLogic.threadLineKey(t)))
+        }
         orphanCards = orphans.compactMap { t in
             // A card shows in one place: the list takes it while its line is not drawn.
             guard let card = threadCard(t) else { return nil }
