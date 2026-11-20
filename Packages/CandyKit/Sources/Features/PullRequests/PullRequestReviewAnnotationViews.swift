@@ -129,6 +129,7 @@ public final class PullRequestDraftCommentView: DSView, DiffAnnotationContent {
             if sel == #selector(NSResponder.insertNewline(_:)), NSApp.currentEvent?.modifierFlags.contains(.command) == true { self.send(); return true }
             return false
         }
+        PullRequestCompletion.attach(to: textarea)
         cancel.action = { [weak self] in self?.onCancel?() }
         submit.action = { [weak self] in self?.send() }
         update()
@@ -221,6 +222,7 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
             if sel == #selector(NSResponder.insertNewline(_:)), NSApp.currentEvent?.modifierFlags.contains(.command) == true { self.sendReply(); return true }
             return false
         }
+        PullRequestCompletion.attach(to: replyBox)
         rebuild()
     }
 

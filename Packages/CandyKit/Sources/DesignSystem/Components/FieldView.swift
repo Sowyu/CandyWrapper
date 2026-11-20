@@ -53,6 +53,20 @@ public class FieldView: DSView {
     public final var onSubmit: (@MainActor () -> Void)?
     /// An input method is composing (`isComposing`): Enter belongs to it.
     public var hasMarkedText: Bool { editor.hasMarkedText() }
+    /// The caret's UTF-16 offset, nil while a range is selected.
+    public var caretLocation: Int? {
+        let r = editor.selectedRange()
+        return r.length == 0 ? r.location : nil
+    }
+    /// Fires when the caret or selection moves, typed or clicked.
+    public final var onSelectionChange: (@MainActor () -> Void)?
+    /// Swaps in `text` as typed input (undo and `onChange` run) and puts the caret at `caret`.
+    public func replaceText(in range: NSRange, with text: String, caret: Int) {
+        guard editor.shouldChangeText(in: range, replacementString: text) else { return }
+        editor.replaceCharacters(in: range, with: text)
+        editor.didChangeText()
+        editor.setSelectedRange(NSRange(location: caret, length: 0))
+    }
     /// Sees every editing command first (`moveUp:`, `insertNewline:`, `deleteBackward:`, `cancelOperation:`);
     /// true means handled. Lets a field drive a list the way an autocomplete input does.
     public final var onCommand: (@MainActor (Selector) -> Bool)?
@@ -295,6 +309,8 @@ final class FieldEditor: NSTextView, NSTextViewDelegate {
     override func insertBacktab(_ sender: Any?) { window?.selectPreviousKeyView(sender) }
 
     func textDidChange(_ notification: Notification) { field?.textChanged() }
+
+    func textViewDidChangeSelection(_ notification: Notification) { field?.onSelectionChange?() }
 
     func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         field?.onCommand?(commandSelector) ?? false

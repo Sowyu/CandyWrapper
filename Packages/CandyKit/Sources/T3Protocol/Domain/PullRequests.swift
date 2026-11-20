@@ -154,6 +154,52 @@ public struct PullRequestLabelCandidateList: Codable, Hashable, Sendable {
     public var truncated: Bool
 }
 
+/// `PullRequestFilterOptionsInput` (4928 pullRequest.ts:585): `pullRequests.filterOptions` asks for
+/// `labels`, `authors` or `references`, scoped like the list. `sigil` goes with `references`.
+public struct PullRequestFilterOptionsInput: Codable, Hashable, Sendable {
+    public var kind: String
+    public var projectId: String?
+    public var query: String?
+    public var sigil: String?
+    public init(kind: String, projectId: String?, query: String? = nil, sigil: String? = nil) {
+        self.kind = kind; self.projectId = projectId; self.query = query; self.sigil = sigil
+    }
+}
+
+/// `PullRequestReferenceCandidate` (4928 pullRequest.ts:597): an issue or change request a composer
+/// can reference, with the text the host links (`#12`, `!12`).
+public struct PullRequestReferenceCandidate: Codable, Hashable, Sendable {
+    public var reference: String
+    /// `issue` or `change-request`.
+    public var kind: String
+    public var number: Int
+    public var title: String
+    /// `open`, `closed` or `merged`.
+    public var state: String
+    public init(reference: String, kind: String, number: Int, title: String, state: String) {
+        self.reference = reference; self.kind = kind; self.number = number; self.title = title; self.state = state
+    }
+}
+
+/// `PullRequestFilterOptions` (4928 pullRequest.ts:606). Servers from before reference completion
+/// send no `references`.
+public struct PullRequestFilterOptions: Codable, Hashable, Sendable {
+    public var labels: [PullRequestLabel]
+    public var authors: [PullRequestActor]
+    public var references: [PullRequestReferenceCandidate]
+    public var truncated: Bool
+    public init(labels: [PullRequestLabel] = [], authors: [PullRequestActor] = [], references: [PullRequestReferenceCandidate] = [], truncated: Bool = false) {
+        self.labels = labels; self.authors = authors; self.references = references; self.truncated = truncated
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        labels = try c.decodeIfPresent([PullRequestLabel].self, forKey: .labels) ?? []
+        authors = try c.decodeIfPresent([PullRequestActor].self, forKey: .authors) ?? []
+        references = try c.decodeIfPresent([PullRequestReferenceCandidate].self, forKey: .references) ?? []
+        truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated) ?? false
+    }
+}
+
 /// `PullRequestCommit` (pullRequest.ts:316).
 public struct PullRequestCommit: Codable, Hashable, Sendable {
     public var oid: String
@@ -204,6 +250,8 @@ public struct PullRequestCapabilities: Codable, Hashable, Sendable {
     public var stackActions: Bool?
     public var deleteBranch: Bool?
     public var labels: Bool?
+    /// The host searches the repository's users, so composers complete `@login` (4928 pullRequest.ts:314).
+    public var mentions: Bool?
     /// The sigils composers complete references for, `#` and `!` (4928 pullRequest.ts:315).
     public var referenceSigils: [String]?
     /// Every head gets a check, so a long silence means none reported (4928 pullRequest.ts:320).

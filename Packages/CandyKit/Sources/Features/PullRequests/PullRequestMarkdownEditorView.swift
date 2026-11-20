@@ -55,6 +55,7 @@ public final class PullRequestMarkdownEditorView: DSView {
             }
             return false
         }
+        PullRequestCompletion.attach(to: textarea)
         cancel.action = { [weak self] in self?.onCancel?() }
         save.action = { [weak self] in
             guard let self, self.save.isEnabled else { return }

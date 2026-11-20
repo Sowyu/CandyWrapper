@@ -116,6 +116,15 @@ final class PullRequestDetailBinding {
             view.onSaveComment = { [weak self] comment, body in self?.updateComment(comment, body) }
             view.onReact = { [weak self] subject, content, reacted, bar in self?.react(subject, content, reacted, bar) }
             view.onPickLabels = { [weak self] anchor in self?.openPicker(.labels, from: anchor) }
+            // @ and # completion in the composers (4928 PullRequestMarkdownTextarea.tsx:72-88).
+            view.completionSearch = { [weak self] input in
+                guard let shell = self?.shell else { throw CancellationError() }
+                var o: [String: JSONValue] = ["kind": .string(input.kind)]
+                if let p = input.projectId { o["projectId"] = .string(p) }
+                if let q = input.query { o["query"] = .string(q) }
+                if let s = input.sigil { o["sigil"] = .string(s) }
+                return try await shell.supervisor.request("pullRequests.filterOptions", payload: .object(o)).decode(as: PullRequestFilterOptions.self)
+            }
             view.onPickReviewers = { [weak self] anchor in self?.openPicker(.reviewers, from: anchor) }
             view.onLoadMoreDiff = { [weak self] in self?.loadNextSlice() }
             view.onLoadWithheldFile = { [weak self] path in self?.loadWithheld(path) }

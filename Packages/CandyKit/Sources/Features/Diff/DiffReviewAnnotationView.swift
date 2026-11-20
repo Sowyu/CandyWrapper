@@ -70,6 +70,8 @@ final class DiffReviewAnnotationView: DSView, DiffAnnotationContent {
             }
             return false
         }
+        // Completes only inside a pull request's Code tab, where the detail panel gives the scope.
+        PullRequestCompletion.attach(to: editor)
     }
     override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 114) }
     func height(forWidth width: CGFloat) -> CGFloat { 114 }

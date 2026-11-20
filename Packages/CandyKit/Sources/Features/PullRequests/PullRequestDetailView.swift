@@ -76,6 +76,8 @@ public final class PullRequestDetailView: DSView {
     public var onReview: ((_ verdict: String, _ body: String, _ comments: [PullRequestReviewCommentDraft]) -> Void)?
     /// The review store's key for this pull request (`pullRequestReviewKey`); set with the detail.
     public var reviewKey: String?
+    /// `pullRequests.filterOptions` for this detail's host, set by the app; nil completes nothing.
+    public var completionSearch: (@MainActor (PullRequestFilterOptionsInput) async throws -> PullRequestFilterOptions)?
     /// The composer for the pull request on screen; it outlives its popover so drafts survive.
     public private(set) var composer: PullRequestComposerView?
     private var composerPopup: OpenPopup?
@@ -820,7 +822,7 @@ public final class PullRequestDetailView: DSView {
         guard let d = detail else { return }
         let key = reviewKey ?? d.url
         if composer?.reviewKey != key {
-            let c = PullRequestComposerView(detail: d, reviewKey: key)
+            let c = PullRequestComposerView(detail: d, reviewKey: key, completionScope: { [weak self] in self?.completionScope })
             c.onComment = { [weak self] body in self?.onComment?(body) }
             c.onCommentAction = { [weak self] body, action in self?.onCommentAction?(body, action) }
             c.onReview = { [weak self] verdict, body, comments in self?.onReview?(verdict, body, comments) }
@@ -1367,5 +1369,13 @@ final class PullRequestDetailGhostView: DSView {
             (16, 145, 200, 24), (16, 196, 120, 12), (16, 222, w - 32, 12), (16, 244, w * 0.7, 12), (16, 266, w * 0.5, 12),
         ]
         for (bar, s) in zip(bars, specs) { bar.frame = NSRect(x: s.0, y: s.1, width: max(0, s.2), height: s.3) }
+    }
+}
+
+extension PullRequestDetailView: PullRequestCompletionScopeProviding {
+    /// `pullRequestCompletionScope` (PullRequestMarkdownTextarea.tsx:40).
+    public var completionScope: PullRequestCompletionScope? {
+        guard let d = detail, let search = completionSearch, let support = PullRequestCompletionLogic.Support(d.capabilities) else { return nil }
+        return PullRequestCompletionScope(projectId: d.projectId, support: support, search: search)
     }
 }
