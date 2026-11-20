@@ -362,7 +362,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 5bb5d53312 | #22349 | thread | fix(web): full-screen HTML pages fit their content and zoom by reflowing | left (thread-3): the full-screen HTML dialog's fit and reflow zoom (HtmlRenderDialog.tsx at 4928) in HtmlRenderDialogView; needs an on-screen check |
+| 5bb5d53312 | #22349 | thread | fix(web): full-screen HTML pages fit their content and zoom by reflowing | ported (thread-4): HtmlRenderDialogView: a min(92vw,1176) p-4 card as tall as the page up to its cap, the frame at the card's width and frameHeight(width / zoom) times zoom, so zoom reflows; needs an on-screen check |
 | 860fa7c7b6 | #34344 | thread | fix(shared): keep HTML bootstrap outside quoted attributes | free with the runtime: the server injects the bootstrap (apps/server/src/htmlRender/HtmlRender.ts:490) |
 | 25123c28d4 | #35022 | thread | fix(shared): html_render pages from OpenCode 2 Code Mode show and are cleaned up | ported in d1f3d2fc |
 | ddd02848e6 | #35434 | thread | fix(shared): html_render pages show for Grok threads | ported in d1f3d2fc |

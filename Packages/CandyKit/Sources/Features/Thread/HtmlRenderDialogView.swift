@@ -4,17 +4,24 @@ import T3Protocol
 import T3Store
 
 /// `HtmlRenderDialog` (chat/HtmlRenderDialog.tsx, T3 3105 aba3a6ddc): a visual reply full screen in the media dialog.
-/// The page fills a `w-[92vw] h-[min(86vh,100vh-160px)]` box (`rounded-lg bg-background shadow-2xl ring-1
-/// ring-border/70`) that scrolls when zoomed; under it the title and the zoom controls, 50% to 200% in 25% steps.
-/// The page lays out at the box's size and the zoom scales it (`zoom` on a `100cqw` by `100cqh` wrapper), which
-/// WebKit's page zoom on a frame of the zoomed size reproduces. Escape, the close button or a click outside closes it.
+/// The page sits in a `w-[min(92vw,1176px)] max-h-[min(86vh,100vh-160px)] p-4` card (`rounded-lg bg-background
+/// shadow-2xl ring-1 ring-border/70`) that scrolls vertically; under it the title and the zoom controls, 50% to 200%
+/// in 25% steps. Since 4928 (HtmlRenderDialog.tsx, #22349) the zoom divides the page's layout width, so the page
+/// reflows to fill the card at every level, and the frame is as tall as the page (`htmlRenderFrameHeight` at that
+/// width with the height the page reports), so only the card scrolls. WebKit's page zoom on a frame of the card's
+/// width does the same. Escape, the close button or a click outside closes it.
 @MainActor
 final class HtmlRenderDialogView: DSView {
     var onClose: (() -> Void)?
 
     private let box = DSView()
     private let scroll = NSScrollView()
+    /// The card's padded content: the frame at `p-4`.
+    private let content = FlippedView()
     private let frameView = ThreadWebFrameView()
+    private let reference: HtmlRenderReference?
+    /// The height the page reported for itself (`onContentHeight`), at its current layout width.
+    private var contentHeight: Double?
     private let page: ThreadWebFrameView.Page
     private let caption: LabelView
     private let close = ButtonView(nil, icon: .x, variant: .mediaClose, size: .iconXs)
@@ -24,8 +31,9 @@ final class HtmlRenderDialogView: DSView {
     private(set) var zoom: CGFloat = 1
     private weak var previousResponder: NSResponder?
 
-    init(page: ThreadWebFrameView.Page, onMessage: @escaping (JSONValue, ThreadWebFrameView) -> Void) {
+    init(page: ThreadWebFrameView.Page, reference: HtmlRenderReference? = nil, onMessage: @escaping (JSONValue, ThreadWebFrameView) -> Void) {
         self.page = page
+        self.reference = reference
         caption = LabelView(page.title, font: DSFont.ui(12), color: NSColor.white.withAlphaComponent(0.8))
         super.init(frame: .zero)
         box.layer?.cornerRadius = 8
@@ -35,9 +43,10 @@ final class HtmlRenderDialogView: DSView {
         scroll.contentView = FlippedClipView()
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
-        scroll.hasHorizontalScroller = true
+        scroll.hasHorizontalScroller = false
         scroll.autohidesScrollers = true
-        scroll.documentView = frameView
+        content.addSubview(frameView)
+        scroll.documentView = content
         box.addSubview(scroll)
         addSubview(box)
         caption.lineHeight = 16
@@ -55,6 +64,10 @@ final class HtmlRenderDialogView: DSView {
         frameView.budgeted = false
         frameView.onMessage = { [weak self] data in
             guard let self else { return }
+            if let height = HtmlRenderTheme.contentHeight(data), height != self.contentHeight {
+                self.contentHeight = height
+                self.needsLayout = true
+            }
             onMessage(data, self.frameView)
         }
         setAccessibilityRole(.group)
@@ -78,7 +91,9 @@ final class HtmlRenderDialogView: DSView {
         content.addSubview(self)
         layoutSubtreeIfNeeded()
         frameView.activate(page)
-        frameView.webView?.forwardsScroll = false
+        // The frame is as tall as the page, so the card scrolls, never the page.
+        frameView.webView?.forwardsScroll = true
+        frameView.webView?.pageZoom = zoom
         window.makeFirstResponder(self)
     }
 
@@ -94,6 +109,8 @@ final class HtmlRenderDialogView: DSView {
         let clamped = min(2, max(0.5, next))
         guard clamped != zoom else { return }
         zoom = clamped
+        // The page reflows at the new layout width and reports its height there.
+        contentHeight = nil
         syncZoom()
     }
 
@@ -102,8 +119,6 @@ final class HtmlRenderDialogView: DSView {
         zoomIn.isEnabled = zoom != 2
         reset.title = "\(Int((zoom * 100).rounded()))%"
         frameView.webView?.pageZoom = zoom
-        // Past 100% the wrapper outgrows the box, which scrolls; the page itself scrolls at 100% and below.
-        frameView.webView?.forwardsScroll = zoom > 1
         needsLayout = true
     }
 
@@ -130,13 +145,21 @@ final class HtmlRenderDialogView: DSView {
     override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
-        let size = CGSize(width: (w * 0.92).rounded(), height: max(0, min(h * 0.86, h - 160)).rounded())
+        let maxHeight = max(0, min(h * 0.86, h - 160)).rounded()
+        // 1144px is the widest the server measures a page, plus the card's padding.
+        let width = min((w * 0.92).rounded(), 1176)
+        let inner = max(0, width - 32)
+        let pageHeight = reference.map { CGFloat($0.frameHeight(width: Double(inner / zoom), contentHeight: contentHeight)) }
+            ?? max(0, maxHeight - 32) / zoom
+        let frameHeight = (pageHeight * zoom).rounded()
+        let size = CGSize(width: width, height: min(maxHeight, frameHeight + 32))
         // The controls row is `mt-2`, as tall as its 28pt buttons (`sm:h-7`).
         let block = size.height + 8 + 28
         let origin = CGPoint(x: ((w - size.width) / 2).rounded(), y: ((h - block) / 2).rounded())
         box.frame = NSRect(origin: origin, size: size).insetBy(dx: -1, dy: -1)
         scroll.frame = box.bounds.insetBy(dx: 1, dy: 1)
-        frameView.frame = NSRect(x: 0, y: 0, width: size.width * zoom, height: size.height * zoom)
+        content.frame = NSRect(x: 0, y: 0, width: size.width, height: frameHeight + 32)
+        frameView.frame = NSRect(x: 16, y: 16, width: inner, height: frameHeight)
         close.frame = NSRect(x: origin.x + size.width - 24, y: origin.y - 40, width: 24, height: 24)
         // `flex items-center justify-center gap-3`: the title, then the buttons with `gap-1`.
         let rw = max(reset.intrinsicContentSize.width, 28)
@@ -152,7 +175,11 @@ final class HtmlRenderDialogView: DSView {
     }
 }
 
-/// Keeps a page smaller than the box (zoomed out) at the top left, as the web wrapper sits.
+/// Keeps the card's content at the top as it scrolls.
 private final class FlippedClipView: NSClipView {
+    override var isFlipped: Bool { true }
+}
+
+private final class FlippedView: NSView {
     override var isFlipped: Bool { true }
 }

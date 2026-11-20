@@ -2,6 +2,7 @@ import AppKit
 import Testing
 import DesignSystem
 import T3Protocol
+import T3Store
 @testable import Features
 
 /// Nightly 4928 thread rows from the fourth pass (thread-4).
@@ -70,5 +71,30 @@ struct ThreadCatchUp4928Part4Tests {
         let long = String(repeating: "word ", count: 400)
         #expect(try toggleShown(long, width: 320))
         #expect(UserMessageRowView.tallEnoughToFold(352) && !UserMessageRowView.tallEnoughToFold(351.5))
+    }
+
+    /// #22349 (HtmlRenderDialog.tsx at 4928): the full-screen card is at most 1176pt wide, as tall as the page up to
+    /// its cap, and the frame keeps the card's width at every zoom, so the page reflows instead of scaling.
+    @Test func htmlDialogFitsItsPage() throws {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1600, height: 1000), styleMask: [.borderless], backing: .buffered, defer: false)
+        let ref = HtmlRenderReference(attachmentId: "a", title: "Chart", height: 300)
+        let dialog = HtmlRenderDialogView(page: .init(src: URL(string: "about:blank")!, title: "Chart", dark: false), reference: ref) { _, _ in }
+        dialog.present(in: window)
+        dialog.layoutSubtreeIfNeeded()
+        let frame = try #require(dialog.firstDescendant(of: ThreadWebFrameView.self))
+        #expect(frame.frame == NSRect(x: 16, y: 16, width: 1144, height: 300))
+        let card = try #require(frame.superview?.enclosingScrollView?.superview)
+        #expect(card.frame.width == 1178 && card.frame.height == 334)
+        dialog.dismiss()
+    }
+}
+
+private extension NSView {
+    func firstDescendant<T: NSView>(of type: T.Type) -> T? {
+        for sub in subviews {
+            if let hit = sub as? T { return hit }
+            if let hit = sub.firstDescendant(of: type) { return hit }
+        }
+        return nil
     }
 }
