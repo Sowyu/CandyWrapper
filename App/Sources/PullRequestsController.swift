@@ -683,8 +683,14 @@ final class ThreadPullRequestsController {
     fileprivate weak var previewAnchor: NSView?
     fileprivate var previewPopup: OpenPopup?
 
+    /// The thread's `issue` tabs (4928 IssueDetailPanel beside a thread).
+    private let issueDetail: IssueDetailBinding
+    /// Linked issues' states once a detail was read, for the Linked items rows.
+    private var issueStates: [String: IssueState] = [:]
+
     init(panel: ThreadPanelView, sidebar: SidebarContentView, environments: Environments, capabilities: PullRequestCapabilities) {
         self.panel = panel
+        issueDetail = IssueDetailBinding(surface: panel.lazyIssueView, environments: environments, capabilities: capabilities)
         self.sidebar = sidebar
         self.environments = environments
         self.capabilities = capabilities
@@ -703,6 +709,33 @@ final class ThreadPullRequestsController {
             list.onWatch = { [weak self] link, watching in self?.watch(link, watching) }
         }
         MarkdownView.linkHandler = self
+        issueDetail.toast = { [weak panel] title, message, kind in panel?.toasts.show(ToastView(title: title, message: message, kind: kind)) }
+        issueDetail.onStatus = { [weak self] id, state in
+            guard let self else { return }
+            self.panel.issueStatus[id] = state
+            if let t = self.panel.panelState.surfaces.first(where: { $0.id == id })?.issue {
+                self.issueStates[ThreadIssueKey(tracker: t.tracker, host: t.host ?? "", scope: t.scope, key: t.key).normalized] = state
+            }
+        }
+        issueDetail.onOpenPullRequest = { [weak self] target in self?.panel.mutatePanel { $0.openPullRequest(target); return [] } }
+        issueDetail.cwd = { [weak self] env, projectId in
+            self?.sidebar?.snapshot?.projects.first { $0.id.environmentId == env && $0.id.localId.rawValue == projectId }?.workspaceRoot
+        }
+        panel.lazyLinkedPullRequestsView.configure { [weak self] list in
+            list.onOpenIssue = { [weak self] link in self?.openIssue(link) }
+        }
+    }
+
+    /// A linked issue opens in the thread's panel (`openIssue(threadRef, link)`, ThreadDetailsIssueRows.tsx:53-56),
+    /// only where the server reads issues.
+    func openIssue(_ link: ThreadIssueLink) {
+        guard let env = thread?.id.environmentId, capabilities.has(env, "issues") else {
+            if let u = SafeExternalURL.parse(link.url) { NSWorkspace.shared.open(u) }
+            return
+        }
+        let target = IssueSurfaceTarget(projectId: link.projectId.rawValue, tracker: link.tracker, host: link.host, scope: link.scope,
+                                        key: link.key, url: link.url)
+        panel.mutatePanel { $0.openIssue(target); return [] }
     }
 
     fileprivate var thread: ThreadShell? {
@@ -726,7 +759,8 @@ final class ThreadPullRequestsController {
             return
         }
         let links = thread.pullRequests ?? []
-        panel.pullRequestsAvailable = capabilities.has(env, "threadPullRequests") && !ThreadPullRequests.visible(links).isEmpty
+        let issues = thread.issues?.values ?? []
+        panel.pullRequestsAvailable = capabilities.has(env, "threadPullRequests") && (!ThreadPullRequests.visible(links).isEmpty || !issues.isEmpty)
         panel.pullRequestAvailable = capabilities.has(env, "pullRequests") && panelTarget(thread) != nil
         // Linked snapshots seed the tab glyphs (`resolvePullRequestTabLink`).
         var status = panel.pullRequestStatus
@@ -747,6 +781,11 @@ final class ThreadPullRequestsController {
         case .pullRequests:
             panel.linkedPullRequestsView.onWatch = capabilities.has(env, "threadPullRequestWatch") ? { [weak self] link, w in self?.watch(link, w) } : nil
             panel.linkedPullRequestsView.set(links, nowMs: TimestampFormat.nowMs())
+            panel.linkedPullRequestsView.setIssues(issues, states: issueStates)
+        case .issue(let target):
+            issueDetail.threadId = thread.id
+            issueDetail.threadIssues = { [weak self] in self?.thread?.issues?.values ?? [] }
+            issueDetail.show(environmentId: target.environmentId ?? env, target: target)
         default:
             break
         }

@@ -524,6 +524,9 @@ final class IssueGroupView: DSView {
 /// the author, tracker, scope, server and up to three labels with the time on the right.
 final class IssueRowView: DSView {
     static let height: CGFloat = 56
+    /// Linked items' issue row (ThreadDetailsIssueRows.tsx non-compact, the panel row's `py-1 pr-1`).
+    static let panelHeight: CGFloat = 44
+    private var panel = false
     private var glyph = IconView(name: .circleDot, size: 16)
     private let number = LabelView("", font: DSFont.mono(12))
     private let title = LabelView("", font: DSFont.ui(14))
@@ -552,6 +555,22 @@ final class IssueRowView: DSView {
         for l in [login, scope, server, time] { l.lineHeight = 16 }
         [glyph, number, title, commentIcon, comments, author, login, tracker, scope, server, time].forEach(addSubview)
         setAccessibilityRole(.button)
+    }
+
+    /// A thread's linked issue: the state glyph once the detail was read, the key, the title, then
+    /// the tracker and scope (ThreadDetailsIssueRows.tsx:25-82).
+    func configure(link: ThreadIssueLink, state: IssueState?) {
+        panel = true
+        let e = IssueListEntry(tracker: link.tracker, host: link.host, scope: link.scope, key: link.key, displayKey: link.displayKey,
+                               title: link.title, url: link.url, author: nil, state: state ?? IssueState(category: "open", name: "Open"),
+                               createdAt: link.linkedAt.raw, updatedAt: link.linkedAt.raw, projectId: link.projectId.rawValue, projectTitle: "")
+        configure(IssueListLogic.Row(entry: e, environmentId: ""), selected: false, showScope: true, showTracker: true, environmentLabel: nil, nowMs: 0)
+        if state == nil { glyph.strokeColor = Themed.color(\.mutedForeground) }
+        author.isHidden = true
+        login.isHidden = true
+        time.isHidden = true
+        chips.forEach { $0.isHidden = true }
+        setAccessibilityLabel("Issue \(link.displayKey): \(link.title)")
     }
 
     func configure(_ r: IssueListLogic.Row, selected: Bool, showScope: Bool, showTracker: Bool, environmentLabel: String?, nowMs: Int64) {
@@ -609,7 +628,7 @@ final class IssueRowView: DSView {
 
     override func layout() {
         super.layout()
-        let x0: CGFloat = 12, top: CGFloat = 10
+        let x0: CGFloat = panel ? 8 : 12, top: CGFloat = panel ? 4 : 10
         glyph.frame = NSRect(x: x0, y: top + 2, width: 16, height: 16)
         let lx = x0 + 16 + 8
         let lr = bounds.width - 12
@@ -638,12 +657,14 @@ final class IssueRowView: DSView {
         let metaRight = lr - tmw - 6
         let metaWidth = lr - lx
         var mx = lx
+        if !panel {
         author.frame = NSRect(x: mx, y: y2 + 1, width: 14, height: 14); mx += 14 + 4
         login.isHidden = metaWidth < 320
         if !login.isHidden {
             let w = min(ceil(login.textWidth) + 1, 142)
             login.frame = NSRect(x: mx, y: y2, width: w, height: 16); mx += w + 6
         } else { mx += 2 }
+        }
         if !tracker.isHidden { tracker.frame = NSRect(x: mx, y: y2 + 2, width: 12, height: 12); mx += 12 + 6 }
         for l in [scope, server] where !l.isHidden {
             let w = min(ceil(l.textWidth) + 1, max(0, metaRight - mx))
@@ -651,7 +672,7 @@ final class IssueRowView: DSView {
         }
         // Labels from `@xl/issue-row-meta` (576).
         for chip in chips {
-            chip.isHidden = metaWidth < 576
+            chip.isHidden = panel || metaWidth < 576
             guard !chip.isHidden else { continue }
             let cw = min(160, ceil(chip.intrinsicContentSize.width), max(0, metaRight - mx))
             chip.frame = NSRect(x: mx, y: y2 + 0.25, width: cw, height: 16)

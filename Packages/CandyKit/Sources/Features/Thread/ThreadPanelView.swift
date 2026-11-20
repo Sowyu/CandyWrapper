@@ -1086,6 +1086,12 @@ public final class ThreadPanelView: DSView {
     /// The pull request surfaces, for the app to fill.
     public var pullRequestView: PullRequestDetailView { rightPanel.pullRequest }
     public var linkedPullRequestsView: ThreadPullRequestsListView { rightPanel.linkedPullRequests }
+    /// An `issue` tab's surface, built when it first shows.
+    public var lazyIssueView: LazyView<IssueDetailView> { rightPanel.lazyIssue }
+    public var issueStatus: [String: IssueState] {
+        get { rightPanel.issueStatus }
+        set { rightPanel.issueStatus = newValue }
+    }
     public var lazyPullRequestView: LazyView<PullRequestDetailView> { rightPanel.lazyPullRequest }
     public var lazyLinkedPullRequestsView: LazyView<ThreadPullRequestsListView> { rightPanel.lazyLinkedPullRequests }
     /// Whether the + menu and launcher offer "Pull request" and "Linked pull requests"
