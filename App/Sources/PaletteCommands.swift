@@ -392,21 +392,7 @@ final class PaletteCommands {
     /// Project groups with the open thread's group first (`pickerProjects`).
     private func projectGroups() -> [SidebarModel.ProjectGroup] {
         guard let snapshot else { return [] }
-        // `projectGroups` in the `sidebarProjectSortOrder` order (CommandPalette.tsx:955-963), then the
-        // contextual project first (`buildSidebarProjectPickerEntries`, sidebarProjectGrouping.ts:168-175).
-        let order = SidebarProjectOrder.sortOrder
-        let built = SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: envs.primaryId)
-        // Manual reads the stored order (CommandPaletteLookups.ts:73-83).
-        var groups = order == .manual ? SidebarModel.orderProjectGroups(built, projects: snapshot.projects, preferred: SidebarProjectOrder.stored)
-            : SidebarModel.sortLogicalProjectsForSidebar(built, threads: snapshot.threads, order: order)
-        // Archived projects leave the pickers and pinned ones lead; the current project leads the unpinned ones
-        // (`pickableProjectGroups`, `buildSidebarProjectPickerEntries` at 4928, #26154).
-        groups = ProjectOrganization.pickable(groups)
-        if let current = threads.composer.activeProjectId, let i = groups.firstIndex(where: { $0.memberProjectIds.contains(current) }), !groups[i].pinned {
-            let pinned = groups.filter(\.pinned).count
-            if i > pinned { groups.insert(groups.remove(at: i), at: pinned) }
-        }
-        return groups
+        return SidebarProjectOrder.pickerGroups(snapshot, primaryId: envs.primaryId, current: threads.composer.activeProjectId)
     }
 
     /// `ProjectSearchDescription`: "<location> · <root>" for one project, the machine labels for a group.

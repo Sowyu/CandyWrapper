@@ -23,6 +23,7 @@ public final class SidebarListCache {
         var dither: Bool
         var olderCuts: [String: OlderSettledThreads]
         var olderCut: OlderSettledThreads?
+        var launching: Set<ThreadId>
     }
 
     /// A thread's place: its shelf, the part of it that shelf sorts by (the id tiebreak never changes) and its
@@ -116,7 +117,8 @@ public final class SidebarListCache {
                             scopeKeys: state.projectScopeKeys, scopedProjectIds: state.scopedProjectIds,
                             settlement: state.capabilities.threadSettlement, snooze: state.capabilities.threadSnooze,
                             environments: state.environments, scratchRoots: state.scratchRoots, folders: state.usesProjectFolders, dither: state.dither,
-                            olderCuts: snapshot.olderSettledByEnvironment, olderCut: snapshot.olderSettled)
+                            olderCuts: snapshot.olderSettledByEnvironment, olderCut: snapshot.olderSettled,
+                            launching: state.launchingThreadIds)
         // ponytail: the Working beta shelf orders by this client's return times, which move on their own; it rebuilds the shelves every time, make it incremental if the beta ships on by default
         guard shared == self.shared, var ctx = context, !state.workingShelfEnabled || state.usesProjectFolders else {
             structural = true
@@ -132,6 +134,7 @@ public final class SidebarListCache {
         let requests = same ? subagentRequests : PendingSubagentRequests.byThread(new)
         let requestChanged = same ? [] : Set(requests.keys).union(subagentRequests.keys).filter { requests[$0] != subagentRequests[$0] }
         subagentRequests = requests
+        let ctxLaunching = shared.launching
         func derive(_ i: Int, _ shell: ThreadShell, previous: Placement?) -> (Entry?, SidebarThread?) {
             rows[shell.id] = nil
             changed.insert(i)
@@ -141,7 +144,7 @@ public final class SidebarListCache {
             }
             // The old place stays until the pass below compares it with the new one.
             if entry.visible { entry.placement = previous } else if let previous { resort.insert(previous.section) }
-            return (entry, SidebarThread(shell, pendingSubagentRequest: requests[shell.id]))
+            return (entry, SidebarThread(shell, pendingSubagentRequest: requests[shell.id], launching: ctxLaunching.contains(shell.id)))
         }
         if same {
             // Nothing changed (a clock tick or a state change).
@@ -237,7 +240,7 @@ public final class SidebarListCache {
         subagentRequests = PendingSubagentRequests.byThread(shells)
         for shell in shells {
             guard var e = Self.entry(shell, scopedIds: ctx.scopedIds) else { entries.append(nil); threads.append(nil); continue }
-            let thread = SidebarThread(shell, pendingSubagentRequest: subagentRequests[shell.id])
+            let thread = SidebarThread(shell, pendingSubagentRequest: subagentRequests[shell.id], launching: shared.launching.contains(shell.id))
             if e.visible { e.placement = Self.placement(thread, capabilities: state.capabilities, nowMs: nowMs, bySend: state.usesProjectFolders) }
             entries.append(e)
             threads.append(thread)

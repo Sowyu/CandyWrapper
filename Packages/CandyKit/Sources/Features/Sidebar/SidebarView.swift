@@ -574,7 +574,7 @@ public final class SidebarContentView: DSView {
         if !state.usesProjectFolders, let tracker = state.inboxReturns, let snapshot {
             let requests = PendingSubagentRequests.byThread(snapshot.threads)
             tracker.observe(snapshot.threads.filter { $0.archivedAt == nil && $0.deletedAt == nil }
-                .map { SidebarThread($0, pendingSubagentRequest: requests[$0.id]) }, nowMs: ms)
+                .map { SidebarThread($0, pendingSubagentRequest: requests[$0.id], launching: state.launchingThreadIds.contains($0.id)) }, nowMs: ms)
         }
         if isSearching {
             var items = searchItems(nowMs: ms)

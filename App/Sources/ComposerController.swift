@@ -705,6 +705,12 @@ final class ComposerController {
     /// An environment's live shell: a thread draft whose model pick the thread now runs drops it, so the
     /// composer follows later changes made on other clients (composerDraftStore.ts:4152-4219, T3 2767012996).
     func liveShell(_ environmentId: String, _ snapshot: ShellSnapshot?) {
+        // The server owns a launch once its message persisted or its run started (composerDraftStore.ts:4757-4770 at 4928).
+        if let snapshot, let launching = sidebar?.state.launchingThreadIds, !launching.isEmpty {
+            let owned = snapshot.threads.filter { $0.latestRunId != nil || $0.latestUserMessageAt != nil }
+                .map { $0.id.scoped(to: environmentId) }.filter(launching.contains)
+            if !owned.isEmpty { sidebar?.state.launchingThreadIds.subtract(owned) }
+        }
         guard let snapshot, !pickers.store.drafts.isEmpty else { return }
         var models: [String: ModelSelection] = [:]
         for thread in snapshot.threads { models[thread.id.scoped(to: environmentId).rawValue] = thread.modelSelection }
@@ -1423,10 +1429,8 @@ final class ComposerController {
         if ThemeRuntime.isDither(dark: anchor.effectiveAppearance.isDark) { return pickProjectDither(from: anchor, snapshot: snapshot, current: current) }
         let envs = sidebarEnvironments
         let currentId = ProjectId(current.projectId)
-        var groups = SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: envs.primaryId)
-        if let i = groups.firstIndex(where: { $0.memberProjectIds.contains(currentId) }), i > 0 {
-            groups.insert(groups.remove(at: i), at: 0)
-        }
+        // The command palette's order, manual order included (`useSortedProjectGroups`, DraftHeroHeadline.tsx:96 at 4928, #29846).
+        let groups = SidebarProjectOrder.pickerGroups(snapshot, primaryId: envs.primaryId, current: currentId)
         let active = groups.first { $0.memberProjectIds.contains(currentId) }
         // `onValueChange` (DraftHeroHeadline.tsx:282-295 in 2994): "Add project" opens the add flow, the current
         // project does nothing, another opens its draft.
@@ -1491,7 +1495,10 @@ final class ComposerController {
         pickers.prompt = composer.text
         loadComposerPeerLinks()
         refresh()
-        DispatchQueue.main.async { [weak self] in self?.composer.focus() }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !SidebarRenameFocus.isActive(in: self.composer.window) else { return }
+            self.composer.focus()
+        }
     }
 
     /// `/side` and `/btw` start a side chat with the rest as its message, ahead of an open question or a plan follow-up
@@ -2387,6 +2394,8 @@ final class ComposerController {
             // First send of a draft: one launchThread; the thread exists after the reply (05-composer.jsonl).
             // The launch takes a thread id of its own and the draft leaves the store (`NewThreadDraftLaunch`).
             let (session, sessionKey) = NewThreadDraftLaunch.begin(stored, in: &sessions)
+            // The sidebar shows the new thread as Setting up until the server owns the send (#33783).
+            sidebar?.state.launchingThreadIds.insert(ThreadId(session.threadId))
             self.target = .draft(session)
             scheduleSave()
             panel.setDraft(projectTitle: nil)
@@ -2425,6 +2434,7 @@ final class ComposerController {
                     }
                 } catch {
                     guard let self else { return }
+                    sidebar?.state.launchingThreadIds.remove(ThreadId(session.threadId))
                     // A fresh draft took the composer (`backgroundDraftOpened`), so the failed one comes back on its own.
                     if background, self.target != .draft(session) {
                         backgroundSendFailed(error, session: session, key: sessionKey, text: text, attachments: attachments)

@@ -2,6 +2,18 @@ import AppKit
 import DesignSystem
 import T3Protocol
 
+/// Whether `window`'s focus sits in a sidebar rename field: double-clicking a row opens its thread and its rename
+/// field in one gesture, so the thread's composer leaves focus alone (useFocusComposerOnThreadOpen.ts:22-23 at 4928, #27287).
+public enum SidebarRenameFocus {
+    @MainActor public static func isActive(in window: NSWindow?) -> Bool {
+        var responder = window?.firstResponder
+        if let editor = responder as? NSTextView, editor.isFieldEditor, let owner = editor.delegate as? NSResponder { responder = owner }
+        var view = responder as? NSView
+        while let v = view { if v is SidebarRenameFieldView { return true }; view = v.superview }
+        return false
+    }
+}
+
 /// The inline rename input (T3 4928 SidebarThreadRow.tsx, #31009): `-mx-1 rounded-sm bg-card px-1 text-sm font-medium
 /// text-card-foreground outline-none ring-1 ring-inset ring-input focus:ring-foreground`. Return commits, Escape cancels,
 /// leaving the field commits; the text is selected when it takes focus.
