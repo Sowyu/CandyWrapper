@@ -1,5 +1,7 @@
 # Orchestrator phase 1: build brief
 
+> Removed on 2026-11-21 at the user's request. This file is history; see `docs/research/orchestrator-removal-2026-11-21.md`.
+
 Goal: In the Redesign theme, "Experimental Orchestrator features" turns on the Orchestrator, the master of every thread on its machine. You talk to it in an iMessage-style chat. It sees and prompts every thread, including the ones you start yourself, picks models from a list you control in Settings, and pins itself as a live 3D bot at the top of the sidebar. Official T3 Code still sees only normal threads.
 
 ## Read first

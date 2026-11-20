@@ -111,8 +111,8 @@ app=$out/CandyWrapper.app
 fw=$app/Contents/Frameworks/Sparkle.framework/Versions/B
 print "version $ver ($bnum), out $out"
 
-# 3b. The CandyWrapper Helper's downloads (docs/orchestrator-helper.md), signed like the app, and their SHA-256 sums in
-#     the app as helper-manifest.json, which the Helper button installs from. They go up with the release in step 7.
+# 3b. The CandyWrapper Helper's downloads (docs/connectors.md), signed like the app, and their SHA-256 sums in
+#     the app as helper-manifest.json, which the Connectors tab downloads the helper from. They go up with the release in step 7.
 print "building the helper (log $work/helper.log)"
 unlock
 CANDY_KEYCHAIN_READY=1 $src/scripts/build-helper $ver $out/helper --sign > $work/helper.log 2>&1 || { tail -30 $work/helper.log; exit 1 }
