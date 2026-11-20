@@ -378,4 +378,5 @@ actor AssetURLLimit {
     }
 
     var inFlight: Int { running }
+    var queued: Int { waiting.count }
 }
