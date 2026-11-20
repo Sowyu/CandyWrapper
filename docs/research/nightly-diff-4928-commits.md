@@ -1431,7 +1431,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 17580724fc | #26067 | thread | fix(web): byte sizes just under the next unit no longer read "1024 KB" | ported (thread-3): StorageCleanupReport.formatBytes picks the unit after rounding |
 | 9ad6c7ef8b | #26145 | thread | fix(web,mobile): long links in secret requests wrap and can be copied | port |
 | 22463861cd | #26151 | thread | fix(web): clicking a secret request card focuses its field again | port |
-| 1b9437f6ab | #27078 | thread | fix(web): long pending-question headers truncate instead of overflowing | port |
+| 1b9437f6ab | #27078 | thread | fix(web): long pending-question headers truncate instead of overflowing | skip (thread-4): the question panel is Features/Composer/Panels/QuestionPanelView, the composer agent's area |
 | 609dd0f7dd | #27144 | thread | fix(web): plain text code blocks match the text around them | ported in eceea265 |
 | 12d1e4c23c | #22339 | thread | fix(web): keep truncated Markdown task previews read-only | port |
 | 469afd8b53 | #23351 | thread | fix(chat): commands that exit 0 no longer show as failed | ported (thread-3): WorkLog.checkFailure trusts the exit code over output and command text |
@@ -1511,13 +1511,13 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 283fa1f1cd | #34011 | thread | fix(clients): scroll truncated command output notice with logs | port |
 | d256170b34 | #34006 | thread | fix: file links with line ranges open at their first line | ported in 93df13b9: a range opens at its first line; the label check compares the end line too (thread-4, FileLinks.endLine). Left: the tooltip's `L42–64`, which needs an endLine on FileLinkMeta |
 | d6d1763d41 | #33820 | thread | fix(web): sent messages keep the numbers written on list items | ported: sent messages keep each ordered item's written number and draw every level in digits; the gutter widens by the numbers shown (thread-2, MarkdownDocument `keepWrittenNumbers`). Left: copying a list keeps CommonMark's numbers (markdown-clipboard.ts) |
-| 43915a4064 | #34095 | thread | fix(web): question panel header text sits centered in its row | port |
+| 43915a4064 | #34095 | thread | fix(web): question panel header text sits centered in its row | skip (thread-4): the question panel is Features/Composer/Panels/QuestionPanelView, the composer agent's area |
 | ccc7b2d96f | #33352 | thread | fix(web): MCP App cards no longer flash white in dark mode while the app loads | port |
 | 32fdad5f49 | #32151 | thread | fix(web): timeline minimap preview no longer steals hover or jumps around | port |
 | 5b11efe5df | #30473 | thread | fix(clients): images the agent opens stay visible in the chat | ported in 2eb8794e |
 | 11611419f3 | #33396 | thread | fix(web): trackpad flicks over the right panel tabs no longer navigate back | n/a: browser back-swipe navigation, which AppKit views don't have |
 | 1c17285e58 | #28084 | thread | fix(shared): cite assistant messages with IDs over 512 characters | ported (thread-4): ThreadAssistantCitation.parse takes ids up to 4,096 characters and hrefs up to 256,168 |
-| d835e430db | #22874 | thread | fix(web): question answers submit while normal sends are blocked | port |
+| d835e430db | #22874 | thread | fix(web): question answers submit while normal sends are blocked | skip (thread-4): the question panel is Features/Composer/Panels/QuestionPanelView, the composer agent's area |
 | 691b9709b0 | #26408 | thread | fix(web): Ctrl + "+" zooms on keyboard layouts with a dedicated plus key | n/a: browser zoom shortcuts on keyboard layouts; CandyWrapper has no page zoom |
 | b3f5d52701 | #24138 | thread | fix(composer): steer instead of queueing during automatic compaction | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
 | f3da8ff63b | #30575 | thread | feat(gitlab): resolve overview threads from Summary and Timeline | ported (panels-2): `overviewThreads` decode after the line threads and head "Overview" without a file glyph in the Timeline; Summary cards leave out the location |
@@ -1547,8 +1547,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 1c3d5f7e82 | #34657 | thread | fix(web): a link to a thread on a linked machine no longer opens a blank pane | port |
 | a6d676fd9a | #24336 | thread | fix(web): keep background tasks visible during follow-up turns | port |
 | 32882540fb | #34685 | thread | fix(web): interruption footer label sits on the reason's baseline | port |
-| dbfbe3993f | #34806 | thread | fix(web): questions without options no longer mention a selected option | port |
-| 101e5f99a2 | #34855 | thread | fix(web): review comments in question answers reach the agent with their text | port |
+| dbfbe3993f | #34806 | thread | fix(web): questions without options no longer mention a selected option | skip (thread-4): the question panel is Features/Composer/Panels/QuestionPanelView, the composer agent's area |
+| 101e5f99a2 | #34855 | thread | fix(web): review comments in question answers reach the agent with their text | skip (thread-4): the question panel is Features/Composer/Panels/QuestionPanelView, the composer agent's area |
 | 204b140073 | #34846 | thread | fix(web): context row under the composer hides chat text scrolling behind it | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
 | 415e1cabe6 | #34883 | thread | fix(web): html render images open with the rest of their page in the viewer | ported in d1f3d2fc |
 | d8b0a05a74 | #34784 | thread | fix(clients): Claude question option previews are shown under their option | ported: the option `preview` decodes (T3Store UserInputQuestion.Option) and shows under its option, outside the button, at `ps-8 pe-2 pb-1.5`, 12/16 in foreground/70 (QuestionPanelView `previews`). Plain text with its line breaks; T3 renders it as ChatMarkdown, which needs a 12px MarkdownView composer-5: Markdown previews still left, a 12px MarkdownView needs a body size through MarkdownLayout (13 font-size sites in Features/Markdown, another agent's area). |
@@ -1568,11 +1568,11 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | b63d3c5923 | #26888 | thread | fix(web): sent messages honor their theme foreground | ported (thread-4): sent message text uses messageForeground, which equals the foreground in the default themes. Left: inline code in sent messages tinted from the message foreground (10% fill, index.css), which needs a per-view chip fill in MarkdownLayout |
 | dfded9d759 | #27436 | thread | fix(web): keep the child thread open when its remote parent was deleted | port |
 | 9ac4535b06 | #35634 | thread | fix(shared): token counts just below a unit boundary use the next unit | ported: token counts pick their unit after rounding, so 999,999 reads 1M (thread-2, T3Store `formatTokens`) |
-| c6b18c4741 | #33353 | thread | fix(web,mobile): keep line breaks in pending question text | port |
+| c6b18c4741 | #33353 | thread | fix(web,mobile): keep line breaks in pending question text | skip (thread-4): the question panel is Features/Composer/Panels/QuestionPanelView, the composer agent's area |
 | c4e74fe767 | #29511 | thread | Typeset equations that fail only because of an unescaped percent | ported (thread-3): MathLayout retries with escapeLiteralPercents |
 | 9ccc0f8a60 | #33558 | thread | fix(editors): JetBrains IDEs open file links in the thread's project | left (thread-4): App OpenInController, not checked |
 | cfad310913 | #35680 | thread | fix(client-runtime): long MCP app download names no longer split an emoji | n/a (thread-3): Swift String.prefix cuts at whole characters (ThreadMcpAppDownload.swift:33) |
-| 4cfcfaf2fd | #35574 | thread | fix(web): a question answer restored with undo is no longer sent twice | port |
+| 4cfcfaf2fd | #35574 | thread | fix(web): a question answer restored with undo is no longer sent twice | skip (thread-4): the question panel is Features/Composer/Panels/QuestionPanelView, the composer agent's area |
 | c1b42c17dc | #33873 | thread | fix(client-runtime): last user message sort ignores agent-posted messages | port |
 | f8372d1baf | #35681 | thread | fix(web): long screen-reader announcements keep emoji whole at the cutoff | n/a (thread-4): DOM screen reader, focus or tab order behavior; CandyWrapper's rows use AppKit accessibility |
 | 9b0387d6cd | #32334 | thread | fix(web): triple-click selects the whole line around links and file chips | n/a (thread-3): browser triple-click box rules; CandyWrapper draws its own selection |
@@ -1592,7 +1592,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | c83e78fe07 | #36285 | thread | fix(web): Shift+Return after closed inline code or bold starts a plain line | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
 | 66ec37079a | #36298 | thread | fix(shared): hosted thread URLs inside other links stay as written | already in CandyWrapper (thread-4): thread chips come from parsed link runs, so a thread URL inside another link's label or destination stays that link |
 | 250d372e51 | #36321 | thread | fix(web): images in expanded tool rows page through the group's viewed images | ported in 2eb8794e |
-| cfc71e1a99 | #36357 | thread | fix(web): preview annotations in question answers reach the agent with their text | port |
+| cfc71e1a99 | #36357 | thread | fix(web): preview annotations in question answers reach the agent with their text | skip (thread-4): the question panel is Features/Composer/Panels/QuestionPanelView, the composer agent's area |
 | 48cdefed5a | #32108 | thread | fix(web): size markdown media whose width and height carry a px unit | skip: CandyWrapper draws no raw HTML `<img>` in replies yet; take it with raw HTML support |
 | c8db8be305 | #36334 | thread | fix(web): a run waiting on foreground subagents says so instead of Thinking | ported: the Thinking row reads Waiting on a subagent or Waiting on N subagents while the run's newest entries are its own running subagents (thread-2, TimelineRows `.thinking(label:)`). Zen keeps Thinking since it hides the cards |
 | cf382b0c44 | #24637 | thread | fix(web,mobile): explain missing file access for host videos | port |
@@ -1610,13 +1610,13 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 71c2410a67 | #28929 | thread | fix(web): thread details slides in on close | left (settings-4928, thread-4): on a non-maximized close, header.toggles[0] (ThreadPanelView) should start at the panel header's right edge minus 12pt and slide home over the panel's close (SettingsPanelMotion.duration, the panel's easing), driven from panelSlide in ThreadPanelView.layout so it ends on its resting pixels; needs the screen to compare with T3 |
 | 666631e94e | #36712 | thread | fix(web): copied inline code keeps meaningful edge spaces | n/a (thread-4): T3 serializes a DOM selection back to Markdown; CandyWrapper copies a selection's text with chip and formula sources (MarkdownTextBox.copyText) |
 | e2f164d6bb | #28968 | thread | fix(web): let subagent lists pass scrolling to the details panel | n/a (thread-4): browser behavior AppKit doesn't share: NSScrollView passes scrolling on at the edge |
-| a678948483 | #28388 | thread | fix(web): pending-question digit shortcuts ignore dialogs, menus and selects | port |
+| a678948483 | #28388 | thread | fix(web): pending-question digit shortcuts ignore dialogs, menus and selects | skip (thread-4): the question panel is Features/Composer/Panels/QuestionPanelView, the composer agent's area |
 | 6cb47acfb8 | #36768 | thread | fix(web): Escape that cancels a thread rename no longer also closes the find bar | port |
 | cebdf39984 | #29570 | thread | fix(web): cancelled queued-message edits release their staged uploads | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
 | c666345bb9 | #29637 | thread | fix(web): subagent previews drop image marks and full link URLs | port |
 | e330593141 | #36779 | thread | fix(web): bare URLs no longer swallow Arabic commas and question marks | ported (thread-4): MarkdownDocument.endingBareURLsAtCJKPunctuation also ends a bare URL at the Arabic comma, semicolon, question mark and full stop |
 | 60e4be49cf | #36758 | thread | fix(shared): open relative Codex citations with filename punctuation | skip (thread-4): needs Codex file citation directives (shared/codexMarkdownDirectives.ts), which CandyWrapper doesn't render yet |
-| 154c5014a7 | #29834 | thread | fix(web): long preview annotation comments are no longer dropped from the message | port |
+| 154c5014a7 | #29834 | thread | fix(web): long preview annotation comments are no longer dropped from the message | skip (thread-4): the question panel is Features/Composer/Panels/QuestionPanelView, the composer agent's area |
 | bf74669509 | #36830 | thread | fix(web): copied email links keep their destination | n/a (thread-4): T3 serializes a DOM selection back to Markdown; CandyWrapper copies a selection's text with chip and formula sources (MarkdownTextBox.copyText) |
 | a4bf7922f5 | #33248 | thread | fix(clients): undoing a settle puts the thread back where you placed it | skip (thread-4): outside the thread areas, for the agent working on Features/Sidebar |
 | 2abf7be914 | #35255 | thread | fix(web): trackpad scrolling no longer stalls on gaps between right panel tabs | n/a (thread-4): browser behavior AppKit doesn't share: wheel events over DOM gaps |
@@ -1643,7 +1643,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 843893e58c | #30084 | thread | fix(web): the minimap keeps the current turn lit while reading a long reply | port |
 | 37b71a4ffe | #37079 | thread | fix(web): remove redundant subagent action from background row | port |
 | 79e47e9096 | #32402 | thread | fix(shared): inline code paths like `docker/Dockerfile` become file chips | ported in 93df13b9 |
-| b35c9702f9 | #36997 | thread | fix(acp): optional text questions can be left blank | port |
+| b35c9702f9 | #36997 | thread | fix(acp): optional text questions can be left blank | skip (thread-4): the question panel is Features/Composer/Panels/QuestionPanelView, the composer agent's area |
 | 8897a6ebe1 | #37183 | thread | fix(web): keep thread mentions when editing sent messages | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
 | 598296e850 | #37284 | thread | fix(web): copied code blocks drop the fence's trailing newline | ported (thread-4): a code block's Copy drops the fence's trailing newline (MarkdownCodeCopy) |
 | 58b6e1c5ba | #37395 | thread | fix(web): a disabled Merge back button shows why it is disabled | port |
@@ -1662,7 +1662,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | ebd007e6ae | #37900 | thread | fix(web): View instructions closes the skill details popover | port |
 | 44ebe67195 | #35300 | thread | fix(web): preserve citations when adding review comments | port |
 | a2bace5cf4 | #35577 | thread | fix(web): the message minimap no longer shows a track line on themes with an opaque border | port |
-| f79ab79721 | #38005 | thread | fix(web): stopped or expired questions return their attached files to the composer | port |
+| f79ab79721 | #38005 | thread | fix(web): stopped or expired questions return their attached files to the composer | skip (thread-4): the question panel is Features/Composer/Panels/QuestionPanelView, the composer agent's area |
 | d6419d92a0 | #38017 | thread | fix(web): links to repeated headings work while a reply streams | port |
 | 10784e01f8 | #38041 | thread | fix: expired-session error card asks to pair again and names the rejected request's trace | port |
 | 0b3ebcf268 | #38079 | thread | fix(web): sent messages keep the spaces typed at the start of a line | left (thread-4): sent messages need the leading spaces of a line kept as unselectable indentation (shared/markdownLeadingWhitespace.ts at 4928, with list, quote and tab handling); Foundation's parser drops them, so a source pass would insert no-break spaces outside lists and quotes and the copy path would drop them again |
@@ -1674,7 +1674,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 24467d671d | #38368 | thread | fix(client): a subagent prompt that opens with comment dividers no longer freezes the thread | ported (thread-3): WorkflowOpening.scriptStart without backtracking, 57.6 to 0.001 ms |
 | 42763ff8b1 | #38400 | thread | fix(web): screen readers read a pull request's number once in thread details | n/a (thread-4): DOM screen reader, focus or tab order behavior; CandyWrapper's rows use AppKit accessibility |
 | 70e4319da8 | #38458 | thread | fix(web): switching back to a thread no longer jumps through its HTML renders | port |
-| 9758cf9e13 | #38476 | thread | fix(web): typing into a simulator no longer answers a waiting question | port |
+| 9758cf9e13 | #38476 | thread | fix(web): typing into a simulator no longer answers a waiting question | skip (thread-4): the question panel is Features/Composer/Panels/QuestionPanelView, the composer agent's area |
 | 373ec12be6 | #38558 | thread | fix(web): very wide or tall lone images in user messages show the whole image | ported in 11fea921 |
 | eb46038e3a | #38763 | thread | fix(web): Background work details show a subagent as Waiting, like the line above | port |
 | 4c679a21e7 | #38832 | thread | fix(web): page scripts in inline HTML renders no longer scroll the chat | ported in d1f3d2fc |
