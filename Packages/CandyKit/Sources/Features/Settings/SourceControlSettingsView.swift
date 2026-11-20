@@ -105,6 +105,16 @@ public final class SourceControlSettingsView: ScopedSettingsPage {
     private let scanButton = ButtonView(nil, icon: .refreshCw, variant: .ghostMuted, size: .iconXs)
     private var expanded: Set<String> = []
     private var branchRows: [SettingsRowView] = []
+    /// `IssueTrackerSettings` (IssueTrackerSettings.tsx:44-94): `issueTrackers.list` on the representative.
+    private let trackersSection = SettingsSectionView(title: "Issue trackers", rows: [])
+    private var trackers: IssueTrackerConnectionList?
+    private var trackersError: String?
+    private var trackersLoading = false
+    private var trackersEnvironment: String?
+    private var expandedTrackers: Set<String> = []
+    private var busyTrackers: Set<String> = []
+    private var trackerFailures: [String: String] = [:]
+    private var pendingBinding: String?
 
     public init(context: SettingsPageContext, discoveryEnabled: Bool = true) {
         self.discoveryEnabled = discoveryEnabled
@@ -114,8 +124,10 @@ public final class SourceControlSettingsView: ScopedSettingsPage {
         scanButton.action = { [weak self] in self?.scan() }
         anchors["source-control"] = vcsSection
         if discoveryEnabled {
-            body = [repositoriesSection(), emptySection, vcsSection, providersSection, textGenerationSection()]
+            anchors["issue-trackers"] = trackersSection
+            body = [repositoriesSection(), emptySection, vcsSection, providersSection, trackersSection, textGenerationSection()]
             binder.add { [weak self] in self?.updateDiscovery() }
+            binder.add { [weak self] in self?.updateTrackers() }
         } else { body = [textGenerationSection()] }
     }
 
@@ -124,6 +136,11 @@ public final class SourceControlSettingsView: ScopedSettingsPage {
 
     public override func refresh() {
         if discoveryEnabled, environmentId != scannedEnvironment { discovery = nil; discoveryError = nil; scannedEnvironment = environmentId; scan() }
+        if discoveryEnabled, environmentId != trackersEnvironment {
+            trackers = nil; trackersError = nil; trackersEnvironment = environmentId
+            expandedTrackers = []; busyTrackers = []; trackerFailures = [:]
+            loadTrackers()
+        }
         super.refresh()
     }
 
@@ -143,6 +160,115 @@ public final class SourceControlSettingsView: ScopedSettingsPage {
             }
             self?.scanning = false
             self?.refresh()
+        }
+    }
+
+    // MARK: Issue trackers (IssueTrackerSettings.tsx, SourceControlSettings.tsx:658-660)
+
+    /// Servers before 4928 have no issues capability and no `issueTrackers.*`, so the section stays away.
+    private var trackerEnvironment: SettingsScopeEnvironment? {
+        context.scope.representative.flatMap { e in e.connected && e.capabilities.contains("issues") ? e : nil }
+    }
+
+    func loadTrackers() {
+        guard let env = trackerEnvironment?.id, !trackersLoading, let request = context.request else { return }
+        trackersLoading = true
+        updateTrackers()
+        Task { [weak self] in
+            do {
+                let result = try await request(env, "issueTrackers.list", .object([:]))
+                let list = try result.decode(as: IssueTrackerConnectionList.self)
+                guard let self, self.trackersEnvironment == env else { return }
+                self.trackers = list
+                self.trackersError = nil
+            } catch {
+                guard let self, self.trackersEnvironment == env else { return }
+                self.trackersError = "\(error)"
+            }
+            self?.trackersLoading = false
+            self?.updateTrackers()
+            self?.onHeightChange?()
+        }
+    }
+
+    private func updateTrackers() {
+        guard let env = trackerEnvironment, env.id == trackersEnvironment else { setHidden(trackersSection, true); return }
+        if trackers == nil, trackersLoading {
+            // ponytail: T3 draws two skeleton bars here; the section stays hidden until the list lands
+            setHidden(trackersSection, true); return
+        }
+        if trackers == nil, let trackersError {
+            let row = SettingsRowView(title: "Could not load issue trackers", detail: trackersError)
+            let retry = ButtonView("Retry", variant: .outline, size: .xs)
+            retry.action = { [weak self] in self?.loadTrackers() }
+            row.control = retry
+            trackersSection.group.rows = [row]
+            setHidden(trackersSection, false)
+            return
+        }
+        guard let list = trackers, !list.trackers.isEmpty else { setHidden(trackersSection, true); return }
+        let projects = context.scope.projects.flatMap(\.members).filter { $0.environmentId == env.id }
+            .map { IssueTrackerDetailsView.Project(id: $0.projectId, title: $0.title) }
+        trackersSection.group.rows = list.trackers.map { t in
+            let busy = busyTrackers.contains(t.tracker)
+            let details = IssueTrackerDetailsView(
+                tracker: t, bindings: list.bindings, projects: projects, canEdit: env.canWrite, busy: busy,
+                failure: trackerFailures[t.tracker], openURL: context.openURL,
+                submit: { [weak self] token in self?.connectTracker(t, token: token) },
+                bind: { [weak self] project, scope in self?.bindProject(project, tracker: t, scope: scope) })
+            details.pickers.forEach { $0.isEnabled = $0.isEnabled && pendingBinding == nil }
+            let row = IssueTrackerRow(tracker: t, summary: IssueTrackerSettingsLogic.summary(t, bindings: list.bindings), details: details)
+            row.isExpanded = expandedTrackers.contains(t.tracker)
+            row.onToggle = { [weak self, weak row] in
+                guard let self, let row else { return }
+                CollapseMotion.run(in: row) {
+                    if self.expandedTrackers.remove(t.tracker) == nil { self.expandedTrackers.insert(t.tracker) }
+                    row.isExpanded = self.expandedTrackers.contains(t.tracker)
+                    self.needsLayout = true
+                    self.onHeightChange?()
+                }
+            }
+            return row
+        }
+        setHidden(trackersSection, false)
+    }
+
+    private func connectTracker(_ t: IssueTrackerConnectionList.Connection, token: String?) {
+        guard let env = trackersEnvironment, let request = context.request, !busyTrackers.contains(t.tracker) else { return }
+        busyTrackers.insert(t.tracker)
+        trackerFailures[t.tracker] = nil
+        updateTrackers()
+        Task { [weak self] in
+            do {
+                let result = try await request(env, "issueTrackers.connect", IssueTrackerSettingsLogic.connect(tracker: t.tracker, token: token))
+                let updated = try result.decode(as: IssueTrackerConnectionList.Connection.self)
+                guard let self, self.trackersEnvironment == env else { return }
+                if let i = self.trackers?.trackers.firstIndex(where: { $0.tracker == t.tracker }) { self.trackers?.trackers[i] = updated }
+            } catch {
+                self?.trackerFailures[t.tracker] = "\(error)"
+            }
+            self?.busyTrackers.remove(t.tracker)
+            self?.updateTrackers()
+            self?.onHeightChange?()
+            // The bindings can change with the connection; refetch quietly.
+            self?.loadTrackers()
+        }
+    }
+
+    private func bindProject(_ projectId: String, tracker t: IssueTrackerConnectionList.Connection, scope: String?) {
+        guard let env = trackersEnvironment, let request = context.request, pendingBinding == nil else { return }
+        pendingBinding = projectId
+        updateTrackers()
+        Task { [weak self] in
+            do {
+                _ = try await request(env, "issueTrackers.bindProject", IssueTrackerSettingsLogic.bind(projectId: projectId, tracker: t.tracker, scope: scope))
+                if let scope { self?.trackers?.bindings[projectId] = .init(tracker: t.tracker, scope: scope) }
+                else { self?.trackers?.bindings.removeValue(forKey: projectId) }
+            } catch {
+                self?.context.toast?("Project not bound", "\(error)", .error)
+            }
+            self?.pendingBinding = nil
+            self?.updateTrackers()
         }
     }
 

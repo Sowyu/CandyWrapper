@@ -113,7 +113,7 @@ UNPORTED_PATHS = {"/settings/voice", "/settings/secrets"}
 # 4928 rows CandyWrapper doesn't draw yet, so a search never lands on a page without them. Remove an id when its row lands.
 UNPORTED_IDS = {"boring-sidebar-multiline", "screen-reader-announcements", "screen-reader-window-title", "simlock-hosts",
                 "worktree-fast-checkout", "keep-awake-while-agents-work", "ghq-clone-layout", "welcome-page", "text-generators",
-                "device-sources", "issue-trackers"}
+                "device-sources"}
 
 
 def swift_string(literal):

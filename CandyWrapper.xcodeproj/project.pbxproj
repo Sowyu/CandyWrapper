@@ -54,6 +54,7 @@
 		940F19905C851EDA3FE6A6C9 /* PeerLinkDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DFD350D71DAD207A7E9B05B /* PeerLinkDialog.swift */; };
 		95C9CA154F0B56C69199D763 /* ComposerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56396DA448A1952FDC05BF3E /* ComposerController.swift */; };
 		9609FDB88DD924EBE32D30CA /* PaletteAddProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB4A3C4266BFC2E4F7D1B326 /* PaletteAddProject.swift */; };
+		97342C236009A10B64F606ED /* ThemeBackgroundController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CAB676BFFD511C6E001D2F7 /* ThemeBackgroundController.swift */; };
 		98518441987B7F297A77A955 /* RuntimeUpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E6841D4497EC3DD03F5BCCA /* RuntimeUpdateController.swift */; };
 		98CCAAC39B10C1248C984732 /* T3Protocol in Frameworks */ = {isa = PBXBuildFile; productRef = A244FA9F04D77F15EAC9B9AD /* T3Protocol */; };
 		A35346E84F4C99825C662E3B /* WelcomeOnboardingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA598ADFC895B496C79E89EE /* WelcomeOnboardingController.swift */; };
@@ -107,6 +108,7 @@
 		53CA0D184BBD9C9A87D29CE0 /* FakeT3Connect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeT3Connect.swift; sourceTree = "<group>"; };
 		55FB4EFB4DBDAF423D7789DC /* GitController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitController.swift; sourceTree = "<group>"; };
 		56396DA448A1952FDC05BF3E /* ComposerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerController.swift; sourceTree = "<group>"; };
+		5CAB676BFFD511C6E001D2F7 /* ThemeBackgroundController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeBackgroundController.swift; sourceTree = "<group>"; };
 		5CEE730F143C640FB3EE85DE /* HelperController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperController.swift; sourceTree = "<group>"; };
 		5DD09308DB9CC604E83A39AE /* SidebarCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarCommands.swift; sourceTree = "<group>"; };
 		5E6841D4497EC3DD03F5BCCA /* RuntimeUpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeUpdateController.swift; sourceTree = "<group>"; };
@@ -248,6 +250,7 @@
 				3D6AC148A6FC62F574C41E70 /* StallMonitor.swift */,
 				92B1A20A927434B822A78FBE /* T3ConnectController.swift */,
 				7FBAA6B0719E3E582513EAF9 /* TerminalController.swift */,
+				5CAB676BFFD511C6E001D2F7 /* ThemeBackgroundController.swift */,
 				EB27CF39529D632C5DF41F67 /* ThreadAutomationsController.swift */,
 				7464DFC6714D57582751B667 /* ThreadNotificationCoordinator.swift */,
 				C28281CD4D81D6A990C1B210 /* ThreadSession.swift */,
@@ -450,6 +453,7 @@
 				D4EECE560A7C4C132A023B0B /* StallMonitor.swift in Sources */,
 				EB86443F1218E9073AE558A0 /* T3ConnectController.swift in Sources */,
 				3CFF0922C65AA380DE470C28 /* TerminalController.swift in Sources */,
+				97342C236009A10B64F606ED /* ThemeBackgroundController.swift in Sources */,
 				D050126CAF44FEFD05E6EEF0 /* ThreadAutomationsController.swift in Sources */,
 				7AEB67D7EED3460CC950037F /* ThreadNotificationCoordinator.swift in Sources */,
 				5FBDC02DA9A1272DD1ACCEB9 /* ThreadSession.swift in Sources */,
