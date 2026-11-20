@@ -90,6 +90,10 @@ public struct ClientSettings: Equatable, Sendable {
         "sidebarWorkingShelfEnabled": SettingSpec(.bool, .bool(true)),
         "sidebarProjectGroupingMode": SettingSpec(.literals(["repository", "repository_path", "separate"]), .string("repository")),
         "sidebarProjectGroupingOverrides": SettingSpec(.any, .object([:])),
+        // The thread details card's items (4928 settings.ts:541-547, #26904): only choices that differ from
+        // the default, and the retired Labs flag that still defaults Usage and Context.
+        "threadDetailsItems": SettingSpec(.any, .object([:])),
+        "threadDetailsUsageEnabled": SettingSpec(.bool, .bool(false)),
         "sidebarProjectSortOrder": SettingSpec(.literals(["updated_at", "created_at", "manual"]), .string("manual")),  // T3 defaults to updated_at (settings.ts:59); CandyWrapper keeps sections where the user put them
         "sidebarThreadSortOrder": SettingSpec(.literals(["updated_at", "created_at"]), .string("updated_at")),
         "sidebarThreadPreviewCount": SettingSpec(.int(1...15), .number(6)),

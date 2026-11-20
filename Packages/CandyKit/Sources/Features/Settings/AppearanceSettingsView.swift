@@ -242,7 +242,8 @@ public final class AppearanceSettingsView: SettingsPageBase {
             let advanced = SettingsAdvancedRows(rows: rows + [identification, strip])
             advanced.onHeightChange = { [weak self] in self?.onHeightChange?() }
             advancedInterface = advanced
-            var interface: [NSView & SettingsGroupRow] = [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), ignoreReduceTransparencyRow(), width]
+            // AppearanceSettingsPanel.tsx:297 at 4928: Thread details follows the chat width.
+            var interface: [NSView & SettingsGroupRow] = [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), ignoreReduceTransparencyRow(), width, threadDetailsRow()]
             if ComposerDesign.uses3814(dark: effectiveAppearance.isDark) {
                 // AppearanceSettingsPanel.tsx:275-306 at 3824: the effort row sits between chat width and math.
                 let effort = clientSelect("effort-display", "Show reasoning effort in the composer as its name, such as High, or as bars.", key: "effortDisplay",
@@ -253,8 +254,41 @@ public final class AppearanceSettingsView: SettingsPageBase {
             interface += [math, appIconRow(), appIconAppearanceRow(), advanced]
             return section("appearance-interface", "Interface", interface)
         }
-        return section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), ignoreReduceTransparencyRow(), identification, diff, strip, width, math,
+        return section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), ignoreReduceTransparencyRow(), identification, diff, strip, width, threadDetailsRow(), math,
                                                               appIconRow(), appIconAppearanceRow()])
+    }
+
+    /// `ThreadDetailsItemsRow` (4928 settings/ThreadDetailsItemsRow.tsx:17-63, #26904): "N of 12 on" opens the
+    /// card's items menu, with a reset while any differs from the default.
+    // ponytail: the row has no search entry until gen-settings-search.py reads 4928's `msg()` titles
+    private func threadDetailsRow() -> SettingsRowView {
+        let total = ThreadDetailsItems.all.count
+        let trigger = ButtonView("", variant: .outline, size: .sm).menuTrigger()
+        trigger.trailingIcon = .chevronDown
+        trigger.justifiesBetween = true
+        trigger.frame.size.width = 160  // `sm:w-40`
+        let r = row(nil, title: "Thread details", detail: "Choose what the thread details card shows. You can also right-click the card.",
+                    control: trigger)
+        anchors["thread-details-items"] = r
+        let slot = ResetSlot(label: "thread details")
+        slot.tooltip = "Reset thread details to default"
+        r.accessories = [slot]
+        slot.action = { [weak self] in self?.context.writeClient?(ThreadDetailsItems.reset) }
+        trigger.action = { [weak self, weak trigger] in
+            guard let self, let trigger else { return }
+            let items = ThreadDetailsItems.menuItems(settings: { [weak self] in self?.client ?? .defaults },
+                                                     write: { [weak self] patch in self?.context.writeClient?(patch) })
+            MenuPopupView.show(items, from: trigger, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4))
+        }
+        binder.add(read: { [weak self] () -> [String: Bool] in self.map { ThreadDetailsItems.visibility($0.client) } ?? [:] },
+                   update: { [weak trigger, weak slot, weak r] shown in
+            let enabled = ThreadDetailsItems.all.filter { shown[$0.id] == true }.count
+            trigger?.title = "\(enabled) of \(total) on"
+            trigger?.setAccessibilityLabel("Thread details: \(enabled) of \(total) on")
+            slot?.isShown = !ThreadDetailsItems.isDefault(shown)
+            r?.needsLayout = true
+        })
+        return r
     }
 
     /// CandyWrapper's own row for the Dither theme's picture: choose one, or go back to the desktop picture.

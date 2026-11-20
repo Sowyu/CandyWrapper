@@ -58,7 +58,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| d7935f135f | #26904 | thread | feat(web): choose what the thread details card shows | port |
+| d7935f135f | #26904 | thread | feat(web): choose what the thread details card shows | ported (settings-4928): Appearance's Thread details row and the card's right-click menu choose the items; the card hides them. Usage limits, Context window and Side chats have no card section yet |
 
 ## Port group thread-load (4)
 
