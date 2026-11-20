@@ -47,11 +47,21 @@ public final class GeneralSettingsView: SettingsPageBase {
         _ = bindServerRow(modelRow, keys: ["defaultModelSelection"], reset: "default model", resetPatch: { ["defaultModelSelection": .null] })
         binder.add { [weak self, weak modelRow, weak model] in
             guard let self else { return }
-            model?.refresh()
+            // `defaultModelSelectionsAreMixed` (modelSelection.ts:315-345, #28005): targets differ when what new threads
+            // would start on differs, so automatic defaults on two machines can be mixed too.
             let scope = self.context.scope
-            let mixed = scope.isMixed(["defaultModelSelection"])
+            let automatic = !scope.connected.isEmpty && scope.connected.allSatisfy { $0.settings?["defaultModelSelection"] == .null }
+            let mixed = scope.isMixed(["defaultModelSelection"]) || self.effectiveDefaultsDiffer()
+            model?.mixedLabel = mixed ? (automatic ? "Automatic (mixed)" : "Mixed") : nil
+            model?.refresh()
             let overridden = scope.isProjectScope && scope.source(["defaultModelSelection"]) == .project
-            modelRow?.status = scope.connected.isEmpty || mixed || overridden || self.server["defaultModelSelection"] != .null ? nil : "Automatic"
+            if !scope.isProjectScope {
+                modelRow?.detail = !overridden && automatic ? "Default model for new threads, selected automatically. Projects can override it."
+                    : "Default model for new threads. Projects can override it."
+            }
+            modelRow?.status = !mixed ? nil : automatic
+                ? "Automatic defaults differ. Select one environment or choose a shared model to edit effort."
+                : "Defaults differ. Select one environment or choose a shared model to edit effort."
         }
 
         // Fallback model (ProjectDefaultsSettings.tsx:271-351, #26164, #27593): what new threads start on while the default
@@ -66,7 +76,7 @@ public final class GeneralSettingsView: SettingsPageBase {
             guard let self else { return }
             fallback?.refresh()
             let scope = self.context.scope
-            fallbackRow?.isHidden = scope.isProjectScope || !Self.serversSend("fallbackModelSelection", scope)
+            fallbackRow?.isHidden = scope.isProjectScope || !scope.allStore("fallbackModelSelection")
         }
 
         let modes = RuntimeMode.all.map { (value: $0.rawValue, label: ComposerPickers.modes[$0]!.label) }
@@ -103,9 +113,15 @@ public final class GeneralSettingsView: SettingsPageBase {
         return section("project-defaults", "New threads", [modelRow, fallbackRow, permissions, workspace, submodules])
     }
 
-    /// Every connected target's server sends `key`, so a server that predates it never gets a patch it would refuse.
-    static func serversSend(_ key: String, _ scope: SettingsScopeState) -> Bool {
-        !scope.connected.isEmpty && scope.connected.allSatisfy { $0.settings?.raw[key] != nil }
+    /// Each connected target's default, or for an automatic one the first ready provider's default model.
+    private func effectiveDefaultsDiffer() -> Bool {
+        let picks = context.scope.connected.map { env -> String? in
+            let stored = env.settings?["defaultModelSelection"] ?? .null
+            if let id = stored["instanceId"]?.stringValue, let model = stored["model"]?.stringValue { return id + "/" + model }
+            let catalog = ProviderCatalog(context.configs[env.id]?.providers ?? [], settings: env.settings, projectId: nil)
+            return catalog.entries.first(where: \.isSelectable).flatMap { e in (e.defaultModel ?? e.models.first?.slug).map { e.id.rawValue + "/" + $0 } }
+        }
+        return Set(picks.map { $0 ?? "" }).count > 1
     }
 
     /// File-backed keys reset to null (inherit), not to a value. At a project scope the row's own reset clears the override.
@@ -648,6 +664,8 @@ final class SettingsModelPickerControl: DSView {
     private let unsetFrom: String?
     private weak var popup: OpenPopup?
     private var isUnset: Bool { unsetFrom != nil && context.scope.values[key] == .null }
+    /// The trigger's title while the targets differ (`triggerLabel`), when the row knows better than the stored values.
+    var mixedLabel: String?
 
     init(context: SettingsPageContext, key: String, unsetFrom: String? = nil) {
         self.context = context
@@ -684,6 +702,9 @@ final class SettingsModelPickerControl: DSView {
         if context.scope.connected.isEmpty {
             button.title = "Connect an environment"
             button.icon = nil
+        } else if let mixedLabel {
+            button.title = mixedLabel
+            button.icon = nil
         } else if context.scope.isMixed([key]) {
             button.title = "Mixed"
             button.icon = nil
@@ -695,7 +716,7 @@ final class SettingsModelPickerControl: DSView {
             button.title = "No providers available"
             button.icon = nil
         }
-        traits.isHidden = descriptors.isEmpty || context.scope.isMixed([key]) || context.scope.connected.isEmpty || isUnset
+        traits.isHidden = descriptors.isEmpty || context.scope.isMixed([key]) || mixedLabel != nil || context.scope.connected.isEmpty || isUnset
         traits.title = ModelTraits.triggerLabel(descriptors, ultrathink: false, provider: selection?.0.driver)
         invalidateIntrinsicContentSize()
         superview?.needsLayout = true
