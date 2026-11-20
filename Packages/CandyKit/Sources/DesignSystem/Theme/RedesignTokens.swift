@@ -10,7 +10,7 @@ public enum RedesignTokens {
         public static let control: CGFloat = 8
         /// Cards, bubbles, code blocks, tables, banners and popovers.
         public static let card: CGFloat = 12
-        /// The composer, the reading column, the details card, the content panel and modals.
+        /// The composer, the details card, the content panel and modals.
         public static let panel: CGFloat = 16
         /// The window's own corner, measured on macOS 27 for a titled window without a toolbar: a continuous 16, on
         /// this Mac at 1x and in the user's 2x capture (2026-10-22).
@@ -69,7 +69,7 @@ public enum RedesignTokens {
 
     /// The glass recipes: a 12pt backdrop blur (`Tokens.LengthPx.glassBlur`), a fill and a 1pt rim.
     public enum Surface {
-        /// Surfaces that rest on the picture: the composer, the pills, the header pill, the reading column, cards.
+        /// Surfaces that rest on the picture: the composer, the pills, the header pill, cards.
         public static let resting: CGFloat = 0.62
         /// Layers over content, which must hide sharp text under them: menus, popovers, toasts, modals.
         public static let floating: CGFloat = 0.82
