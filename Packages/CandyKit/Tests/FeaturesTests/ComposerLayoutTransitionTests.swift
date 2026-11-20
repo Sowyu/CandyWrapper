@@ -72,6 +72,28 @@ struct ComposerLayoutTransitionTests {
         #expect(composer.questionPill.frame.maxX <= composer.primary.frame.minX, "Stop sits right of the pill")
     }
 
+    /// Screen pass 2026-11-20, item 3: after `/clear`, archiving the thread landed on the new-thread page with the
+    /// "fresh session" banner still drawn where the docked composer had been.
+    @Test func freshSessionBannerHidesWhenTheRouteLeavesTheThread() throws {
+        let original = ThemeRuntime.input
+        var plain = original
+        plain.ditherLight = false; plain.ditherDark = false; plain.glassLight = false; plain.glassDark = false
+        ThemeRuntime.apply(plain)
+        defer { ThemeRuntime.apply(original) }
+        let panel = ThreadPanelView(frame: NSRect(x: 0, y: 0, width: 1000, height: 780))
+        let projection = try #require(try ThreadPreview.projection(titled: ThreadPreview.markdownThread))
+        panel.setProjection(projection, projectTitle: "demo-repo", workspaceRoot: nil)
+        panel.lazyFreshSessionBanner.view.apply(.init(variant: .neutral, icon: .eraser, title: "Your next message starts a fresh session"))
+        panel.freshSessionKey = "thread-key"
+        panel.layoutSubtreeIfNeeded()
+        let banner = try #require(panel.lazyFreshSessionBanner.loaded)
+        #expect(!banner.isHidden && banner.superview != nil, "the banner shows over the docked composer")
+        panel.setDraft(projectTitle: "demo-repo", isScratch: false)
+        panel.freshSessionKey = nil
+        panel.layoutSubtreeIfNeeded()
+        #expect(banner.isHidden || banner.superview == nil, "no banner on the new-thread page")
+    }
+
     private func collapsedPanel() throws -> ThreadPanelView {
         let panel = ThreadPanelView(frame: NSRect(x: 0, y: 0, width: 1000, height: 780))
         let projection = try #require(try ThreadPreview.projection(titled: ThreadPreview.markdownThread))
