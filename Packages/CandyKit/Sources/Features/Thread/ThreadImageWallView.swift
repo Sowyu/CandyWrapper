@@ -179,31 +179,39 @@ final class GalleryMasonryView: DSView {
         guard window != nil, frames.count < images.count, measuring.count < 6 else { return }
         let placedBottom = frames.map(\.maxY).min() ?? 0
         guard frames.isEmpty || placedBottom < visibleRect.maxY + max(visibleRect.height, 400) else { return }
-        let scale = window?.backingScaleFactor ?? 2
-        let side = Int((columnWidth * scale).rounded(.up))
         for image in images[frames.count...].prefix(12) where measuring.count < 6 {
             guard aspect(image) == nil, !measuring.contains(image.pixelKey) else { continue }
-            let pixelKey = image.pixelKey, key = image.key
-            let memoryKey = "\(pixelKey)|cover"
-            measuring.insert(pixelKey)
-            let load = loader(image)
+            measuring.insert(image.pixelKey)
+            let load = loader(image), side = measureSide
             Task { [weak self] in
                 // The loader itself, not the cache's shared request: a cache clear (Force Reload) cancels those, and a
                 // cancelled measure must not read as a failed picture.
-                let image = await load(side)
-                guard let self else { return }
-                self.measuring.remove(pixelKey)
-                if let image {
-                    if self.sharedCache { ImageDecodeCache.store(image, side: side, key: memoryKey) } else { self.measured[pixelKey] = image }
-                    // A loader that measured nothing on the way (a kept copy) still gives the proportions.
-                    if self.images.first(where: { $0.pixelKey == pixelKey })?.naturalSize == nil {
-                        MarkdownImages.record(CGSize(width: image.width, height: image.height), for: key)
-                    }
-                } else {
-                    self.failed.insert(pixelKey)
-                }
-                self.relayout()
+                let pixels = await load(side)
+                self?.measured(image, pixels, side: side)
             }
+        }
+    }
+
+    private var measureSide: Int { Int((columnWidth * (window?.backingScaleFactor ?? 2)).rounded(.up)) }
+
+    /// A first load came back: keep its pixels for the tile, take its proportions if nothing measured them on the way,
+    /// or mark it failed, then place what is now known.
+    private func measured(_ image: GalleryImage, _ pixels: CGImage?, side: Int) {
+        measuring.remove(image.pixelKey)
+        if let pixels {
+            if sharedCache { ImageDecodeCache.store(pixels, side: side, key: "\(image.pixelKey)|cover") } else { measured[image.pixelKey] = pixels }
+            if image.naturalSize == nil { MarkdownImages.record(CGSize(width: pixels.width, height: pixels.height), for: image.key) }
+        } else {
+            failed.insert(image.pixelKey)
+        }
+        relayout()
+    }
+
+    /// Measures every picture not measured yet, in order, one at a time, and returns once all are placed. Tests use it
+    /// to wait on the measuring itself rather than on the main actor's turn.
+    func measureAll() async {
+        for image in images where aspect(image) == nil {
+            measured(image, await loader(image)(measureSide), side: measureSide)
         }
     }
 

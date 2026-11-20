@@ -118,8 +118,7 @@ struct ThreadImageWallTests {
         }
         wall.images = images
         wall.layoutSubtreeIfNeeded()
-        let end = Date().addingTimeInterval(30)
-        while wall.masonry.frames.count < images.count, Date() < end { try await Task.sleep(for: .milliseconds(50)) }
+        await wall.masonry.measureAll()
         #expect(wall.masonry.frames.count == images.count)
         let placed = wall.masonry.frames
         wall.masonry.relayout()
