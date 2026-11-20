@@ -13,86 +13,146 @@ Before changing anything, I regenerated all 96 specs with 3824's stylesheet and 
 
 Fonts and Chrome on this Mac draw the same pixels as the old Mac's, so new references are comparable. When committing 4928's references I kept the checked-in PNG for all 65 cases above wherever 4928 changed nothing else. I cropped 13 PNGs that 4928 did change back to the old size, since they had the same capture-margin growth. `diff` and `markdown/code` and `markdown/file-chips` still show 3824 and need the assets before anyone can recapture them. To get them, unpack the 4928 client bundle into `t3-client-assets` and update the paths and minified export names in `gen-diff-spec.py` and `gen-markdown-spec.py`.
 
-## Most failures are markup changes, not stylesheet changes
+## Specs at 4928 markup (task specs-4928, 2026-11-19)
 
-Every failing case uses Tailwind utilities that 3824's stylesheet compiled and 4928's no longer has, because T3 changed those components' class lists. The spec HTML in `scripts/gen-*-spec.py` is still 3824's markup, so these references show 3824 markup drawn with 4928's CSS, which matches neither version. A port agent has to bring the generator's markup to 4928's TSX first, then rerun `scripts/component-reference` for that spec, and only then port CandyWrapper against the new reference.
+Branch `specs-4928` from `catchup-4928` at `34617667`. The spec generators now hold Nightly 4928's
+component markup, and every changed spec was recaptured. Earlier sections of this file describe the
+state before that.
 
-40 cases in 16 specs use such classes. Only the 26 below fail, so the other 14 also need fresh markup even though they pass now: connections 8, provider-setup 2, settings-pages3 2, settings-sweep 1 and usage 1 (all the settings row grid), composer-menu 1 and markdown 1 (context chip), sidebar-search 2 (`max-w-[min(18rem,var(--available-width))]`) and threadview 4 more chips.
+What changed:
 
-The baseline run on `652c31e7` with 3824's references passed all fidelity suites: 83 tests in 54 FeaturesTests suites and 66 tests in 11 DesignSystemTests suites. So every failure below comes from 4928.
+1. `~/CandyWrapper-research/t3-client-assets` is a copy of the 4928 runtime's `client/assets`, and
+   `~/CandyWrapper-research/downloads/lucide-static-0.564.0` holds lucide-static from npm, so every
+   generator runs on this Mac. The diff and Markdown code cases are recaptured from 4928's bundle
+   (pierre diffs 1.7.0-beta.4, the Highlights highlighter, t3-light).
+2. Every class string in the spec HTML that exists only in 3824's web source now matches 4928. A
+   check that compares each `class="..."` in `design/component-reference/*.json` against both source
+   trees finds none left, apart from the retired meter. 35 specs and 163 PNGs were recaptured in
+   `e7c4f0cd`, plus 18 diff and 16 Markdown PNGs.
+3. Specs that import T3's main chunk (diff, Markdown, threadview, composer-menu, user-message) set
+   `t3code:theme-appearance-mode` first. Without it main switches a dark page to light
+   (useTheme.ts:162-172).
+4. New: `user-message` (7 cases), `sidebar-footer` (2 cases) and `markdown/insight`.
 
-## Failing cases by surface
+The drift check works on whole class strings. Class lists that T3 builds with `cn()` from several
+parts, and elements T3 added or removed, only show up where someone read the component. I read and
+updated the components the failing cases cite. These cited files changed between the tags without
+leaving a stale string in any spec, so their specs may still lag in structure: ConnectionsSettings.tsx,
+UsagePage.tsx, ProposedPlanCard.tsx, ThreadRelationshipsControl.tsx (thread-lineage got only its list
+class), ThreadTerminalDrawer.tsx, FilePreviewPanel.tsx, RightPanelTabs.tsx, DevicePanel.tsx and
+CommandPalette.tsx.
 
-The numbers are the share of pixels that differ, then the case's ceiling.
+### Retired cases
 
-### Composer model and effort control
+- `thread-leftovers` meter-0, meter-25, meter-95: T3 deleted ContextWindowMeter.tsx in the Labs
+  cleanup (521ac7c218, #33131). The context meter now lives in the thread details card
+  (ThreadDetailsUsage.tsx), which has no spec yet.
+- `timeline-gaps` plan.implement-split, plan.refine: the same commit removed the plan follow-up
+  actions from ComposerPrimaryActions.tsx.
 
-`ComposerFooterFidelityTests`, 6 cases, and the suite mean rose to 5.33% against its 5% limit. T3 4928 dropped `ps-0`, `ps-0.5` and `data-pressed:bg-transparent` from the cluster. This is the branch composer-pickers surface, section 2.1 of `nightly-diff-4928.md`.
+The cases stay in their specs with a `retired` reason, and ThreadLeftoversFidelityTests and
+TimelineGapsFidelityTests skip them.
 
-- `cluster.access-icon` light 9.15%, dark 9.22%, ceiling 6%
-- `cluster.both-icon` light 7.38%, dark 7.41%, ceiling 6%
-- `cluster.bars` light 11.56%, dark 11.55%, ceiling 6%
+## Fidelity at 4928 markup
 
-### Settings rows
+`scripts/test --filter Fidelity`: FeaturesTests 85 tests in 56 suites with 64 issues, DesignSystemTests
+66 tests in 11 suites with 10 issues. Every case not listed below passes. Numbers are the share of
+differing pixels against the case's ceiling. A box is the diff's bounding box in 2x pixels of the
+reference, which includes 16 px of capture padding on each side.
 
-8 cases. The settings row grid changed at `apps/web/src/components/settings/settingsLayout.tsx:538` (4928): `grid-cols-[minmax(0,1fr)_minmax(10rem,auto)]` and the section's `[&>*+*]:border-t` divider classes are gone. The new references are up to 120 CSS px taller, because the old markup no longer lays out as a grid.
+Each entry below is a real difference between CandyWrapper and T3 4928 unless it says harness.
 
-- `FormsFidelityTests` (DesignSystemTests) `section.one-row` dark 5.04%, ceiling 3.5%
-- `FormsFidelityTests` `section.three-rows` light 3.95%, dark 5.42%, ceiling 3.5%
-- `SettingsPagesFidelityTests` `general.notifications` light 5.98%, dark 10.13%, ceiling 5%
-- `SettingsPages2FidelityTests` `project.overview` dark 9.07%, ceiling 4.5%
-- `SettingsPages2FidelityTests` `source-control.repositories` light 8.12%, dark 14.51%, ceiling 4.5%
+### Dialogs (DesignSystemTests DialogsFidelity, connections, git, pull-requests, timeline-gaps)
 
-### Context window meter
+T3 4928 sets dialog, alert dialog and sheet titles `leading-snug` instead of `leading-none`
+(dialog.tsx:227, alert-dialog.tsx:127, sheet.tsx:147). The taller title line moves everything below
+it, so the diff covers the whole dialog.
 
-`ThreadLeftoversFidelityTests` `threadControls`, 6 cases, ceiling 6.5%. `stroke-muted-foreground/24` is gone from the meter's track. This is section 1.4 of the diff doc.
+- `dialog` default 19.56% light, 10.61% dark; default.panel 17.38%, 13.14%; bare.panel 20.92%,
+  13.48%; ceiling 9%.
+- `alert-dialog` default 16.48%, 10.86%; bare 19.69%, 10.37%; ceiling 9%.
+- `connections` add-dialog, add-dialog.error, add-dialog.route, add-dialog.ssh, add-dialog.ssh-error
+  15.3% to 19.9%, ceiling 6.5%; create-link-dialog 15.37% light, 16.66% dark, ceilings 7% and 6.5%.
+- `git` dialog.commit 10.60%, 12.43%, ceiling 6%.
+- `pull-requests` link-dialog 14.03%, 13.82%, ceiling 7%.
+- `timeline-gaps` plan.save-dialog 14.18%, 13.67%, ceiling 7.5%.
 
-- `meter-0` light 7.18%, dark 7.28%
-- `meter-25` light 7.33%, dark 7.41%
-- `meter-95` light 7.89%, dark 7.90%
+### Composer model and effort control (ComposerFooterFidelityTests)
 
-### Context chips
+The cluster cases now start at the model trigger, which carries the effort as its suffix, followed by
+the permissions chip (ComposerControlsBar.tsx:168-300). CandyWrapper still draws a separate traits
+block. Box 34,28 to the right edge on every case, the whole cluster.
 
-`ThreadViewFidelityTests`, 2 cases, and the suite mean rose to 6.29% against 5%, with the per-case line check failing too. `ContextChip.tsx:9-48` (4928) rewrote the accent and ink variables, and `bg-(--context-chip-accent)/10` and `border-(--context-chip-accent)/30` are gone.
+- cluster.access-icon 8.95% light, 9.07% dark; cluster.bars 9.74%, 9.84%; cluster.both-icon 7.70%,
+  7.77%; cluster.overflow-both 6.88%, 6.94%; ceiling 6%. The suite mean is above 5%.
+- The harness's own fit check (`v.fit == ...`, ComposerFooterFidelityTests.swift:48) fails for all
+  four, because it asks for the 3824 fits. The port agent has to rewrite this harness with the cluster.
+- `overflowSkipsPermissionsOnlyState` fails too: the overflow width is 188.6 against 189.1 needed. It
+  reads no component reference, so it is not caused by these specs.
 
-- `chip.image` light 22.66%, dark 22.81%, ceiling 12%
+### Model picker (PickersFidelityTests)
 
-### Plan card split button
+`popupsAgainstReferences` 13-model-picker 12.32% both themes, ceiling 5.5%, and its width check fails.
+It compares with `design/reference-3824`, not with a component reference, so it is the composer-pickers
+port against the old full-screen capture, untouched by this task.
 
-`TimelineGapsFidelityTests`, 2 cases, ceiling 7.5%, and its line check fails. `rounded-l-none`, `rounded-r-none` and `border-message-action-foreground/20` are gone from the implement split button.
+### Settings (SettingsPages2, SettingsPages3)
 
-- `plan.implement-split` light 8.17%, dark 8.12%
+- `providers.list` 33.10% light, 33.62% dark, ceiling 4.5%. Box 16,44 to 559,406, the whole list:
+  4928 makes the row `relative` with the absolute select button, and the switch sits in the
+  pointer-events-none action span (ProviderInstanceCard.tsx:1173-1250).
+- `source-control.repositories` 10.17%, 12.99%, ceiling 4.5%. Box covers the section from y 31: the
+  settings row grid's control column is `auto` now, not `minmax(10rem,auto)` (settingsLayout.tsx:538).
+- `provider.environment` dark 25.26%, ceiling 11%; light passes. Each variable is now a bordered card
+  with the name and remove button on one line and the value and lock on the next
+  (ProviderInstanceCard.tsx:466-560).
+- The other settings cases that held the old row grid (connections 8, provider-setup, settings-pages,
+  settings-sweep, usage, forms section) pass with the 4928 markup.
 
-### Sidebar rename field
+### Context chips (ThreadViewFidelityTests)
 
-`SidebarLeftoversFidelityTests`, 2 cases, ceiling 6%. `focus:border-foreground` is gone from the rename input. The sidebar-4928 branch touched the rename field in `0166b1ef`, so check it there first.
+- chip.image 23.65% light, 23.76% dark, ceiling 12%. Box 18,20 to 553,57. The 4928 image chip has no
+  bubble and takes T3's runtime `--context-chip-image` (#006a99 light); CandyWrapper still draws the
+  tinted bubble.
+- pr.merge 11.03%, 11.20%, ceiling 10%. Box 37,28 to 487,119: the Merge pill is a faint
+  `bg-black/[0.035]` pill at 4928 (ThreadDetailsControl.tsx:62-66), CandyWrapper draws it solid blue.
+- The suite mean and line check fail from these two.
+- The other chip cases, card.* and avatar.* pass.
 
-- `rename.focus-visible` light 6.02%, dark 6.70%
+### Markdown (MarkdownFidelityTests)
 
-## References that changed and still pass
+- insight 33.13% light, 33.53% dark, ceiling 5.5%. New case. The native render's colors are the inline
+  code fill (#e4e4e5) where T3 draws the info-blue callout (ChatMarkdown.tsx:377-382, #22239), so
+  CandyWrapper does not take this source, the fence as INSIGHT_OPEN_PATTERN and INSIGHT_CLOSE_PATTERN
+  accept it (markdownStreamBlocks.ts:10-11), as an insight, although thread-markdown ported the callout.
+  Check the native fence detection against those patterns first.
+- file-chips 5.52% light, 5.69% dark, ceiling 5.5%. Spread over the chips (box 17,27 to 1284,165): the
+  mention color is now T3's runtime `--context-chip-mention`.
+- text, lists, quotes, table, code and rule-image pass with 4928's Highlights colors.
 
-83 PNGs changed (the commit message of `3f9c5675` says 68, which is wrong): composer-footer 6, composer-menu 2, connections 14, markdown 3, provider-setup 6, scroll-area 6, settings 4, settings-pages 4, settings-pages2 8, settings-pages3 2, settings-sweep 2, sidebar-leftovers 2, thread-completion 4, thread-leftovers 6, threadview 8, timeline-gaps 2 and usage 4. The scroll-area ones are the new dark scrollbar thumb (`--app-scrollbar-thumb` went from `#ffffff14` to `#ffffff5c`, #30031). The rest are mostly the markup mismatch above.
+### Sidebar (SidebarLeftoversFidelityTests, SidebarFooterFidelityTests)
 
-## Port-branch shapes without a reference
+- rename.rest and rename.focus-visible 12.2% to 12.4%, ceiling 6%. Box 24,32 to 439,75: the 4928 field
+  is a 1px inset ring with `-mx-1` (SidebarThreadRow.tsx:660-673), not a border.
+- sidebar-footer undo.archived 8.96% light, 56.26% dark; undo.archived-many.narrow 8.99%, 53.86%;
+  ceiling 6%. New cases. Harness, check first: the dark diff covers the whole box and the reference's
+  most common color is #111111 where the native canvas is #000000, so `SidebarBox` and the spec's
+  `var(--sidebar)` disagree on the dark sidebar color before the notice itself is compared.
 
-The gen-*-spec.py flow has no case for the user message itself. `threadview`'s `chip.*` cases cover only the Markdown inside a sent message, and `timeline-gaps`' `attachment.sent` is the attachment preview panel. So I added no spec cases for the merged thread shapes. These shapes have no reference of any kind:
+### Your messages (UserMessageFidelityTests)
 
-1. Back-to-back message bursts: joined corners, one Steer label, and the time and buttons floating beside the bubble on wide lanes (`TimelineUserMessageRow.tsx:270`, `MessagesTimeline.logic.ts:645`).
-2. Images and videos above the bubble, a lone image with no bubble, and the collage (#27306, #38558).
-3. File cards for files sent without text (`UserFileCard`, `TimelineUserMessageRow.tsx:109`), plus the pasted text, snapshot and sending shapes (#27377).
-4. The quote inset card (`AssistantCitationChip.tsx:117`).
-5. The model and effort switch row (`V2LifecycleRow.tsx:643`).
+burst 1.40% light, 1.60% dark; file-card 0.93%, 1.01%; model-switch 1.90%, 1.92%; ceiling 6%. All pass.
+media.above-text, media.image-only, media.collage and quote-card have references but no native harness,
+because the native row loads images through the thread's image model.
 
-The composer's combined model and effort control (branch composer-pickers) has `composer-footer` cases, but they hold 3824's markup and now fail as listed above. Sidebar rows (branch sidebar-4928, merged into `catchup-4928` after this branch started) have `sidebar` spec cases that pass, but they also hold 3824's markup. Both need 4928 markup in their generators before they say anything about 4928. A new `gen-user-message-spec.py` with a native harness in a new `UserMessageFidelityTests` is the way to cover items 1 to 5.
+## Shapes still without a reference
 
-## Capturing the full-screen references at 4928
+These were asked for and are not done. Each needs more of T3's markup than this task had room for.
 
-The current full-screen set the tests read is `design/reference-3824`. Its README says headless chrome-headless-shell captured it from the 3824 web client against a seeded sandbox copy, so it needs no window. These are the gaps on this Mac:
-
-1. A seeded 4928 sandbox. `sandbox-3824-ref` with its Markdown, commands, question, approval and changed-files threads and `demo-repo` stayed on the old Mac. Without it, `scripts/sandbox-server` with the 4928 runtime gives an empty home, and the seed plans cost about six Claude Haiku 5.5 turns, which needs the user's approval. Copying `sandbox-3824-ref` over from the old Mac avoids most of them.
-2. The capture tool. `design/reference-3824/plans/capture-reference-extended.swift` still looks for Chrome only under `~/.t3/tools`, so it needs the same `findChrome()` as `scripts/capture-reference.swift`.
-3. Plans for 4928. `plans/gen.py` selects the 3824 composer, so states 13, 41, 42 and 53 need the combined model and effort control's selectors. Section 1 of the diff doc also adds states worth capturing: a burst, an image message, a file card and the switch row.
-4. Pairing. `run.sh` mints a pairing URL with `env -i <runtime> auth pairing create --base-dir <copy>/t3home`, which works with the 4928 runtime in `~/CandyWrapper-research/runtimes`.
-5. Review. Each PNG has to be looked at before it replaces the 3824 one, so plan for the user's review time.
-
-Captures from the desktop app on a real screen instead need the screen lock, the official Nightly app and screencapture, so they wait until the user frees the screen.
+1. The docked model picker with its effort column and footer (ModelPickerContent.tsx:473,
+   ComposerModelEffort.tsx:525-560 for the column, ComposerPickerFooter for the footer).
+2. The title glimmer's resting state and the issue badge on a sidebar row. Both live inside
+   SidebarThreadRow.tsx (glimmer :1110 and :1923 through ActivityShimmerOverlay, issue badge
+   :1135-1160), and no spec holds a 4928 sidebar row to put them in.
+3. The viewed-images row (TimelineWorkEntryRow.tsx ViewedImagesTimelineRow through
+   ChatMarkdownAssetImage and ChatMarkdownImage in ChatMarkdownMedia.tsx).

@@ -89,6 +89,8 @@ def code_block(language, code):
         f'<div class="chat-markdown-shiki"><pre data-shiki-lang="{language}" data-code="{html.escape(code + chr(10))}"></pre></div></div>')
 
 ALERTS = {
+    # ChatMarkdown.tsx:377-382 (4928): Claude's insight fence renders as this callout.
+    "insight": ("Insight", "star", "border-info", "text-info"),
     "note": ("Note", "info", "border-blue-500/70", "text-blue-600 dark:text-blue-400"),
     "tip": ("Tip", "lightbulb", "border-emerald-500/70", "text-emerald-600 dark:text-emerald-400"),
     "important": ("Important", "message-square-warning", "border-purple-500/70", "text-purple-600 dark:text-purple-400"),
@@ -97,8 +99,9 @@ ALERTS = {
 }
 def alert(kind, body):
     label, icon, border, title = ALERTS[kind]
-    return (f'<div role="note" class="my-1 border-l-2 pl-3 {border}">'
-            f'<p data-thread-find-ignore="true" class="flex items-center gap-1.5 font-medium {title}">{lucide(icon, "size-3.5 shrink-0")}{label}</p>\n'
+    # ChatMarkdown.tsx:1121-1142 (4928): logical border and padding, data-markdown-alert attributes.
+    return (f'<div role="note" data-markdown-alert="{kind}" class="my-1 border-s-2 ps-3 {border}">'
+            f'<p data-thread-find-ignore="true" data-markdown-alert-label="" class="flex items-center gap-1.5 font-medium {title}">{lucide(icon, "size-3.5 shrink-0")}{label}</p>\n'
             f'<p>{body}</p>\n</div>')
 
 TABLE_VIEWPORT = ("h-full max-h-[inherit] overflow-auto overscroll-contain rounded-[inherit] outline-none transition-shadow "
@@ -213,6 +216,13 @@ soft line break as a space.</p>
 """ + "\n".join(alert(k, b) for k, b in [("note", "Useful information."), ("tip", "A better way to do it."),
     ("important", "Key information."), ("warning", "Needs attention."), ("caution", "Risky outcome.")]))
 
+# The insight callout (#22239): remarkAssistantInsights turns Claude's ★ Insight fence into an alert
+# (markdownStreamBlocks.ts:9-11, ChatMarkdown.tsx:377-382).
+case("insight", """`★ Insight ─────────────────────────────────────`
+Caching the parsed config saves one disk read per request.
+`─────────────────────────────────────────────────`""",
+alert("insight", "Caching the parsed config saves one disk read per request."))
+
 case("table", """| Process | Status | CPU | Notes |
 |---|:---:|---:|:---|
 | t3 serve | running | 0.4% | idle most of the time |
@@ -267,14 +277,15 @@ After the rule, an image:
 <p>After the rule, an image:</p>
 <p><span class="inline-block! aspect-video w-full overflow-hidden bg-muted/60 max-w-[min(100%,30rem)] rounded-lg border border-border/40 relative" role="status" aria-label="Loading image"></span></p>""")
 
-# File chips: MarkdownFileLink renders a ContextChip kind="mention" (ContextChip.tsx) around FileTagChipContent
+# File chips: MarkdownFileLink renders a ContextChip kind="mention" with dir=ltr (MarkdownFileLink.tsx:333-373 at 4928;
+# the mention color is T3's runtime --context-chip-mention, which main writes) around FileTagChipContent
 # (chat/FileTagChip.tsx): lucide folder at text-icon-muted for paths without an extension, else the pierre icon
 # tinted per theme (PierreEntryIcon.tsx; the prepare hook below picks the theme's color).
 CHIP = ("inline-flex max-w-full items-center gap-[0.2em] font-medium leading-[normal] text-(--context-chip-ink) "
-        "[--context-chip-ink:var(--context-chip-accent)] [--document-icon-stroke:var(--context-chip-ink)] "
+        "[--context-chip-ink:var(--context-chip-message-ink,var(--context-chip-accent))] [--document-icon-stroke:var(--context-chip-ink)] "
         "[&_svg]:block [&_svg]:size-[1em] [&_svg]:shrink-0 [&_svg]:self-center "
         "[button&,a&,[data-popup-open]&]:cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 "
-        "focus-visible:outline-current rounded-sm disabled:cursor-default [--context-chip-accent:oklch(0.62_0.11_215)] chat-markdown-file-link")
+        "focus-visible:outline-current rounded-sm disabled:cursor-default [--context-chip-accent:var(--context-chip-mention)] chat-markdown-file-link")
 
 extract_assets()
 PIERRE = open(glob.glob(os.path.join(ASSETS, "pierre-icons-*.js"))[0], encoding="utf-8").read()
@@ -286,7 +297,7 @@ def pierre(token):
     return (f'<svg aria-hidden="true" data-light="{light}" data-dark="{dark}" class="size-4 shrink-0" '
             f'viewBox="{m.group(1)}">{m.group(2)}</svg>')
 def chip(href, icon, label):
-    return (f'<a href="{html.escape(href)}" class="{CHIP}" data-slot="context-chip">{icon}'
+    return (f'<a href="{html.escape(href)}" dir="ltr" class="{CHIP}" data-slot="context-chip">{icon}'
             f'<span class="block min-w-0 self-baseline overflow-x-clip text-ellipsis whitespace-nowrap underline decoration-transparent decoration-1 underline-offset-[0.2em]" data-slot="context-chip-label">{html.escape(label)}</span></a>')
 FOLDER = lucide("folder", "size-4 text-icon-muted")
 
