@@ -4675,12 +4675,21 @@ extension ComposerController {
             try? FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
             var prepared: [ComposerAttachment] = []
             var failure: String?
-            for image in images {
+            // A byte-for-byte repeat of an image the draft has, or of one before it here, is dropped (#37116).
+            let sources = images.map { ($0.name, $0.mimeType, $0.url) }
+            let keys = await Task.detached(priority: .userInitiated) {
+                sources.map { ComposerAttachmentRules.imageDedupKey(name: $0.0, mimeType: $0.1, url: $0.2) }
+            }.value
+            let kept = Set(ComposerAttachmentRules.dedupedImages(keys.enumerated().map { ($0.element, $0.offset) },
+                                                                 existing: (self?.draftAttachments[key] ?? []).map(\.dedupKey)))
+            for (index, image) in images.enumerated() where kept.contains(index) {
                 do {
                     let p = try await ComposerImageIO.prepare(image.url, name: image.name, mimeType: image.mimeType,
                                                               maxBytes: ComposerAttachmentRules.maxImageBytes, workDir: work)
-                    prepared.append(ComposerAttachment(kind: .image, name: p.name, mimeType: p.mimeType, sizeBytes: p.sizeBytes,
-                                                       fileURL: p.url, environmentId: env))
+                    var attachment = ComposerAttachment(kind: .image, name: p.name, mimeType: p.mimeType, sizeBytes: p.sizeBytes,
+                                                        fileURL: p.url, environmentId: env)
+                    attachment.dedupKey = keys[index]
+                    prepared.append(attachment)
                 } catch ComposerImageIO.PrepareFailure.unreadable {
                     failure = "'\(image.name)' could not be read as an image."
                 } catch {
