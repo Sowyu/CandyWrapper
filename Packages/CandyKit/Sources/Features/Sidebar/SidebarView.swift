@@ -950,15 +950,17 @@ public final class SidebarContentView: DSView {
         if filterButton.isHidden == hasProjects { needsLayout = true }
     }
 
-    /// Opens the scope combobox under the search field, or closes it when it is open.
+    /// Opens the scope combobox under its filter button, or closes it when it is open. T3 anchors it to the
+    /// trigger at `w-[min(18rem,var(--available-width))]`, aligned to its start and shifted into the window
+    /// (115739c1e0, Sidebar.tsx:3064-3067 at 4928).
     func toggleScopePopup() {
-        let trigger: NSView = filterButton, field: NSView = search
+        let trigger: NSView = filterButton
         guard let host = trigger.popupHost else { return }
         if let open = scopePopup, host.popups.contains(where: { $0 === open }) { host.close(open); return }
         let groups = SidebarListBuilder.projectScopeGroups(snapshot: snapshot, primaryEnvironmentId: state.environments.primaryId,
                                                            order: SidebarProjectOrder.sortOrder, preferred: state.projectOrder)
         let view = SidebarProjectScopeView(
-            groups: groups, selectedKey: state.projectScopeKey, minimumWidth: field.frame.width, environments: state.environments,
+            groups: groups, selectedKey: state.projectScopeKey, minimumWidth: SidebarProjectScopeView.maxWidth, environments: state.environments,
             selectedKeys: state.projectScopeKeys, canPin: actions.canPinProject)
         view.onTogglePin = { [weak self] key, pinned in
             if let group = groups.first(where: { $0.key == key }) { self?.actions.setProjectPinned(group, pinned) }
@@ -970,9 +972,9 @@ public final class SidebarContentView: DSView {
             self?.closeScopePopup()
             self?.actions.openProjectSettings(key)
         }
-        let anchor = trigger.convert(field.bounds, from: field)
-        let popup = host.open(PickerPopupView(view), trigger: trigger, anchorRect: anchor, placement: .dropdown,
-                              swallowsOutsideClick: true)
+        var placement = PopupPlacement.dropdown
+        placement.collision = .shift
+        let popup = host.open(PickerPopupView(view), trigger: trigger, placement: placement, swallowsOutsideClick: true)
         popup.onClose = { [weak self] in self?.scopePopup = nil }
         scopePopup = popup
         window?.makeFirstResponder(view.search)

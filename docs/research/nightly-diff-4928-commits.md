@@ -640,7 +640,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | cfb7cae2b9 | #33987 | settings | feat(web): bindable shortcut to regenerate a thread's title | ported (settings-4928): thread.regenerateTitle is listed in Keybindings and regenerates the open thread's title; the wire command was already there |
-| 1c9ea568a1 | #31418 | sidebar | fix(clients): report title regeneration outcomes | port |
+| 1c9ea568a1 | #31418 | sidebar | fix(clients): report title regeneration outcomes | left (composer-5, checked): T3 reports each regeneration as renamed, kept ("Title kept") or failed, from `thread.lastTitleRegeneration` (requestId, status, message, completedAt) the server now projects (threadTitle.ts:14-25, threadTitleRegenerationToast.ts). Needs the field decoded in T3Protocol thread shells behind a capability check, the regenerate path to wait for its requestId, and the toasts in SidebarCommands |
 | ccf96b2f65 | #29383 | sidebar | feat(web): sidebar titles glimmer while they regenerate | ported 9a0153d1 |
 
 ## New feature i18n (11)
@@ -1318,7 +1318,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | e925dd6819 | #27785 | sidebar | fix(web): allow folder references on saved local desktop servers | skip: composer folder references, outside the sidebar |
 | 5b9731cedc | #26690 | sidebar | fix(web): screen readers can browse and Tab through the threads sidebar again without going into focus mode | skip: web ARIA focus mode |
 | e1e520c93c | #29704 | sidebar | fix(web): show the project pin before the remote badge | ported (side-chats): SidebarProjectScopeView rows, sidebar-project-filter spec |
-| 115739c1e0 |  | sidebar | fix(web): keep the project filter menu aligned with its trigger | left: filter popup anchoring, with the filter row work |
+| 115739c1e0 |  | sidebar | fix(web): keep the project filter menu aligned with its trigger | ported (composer-5): the project filter popup anchors to its filter button at min(288, available), aligned to its start and shifted into the window (SidebarView `toggleScopePopup`) |
 | 7239986680 | #29643 | sidebar | fix(web): deleting the open thread no longer opens a snoozed or settled thread | ported 9a0153d1 |
 | dd8c122c5d | #30063 | sidebar | fix(client): keep snoozed failures hidden without completion times | ported 9a0153d1 |
 | 20e92ffe02 | #29639 | sidebar | fix(web): sidebar project filter rows line up and stay still on hover | ported (side-chats): the pin column and stand-ins, sidebar-project-filter spec |
