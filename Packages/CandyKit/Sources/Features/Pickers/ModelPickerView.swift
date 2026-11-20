@@ -45,8 +45,15 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     /// Expanded backend headings (`ModelPickerRow.subProviderKey`); the active model's opens expanded.
     private var expandedSubProviders: Set<String> = []
     private(set) var sections: ModelPickerSections
-    /// Keyboard highlight in the list (`data-highlighted`).
-    var highlightedRow: Int? { didSet { if highlightedRow != oldValue { restyleHighlight(from: oldValue); scrollToHighlight() } } }
+    /// Keyboard highlight in the list (`data-highlighted`). It always names a row that exists: an index past the end of a
+    /// list that shrank clears here, whoever set it. v1.15.0 kept the clicked Show less row's index from the longer list
+    /// and trapped on it in `scrollToHighlight`.
+    var highlightedRow: Int? {
+        didSet {
+            if let h = highlightedRow, !(0..<min(rowViews.count, sections.rows.count)).contains(h) { highlightedRow = nil }
+            if highlightedRow != oldValue { restyleHighlight(from: oldValue); scrollToHighlight() }
+        }
+    }
     /// Keyboard focus in the rail (index into `railButtons`), nil while the search field has it.
     private(set) var railFocus: Int? { didSet { allRailButtons.forEach { $0.restyle() } } }
 
@@ -143,6 +150,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
 
     private func reload() {
         syncSharing()
+        let highlightedKey = highlightedRow.flatMap { sections.rows.indices.contains($0) ? Self.rowKey(sections.rows[$0]) : nil }
         let visible = catalog.entries.filter(\.isVisibleInPicker)
         if railButtons.map(\.entryId) != visible.map(\.id) {
             railButtons.forEach { $0.removeFromSuperview() }
@@ -155,6 +163,8 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
                 addSubview(b)
                 return b
             }
+            // Rail focus is an index too: a tab that went away takes it with it.
+            if let f = railFocus, f >= allRailButtons.count { railFocus = nil }
         }
         sections = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
                                        rail: rail, query: query, expandedLegacy: expandedLegacy, selectedKeys: selectedKeys, preferences: preferences,
@@ -201,7 +211,9 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         // Keep accessibility traversal in the same order as the filtered results.
         list.subviews = [emptyLabel] + [card, card == nil ? nil : sectionLabel].compactMap { $0 } + rowViews
         emptyLabel.isHidden = !sections.rows.isEmpty
-        if let h = highlightedRow, h >= rowViews.count { highlightedRow = nil }
+        // The highlight stays on its row, not its index, as T3 keys it by the row (ModelPickerContent.tsx:989-990), so
+        // Show less keeps it after the list above it shrinks, and a row that went away drops it.
+        highlightedRow = highlightedKey.flatMap { key in sections.rows.firstIndex { Self.rowKey($0) == key } }
         sectionLabel.isHidden = stacked
         railButtons.forEach { $0.restyle() }
         favoritesButton.restyle()
@@ -296,10 +308,13 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     }
 
     private func reloadKeepingHighlight() {
-        let keep = highlightedRow
         reload()
-        highlightedRow = keep
         resizePopup()
+        // The rows moved under a still pointer, so Redesign's hover takes the row now under it, or none.
+        if capy, pointerHighlight, let window {
+            window.contentView?.layoutSubtreeIfNeeded()
+            syncPointerHighlight(at: window.mouseLocationOutsideOfEventStream)
+        }
     }
 
     /// `modelPicker.previousProvider` / `nextProvider`: the adjacent provider, search cleared
