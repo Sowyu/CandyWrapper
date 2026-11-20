@@ -79,7 +79,6 @@ open class DialogView: DSView {
         titleText.text = title
         messageText.text = message ?? ""
         titleText.font = DSFont.ui(20, weight: .semibold)
-        titleText.lineHeight = 20 // `leading-none`
         messageText.font = DSFont.ui(14)
         messageText.lineHeight = 20
         addSubview(titleText)
@@ -330,6 +329,10 @@ open class DialogView: DSView {
         tint.border = Themed.pick(light: Themed.black(0.05), dark: Themed.white(0.05))
         tint.borderEdges = .init(top: 1, bottom: 1)
         wizardTint.boxStyle = tint
+        // T3 4928 sets the title `leading-snug` (dialog.tsx:227, alert-dialog.tsx:127, sheet.tsx:147).
+        // CandyWrapper's own themes keep the earlier `leading-none`.
+        let titleLine: CGFloat = DesignGeometry.usesClassic(self) ? 20 : 27.5
+        if titleText.lineHeight != titleLine { titleText.lineHeight = titleLine; changed() }
         titleText.color = Themed.color(\.contrastPopoverForeground)
         messageText.color = Themed.color(\.contrastMutedForeground)
     }
