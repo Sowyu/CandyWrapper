@@ -44,7 +44,7 @@ final class SettingsResourceFootprintView: BoxView, SettingsGroupRow {
         summary.font = DSFont.ui(12)
         summary.lineHeight = 19.5
         summary.color = Themed.color(\.mutedForeground)
-        sampling.text = "Sampling every " + (snapshot?["sampleIntervalMs"]?.doubleValue.map { $0 >= 1000 ? "\(Int($0 / 1000)) second" : "\(Int($0)) ms" } ?? "...")
+        sampling.text = snapshot?["sampleIntervalMs"]?.doubleValue.map(DiagnosticsFormat.samplingStatus) ?? "Sampling every ..."
         sampling.font = DSFont.ui(10)
         sampling.lineHeight = 14
         sampling.color = Themed.color(\.mutedForeground, 0.65)
@@ -68,13 +68,7 @@ final class SettingsResourceFootprintView: BoxView, SettingsGroupRow {
         restyle()
     }
 
-    static func bytes(_ value: Double) -> String {
-        if value < 1024 { return "\(Int(value.rounded())) B" }
-        let units = ["KB", "MB", "GB", "TB"]
-        var next = value, unit = -1
-        repeat { next /= 1024; unit += 1 } while next >= 1024 && unit < units.count - 1
-        return String(format: next >= 100 ? "%.0f %@" : next >= 10 ? "%.1f %@" : "%.2f %@", next, units[unit])
-    }
+    static func bytes(_ value: Double) -> String { DiagnosticsFormat.bytes(value) }
 
     private func restyle() {
         // 4928 draws the footprint inside the section's own card (`overflow-hidden rounded-[inherit]`,

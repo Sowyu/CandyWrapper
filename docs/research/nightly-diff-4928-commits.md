@@ -331,7 +331,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 4f0b74e190 | #33209 | settings | feat(web): first run is one Welcome page instead of a 3-step wizard | left (settings-2): WelcomePage.tsx is 2,031 lines: agents with install terminals (AgentInstallTerminal, :1289), Codex setup, project import (useProjectImport, :1476), phone pairing (:981) and the telemetry notice; it replaces App/Sources/WelcomeOnboardingController.swift's three steps, whose scan and import logic carries over. Needs a spec case from 27-welcome and an on-screen check |
+| 4f0b74e190 | #33209 | settings | feat(web): first run is one Welcome page instead of a 3-step wizard | ported (settings-3): Features/Settings WelcomePageView, WelcomePageModel and WelcomePageLogic; 27-welcome 0.62% |
 
 ## Port group send-while-uploading (1)
 
@@ -648,16 +648,16 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | 2a6b2c8298 | #31313 | settings | feat(web): switch the UI language from Settings, with Spanish and Chinese | left (settings-3): plan and counts in docs/research/translation-4928.md (T3 catalogs keyed by hash, 3,853 CandyWrapper strings already have a key, about 9 to 12 hours of agent work) |
-| afade9b562 | #33161 | settings | feat(web): add Brazilian Portuguese translation | port |
-| 93d502f237 | #33162 | settings | feat(web): add French translation | port |
-| d8631c8711 | #33163 | settings | feat(web): add German translation | port |
-| 2718951b9f | #33164 | settings | feat(web): add Japanese translation | port |
-| fdefab4df3 | #33165 | settings | feat(web): add Korean translation | port |
-| 13eb5c95a6 | #33166 | settings | feat(web): add Russian translation | port |
+| afade9b562 | #33161 | settings | feat(web): add Brazilian Portuguese translation | left (settings-3): with #31313, see docs/research/translation-4928.md |
+| 93d502f237 | #33162 | settings | feat(web): add French translation | left (settings-3): with #31313, see docs/research/translation-4928.md |
+| d8631c8711 | #33163 | settings | feat(web): add German translation | left (settings-3): with #31313, see docs/research/translation-4928.md |
+| 2718951b9f | #33164 | settings | feat(web): add Japanese translation | left (settings-3): with #31313, see docs/research/translation-4928.md |
+| fdefab4df3 | #33165 | settings | feat(web): add Korean translation | left (settings-3): with #31313, see docs/research/translation-4928.md |
+| 13eb5c95a6 | #33166 | settings | feat(web): add Russian translation | left (settings-3): with #31313, see docs/research/translation-4928.md |
 | b823ddadd9 | #37954 | thread | fix(i18n): catalogs match the source, with a CI check | port |
-| 055b44919e | #37893 | settings | feat(web,mobile,desktop): translate the whole app into every supported language | port |
+| 055b44919e | #37893 | settings | feat(web,mobile,desktop): translate the whole app into every supported language | left (settings-3): with #31313, see docs/research/translation-4928.md |
 | 759a173e15 | #38565 | terminal | fix(web): idle numbered terminals show their name in the app language | port |
-| 6ea01d4cbe | #38649 | settings | fix(web): No project folder follows the app language | port |
+| 6ea01d4cbe | #38649 | settings | fix(web): No project folder follows the app language | left (settings-3): with #31313, see docs/research/translation-4928.md |
 
 ## New feature reply-to-response (1)
 
@@ -669,11 +669,11 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 42057b82d0 | #35247 | settings | feat: agents can restyle T3 Code with theme colors and CSS | port; agents restyle the app with theme CSS |
-| c3517ec0bf | #36696 | settings | fix(shared): theme CSS checks allow url() inside a quoted data: address | port |
-| e82050b8b9 | #36656 | settings | feat(themes): theme CSS can hold 50,000 characters | port |
-| 9d28fc921b | #37781 | settings | feat(themes): theme CSS can hold 100,000 characters | port |
-| 31706f3d41 | #38150 | settings | fix(shared): theme CSS check no longer rejects @import text inside a string | port |
+| 42057b82d0 | #35247 | settings | feat: agents can restyle T3 Code with theme colors and CSS | left (settings-3): CandyWrapper has no CSS engine; needs a decision on theme CSS (themeCss.ts strips every value themeCssValueFetches flags; a native port could read only :root custom properties for known tokens after that check) |
+| c3517ec0bf | #36696 | settings | fix(shared): theme CSS checks allow url() inside a quoted data: address | left (settings-3): CandyWrapper has no CSS engine; needs a decision on theme CSS (themeCss.ts strips every value themeCssValueFetches flags; a native port could read only :root custom properties for known tokens after that check) |
+| e82050b8b9 | #36656 | settings | feat(themes): theme CSS can hold 50,000 characters | left (settings-3): CandyWrapper has no CSS engine; needs a decision on theme CSS (themeCss.ts strips every value themeCssValueFetches flags; a native port could read only :root custom properties for known tokens after that check) |
+| 9d28fc921b | #37781 | settings | feat(themes): theme CSS can hold 100,000 characters | left (settings-3): CandyWrapper has no CSS engine; needs a decision on theme CSS (themeCss.ts strips every value themeCssValueFetches flags; a native port could read only :root custom properties for known tokens after that check) |
+| 31706f3d41 | #38150 | settings | fix(shared): theme CSS check no longer rejects @import text inside a string | left (settings-3): CandyWrapper has no CSS engine; needs a decision on theme CSS (themeCss.ts strips every value themeCssValueFetches flags; a native port could read only :root custom properties for known tokens after that check) |
 
 ## New feature connect-device-approval (1)
 
@@ -685,9 +685,9 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 7d32075e37 | #36680 | settings | feat(web): themes can use full-size background images | port |
-| b75424062a | #37843 | settings | fix(web): retry a failed theme wallpaper download when back online | port |
-| 49c3ab8632 | #37981 | settings | fix(web): published background no longer shows under a saved theme with the same id | port |
+| 7d32075e37 | #36680 | settings | feat(web): themes can use full-size background images | left (settings-3): needs assets.createUrl with environment-theme-background, an HTTP fetch into an image behind the window, and retries at 1, 2, 4 and 8 s (themeBackground.ts) |
+| b75424062a | #37843 | settings | fix(web): retry a failed theme wallpaper download when back online | left (settings-3): needs assets.createUrl with environment-theme-background, an HTTP fetch into an image behind the window, and retries at 1, 2, 4 and 8 s (themeBackground.ts) |
+| 49c3ab8632 | #37981 | settings | fix(web): published background no longer shows under a saved theme with the same id | left (settings-3): needs assets.createUrl with environment-theme-background, an HTTP fetch into an image behind the window, and retries at 1, 2, 4 and 8 s (themeBackground.ts) |
 | 28d2262083 | #38132 | pr/git | fix(web): theme wallpaper stays in the live preview when connectivity returns | port |
 
 ## New feature issues (22)
@@ -1182,8 +1182,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 80ae9b5301 | #23223 | settings | fix(web): show theme conflicts even when another import fails | port |
 | bae3c1962c | #23160 | settings | fix(settings): offer Use existing CLI in managed Codex settings | port |
 | 08a463e299 | #24472 | settings | fix(settings): project edits keep overrides the client does not know | port |
-| c8a606c7b7 | #27316 | settings | fix(shared): durations under 10s drop a trailing .0 | port |
-| 305a90dce4 | #27442 | settings | fix(relay): show the account's real tunnel cap in T3 Connect settings | left (settings-2): CandyWrapper has no T3 Connect tunnel meter yet (useManagedTunnelUsage and TunnelUsageMeter, SavedEnvironmentRows.tsx:505-560); port the meter, then the cap from RelayEnvironmentLinkLimitExceededError's maxTunnels |
+| c8a606c7b7 | #27316 | settings | fix(shared): durations under 10s drop a trailing .0 | ported (settings-3): diagnostics durations and CPU time drop a trailing .0 |
+| 305a90dce4 | #27442 | settings | fix(relay): show the account's real tunnel cap in T3 Connect settings | left (settings-3): needs the #26369 meter first: RelayClient GET /v1/client/t3chat-link, managedTunnelCap with maxTunnelsOverride (managedRelayState.ts:156-172), TunnelUsageMeter and TunnelLimitAlert in Connections |
 | 94b80eaf4f | #22455 | settings | fix(web): language dialects use their base language's icon | port |
 | 6b276f5c40 | #22867 | settings | fix(web): project removal says provider sessions are kept | port |
 | e4926868da | #22906 | settings | fix(web): diagnostics cards use one border radius | port |
@@ -1214,14 +1214,14 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | d64888fbc4 | #27151 | settings | fix(web): Escape while recording a shortcut no longer closes Settings | port |
 | cae3ced9fb | #27376 | settings | fix(web): find the fallback model in Settings search | port |
 | fcb1d0b1db | #24134 | settings | fix(web): honor editableFocus in shortcut conditions | port |
-| aa056f7d0f | #24719 | settings | fix(web): the welcome wizard keeps the project selection when you go back a stage | port |
+| aa056f7d0f | #24719 | settings | fix(web): the welcome wizard keeps the project selection when you go back a stage | n/a (settings-3): the Welcome page replaced the wizard's stages |
 | 220bc7cc50 | #27540 | settings | fix(web): Settings search finds rows by their titles | port |
 | c894d797cf | #27759 | settings | fix(providers): Antigravity API-key setup says Connect | port |
 | 435cda96a3 | #23136 | settings | fix(web): keep theme color alpha when a hex value is typed | port |
 | 2a9335680e | #23168 | settings | fix(web): keep saved sensitive variables from losing their value | port |
 | 52b65aabce | #24655 | settings | fix(web): installing two providers at once starts both | port |
 | b8badda42e | #24673 | settings | fix(web): interval settings save when editing ends, not per keystroke | port |
-| 4c3808a109 | #28300 | settings | fix(web): Diagnostics memory no longer reads "1024.0 MB" | port |
+| 4c3808a109 | #28300 | settings | fix(web): Diagnostics memory no longer reads "1024.0 MB" | ported (settings-3): DiagnosticsFormat.bytes picks the unit after rounding (lib/formatBytes.ts) |
 | edc37c96c8 | #29382 | settings | fix(web): center authorized client settings rows | port |
 | a497f7b9a3 | #29480 | settings | fix(web): confirm before removing a provider instance's saved settings | ported (settings-4928): Reset and Delete on a provider instance ask first, with the turned-off note for default-off drivers |
 | bff68fb6b6 | #29554 | settings | fix(shared): saving one source control token no longer drops the other hosts' tokens | port |
@@ -1230,13 +1230,13 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 8395f20124 | #29851 | settings | fix(web): editing a scheduled task shows its saved time when the hour has one digit | port |
 | 8913a4a254 | #30115 | settings | fix(web): keep typed unpublished variable rows across settings re-deliveries | port |
 | e85e0094dd | #33538 | settings | fix(web): checking for updates finds provider updates on every machine | already (settings-3): UpdateEverything.check refreshes providers with refreshModels on every connected machine; the providers:manage filter and the failure toast are not ported |
-| 25da7ebca6 | #33730 | settings | fix(web): reclaim notice says the machine will be offline | port |
+| 25da7ebca6 | #33730 | settings | fix(web): reclaim notice says the machine will be offline | ported (settings-3): Reclaim says the machine will be offline for about N min |
 | 7389423507 | #32576 | settings | fix(web): screen readers hear the add-project submit shortcut | port |
 | f7b81e1d11 | #33395 | settings | fix(web): settings search shortcuts follow the physical key on non-US layouts | port |
 | 0815d98cd7 | #34178 | settings | fix(web): make Q&A option outlines visible across themes | port |
 | 43821388a9 | #18187 | settings | fix(web): focus the primary action when confirmation dialogs open | port |
 | 0e1f01ec85 | #14493 | settings | fix(web): keep grouped project icons consistent in settings | port |
-| 477845733d | #27484 | settings | fix(web): track switch dialog no longer offers a switch that moves nothing | port |
+| 477845733d | #27484 | settings | fix(web): track switch dialog no longer offers a switch that moves nothing | left (settings-3): with #26288, nothingToMove in updateTrackSwitch.logic.ts |
 | 940b7a4160 | #30841 | settings | fix(web): screen readers can browse and Tab through the settings sections again | port |
 | cff8bfcef0 | #23479 | settings | fix(web): keep model favorites usable after disabling a provider | port |
 | 338e73859a | #23568 | settings | fix(web): thread shortcuts work with the narrow sidebar closed | port |
@@ -1257,19 +1257,19 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 6bb9b7b323 | #36303 | settings | fix(web): auto-settle days save when the edit is finished, not on every keystroke | port |
 | 0517d15c41 | #36392 | settings | fix(web): provider sign-in links only open web addresses | port |
 | ab9e6a2792 | #36437 | settings | fix(web): closing Settings no longer leaves it as a back/forward stop | port |
-| 62ba72fa15 | #36477 | settings | fix(web): onboarding rechecks an agent when its install command finishes | left (settings-2): with #33209, recheck an agent after its install command exits |
+| 62ba72fa15 | #36477 | settings | fix(web): onboarding rechecks an agent when its install command finishes | ported (settings-3): the Welcome install terminal refreshes the agent when its command exits (WelcomeInstallTerminalView.onCommandFinished) |
 | a81ec88f58 | #24641 | settings | fix(clients): allow portable provider handoffs after detach | port |
 | fe873f82c1 | #23578 | settings | fix(web): confirm before deleting scheduled tasks | ported (settings-4928): Delete asks first |
 | b2259d3c6c | #23590 | settings | fix(web): show working state while provider sessions start | port |
 | 000d82dc67 | #25130 | settings | fix(web): Esc closes the theme editor, not Settings | port |
 | b4c1bd106d | #35612 | settings | fix(web): re-picking the current model in Settings keeps its traits | port |
-| 913d7fc45e | #28319 | settings | fix(web): PageUp and PageDown shortcut labels no longer read Pageup and Pagedown | port |
+| 913d7fc45e | #28319 | settings | fix(web): PageUp and PageDown shortcut labels no longer read Pageup and Pagedown | ported (settings-3): KeybindingShortcut.keyLabel says PageUp and PageDown |
 | e26e21c06b | #36628 | settings | fix(web,mobile): bound scheduled tasks no longer offer a model their runs ignore | port |
 | 616067de84 | #36755 | settings | fix(web): pressing Enter in the Add CLIProxyAPI hub dialog adds the hub | port |
 | 3b816cf6c7 | #36753 | settings | fix(web): ChatGPT sign-in error no longer points to a missing redirect URL field | port |
-| 5fe2f7e456 | #29377 | settings | fix(web): diagnostics no longer shows near-second spans as "1000 ms" | port |
+| 5fe2f7e456 | #29377 | settings | fix(web): diagnostics no longer shows near-second spans as "1000 ms" | ported (settings-3): DiagnosticsFormat.duration rounds before choosing ms or s |
 | b5df3c1bef | #36789 | settings | fix(web): a scheduled task with a cleared run time no longer saves as 09:00 | port |
-| 0487654fc8 | #29395 | settings | fix(web): diagnostics CPU time no longer reads "60s" or "60m" | port |
+| 0487654fc8 | #29395 | settings | fix(web): diagnostics CPU time no longer reads "60s" or "60m" | ported (settings-3): DiagnosticsFormat.cpuTime picks the unit after rounding |
 | ee4ef06469 | #28945 | settings | fix(web): use optimistic updates for settings across environments | port |
 | 81f23426d4 | #36856 | settings | fix(web): Settings > Projects list follows the selected environment | port |
 | 756545a917 | #36906 | settings | fix(web): successive custom model saves keep earlier edits | port |
@@ -1277,12 +1277,12 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 4dec8cf641 | #34081 | settings | fix(web): honor right panel state in custom shortcuts | port |
 | da95a04763 | #35189 | settings | fix(web): right-panel shortcuts work on a new, unsent thread | port |
 | 0fbe8a2e44 | #29503 | settings | fix(web): settings section headers no longer overlap their actions on narrow screens | port |
-| 58f609f7cc | #30330 | settings | fix(web): theme import no longer says a file just under 1 MB is "1024 KB" | port |
-| b8bffc8b35 | #29749 | settings | fix(web): resource monitor no longer claims to sample every 0 ms | port |
+| 58f609f7cc | #30330 | settings | fix(web): theme import no longer says a file just under 1 MB is "1024 KB" | n/a (settings-3): CandyWrapper's theme import has no size message; DiagnosticsFormat.bytes follows formatBytes for any later one |
+| b8bffc8b35 | #29749 | settings | fix(web): resource monitor no longer claims to sample every 0 ms | ported (settings-3): DiagnosticsFormat.samplingStatus says Sampling on demand for 0 |
 | 63b5645678 | #32859 | settings | fix(web): Esc in Clerk's account modal no longer closes Settings | port |
 | 6d3f6423a3 | #37198 | settings | fix(web): Enter sends when a panel-conditioned shortcut is inactive | port |
 | 57ec00ddd6 | #37509 | settings | fix(web): source control settings notice a CLI login made outside the app | port |
-| 83e3c4f60d | #37493 | settings | fix(web): published themes keep their CSS when a saved theme shares the id | port |
+| 83e3c4f60d | #37493 | settings | fix(web): published themes keep their CSS when a saved theme shares the id | left (settings-3): CandyWrapper has no CSS engine; needs a decision on theme CSS (themeCss.ts strips every value themeCssValueFetches flags; a native port could read only :root custom properties for known tokens after that check) |
 | d6a28f4faa | #37818 | settings | fix(client): guard saved environment routes during SSH onboarding | port |
 | 4021638273 | #31527 | settings | fix(web): thread hover cards show the provider icon in its brand color | port |
 | cd9c39fe3c | #37982 | settings | fix(web): imported theme files keep their top-level canvas and accent | port |

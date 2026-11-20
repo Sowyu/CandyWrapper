@@ -42,6 +42,9 @@ public struct KeybindingShortcut: Codable, Hashable, Sendable {
         case "arrowdown": "Down"
         case "arrowleft": "Left"
         case "arrowright": "Right"
+        // keybindings.ts:225-226 at 4928 (#28319): not "Pageup" and "Pagedown".
+        case "pageup": "PageUp"
+        case "pagedown": "PageDown"
         default: key.count == 1 ? key.uppercased() : key.prefix(1).uppercased() + key.dropFirst()
         }
     }
