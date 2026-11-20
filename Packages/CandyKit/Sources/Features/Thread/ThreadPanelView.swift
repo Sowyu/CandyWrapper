@@ -2272,9 +2272,10 @@ public final class ThreadPanelView: DSView {
         // Dither's panel sits under the tab strip band, so the timeline reaches up past the panel's top to the
         // window's edge and its rows slide on under the band (the user: "my stuff is still getting covered").
         let above = ditherOverhang
-        // On Redesign's reading column the first row starts below the rows' fade-in (the timeline mask).
-        let columnFade = ditherHeader && !isDraft && !isEmbedded ? RedesignTokens.Space.l : 0
-        timeline.topClearance = chatTop + above + columnFade
+        // On Redesign's reading column the first row starts below the rows' fade-in (the timeline mask), which is
+        // measured from the timeline's top, the window's.
+        let column = ditherHeader && !isDraft && !isEmbedded
+        timeline.topClearance = column ? max(chatTop + above, DitherChrome.band) + RedesignTokens.Space.l : chatTop + above
         timeline.frame = NSRect(x: 0, y: -above, width: chat, height: max(0, chatHeight + above))
         // Mid-slide the panel keeps its width and runs past the window's right edge.
         rightPanel.frame = NSRect(x: sheet ? bounds.width - panelWidth : chat, y: panelTop, width: panelWidth, height: max(0, bounds.height - panelTop))

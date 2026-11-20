@@ -1678,7 +1678,9 @@ extension MarkdownLayout {
     /// A cell's `0.75rem` side padding, without the first column's leading or the last column's trailing
     /// side (`:is(th, td):first-child` and `:last-child`, index.css:2146-2152).
     static func tableCellPadding(_ column: Int, of columns: Int) -> (lead: CGFloat, total: CGFloat) {
-        let lead: CGFloat = column == 0 ? 0 : 12, trail: CGFloat = column == columns - 1 ? 0 : 12
+        // Redesign's table sits on a card, so its outer cells keep the card's inset from its edge too.
+        let edge: CGFloat = ThreadDesign.redesign ? RedesignTokens.Space.m : 0
+        let lead: CGFloat = column == 0 ? edge : 12, trail: CGFloat = column == columns - 1 ? edge : 12
         return (lead, lead + trail)
     }
 
