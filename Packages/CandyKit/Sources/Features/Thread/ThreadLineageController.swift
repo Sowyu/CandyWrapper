@@ -59,8 +59,6 @@ public final class ThreadLineageController {
 
     private var threadId: ThreadId?
     private var projection: ThreadProjection?
-    /// The thread whose wait on its subagents already opened the strip, so it opens once per wait.
-    private var stripAutoOpened: ThreadId?
     private var stripThread: ThreadId?
     /// Subagent ids with a Stop in flight.
     private var stoppingAgents: Set<String> = []
@@ -191,20 +189,20 @@ public final class ThreadLineageController {
         armWake()
     }
 
-    /// Redesign's subagent strip, from the projection's subagent records and their child shells. Opens by itself once
-    /// each time the thread starts waiting on them.
+    /// Redesign's subagent strip, from the projection's subagent records and their child shells. The panel starts
+    /// closed each time a thread opens and opens only from its pill, like T3's background work list, a dialog behind
+    /// "Details" whose open state is `useState(false)` and lives only while the banner shows
+    /// (BackgroundWorkDetails.tsx:45-49, ThreadActivityBanners.tsx:289 at 4928).
     private func syncStrip(_ projection: ThreadProjection, local: [ThreadShell], env: String) {
         guard let threadId else { return }
         if stripThread != threadId {
             stripThread = threadId
-            stripAutoOpened = nil
             panel.subagentStripExpanded = false
         }
         let me = local.first { $0.id == threadId.localId }
         let strip = SubagentStrip.make(subagents: projection.subagents, shells: local, latestTurn: SubagentStrip.latestTurn(projection.runs), parent: me)
         panel.showsSubagentStrip = strip.isVisible
         guard strip.isVisible else {
-            stripAutoOpened = nil
             panel.subagentStripExpanded = false
             return
         }
@@ -214,11 +212,6 @@ public final class ThreadLineageController {
         stoppingAgents.formIntersection(strip.rows.filter(\.canStop).map(\.id))
         panel.lazySubagentPanel.view.items = strip.rows.map {
             .init(row: $0, modelName: Self.modelName($0, providers), stopping: stoppingAgents.contains($0.id))
-        }
-        if !strip.parentWaiting { stripAutoOpened = nil }
-        else if stripAutoOpened != threadId {
-            stripAutoOpened = threadId
-            panel.subagentStripExpanded = true
         }
     }
 

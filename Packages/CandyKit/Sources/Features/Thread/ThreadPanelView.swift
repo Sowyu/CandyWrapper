@@ -2047,12 +2047,15 @@ public final class ThreadPanelView: DSView {
         }
         watchQueueClicks(queueOpen)
         // The subagent panel opens from its pill the same way; the queue, the `/` menu and the stash list win.
+        // Unlike those menus it stays open while the user reads on, so the timeline's inset grows by its height.
+        var insetTop = top
         if stripOn && subagentStripExpanded && !queueOpen && !menuShown && !stashShown {
             let panel = lazySubagentPanel.view
             if panel.superview !== self { addSubview(panel, positioned: .above, relativeTo: queue) }
             let maxH = min((window?.contentView?.bounds.height ?? bounds.height) * 0.4, max(96, top - gap - 24))
             let h = panel.preferredHeight(maxHeight: maxH)
             panel.frame = NSRect(x: x, y: top - gap - h, width: width, height: h)
+            insetTop = panel.frame.minY
             shown.append(panel)
             watchSubagentPanel(true)
         } else {
@@ -2093,7 +2096,7 @@ public final class ThreadPanelView: DSView {
 
         animateDitherDock(shown: shown, oldFrames: oldFrames, exiting: exiting)
 
-        let inset = docked ? 8 + (y - top) + height + below + 20 : 0
+        let inset = docked ? 8 + (y - insetTop) + height + below + 20 : 0
         if timeline.bottomInset != inset {
             timeline.bottomInset = inset
             if terminalOpen { needsLayout = true }
