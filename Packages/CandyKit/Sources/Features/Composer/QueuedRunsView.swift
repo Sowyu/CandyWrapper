@@ -20,6 +20,10 @@ public final class QueuedRunsView: ComposerBannerView {
     public var isBusy = false { didSet { if isBusy != oldValue { rebuild() } } }
     public var editBlockedReason: String? { didSet { if editBlockedReason != oldValue { rebuild() } } }
     public private(set) var expanded = true
+    /// The thread the queue belongs to. Redesign's panel closes when another thread opens, like the subagent card
+    /// (b14cf8f5), and opens only from its pill. T3's queue has no closed state (QueuedRunsControl.tsx:109, 250-251).
+    public var threadId: ThreadId? { didSet { if threadId != oldValue, redesign, expanded { toggle() } } }
+    private var redesign: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
 
     public var attachmentMediaURL: (@Sendable (String) async -> URL?)?
     /// A queued image thumbnail was clicked: its message's images and the clicked one (#33298, QueuedRunsControl.tsx at 4928).
@@ -110,7 +114,8 @@ public final class QueuedRunsView: ComposerBannerView {
     private func rebuild() {
         let before = preferredHeight, count = rows.count
         // Redesign's panel starts closed each time the queue fills; the pill shows the count (the user, 2026-10-22).
-        if rows.isEmpty, !state.items.isEmpty, placement == .floating, expanded { toggle() }
+        // The theme, not `placement`: the dock sets `.floating` only once it lays out, after the first queue arrives.
+        if rows.isEmpty, !state.items.isEmpty, redesign, expanded { toggle() }
         header.count = state.items.count
         setAccessibilityLabel("\(state.items.count) queued message\(state.items.count == 1 ? "" : "s")")
         if let row = rows.first, (row is ModernQueuedRowView) != modern {

@@ -2047,8 +2047,8 @@ public final class ThreadPanelView: DSView {
         }
         watchQueueClicks(queueOpen)
         // The subagent panel opens from its pill the same way; the queue, the `/` menu and the stash list win.
-        // Unlike those menus it stays open while the user reads on, so the timeline's inset grows by its height.
-        var insetTop = top
+        // While the queue or this panel is open the timeline's inset grows by its height, so it covers no last lines.
+        var insetTop = queueOpen ? queue.frame.minY : top
         if stripOn && subagentStripExpanded && !queueOpen && !menuShown && !stashShown {
             let panel = lazySubagentPanel.view
             if panel.superview !== self { addSubview(panel, positioned: .above, relativeTo: queue) }
