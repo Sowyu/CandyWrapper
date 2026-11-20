@@ -50,4 +50,17 @@ struct ThreadCatchUp4928Tests {
         #expect(layout.contextChips.map(\.look.label) == ["Opus"])
         #expect(layout.contextChips.first?.look.kind == .model(driver: "claudeAgent"))
     }
+
+    /// #24833, #24898: a subagent's glyph wears its instance's account badge once two instances share a driver,
+    /// and status dots move to the top corner.
+    @Test func subagentAccountBadges() {
+        let model = ThreadViewModel()
+        model.providers = [ServerProvider(instanceId: .init("codex"), driver: "codex"), ServerProvider(instanceId: .init("claudeAgent"), driver: "claudeAgent")]
+        #expect(!model.anyInstanceBadge)
+        #expect(model.providerBadge(instanceId: "codex", ring: .white) == nil)
+        model.providers.append(ServerProvider(instanceId: .init("codex_work"), driver: "codex"))
+        #expect(model.anyInstanceBadge)
+        #expect(model.providerBadge(instanceId: "codex_work", ring: .white)?.size == .small)
+        #expect(model.providerBadge(instanceId: "claudeAgent", ring: .white) == nil)
+    }
 }

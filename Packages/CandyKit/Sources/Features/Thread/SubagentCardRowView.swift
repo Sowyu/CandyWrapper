@@ -182,6 +182,9 @@ final class SubagentCardRowView: TimelineRowView {
         while links.count < agents.count { let link = SubagentCardLinkView(); links.append(link); addSubview(link) }
         for (link, agent) in zip(links, agents) {
             let live = item.ui.subagentRecords.first { $0["id"]?.stringValue == agent.string("subagentId") }
+            let model = context.model
+            link.badge = model?.providerBadge(instanceId: live?["providerInstanceId"]?.stringValue ?? agent.string("providerInstanceId"), ring: TL.c(\.muted))
+            link.dotOnTop = model?.anyInstanceBadge ?? false
             link.configure(SubagentCardPresentation(agent, live: live))
             link.action = { [weak self, weak link] in
                 guard let child = link?.presentation?.child else { return }
@@ -209,6 +212,10 @@ final class SubagentCardLinkView: ControlView {
     /// A member row without a detail line: `py-1.5` around the 24pt avatar.
     static func height(_ p: SubagentCardPresentation) -> CGFloat { p.memberRow && p.detail == nil ? 36 : height }
     private(set) var presentation: SubagentCardPresentation?
+    /// The instance's account badge on the glyph, and the status dot at the top corner while any instance shows one
+    /// (V2LifecycleRow.tsx:256-285 at 4928, #24898).
+    var badge: ProviderBadge?
+    var dotOnTop = false
     private let avatar = FillView(), dot = FillView()
     private var glyph: NSView?
     private let title = LabelView("", font: TL.font(12, .medium))
@@ -245,7 +252,8 @@ final class SubagentCardLinkView: ControlView {
         detail.isHidden = !path || text.isEmpty; plainDetail.isHidden = path || text.isEmpty
         chevron.isHidden = p.child == nil
         glyph?.removeFromSuperview()
-        let v = p.driver.isEmpty ? IconView(name: .bot, size: 14, strokeColor: TL.c(\.mutedForeground)) : ProviderIcon.make(driver: p.driver, displayName: p.driver, size: 14)
+        let v = p.driver.isEmpty ? IconView(name: .bot, size: 14, strokeColor: TL.c(\.mutedForeground))
+            : ProviderIcon.make(driver: p.driver, displayName: p.driver, size: 14, badge: badge)
         glyph = v; addSubview(v)
         setAccessibilityRole(p.child == nil ? .group : .button)
         setAccessibilityLabel(p.child == nil ? p.title : "Open \(p.title)")
@@ -307,7 +315,7 @@ final class SubagentCardLinkView: ControlView {
         let dy = (bounds.height - Self.height) / 2
         avatar.frame = NSRect(x: 8, y: 11 + dy, width: 24, height: 24)
         glyph?.frame = NSRect(x: 13, y: 16 + dy, width: 14, height: 14)
-        dot.frame = NSRect(x: 24, y: 27 + dy, width: 8, height: 8)
+        dot.frame = NSRect(x: 24, y: (dotOnTop ? 10 : 27) + dy, width: 8, height: 8)
         var right = bounds.width - 8
         if !chevron.isHidden { chevron.frame = NSRect(x: right - 14, y: 16 + dy, width: 14, height: 14); right -= 24 }
         let ew = ceil(elapsed.textWidth)

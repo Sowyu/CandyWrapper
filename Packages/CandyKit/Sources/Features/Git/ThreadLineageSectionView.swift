@@ -81,6 +81,8 @@ final class ThreadRelationshipIconView: DSView {
     private var glyph: NSView?
     private let dot = CALayer()
     private var tone = ThreadRelationships.Dot.muted
+    /// `-top-1` while any instance in the list shows an account badge, else `-bottom-1` (ThreadRelationshipIcon.tsx at 4928).
+    private var dotOnTop = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -93,10 +95,11 @@ final class ThreadRelationshipIconView: DSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    func configure(driver: String?, displayName: String, fallback: IconName, status: String?) {
+    func configure(driver: String?, displayName: String, fallback: IconName, status: String?, badge: ProviderBadge? = nil, dotOnTop: Bool = false) {
         glyph?.removeFromSuperview()
+        self.dotOnTop = dotOnTop
         let muted = Themed.color(\.contrastMutedForeground)
-        let v: NSView = driver.map { ProviderIcon.make(driver: $0, displayName: displayName, size: 16, color: muted) }
+        let v: NSView = driver.map { ProviderIcon.make(driver: $0, displayName: displayName, size: 16, color: muted, badge: badge) }
             ?? IconView(name: fallback, size: 16, strokeColor: muted)
         addSubview(v, positioned: .below, relativeTo: nil)
         glyph = v
@@ -108,7 +111,7 @@ final class ThreadRelationshipIconView: DSView {
     override func layout() {
         super.layout()
         glyph?.frame = NSRect(x: 0, y: 0, width: 16, height: 16)
-        dot.frame = CGRect(x: 12, y: 12, width: 8, height: 8)
+        dot.frame = CGRect(x: 12, y: dotOnTop ? -4 : 12, width: 8, height: 8)
     }
 
     override var wantsUpdateLayer: Bool { true }
@@ -149,14 +152,15 @@ final class ThreadLineageRowView: ControlView {
 
     init(_ row: ThreadRelationships.Lineage.Row, driver: String?, providerName: String, nowMs: Int64,
          mergeEnabled: Bool, mergeBusy: Bool, mergeTooltip: String, mergeLabel: String, stopping: Bool,
-         workflowExpanded: Bool = false, canStopWorkflow: Bool = false) {
+         workflowExpanded: Bool = false, canStopWorkflow: Bool = false, badge: ProviderBadge? = nil, dotOnTop: Bool = false) {
         self.row = row
         super.init(frame: .zero)
         fill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
         fill.cornerRadius = ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 8 : 10
         layer?.addSublayer(fill)
         let fallback: IconName = row.isParent ? .cornerLeftUp : row.isSubagent ? .bot : .gitFork
-        icon.configure(driver: row.isSubagent && !row.isParent ? driver : nil, displayName: providerName, fallback: fallback, status: row.status)
+        icon.configure(driver: row.isSubagent && !row.isParent ? driver : nil, displayName: providerName, fallback: fallback, status: row.status,
+                       badge: row.isSubagent && !row.isParent ? badge : nil, dotOnTop: dotOnTop)
         title.text = row.title
         title.font = DSFont.ui(14, weight: .medium)
         title.lineHeight = 16
@@ -355,6 +359,9 @@ public final class ThreadLineageSectionView: DSView {
     public var lineage = ThreadRelationships.Lineage() { didSet { if lineage != oldValue { rebuild() } } }
     /// The driver and display name of a provider instance, for the subagent glyphs.
     public var provider: ((String) -> (driver: String, name: String)?)?
+    /// An instance's account badge (#24833), and whether any instance shows one, which moves the status dots up.
+    public var providerBadge: ((String) -> ProviderBadge?)?
+    public var anyInstanceBadge = false { didSet { if anyInstanceBadge != oldValue { rebuild() } } }
     public var onOpen: ((ThreadId) -> Void)?
     public var onMerge: (() -> Void)?
     public var onStop: ((ThreadId) -> Void)?
@@ -471,7 +478,9 @@ public final class ThreadLineageSectionView: DSView {
                 let v = ThreadLineageRowView(r, driver: driver, providerName: p?.name ?? driver ?? "", nowMs: nowMs,
                                              mergeEnabled: canMerge && busy == nil, mergeBusy: busy == .merge,
                                              mergeTooltip: mergeTooltip, mergeLabel: mergeLabel, stopping: stopping,
-                                             workflowExpanded: turning == r.threadId ? !open : open, canStopWorkflow: canStopWorkflow)
+                                             workflowExpanded: turning == r.threadId ? !open : open, canStopWorkflow: canStopWorkflow,
+                                             badge: (r.agent?.providerInstanceId ?? r.child?.providerInstanceId.rawValue).flatMap { providerBadge?($0) },
+                                             dotOnTop: anyInstanceBadge)
                 v.action = { [weak self] in self?.onOpen?(r.threadId) }
                 v.merge?.action = { [weak self] in self?.onMerge?() }
                 if let workflow = r.workflow {

@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import T3Protocol
@@ -150,13 +151,23 @@ public final class ThreadViewModel {
     public var providers: [ServerProvider] = [] {
         didSet {
             guard providers != oldValue else { return }
+            providerCatalog = ProviderCatalog(providers)
             for item in items {
-                if case .event(let p, _, _) = item.row.kind, p.item.type == .handoff { refreshRow(item.id) }
+                if case .event(let p, _, _) = item.row.kind, p.item.type == .handoff || p.item.type == .subagent { refreshRow(item.id) }
                 // A model switch row names its models by them too.
                 if case .message(_, let p?, _, _, _, _) = item.row.kind, ModelSwitchPresentation.modelSwitch(p) != nil { refreshRow(item.id) }
             }
         }
     }
+    private var providerCatalog = ProviderCatalog([])
+    /// The account badge a subagent's provider glyph wears, when its instance shows one (#24833, #24898:
+    /// `shouldShowInstanceBadge`, client-runtime providerInstanceDisplay.ts:79-104).
+    func providerBadge(instanceId: String?, ring: NSColor) -> ProviderBadge? {
+        guard let instanceId, let entry = providerCatalog.entries.first(where: { $0.id.rawValue == instanceId }) else { return nil }
+        return ProviderBadge.make(entry, in: providerCatalog, size: .small, overhang: 3, ring: ring)
+    }
+    /// Some instance shows a badge, so status dots move to the top corner (`hasInstanceBadge`).
+    var anyInstanceBadge: Bool { providerCatalog.entries.contains { ProviderBadge.shows($0, in: providerCatalog) } }
     private var webContentHeights: [String: Double] = [:]
     private var closedApps: Set<String> = []
     /// By attachment id, so the height outlives the row view and its web view.

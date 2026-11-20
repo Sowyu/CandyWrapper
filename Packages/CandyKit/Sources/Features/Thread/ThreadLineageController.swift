@@ -81,6 +81,12 @@ public final class ThreadLineageController {
                       let p = providers?(env).first(where: { $0.instanceId.rawValue == instance }) else { return nil }
                 return (p.driver, p.displayName ?? p.driver)
             }
+            section.providerBadge = { [weak self] instance in
+                guard let self, let env = threadId?.environmentId else { return nil }
+                let catalog = ProviderCatalog(providers?(env) ?? [])
+                guard let entry = catalog.entries.first(where: { $0.id.rawValue == instance }) else { return nil }
+                return ProviderBadge.make(entry, in: catalog, size: .small, overhang: 3, ring: Themed.color(\.card))
+            }
             section.onOpen = { [weak self] id in self?.open(id) }
             section.onMerge = { [weak self] in self?.merge() }
             section.onStop = { [weak self] id in self?.stop(id) }
@@ -140,6 +146,8 @@ public final class ThreadLineageController {
         #endif
         let byId = Dictionary(local.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         card.set(\.lineage.mergeTargetTitle, lineage.mergeTarget.flatMap { byId[$0]?.title })
+        let catalog = ProviderCatalog(providers?(env) ?? [])
+        card.set(\.lineage.anyInstanceBadge, catalog.entries.contains { ProviderBadge.shows($0, in: catalog) })
         card.set(\.lineage.lineage, lineage)
         // "Subagent of" over the timeline and the parent crumb in the header: any thread whose lineage names a
         // subagent parent.
