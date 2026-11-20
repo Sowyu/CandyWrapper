@@ -113,6 +113,8 @@ public final class ComposerView: DSView {
         guard scrollCollapsed else { return }
         scrollCollapsed = false; needsLayout = true; onHeightChange?()
     }
+    /// Sits over the chip last clicked, for popovers that open from it.
+    public var chipAnchor: NSView { editor.chipAnchor }
     public var onOpenChip: ((String) -> Bool)? {
         get { editor.onOpenChip }
         set { editor.onOpenChip = newValue }

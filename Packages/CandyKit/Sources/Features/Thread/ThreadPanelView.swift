@@ -1695,6 +1695,8 @@ public final class ThreadPanelView: DSView {
         let bannerWidth = max(0, width - 2 * ComposerBannerView.drawerInset - (badgeShown ? badgeWidth + 4 : 0))
         let overlap = ComposerBannerView.overlap
         var top = y
+        // Attachments from the composer up; all but the lowest have one docked under them (#32683).
+        var chain: [NSView] = []
         let shown: ComposerBannerView? = !docked ? nil : drawer == .approval ? approvalPanel : drawer == .question ? questionPanel : nil
         approvalPanel.isHidden = shown !== approvalPanel
         lazyQuestionPanel.loaded?.isHidden = shown !== lazyQuestionPanel.loaded
@@ -1704,11 +1706,13 @@ public final class ThreadPanelView: DSView {
             let h = shown === approvalPanel ? approvalPanel.preferredHeight(width: bannerWidth) : questionPanel.preferredHeight(width: bannerWidth)
             shown.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
             top = shown.frame.minY
+            chain.append(shown)
         }
         tasksView.isHidden = !docked || tasksView.steps.isEmpty
         if !tasksView.isHidden {
             tasksView.frame = NSRect(x: bannerX, y: top + overlap - tasksView.height, width: bannerWidth, height: tasksView.height)
             top = tasksView.frame.minY
+            chain.append(tasksView)
         }
         let planShown = docked && showsPlanFollowUp
         if planShown { planFollowUpBanner.isHidden = false } else { lazyPlanFollowUpBanner.loaded?.isHidden = true }
@@ -1716,6 +1720,7 @@ public final class ThreadPanelView: DSView {
             let h = ComposerNoticeBannerView.height
             planFollowUpBanner.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
             top = planFollowUpBanner.frame.minY
+            chain.append(planFollowUpBanner)
         }
         // The banner stack (ChatComposer.tsx:6713-6735): with banner items, the sync row is the stack's
         // activity item and stays attached; without, it is its own strip under the stack.
@@ -1732,6 +1737,7 @@ public final class ThreadPanelView: DSView {
             let h = activityRow.preferredHeight
             activityRow.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
             top = activityRow.frame.minY
+            chain.append(activityRow)
         }
         let sorted = ComposerBannerStackItem.ordered(items)
         let ordered = ComposerDesign.uses3814(dark: effectiveAppearance.isDark) && sorted.count > 1
@@ -1758,6 +1764,7 @@ public final class ThreadPanelView: DSView {
             let h = front.height(bannerWidth)
             view.frame = NSRect(x: bannerX, y: top + overlap - h, width: bannerWidth, height: h)
             top = view.frame.minY
+            chain.append(view)
         }
         let modernQueue = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
         let hasQueuedMessages = docked && !queue.state.items.isEmpty
@@ -1767,13 +1774,14 @@ public final class ThreadPanelView: DSView {
         if !modernQueue {
             if queue.superview !== self { addSubview(queue, positioned: .below, relativeTo: composer) }
             queue.frame = NSRect(x: bannerX, y: top + overlap - queueHeight, width: bannerWidth, height: queueHeight)
-            if queueHeight > 0 { top = queue.frame.minY }
+            if queueHeight > 0 { top = queue.frame.minY; chain.append(queue) }
         }
         // The other notices peek above the whole column, never from between two attachments.
         if bannerStack.hasStack {
             let h = bannerStack.height(width: bannerWidth)
             bannerStack.frame = NSRect(x: bannerX, y: top - h, width: bannerWidth, height: h)
         }
+        for (i, view) in chain.enumerated() { (view as? ComposerBannerView)?.dockedBelow = i > 0 }
         // Adjacent attachments share their outline (ComposerBanner.tsx `Attachment`).
         front?.view.joinsAbove = queueHeight > 0 || (ComposerDesign.uses3814(dark: effectiveAppearance.isDark) && bannerStack.hasStack)
         let attachedAbove = queueHeight > 0 || front != nil

@@ -1076,8 +1076,10 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         let index = characterIndexForInsertion(at: point)
         if event.clickCount == 2, editCitation(near: index) { return }
         if let storage = textStorage, index < storage.length {
-            if let chip = storage.attribute(.attachment, at: index, effectiveRange: nil) as? ComposerChipAttachment,
-               onOpenChip?(chip.source) == true { return }
+            if let chip = storage.attribute(.attachment, at: index, effectiveRange: nil) as? ComposerChipAttachment {
+                placeChipAnchor(at: index)
+                if onOpenChip?(chip.source) == true { return }
+            }
             if let block = storage.attribute(.attachment, at: index, effectiveRange: nil) as? ComposerBlockAttachment,
                case .codeHeader(let fence, let info) = block.kind {
                 guard let host = popupHost else { return }
@@ -1100,6 +1102,18 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             return
         }
         super.mouseDown(with: event)
+    }
+
+    /// An invisible view over the clicked chip, so a popover can open from the chip itself.
+    let chipAnchor = NSView()
+
+    private func placeChipAnchor(at index: Int) {
+        guard let layoutManager, let textContainer else { return }
+        let glyphs = layoutManager.glyphRange(forCharacterRange: NSRange(location: index, length: 1), actualCharacterRange: nil)
+        var rect = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
+        rect.origin.x += textContainerOrigin.x; rect.origin.y += textContainerOrigin.y
+        if chipAnchor.superview !== self { addSubview(chipAnchor) }
+        chipAnchor.frame = rect
     }
 
     override func flagsChanged(with event: NSEvent) {

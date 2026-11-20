@@ -4040,6 +4040,15 @@ extension ComposerController {
             case .context("skill", let id, _): self.menuState.records[id]?["name"]?.stringValue
             default: nil
             }
+            // The model chip opens its details (`ModelMentionChip`'s ContextChipPopover, ModelMentionChip.tsx:100-125).
+            if case .model(let instance, let slug) = token.kind,
+               let provider = self.serverConfig.providers.first(where: { $0.instanceId.rawValue == instance }),
+               let model = provider.models.first(where: { $0.slug == slug }) {
+                let name = ProviderCatalog([provider]).entries.first?.displayName ?? provider.instanceId.rawValue
+                ModelMentionDetailsView.show(label: ModelNames.display(model), provider: model.subProvider ?? name,
+                                             source: source, from: self.composer.chipAnchor)
+                return true
+            }
             if let name = skillName, let skill = self.menuProvider?.skills(cwd: self.menuCwd).first(where: { $0.name == name }) {
                 let open: (() -> Void)? = self.openThreadId == nil || skill.path.isEmpty ? nil : { [weak self] in
                     let path = skill.path
