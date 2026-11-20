@@ -327,6 +327,8 @@ final class ComposerController {
     private var sendAfterRetry: [String: (text: String, mode: ComposerLogic.SendMode, background: Bool)] = [:]
     /// Images still being prepared per draft key: they hold their attachment slots.
     private var preparingImages: [String: Int] = [:]
+    /// Bumped when a draft is discarded, so images it was still preparing are dropped (#36732).
+    private var preparingGenerations: [String: Int] = [:]
     /// `/clear` armed per thread key (freshSessionArms.ts at 4928): the next message starts a fresh provider session.
     /// The value tells a send's arm from one made while it was in flight.
     private var freshSessionArms: [String: UUID] = [:]
@@ -3131,6 +3133,8 @@ extension ComposerController {
         prompts[draftId] = nil
         sendAfterPreparing[draftId] = nil
         sendAfterRetry[draftId] = nil
+        preparingImages[draftId] = nil
+        preparingGenerations[draftId, default: 0] += 1
         pickers.store.didSend(draftId)
         if target == .draft(session), let project = sidebar?.snapshot?.projects.first(where: { $0.id.rawValue == session.projectId }) {
             composer.text = ""
@@ -4452,6 +4456,7 @@ extension ComposerController {
         guard !images.isEmpty else { return }
         preparingImages[key, default: 0] += images.count
         let work = Self.attachmentWorkDirectory
+        let generation = preparingGenerations[key, default: 0]
         Task { [weak self] in
             try? FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
             var prepared: [ComposerAttachment] = []
@@ -4469,6 +4474,11 @@ extension ComposerController {
                 }
             }
             guard let self else { return }
+            // `cancelPreparingComposerImages` (preparingComposerImages.ts at 4928): a discarded draft stays discarded.
+            guard preparingGenerations[key, default: 0] == generation else {
+                for a in prepared { try? FileManager.default.removeItem(at: a.fileURL) }
+                return
+            }
             preparingImages[key, default: images.count] -= images.count
             draftAttachments[key, default: []] += prepared
             if imagesGetChips, key == draftKey, !prepared.isEmpty {
@@ -5190,8 +5200,17 @@ extension ComposerController {
     /// `restoreStashEntry`: files only in the environment that holds them, checked against the
     /// server first (uploads expire after 24 hours); the text joins the current prompt after a
     /// blank line; images upload again; anything that did not come back is listed in one warning.
+    /// An answer to an agent's question carries no machines, so a stash with machine mentions waits for it
+    /// (`refuseMachinesInAnswer`, useComposerStash.ts at 4928, #28780). Checked again after the file check.
+    private func refusesMachinesInAnswer(_ entry: PromptStashEntry) -> Bool {
+        guard !requests.userInputs.isEmpty, entry.records?.contains(where: { $0["kind"]?.stringValue == "environment" }) == true else { return false }
+        toast(.error, "Stashed machines can't go in an answer", "Restore this prompt after the agent's question is answered.")
+        return true
+    }
+
     private func restoreStash(_ menuEntry: PromptStashEntry) {
         guard let key = draftKey, let env = targetEnvironmentId else { return }
+        if refusesMachinesInAnswer(menuEntry) { return }
         let files = menuEntry.files ?? []
         if files.contains(where: { $0.environmentId != env }) {
             toast(.error, "Stashed files belong to another environment", "Restore this prompt in the environment that received its files.")
@@ -5211,7 +5230,7 @@ extension ComposerController {
                 } catch {}
             }
             // A target switch during the check leaves the entry for where the user is now.
-            guard let self, draftKey == key else { return }
+            guard let self, draftKey == key, !refusesMachinesInAnswer(menuEntry) else { return }
             finishRestore(menuEntry.id, key: key, env: env, expired: expired)
         }
     }
