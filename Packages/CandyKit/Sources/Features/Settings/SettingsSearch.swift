@@ -13,6 +13,9 @@ public struct SettingsSearchItem: Sendable, Equatable {
         case localBackendManagementOnly, localEnvironmentOnly, wslAvailableOnly, managedTunnelOnly, secondary, requiresThreadAutoSettlement
         /// `peerLinksOnly`: a connected environment offers links (useAvailableSettingsSearchItems.ts at 3814).
         case peerLinksOnly
+        /// 4928's flags (settingsSearch.ts:1606-1637). A native app has a release channel like the desktop app, and
+        /// CandyWrapper has no secrets store, so those rows never show.
+        case primaryEnvironmentOnly, fastWorktreeCheckoutOnly, textGeneratorsOnly, releaseChannelOnly, secretsFeatureOnly
     }
 
     public let id: String
@@ -45,6 +48,10 @@ public struct SettingsSearchAvailability: Sendable, Equatable {
     public var hasThreadAutoSettlement = true
     public var managedTunnelActive = false
     public var hasPeerLinkHost = false
+    public var hasPrimaryEnvironment = true
+    public var hasFastWorktreeCheckoutEnvironment = false
+    /// An environment without a provider allow-list, which hides text generators.
+    public var hasTextGeneratorsEnvironment = false
     public init() {}
 }
 
@@ -86,6 +93,10 @@ public enum SettingsSearch {
                 && (!f.contains(.requiresThreadAutoSettlement) || a.hasThreadAutoSettlement)
                 && (!f.contains(.managedTunnelOnly) || a.managedTunnelActive)
                 && (!f.contains(.peerLinksOnly) || a.hasPeerLinkHost)
+                && (!f.contains(.primaryEnvironmentOnly) || a.hasPrimaryEnvironment)
+                && (!f.contains(.fastWorktreeCheckoutOnly) || a.hasFastWorktreeCheckoutEnvironment)
+                && (!f.contains(.textGeneratorsOnly) || a.hasTextGeneratorsEnvironment)
+                && !f.contains(.secretsFeatureOnly)
         }
     }
 

@@ -12,6 +12,8 @@ src = open(os.path.join(T3, "apps/web/src/components/settings/settingsSearch.ts"
 start = src.index("export const SETTINGS_SEARCH_ITEMS = [") + len("export const SETTINGS_SEARCH_ITEMS = [")
 body = src[start:src.index("] as const satisfies ReadonlyArray<SettingsSearchItem>;", start)]
 body = re.sub(r"//[^\n]*", "", body)
+# Since 4928 titles are `msg("Title")` or `msg("Title", { $context: "..." })` for translation; keep the literal.
+body = re.sub(r'msg\(\s*("(?:[^"\\]|\\.)*")\s*(?:,\s*\{[^}]*\}\s*)?,?\s*\)', r"\1", body)
 
 # Since 3669 the hosts come from the forge definitions (packages/source-control-definitions/src/registry.ts):
 # SOURCE_CONTROL_HOST_LABELS and SOURCE_CONTROL_HOST_TERMS join their labels and keywords in registry order,
@@ -87,7 +89,8 @@ TITLES = {"Open pull requests in T3 Code": "Open pull requests in CandyWrapper"}
 STRING = r'"(?:[^"\\]|\\.)*"'
 FLAGS = ["desktopOnly", "macOnly", "windowsOnly", "cloudOnly", "environmentOnly", "providerSettingsOnly",
          "macProviderSettingsOnly", "localBackendManagementOnly", "localEnvironmentOnly", "wslAvailableOnly",
-         "managedTunnelOnly", "secondary", "requiresThreadAutoSettlement", "peerLinksOnly"]
+         "managedTunnelOnly", "secondary", "requiresThreadAutoSettlement", "peerLinksOnly", "primaryEnvironmentOnly",
+         "fastWorktreeCheckoutOnly", "textGeneratorsOnly", "releaseChannelOnly", "secretsFeatureOnly"]
 PATHS = {"/settings/chat": "chat", "/settings/diffs": "diffs", "/settings/threads": "threads",
          "/settings/browser": "browser", "/settings/devices": "devices", "/settings/worktrees": "worktrees",
          "/settings/access": "access", "/settings/maintenance": "maintenance", "/settings/labs": "beta", "/settings/about": "about",
@@ -97,6 +100,9 @@ PATHS = {"/settings/chat": "chat", "/settings/diffs": "diffs", "/settings/thread
          "/settings/integrations": "integrations", "/settings/scheduled-tasks": "scheduledTasks",
          "/settings/source-control": "sourceControl", "/settings/storage": "storage", "/settings/connections": "connections", "/settings/beta": "beta",
          "/settings/archived": "archive"}
+
+# Pages CandyWrapper doesn't have yet: voice dictation and the secrets store. Their rows stay out of search.
+UNPORTED_PATHS = {"/settings/voice", "/settings/secrets"}
 
 
 def swift_string(literal):
@@ -136,6 +142,8 @@ for kind, text in entries:
     for m in re.finditer(r"(\w+):\s*(" + STRING + r"|true|false|\[[^\]]*\])", text):
         fields.setdefault(m.group(1), m.group(2))
     title = fields["title"].strip('"')
+    if fields["to"].strip('"') in UNPORTED_PATHS:
+        continue
     args = [f'id: {fields["id"]}', f'title: {json.dumps(TITLES.get(title, title))}', f'to: .{PATHS[fields["to"].strip(chr(34))]}']
     if "targetId" in fields:
         args.append(f'targetId: {fields["targetId"]}')
