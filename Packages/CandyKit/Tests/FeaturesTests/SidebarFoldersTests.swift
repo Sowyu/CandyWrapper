@@ -35,6 +35,25 @@ struct SidebarFoldersTests {
         #expect(cache.patch(snapshot: snapshot, state: state, nowMs: now) == nil)
     }
 
+    /// Screen pass 3, item 9: Labs' Two-line folder rows turned on with the sidebar already drawn puts folder rows
+    /// with a branch on two lines (#26463, SidebarThreadRow.tsx:1268-1275 at 4928).
+    @Test func twoLineFolderRowsApplyToADrawnSidebar() throws {
+        let snapshot = SidebarPreview.snapshot(projects: [SidebarPreview.project("p", "Demo")], threads: [
+            SidebarPreview.thread("blue", "Blue", project: "p", kind: .read, minutesAgo: 2, extra: ["branch": "main"]),
+        ])
+        var state = SidebarListState()
+        state.boringSidebarEnabled = true
+        let cache = SidebarListCache()
+        func blue() throws -> SidebarItem {
+            try #require(SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: now, cache: cache).first { $0.key == "thread:blue" })
+        }
+        #expect(try blue().height == 36)
+        state.boringSidebarMultilineRows = true
+        #expect(try blue().height == 54)
+        // The cause on screen: the sidebar's settings observer ignored the key, so the switch waited for a relaunch.
+        #expect(SidebarContentView.listSettingKeys.contains("boringSidebarMultilineRows"))
+    }
+
     /// T3 3824 #26387 (Sidebar.logic.ts:920-948, Sidebar.tsx:1283): an empty project keeps its folder only while
     /// you filter to it, so it can start a thread.
     @Test func anEmptyProjectKeepsItsFolderOnlyWhileFiltered() {

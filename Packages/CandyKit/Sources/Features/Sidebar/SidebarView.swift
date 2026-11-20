@@ -377,13 +377,15 @@ public final class SidebarContentView: DSView {
         // Project grouping follows the client settings everywhere projects are grouped.
         applyClientSettings(ClientSettingsStore.shared.current)
         clientSettingsObserver = ClientSettingsStore.shared.observe { [weak self] keys in
-            guard keys.contains("sidebarProjectGroupingMode") || keys.contains("sidebarProjectGroupingOverrides")
-                    || keys.contains("boringSidebarEnabled") || keys.contains("sidebarWorkingShelfEnabled") || keys.contains("sidebarProjectSortOrder") else { return }
+            guard !keys.isDisjoint(with: Self.listSettingKeys) else { return }
             self?.applyClientSettings(ClientSettingsStore.shared.current)
         }
     }
 
     private var clientSettingsObserver: Int?
+    /// The client settings `applyClientSettings` reads; a change to any of them redraws the list.
+    static let listSettingKeys: Set<String> = ["sidebarProjectGroupingMode", "sidebarProjectGroupingOverrides", "boringSidebarEnabled",
+                                                "boringSidebarMultilineRows", "sidebarWorkingShelfEnabled", "sidebarProjectSortOrder"]
 
     /// `selectProjectGroupingSettings`.
     static func projectGrouping(_ c: ClientSettings) -> SidebarModel.ProjectGrouping {
