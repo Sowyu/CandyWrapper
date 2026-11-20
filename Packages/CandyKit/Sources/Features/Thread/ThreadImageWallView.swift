@@ -61,8 +61,32 @@ final class GalleryMasonryView: DSView {
 
     deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
 
-    var columnCount: Int {
-        GalleryLayout.columns(width: contentWidth, minColumn: metrics.minColumn, gap: metrics.gap)
+    /// The columns the width fits at `minColumn`: the most the wall shows.
+    var maxColumns: Int { GalleryLayout.columns(width: contentWidth, minColumn: metrics.minColumn, gap: metrics.gap) }
+
+    /// A density the user chose on the wall, clamped to what the width fits; nil follows the width.
+    var fixedColumns: Int? { didSet { if fixedColumns != oldValue { relayout() } } }
+
+    var columnCount: Int { fixedColumns.map { min(maxColumns, max(2, $0)) } ?? maxColumns }
+
+    /// Pinches over the tiles, which the wall turns into density.
+    var onMagnify: ((NSEvent) -> Void)?
+    override func magnify(with event: NSEvent) { if let onMagnify { onMagnify(event) } else { super.magnify(with: event) } }
+
+    /// Changes the density keeping the tile under `point` (document coordinates) at the same height in the viewport.
+    func setColumns(_ columns: Int?, keeping point: CGPoint) {
+        guard let clip = enclosingScrollView?.contentView else { fixedColumns = columns; return }
+        let index = frames.firstIndex { $0.contains(point) }
+            ?? frames.indices.min { abs(frames[$0].midY - point.y) < abs(frames[$1].midY - point.y) }
+        let inView = point.y - clip.bounds.minY
+        let share = index.map { (point.y - frames[$0].minY) / max(1, frames[$0].height) }
+        fixedColumns = columns
+        guard let index, let share, frames.indices.contains(index) else { return }
+        let target = frames[index].minY + share * frames[index].height - inView
+        let y = min(max(0, bounds.height - clip.bounds.height), max(0, target))
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: y))
+        enclosingScrollView?.reflectScrolledClipView(clip)
+        tile()
     }
 
     /// The width to lay out for before the scroll view has one, like the card's own width while it is measured.
@@ -337,7 +361,12 @@ final class GalleryViewerView: DSView {
     let previous = ButtonView(nil, icon: .chevronLeft, variant: .ghost, size: .iconSm)
     let next = ButtonView(nil, icon: .chevronRight, variant: .ghost, size: .iconSm)
     let openInThread = ButtonView("Open in thread", icon: .arrowUpRight, variant: .ghost, size: .xs)
+    private(set) lazy var zoom = ZoomableImageView(picture: picture)
     static let bar: CGFloat = 52
+    /// The band above the viewer's top bar that its ground covers: Redesign's tab band, where the header pill sits.
+    var topInset: CGFloat = 0 { didSet { if topInset != oldValue { needsLayout = true } } }
+    /// Horizontal two-finger travel at fit in the current gesture, and whether it already changed the picture.
+    private var swipe: (dx: CGFloat, dy: CGFloat, done: Bool) = (0, 0, false)
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -346,7 +375,11 @@ final class GalleryViewerView: DSView {
         picture.layer?.cornerRadius = Tokens.Radius.card
         picture.layer?.cornerCurve = .continuous
         detail.truncation = .middle
-        for view in [picture, count, detail, close, previous, next, openInThread] as [NSView] { addSubview(view) }
+        zoom.naturalSize = { [weak self] in self?.shown?.naturalSize }
+        zoom.fit = { natural, area, backing in GalleryLayout.fit(natural, in: area, scale: backing) }
+        zoom.onBackgroundClick = { [weak self] in self?.onClose?() }
+        zoom.onFitScroll = { [weak self] event in self?.swipe(event) }
+        for view in [zoom, count, detail, close, previous, next, openInThread] as [NSView] { addSubview(view) }
         close.toolTip = "Back to all images"; close.setAccessibilityLabel("Back to all images")
         previous.toolTip = "Previous image"; previous.setAccessibilityLabel("Previous image")
         next.toolTip = "Next image"; next.setAccessibilityLabel("Next image")
@@ -370,6 +403,7 @@ final class GalleryViewerView: DSView {
     }
 
     private func show() {
+        zoom.reset()
         guard let image = shown else { picture.set(key: nil, fallbackText: "", loader: nil); return }
         let loader = makeLoader?(image) ?? ThreadImageGalleryView.loader(image)
         picture.set(key: image.pixelKey, fallbackText: "Image unavailable", loader: loader, preview: preview?(index), loadingText: "")
@@ -381,25 +415,34 @@ final class GalleryViewerView: DSView {
         needsLayout = true
     }
 
-    /// The area the picture fits in: below the top bar, above the footer, clear of the side arrows.
+    /// The area the picture fits and zooms in: below the top bar, above the footer, clear of the side arrows.
     var pictureArea: CGRect {
         let side = Tokens.Space.xl + 32 + Tokens.Space.s
-        return CGRect(x: side, y: Self.bar, width: max(1, bounds.width - 2 * side), height: max(1, bounds.height - 2 * Self.bar))
+        return CGRect(x: side, y: topInset + Self.bar, width: max(1, bounds.width - 2 * side), height: max(1, bounds.height - topInset - 2 * Self.bar))
+    }
+
+    /// At fit, a two-finger swipe sideways changes the picture once per gesture; momentum and vertical travel do nothing.
+    private func swipe(_ event: NSEvent) {
+        guard event.hasPreciseScrollingDeltas, event.momentumPhase.isEmpty else { return }
+        if event.phase.contains(.began) { swipe = (0, 0, false) }
+        swipe.dx += event.scrollingDeltaX
+        swipe.dy += event.scrollingDeltaY
+        guard !swipe.done, abs(swipe.dx) > 60, abs(swipe.dx) > 2 * abs(swipe.dy) else { return }
+        swipe.done = true
+        // Content follows the fingers: dragging it left brings in the next picture.
+        step(swipe.dx < 0 ? 1 : -1)
     }
 
     override func layout() {
         super.layout()
         let pad = Tokens.Space.xl, w = bounds.width, h = bounds.height
-        let mid = (Self.bar / 2).rounded()
+        let mid = (topInset + Self.bar / 2).rounded()
         count.frame = NSRect(x: pad, y: mid - 9, width: 160, height: 18)
         close.frame = NSRect(x: w - pad - 32, y: mid - 16, width: 32, height: 32)
-        previous.frame = NSRect(x: pad, y: (h / 2 - 16).rounded(), width: 32, height: 32)
-        next.frame = NSRect(x: w - pad - 32, y: (h / 2 - 16).rounded(), width: 32, height: 32)
-        let area = pictureArea
-        let scale = window?.backingScaleFactor ?? 2
-        let size = shown?.naturalSize.map { GalleryLayout.fit($0, in: area.size, scale: scale) } ?? area.size
-        picture.frame = NSRect(x: (area.midX - size.width / 2).rounded(), y: (area.midY - size.height / 2).rounded(), width: size.width, height: size.height)
-        picture.requestedSide = Int((max(size.width, size.height) * scale).rounded(.up))
+        let middle = ((topInset + h) / 2 - 16).rounded()
+        previous.frame = NSRect(x: pad, y: middle, width: 32, height: 32)
+        next.frame = NSRect(x: w - pad - 32, y: middle, width: 32, height: 32)
+        zoom.frame = pictureArea
         let bw = openInThread.intrinsicContentSize.width
         let footerY = h - Self.bar + (Self.bar - 24) / 2
         openInThread.frame = NSRect(x: w - pad - bw, y: footerY, width: bw, height: 24)
@@ -416,18 +459,18 @@ final class GalleryViewerView: DSView {
         layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
     }
 
-    /// The veil returns to the wall; the picture and the controls keep their clicks.
-    override func mouseDown(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        if !picture.frame.contains(point) { onClose?() }
-    }
+    /// The veil returns to the wall; the picture zooms, and a click beside it inside its area returns too.
+    override func mouseDown(with event: NSEvent) { onClose?() }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
-        // The picture and the labels are not controls: their clicks land on the veil's own handler.
-        if hit === picture || hit === count || hit === detail || hit?.isDescendant(of: picture) == true { return self }
+        // The labels are not controls: their clicks land on the veil's own handler.
+        if hit === count || hit === detail { return self }
         return hit
     }
+
+    /// Pinches between the bars zoom the picture too.
+    override func magnify(with event: NSEvent) { zoom.magnify(with: event) }
 }
 
 /// The full gallery: every agent image of the thread as a masonry wall over the main panel, on Redesign's background.
@@ -449,6 +492,13 @@ public final class ThreadImageWallView: DSView {
     public var onHash: ((GalleryImage, String) -> Void)?
 
     static let header: CGFloat = 52
+    /// The band above the header that the wall's ground covers: Redesign's tab band, where the header pill sits.
+    var topInset: CGFloat = 0 { didSet { if topInset != oldValue { viewer?.topInset = topInset; needsLayout = true } } }
+    /// The wall's density for the rest of the session, once a pinch or ⌘+ / ⌘- chose one.
+    // ponytail: session only, one number; persist it if the user wants it across launches
+    static var sessionColumns: Int?
+    /// The pinch in progress: the columns it started from and how far it has zoomed.
+    private var pinch: (columns: Int, zoom: CGFloat)?
 
     let back = ButtonView(nil, icon: .arrowLeft, variant: .ghost, size: .iconSm)
     let title = LabelView("Agent images", font: DSFont.ui(13, weight: .medium), color: Themed.color(\.foreground))
@@ -471,6 +521,9 @@ public final class ThreadImageWallView: DSView {
             ThreadImageGalleryView.loader(image, onHash: { hash in self?.onHash?(image, hash) })
         }
         masonry.onSelect = { [weak self] index in self?.openViewer(at: index) }
+        masonry.fixedColumns = Self.sessionColumns
+        masonry.onMagnify = { [weak self] event in self?.magnify(with: event) }
+        scroll.toolTip = "Pinch or ⌘+ and ⌘- for larger or smaller pictures, ⌘0 to fit the width."
         setAccessibilityRole(.group)
         setAccessibilityLabel("Agent images")
         restyle()
@@ -484,11 +537,12 @@ public final class ThreadImageWallView: DSView {
     public override func layout() {
         super.layout()
         let pad = Tokens.Space.xl, w = bounds.width
-        let mid = (Self.header / 2).rounded()
+        let mid = (topInset + Self.header / 2).rounded()
         back.frame = NSRect(x: pad - 6, y: mid - 16, width: 32, height: 32)
         title.frame = NSRect(x: back.frame.maxX + Tokens.Space.xs, y: mid - 9, width: 200, height: 18)
         count.frame = NSRect(x: w - pad - 120, y: mid - 9, width: 120, height: 18)
-        scroll.frame = NSRect(x: 0, y: Self.header, width: w, height: max(0, bounds.height - Self.header))
+        let top = topInset + Self.header
+        scroll.frame = NSRect(x: 0, y: top, width: w, height: max(0, bounds.height - top))
         scroll.layoutSubtreeIfNeeded()
         masonry.fitWidth()
         viewer?.frame = bounds
@@ -508,6 +562,7 @@ public final class ThreadImageWallView: DSView {
         guard images.indices.contains(index) else { return }
         if let viewer { viewer.index = index; return }
         let viewer = GalleryViewerView(frame: bounds)
+        viewer.topInset = topInset
         viewer.preview = { [weak self] index in self?.masonry.tiles[index]?.thumb.image }
         viewer.makeLoader = { [weak self] image in
             ThreadImageGalleryView.loader(image, onHash: { hash in self?.onHash?(image, hash) })
@@ -528,6 +583,38 @@ public final class ThreadImageWallView: DSView {
         let index = viewer.index
         masonry.reveal(index)
         Self.fade(viewer, in: false, rise: false) { viewer.removeFromSuperview() }
+    }
+
+    /// Pinching over the wall changes its density in whole columns as the fingers move: apart for fewer, larger
+    /// pictures, together for more, smaller ones, keeping the picture under the pointer in place.
+    // ponytail: whole-column steps during the pinch; scale the document between steps if the steps read as jumpy
+    public override func magnify(with event: NSEvent) {
+        if let viewer { viewer.magnify(with: event); return }
+        if event.phase.contains(.began) || pinch == nil { pinch = (masonry.columnCount, 1) }
+        guard var pinch else { return }
+        pinch.zoom *= 1 + event.magnification
+        self.pinch = event.phase.contains(.ended) || event.phase.contains(.cancelled) ? nil : pinch
+        let columns = GalleryLayout.density(from: pinch.columns, zoom: pinch.zoom, max: masonry.maxColumns)
+        setColumns(columns, keeping: masonry.convert(event.locationInWindow, from: nil))
+    }
+
+    /// ⌘+ and ⌘- step the wall's density by a column, ⌘0 follows the width again; the large picture takes them while open.
+    public override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard viewer == nil, window != nil, let direction = ImageZoom.command(event) else { return super.performKeyEquivalent(with: event) }
+        let visible = masonry.visibleRect
+        let middle = CGPoint(x: visible.midX, y: visible.midY)
+        if direction == 0 { setColumns(nil, keeping: middle); return true }
+        setColumns(min(masonry.maxColumns, max(2, masonry.columnCount - direction)), keeping: middle)
+        return true
+    }
+
+    private func setColumns(_ columns: Int?, keeping point: CGPoint) {
+        // The width's own count is no choice: a wider window shows more again.
+        let chosen = columns == masonry.maxColumns ? nil : columns
+        Self.sessionColumns = chosen
+        guard chosen != masonry.fixedColumns else { return }
+        masonry.setColumns(chosen, keeping: point)
+        setAccessibilityValue("\(masonry.columnCount) columns")
     }
 
     /// Escape closes the large picture, then the gallery. Arrows step the large picture, or move the focus ring over

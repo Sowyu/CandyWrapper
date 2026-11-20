@@ -458,7 +458,11 @@ public final class ThreadImageGalleryController {
     public func openWall(showing image: GalleryImage?) {
         guard wall == nil, !images.isEmpty, let window = pill.window, let host = Self.wallHost(for: pill) else { return }
         close()
-        let wall = ThreadImageWallView(frame: host.bounds)
+        // Under Redesign the panel starts below the tab band; the wall reaches up through it, under the pill and the
+        // thread title, so its ground meets the window's top with no strip of the band's fade above it.
+        let band = (host as? ThreadPanelView)?.ditherOverhang ?? 0
+        let wall = ThreadImageWallView(frame: NSRect(x: 0, y: -band, width: host.bounds.width, height: host.bounds.height + band))
+        wall.topInset = band
         wall.autoresizingMask = [.width, .height]
         wall.layer?.cornerRadius = host.layer?.cornerRadius ?? 0
         wall.layer?.cornerCurve = .continuous
@@ -520,6 +524,13 @@ public enum GalleryLayout {
         let third = area.width * area.height / 3
         if natural.width * natural.height * s * s < third { s = min(fill, (third / (natural.width * natural.height)).squareRoot()) }
         return CGSize(width: max(1, (natural.width * s).rounded()), height: max(1, (natural.height * s).rounded()))
+    }
+
+    /// The wall's columns during a pinch that started at `columns` and has zoomed by `zoom`: fewer as it zooms in,
+    /// rounded to whole columns, between two and `max`.
+    public static func density(from columns: Int, zoom: CGFloat, max maximum: Int) -> Int {
+        let target = (CGFloat(columns) / Swift.max(zoom, 0.01)).rounded()
+        return Swift.min(Swift.max(2, maximum), Swift.max(2, Int(Swift.min(target, 1000))))
     }
 
     /// Columns for a content `width`: as many as fit at `minColumn` wide, never fewer than two.

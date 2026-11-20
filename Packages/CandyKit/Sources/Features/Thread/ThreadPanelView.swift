@@ -702,7 +702,7 @@ public final class ThreadPanelView: DSView {
         return 0.7 * (1 - t) * (1 - t)
     }
     /// How far the panel's top sits below the window's under Dither (the tab strip band), which the timeline reaches up through.
-    private var ditherOverhang: CGFloat {
+    var ditherOverhang: CGFloat {
         guard !isEmbedded, ThemeRuntime.isDither(dark: effectiveAppearance.isDark), let content = window?.contentView else { return 0 }
         let top = content.convert(NSPoint(x: 0, y: bounds.minY), from: self).y
         return min(DitherChrome.band, max(0, content.isFlipped ? top : content.bounds.height - top))
@@ -2404,6 +2404,8 @@ public final class ThreadPanelView: DSView {
         updateFadeColors()
         fade.zPosition = 1
         header.layer?.zPosition = 2
+        // Over the full image gallery, which reaches up through the tab band (ThreadImageGalleryController.openWall).
+        threadTitle.layer?.zPosition = 4
         // Dither's art runs up to the panel's top edge, so the rows fade out over it as a mask, as over Glass: an overlay
         // in any one color would paint a band over the art, and its unfaded scrollbar column left a strip at the right.
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
