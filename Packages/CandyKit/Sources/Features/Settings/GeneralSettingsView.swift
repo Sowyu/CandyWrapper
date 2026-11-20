@@ -307,9 +307,6 @@ public final class GeneralSettingsView: SettingsPageBase {
         let skills = clientSwitch("skills-in-slash-menu", "Also include skills in the / command menu. Skills always appear when you type $.",
                                   key: "showSkillsInSlashMenu", reset: "skills in slash menu")
         let rich = clientSwitch("composer-rich-text", "Show formatted Markdown as you type.", key: "composerRichTextEnabled", reset: "rich text composer")
-        let collapse = clientSwitch("composer-collapse",
-                                    "Rest the composer of an existing thread into a single line when you scroll the conversation. Focus the composer or start typing to expand it again.",
-                                    key: "composerCollapseOnScroll", reset: "collapse composer on scroll")
         let send = clientSelect("send-shortcut", "Choose when Enter sends a prompt or inserts a new line", key: "sendShortcut",
                                 options: [("enter", "Enter"), ("mod-enter-multiline", "⌘ + Enter for multiline prompts"), ("mod-enter", "⌘ + Enter always")],
                                 width: nil, reset: "send shortcut", hideIndicator: false)
@@ -351,7 +348,6 @@ public final class GeneralSettingsView: SettingsPageBase {
                                        key: "screenReaderWindowTitle", reset: "screen reader window title", label: "Screen reader window title",
                                        title: "Screen reader window title")
         return section("behavior", "Behavior", [notifications, inApp, language, time, streaming, whitespace, fileState, layout, proactive, skills, rich]
-                       + (ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? [collapse] : [])
                        + [send, followUp, toolCalls, windowTitle, updates, continueRow, backgroundActivityRow(), menuBar])
     }
 

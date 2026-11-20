@@ -8,7 +8,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
     case project, general, appearance, notifications, keyboard
     case orchestrator, models, connectors, threads, scheduledTasks
     case projects, git, tools
-    case machines, advanced, experimental, about
+    case machines, advanced, redesign, experimental, about
 
     public var label: String {
         switch self {
@@ -27,6 +27,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .tools: "Browser and devices"
         case .machines: "Machines and connections"
         case .advanced: "Advanced"
+        case .redesign: "Redesign"
         case .experimental: "Experimental"
         case .about: "About"
         }
@@ -50,6 +51,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .tools: "The built-in browser, simulators and window capture."
         case .machines: "This machine, your other machines, and the clients paired with them."
         case .advanced: "Background work, storage cleanup, diagnostics and legacy features."
+        case .redesign: "The switch for this look, its picture and accent, and its model picker."
         case .experimental: "Features still being built. They may change or go away."
         case .about: "Version, updates and licenses."
         }
@@ -72,6 +74,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .tools: .globe
         case .machines: .server
         case .advanced: .slidersHorizontal
+        case .redesign: .paintbrush
         case .experimental: .flaskConical
         case .about: .info
         }
@@ -82,7 +85,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         (nil, [.general, .appearance, .notifications, .keyboard]),
         ("Agents", [.orchestrator, .models, .connectors, .threads, .scheduledTasks]),
         ("Workspace", [.project, .projects, .git, .tools]),
-        ("System", [.machines, .advanced, .experimental, .about]),
+        ("System", [.machines, .advanced, .redesign, .experimental, .about]),
     ]
 
     /// The content column: the two-pane pages keep T3's wide container.
@@ -95,7 +98,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .project: return [.init(.projects)]
         case .general: return [
             .init(.general, scope: true, [G("behavior", "Composer and chat", rows: ["language", "time-format", "response-streaming", "skills-in-slash-menu",
-                                                                               "composer-rich-text", "composer-collapse", "send-shortcut",
+                                                                               "composer-rich-text", "send-shortcut",
                                                                                "follow-up-behavior"])]),
             .init(.general, [G("behavior", "Diffs and panels", rows: ["hide-whitespace-changes", "default-diff-file-state", "diff-layout",
                                                                       "proactive-panels"]),
@@ -122,6 +125,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .orchestrator: return [.init(.orchestrator)]
         case .connectors: return [.init(.connectors)]
         // T3's Beta page joins CandyWrapper's own experiments.
+        case .redesign: return [.init(.redesign)]
         case .experimental: return [.init(.experimental), .init(.beta)]
         case .projects: return [
             .init(.general, scope: true, [G("project-defaults", "New threads", rows: ["new-threads", "worktree-submodules"]),
@@ -169,6 +173,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .archive: .threads
         case .orchestrator: .orchestrator
         case .connectors: .connectors
+        case .redesign: .redesign
         case .experimental, .beta: .experimental
         case .diagnostics, .licenses: nil
         }

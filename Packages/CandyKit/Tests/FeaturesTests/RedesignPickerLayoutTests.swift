@@ -42,7 +42,7 @@ import T3Store
         return dock
     }
 
-    private static func lay(_ dock: DockedModelPickerView, height: CGFloat? = nil) {
+    static func lay(_ dock: DockedModelPickerView, height: CGFloat? = nil) {
         let size = dock.naturalSize
         dock.frame = NSRect(x: 0, y: 0, width: size.width, height: height ?? size.height)
         dock.layoutSubtreeIfNeeded()
@@ -259,6 +259,107 @@ import T3Store
             dock.footer.focus(permissions: true)
             #expect(!dock.footer.items.contains { ($0 as? ComposerPermissionsTriggerView)?.focused == true })
         }
+    }
+
+    /// Settings > Redesign's two picker switches, set for `body` and put back after.
+    static func withPicker(stacked: Bool, account: Bool, _ body: () throws -> Void) rethrows {
+        let store = ClientSettingsStore.shared
+        let before = ["redesignStackedPicker": store.current["redesignStackedPicker"], "redesignPickerAccount": store.current["redesignPickerAccount"]]
+        defer { store.update(before) }
+        store.update(["redesignStackedPicker": .bool(stacked), "redesignPickerAccount": .bool(account)])
+        try RedesignPickerLayoutTests.withRedesign(body)
+    }
+
+    private static func cards(_ view: NSView) -> [DitherProviderCardView] {
+        ((view as? DitherProviderCardView).map { [$0] } ?? []) + view.subviews.flatMap(cards)
+    }
+
+    @Test(arguments: [(true, false), (true, true), (false, false), (false, true)])
+    func pickerSwitchesChangeTheLayout(_ stacked: Bool, _ account: Bool) throws {
+        try Self.withPicker(stacked: stacked, account: account) {
+            let dock = RedesignPickerLayoutTests.dock(models: 4)
+            RedesignPickerLayoutTests.lay(dock)
+            let picker = dock.picker
+            #expect(dock.stacked == stacked && dock.column.stacked == stacked && dock.footer.stacked == stacked)
+            if stacked {
+                #expect(dock.bounds.width == 335 && dock.column.frame.minY == picker.frame.maxY)
+            } else {
+                // Two columns: the list and Reasoning side by side over the footer.
+                #expect(dock.bounds.width == picker.frame.width + ComposerEffortColumnView.width)
+                #expect(dock.column.frame.minX == picker.frame.maxX && dock.column.frame.minY == 0)
+            }
+            let card = Self.cards(picker).first
+            #expect((card != nil) == account)
+            let first = try #require(picker.rowViews.first)
+            let firstTop = picker.convert(first.frame, from: first.superview).minY
+            let searchBottom = picker.search.frame.maxY
+            if let card {
+                // The card sits between the search and the first model.
+                let cardFrame = picker.convert(card.frame, from: card.superview)
+                #expect(cardFrame.minY >= searchBottom && firstTop >= cardFrame.maxY)
+            } else {
+                // The list starts right under the search: only the list's 6pt padding between.
+                #expect(firstTop - searchBottom < 16, "first row \(firstTop), search \(searchBottom)")
+            }
+            // The provider's status stays on its tab as T3's tooltip.
+            let tabs = picker.subviews.compactMap { $0 as? RailButtonView }.filter { $0.entryId != nil }
+            #expect(tabs.allSatisfy { $0.toolTip?.isEmpty == false })
+        }
+    }
+
+    /// A track of three segments with `checked` picked, drawn at 2x on mid gray (light Redesign's input is black-based).
+    private static func track(checked: Int, dark: Bool) -> (ComposerFooterGroupView, NSBitmapImageRep) {
+        let group = ComposerFooterGroupView(["Low", "Medium", "High"].enumerated().map { ComposerFooterSegmentView(title: $1, checked: $0 == checked) })
+        group.fills = true
+        let size = CGSize(width: 180, height: 28)
+        let rep = PickersFidelityTests.render(group, size: size, backdrop: NSColor(srgbRed: 0.5, green: 0.5, blue: 0.5, alpha: 1), dark: dark)
+        return (group, rep)
+    }
+
+    private static func rgb(_ rep: NSBitmapImageRep, px x: Int, _ y: Int) -> [Int] {
+        var p = [Int](repeating: 0, count: 4)
+        rep.getPixel(&p, atX: x, y: y)
+        return Array(p.prefix(3))
+    }
+
+    private static func near(_ a: [Int], _ b: [Int], _ tolerance: Int = 3) -> Bool { zip(a, b).allSatisfy { abs($0 - $1) <= tolerance } }
+
+    @Test(arguments: [0, 1, 2])
+    func selectedSegmentIsRoundedInsideTheTrack(_ checked: Int) throws {
+        #expect(ComposerFooterSegmentView.radius == 6)
+        try RedesignPickerLayoutTests.withRedesign {
+            for dark in [true, false] {
+                let (group, rep) = Self.track(checked: checked, dark: dark)
+                let s = group.segments[checked].frame, other = group.segments[(checked + 1) % 3].frame
+                let fill = Self.rgb(rep, px: Int(s.midX * 2), Int(s.minY * 2) + 3)
+                let trackColor = Self.rgb(rep, px: Int(other.midX * 2), Int(other.minY * 2) + 3)
+                #expect(!Self.near(fill, trackColor, 4), "the pick shows: fill \(fill) track \(trackColor) dark \(dark)")
+                // Every corner of the fill is cut on its 6pt radius: the corner pixel is not the fill. Between two
+                // segments it shows the track; at the ends it is the track's own curve.
+                let xs = [Int(s.minX * 2), Int(s.maxX * 2) - 1], ys = [Int(s.minY * 2), Int(s.maxY * 2) - 1]
+                for x in xs { for y in ys {
+                    let corner = Self.rgb(rep, px: x, y)
+                    #expect(!Self.near(corner, fill, 4), "corner \(x),\(y) of segment \(checked) dark \(dark)")
+                    if checked == 1 { #expect(Self.near(corner, trackColor), "middle corner \(x),\(y) dark \(dark)") }
+                } }
+                // Nothing pokes out of the track's 8pt curve: 2pt in from each track corner is still the backdrop.
+                let w = Int(group.bounds.width * 2), h = Int(group.bounds.height * 2), backdrop = Self.rgb(rep, px: 0, 0)
+                for (x, y) in [(3, 3), (w - 4, 3), (3, h - 4), (w - 4, h - 4)] {
+                    #expect(Self.near(Self.rgb(rep, px: x, y), backdrop, 6), "track corner \(x),\(y) segment \(checked)")
+                }
+            }
+        }
+    }
+
+    @Test func defaultThemesKeepT3sSquareMiddleSegment() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        var input = previous
+        input.ditherLight = false; input.ditherDark = false
+        ThemeRuntime.apply(input)
+        let (group, _) = Self.track(checked: 1, dark: true)
+        #expect(group.segments[1].layer?.maskedCorners == [])
+        #expect(group.segments[0].layer?.maskedCorners == [.layerMinXMinYCorner, .layerMinXMaxYCorner])
     }
 }
 
