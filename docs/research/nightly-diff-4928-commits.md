@@ -490,7 +490,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | 58e60bf5e8 | #26767 | thread | feat: turn a No project thread into a project | ported (sidebar-2): projects.createFromThread behind threadProjectFromScratch; thread menu Turn into project with its toasts |
-| 84e69da395 | #34788 | pr/git | fix(web): No project threads offer no Initialize Git, and their linked PRs show and act in the thread | left: belongs with the No project conversion |
+| 84e69da395 | #34788 | pr/git | fix(web): No project threads offer no Initialize Git, and their linked PRs show and act in the thread | left (composer-4, checked): nothing on the sidebar side; the commit changes ThreadDetailsPanel and ThreadDetailsPrRow(s) (Features/Thread), BranchToolbarBranchSelector (Features/Git) and PullRequestDetailPanel (Features/PullRequests) |
 
 ## New feature fleet-channel (1)
 
@@ -711,7 +711,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 378584a760 | #38294 | issues | feat(web): hovering an issue link shows its preview card | port |
 | b6a0fd6d62 | #38771 | issues | feat(issues): an issue shows every thread it is linked to | ported 0a5ca190: the linked-threads count opens the palette on the issue URL |
 | c350ee7e15 | #38256 | issues | feat(web): filter the issues list by project | ported 39a3ad7d: the Project filter |
-| 2e3d9fccdd | #38282 | issues | feat(web): show linked issues beside thread pull requests | ported 9a0153d1 in the sidebar: generic issue glyph, no state tint or hover list until CW has issues |
+| 2e3d9fccdd | #38282 | issues | feat(web): show linked issues beside thread pull requests | ported 9a0153d1, composer-4: the sidebar badge, and since composer-4 its state icon and tone from `issues.detail` for a single issue (SidebarThreadRow.tsx:1137-1171, issuePresentation.tsx:33-53); new issue-badge.open and .completed spec cases. Left: the hover list of issues (ThreadDetailsIssueRows), with #38160 in Features/Thread |
 | 63899c16b9 | #38654 | issues | fix(web): retrying a failed Issues list no longer restarts another environment's read | ported 0a5ca190: Retry reads every environment again in one generation |
 | 966bdc74f3 | #38854 | issues | fix(client): Linear issue links in messages open in the issue panel | port |
 | 60e54867fc | #38986 | issues | fix(azure-devops): refreshing Issues reads each project's current finished states | n/a: server side |

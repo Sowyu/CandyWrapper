@@ -23,6 +23,14 @@
     "height" : 44,
     "width" : 240
   },
+  "issue-badge.completed" : {
+    "height" : 44,
+    "width" : 240
+  },
+  "issue-badge.open" : {
+    "height" : 44,
+    "width" : 240
+  },
   "no-projects" : {
     "height" : 114,
     "width" : 240

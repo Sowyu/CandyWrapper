@@ -7,23 +7,30 @@ import T3Protocol
 public struct SidebarIssueBadge: Equatable, Sendable {
     public var text: String
     public var label: String
+    /// A single issue's live state from `issues.detail`, which tints and names the glyph (SidebarThreadRow.tsx:1137-1171).
+    public var state: IssueState?
 
-    public init?(_ issues: [ThreadIssueLink]) {
+    public init?(_ issues: [ThreadIssueLink], state: IssueState? = nil) {
         guard let first = issues.first else { return nil }
         if issues.count == 1 {
             text = first.displayKey
-            label = "Issue \(first.displayKey): \(first.title)"
+            self.state = state
+            label = state.map { "Issue \(first.displayKey): \(first.title), \($0.name)" } ?? "Issue \(first.displayKey): \(first.title)"
         } else {
             text = "\(issues.count)"
             label = "\(issues.count) linked issues"
         }
     }
+
+    /// The key `SidebarState.issueStates` holds a single issue's state under.
+    public static func stateKey(environmentId: String?, _ link: ThreadIssueLink) -> String {
+        [environmentId ?? "", link.projectId.rawValue, link.tracker, link.host, link.scope, link.key].joined(separator: "|")
+    }
 }
 
-// ponytail: draws the generic issue glyph; T3 tints it by the issue's live state from the issues RPC. Add the state
-// tint, and the hover's issue rows, once CW has the Issues panel.
+// ponytail: no hover rows of the issues; add them with the thread details' issue rows (#38160, Features/Thread)
 final class SidebarIssueBadgeView: ControlView {
-    private let icon = IconView(name: .circleDot, size: 12)
+    private var icon = IconView(name: .circleDot, size: 12)
     private let label = LabelView("", font: DSFont.ui(12))
     private var tooltip: TooltipController?
 
@@ -31,6 +38,14 @@ final class SidebarIssueBadgeView: ControlView {
         didSet {
             guard badge != oldValue else { return }
             isHidden = badge == nil
+            // `issueStatePresentation` (issuePresentation.tsx:33-53): circle-dot, circle-check or circle-slash.
+            let name = badge?.state.map(IssueListLogic.icon) ?? .circleDot
+            if name != oldValue?.state.map(IssueListLogic.icon) ?? .circleDot {
+                icon.removeFromSuperview()
+                icon = IconView(name: name, size: 12)
+                addSubview(icon)
+                restyle()
+            }
             label.text = badge?.text ?? ""
             setAccessibilityLabel(badge?.label)
             tooltip?.text = badge?.label ?? ""
@@ -65,7 +80,8 @@ final class SidebarIssueBadgeView: ControlView {
 
     private func restyle() {
         // `tone="muted"`: the glyph is muted and turns foreground on hover; the key stays `text-secondary-label`.
-        icon.strokeColor = Themed.color(state.hovered ? \.foreground : \.mutedForeground, sidebar: true)
+        // A known state wears its tone instead (`issueStatus?.toneClassName`).
+        icon.strokeColor = badge?.state.map(IssueListLogic.color) ?? Themed.color(state.hovered ? \.foreground : \.mutedForeground, sidebar: true)
         label.color = Themed.color(\.secondaryLabel, sidebar: true)
         label.isUnderlined = state.hovered
     }
