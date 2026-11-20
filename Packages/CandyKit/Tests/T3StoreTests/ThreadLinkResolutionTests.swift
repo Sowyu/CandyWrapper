@@ -3,11 +3,6 @@ import T3Protocol
 @testable import T3Store
 
 struct ThreadLinkResolutionTests {
-    @Test func orchestratorPlansKeepTheEnvironmentAndHideTheRawAutolink() {
-        let reply = OrchestratorReply.parse("```orchestrator-plan\n1. Read the changes <t3-thread://v2/remote/thread>\n```")
-        #expect(reply.plan?.first?.threadId == "t3-thread://v2/remote/thread")
-        if let step = reply.plan?.first { #expect(OrchestratorReply.displayText(step) == "Read the changes") }
-    }
 
     @Test func scopedLinksNeverGuessAndV1RequiresAUniqueRemoteMatch() throws {
         let a = thread("one:same"), b = thread("two:same")

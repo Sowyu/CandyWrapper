@@ -3,10 +3,10 @@ import Foundation
 import Testing
 @testable import Features
 
-/// Regression for audit OH-5 (docs/research/responsiveness-audit-2026-10-26/orchestrator-helper.md). No app or server is needed.
+/// Regression for audit OH-5 (docs/research/responsiveness-audit-2026-10-26/orchestrator-helper.md), on the Connectors tab's store. No app or server is needed.
 @MainActor
 @Suite(.serialized)
-struct OrchestratorHelperAuditTests {
+struct ConnectorsStoreQueueTests {
     @Test func earlierReadCompletionDoesNotClearQueuedMutationBusyState() {
         let store = ConnectorsStore()
         var submitted: [String] = []

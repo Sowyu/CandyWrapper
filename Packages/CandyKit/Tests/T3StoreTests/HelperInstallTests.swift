@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import T3Store
 
-/// What a client types to install or remove the helper, and how it reads the terminal back.
+/// What a client types to run the helper's `config` or remove an old relay helper, and how it reads the terminal back.
 @Suite struct HelperInstallTests {
     let release = HelperInstall.Release(version: "1.14.0", baseURL: URL(string: "https://github.com/Sowyu/CandyWrapper/releases/download/v1.14.0")!,
                                         sums: ["darwin-universal": "aa", "linux-x86_64": "bb", "linux-aarch64": "cc"])
@@ -22,8 +22,7 @@ import Testing
 
     /// The terminal echoes the typed line, which must never read as a result.
     @Test func theEchoedCommandCarriesNoMarker() {
-        let command = HelperInstall.installCommand(release, homeId: "env-a")
-        #expect(HelperInstall.scan(command).isEmpty)
+        #expect(HelperInstall.scan(HelperInstall.configCommand(release, set: true)).isEmpty)
         #expect(HelperInstall.scan(HelperInstall.uninstallCommand()).isEmpty)
     }
 
@@ -40,15 +39,14 @@ import Testing
     }
 
     @Test func noValueCanBreakOutOfTheQuotes() {
-        let command = HelperInstall.installCommand(release, homeId: "env'; rm -rf ~; '")
+        let command = HelperInstall.configCommand(release, set: false, testHome: "/tmp/x'; rm -rf ~; '", configHome: "~'$(id)'")
         let body = command.dropFirst(" sh -c '".count).dropLast("'\n".count)
         #expect(!body.contains("'"))
-        #expect(HelperInstall.pairingInput([.init(machineId: "a", label: "Mac\tmini", url: URL(string: "http://127.0.0.1:1")!, code: "C")]) == "a\tMac mini\thttp://127.0.0.1:1\tC\n.\n")
     }
 
     /// Both commands parse as POSIX sh.
     @Test func theCommandsAreValidShell() throws {
-        for command in [HelperInstall.installCommand(release, homeId: "env-a", testHome: "/tmp/x y"), HelperInstall.uninstallCommand()] {
+        for command in [HelperInstall.configCommand(release, set: true, testHome: "/tmp/x y", configHome: "/tmp/h"), HelperInstall.uninstallCommand()] {
             let body = String(command.dropFirst(" sh -c '".count).dropLast("'\n".count))
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
