@@ -109,6 +109,25 @@ struct ThreadCatchUp4928Part4Tests {
         try #require(pieces.count >= 2)
         #expect(pieces.allSatisfy { $0.card && $0.text == quote.markdown })
     }
+
+    /// #36779: Arabic commas and question marks end a bare URL too.
+    @Test func bareURLsEndAtArabicPunctuation() {
+        #expect(links("افتح https://example.com/a، ثم") == ["https://example.com/a=>https://example.com/a"])
+        #expect(links("هل https://example.com/a؟ نعم") == ["https://example.com/a=>https://example.com/a"])
+    }
+
+    /// #35859 (CHAT_USER_MARKDOWN_REMARK_PLUGINS at 4928): sent messages keep single tildes; `~~double~~` still strikes.
+    @Test func sentMessagesKeepSingleTildes() {
+        func struck(_ text: String, user: Bool) -> [String] {
+            guard case .paragraph(let runs)? = MarkdownDocument(parsing: text, preservesLineBreaks: user).blocks.first else { return [] }
+            return runs.filter(\.strikethrough).map(\.text)
+        }
+        #expect(struck("see ~/a and (~/b) here", user: true).isEmpty)
+        #expect(struck("a ~~gone~~ b", user: true) == ["gone"])
+        #expect(struck("see ~/a and (~/b) here", user: false) == ["/a and ("])
+        guard case .paragraph(let runs)? = MarkdownDocument(parsing: "run `~x~` and ~/a", preservesLineBreaks: true).blocks.first else { Issue.record("no paragraph"); return }
+        #expect(runs.map(\.text).joined() == "run ~x~ and ~/a")
+    }
 }
 
 private extension NSView {

@@ -1580,7 +1580,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 4137412fe9 | #35739 | thread | fix(web): screen readers at Everything hear context compaction start | port |
 | 05cc444a4a | #35781 | thread | fix(web): a failed commit keeps the commit message you typed | port |
 | ed2a319814 | #27209 | thread | fix(web): arrow and page keys scroll the conversation again after a click or F6 | port |
-| f999dc1018 | #35859 | thread | fix(web): preserve single tildes in sent user messages | port |
+| f999dc1018 | #35859 | thread | fix(web): preserve single tildes in sent user messages | ported (thread-4): MarkdownDocument.keepingSingleTildes escapes a lone ~ outside code in sent messages before parsing |
 | 1e96606cb2 | #29409 | thread | fix(client-runtime): reopened files show host edits instead of the first read | port |
 | 7556047418 | #35914 | thread | fix(web): copying an image with a spaced path keeps it an image | port |
 | b62e80e0a3 | #35932 | thread | fix(web): copying an alert callout keeps its alert Markdown | port |
@@ -1614,7 +1614,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 6cb47acfb8 | #36768 | thread | fix(web): Escape that cancels a thread rename no longer also closes the find bar | port |
 | cebdf39984 | #29570 | thread | fix(web): cancelled queued-message edits release their staged uploads | port |
 | c666345bb9 | #29637 | thread | fix(web): subagent previews drop image marks and full link URLs | port |
-| e330593141 | #36779 | thread | fix(web): bare URLs no longer swallow Arabic commas and question marks | port |
+| e330593141 | #36779 | thread | fix(web): bare URLs no longer swallow Arabic commas and question marks | ported (thread-4): MarkdownDocument.endingBareURLsAtCJKPunctuation also ends a bare URL at the Arabic comma, semicolon, question mark and full stop |
 | 60e4be49cf | #36758 | thread | fix(shared): open relative Codex citations with filename punctuation | port |
 | 154c5014a7 | #29834 | thread | fix(web): long preview annotation comments are no longer dropped from the message | port |
 | bf74669509 | #36830 | thread | fix(web): copied email links keep their destination | port |
@@ -1665,7 +1665,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | f79ab79721 | #38005 | thread | fix(web): stopped or expired questions return their attached files to the composer | port |
 | d6419d92a0 | #38017 | thread | fix(web): links to repeated headings work while a reply streams | port |
 | 10784e01f8 | #38041 | thread | fix: expired-session error card asks to pair again and names the rejected request's trace | port |
-| 0b3ebcf268 | #38079 | thread | fix(web): sent messages keep the spaces typed at the start of a line | port |
+| 0b3ebcf268 | #38079 | thread | fix(web): sent messages keep the spaces typed at the start of a line | left (thread-4): sent messages need the leading spaces of a line kept as unselectable indentation (shared/markdownLeadingWhitespace.ts at 4928, with list, quote and tab handling); Foundation's parser drops them, so a source pass would insert no-break spaces outside lists and quotes and the copy path would drop them again |
 | 1da3f3f370 | #38113 | thread | fix(web): review comments added to the chat arrive whole with their line comments | port |
 | 05d3cc94b2 | #38141 | thread | fix(web): collapsing a timeline review thread no longer hits Unresolve | port |
 | 68108be900 | #38250 | thread | fix(web): minimap previews show cited assistant text, not the raw link | port |

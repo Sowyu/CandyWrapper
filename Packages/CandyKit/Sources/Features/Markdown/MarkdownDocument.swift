@@ -20,7 +20,8 @@ public struct MarkdownDocument: Sendable, Equatable {
         // Formulas leave the text before the Windows path pass, which then never touches their TeX: T3's
         // `remarkKeepWindowsPaths` rewrites character escapes only, and a formula holds none.
         let hidden = math ? MarkdownMathScanner.hiding(source) : nil
-        let markdown = endingBareURLsAtCJKPunctuation(keepingWindowsPathEscapes(hidden?.text ?? source))
+        var markdown = endingBareURLsAtCJKPunctuation(keepingWindowsPathEscapes(hidden?.text ?? source))
+        if preservesLineBreaks { markdown = keepingSingleTildes(markdown) }
         // Source positions cost about 15% of the parse (a 1,000-line reply on the huge thread's cached open),
         // and only loose lists need them.
         // Sent messages keep the numbers written on list items (#33820), which only source positions show.
@@ -155,16 +156,18 @@ public struct MarkdownDocument: Sendable, Equatable {
         return changed ? Substring(decoding: out, as: UTF8.self) : text
     }
 
-    /// `remarkEndAutolinksAtCjkPunctuation` (4928 shared/src/markdownPipeline.ts:467-657, #35267): a bare URL that is
-    /// ASCII up to a Chinese or Japanese punctuation mark ends there, with any emphasis delimiters before the mark
+    /// `remarkEndAutolinksAtScriptPunctuation` (4928 shared/src/markdownPipeline.ts:467-657, #35267, #36779): a bare URL
+    /// that is ASCII up to a Chinese, Japanese or Arabic punctuation mark ends there, with any emphasis delimiters before the mark
     /// closing around it. Foundation's parser would run the URL on or not link it at all, so the URL is written as an
     /// explicit autolink (`<http://…>`, or `[www.…](http://www.…)`) before parsing. Code spans, fences, link labels and
     /// destinations stay as typed, and Unicode earlier in the URL keeps the mark in it, as T3 does.
     static func endingBareURLsAtCJKPunctuation(_ text: Substring) -> Substring {
-        // A CJK mark's first byte (E3 80 or EF BC to BF) and a scheme or `www.` must both be there; most text skips here.
+        // A mark's first bytes (CJK E3 80 or EF BC to BF, Arabic D8 8C, D8 9B, D8 9F or DB 94) and a scheme or `www.`
+        // must both be there; most text skips here.
         var lead = false, previous: UInt8 = 0
         for c in text.utf8 {
-            if (previous == 0xE3 && c == 0x80) || (previous == 0xEF && c >= 0xBC) { lead = true; break }
+            if (previous == 0xE3 && c == 0x80) || (previous == 0xEF && c >= 0xBC)
+                || (previous == 0xD8 && (c == 0x8C || c == 0x9B || c == 0x9F)) || (previous == 0xDB && c == 0x94) { lead = true; break }
             previous = c
         }
         guard lead, text.contains("://") || text.contains("www.") else { return text }
@@ -177,9 +180,10 @@ public struct MarkdownDocument: Sendable, Equatable {
             for k in 0..<p.count where b[i + k] | 0x20 != p[k] { return false }
             return true
         }
-        /// The length of a CJK punctuation mark or symbol at `i`, or 0.
+        /// The length of a CJK punctuation mark or symbol, or an Arabic comma, semicolon, question mark or full stop at `i`, or 0.
         func cjkMark(_ i: Int) -> Int {
-            guard i + 2 < b.count, (b[i] == 0xE3 && b[i + 1] == 0x80) || (b[i] == 0xEF && b[i + 1] >= 0xBC) else { return 0 }
+            if i >= 0, i + 1 < b.count, (b[i] == 0xD8 && [0x8C, 0x9B, 0x9F].contains(b[i + 1])) || (b[i] == 0xDB && b[i + 1] == 0x94) { return 2 }
+            guard i >= 0, i + 2 < b.count, (b[i] == 0xE3 && b[i + 1] == 0x80) || (b[i] == 0xEF && b[i + 1] >= 0xBC) else { return 0 }
             let value = (UInt32(b[i] & 0x0F) << 12) | (UInt32(b[i + 1] & 0x3F) << 6) | UInt32(b[i + 2] & 0x3F)
             guard let scalar = Unicode.Scalar(value) else { return 0 }
             switch scalar.properties.generalCategory {
@@ -243,7 +247,7 @@ public struct MarkdownDocument: Sendable, Equatable {
                 }
             }
             let www = starts(i, "www.")
-            if depth == 0, www || starts(i, "http://") || starts(i, "https://"), i == 0 || !isWord(b[i - 1]) || cjkMark(i - 3) > 0 {
+            if depth == 0, www || starts(i, "http://") || starts(i, "https://"), i == 0 || !isWord(b[i - 1]) || cjkMark(i - 3) == 3 || cjkMark(i - 2) == 2 {
                 var j = i
                 while j < b.count, b[j] >= 0x21, b[j] <= 0x7E, b[j] != UInt8(ascii: "<"), b[j] != UInt8(ascii: ">") { j += 1 }
                 if cjkMark(j) > 0 {
@@ -281,6 +285,67 @@ public struct MarkdownDocument: Sendable, Equatable {
                     }
                 }
                 out += b[i..<j]; i = j
+                continue
+            }
+            out.append(c); i += 1
+        }
+        return changed ? Substring(decoding: out, as: UTF8.self) : text
+    }
+
+    /// `CHAT_USER_MARKDOWN_REMARK_PLUGINS` (4928 shared/src/markdownPipeline.ts, #35859): sent messages turn GFM's
+    /// single-tilde strikethrough off, since people type paths like `~/a` and `(~/b`; `~~double~~` still strikes.
+    /// A lone `~` outside code is escaped before parsing. Text without one skips after a byte scan.
+    static func keepingSingleTildes(_ text: Substring) -> Substring {
+        let tilde = UInt8(ascii: "~")
+        var previous: UInt8 = 0, lone = false
+        var it = text.utf8.makeIterator()
+        var current = it.next()
+        while let c = current {
+            let next = it.next()
+            if c == tilde, previous != tilde, next != tilde, previous != UInt8(ascii: "\\") { lone = true; break }
+            previous = c; current = next
+        }
+        guard lone else { return text }
+        let b = Array(text.utf8)
+        func run(_ i: Int, _ c: UInt8) -> Int { var j = i; while j < b.count, b[j] == c { j += 1 }; return j - i }
+        var out: [UInt8] = []
+        out.reserveCapacity(b.count + 8)
+        var i = 0, lineStart = true, changed = false
+        var fence: (char: UInt8, length: Int)?
+        while i < b.count {
+            if lineStart {
+                let lineEnd = b[i...].firstIndex(of: UInt8(ascii: "\n")).map { $0 + 1 } ?? b.count
+                var j = i
+                while j < lineEnd, j - i < 3, b[j] == UInt8(ascii: " ") { j += 1 }
+                let c = j < lineEnd ? b[j] : 0
+                let marker = c == UInt8(ascii: "`") || c == tilde ? run(j, c) : 0
+                if let open = fence {
+                    if c == open.char, marker >= open.length,
+                       b[(j + marker)..<lineEnd].allSatisfy({ $0 == 32 || $0 == 9 || $0 == 10 || $0 == 13 }) { fence = nil }
+                    out += b[i..<lineEnd]; i = lineEnd; continue
+                }
+                if marker >= 3 { fence = (c, marker); out += b[i..<lineEnd]; i = lineEnd; continue }
+                if lineEnd - i >= 4, b[i..<(i + 4)].allSatisfy({ $0 == 32 }) { out += b[i..<lineEnd]; i = lineEnd; continue }
+                lineStart = false
+            }
+            let c = b[i]
+            if c == UInt8(ascii: "\n") { out.append(c); i += 1; lineStart = true; continue }
+            if c == UInt8(ascii: "\\"), i + 1 < b.count { out += [c, b[i + 1]]; i += 2; continue }
+            if c == UInt8(ascii: "`") {
+                let r = run(i, c)
+                var k = i + r
+                var close: Int?
+                while k < b.count {
+                    if b[k] == c { let n = run(k, c); if n == r { close = k; break }; k += n } else { k += 1 }
+                }
+                let end = close.map { $0 + r } ?? i + r
+                out += b[i..<end]; i = end
+                continue
+            }
+            if c == tilde {
+                let r = run(i, c)
+                if r == 1 { out += [UInt8(ascii: "\\"), tilde]; changed = true } else { out += b[i..<(i + r)] }
+                i += r
                 continue
             }
             out.append(c); i += 1
