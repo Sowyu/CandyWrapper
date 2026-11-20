@@ -158,10 +158,10 @@ public final class GeneralSettingsView: SettingsPageBase {
                                  reset: "project order")
         let options = snoozeOptionsRow()
         let resume = serverSwitch("auto-resume-limited-threads",
-                                  "Resume usage-limit stops at the reported reset time. Each thread can cancel its scheduled continuation.",
+                                  "Automatically resume threads when their usage limits reset. You can cancel auto-resume in each thread.",
                                   key: "autoResumeLimitedThreads", reset: nil)
         let snooze = serverSwitch("snooze-limited-threads",
-                                  "Snooze usage-limit stops until the reported reset time. Combine with auto-resume to continue when they wake.",
+                                  "Snooze threads until their usage limits reset. Enable auto-resume to continue the agent after the reset.",
                                   key: "snoozeLimitedThreads", reset: nil)
         // SettingsPanels.tsx:973-1020, before the auto-settle rows.
         let compact = idleCompactionRow()
@@ -515,6 +515,7 @@ public final class GeneralSettingsView: SettingsPageBase {
         let checkTip = TooltipController.attach(to: check, text: "")
         check.action = { [weak self] in self?.context.updateButton?() }
         let version = VersionTitleView()
+        version.copies = true
         let versionRow = row("app-version", title: "Version", detail: "Current version of the application.", control: check)
         versionRow.accessories = [version]
         binder.add { [weak self, weak check, weak versionRow] in
@@ -588,11 +589,25 @@ public final class GeneralSettingsView: SettingsPageBase {
 /// `AboutVersionTitle`'s version code after the title (`text-2xs font-medium text-muted-foreground`), baseline aligned.
 final class VersionTitleView: DSView {
     private let label = LabelView("", font: DSFont.mono(11, weight: .medium), color: Themed.color(\.mutedForeground))
-    var version = "" { didSet { label.text = version; needsLayout = true } }
+    private var tip: TooltipController?
+    /// AboutVersionTitle.tsx (#24788): the version is a muted inline button that copies it.
+    var copies = false { didSet { tip = copies ? TooltipController.attach(to: self, text: "Copy version") : nil; window?.invalidateCursorRects(for: self) } }
+    var version = "" { didSet { label.text = version; setAccessibilityLabel(copies ? "Copy version \(version)" : nil); needsLayout = true } }
     override init(frame frameRect: NSRect) { super.init(frame: frameRect); label.lineHeight = 16; addSubview(label) }
     override func layout() {
         super.layout()
         label.frame = NSRect(x: 2, y: 3, width: max(0, superview.map { $0.bounds.width - frame.minX } ?? 200), height: 16)
+    }
+    private var textRect: NSRect { NSRect(x: 2, y: 3, width: ceil(label.textWidth) + 1, height: 16) }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard copies, !isHidden, textRect.contains(convert(point, from: superview)) else { return nil }
+        return self
+    }
+    override func resetCursorRects() { if copies { addCursorRect(textRect, cursor: .pointingHand) } }
+    override func mouseUp(with event: NSEvent) {
+        guard copies, textRect.contains(convert(event.locationInWindow, from: nil)), !version.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        AnchoredCopyToast.show(from: self, success: NSPasteboard.general.setString(version, forType: .string))
     }
 }
 

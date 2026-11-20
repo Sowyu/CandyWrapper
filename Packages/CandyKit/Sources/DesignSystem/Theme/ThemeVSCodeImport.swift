@@ -2,6 +2,17 @@ import Foundation
 
 /// vscodeThemeImport.ts:160-410. Imports only palette data; never installs extension code.
 public enum ThemeVSCodeImport {
+    /// `parseThemeImport` (vscodeThemeImport.ts, #25375): VS Code themes may carry comments and trailing commas,
+    /// theme files stay strict JSON.
+    // ponytail: JSON5 accepts a little more than JSONC (unquoted keys, single quotes), a JSONC scanner if that matters
+    public static func parseImport(_ data: Data) throws -> ThemeDefinition {
+        guard let loose = try? JSONSerialization.jsonObject(with: data, options: .json5Allowed) else {
+            throw ThemePalette.FileError(message: "That theme file is not valid JSON.")
+        }
+        if isTheme(loose) { return try parse(loose) }
+        return try ThemePalette.parseFile(try JSONSerialization.jsonObject(with: data))
+    }
+
     public static func isTheme(_ value: Any) -> Bool {
         guard let object = value as? [String: Any], object["version"] as? Int != 1 else { return false }
         return (object["colors"] as? [String: Any])?.keys.contains(where: { $0.contains(".") }) == true || object["tokenColors"] is [Any]

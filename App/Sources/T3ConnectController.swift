@@ -22,6 +22,9 @@ final class T3ConnectController {
         didSet { environments.connectEndpoints = Dictionary((machines ?? []).map { ($0.environmentId, $0.record.endpoint.httpBaseUrl) }) { a, _ in a } }
     }
     private(set) var discovering = false
+    /// The account's T3 Chat link, which sets the tunnel cap, and the cap the relay named when it refused a tunnel.
+    private(set) var t3ChatLink: RelayT3ChatLinkResponse?
+    private var refusal: (limit: Int, used: Int?)?
     private(set) var discoveryError: String?
     private(set) var adding: Set<String> = []
     /// The signed-in user's Clerk profile and image, read once per sign-in and kept in memory only.
@@ -44,7 +47,14 @@ final class T3ConnectController {
     init(environments: Environments, fake: Bool) {
         self.environments = environments
         self.fake = fake
+        // `shouldRelistAccountAfterWakeup` (connection/wakeups.ts, #29788): coming back to the app lists the account
+        // again, so a machine linked meanwhile shows without signing in again. One request per activation, no timer.
+        activeObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { if self?.signedIn != nil { self?.refreshMachines() } }
+        }
     }
+
+    private var activeObserver: NSObjectProtocol?
 
     @discardableResult
     func observe(_ change: @escaping () -> Void) -> UUID {
@@ -207,6 +217,7 @@ final class T3ConnectController {
         modal?.close()
         signedIn = clerkAccount
         machines = nil
+        t3ChatLink = nil; refusal = nil
         profile = nil
         avatar = nil
         changed()
@@ -283,6 +294,7 @@ final class T3ConnectController {
             }
             signedIn = nil
             machines = nil
+            t3ChatLink = nil; refusal = nil
             discoveryError = nil
             profile = nil
             avatar = nil
@@ -297,14 +309,19 @@ final class T3ConnectController {
         discovering = true
         changed()
         Task {
+            // `refreshManagedTunnelUsage` (managedRelayState.ts:174-180): the environments and the T3 Chat plan together.
+            async let link = try? account.t3ChatLink()
             do {
                 machines = try await account.discover()
                 discoveryError = nil
+                t3ChatLink = await link
             } catch CloudSessionError.signedOut {
                 signedIn = nil
                 machines = nil
             } catch {
+                noteTunnelRefusal(error)
                 discoveryError = T3Connect.failure(for: error).detail
+                t3ChatLink = await link
             }
             discovering = false
             changed()
@@ -361,6 +378,40 @@ final class T3ConnectController {
         }
         if rows.isEmpty, let discoveryError { return .failed(discoveryError) }
         return .machines(rows)
+    }
+
+    // MARK: Tunnels (TunnelUsage.tsx, SavedEnvironmentRows.tsx:506-560)
+
+    /// Managed tunnels on the account against its cap; nil fields are loading or failed (`useManagedTunnelUsage`).
+    var tunnelUsage: TunnelUsageState {
+        let used = machines.map { TunnelUsageLogic.used(providerKinds: $0.map(\.record.endpoint.providerKind)) }
+        let cap = t3ChatLink.map { TunnelUsageLogic.cap(available: $0.available, plan: $0.link?.plan,
+                                                        override: $0.maxTunnelsOverride.flatMap { Int(exactly: $0.rounded()) }) }
+        return TunnelUsageState(used: used, limit: cap?.limit, upgrade: cap?.upgrade, tunnelLimit: refusal?.limit,
+                                usedAtRefusal: refusal?.used ?? used)
+    }
+
+    /// A relay refusal at the tunnel cap shows the limit alert instead of an error (useCloudLinkController.ts:212-220).
+    @discardableResult
+    func noteTunnelRefusal(_ error: Error) -> Bool {
+        guard let limit = (error as? RelayError)?.tunnelLimit else { return false }
+        refusal = (limit, machines.map { TunnelUsageLogic.used(providerKinds: $0.map(\.record.endpoint.providerKind)) })
+        changed()
+        return true
+    }
+
+    /// The meter's and alert's actions: link or upgrade T3 Chat in the browser, else the account page to deregister.
+    // ponytail: T3 opens its in-app T3 Chat profile page; CandyWrapper has none, so the link and the upgrade open in the browser
+    func manageTunnels(chat: Bool, window: NSWindow) {
+        guard chat, let upgrade = tunnelUsage.upgrade else { presentAccountPage(in: window); return }
+        if upgrade != .link { NSWorkspace.shared.open(TunnelUsageLogic.subscriptionURL); return }
+        guard let account else { return }
+        Task { [weak self] in
+            do { NSWorkspace.shared.open(try await account.t3ChatLinkRequest()) } catch {
+                guard let self else { return }
+                self.toast?("Could not link T3 Chat", T3Connect.failure(for: error).detail, .error)
+            }
+        }
     }
 
     // MARK: The account's "T3 Connect" page

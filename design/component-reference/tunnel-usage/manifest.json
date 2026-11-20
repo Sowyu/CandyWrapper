@@ -1,0 +1,14 @@
+{
+  "tunnel-usage.meter" : {
+    "height" : 40,
+    "width" : 732
+  },
+  "tunnel-usage.refused" : {
+    "height" : 120,
+    "width" : 732
+  },
+  "tunnel-usage.track" : {
+    "height" : 40,
+    "width" : 732
+  }
+}

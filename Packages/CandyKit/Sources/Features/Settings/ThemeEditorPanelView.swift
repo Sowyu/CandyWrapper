@@ -4,7 +4,13 @@ import DesignSystem
 /// The floating theme editor (ThemeEditorPanel.tsx:1118-1312): `dialog-glass fixed bottom-4 right-4 w-[min(26rem,100vw-2rem)]
 /// max-h-[min(42rem,100dvh-6rem)] rounded-xl border`, a draggable header, the scrolling form, the footer and a
 /// corner resize grip.
-final class ThemeEditorPanelView: DSView {
+final class ThemeEditorPanelView: DSView, RouteModalEscapeHandler {
+    /// ThemeEditorPanel.tsx (#25130): Esc inside the editor leaves inspection, or closes the editor, never Settings.
+    func takeRouteModalEscape() -> Bool {
+        if controller.isInspecting { controller.setInspecting(false) } else { controller.close() }
+        return true
+    }
+
     let controller: ThemeEditorController
     private let decoration = BoxDecorationLayer()
     private let header = ThemeEditorHeaderView()
@@ -715,7 +721,8 @@ final class ThemeColorPickerPanelView: DSView {
         hsv = Self.hexToHsv(t.lowercased())
         apply()
         rgbBox.input.text = Self.rgb(t)
-        onChange?(t.lowercased())
+        // ThemeColorPicker.tsx:147 (#23136): a typed hex keeps the color's alpha.
+        onChange?(t.lowercased() + alphaSuffix)
     }
 
     private func typedRGB(_ t: String) {

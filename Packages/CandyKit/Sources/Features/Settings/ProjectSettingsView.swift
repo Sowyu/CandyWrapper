@@ -74,8 +74,8 @@ public final class ProjectSettingsView: ScopedSettingsPage {
         case .unavailable(let m): message = scope.selection.project == nil ? m : (scope.projects.isEmpty ? "Add a project from the sidebar to configure it here." : m)
         default:
             // `SettingsScopeNotice target="project"`.
-            choices = scope.projects.map { p in (p.displayName, { [weak self] in
-                self?.context.selectScope?(SettingsScopeSelection(machine: nil, project: p.key)) }) }
+            choices = scope.projectMenu.map { p in (p.displayName, { [weak self] in
+                self?.context.selectScope?(SettingsScopeSelection(machine: scope.selection.machine, project: p.key)) }) }
         }
         if let choices {
             let n: NSView & SettingsGroupRow = DesignGeometry.usesClassic(self)
@@ -167,6 +167,8 @@ public final class ProjectSettingsView: ScopedSettingsPage {
         let external = context.scope.primaryId.map { primary in members.allSatisfy { $0.environmentId == primary } } ?? false
         context.chooseIconFile?(representative.environmentId, representative.workspaceRoot, group.displayName, external) { [weak self] path in
             guard let self else { return }
+            // ProjectSettingsPanel.tsx (#28584): choosing a path again asks the server again; a cached "missing" would stick.
+            for m in self.members { ProjectIconStore.shared.forget(environmentId: m.environmentId, cwd: m.workspaceRoot) }
             self.context.updateProject?(self.members, ["faviconPath": .string(path), "projectIcon": .null], "Failed to update project icon")
         }
     }
@@ -453,8 +455,9 @@ public enum ProjectRemoval {
         } else {
             lines.append("This removes \(members.count) grouped project entries.")
         }
-        lines.append(threadCount > 0 ? "This permanently clears conversation history for those threads and any archived threads."
-                     : "This permanently clears any archived conversation history.")
+        // projectRemoval.ts (#22867).
+        lines.append(threadCount > 0 ? "Those threads and any archived threads are deleted from T3 Code. Provider sessions are kept."
+                     : "Any archived threads are deleted from T3 Code. Provider sessions are kept.")
         lines.append(isWholeGroup && !hasOtherMembers ? "This removes only the project entries, not the files on disk."
                      : "Other entries in this grouped project are unaffected.")
         lines.append("This action cannot be undone.")

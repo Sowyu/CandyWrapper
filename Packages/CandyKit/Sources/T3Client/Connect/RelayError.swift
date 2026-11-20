@@ -38,6 +38,8 @@ public struct RelayError: Error, Sendable, Equatable, CustomStringConvertible {
         case unlink = "unlink relay environment"
         case status = "get relay environment status"
         case connect = "connect relay environment"
+        case t3ChatLink = "get the linked T3 Chat account"
+        case t3ChatLinkRequest = "start linking T3 Chat"
 
         /// `ManagedRelayRequestActivity`, used for timeouts (managedRelay.ts:102-115).
         var activity: String {
@@ -47,6 +49,8 @@ public struct RelayError: Error, Sendable, Equatable, CustomStringConvertible {
             case .unlink: "Relay environment unlinking"
             case .status: "Relay environment status request"
             case .connect: "Relay environment connection"
+            case .t3ChatLink: "Relay T3 Chat link request"
+            case .t3ChatLinkRequest: "Relay T3 Chat link start"
             }
         }
     }
@@ -62,6 +66,13 @@ public struct RelayError: Error, Sendable, Equatable, CustomStringConvertible {
     public var body: RelayErrorBody? {
         if case .relay(_, let body) = kind { return body }
         return nil
+    }
+
+    /// The account's tunnel cap when the relay refused a tunnel for being at it
+    /// (`RelayEnvironmentLinkLimitExceededError`, relay.ts:554-566; useCloudLinkController.ts:47-54).
+    public var tunnelLimit: Int? {
+        guard body?.tag == "RelayEnvironmentLinkLimitExceededError", let max = body?.maxTunnels else { return nil }
+        return Int(exactly: max.rounded())
     }
 
     /// The cached relay access token was refused: drop it and exchange once more

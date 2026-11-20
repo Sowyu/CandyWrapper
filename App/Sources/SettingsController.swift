@@ -157,6 +157,10 @@ final class SettingsController {
             self?.refresh()
         }
         actions.setLoadPreference = { [weak self] id, weight in self?.setLoadPreference(id, weight) }
+        actions.manageTunnels = { [weak self] chat in
+            guard let self, let window = self.window else { return }
+            self.t3.manageTunnels(chat: chat, window: window)
+        }
         actions.updateServer = { [weak self] id in
             guard let self else { return }
             let label = id == environments.primaryId ? connections.model.thisMachine?.label : environments.label(id)

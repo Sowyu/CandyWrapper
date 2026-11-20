@@ -7,15 +7,15 @@ final class SettingsProjectChoicesView: DSView, SettingsGroupRow {
     private let group: SettingsGroupView
 
     init(context: SettingsPageContext) {
-        let duplicates = Dictionary(grouping: context.scope.projects, by: \.displayName)
-        group = SettingsGroupView(rows: context.scope.projects.map { project in
+        let duplicates = Dictionary(grouping: context.scope.projectMenu, by: \.displayName)
+        group = SettingsGroupView(rows: context.scope.projectMenu.map { project in
             let members = project.members
             let machines = duplicates[project.displayName, default: []].count > 1
                 ? members.compactMap { member in context.scope.environments.first { $0.id == member.environmentId }?.label }.joined(separator: ", ") : ""
             let path = members.first?.workspaceRoot ?? ""
             let secondary = [machines, path].filter { !$0.isEmpty }.joined(separator: " · ")
             return ProjectChoice(project: project, secondary: secondary) { [weak context] in
-                context?.selectScope?(SettingsScopeSelection(machine: nil, project: project.key))
+                context?.selectScope?(SettingsScopeSelection(machine: context?.scope.selection.machine, project: project.key))
             }
         })
         super.init(frame: .zero)

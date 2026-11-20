@@ -190,10 +190,12 @@ public final class ColorHueSliderView: DSView {
     public override func becomeFirstResponder() -> Bool { showsFocus = NSApp.currentEvent?.type == .keyDown; return true }
     public override func resignFirstResponder() -> Bool { showsFocus = false; return true }
 
-    /// Arrows ±1 degree, Shift ±10.
+    /// Arrows ±1 degree, Shift ±10, Home and End jump to 0 and 360 (color-picker.tsx:185-189, #23465).
     public override func keyDown(with event: NSEvent) {
         let step: Double = event.modifierFlags.contains(.shift) ? 10 : 1
         switch event.specialKey {
+        case .home?: hue = 0
+        case .end?: hue = 360
         case .leftArrow?, .downArrow?: hue = max(0, hue - step)
         case .rightArrow?, .upArrow?: hue = min(360, hue + step)
         default: super.keyDown(with: event); return

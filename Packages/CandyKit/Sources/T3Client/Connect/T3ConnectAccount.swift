@@ -88,6 +88,16 @@ public actor T3ConnectAccount {
         return statuses
     }
 
+    /// The account's T3 Chat link, which sets its tunnel cap (`t3ChatLinkAtom`, managedRelayState.ts:390-410).
+    public func t3ChatLink() async throws -> RelayT3ChatLinkResponse {
+        try await relay.t3ChatLink(bearer: try await clerk.clientBearer())
+    }
+
+    /// Starts linking a T3 Chat plan: the page to open in the browser.
+    public func t3ChatLinkRequest() async throws -> URL {
+        try await relay.t3ChatLinkRequest(bearer: try await clerk.clientBearer())
+    }
+
     /// Saves a listed machine as a T3 Connect route in the catalog (`RelayConnectionRegistration`).
     @discardableResult
     public func add(_ machine: T3ConnectMachine, to catalog: EnvironmentCatalog) async throws -> EnvironmentRegistration {

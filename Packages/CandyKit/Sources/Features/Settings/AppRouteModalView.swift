@@ -67,7 +67,7 @@ public final class AppRouteModalView: DSView {
                 guard let host, event.window === host.window, !host.isClosing,
                       !ModalHost.isPresented(in: host.window), !host.hasPopup else { return false }
                 if event.keyCode == 53 {
-                    if !event.isARepeat, (host.navigation as? SettingsSidebarView)?.consumeSearchEscape() != true { host.close() }
+                    if !event.isARepeat, !host.escapeTaken(), (host.navigation as? SettingsSidebarView)?.consumeSearchEscape() != true { host.close() }
                     return true
                 }
                 if event.keyCode == 48 {
@@ -87,6 +87,20 @@ public final class AppRouteModalView: DSView {
     }
 
     public override var acceptsFirstResponder: Bool { true }
+
+    /// Esc goes to the focused control first: a shortcut recorder cancels (#27151), the keybindings search clears
+    /// (#35161) and the theme editor leaves inspection or closes (#25130), each without closing Settings.
+    func escapeTaken() -> Bool {
+        guard let window else { return false }
+        if ThemeEditorController.shared.isInspecting { ThemeEditorController.shared.setInspecting(false); return true }
+        var view = window.firstResponder as? NSView
+        if let text = view as? NSTextView, text.isFieldEditor, let owner = text.delegate as? NSView { view = owner }
+        while let v = view {
+            if let handler = v as? RouteModalEscapeHandler, handler.takeRouteModalEscape() { return true }
+            view = v.superview
+        }
+        return false
+    }
 
     public static func surfaceFrame(in size: NSSize) -> NSRect {
         let inset: CGFloat = size.width >= 1024 ? 40 : size.width >= 640 ? 24 : 0
@@ -163,6 +177,11 @@ public final class AppRouteModalView: DSView {
             return
         }
         isClosing = true
+        // AppRouteModal.tsx (#25131): end editing first so a field that commits on blur keeps what was typed.
+        if let focus = window?.firstResponder as? NSView, focus === self || focus.isDescendant(of: self)
+            || ((focus as? NSTextView)?.delegate as? NSView)?.isDescendant(of: self) == true {
+            window?.makeFirstResponder(self)
+        }
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
         let finish: @MainActor () -> Void = { [weak self] in
             guard let self else { return }
@@ -239,4 +258,9 @@ public final class AppRouteModalView: DSView {
         }
         CATransaction.commit()
     }
+}
+
+/// A view inside Settings, or floating over it, that takes Esc from its focused control before Settings closes.
+@MainActor protocol RouteModalEscapeHandler: AnyObject {
+    func takeRouteModalEscape() -> Bool
 }

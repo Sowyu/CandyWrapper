@@ -153,6 +153,23 @@ struct UsageTests {
 
     static let now = T3Timestamp.parseEpochMs("2026-10-10T12:00:00.000Z")!
 
+    /// #34421: a Cursor Overall that only repeats Cursor Models shows one untitled card.
+    @Test func cursorDuplicateOverall() {
+        func pool(_ auto: Double) -> UsageLimitPool {
+            let p = Self.provider("cursor", driver: "cursor", email: "a@x.com", windows: [
+                UsageLimitWindow(id: "totalPercentUsed", kind: "monthly", label: "Overall", usedPercent: 30, resetsAt: "2026-11-01T00:00:00.000Z"),
+                UsageLimitWindow(id: "autoPercentUsed", kind: "monthly", label: "Auto", usedPercent: auto, resetsAt: "2026-11-01T00:00:00.000Z")])
+            let accounts = UsageLimitsLogic.accounts([UsageLimitsEnvironment(environmentId: "e", label: "E", providers: [p], sources: [])])
+            return UsageLimitsLogic.pools(accounts, nowMs: Self.now)[0]
+        }
+        let same = pool(30)
+        #expect(UsageLimitsLogic.displayWindows(same).map(\.id) == ["autoPercentUsed"])
+        #expect(UsageLimitsLogic.cursorWindowDetails("autoPercentUsed", pool: same).map { $0.label == nil && $0.description == nil } == true)
+        let different = pool(10)
+        #expect(UsageLimitsLogic.displayWindows(different).map(\.id) == ["totalPercentUsed", "autoPercentUsed"])
+        #expect(UsageLimitsLogic.cursorWindowDetails("autoPercentUsed", pool: different)?.label == "Cursor Models")
+    }
+
     @Test func windowMath() {
         // A five hour window resetting in 2h 30m: 50% elapsed.
         let w = UsageLimitWindow(id: "five_hour", kind: "session", label: "5h", usedPercent: 70, resetsAt: "2026-10-10T14:30:00.000Z", windowDurationMins: 300)
@@ -339,7 +356,7 @@ struct ScheduledTaskLogicTests {
         d.replayKey = "delivery"
         d.coalesceKey = "{{body.id}}"
         d.coalesceWindowSeconds = "5"
-        #expect(upsert() == .failure(.several([.invalidWebhook("Replay key must contain a valid request placeholder."),
+        #expect(upsert() == .failure(.several([.invalidWebhook("Duplicate request key must contain a valid request placeholder."),
                                                .invalidWebhook("Coalesce window must be whole seconds from 10 to 3600.")])))
         #expect(ScheduledTaskLogic.isDedupeTemplate("{{ request }}") && ScheduledTaskLogic.isDedupeTemplate("gh-{{headers.x-id}}"))
         #expect(!ScheduledTaskLogic.isDedupeTemplate("{{body}} }}") && !ScheduledTaskLogic.isDedupeTemplate("{{ query..a }}"))

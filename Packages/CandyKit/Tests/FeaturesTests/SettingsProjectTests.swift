@@ -203,7 +203,7 @@ struct SettingsProjectTests {
     @Test func removalPromptLines() {
         let m = SettingsScopeProject.Member(environmentId: "e", projectId: "p", title: "demo", workspaceRoot: "/r", environmentLabel: "Mac")
         #expect(ProjectRemoval.message(members: [m], allMembers: [m], hasOtherMembers: false, groupName: "demo", threadCount: 2)
-            == "Remove project \"demo\" and delete its 2 threads?\nPath: /r\nEnvironment: Mac\nThis permanently clears conversation history for those threads and any archived threads.\nThis removes only the project entries, not the files on disk.\nThis action cannot be undone.")
+            == "Remove project \"demo\" and delete its 2 threads?\nPath: /r\nEnvironment: Mac\nThose threads and any archived threads are deleted from T3 Code. Provider sessions are kept.\nThis removes only the project entries, not the files on disk.\nThis action cannot be undone.")
         let copy = ConfirmCopy.resolve("Remove project \"demo\"?\nPath: /r")
         #expect(copy.title == "Remove project \"demo\"?" && copy.description == "Path: /r")
         #expect(ConfirmCopy.resolve("Send SIGKILL to process 1? This cannot be handled.") == ("Send SIGKILL to process 1?", "This cannot be handled."))

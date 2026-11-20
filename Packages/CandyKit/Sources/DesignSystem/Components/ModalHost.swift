@@ -46,6 +46,12 @@ public final class ModalHost: DSView {
         window?.contentView?.subviews.contains { ($0 as? ModalHost)?.isClosing == false } ?? false
     }
 
+    /// True while a confirmation (an alert dialog) covers `window`: app shortcuts wait behind it
+    /// (shortcuts/dispatcher.ts `isInsideConfirmation`, #27157).
+    public static func confirmationPresented(in window: NSWindow?) -> Bool {
+        window?.contentView?.subviews.contains { ($0 as? ModalHost).map { !$0.isClosing && $0.panel.kind == .alertDialog } ?? false } ?? false
+    }
+
     /// For the gallery and tests: the host statically open, without a window or motion.
     public init(panel: DialogView) {
         self.panel = panel
@@ -167,7 +173,12 @@ public final class ModalHost: DSView {
     func trapFocus() {
         let views = focusableViews
         for (i, v) in views.enumerated() { v.nextKeyView = views[(i + 1) % views.count] }
-        // ponytail: initial focus goes to the first focusable view in reading order (often the close button); T3 can name a target with `initialFocus`, add that when a dialog sets it
+        // ConfirmDialogHost.tsx (#18187): a confirmation opens on its primary action, the last footer button.
+        // ponytail: other dialogs focus the first focusable view in reading order; T3 can name a target with `initialFocus`, add that when a dialog sets it
+        if panel.kind == .alertDialog, let primary = panel.footerButtons.last, views.contains(where: { $0 === primary }) {
+            window?.makeFirstResponder(primary)
+            return
+        }
         window?.makeFirstResponder(views.first ?? self)
     }
 

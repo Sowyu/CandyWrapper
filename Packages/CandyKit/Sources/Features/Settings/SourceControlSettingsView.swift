@@ -129,7 +129,16 @@ public final class SourceControlSettingsView: ScopedSettingsPage {
             binder.add { [weak self] in self?.updateDiscovery() }
             binder.add { [weak self] in self?.updateTrackers() }
         } else { body = [textGenerationSection()] }
+        // SourceControlSettings.tsx (#37509): a CLI login made outside the app shows when the window comes back.
+        if discoveryEnabled {
+            activeObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { if self?.window?.isVisible == true { self?.scan() } }
+            }
+        }
     }
+
+    private var activeObserver: NSObjectProtocol?
+    isolated deinit { if let activeObserver { NotificationCenter.default.removeObserver(activeObserver) } }
 
     /// The environment discovery inspects (the representative, `environment`).
     private var environmentId: String? { context.scope.representative?.id }
@@ -560,7 +569,7 @@ public final class SourceControlSettingsView: ScopedSettingsPage {
         let writerPicker = SettingsModelPickerControl(context: context, key: "sourceControlWriterModelSelection")
         let writerGroup = SettingsControlGroup([writerPicker, writerSwitch])
         let writerRow = row("source-control-writer-model",
-                            detail: "Model for source control text and branch or bookmark names. Off uses the environment's text generation model.",
+                            detail: "Model for commit messages, pull request text, and branch or bookmark names. When disabled, use the text generation model configured for this environment.",
                             control: writerGroup)
         _ = bindServerRow(writerRow, keys: ["sourceControlWriterModelSelection"], reset: nil)
         writerSwitch.onChange = { [weak self] on in
@@ -587,7 +596,7 @@ public final class SourceControlSettingsView: ScopedSettingsPage {
         let enabled = SwitchView(isOn: false)
         enabled.setAccessibilityLabel("Review guides")
         let enabledRow = row("review-guides",
-                             detail: "Adds a Guide tab to pull requests: an agent writes a tour of the change, stop by stop, with the calls a maintainer should make.",
+                             detail: "Add a Guide tab to pull requests. An agent explains the changes and points out decisions that need review.",
                              control: enabled)
         _ = bindServerRow(enabledRow, keys: ["reviewGuidesEnabled"], reset: nil)
         enabled.onChange = { [weak self] on in self?.context.patchServer(["reviewGuidesEnabled": .bool(on)]) }
@@ -956,8 +965,10 @@ final class GitHubTokenView: DSView, SettingsGroupRow {
         guard let request = context.request, !saving, let settings = context.configs[environmentId]?.settings else { return }
         saving = true
         let env = environmentId
-        var next = tokens
-        next[target] = .string(value)
+        // serverSettings.ts (#29554): the server keys tokens by trimmed, lowercased host, so merge on that key.
+        func host(_ h: String) -> String { h.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        var next = Dictionary(tokens.map { (host($0.key), $0.value) }, uniquingKeysWith: { _, last in last })
+        next[host(target)] = .string(value)
         let patch = settings.sourceControlHostPatch("github", ["tokens": .object(next)])
         Task { [weak self] in
             do {

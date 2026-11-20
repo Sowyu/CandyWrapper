@@ -171,8 +171,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
                 guard size <= 512 * 1024 else { throw ThemePalette.FileError(message: "That file is too large to be a theme.") }
                 let data = try Data(contentsOf: url)
                 guard data.count <= 512 * 1024 else { throw ThemePalette.FileError(message: "That file is too large to be a theme.") }
-                let object = try JSONSerialization.jsonObject(with: data)
-                let theme = try self.themes.install(ThemeVSCodeImport.isTheme(object) ? ThemeVSCodeImport.parse(object) : ThemePalette.parseFile(object))
+                let theme = try self.themes.install(ThemeVSCodeImport.parseImport(data))
                 if let single = theme.singleAppearance {
                     self.themes.assignHalf(single, theme.id)
                     self.context.toast?("\(theme.label) added", "It’s now your \(single.rawValue) theme.", .success)

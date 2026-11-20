@@ -241,6 +241,10 @@ public class SettingsPageBase: SettingsStackView {
         case .array(let a): return "\(a.count) \(a.count == 1 ? "item" : "items")"
         case .object(let o):
             if let model = o["model"]?.stringValue { return model }
+            // SettingInheritance.tsx (#23450): a background activity profile by its name.
+            if key == "backgroundActivity", let profile = o["profile"]?.stringValue {
+                return ["balanced": "Balanced", "performance": "Performance", "battery-saver": "Battery saver", "custom": "Advanced"][profile] ?? profile
+            }
             if let mode = o["mode"]?.stringValue {
                 return ["repo_conventions": "Repository conventions", "conventional_commits": "Conventional Commits", "custom": "Custom instructions"][mode] ?? mode
             }

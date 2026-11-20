@@ -7,9 +7,9 @@ import T3Protocol
 /// Working section moved here from General; Guest links is new. Signed out of T3 Connect, Guest links offers
 /// Sign in in place of its switch (`GuestLinksRowWithSignIn`), but only once the account has loaded.
 public final class BetaSettingsView: SettingsPageBase {
-    static let guestDetail = "Share a thread with a guest who watches it live in their browser and sends messages you approve. Needs T3 Connect: sign in and link this machine in Sharing & access. While it is off, every guest link stops working."
-    static let linkedDetail = "Let agents here work on your other machines, and theirs here. Turn it on for each machine, then link them in Connections. While it is off, nothing new starts over a link; tasks already running finish."
-    static let guestSignedOutDetail = "Share a thread with a guest who watches it live in their browser and sends messages you approve. Sign in to T3 Connect to use guest links."
+    static let guestDetail = "Share a thread with a guest who watches it live in a browser and sends messages you approve. Needs T3 Connect: sign in and link this machine in Sharing & access. Turning it off stops every guest link."
+    static let linkedDetail = "Let agents here work on your other machines, and theirs here. Turn it on for each machine, then link them in Connections. While off, nothing new starts over a link; running tasks finish."
+    static let guestSignedOutDetail = "Share a thread with a guest who watches it live in a browser and sends messages you approve. Sign in to T3 Connect to use guest links."
 
     public override init(context: SettingsPageContext) {
         super.init(context: context)

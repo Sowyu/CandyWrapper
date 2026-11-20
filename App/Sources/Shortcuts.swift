@@ -1,4 +1,5 @@
 import AppKit
+import DesignSystem
 import Features
 import T3Protocol
 
@@ -169,6 +170,8 @@ final class Shortcuts {
         if let nested, nested.keyHandlers.contains(where: { $0(event) }) { return true }
         if !paletteOpen, keyHandlers.indices.contains(where: { (nested == nil || !chatKeyHandlers.contains($0)) && keyHandlers[$0](event) }) { return true }
         guard let stroke else { return false }
+        // dispatcher.ts (#27157): a bound shortcut does nothing while a confirmation is open, and its key stops here.
+        if ModalHost.confirmationPresented(in: window), resolve(stroke) != nil { return true }
         let used = run(stroke, paletteOpen: paletteOpen)
         if used, lastCommand == "thread.undo" { heldUndoKey = event.keyCode }
         return used

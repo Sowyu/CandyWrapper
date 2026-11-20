@@ -84,6 +84,24 @@ public actor RelayClient {
         _ = try await perform(request, .unlink, as: RelayOkResponse.self)
     }
 
+    /// `GET /v1/client/t3chat-link` (managedRelayState.ts:390-410): the linked T3 Chat plan, which sets the tunnel cap.
+    public func t3ChatLink(bearer: String) async throws -> RelayT3ChatLinkResponse {
+        var request = makeRequest("GET", "/v1/client/t3chat-link")
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        return try await perform(request, .t3ChatLink, as: RelayT3ChatLinkResponse.self)
+    }
+
+    /// `POST /v1/client/t3chat-link-requests`: the T3 Chat page that links the plan to this account.
+    public func t3ChatLinkRequest(bearer: String) async throws -> URL {
+        var request = makeRequest("POST", "/v1/client/t3chat-link-requests")
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        let url = try await perform(request, .t3ChatLinkRequest, as: RelayT3ChatLinkRequestResponse.self).url
+        guard let parsed = URL(string: url), parsed.scheme == "https" else {
+            throw RelayError(.invalidResponse("T3 Chat link URL"), action: .t3ChatLinkRequest)
+        }
+        return parsed
+    }
+
     // MARK: DPoP routes (relay access token from the t3-relay JWT)
 
     /// `POST /v1/environments/:id/status` with scopes `environment:status environment:connect`

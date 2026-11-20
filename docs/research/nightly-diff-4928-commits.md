@@ -215,7 +215,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 962eeefa03 | #24761 | thread | fix(client-runtime): retry messages after socket loss with the same command ID | left (thread-4): not checked; the CandyWrapper side is command dispatch (App ComposerController and T3Client ConnectionSupervisor) |
 | de21fbcff3 | #25919 | thread | fix(client): a thread whose subscription dies on a defect resubscribes instead of staying blank | left (thread-4): not checked; the CandyWrapper side is thread loading and subscriptions (App ThreadSession, T3Store ThreadStore and ThreadReducer) |
 | 7c22095fcc | #34623 | connections | fix(client-runtime): a stalled sign-in token or dead route no longer holds a reconnect for 40 seconds | port |
-| e396bb2e26 | #37990 | device | feat(client-runtime): direct links pair with the device key and renew themselves | left (settings-2): T3Client/Connect work (direct links pair with the DPoP device key and renew); another agent held T3Client's connection code this session |
+| e396bb2e26 | #37990 | device | feat(client-runtime): direct links pair with the device key and renew themselves | left (settings-6): direct links pairing with the DPoP device key and renewing (accessTokenRenewal) need a DPoP token exchange in EnvironmentHTTP.pair, the key from DPoPKeyStore, a renewal sleep like T3ConnectAuthorizer.keepSessionAlive, and capability checks; not started |
 
 ## Port group composer-markdown (1)
 
@@ -278,8 +278,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 1b952135a1 | #29280 | settings | fix(providers): remove incomplete ChatGPT connections | port |
-| 315b06c5ec | #21249 | settings | feat(providers): managed Antigravity and Codex installs can update past their pin | port |
+| 1b952135a1 | #29280 | settings | fix(providers): remove incomplete ChatGPT connections | free with the runtime: the server removes incomplete ChatGPT connections; the web change is mobile only |
+| 315b06c5ec | #21249 | settings | feat(providers): managed Antigravity and Codex installs can update past their pin | ported (settings-6): a signed-in managed Codex behind its release shows Update Codex (CodexSetupView, provider.install.start); the Antigravity half is server-side |
 
 ## Port group archive-delete (1)
 
@@ -349,8 +349,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 92f1b8ec25 | #34139 | settings | fix(peer): link requests use the addresses the app already has for a machine | port |
-| f991781872 | #34721 | thread | fix(server,web,mobile): messages from a linked environment name the thread that sent them | left (thread-4): not checked; the CandyWrapper side is linked environments (T3Store, Features/Thread user message attribution) |
+| 92f1b8ec25 | #34139 | settings | fix(peer): link requests use the addresses the app already has for a machine | already in CandyWrapper: PeerLinkDialog.machines takes the machine's saved routes and its reported directEndpoints (App/Sources/SettingsLinkedEnvironments.swift:80-81) |
+| f991781872 | #34721 | thread | fix(server,web,mobile): messages from a linked environment name the thread that sent them | held for the Thread agent: the message header for a linked environment's sender |
 
 ## Port group accessibility (1)
 
@@ -471,8 +471,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| a941ab544d | #37823 | connections | fix(connect): restrict relay configuration and token destinations | left (settings-2): T3Client/Connect relay allow list for configuration and token destinations; held for the T3Client owner |
-| 6b45d90047 | #38892 | connections | fix(connect): let remote clients with relay configuration link | left (settings-2): with #37823, T3Client/Connect |
+| a941ab544d | #37823 | connections | fix(connect): restrict relay configuration and token destinations | n/a (settings-6): the destinations are enforced by the server and relay; the client half guards linking an environment and pushing relay configuration, which CandyWrapper leaves to T3 Code's app (SettingsHostAccess linkTooltip). Port with linking |
+| 6b45d90047 | #38892 | connections | fix(connect): let remote clients with relay configuration link | n/a (settings-6): with #37823; remote clients linking needs CandyWrapper to link environments itself |
 
 ## New feature simlock (6)
 
@@ -881,52 +881,52 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| e6ca17001d | #26917 | connections | fix(web): update everything no longer waits on npm for service hosts | left (panels-4): Update everything lives in Features/Updates and Settings, outside this pass; service hosts skip the npm wait (updateEverything.logic.ts) |
-| de386ada9e | #23244 | connections | fix(web): create tasks on a permitted connected environment | left (panels-4): scheduled tasks environment choice, held for the Settings agent (ScheduledTasksSettings) |
-| 4092c4ac56 | #27008 | connections | fix(client): retry the permissions check after a reconnect | left (panels-4): the permissions note retries after a reconnect; needs a session-state reread on reconnect in ConnectionsHostViews' host (Settings agent) |
+| e6ca17001d | #26917 | connections | fix(web): update everything no longer waits on npm for service hosts | left (settings-6): App/Sources/UpdateEverything.swift still waits on npm for service hosts; needs updateEverything.logic.ts's service-host skip |
+| de386ada9e | #23244 | connections | fix(web): create tasks on a permitted connected environment | left (settings-6): the scheduled task editor should default to a connected environment whose session may create tasks (ScheduledTasksSettings.tsx); needs the scope check in ScheduledTaskEditor's environment pick |
+| 4092c4ac56 | #27008 | connections | fix(client): retry the permissions check after a reconnect | left (settings-6): the permissions note needs SettingsHostAccess to reread the session after a reconnect (a supervisor phase observer) |
 | 65b0ab8c91 | #27101 | connections | fix(client): dead connection routes are probed 30x less often | already in CandyWrapper (panels-4): silent routes back off from 2 to 30 minutes (connection-2, Environments.routeBackoff) |
-| ebd1265ccf | #21706 | connections | fix(connect): the remove dialog says whether a T3 Connect environment is still on the account | left (panels-4): the T3 Connect remove dialog wording, held for the Settings agent |
-| 503bcaaf99 | #22887 | connections | fix: keep offline environments out of thread reorder writes | left (panels-4): offline environments in thread reorder writes, held for the Sidebar agent |
-| b1b3c10e24 | #23532 | connections | fix(clients): keep accepted server updates through disconnects | left (panels-4): Update everything lives in Features/Updates and Settings, outside this pass; accepted updates survive disconnects (outdatedHostUpdate.ts) |
-| fd78ea42fc | #23753 | connections | fix(web): show an error when merge-back or disconnect fails | left (panels-4): merge-back and disconnect errors in the relationships control, held for the Thread agent |
-| e5871b6719 | #24691 | connections | fix(web): Reconnect on a switched-off environment switches it back on | left (panels-4): Reconnect on a switched-off environment, a composer banner, held for the Composer agent |
-| 9e97921ad8 | #24716 | connections | fix(clients): a route added after a reorder no longer disappears | left (panels-4): route reorder in the routes list, held for the Settings agent |
-| d2d1e4f50e | #27847 | connections | fix(updates): version checks respect your configured npm registry | left (panels-4): Update everything lives in Features/Updates and Settings, outside this pass; npm registry for version checks is server side; CW reads the result |
-| a05e8fde08 | #26160 | connections | fix(web): Add Environment dialog reopens on Remote link instead of a stale SSH selection | left (panels-4): Add Environment dialog mode reset, held for the Settings agent |
+| ebd1265ccf | #21706 | connections | fix(connect): the remove dialog says whether a T3 Connect environment is still on the account | left (settings-6): the remove dialog needs the machine's relay registration from T3ConnectController.machines to say whether it's still on the account |
+| 503bcaaf99 | #22887 | connections | fix: keep offline environments out of thread reorder writes | held for the sidebar agent: offline environments in thread reorder writes |
+| b1b3c10e24 | #23532 | connections | fix(clients): keep accepted server updates through disconnects | left (settings-6): accepted server updates surviving a disconnect needs outdatedHostUpdate.ts's accepted set in App ServerUpdates |
+| fd78ea42fc | #23753 | connections | fix(web): show an error when merge-back or disconnect fails | held for the Thread agent: merge-back and disconnect errors |
+| e5871b6719 | #24691 | connections | fix(web): Reconnect on a switched-off environment switches it back on | held for the composer agent: Reconnect on a switched-off environment |
+| 9e97921ad8 | #24716 | connections | fix(clients): a route added after a reorder no longer disappears | left (settings-6): a route added after a reorder needs EnvironmentRoutesList's reorder to keep unseen routes (EnvironmentCatalog reorder) |
+| d2d1e4f50e | #27847 | connections | fix(updates): version checks respect your configured npm registry | free with the runtime: the server reads the npm registry; CandyWrapper shows the version it reports |
+| a05e8fde08 | #26160 | connections | fix(web): Add Environment dialog reopens on Remote link instead of a stale SSH selection | already in CandyWrapper: SettingsController builds a fresh Add Environment form on Remote link each time it opens (AddEnvironmentDialog.make) |
 | 1aa46d0cdf | #27998 | connections | fix(connect): T3 Connect sockets no longer drop every hour | already in CandyWrapper (panels-4): T3 Connect sockets renew their token in the last minute (connection, T3ConnectAuthorizer.swift:310-338) |
-| 8f0d66de5f | #26109 | connections | fix(web): servers still restarting after an app update no longer offer the update again | left (panels-4): Update everything lives in Features/Updates and Settings, outside this pass; servers restarting after an update |
+| 8f0d66de5f | #26109 | connections | fix(web): servers still restarting after an app update no longer offer the update again | left (settings-6): servers still restarting after an update need ServerUpdates to hold the offer until the new version reports |
 | 7cd9a73b2f | #24493 | connections | fix(web): thread alerts missed during a disconnect fire on reconnect | ported (panels-2): a stale shell pauses its environment's tracker instead of forgetting it, so what changed during the disconnect notifies once on reconnect |
 | aa46f7ada4 | #25591 | connections | fix(client-runtime): re-pairing at a new address uses the new token | ported (panels-4): a route paired at a new address goes first among its kind (EnvironmentRoute.upsert, connection/routes.ts:159-169) |
 | 95d4da5a93 | #28592 | connections | fix(clients): open a delegated child's approval on the environment it runs in | already in CandyWrapper: the child input banner opens the child's scoped thread id, which carries its own environment (Features/Thread/ThreadLineageController `updateChildInputs`) |
-| 322f6544df | #30498 | connections | feat(web): show a newly created pairing link without expanding the client list | left (panels-4): new pairing link shown without expanding, held for the Settings agent |
-| d520d5bb85 | #26464 | connections | fix(web): show saved service access with Local environment off | left (panels-4): saved service access with Local off, held for the Settings agent |
-| dff0b1159b | #25198 | connections | fix(connect): show why relay unlink failed | left (panels-4): relay unlink failure reason, held for the Settings agent |
-| 7fe1310ee5 | #32937 | connections | fix(web): Copy MCP URL uses the T3 Connect address | left (panels-4): Copy MCP URL uses the T3 Connect address; needs presentation.ts's route choice in the Settings MCP row |
+| 322f6544df | #30498 | connections | feat(web): show a newly created pairing link without expanding the client list | left (settings-6): a new pairing link should open its share panel at once (`defaultShareOpen` for the newest link in the Authorized clients list) |
+| d520d5bb85 | #26464 | connections | fix(web): show saved service access with Local environment off | left (settings-6): saved service access with Local environment off; the rows hide with the primary today (SettingsHostAccess) |
+| dff0b1159b | #25198 | connections | fix(connect): show why relay unlink failed | left (settings-6): an unlink failure should name its reason (relayFailureReason); CandyWrapper doesn't unlink environments itself, only deregisters from the account page |
+| 7fe1310ee5 | #32937 | connections | fix(web): Copy MCP URL uses the T3 Connect address | held for settings-5: Copy MCP URL belongs to Use T3 Code in another app |
 | b5256ad09c | #22839 | connections | fix(opencode): verify CLI updates when loopback server is still running | free with the runtime (panels-4): OpenCode CLI update verification is server side |
-| 25f4c9d44e | #23194 | connections | fix(web): offer retry while an environment reconnects | left (panels-4): retry while reconnecting, a composer banner, held for the Composer agent |
-| ba32aabf62 | #23111 | connections | fix(scheduler): show short server timezone on fixed-time labels | left (panels-4): short server timezone on scheduled task labels, held for the Settings agent |
-| 54a5c51a58 | #21530 | connections | fix(web): fall back to a readable server for shared repositories | left (panels-4): PR list falls back to a readable server for shared repositories; same work as #34088 in PullRequestsPage |
-| 42d645ae9e | #32924 | connections | fix(web): update Retry stops re-sending servers already on the target version | left (panels-4): Update everything lives in Features/Updates and Settings, outside this pass; Retry skips servers already on the target |
-| 7eca0ed885 | #29462 | connections | fix(web): hand-started t3 servers get an update command that updates them | left (panels-4): Update everything lives in Features/Updates and Settings, outside this pass; hand-started servers' update command |
-| 6790f85f53 | #27692 | connections | fix(web): point pairing copy at Sharing & access | left (panels-4): pairing copy points at Sharing & access, held for the Settings agent |
+| 25f4c9d44e | #23194 | connections | fix(web): offer retry while an environment reconnects | held for the composer agent: retry while an environment reconnects |
+| ba32aabf62 | #23111 | connections | fix(scheduler): show short server timezone on fixed-time labels | left (settings-6): fixed-time labels need the server's short time zone (`scheduleTimeZoneLabel` with the list's `timeZone`) in ScheduledTaskLogic.scheduleLabel |
+| 54a5c51a58 | #21530 | connections | fix(web): fall back to a readable server for shared repositories | left: PullRequestsPage readable-server fallback, same work as #34088 |
+| 42d645ae9e | #32924 | connections | fix(web): update Retry stops re-sending servers already on the target version | left (settings-6): Retry in Update everything should skip servers already on the target (UpdateEverything plan) |
+| 7eca0ed885 | #29462 | connections | fix(web): hand-started t3 servers get an update command that updates them | left (settings-6): hand-started servers' update command (ServerUpdateCopy.Manual for `t3 serve` without a launcher) |
+| 6790f85f53 | #27692 | connections | fix(web): point pairing copy at Sharing & access | ported (settings-6): the link dialog, its code hint and Forget point at Sharing & access and Authorized clients (LinkedEnvironmentsViews, SettingsLinkedEnvironments; LinkedEnvironmentsSettings.tsx:136, 321, 388-400) |
 | fa9d85fad5 | #35327 | connections | fix(web): a server updated with the app reconnects as soon as it is ready | n/a (settings-3): CandyWrapper has no relaunch handoff of server updates; ServerUpdater.run already retries the connection every second while a server restarts |
 | 00f617db4e | #24400 | connections | fix(client-runtime): recover subscriptions that stop on a healthy connection | already in CandyWrapper (panels-4): a stream that fails on a healthy socket resubscribes with backoff (ConnectionSupervisor.swift:937-956) |
 | cbf0f0a83f | #36445 | connections | fix(web): screen readers read the Update everything machine list as a table | n/a (panels-4): an ARIA table role; CW's Update everything list is native AX rows |
-| 757f71a7f6 | #29788 | connections | fix(client-runtime): new T3 Connect machines appear without signing in again | left (panels-4): refresh the T3 Connect machine list on app activation; Environments.swift:94 checks routes only |
+| 757f71a7f6 | #29788 | connections | fix(client-runtime): new T3 Connect machines appear without signing in again | ported (settings-6): returning to the app lists the T3 Connect account again, so a machine linked meanwhile shows (T3ConnectController, wakeups.ts shouldRelistAccountAfterWakeup) |
 | bd9ff7eb2a | #33244 | connections | fix(client-runtime): recover thread list updates after stream defects | already in CandyWrapper (panels-4): the thread list stream resubscribes after a bad value (ConnectionSupervisor.swift:950-956) |
 | ca7a9448b8 | #24932 | connections | fix(client-runtime): Reconnect works while the network reports offline | already in CandyWrapper: connection-2 made Reconnect work while the device reports offline (ConnectionSignalTests) |
-| efae4e9da1 | #36559 | connections | fix(client): retry unread thread visits after reconnect | left (panels-4): ThreadSession.swift:1347-1394 drops a failed thread.visit; retry it on the next connection (ThreadSession, outside these areas) |
+| efae4e9da1 | #36559 | connections | fix(client): retry unread thread visits after reconnect | left: ThreadSession.swift drops a failed thread.visit; retry on the next connection (Thread agent's file) |
 | ead133ce70 | #28297 | connections | fix(web): SSH port field no longer turns 22.5 into port 22 | already in CandyWrapper (panels-4): Swift Int() rejects 22.5 (SshEnvironmentTarget.manual) |
-| acd192fc64 | #36726 | connections | fix(web): removing an environment dismisses its notification toasts | left (panels-4): removing an environment dismisses its toasts; ThreadNotificationCoordinator, outside these areas |
-| 12102c74a3 | #28907 | connections | fix(web,mobile): Linked environments shows links made outside the app | left (panels-4): links made outside the app in Linked environments, held for the Settings agent |
-| 5583b26460 | #36793 | connections | fix(server,client): preserve literal JSON command output | left (panels-4): literal JSON command output; needs commandOutput.ts's raw text path in T3Store CommandOutputBuffer, checked with a transcript |
+| acd192fc64 | #36726 | connections | fix(web): removing an environment dismisses its notification toasts | left: removing an environment should dismiss its toasts in ThreadNotificationCoordinator |
+| 12102c74a3 | #28907 | connections | fix(web,mobile): Linked environments shows links made outside the app | left (settings-6): Linked environments should list links made outside the app (`peerLinks` from the host's list, not only the ones created here) |
+| 5583b26460 | #36793 | connections | fix(server,client): preserve literal JSON command output | left: literal JSON command output needs commandOutput.ts's raw path in T3Store CommandOutputBuffer |
 | a6765d41d5 | #33795 | connections | fix(web): audio and server spinners respect reduced motion | already in CandyWrapper (panels-4): SpinnerView holds a still arc under Reduce Motion (DesignSystem SpinnerView.swift:5), which ThreadServersView uses |
-| e1458f25e2 | #32048 | connections | fix(web): track switch no longer blocked when Local environment is off | left (panels-4): Update everything lives in Features/Updates and Settings, outside this pass; track switch with Local off |
-| 1672b51630 | #32157 | connections | fix(web): Add Environment drops the old tab's error when switching mode | left (panels-4): Add Environment drops the old tab's error, held for the Settings agent |
+| e1458f25e2 | #32048 | connections | fix(web): track switch no longer blocked when Local environment is off | held for settings-5: the track switch |
+| 1672b51630 | #32157 | connections | fix(web): Add Environment drops the old tab's error when switching mode | already in CandyWrapper: AddEnvironmentFormView.setSSHMode clears the error when the tab changes |
 | 399ea10f4e | #37490 | connections | fix(web): Update everything no longer offers a Nightly build to a Stable desktop app | ported (settings-3): UpdateEverythingLogic.serverTargets skips a Stable desktop host for a Nightly target |
 | 27411651a4 | #37825 | connections | fix(auth): bind automatic pairing codes to peer links | free with the runtime (panels-4): server-side pairing code binding |
-| c48825322d | #38442 | connections | fix(web): pairing links never use the desktop app's t3code:// address | left (panels-4): pairing links never use t3code://, held for the Settings agent (AuthorizedClientsSettings) |
-| dcaff67177 | #38980 | connections | fix(web): removing a connection withdraws its permission update notice | left (panels-4): removing a connection withdraws its permission notice; ThreadSession's permission notice, outside these areas |
+| c48825322d | #38442 | connections | fix(web): pairing links never use the desktop app's t3code:// address | already in CandyWrapper: share links come from the route in use (`EnvironmentRoute.origin`), which is http or https, never t3code:// (SettingsHostAccess.accessModel) |
+| dcaff67177 | #38980 | connections | fix(web): removing a connection withdraws its permission update notice | left: removing a connection should withdraw ThreadSession's permission notice |
 
 ## Small fixes, device (10)
 
@@ -936,12 +936,12 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 9bd5e12242 | #24106 | device | fix(web): restored Device view waits for device state before setup | skip (panels-3): restoring a Device view needs a live device host to check; the sandbox has no simulator runtime or Android SDK (parity-checklist Device panel) |
 | 43b56b1790 | #23339 | device | fix(device): forward numeric keypad keys to iOS simulators | ported (panels-3): the numeric keypad's keys map to HID usages 0x54-0x63 and 0x67 on iOS, DevicePanelStreamClient.key |
 | 09ace626bb | #28323 | device | fix(web): device tools keep the typed text when a command fails | already in CandyWrapper (panels-3): DeviceToolsDrawerView never clears a field after a command, so a failure keeps the text; T3 also clears it after success, which CW does not |
-| a821f039c1 | #29352 | device | fix(client-runtime): connection diagnosis no longer blames the host while this device's sign-in loads | left (panels-3): diagnosis while this device's sign-in loads lives in Features/Settings ConnectionDiagnosis.swift, held for the Settings agent |
+| a821f039c1 | #29352 | device | fix(client-runtime): connection diagnosis no longer blames the host while this device's sign-in loads | left (settings-6): ConnectionDiagnosis should not blame the host while this device's sign-in loads (diagnosis.ts); needs the T3 Connect loading state passed in |
 | 3ee55151e0 | #29912 | device | fix(web): device host checks show the error without a stack trace | n/a (panels-3): CandyWrapper shows the server's message for a host check, never an Effect cause with a stack |
 | 202d5b5616 | #25971 | device | fix(devices): keep devices listed when simulator discovery fails | skip (panels-3): the discovery warning popover with Retry needs a device host whose discovery fails to check; the sandbox has no device runtime |
 | f475de2f75 | #27030 | device | fix(web): device tool update buttons fit their popovers | n/a (panels-3): CandyWrapper has no device tool update buttons yet (parity-checklist Device tools drawer, tool versions remain) |
 | aa37097093 | #35664 | device | fix(web): streamed device toolbar starts at the panel size | n/a (panels-3): a streamed browser tab in CandyWrapper sizes from its own view's bounds, not a published panel rect |
-| 9e32c95576 | #33199 | device | fix(client-runtime): show routes whose host refused this device's sign-in | left (panels-3): routes a host refused this device's sign-in need the connection driver's refusal state and Settings EnvironmentRoutesList, held for the Settings agent |
+| 9e32c95576 | #33199 | device | fix(client-runtime): show routes whose host refused this device's sign-in | left (settings-6): routes a host refused this device's sign-in need the driver's refusal state in EnvironmentRoutesList |
 
 ## Small fixes, diff (18)
 
@@ -1179,118 +1179,118 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 80ae9b5301 | #23223 | settings | fix(web): show theme conflicts even when another import fails | port |
-| bae3c1962c | #23160 | settings | fix(settings): offer Use existing CLI in managed Codex settings | port |
-| 08a463e299 | #24472 | settings | fix(settings): project edits keep overrides the client does not know | port |
+| 80ae9b5301 | #23223 | settings | fix(web): show theme conflicts even when another import fails | skip (settings-6): CandyWrapper's Add theme takes one file at a time, so no batch can fail beside a conflict (AppearanceSettingsView.addTheme) |
+| bae3c1962c | #23160 | settings | fix(settings): offer Use existing CLI in managed Codex settings | ported (settings-6): the Codex settings card offers Use existing CLI while signed out (CodexSetupView.render) |
+| 08a463e299 | #24472 | settings | fix(settings): project edits keep overrides the client does not know | already in CandyWrapper: project override patches edit the stored entry in place, so keys CandyWrapper doesn't know stay (ProjectSettings.clear, providerOverridePatch); the server rejects unknown new keys |
 | c8a606c7b7 | #27316 | settings | fix(shared): durations under 10s drop a trailing .0 | ported (settings-3): diagnostics durations and CPU time drop a trailing .0 |
 | 305a90dce4 | #27442 | settings | fix(relay): show the account's real tunnel cap in T3 Connect settings | left (settings-3): needs the #26369 meter first: RelayClient GET /v1/client/t3chat-link, managedTunnelCap with maxTunnelsOverride (managedRelayState.ts:156-172), TunnelUsageMeter and TunnelLimitAlert in Connections |
-| 94b80eaf4f | #22455 | settings | fix(web): language dialects use their base language's icon | port |
-| 6b276f5c40 | #22867 | settings | fix(web): project removal says provider sessions are kept | port |
-| e4926868da | #22906 | settings | fix(web): diagnostics cards use one border radius | port |
-| c65e488359 | #23427 | settings | fix(web): save settings fields only after an edit | port |
-| 6ad082745a | #23450 | settings | fix(web): name inherited background activity profiles | port |
-| 4ce9205d1f | #23465 | settings | fix(web): support Home and End on hue sliders | port |
-| 6c703e1c94 | #23746 | settings | fix(web): allow Antigravity installation while status loads | port |
-| 975059a718 | #23847 | settings | fix(web): keep unsaved edits to other ACP providers | port |
-| 64f30421d5 | #24488 | settings | fix(web): closing an invalid When editor no longer leaves Save disabled | port |
-| 49f51e1c3c | #25014 | settings | fix(web): allow adding the displayed provider accent color | port |
-| f8278d8516 | #25131 | settings | fix(web): keep typed Settings text when Esc closes Settings | port |
-| 1c7cef2adf | #26399 | settings | fix(web): onboarding pairing hint no longer suggests npx t3 serve --tailscale | port |
-| 77f08e6b01 | #27157 | settings | fix(web): app shortcuts wait while a confirmation dialog is open | port |
-| be5a887b93 | #27899 | settings | feat: add assembly file highlighting and language selection | port |
-| de6d4bfead | #26335 | settings | fix(web): keep retention controls stable while editing days | port |
-| ea3767b248 | #26658 | settings | fix(web): scheduled task editor shows the destination thread | port |
+| 94b80eaf4f | #22455 | settings | fix(web): language dialects use their base language's icon | left for the files agent: dialects should use their base language's icon (pierre-icons.ts) in FileIcons |
+| 6b276f5c40 | #22867 | settings | fix(web): project removal says provider sessions are kept | ported (settings-6): project removal says the threads are deleted from T3 Code and provider sessions are kept (ProjectSettingsView) |
+| e4926868da | #22906 | settings | fix(web): diagnostics cards use one border radius | left: Diagnostics cards should share one radius (ResourceTelemetryDiagnostics.tsx rounded-[inherit]); compare DiagnosticsSettingsView's nested boxes |
+| c65e488359 | #23427 | settings | fix(web): save settings fields only after an edit | already in CandyWrapper: settings InputView handlers commit only when the text differs from the stored value |
+| 6ad082745a | #23450 | settings | fix(web): name inherited background activity profiles | ported (settings-6): the inheritance popover names a background activity profile, Battery saver or Advanced (SettingsPageBase.format) |
+| 4ce9205d1f | #23465 | settings | fix(web): support Home and End on hue sliders | ported (settings-6): Home and End jump the hue slider to 0 and 360 (ColorHueSliderView.keyDown) |
+| 6c703e1c94 | #23746 | settings | fix(web): allow Antigravity installation while status loads | n/a: CandyWrapper has no managed Antigravity runtime card (ProviderSetupSection's install panel) |
+| 975059a718 | #23847 | settings | fix(web): keep unsaved edits to other ACP providers | n/a: CandyWrapper ports only the ACP session list, not AcpSessionManagementSection's per-project provider editor |
+| 64f30421d5 | #24488 | settings | fix(web): closing an invalid When editor no longer leaves Save disabled | ported (settings-6): closing the When editor drops an unparsed draft and turns Save back on (KeybindingsSettingsView openWhen) |
+| 49f51e1c3c | #25014 | settings | fix(web): allow adding the displayed provider accent color | ported (settings-6): the provider accent picker shows Add color while no color is set, which commits the color on show |
+| f8278d8516 | #25131 | settings | fix(web): keep typed Settings text when Esc closes Settings | ported (settings-6): closing Settings ends editing first, so a field that commits on blur keeps what was typed (AppRouteModalView.close) |
+| 1c7cef2adf | #26399 | settings | fix(web): onboarding pairing hint no longer suggests npx t3 serve --tailscale | n/a: the Welcome page replaced WelcomeWizard's pairing hint (settings-3) |
+| 77f08e6b01 | #27157 | settings | fix(web): app shortcuts wait while a confirmation dialog is open | ported (settings-6): a bound app shortcut does nothing while a confirmation dialog is open (Shortcuts.handle, ModalHost.confirmationPresented) |
+| be5a887b93 | #27899 | settings | feat: add assembly file highlighting and language selection | held for the markdown agent: assembly highlighting and its language choice |
+| de6d4bfead | #26335 | settings | fix(web): keep retention controls stable while editing days | already in CandyWrapper: the retention day fields are NumberFieldViews that commit on blur, so they don't jump while typing; the 300 ms debounced Mixed status isn't ported |
+| ea3767b248 | #26658 | settings | fix(web): scheduled task editor shows the destination thread | already in CandyWrapper: ScheduledTaskDestinationField shows the bound thread's title and what each run does (settings-4928) |
 | 2b15ba077d | #27891 | settings | fix(web): model settings show "No reasoning" instead of labeling every model | ported (settings-2): model rows label Fast mode and No reasoning only (ProvidersLogic.capabilities, ProviderOptionDescriptor.isReasoningControl) |
-| 1d4c5e023f | #24890 | settings | fix(web): show the correct Tailscale URL when switching to port 443 | port |
-| bfb44fbe6c | #24788 | settings | feat(web): copy the app version from General settings | port |
-| 7671644754 | #26798 | settings | fix(web): restore No project name and icon from settings | port |
-| 35041c27d7 | #24148 | settings | fix(copy): clarify thread and source control settings | port |
-| c8e78cbd84 | #24149 | settings | fix(copy): clarify unavailable tasks and duplicate requests | port |
-| f17126c261 | #27268 | settings | fix(web): sidebar metadata uses the theme's colors in dark mode | port |
-| 4e6b7d8447 | #27936 | settings | fix(web): explain when a theme hides environment artwork | port |
-| bc799c4ba5 | #23162 | settings | fix(web): give non-Latin theme names distinct stable ids | port |
-| d3f6ace496 | #23183 | settings | fix(web): respect provider permissions in bulk updates | port |
-| ef6e05e356 | #25375 | settings | fix(themes): accept VS Code JSONC imports | port |
-| d64888fbc4 | #27151 | settings | fix(web): Escape while recording a shortcut no longer closes Settings | port |
-| cae3ced9fb | #27376 | settings | fix(web): find the fallback model in Settings search | port |
-| fcb1d0b1db | #24134 | settings | fix(web): honor editableFocus in shortcut conditions | port |
+| 1d4c5e023f | #24890 | settings | fix(web): show the correct Tailscale URL when switching to port 443 | n/a: CandyWrapper's Tailscale HTTPS row has no URL or port field |
+| bfb44fbe6c | #24788 | settings | feat(web): copy the app version from General settings | ported (settings-6): the version next to Version copies on click with Copy version as its tooltip (VersionTitleView) |
+| 7671644754 | #26798 | settings | fix(web): restore No project name and icon from settings | n/a: CandyWrapper's project shells carry no `isScratch` No project entry for Settings to restore |
+| 35041c27d7 | #24148 | settings | fix(copy): clarify thread and source control settings | ported (settings-6): the 4928 copy for auto-resume, snooze, Guide, the writer model and proactive panels' reset label |
+| c8e78cbd84 | #24149 | settings | fix(copy): clarify unavailable tasks and duplicate requests | ported (settings-6): "Duplicate request key" with its 7-day line, and the clearer unavailable task text (ScheduledTasksSettingsView, ScheduledTaskLogic) |
+| f17126c261 | #27268 | settings | fix(web): sidebar metadata uses the theme's colors in dark mode | left for the sidebar agent: check that SB.c(\.secondaryLabel) follows a custom theme's secondaryLabel in dark mode |
+| 4e6b7d8447 | #27936 | settings | fix(web): explain when a theme hides environment artwork | left: CandyWrapper's sidebar doesn't yet swap artwork for the version pill under a custom theme (`resolveEnvironmentIdentificationMode`, SidebarView.applyStage, sidebar agent's file); the description can follow once it does |
+| bc799c4ba5 | #23162 | settings | fix(web): give non-Latin theme names distinct stable ids | ported (settings-6): ThemePalette.themeId(fromName:) gives a name without ASCII letters or digits a stable FNV-1a id over its UTF-16 units |
+| d3f6ace496 | #23183 | settings | fix(web): respect provider permissions in bulk updates | ported (settings-6): Update everything skips machines whose session can't manage providers (App/Sources/UpdateEverything.swift) |
+| ef6e05e356 | #25375 | settings | fix(themes): accept VS Code JSONC imports | ported (settings-6): ThemeVSCodeImport.parseImport reads VS Code themes with comments and trailing commas (JSON5), theme files stay strict JSON |
+| d64888fbc4 | #27151 | settings | fix(web): Escape while recording a shortcut no longer closes Settings | ported (settings-6): Esc while recording a shortcut cancels the recording and Settings stays open (RouteModalEscapeHandler on ShortcutRecorderView) |
+| cae3ced9fb | #27376 | settings | fix(web): find the fallback model in Settings search | already in CandyWrapper: SettingsSearchCatalog.generated.swift has fallback-model; a search pick clearing the project and machine axes isn't checked |
+| fcb1d0b1db | #24134 | settings | fix(web): honor editableFocus in shortcut conditions | already in CandyWrapper: App/Sources/AppDelegate.swift:517 sets editableFocus from the focused view for every shortcut |
 | aa056f7d0f | #24719 | settings | fix(web): the welcome wizard keeps the project selection when you go back a stage | n/a (settings-3): the Welcome page replaced the wizard's stages |
-| 220bc7cc50 | #27540 | settings | fix(web): Settings search finds rows by their titles | port |
-| c894d797cf | #27759 | settings | fix(providers): Antigravity API-key setup says Connect | port |
-| 435cda96a3 | #23136 | settings | fix(web): keep theme color alpha when a hex value is typed | port |
-| 2a9335680e | #23168 | settings | fix(web): keep saved sensitive variables from losing their value | port |
-| 52b65aabce | #24655 | settings | fix(web): installing two providers at once starts both | port |
-| b8badda42e | #24673 | settings | fix(web): interval settings save when editing ends, not per keystroke | port |
+| 220bc7cc50 | #27540 | settings | fix(web): Settings search finds rows by their titles | already in CandyWrapper: the generated catalog carries the 4928 search terms (codex_home, wsl only, settled) |
+| c894d797cf | #27759 | settings | fix(providers): Antigravity API-key setup says Connect | ported (settings-6): Antigravity API-key and Agent Platform setups say Connect, Connecting… and Retry connection (ProviderAuthenticationView) |
+| 435cda96a3 | #23136 | settings | fix(web): keep theme color alpha when a hex value is typed | ported (settings-6): a typed hex keeps the color's alpha in the theme color picker (ThemeEditorPanelView.typedHex) |
+| 2a9335680e | #23168 | settings | fix(web): keep saved sensitive variables from losing their value | ported (settings-6): a stored secret's name and lock are disabled, and the note says to enter a new value first (ProviderEnvironmentViews) |
+| 52b65aabce | #24655 | settings | fix(web): installing two providers at once starts both | already in CandyWrapper: each provider.install.start is its own request, nothing collapses two installs |
+| b8badda42e | #24673 | settings | fix(web): interval settings save when editing ends, not per keystroke | already in CandyWrapper: NumberFieldView commits interval fields when editing ends or a stepper is pressed (BackgroundActivityDialog.interval) |
 | 4c3808a109 | #28300 | settings | fix(web): Diagnostics memory no longer reads "1024.0 MB" | ported (settings-3): DiagnosticsFormat.bytes picks the unit after rounding (lib/formatBytes.ts) |
-| edc37c96c8 | #29382 | settings | fix(web): center authorized client settings rows | port |
+| edc37c96c8 | #29382 | settings | fix(web): center authorized client settings rows | left: compare the authorized client row (badges h-6, min-h-7, centered) with AuthorizedClientsSettings.tsx in ConnectionsHostViews |
 | a497f7b9a3 | #29480 | settings | fix(web): confirm before removing a provider instance's saved settings | ported (settings-4928): Reset and Delete on a provider instance ask first, with the turned-off note for default-off drivers |
-| bff68fb6b6 | #29554 | settings | fix(shared): saving one source control token no longer drops the other hosts' tokens | port |
-| 2e39f1d7de | #31826 | settings | fix(web): settings descriptions use the full row and stay two lines | port |
-| 7f7bf263a8 | #32409 | settings | fix(web): recover ACP settings when projects change | port |
-| 8395f20124 | #29851 | settings | fix(web): editing a scheduled task shows its saved time when the hour has one digit | port |
-| 8913a4a254 | #30115 | settings | fix(web): keep typed unpublished variable rows across settings re-deliveries | port |
+| bff68fb6b6 | #29554 | settings | fix(shared): saving one source control token no longer drops the other hosts' tokens | ported (settings-6): saving a source control token merges on the trimmed, lowercased host (SourceControlSettingsView) |
+| 2e39f1d7de | #31826 | settings | fix(web): settings descriptions use the full row and stay two lines | already in CandyWrapper: the reclaim and tool call copy match 4928 (StorageSettingsView:224, GeneralSettingsView:344); the voice line is dictation, which the user doesn't want; the row grid is what the 4928 references check |
+| 7f7bf263a8 | #32409 | settings | fix(web): recover ACP settings when projects change | already in CandyWrapper: ProviderAcpSessionsView disables the project picker while a request runs and is rebuilt when the projects change |
+| 8395f20124 | #29851 | settings | fix(web): editing a scheduled task shows its saved time when the hour has one digit | ported (settings-6): a saved 9:05 opens as 09:05 (ScheduledTaskLogic.draft) |
+| 8913a4a254 | #30115 | settings | fix(web): keep typed unpublished variable rows across settings re-deliveries | ported (settings-6): rows added here that the server never acknowledged survive a settings re-delivery (ProvidersSettingsView.envDrafts) |
 | e85e0094dd | #33538 | settings | fix(web): checking for updates finds provider updates on every machine | already (settings-3): UpdateEverything.check refreshes providers with refreshModels on every connected machine; the providers:manage filter and the failure toast are not ported |
 | 25da7ebca6 | #33730 | settings | fix(web): reclaim notice says the machine will be offline | ported (settings-3): Reclaim says the machine will be offline for about N min |
-| 7389423507 | #32576 | settings | fix(web): screen readers hear the add-project submit shortcut | port |
-| f7b81e1d11 | #33395 | settings | fix(web): settings search shortcuts follow the physical key on non-US layouts | port |
-| 0815d98cd7 | #34178 | settings | fix(web): make Q&A option outlines visible across themes | port |
-| 43821388a9 | #18187 | settings | fix(web): focus the primary action when confirmation dialogs open | port |
-| 0e1f01ec85 | #14493 | settings | fix(web): keep grouped project icons consistent in settings | port |
+| 7389423507 | #32576 | settings | fix(web): screen readers hear the add-project submit shortcut | left: the palette's add-project submit shortcut needs an accessibility label (CommandPaletteAddProject.tsx) |
+| f7b81e1d11 | #33395 | settings | fix(web): settings search shortcuts follow the physical key on non-US layouts | ported (settings-6): Cmd+F and / focus the settings search by the physical key too, and Shift on the physical slash key stays out |
+| 0815d98cd7 | #34178 | settings | fix(web): make Q&A option outlines visible across themes | held for the composer agent: Q&A option outlines are ComposerPendingUserInputPanel's |
+| 43821388a9 | #18187 | settings | fix(web): focus the primary action when confirmation dialogs open | ported (settings-6): a confirmation dialog opens with its primary action focused (ModalHost.trapFocus) |
+| 0e1f01ec85 | #14493 | settings | fix(web): keep grouped project icons consistent in settings | left: Settings > Projects shows the first connected member's icon; matching T3 needs the sidebar group's own representative (`scopeProjectSettingsGroup`) passed in SettingsScopeProject |
 | 477845733d | #27484 | settings | fix(web): track switch dialog no longer offers a switch that moves nothing | left (settings-3): with #26288, nothingToMove in updateTrackSwitch.logic.ts |
-| 940b7a4160 | #30841 | settings | fix(web): screen readers can browse and Tab through the settings sections again | port |
-| cff8bfcef0 | #23479 | settings | fix(web): keep model favorites usable after disabling a provider | port |
-| 338e73859a | #23568 | settings | fix(web): thread shortcuts work with the narrow sidebar closed | port |
-| 661a3e2a47 | #34802 | settings | fix(web): Backspace right after a list shortcut keeps the typed marker | port |
-| dcad1942a9 | #34858 | settings | fix(client-runtime): provider toggles no longer wait for another provider's update | port |
-| 2b7e975a97 | #35008 | settings | fix(clients): say "Starting Claude" until the provider actually starts | port |
-| 12d4c62214 | #35101 | settings | fix(web): every settings nav group has a name for screen readers | port |
+| 940b7a4160 | #30841 | settings | fix(web): screen readers can browse and Tab through the settings sections again | left: Tab already moves through the route modal (AppRouteModalView.moveFocus); browsing sections with VoiceOver needs the nav groups above |
+| cff8bfcef0 | #23479 | settings | fix(web): keep model favorites usable after disabling a provider | ported (settings-6): Settings > Providers keeps a row for a favorite the provider no longer reports, so its star can be cleared (ProvidersLogic.displayModels); the composer picker half is held for the pickers agent |
+| 338e73859a | #23568 | settings | fix(web): thread shortcuts work with the narrow sidebar closed | held for the sidebar agent: thread shortcuts with the narrow sidebar closed |
+| 661a3e2a47 | #34802 | settings | fix(web): Backspace right after a list shortcut keeps the typed marker | held for the composer agent: Backspace after a list shortcut |
+| dcad1942a9 | #34858 | settings | fix(client-runtime): provider toggles no longer wait for another provider's update | n/a: client-runtime atom scheduling; CandyWrapper sends provider toggles without waiting on provider updates |
+| 2b7e975a97 | #35008 | settings | fix(clients): say "Starting Claude" until the provider actually starts | held for the Thread agent: "Starting Claude" is the timeline's work group |
+| 12d4c62214 | #35101 | settings | fix(web): every settings nav group has a name for screen readers | left: VoiceOver can't name the nav groups; each group needs an accessibility group labelled by its heading in SettingsSidebarView's flat navDocument |
 | b2e86d7902 | #35100 | settings | fix(web): an invalid provider setting is refused at its field instead of taking the provider offline | ported (settings-2): a refused value stays in the field marked invalid with "Enter a valid value. It was not saved." (ProvidersSettingsView.swift `ValidatedFieldControl`, `Field.pattern`) |
-| 32f3d8b160 | #35116 | settings | fix(client-runtime): Diagnostics Resource History keeps updating while open | port |
-| a30cb3283a | #35161 | settings | fix(web): Esc in the keybindings search clears it without closing Settings | port |
+| 32f3d8b160 | #35116 | settings | fix(client-runtime): Diagnostics Resource History keeps updating while open | skip: a 5 s poll while Diagnostics is open breaks the idle rule; the Refresh button stays |
+| a30cb3283a | #35161 | settings | fix(web): Esc in the keybindings search clears it without closing Settings | ported (settings-6): Esc in the keybindings search clears it without closing Settings; an empty search lets Settings close |
 | 1d218d1525 | #34697 | settings | feat(web): screen reader window title leads with the thread's status and name | ported (panels-5): WindowTitle ports resolveWindowTitle and resolveWindowTitleThreadStatus; the window now reads project / thread, and with Settings > Behavior > Screen reader window title, status: thread - project. Left: the Settings search catalog entry |
-| 4f555c746c | #28584 | settings | fix(web): choosing a project icon again re-reads it from disk | port |
-| 817b92f13a | #24110 | settings | fix(pi): stop offering extension-only models for text generation | port |
-| 141de5e9f4 | #25513 | settings | fix(web): a dismissed provider banner stays dismissed when you switch threads | port |
-| 56d227836b | #25244 | settings | fix(projects): preserve grouped renames to repository names | port |
-| 254e985e47 | #35715 | settings | fix(web): find scheduled tasks in Settings search | port |
-| 8cb55fa5a4 | #32537 | settings | fix(web): provider rows select from anywhere in the row | port |
-| 6bb9b7b323 | #36303 | settings | fix(web): auto-settle days save when the edit is finished, not on every keystroke | port |
-| 0517d15c41 | #36392 | settings | fix(web): provider sign-in links only open web addresses | port |
-| ab9e6a2792 | #36437 | settings | fix(web): closing Settings no longer leaves it as a back/forward stop | port |
+| 4f555c746c | #28584 | settings | fix(web): choosing a project icon again re-reads it from disk | ported (settings-6): choosing a project icon file drops the cached icon for each member, so a path that was missing before is asked again (ProjectIconStore.forget) |
+| 817b92f13a | #24110 | settings | fix(pi): stop offering extension-only models for text generation | held for settings-5 |
+| 141de5e9f4 | #25513 | settings | fix(web): a dismissed provider banner stays dismissed when you switch threads | held for the composer agent: the provider banner dismissal lives in ComposerBannerStack |
+| 56d227836b | #25244 | settings | fix(projects): preserve grouped renames to repository names | left: needs `hasCustomTitle` decoded on project shells and carried in SettingsScopeProject.Member, then the rename check and the sidebar's shared-title rule (projectGrouping.ts, sidebar agent) |
+| 254e985e47 | #35715 | settings | fix(web): find scheduled tasks in Settings search | already in CandyWrapper: SettingsSearchCatalog.generated.swift:101 has the scheduled-tasks entry |
+| 8cb55fa5a4 | #32537 | settings | fix(web): provider rows select from anywhere in the row | already in CandyWrapper: ProviderListRow is one control that selects from anywhere outside the switch (ProvidersSettingsView.swift ProviderListRow.mouseDown) |
+| 6bb9b7b323 | #36303 | settings | fix(web): auto-settle days save when the edit is finished, not on every keystroke | left: the auto-settle days field still saves each valid keystroke (GeneralSettingsView `days.onChange`); move the patch to `onCommit` with T3's draft and pending rules (SettingsPanels.logic.ts autoSettleDaysField) |
+| 0517d15c41 | #36392 | settings | fix(web): provider sign-in links only open web addresses | already in CandyWrapper: ProviderAuthenticationView.swift:131 opens only http and https links; T3's error line for other schemes isn't shown |
+| ab9e6a2792 | #36437 | settings | fix(web): closing Settings no longer leaves it as a back/forward stop | ported (settings-6): closing Settings back to the page it opened over drops its history entries, so Back and Forward skip it (RouteHistory.record) |
 | 62ba72fa15 | #36477 | settings | fix(web): onboarding rechecks an agent when its install command finishes | ported (settings-3): the Welcome install terminal refreshes the agent when its command exits (WelcomeInstallTerminalView.onCommandFinished) |
-| a81ec88f58 | #24641 | settings | fix(clients): allow portable provider handoffs after detach | port |
+| a81ec88f58 | #24641 | settings | fix(clients): allow portable provider handoffs after detach | held for the composer agent: ComposerLogic.swift:471 still requires nativeThreadRef for a portable handoff |
 | fe873f82c1 | #23578 | settings | fix(web): confirm before deleting scheduled tasks | ported (settings-4928): Delete asks first |
-| b2259d3c6c | #23590 | settings | fix(web): show working state while provider sessions start | port |
-| 000d82dc67 | #25130 | settings | fix(web): Esc closes the theme editor, not Settings | port |
-| b4c1bd106d | #35612 | settings | fix(web): re-picking the current model in Settings keeps its traits | port |
+| b2259d3c6c | #23590 | settings | fix(web): show working state while provider sessions start | held for the Thread agent: the working state while a provider session starts is ChatView's |
+| 000d82dc67 | #25130 | settings | fix(web): Esc closes the theme editor, not Settings | ported (settings-6): Esc inside the theme editor leaves inspection or closes the editor, not Settings |
+| b4c1bd106d | #35612 | settings | fix(web): re-picking the current model in Settings keeps its traits | already in CandyWrapper: SettingsModelPickerControl's onSelect keeps the selection when the same model is picked (GeneralSettingsView.swift:779) |
 | 913d7fc45e | #28319 | settings | fix(web): PageUp and PageDown shortcut labels no longer read Pageup and Pagedown | ported (settings-3): KeybindingShortcut.keyLabel says PageUp and PageDown |
-| e26e21c06b | #36628 | settings | fix(web,mobile): bound scheduled tasks no longer offer a model their runs ignore | port |
-| 616067de84 | #36755 | settings | fix(web): pressing Enter in the Add CLIProxyAPI hub dialog adds the hub | port |
-| 3b816cf6c7 | #36753 | settings | fix(web): ChatGPT sign-in error no longer points to a missing redirect URL field | port |
+| e26e21c06b | #36628 | settings | fix(web,mobile): bound scheduled tasks no longer offer a model their runs ignore | ported (settings-6): a task bound to a thread shows that thread's current model in a locked picker (ScheduledTaskModelPicker, ScheduledTaskThreadOption.model) |
+| 616067de84 | #36755 | settings | fix(web): pressing Enter in the Add CLIProxyAPI hub dialog adds the hub | ported (settings-6): Enter in any field of the Add hub dialog adds the hub once it's valid |
+| 3b816cf6c7 | #36753 | settings | fix(web): ChatGPT sign-in error no longer points to a missing redirect URL field | ported (settings-6): the ChatGPT sign-in error no longer points to a redirect URL field (CodexSetupView) |
 | 5fe2f7e456 | #29377 | settings | fix(web): diagnostics no longer shows near-second spans as "1000 ms" | ported (settings-3): DiagnosticsFormat.duration rounds before choosing ms or s |
-| b5df3c1bef | #36789 | settings | fix(web): a scheduled task with a cleared run time no longer saves as 09:00 | port |
+| b5df3c1bef | #36789 | settings | fix(web): a scheduled task with a cleared run time no longer saves as 09:00 | ported (settings-6): a cleared run time fails with Invalid run time, Pick a time., instead of saving 09:00 |
 | 0487654fc8 | #29395 | settings | fix(web): diagnostics CPU time no longer reads "60s" or "60m" | ported (settings-3): DiagnosticsFormat.cpuTime picks the unit after rounding |
-| ee4ef06469 | #28945 | settings | fix(web): use optimistic updates for settings across environments | port |
-| 81f23426d4 | #36856 | settings | fix(web): Settings > Projects list follows the selected environment | port |
-| 756545a917 | #36906 | settings | fix(web): successive custom model saves keep earlier edits | port |
-| 01c8e59f14 | #31318 | settings | fix(web): preserve published theme IDs during alias lookup | port |
-| 4dec8cf641 | #34081 | settings | fix(web): honor right panel state in custom shortcuts | port |
-| da95a04763 | #35189 | settings | fix(web): right-panel shortcuts work on a new, unsent thread | port |
-| 0fbe8a2e44 | #29503 | settings | fix(web): settings section headers no longer overlap their actions on narrow screens | port |
+| ee4ef06469 | #28945 | settings | fix(web): use optimistic updates for settings across environments | left: a scoped save shows only once its reply lands; matching T3 needs pending writes applied over each environment's settings until its push arrives (scopedSettings.ts `applyPendingScopedWrites`) in SettingsController's scope build |
+| 81f23426d4 | #36856 | settings | fix(web): Settings > Projects list follows the selected environment | ported (settings-6): the Settings > Projects list follows the selected environment and keeps it when a project is picked (SettingsScope.projectMenu) |
+| 756545a917 | #36906 | settings | fix(web): successive custom model saves keep earlier edits | ported (settings-6): a second custom model edit before the first save's reply builds on that save (ProvidersSettingsView.saveCustomModels) |
+| 01c8e59f14 | #31318 | settings | fix(web): preserve published theme IDs during alias lookup | n/a: a Swift dictionary has no prototype keys, so ThemePalette.normalizedId can't match "constructor" |
+| 4dec8cf641 | #34081 | settings | fix(web): honor right panel state in custom shortcuts | already in CandyWrapper: App/Sources/AppDelegate.swift:519 passes rightPanelOpen to the shortcut context |
+| da95a04763 | #35189 | settings | fix(web): right-panel shortcuts work on a new, unsent thread | left for the Thread and Browser owners: preview shortcuts on a draft thread need the draft's environment in BrowserController |
+| 0fbe8a2e44 | #29503 | settings | fix(web): settings section headers no longer overlap their actions on narrow screens | left: a section header with an action should wrap under a narrow Settings (settingsLayout.tsx flex-wrap); needs a check at the 640pt minimum |
 | 58f609f7cc | #30330 | settings | fix(web): theme import no longer says a file just under 1 MB is "1024 KB" | n/a (settings-3): CandyWrapper's theme import has no size message; DiagnosticsFormat.bytes follows formatBytes for any later one |
 | b8bffc8b35 | #29749 | settings | fix(web): resource monitor no longer claims to sample every 0 ms | ported (settings-3): DiagnosticsFormat.samplingStatus says Sampling on demand for 0 |
-| 63b5645678 | #32859 | settings | fix(web): Esc in Clerk's account modal no longer closes Settings | port |
-| 6d3f6423a3 | #37198 | settings | fix(web): Enter sends when a panel-conditioned shortcut is inactive | port |
-| 57ec00ddd6 | #37509 | settings | fix(web): source control settings notice a CLI login made outside the app | port |
+| 63b5645678 | #32859 | settings | fix(web): Esc in Clerk's account modal no longer closes Settings | already in CandyWrapper: the account dialog is a ModalHost, and Settings' Esc monitor stands down while one is open (AppRouteModalView keyMonitor) |
+| 6d3f6423a3 | #37198 | settings | fix(web): Enter sends when a panel-conditioned shortcut is inactive | held for the composer agent: Enter resolution in ComposerController should read ChatView's shortcut context |
+| 57ec00ddd6 | #37509 | settings | fix(web): source control settings notice a CLI login made outside the app | ported (settings-6): Source control rescans when the app becomes active, so a CLI login made outside shows (no timer) |
 | 83e3c4f60d | #37493 | settings | fix(web): published themes keep their CSS when a saved theme shares the id | n/a (settings-4): CandyWrapper bakes a published theme's CSS colors into its palette, so a saved copy keeps them; no CSS travels with saved themes |
-| d6a28f4faa | #37818 | settings | fix(client): guard saved environment routes during SSH onboarding | port |
-| 4021638273 | #31527 | settings | fix(web): thread hover cards show the provider icon in its brand color | port |
-| cd9c39fe3c | #37982 | settings | fix(web): imported theme files keep their top-level canvas and accent | port |
-| d051d9822f | #38021 | settings | fix(web): leaving Appearance cancels a pending theme install | port |
-| 81049d2b92 | #38134 | settings | fix(web): importing light and dark theme files together keeps their custom CSS | port |
-| 077b206b33 | #38139 | settings | fix(web): same-named themes renamed on batch import keep their CSS | port |
-| b48a20bc85 | #38944 | settings | fix(web): settings search icons line up with their titles | port |
-| 26b872b46a | #38996 | settings | fix(web): hiding a revealed email no longer flashes its placeholder | port |
+| d6a28f4faa | #37818 | settings | fix(client): guard saved environment routes during SSH onboarding | left for the connections owner: SSH onboarding registers with `knownAddressOnly` only in client-runtime; CandyWrapper has no SSH onboarding |
+| 4021638273 | #31527 | settings | fix(web): thread hover cards show the provider icon in its brand color | held for the sidebar agent: hover card provider icons in brand color |
+| cd9c39fe3c | #37982 | settings | fix(web): imported theme files keep their top-level canvas and accent | ported (settings-6): a theme file with top-level canvas and accent seeds its palette from them (ThemePalette.parseFile) |
+| d051d9822f | #38021 | settings | fix(web): leaving Appearance cancels a pending theme install | n/a: CandyWrapper has no Open VSX theme install to cancel |
+| 81049d2b92 | #38134 | settings | fix(web): importing light and dark theme files together keeps their custom CSS | n/a: imported theme files keep no CSS in CandyWrapper; theme CSS is read only from published themes (settings-4) |
+| 077b206b33 | #38139 | settings | fix(web): same-named themes renamed on batch import keep their CSS | n/a: no batch import and no imported CSS in CandyWrapper |
+| b48a20bc85 | #38944 | settings | fix(web): settings search icons line up with their titles | ported (settings-6): settings search result icons sit 2pt lower, centered on the title line (SettingsSearchResultRow) |
+| 26b872b46a | #38996 | settings | fix(web): hiding a revealed email no longer flashes its placeholder | n/a: CandyWrapper keeps the email masked with no reveal toggle (ProvidersSettingsView.statusLine) |
 
 ## Small fixes, sidebar (74)
 

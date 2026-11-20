@@ -110,6 +110,11 @@ enum FakeT3Connect {
                     #"{"environmentId":"\#(m.id)","label":"\#(m.label)","endpoint":\#(Self.endpoint(m.host)),"linkedAt":"2026-09-28T09:30:00.000Z"}"#
                 }
                 return (200, #"{"environments":[\#(list.joined(separator: ","))]}"#, [:])
+            case ("GET", "/v1/client/t3chat-link"):
+                // No T3 Chat plan linked: 3 tunnels, "Get more tunnels" links one (relay.ts:972-987).
+                return (200, #"{"available":true,"link":null}"#, [:])
+            case ("POST", "/v1/client/t3chat-link-requests"):
+                return (200, #"{"url":"https://t3.chat.fake.invalid/link"}"#, [:])
             case ("POST", "/v1/client/dpop-token"):
                 return (200, #"{"access_token":"fake-relay-token","issued_token_type":"urn:ietf:params:oauth:token-type:access_token","token_type":"DPoP","expires_in":1800,"scope":"\#(f["scope"] ?? "")"}"#, [:])
             default:

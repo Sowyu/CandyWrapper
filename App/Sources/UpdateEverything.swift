@@ -131,7 +131,9 @@ final class UpdateEverything {
         let machineSnapshot = machines()
         let (servers, skipped) = L.serverTargets(machineSnapshot, target: target)
         let providerMachines = environments.environmentIds.compactMap { id -> (environmentId: String, label: String, candidates: [ServerProvider])? in
-            guard environments.state(id)?.status == .connected else { return nil }
+            // ProviderUpdatesAction.tsx (#23183): only machines whose session may manage providers.
+            guard environments.state(id)?.status == .connected,
+                  environments.authSession(id).map({ $0.grants(AuthScopes.providersManage) }) ?? true else { return nil }
             let all = providers(id)
             let candidates = ProviderUpdateCandidates.candidates(all).filter { ProviderUpdateCandidates.canOneClick($0, among: all) }
             return candidates.isEmpty ? nil : (id, environments.label(id) ?? id, candidates)

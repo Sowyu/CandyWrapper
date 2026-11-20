@@ -123,9 +123,27 @@ import Testing
 
     @Test func idsAndNumbers() {
         #expect(ThemePalette.themeId(fromName: "  My Theme!! 2 ") == "my-theme-2")
-        #expect(ThemePalette.themeId(fromName: "!!!") == "custom-theme")
+        #expect(ThemePalette.themeId(fromName: "!!!").hasPrefix("theme-"))  // #23162: no ASCII letters or digits hash to their own id
         #expect(ThemePalette.format(1.0, 6) == "1")
         #expect(ThemePalette.format(0.5, 6) == "0.5")
         #expect(ThemePalette.format(-0.0000001, 6) == "0")
+    }
+
+    /// #23162, #37982, #25375.
+    @Test func themeImportsFollow4928() throws {
+        #expect(ThemePalette.themeId(fromName: " 夜 ") == "theme-70lml7")
+        #expect(ThemePalette.themeId(fromName: "朝") != ThemePalette.themeId(fromName: "夜"))
+        #expect(ThemePalette.themeId(fromName: "  ") == "custom-theme")
+        #expect(ThemePalette.themeId(fromName: "Ocean dusk") == "ocean-dusk")
+        let seeded = try ThemePalette.parseFile(["version": 1, "name": "Seeded", "appearance": "dark", "canvas": "#101820", "accent": "#ff6600",
+                                                 "colors": ["border": "#333333"]])
+        let vivid = ThemePalette.vividColors(.dark, background: "#101820", accent: "#ff6600")
+        #expect(seeded.colors[.canvas] == vivid[.canvas])
+        #expect(seeded.colors[.border] == ThemePalette.canonical("#333333"))
+        #expect(throws: ThemePalette.FileError.self) {
+            try ThemePalette.parseFile(["version": 1, "name": "Bad", "appearance": "dark", "canvas": 3, "accent": "#ff6600", "colors": ["border": "#333"]])
+        }
+        let jsonc = Data(("{ // a comment\n" + ##" "name": "X", "type": "dark", "colors": { "editor.background": "#101010", }, }"##).utf8)
+        #expect(try ThemeVSCodeImport.parseImport(jsonc).label == "X")
     }
 }
