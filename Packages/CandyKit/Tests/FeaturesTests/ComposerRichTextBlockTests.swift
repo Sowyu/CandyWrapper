@@ -119,7 +119,7 @@ import Testing
         try pressReturn(editor)
         try pressReturn(editor)
         type(editor, "b")
-        #expect(storedDraft(editor) == "1. a\nb")
+        #expect(storedDraft(editor) == "1. a\n\nb")
         let split = makeEditor()
         split.setText("1. foobar")
         placeCaret(split, "bar")
@@ -143,7 +143,7 @@ import Testing
         ("- a\n  - x", "x", "- a\n- x"),
         ("- a\n  - x\n  - y", "x", "- a\n- x\n  - y"),
         ("- [ ] a\n  - [ ] x", "x", "- [ ] a\n- [ ] x"),
-        ("- a\n- b\n- c", "b", "- a\nb\n- c"),
+        ("- a\n- b\n- c", "b", "- a\n\nb\n- c"),
         ("- a\n  - [ ] x", "x", "- ax"),
         ("- a\n  - x\nb", "b", "- a\n  - xb"),
         ("1. a\nb", "b", "1. ab"),
@@ -157,7 +157,7 @@ import Testing
         #expect(storedDraft(editor) == expected)
     }
 
-    @Test(arguments: [("- a\n```\nl1\nl2\n```", "- a\nl1\nl2"), ("p\n```ts\nl1\n```", "p\nl1")])
+    @Test(arguments: [("- a\n```\nl1\nl2\n```", "- a\n\nl1\nl2"), ("p\n```ts\nl1\n```", "p\nl1")])
     func backspaceRemovesAFenceRatherThanJoiningItsCodeUp(_ value: String, _ expected: String) throws {
         let editor = makeEditor()
         editor.setText(value)
@@ -166,7 +166,7 @@ import Testing
         #expect(storedDraft(editor) == expected)
     }
 
-    @Test(arguments: [("- a\n- b", "- ab"), ("- a\n  - x\n- c", "- ax\n- c"), ("- a\n\nb", "- a\nb")])
+    @Test(arguments: [("- a\n- b", "- ab"), ("- a\n  - x\n- c", "- ax\n- c"), ("- a\n\nb", "- ab")])
     func deleteAtTheEndOfALine(_ value: String, _ expected: String) {
         let editor = makeEditor()
         editor.setText(value)
@@ -218,7 +218,7 @@ import Testing
         let editor = makeEditor()
         editor.setText("- a")
         #expect(editor.pasteBlocks("one\ntwo"))
-        #expect(storedDraft(editor) == "- a\none\ntwo")
+        #expect(storedDraft(editor) == "- a\n\none\ntwo")
     }
 }
 
@@ -418,7 +418,7 @@ import Testing
         ("ab", "ab", 0, "# h", "# h\nab"),
         ("ab", "ab", 1, "plain", "aplainb"),
         ("> ab", "ab", 1, "one\ntwo", "> a\n> one\n> two\n> b"),
-        ("- ab", "ab", 1, "one\ntwo", "- a\none\ntwo\n- b"),
+        ("- ab", "ab", 1, "one\ntwo", "- a\n\none\ntwo\n- b"),
         ("- ab", "ab", 1, "- x", "- a- xb"),
     ])
     func pastedBlocks(_ value: String, _ at: String, _ offset: Int, _ pasted: String, _ expected: String) {
@@ -466,5 +466,30 @@ struct ComposerBlockLayoutTests {
         let quoted = ComposerBlockLayout.layout([.paragraph, .quote(">")])
         #expect(quoted.bottom == 0 && quoted.lines[1].marginBefore == ComposerBlockLayout.blockMargin)
         #expect(ComposerBlockLayout.layout([.list(.bullet, indent: "", marker: "-"), .list(.bullet, indent: "  ", marker: "-")]).bottom == ComposerBlockLayout.blockMargin)
+    }
+}
+
+/// `needsBlankLineBetween` (composer-rich-text-doc.ts:1254-1273 at 4928): prose after a list is sent after it (#38414),
+/// and a dash rule under a line stays a rule (#29663). A reopened draft writes the same text again.
+@MainActor struct ComposerBlockSeparatorTests {
+    @Test func proseAfterAListAndARuleUnderALineGetABlankLine() throws {
+        let list = makeEditor()
+        type(list, "- one")
+        try pressReturn(list)
+        try pressReturn(list)
+        type(list, "after")
+        #expect(list.expandedText == "- one\n\nafter")
+        let rule = makeEditor()
+        type(rule, "text")
+        try pressReturn(rule)
+        type(rule, "---")
+        try pressReturn(rule)
+        type(rule, "x")
+        #expect(rule.expandedText == "text\n\n---\n\nx")
+        for text in ["- one\n\nafter", "- one\n- two\n\n\nafter", "text\n\n---\n\nx", "> quoted\n\nafter"] {
+            let reopened = makeEditor()
+            reopened.setText(text)
+            #expect(reopened.expandedText == text)
+        }
     }
 }

@@ -3399,7 +3399,7 @@ extension ComposerController {
         var peerLinkTasks: [String: Task<Void, Never>] = [:]
         var paths: (key: String, entries: [(path: String, isDirectory: Bool)])?
         var pathTask: Task<Void, Never>?
-        var threadMatches: (environment: String, key: String, threads: [ThreadShell])?
+        var threadMatches: (environment: String, key: String, threads: [(environmentId: String, thread: ThreadShell)])?
         var threadSearchTask: Task<Void, Never>?
         var pullRequests: (key: String, entries: [ComposerMenus.PullRequestEntry], failed: Bool)?
         var pullRequestTask: Task<Void, Never>?
@@ -3512,9 +3512,10 @@ extension ComposerController {
         }
         let known = Set(candidates.map(\.id))
         if let matches = menuState.threadMatches, matches.environment == env {
-            candidates += matches.threads.filter { !known.contains($0.id.scoped(to: env).rawValue) }.map {
-                .init(id: $0.id.scoped(to: env).rawValue, title: $0.title, updatedAt: $0.updatedAt.raw, archived: $0.archivedAt != nil,
-                      isSubagent: !$0.lineage.isListed)
+            candidates += matches.threads.filter { !known.contains($0.thread.id.scoped(to: $0.environmentId).rawValue) }.map { m in
+                .init(id: m.thread.id.scoped(to: m.environmentId).rawValue, title: m.thread.title, updatedAt: m.thread.updatedAt.raw,
+                      archived: m.thread.archivedAt != nil, machine: m.environmentId == env ? nil : linked[m.environmentId],
+                      isSubagent: !m.thread.lineage.isListed)
             }
         }
         return candidates
@@ -3671,24 +3672,37 @@ extension ComposerController {
 
     /// Omitted settled threads remain available to `@`, without filling the shell on connect.
     /// T3 5b35402623, contracts/orchestrationV2.ts:3440-3462 (`titlesOnly`).
+    /// Searched here and on the linked machines `@` lists (#37243, useComposerMenuItems.ts:126-132 at 4928).
     private func searchMenuThreads(_ query: String, shell: ShellSession) {
         menuState.threadSearchTask?.cancel()
-        guard !query.isEmpty, shell.omissions.omitOlderSettled, let env = targetEnvironmentId else {
+        guard !query.isEmpty, let env = targetEnvironmentId else {
             menuState.threadMatches = nil
             return
         }
-        guard menuState.threadMatches?.key != "\(env)|\(query)" else { return }
+        let targets = ([env] + composerLinkedNames.keys.sorted()).compactMap { id in
+            environments.session(id).flatMap { $0.omissions.omitOlderSettled ? (id, $0) : nil }
+        }
+        let key = "\(env)|\(targets.map(\.0).joined(separator: ","))|\(query)"
+        guard !targets.isEmpty else {
+            menuState.threadMatches = nil
+            return
+        }
+        guard menuState.threadMatches?.key != key else { return }
         menuState.threadSearchTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(ComposerMenus.pathSearchDebounce)) } catch { return }
-            let generation = await shell.store.generation
-            guard let cut = await shell.store.snapshot?.olderSettled else { return }
-            let payload: JSONValue = .object(["query": .string(query), "titlesOnly": .bool(true),
-                                              "olderSettledBefore": .string(cut.before)])
-            guard let json = try? await shell.supervisor.request("orchestration.searchThreads", payload: payload),
-                  !Task.isCancelled, let self, targetEnvironmentId == env, self.shell === shell,
-                  generation == (await shell.store.generation),
-                  let result = try? json.decode(as: ThreadSearchResult.self) else { return }
-            menuState.threadMatches = (env, "\(env)|\(query)", result.threads ?? [])
+            var found: [(environmentId: String, thread: ThreadShell)] = []
+            for (id, session) in targets {
+                let generation = await session.store.generation
+                guard let cut = await session.store.snapshot?.olderSettled else { continue }
+                let payload: JSONValue = .object(["query": .string(query), "titlesOnly": .bool(true),
+                                                  "olderSettledBefore": .string(cut.before)])
+                guard let json = try? await session.supervisor.request("orchestration.searchThreads", payload: payload),
+                      generation == (await session.store.generation),
+                      let result = try? json.decode(as: ThreadSearchResult.self) else { continue }
+                found += (result.threads ?? []).map { (id, $0) }
+            }
+            guard !Task.isCancelled, let self, targetEnvironmentId == env, self.shell === shell else { return }
+            menuState.threadMatches = (env, key, found)
             panel.menus.reload()
         }
     }

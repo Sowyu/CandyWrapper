@@ -397,6 +397,43 @@ enum ComposerRichTextStyler {
     }
 
     static func serialize(_ input: NSAttributedString) -> String { mapping(input).value }
+
+    /// The loading side of the blank lines `mapping` writes after a list or quote and above a dash rule
+    /// (`buildTiptapContent`'s `blockSeparator`, composer-rich-text-doc.ts:1090-1107 at 4928): the separator is no
+    /// line of its own, so a reopened draft shows and writes the same blocks. Lines inside code fences stay.
+    static func collapseBlockSeparators(_ text: String) -> String {
+        guard text.contains("\n\n") else { return text }
+        var lines = text.components(separatedBy: "\n")
+        func kind(_ i: Int) -> ComposerBlockAttachment.Kind? { i < lines.count ? ComposerBlockAttachment.prefix(lines[i])?.kind : nil }
+        func isFence(_ i: Int) -> Bool { i < lines.count && lines[i].range(of: #"^(`{3,}|~{3,})"#, options: .regularExpression) != nil }
+        func isProse(_ i: Int) -> Bool { i < lines.count && !lines[i].isEmpty && kind(i) == nil && !isFence(i) }
+        var drop: Set<Int> = [], fence: String?, i = 0
+        while i < lines.count {
+            let line = lines[i]
+            if let open = fence {
+                if ComposerBlockAttachment.isClosingFence(line, open) { fence = nil }
+                i += 1; continue
+            }
+            if isFence(i) { fence = String(line.prefix { $0 == line.first }); i += 1; continue }
+            if i + 1 < lines.count, lines[i + 1].isEmpty {
+                switch kind(i) {
+                case .bullet?, .ordered?, .task?:
+                    var next = i + 1
+                    while next < lines.count, lines[next].isEmpty { next += 1 }
+                    if isProse(next) { drop.insert(i + 1) }
+                case .quote?:
+                    if isProse(i + 2) { drop.insert(i + 1) }
+                case nil where !line.isEmpty && !isFence(i):
+                    if case .rule? = kind(i + 2), lines[i + 2].range(of: #"^-+[ \t]*\r?$"#, options: .regularExpression) != nil { drop.insert(i + 1) }
+                default: break
+                }
+            }
+            i += 1
+        }
+        guard !drop.isEmpty else { return text }
+        lines = lines.enumerated().filter { !drop.contains($0.offset) }.map(\.element)
+        return lines.joined(separator: "\n")
+    }
     /// The draft as T3 writes it (`serializeEditorDoc`). Display and source keep one offset per
     /// display character: a piece the draft does not write stays as an empty atomic span.
     static func mapping(_ input: NSAttributedString) -> ComposerRichText.Mapping {
@@ -457,13 +494,27 @@ enum ComposerRichTextStyler {
         // A paragraph on the line right after a quote reads as part of it in Markdown (a lazy
         // continuation), so the draft writes a blank line between them. The newline before it
         // writes both, and the blank line holds no caret (`needsBlankLineAfterQuote`, 02e9d2417a).
+        // A list takes the same blank line before the prose after it, ahead of any empty lines the user left
+        // (#38414), and a dash rule right under a line of prose would underline it into a setext heading (#29663;
+        // `needsBlankLineBetween`, composer-rich-text-doc.ts:1254-1273 at 4928).
         func isQuote(_ i: Int) -> Bool { if i < blocks.count, case .quote? = blocks[i]?.kind { true } else { false } }
-        var quoteLine = isQuote(0)
+        func isList(_ i: Int) -> Bool {
+            guard i < blocks.count, let kind = blocks[i]?.kind else { return false }
+            switch kind { case .bullet, .ordered, .task: return true; default: return false }
+        }
+        func isProse(_ i: Int) -> Bool { i < spans.count && blocks[i] == nil && !isNewline(i) }
+        func isDashRule(_ i: Int) -> Bool {
+            guard i < blocks.count, let block = blocks[i], case .rule = block.kind else { return false }
+            return block.source.range(of: #"^-+[ \t]*\r?$"#, options: .regularExpression) != nil
+        }
+        var lineStart = 0
         for i in spans.indices where isNewline(i) {
-            if quoteLine, i + 1 < spans.count, blocks[i + 1] == nil, !isNewline(i + 1) {
+            var next = i + 1
+            if isList(lineStart) { while isNewline(next) { next += 1 } }
+            if (isQuote(lineStart) || isList(lineStart)) && isProse(next) || isProse(lineStart) && isDashRule(i + 1) {
                 spans[i] = .init(text: "\n\n", marks: [], atomic: true)
             }
-            quoteLine = isQuote(i + 1)
+            lineStart = i + 1
         }
         return ComposerRichText.mapping(spans)
     }
