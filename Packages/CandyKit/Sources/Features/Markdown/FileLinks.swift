@@ -149,6 +149,8 @@ public enum FileLinks {
         let labelPosition = splitPosition(label.trimmingCharacters(in: .whitespacesAndNewlines))
         if let l = labelPosition.line, l != destination.line { return false }
         if let c = labelPosition.column, c != destination.column { return false }
+        // A range's end line in the label must match the destination's too (markdownLinks.ts at 4928, #34006).
+        if let end = endLine(label.trimmingCharacters(in: .whitespacesAndNewlines)), end != endLine(href) { return false }
         var labelPath = normalize(labelPosition.path), destinationPath = normalize(destination.path)
         if labelPath.isEmpty { return true }
         if isWindowsAbsolutePath(destination.path) { labelPath = labelPath.lowercased(); destinationPath = destinationPath.lowercased() }
@@ -261,6 +263,21 @@ public enum FileLinks {
             return (path, line > 0 ? line : nil, (column ?? 0) > 0 ? column : nil)
         }
         return (path, nil, nil)
+    }
+
+    /// The last line of a range such as `:42-64` or `#L42-L64`, when it is past the first (fileLinks.ts at 4928, #34006).
+    static func endLine(_ text: String) -> Int? {
+        let hashIndex = text.firstIndex(of: "#")
+        let path = hashIndex.map { String(text[..<$0]) } ?? text
+        let hash = hashIndex.map { String(text[$0...]) } ?? ""
+        for (pattern, value) in [(positionCapture, path), (positionHash, hash)] {
+            let ns = value as NSString
+            guard let m = pattern.firstMatch(in: value, range: NSRange(location: 0, length: ns.length)) else { continue }
+            guard m.range(at: 3).location != NSNotFound, let line = Int(ns.substring(with: m.range(at: 1))),
+                  let end = Int(ns.substring(with: m.range(at: 3))), line > 0, end > line else { return nil }
+            return end
+        }
+        return nil
     }
 
     static func format(_ path: String, _ line: Int?, _ column: Int?) -> String {

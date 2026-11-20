@@ -67,11 +67,15 @@ final class MarkdownTextBox {
     private(set) lazy var findIndex: (text: String, sources: [NSRange]) = ThreadFindText.index(storage.textStorage ?? NSAttributedString())
 
     /// `range` of the text as copying puts it on the pasteboard: a formula's placeholder becomes its TeX.
-    func copyText(_ range: NSRange) -> String {
-        guard let storage = storage.textStorage, range.upperBound <= storage.length else { return (text as NSString).substring(with: range) }
-        var out = ""
+    func copyText(_ range: NSRange) -> String { copyPieces(range).map(\.text).joined() }
+
+    /// `copyText` in pieces, each flagged when it is a quote card's copy.
+    func copyPieces(_ range: NSRange) -> [(text: String, card: Bool)] {
+        guard let storage = storage.textStorage, range.upperBound <= storage.length else { return [((text as NSString).substring(with: range), false)] }
+        var out: [(text: String, card: Bool)] = []
         storage.enumerateAttribute(.markdownCopyText, in: range) { value, r, _ in
-            out += (value as? String) ?? storage.attributedSubstring(from: r).string
+            let card = storage.attribute(.markdownCopyCard, at: r.location, effectiveRange: nil) != nil
+            out.append(((value as? String) ?? storage.attributedSubstring(from: r).string, card))
         }
         return out
     }

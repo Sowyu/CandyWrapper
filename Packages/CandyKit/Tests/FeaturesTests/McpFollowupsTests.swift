@@ -58,9 +58,10 @@ struct McpFollowupsTests {
         #expect(after.ui.subagentRecords.first?["status"]?.stringValue == "completed")
         #expect(before != after)
     }
-    static func notification(outcome: String, kind: String = "delegated_task", work: String? = nil) throws -> WorkLogEntry {
+    static func notification(outcome: String, kind: String = "delegated_task", work: String? = nil, taskIds: [String]? = nil) throws -> WorkLogEntry {
         var source: [String: Any] = ["kind": kind, "childThreadId": "child"]
         if let work { source["work"] = work }
+        if let taskIds { source["taskIds"] = taskIds }
         let fields: [String: Any] = ["id": "note", "threadId": "parent", "type": "notification", "ordinal": 2, "status": "completed",
                                      "outcome": outcome, "source": source, "updatedAt": "2026-10-11T10:05:00Z"]
         let item = ProjectedTurnItem(local: try JSONDecoder().decode(TurnItem.self, from: JSONSerialization.data(withJSONObject: fields)))
@@ -94,6 +95,22 @@ struct McpFollowupsTests {
         #expect(!SubagentCardPresentation.resumedSince(status: "failed", startedAt: nil, notifiedAt: at))
         let live = SubagentCardPresentation(record: Self.record, event: nil)
         #expect(live.status == "running" && live.event == nil)
+    }
+
+    /// #22141 (V2LifecycleRow.tsx at 4928): follow-up tasks share a child, so a delegated-task notice shows the task it names.
+    @Test func delegatedTaskNoticeShowsItsOwnTask() throws {
+        let first: JSONValue = .object(["id": .string("task-1"), "childThreadId": .string("child"), "title": .string("First"), "status": .string("completed")])
+        let second: JSONValue = .object(["id": .string("task-2"), "childThreadId": .string("child"), "title": .string("Second"), "status": .string("completed")])
+        let e = try Self.notification(outcome: "completed", taskIds: ["task-2"])
+        #expect(SubagentCardPresentation.notificationCard(e, records: [first, second])?.title == "Second")
+        #expect(SubagentCardPresentation.notificationCard(try Self.notification(outcome: "completed"), records: [first, second])?.title == "First")
+    }
+
+    /// #29637 (subagentDisplay.ts:183-193 at 4928): card previews drop image marks and whole link destinations.
+    @Test func subagentPreviewsDropImagesAndLinks() {
+        let record: JSONValue = .object(["id": .string("a"), "childThreadId": .string("c"), "title": .string("T"), "status": .string("completed"),
+                                         "result": .string("See ![shot](/tmp/a (1).png) and [docs](https://x.dev/a_(b)) now")])
+        #expect(SubagentCardPresentation(record: record, event: nil).detail == "See shot and docs now")
     }
 
     @Test func notificationCardNeedsTheParentsRecord() throws {

@@ -129,7 +129,13 @@ public enum TurnItemDetail {
         if let text = textFromBlocks(value, depth: 0, level: .root, previews: &previews) {
             return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text
         }
-        if value == .object([:]) || value == .array([]) { return nil }
+        return formatJSONValue(value)
+    }
+
+    /// `formatJsonValue` (itemDetail.ts:105-116 at 4928): the value as indented JSON, nil when empty.
+    static func formatJSONValue(_ value: JSONValue?) -> String? {
+        guard let value, value != .null, value != .object([:]), value != .array([]) else { return nil }
+        if case .string(let s) = value, s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return nil }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         return (try? encoder.encode(value)).flatMap { String(data: $0, encoding: .utf8) }
@@ -173,7 +179,17 @@ public enum TurnItemDetail {
             let contentLevel: BlockLevel = level == .root && o["content"]?.arrayValue != nil ? .root : .nested
             if keys == ["content"], let c = o["content"] { return textFromBlocks(c, depth: depth + 1, level: contentLevel, previews: &previews) }
             if keys == ["content", "structuredContent"], let c = o["content"] {
+                let start = previews
                 let t = textFromBlocks(c, depth: depth + 1, level: contentLevel, previews: &previews)
+                // An MCP result with images, or with no text, shows its structured content and then the images'
+                // markers (itemDetail.ts:52-61 at 4928, #30389); the images still preview on their own.
+                let images = (c.arrayValue ?? []).filter { $0["type"]?.stringValue == "image" }
+                if let structured = formatJSONValue(o["structuredContent"]),
+                   !images.isEmpty || t.map({ $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) != false {
+                    var counted = start
+                    let markers = textFromBlocks(.array(images), depth: depth + 1, level: contentLevel, previews: &counted)
+                    return [structured, markers ?? ""].filter { !$0.isEmpty }.joined(separator: "\n")
+                }
                 return t.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } == false ? t : nil
             }
             return nil

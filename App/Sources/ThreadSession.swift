@@ -275,8 +275,15 @@ final class ThreadSession {
         guard let shell else { return false }
         var http = shell.http
         http.timeout = 6
-        let store = self.store, token = shell.token
-        return await withTaskGroup(of: Bool.self) { group in
+        return await Self.loadDeferredWork(anchors, store: store, http: http, token: shell.token)
+    }
+
+    /// Nonisolated so the task group's children run off the main actor and capture only Sendable values.
+    /// The pages merge in the store actor; session state stays on the main actor in the caller.
+    nonisolated private static func loadDeferredWork(
+        _ anchors: [String], store: ThreadStore, http: EnvironmentHTTP, token: String
+    ) async -> Bool {
+        await withTaskGroup(of: Bool.self) { group in
             for anchor in anchors {
                 group.addTask {
                     let anchorId = TurnItemId(anchor)
@@ -474,6 +481,24 @@ final class ThreadController {
     /// `getThreadLinkMetadata` answers by `<environment>/<thread>`; nil inside means the server doesn't know the thread.
     fileprivate var linkMetadata: [String: ThreadLinkMetadata?] = [:]
     fileprivate var linkMetadataLoading: Set<String> = []
+    /// `claimWorkspaceBasenameLookup`: only the latest clicked link opens.
+    private var fileLookupSequence = 0
+
+    /// Opens a chat file link, first finding the file the agent cited (#33943, #35036).
+    func openCitedFile(_ meta: FileLinkMeta, open: @escaping (FileLinkMeta) -> Void) {
+        fileLookupSequence += 1
+        let claimed = fileLookupSequence
+        guard meta.workspaceRelativePath.map({ WorkspaceLinkLookup.query($0, cwd: "") != nil }) == true,
+              let env = files.workspaceEnvironmentId else { open(meta); return }
+        let threadProject = sidebar?.snapshot?.threads.first { $0.id == openThreadId }?.projectId
+        let roots = (sidebar?.snapshot?.projects ?? []).filter { $0.id.environmentId == env && $0.id != threadProject }.map(\.workspaceRoot)
+        Task { [weak self] in
+            let found = await self?.files.citedFile(meta, otherRoots: roots)
+            guard let self, claimed == self.fileLookupSequence else { return }
+            open(found ?? meta)
+        }
+    }
+
     private var session: ThreadSession? {
         willSet { if let old = session, old !== newValue { retain(old) } }
     }
@@ -938,10 +963,12 @@ final class ThreadController {
             else { return }
             self.shellOpen(env, OpenInEditors.launchInput(cwd: meta.targetPath, editor: editor), failure: "Unable to open file")
         }
-        // ponytail: reveals `filePath` as written; T3 first resolves a bare basename against the workspace. Add the lookup if bare names miss
+        // Reveal resolves the cited file first, as opening does (#33943).
         MarkdownView.onRevealFile = { [weak self] meta in
             guard let self, let env = self.openThreadId?.environmentId else { return }
-            self.shellOpen(env, OpenInEditors.launchInput(cwd: meta.filePath, editor: "file-manager", reveal: true), failure: "Unable to reveal file")
+            self.openCitedFile(meta) { [weak self] meta in
+                self?.shellOpen(env, OpenInEditors.launchInput(cwd: meta.filePath, editor: "file-manager", reveal: true), failure: "Unable to reveal file")
+            }
         }
         // Media and browser documents in chat Markdown (ChatMarkdown.tsx:2545-2590, 3270-3290): host files load
         // through signed asset URLs on the open thread's environment.

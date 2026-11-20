@@ -566,7 +566,8 @@ public final class ThreadLineageSectionView: DSView {
         let available = lineage.availableMembers
         func member(_ m: SubagentWorkflowGroup.Member) {
             let v = ThreadLineageWorkflowMemberView(m, coordinator: coordinator, driver: driver, providerName: providerName,
-                                                    available: m.childThreadId.map(available.contains) ?? false, nowMs: nowMs)
+                                                    available: m.childThreadId.map(available.contains) ?? false, nowMs: nowMs,
+                                                    badge: providerBadge?(coordinator.providerInstanceId), dotOnTop: anyInstanceBadge)
             if let child = m.childThreadId { v.action = { [weak self] in self?.onOpen?(child) } }
             list?.add(v, height: 32, indent: 26)
             members.append(v)

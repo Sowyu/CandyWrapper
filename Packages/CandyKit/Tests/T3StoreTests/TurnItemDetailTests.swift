@@ -95,4 +95,19 @@ import Testing
         // Nested images are not output blocks, so they never preview.
         #expect(TurnItemDetail.formatToolValue(.array([.array([image])])) == "[image]")
     }
+
+    /// #30389 (itemDetail.ts:52-61 at 4928): an MCP result with images shows its structured content, and the
+    /// previewed images leave no marker; one with text and no images keeps its text.
+    @Test func mcpResultsWithImagesShowStructuredContent() {
+        let image: JSONValue = .object(["type": .string("image"), "data": .string("AA=="), "mimeType": .string("image/png")])
+        let structured: JSONValue = .object(["width": .number(800)])
+        let withImage: JSONValue = .object(["content": .array([.object(["type": .string("text"), "text": .string("shot")]), image]),
+                                            "structuredContent": structured])
+        #expect(TurnItemDetail.formatToolValue(withImage) == "{\n  \"width\" : 800\n}")
+        let textOnly: JSONValue = .object(["content": .array([.object(["type": .string("text"), "text": .string("ok")])]),
+                                           "structuredContent": structured])
+        #expect(TurnItemDetail.formatToolValue(textOnly) == "ok")
+        let empty: JSONValue = .object(["content": .array([]), "structuredContent": structured])
+        #expect(TurnItemDetail.formatToolValue(empty) == "{\n  \"width\" : 800\n}")
+    }
 }

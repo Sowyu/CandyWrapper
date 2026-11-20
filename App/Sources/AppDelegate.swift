@@ -386,7 +386,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openIn = OpenInController(card: threads.panel.lazyDetailsCard, pill: threads.panel.header.pill, git: threads.git, environments: environments, composer: threads.composer,
                                   shortcuts: shortcuts)
         threads.panel.model.openFile = { [weak threads, weak openIn] meta, editor in
-            if editor { openIn?.openFile(meta) } else { threads?.files.openLink(meta) }
+            threads?.openCitedFile(meta) { meta in if editor { openIn?.openFile(meta) } else { threads?.files.openLink(meta) } }
         }
         if let shortcuts, !Self.isPreview {
             let captures = SnapShotController(window: window, composer: threads.composer, shortcuts: shortcuts)

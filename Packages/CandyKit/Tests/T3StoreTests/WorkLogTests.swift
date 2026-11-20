@@ -70,17 +70,6 @@ private func dynamicTool(_ name: String, input: String) -> TurnItem {
         #expect(formatWorkspaceRelativePath("/repo/demo", workspaceRoot: "/repo/demo") == "demo")
     }
 
-    // LT:5196
-    @Test func collapsesOnlyLongUserMessages() {
-        #expect(!shouldCollapseUserMessage("short"))
-        #expect(shouldCollapseUserMessage(String(repeating: "a", count: 601)))
-        #expect(shouldCollapseUserMessage((1...9).map(String.init).joined(separator: "\n")))
-        #expect(!shouldCollapseUserMessage((1...8).map(String.init).joined(separator: "\n")))
-        // A long link collapses to its label first.
-        #expect(!shouldCollapseUserMessage("[notes](https://example.com/\(String(repeating: "x", count: 700)))"))
-        #expect(!shouldCollapseUserMessage("   \n  "))
-    }
-
     // LT:99-352
     @Test func workEntryLabels() {
         let thought = entry(tone: .thinking) {

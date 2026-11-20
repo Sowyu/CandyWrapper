@@ -1187,15 +1187,26 @@ public final class MarkdownView: DSView {
         citeButton?.removeFromSuperview(); citeButton = button; addSubview(button)
     }
     /// The selection as copied: `selectionText` with each formula's TeX in place of its placeholder.
+    /// A quote card spans its title, passage and comment boxes, and copies once for all of them.
     private func copiedText(_ range: NSRange) -> String {
         var out = ""
+        var lastCard: String?
+        var newlines = 0
         for (box, _, offset) in selectionBoxes {
             let length = (box.text as NSString).length
             let overlap = NSIntersectionRange(range, NSRange(location: offset, length: length))
-            if overlap.length > 0 { out += box.copyText(NSRange(location: overlap.location - offset, length: overlap.length)) }
-            if range.location <= offset + length, range.upperBound > offset + length { out += "\n" }
+            if overlap.length > 0 {
+                for piece in box.copyPieces(NSRange(location: overlap.location - offset, length: overlap.length)) {
+                    // The same card's next box: no copy, and no line break inside the card.
+                    if piece.card, piece.text == lastCard { newlines = 0; continue }
+                    out += String(repeating: "\n", count: newlines) + piece.text
+                    newlines = 0
+                    lastCard = piece.card ? piece.text : nil
+                }
+            }
+            if range.location <= offset + length, range.upperBound > offset + length { newlines += 1 }
         }
-        return out
+        return out + String(repeating: "\n", count: newlines)
     }
 
     /// Every line box the selection covers (`range.getClientRects()`).

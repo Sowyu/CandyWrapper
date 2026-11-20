@@ -723,4 +723,39 @@ struct ToolCallVisibilityTests {
         input.latestRun = nil
         #expect(TimelineRows.filteringToolCalls(entries, visibility: "zen", input: input).map(\.id) == ["u1", "a2", "u2", "boom", "a3"])
     }
+
+    /// `liveAnswerPreview` (MessagesTimeline.logic.ts:1485-1498 at 4928): Zen's Thinking row reads the newest assistant
+    /// text or thought since the prompt, read before the filter hides it.
+    @Test func zenThinkingShowsTheLiveAnswerLine() {
+        let at: T3Timestamp = "2026-01-01T00:00:00Z"
+        let entries: [TimelineEntry] = [
+            message("u0", role: .user, at: at, text: "Old"),
+            message("a0", role: .assistant, run: "r0", at: at, text: "Old answer."),
+            message("u1", role: .user, at: at),
+            work("think", at: at) { $0.itemType = .reasoning; $0.detail = "**Checking the config**\nmore"; $0.runId = "r1" },
+        ]
+        #expect(TimelineRows.liveAnswerPreview(entries) == "Checking the config")
+        #expect(TimelineRows.liveAnswerPreview(entries + [message("a1", role: .assistant, run: "r1", at: at, text: "Found it. The key is wrong.")]) == "Found it.")
+        #expect(TimelineRows.liveAnswerPreview(Array(entries.prefix(3))) == nil)
+    }
+
+    /// #34177 (MessagesTimeline.logic.ts at 4928): a folded turn keeps only its latest context-compacted divider.
+    @Test func foldedTurnsKeepOneCompactionDivider() {
+        let at: T3Timestamp = "2026-01-01T00:00:00Z"
+        func compaction(_ id: String) -> TimelineEntry {
+            work(id, run: "r1", at: at, label: "Compacted context", tone: .info) { $0.sourceActivityKind = "context-compaction"; $0.toolLifecycleStatus = .completed }
+        }
+        let rows = derive([
+            message("u", role: .user, at: at),
+            work("cmd1", run: "r1", at: at) { $0.itemType = .commandExecution; $0.toolLifecycleStatus = .completed },
+            compaction("c1"),
+            work("cmd2", run: "r1", at: at) { $0.itemType = .commandExecution; $0.toolLifecycleStatus = .completed },
+            compaction("c2"),
+            message("a", role: .assistant, run: "r1", at: at, text: "Done."),
+        ])
+        let kinds = rows.map { "\($0.id):\(kind($0))" }
+        #expect(kinds.contains { $0.hasPrefix("c2:") })
+        #expect(!kinds.contains { $0.hasPrefix("c1:") })
+        #expect(kinds.contains { $0.hasSuffix(":turn-fold") })
+    }
 }

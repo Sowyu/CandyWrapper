@@ -175,7 +175,7 @@ final class HtmlRenderRowView: TimelineRowView {
             let dark = self.effectiveAppearance.isDark
             let themed = URL(string: url.absoluteString.split(separator: "#", maxSplits: 1)[0] + HtmlRenderTheme(dark: dark).fragment) ?? url
             let model = self.context.model
-            HtmlRenderDialogView(page: .init(src: themed, title: ref.title, dark: dark)) { data, frame in
+            HtmlRenderDialogView(page: .init(src: themed, title: ref.title, dark: dark), reference: ref) { data, frame in
                 Self.handle(data, frame: frame, model: model)
             }.present(in: window)
         }

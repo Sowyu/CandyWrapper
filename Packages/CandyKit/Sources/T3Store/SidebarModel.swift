@@ -1048,7 +1048,7 @@ public final class SidebarInboxReturnTracker: @unchecked Sendable {
     /// `WORKING_EXIT_GRACE_MS` (threadInbox.ts:115).
     public static let workingExitGraceMs: Int64 = 2_000
 
-    private struct State { var working: Bool; var deadline: Int64?; var placement: [String?] }
+    private struct State { var working: Bool; var deadline: Int64?; var placement: [String?]? }
     private var states: [ThreadId: State] = [:]
     private var returns: [ThreadId: Int64] = [:]
 
@@ -1062,17 +1062,20 @@ public final class SidebarInboxReturnTracker: @unchecked Sendable {
         for t in threads {
             present.insert(t.id)
             let shell = t.shell
-            let placement = [shell.archivedAt?.raw, shell.deletedAt?.raw, shell.pinnedAt?.raw, shell.settledOverride?.rawValue,
-                             shell.settledAt?.raw, shell.snoozedAt?.raw, shell.snoozedUntil?.raw, shell.activeOrderKey]
             let previous = states[t.id]
+            let actual = SidebarModel.isThreadWorking(t)
+            // Only a working thread, or one that just was, can be held, so idle threads skip the placement key
+            // (threadInbox.ts at 4928, #27460).
+            let placement = actual || previous?.working == true
+                ? [shell.archivedAt?.raw, shell.deletedAt?.raw, shell.pinnedAt?.raw, shell.settledOverride?.rawValue,
+                   shell.settledAt?.raw, shell.snoozedAt?.raw, shell.snoozedUntil?.raw, shell.activeOrderKey] : nil
             let actionable = t.hasPendingApprovals || t.hasPendingUserInput || t.pendingSubagentRequest != nil
                 || (shell.pendingGuestMessageCount ?? 0) > 0
                 || (shell.interactionMode == .plan && shell.hasActionableProposedPlan)
                 || t.runtime?.lastError != nil || t.latestRun?.status == .failed
-            let moved = previous.map { $0.placement != placement } ?? false
+            let moved = previous?.placement.map { $0 != placement } ?? false
             let excluded = shell.archivedAt != nil || shell.deletedAt != nil || shell.pinnedAt != nil
                 || shell.settledOverride == .settled || SidebarModel.effectiveSnoozed(t, nowMs: nowMs)
-            let actual = SidebarModel.isThreadWorking(t)
             let deadline = !actual && previous?.working == true && !actionable && !moved && !excluded
                 ? previous?.deadline ?? nowMs + Self.workingExitGraceMs : nil
             let working = actual || (deadline.map { $0 > nowMs } ?? false)
