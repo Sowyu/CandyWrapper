@@ -186,7 +186,7 @@ struct RedesignBaselineTests {
                 try capture(name, AppRouteModalView(label: "Settings", content: page, navigation: nav), NSSize(width: 1100, height: 780))
             }
         }
-        #expect(count == 86)
+        #expect(count == 88)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 
