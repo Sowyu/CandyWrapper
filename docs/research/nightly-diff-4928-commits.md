@@ -1420,14 +1420,14 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | ecea6ca3e6 | #21878 | thread | fix(web): edit from here uses a pencil icon | port |
 | 3d5baafecf | #22100 | thread | fix(web): respect reduced motion in thread loading controls | port |
 | 6ca95bd92a | #23626 | thread | fix(web): Enter no longer skips an unanswered question | ported: Next and Enter stay on an unanswered question (T3Store `UserInputSession.advance`) |
-| 616c426f5f | #27372 | thread | fix(shared): TypeScript files no longer show as videos | port |
+| 616c426f5f | #27372 | thread | fix(shared): TypeScript files no longer show as videos | ported: `video/mp2t` and `video/vnd.dlna.mpeg-tts` attachments stay files in sent messages and their chips (thread-2, T3Store `isPlayableVideoMime`). Left: the composer's own check in ComposerAttachments (Features/Composer) |
 | 8d012a688e | #27522 | thread | fix(web): a new thread's first reply shows without reloading | port |
-| a0d6cc8ba9 | #21594 | thread | fix(client-runtime): goal token counts no longer read 1000k | port |
+| a0d6cc8ba9 | #21594 | thread | fix(client-runtime): goal token counts no longer read 1000k | ported: goal usage reads 1m, not 1000k, from 999,500 tokens (thread-2, ThreadRecoveryPresentation) |
 | f47700849e | #22141 | thread | fix(web): show the result of the notified delegated task | port |
 | 5ad7da060d | #22367 | thread | fix(web): keep markdown separators visible in dark mode | ported in eceea265 |
 | 9ceb949a01 | #22875 | thread | fix(web): copied Markdown tables keep formula pipes | port |
 | c40b32a729 | #23448 | thread | fix(web): keep ACP agent logos in multi-model selections | port |
-| 3bd744fc11 | #23679 | thread | fix(web): show clipboard errors in anchored copy notifications | port |
+| 3bd744fc11 | #23679 | thread | fix(web): show clipboard errors in anchored copy notifications | n/a: web clipboard API errors; NSPasteboard writes don't fail this way |
 | 17580724fc | #26067 | thread | fix(web): byte sizes just under the next unit no longer read "1024 KB" | port |
 | 9ad6c7ef8b | #26145 | thread | fix(web,mobile): long links in secret requests wrap and can be copied | port |
 | 22463861cd | #26151 | thread | fix(web): clicking a secret request card focuses its field again | port |
@@ -1440,7 +1440,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 447d71d901 | #25838 | thread | fix(web): chat stays centered while the thread details card fits beside it | port |
 | 191cd7e789 | #25948 | thread | fix(web): match HTML render backgrounds to the dark chat theme | port |
 | fd08b170b6 | #26871 | thread | fix(web): punctuation after a file chip stays on the chip's line | already in CandyWrapper: a chip is a run of the same attributed text, and line breaking never breaks before closing punctuation (Features/Markdown/MarkdownLayout `text`) |
-| f2cd7a1e63 | #25199 | thread | fix(web): show complete tooltip labels when opening | port |
+| f2cd7a1e63 | #25199 | thread | fix(web): show complete tooltip labels when opening | n/a: CSS tooltip entry animation; AppKit tooltips draw whole |
 | 09ac55639a | #26716 | thread | fix(web): popovers fade out in place instead of jumping after a pick | port |
 | eef35b0262 | #26762 | thread | fix(clients): stop loading thread families when opening chats | port |
 | 0343c83aa6 | #24833 | thread | fix(web,mobile): lineage and agent rows show which account a subagent runs on | ported: lineage rows draw the subagent's instance badge on its glyph and lift the status dot to the top corner while any instance shows one (thread-2, ThreadRelationshipIconView). Left: workflow member rows |
@@ -1483,7 +1483,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | ef81fd15ca | #31888 | thread | fix(web): keep task updates static in the timeline | port |
 | 6dcaf6cbe7 | #29285 | thread | fix(web): remote subagents no longer split from the lineage list | port |
 | 8bf1b64cae | #32141 | thread | fix(web): the citation comment box opens at the quote instead of sliding in from the corner | port |
-| 07508ffd2f | #31794 | thread | fix(web): popovers over the desktop header respond to the pointer | port |
+| 07508ffd2f | #31794 | thread | fix(web): popovers over the desktop header respond to the pointer | n/a: Electron's title bar drag region; AppKit hit-tests popups above the window chrome |
 | 08a3909406 | #31825 | thread | fix: show latest reply age in active thread rows | ported 9a0153d1 |
 | 48bb784e3d | #32403 | thread | fix(shared): inline code like `allocator.cc:217` becomes a file chip | ported in 93df13b9 |
 | 57ded10b74 | #25694 | thread | fix(web): restore bold weight in rendered Markdown | ported in eceea265 |
@@ -1496,8 +1496,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 739aba73b7 | #29025 | thread | fix(web,mobile): per-thread auto-settle menu says what it does | port |
 | ceed427d79 | #29601 | thread | fix(web): removing a queued message's attachment counts as an edit when its run starts | port |
 | 6e4711d376 | #33525 | thread | fix(web): clicked workspace areas no longer show the focus ring after a stray key | port |
-| 45e0143cf1 | #33598 | thread | fix(web): thread title menu opens without a half-second wait on desktop | port |
-| ad989057ba | #32643 | thread | fix(web): dropdown items over the desktop title bar respond to clicks | port |
+| 45e0143cf1 | #33598 | thread | fix(web): thread title menu opens without a half-second wait on desktop | n/a: the desktop shell's menu delay; CandyWrapper's title menu opens on click |
+| ad989057ba | #32643 | thread | fix(web): dropdown items over the desktop title bar respond to clicks | n/a: Electron's title bar drag region |
 | 046efd791e | #26630 | thread | fix(web): scrolling pans expanded images and Mermaid diagrams | port |
 | 16a6c1c41f | #33647 | thread | fix(web): show details for background commands | port |
 | 934c7f8d8e | #33724 | thread | fix(web): center short PR titles in thread details | port |
@@ -1506,7 +1506,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 57d5e98272 | #33038 | thread | fix(web): minimap next turn is disabled at the bottom of a thread | port |
 | e509db3a2f | #32605 | thread | fix(web): Tab reaches the add-project and new-project submit buttons | port |
 | 20723d6d9b | #32520 | thread | fix: Claude monitor wakes no longer fire a completion alert per line | port |
-| 08af12da49 | #33994 | thread | fix(shared): show zero seconds in minute durations | port |
+| 08af12da49 | #33994 | thread | fix(shared): show zero seconds in minute durations | already in CandyWrapper: durations read `1m 0s` (screens-port, T3Store ThreadRelationships `formatDuration`) |
 | 3051b32502 | #33943 | thread | fix: chat file links open the file agents cite | port |
 | 283fa1f1cd | #34011 | thread | fix(clients): scroll truncated command output notice with logs | port |
 | d256170b34 | #34006 | thread | fix: file links with line ranges open at their first line | ported in 93df13b9: a range opens at its first line; the label check ignores the end line |
@@ -1515,10 +1515,10 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | ccc7b2d96f | #33352 | thread | fix(web): MCP App cards no longer flash white in dark mode while the app loads | port |
 | 32fdad5f49 | #32151 | thread | fix(web): timeline minimap preview no longer steals hover or jumps around | port |
 | 5b11efe5df | #30473 | thread | fix(clients): images the agent opens stay visible in the chat | ported in 2eb8794e |
-| 11611419f3 | #33396 | thread | fix(web): trackpad flicks over the right panel tabs no longer navigate back | port |
+| 11611419f3 | #33396 | thread | fix(web): trackpad flicks over the right panel tabs no longer navigate back | n/a: browser back-swipe navigation, which AppKit views don't have |
 | 1c17285e58 | #28084 | thread | fix(shared): cite assistant messages with IDs over 512 characters | port |
 | d835e430db | #22874 | thread | fix(web): question answers submit while normal sends are blocked | port |
-| 691b9709b0 | #26408 | thread | fix(web): Ctrl + "+" zooms on keyboard layouts with a dedicated plus key | port |
+| 691b9709b0 | #26408 | thread | fix(web): Ctrl + "+" zooms on keyboard layouts with a dedicated plus key | n/a: browser zoom shortcuts on keyboard layouts; CandyWrapper has no page zoom |
 | b3f5d52701 | #24138 | thread | fix(composer): steer instead of queueing during automatic compaction | port |
 | f3da8ff63b | #30575 | thread | feat(gitlab): resolve overview threads from Summary and Timeline | port |
 | afa617b465 | #15255 | thread | fix(web): branch picker no longer interrupts a running turn | port |
@@ -1567,7 +1567,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 451e3756a5 | #33953 | thread | fix(web): keep later navigation when thread deletion completes | port |
 | b63d3c5923 | #26888 | thread | fix(web): sent messages honor their theme foreground | port |
 | dfded9d759 | #27436 | thread | fix(web): keep the child thread open when its remote parent was deleted | port |
-| 9ac4535b06 | #35634 | thread | fix(shared): token counts just below a unit boundary use the next unit | port |
+| 9ac4535b06 | #35634 | thread | fix(shared): token counts just below a unit boundary use the next unit | ported: token counts pick their unit after rounding, so 999,999 reads 1M (thread-2, T3Store `formatTokens`) |
 | c6b18c4741 | #33353 | thread | fix(web,mobile): keep line breaks in pending question text | port |
 | c4e74fe767 | #29511 | thread | Typeset equations that fail only because of an unescaped percent | port |
 | 9ccc0f8a60 | #33558 | thread | fix(editors): JetBrains IDEs open file links in the thread's project | port |

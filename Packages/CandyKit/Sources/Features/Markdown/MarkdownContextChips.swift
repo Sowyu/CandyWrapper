@@ -248,7 +248,7 @@ public struct MarkdownContextChips: Equatable {
             let name = record["name"]?.stringValue ?? recordLabel
             let size = ComposerFileRow.formatSize(record["sizeBytes"]?.intValue ?? 0)
             let mime = attachment["mimeType"]?.stringValue ?? ""
-            let video = mime.hasPrefix("video/")
+            let video = isPlayableVideoMime(mime)
             // ponytail: a video chip opens the file like any other; T3 plays it in the media viewer (`onExpandVideo`)
             let disabled: Bool = if case .bool(false)? = attachment["downloadable"] { !video } else { false }
             return MarkdownContextChip(look: ComposerChipLook(kind: video ? .video : .file(name: name), label: ComposerAttachmentRules.middleTruncate(name), detail: size),
