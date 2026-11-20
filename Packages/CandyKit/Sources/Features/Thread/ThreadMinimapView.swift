@@ -41,8 +41,13 @@ public struct ThreadMinimapItem: Equatable, Sendable {
             let c = text?.split(whereSeparator: \.isWhitespace).joined(separator: " ") ?? ""
             return c.isEmpty ? nil : c
         }
-        let answer = assistantText.map { MarkdownDocument(parsing: String($0.prefix(1_500)), preservesLineBreaks: false).blocks.map { Self.text($0, threadTitle: threadTitle) }.joined(separator: " ") }
-        return (compact(userText), compact(answer))
+        func plain(_ markdown: String) -> String {
+            MarkdownDocument(parsing: String(markdown.prefix(1_500)), preservesLineBreaks: false).blocks.map { Self.text($0, threadTitle: threadTitle) }.joined(separator: " ")
+        }
+        // A prompt's citations and context links read as their text before parsing, which would turn a citation
+        // into "Assistant quote" (`markdownMinimapPreview`, timelineMinimapItems.ts:101-125 at 4928, #38250).
+        let prompt = plain(ComposerInlineTokens.citationsToPlainText(ComposerInlineTokens.contextLabels(userText)))
+        return (compact(prompt), compact(assistantText.map { plain($0) }))
     }
 
     /// `markdownNodeText` (:60-86): inline content joins as is, blocks with a space; images give their alt.
@@ -87,6 +92,8 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
     }
     /// The turn at the reader's position, for the previous and next buttons (`resolveTimelineMinimapCurrentIndex`).
     public var currentIndex: Int? { didSet { if currentIndex != oldValue { updateNavigation() } } }
+    /// The timeline sits at its very bottom, so there is no next turn to go to.
+    public var atEnd = false { didSet { if atEnd != oldValue { updateNavigation() } } }
     /// Strips whose turn is on screen draw bright (`data-in-view`, MessagesTimeline.tsx:1219-1234, 1890-1902).
     public var inView = IndexSet() { didSet { if inView != oldValue { needsDisplay = true } } }
     public var persistentGutter = true { didSet { if persistentGutter != oldValue { needsDisplay = true; snapAlpha() } } }
@@ -120,7 +127,7 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
     }
     private func updateNavigation() {
         previous.isEnabled = (currentIndex ?? 0) > 0
-        next.isEnabled = (currentIndex ?? 0) < items.count - 1
+        next.isEnabled = !atEnd && (currentIndex ?? 0) < items.count - 1
         HoverReveal.fade([previous], visible: hoveredArrow === previous)
         HoverReveal.fade([next], visible: hoveredArrow === next)
     }
@@ -143,7 +150,9 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
         guard let hovered, items.indices.contains(hovered), let host = popupHost else { return }
         let content = ThreadMinimapPreviewView(item: items[hovered], threadTitle: threadTitle ?? { _ in nil })
         let popover = PopoverView(content: content, padding: .card, width: .md, beforeLine: false, surface: .tooltipGlass, radius: 12)
-        let align: PopupPlacement.Align = hovered == 0 ? .start : hovered == items.count - 1 ? .end : .center
+        // Centered on its strip at the ends too, since the rail leaves room above and below (`-translate-y-1/2`,
+        // TimelineMinimap.tsx at 4928, #32151).
+        let align: PopupPlacement.Align = .center
         previewPopup = host.open(popover, trigger: self, anchorRect: NSRect(x: 24, y: tickY(hovered) + 1, width: 1, height: 0),
             placement: PopupPlacement(side: .right, align: align, sideOffset: 8), pressesTrigger: false, returnsFocus: false, passive: true)
         // A card closed from outside takes the fisheye with it, so the two never disagree.

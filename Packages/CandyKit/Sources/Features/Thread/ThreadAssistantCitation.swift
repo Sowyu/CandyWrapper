@@ -128,6 +128,12 @@ public final class AssistantCitationCommentEditorView: DSView {
         cancel.action = { [weak self] in self?.onCancel?() }
         save.action = { [weak self] in self?.submit(send: false) }
         input.onChange = { [weak self] _ in self?.update() }
+        // Tab from the comment lands on Save, so Enter can't discard a fresh citation through Cancel
+        // (`tabIndex={-1}` on Cancel, AssistantCitationCommentEditor.tsx:120-121 at 4928, #37579).
+        input.onCommand = { [weak self] selector in
+            guard selector == #selector(NSResponder.insertTab(_:)), let self, self.save.isEnabled else { return false }
+            return self.window?.makeFirstResponder(self.save) ?? false
+        }
         update()
     }
 
@@ -230,6 +236,8 @@ public enum AssistantCitationCommentPopup {
         DispatchQueue.main.async { [weak editor] in
             guard let editor, let window = editor.window else { return }
             window.makeFirstResponder(editor.input)
+            // The caret starts after the comment, scrolled to it (AssistantCitationChip.tsx:196-202 at 4928, #28667).
+            editor.input.moveCaretToEnd()
         }
         return popup
     }

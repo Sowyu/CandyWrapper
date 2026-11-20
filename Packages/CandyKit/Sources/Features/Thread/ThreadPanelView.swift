@@ -245,13 +245,6 @@ public final class ThreadHeaderView: TopbarDragView {
         // `size-3.5` favicon: the 16px monogram drawn at 14px.
         favicon.frame = NSRect(x: start, y: midY - 7, width: 14, height: 14)
         favicon.bounds = NSRect(x: 0, y: 0, width: 16, height: 16)
-        let projectWidth = min(160, project.textWidth)
-        project.frame = NSRect(x: start + 20, y: midY - 10, width: ceil(projectWidth), height: 20)
-        let slashX = start + 20 + projectWidth + 12
-        projectButton.frame = NSRect(x: start, y: midY - 10, width: 20 + ceil(projectWidth), height: 20)
-        projectButton.isHidden = project.text.isEmpty || !threadVisible || plain
-        slash.frame = NSRect(x: slashX, y: midY - 10, width: ceil(slash.textWidth), height: 20)
-        var titleX = plain ? start : slashX + slash.textWidth + 12
         // `pr-24` keeps the title clear of the toggles; with the right panel open only the details
         // toggle is left and it is `pr-10`, plus the title button's hidden 14px chevron and `gap-1`
         // (ChatHeader.tsx:256-345).
@@ -266,6 +259,18 @@ public final class ThreadHeaderView: TopbarDragView {
             guestIndicator.frame = NSRect(x: right - size.width, y: midY - size.height / 2, width: size.width, height: size.height)
             titleRight = min(titleRight, guestIndicator.frame.minX - 12 - 18)
         }
+        // The project crumb is `shrink` and middle-truncated beside the title's `min-w-10 flex-1`, so it keeps its
+        // whole name until the title is down to 40pt (ChatHeader.tsx:266-284 at 4928, #30503).
+        let slashWidth = slash.textWidth
+        let parentRoom = parentCrumb.isHidden ? 0 : parentCrumb.collapsedWidth + 12 + ceil(parentSlash.textWidth) + 12
+        let projectWidth = max(0, min(project.textWidth, titleRight - (start + 20) - 12 - slashWidth - 12 - parentRoom - 40))
+        project.truncation = .middle
+        project.frame = NSRect(x: start + 20, y: midY - 10, width: ceil(projectWidth), height: 20)
+        let slashX = start + 20 + ceil(projectWidth) + 12
+        projectButton.frame = NSRect(x: start, y: midY - 10, width: 20 + ceil(projectWidth), height: 20)
+        projectButton.isHidden = project.text.isEmpty || !threadVisible || plain
+        slash.frame = NSRect(x: slashX, y: midY - 10, width: ceil(slashWidth), height: 20)
+        var titleX = plain ? start : slashX + slashWidth + 12
         if !parentCrumb.isHidden {
             // The parent shows in full unless the whole breadcrumb would then overflow; then it collapses
             // to "..." (ChatHeader.tsx:130-164 in 2994).
@@ -390,7 +395,7 @@ public final class ThreadPanelView: DSView {
         let match = ThreadFindResult.Match(entryId: entryId, runId: runId)
         pendingCitation = match
         model.prepareThreadFind(match)
-        if timeline.revealFindEntry(entryId) { pendingCitation = nil }
+        if timeline.revealFindEntry(entryId) { pendingCitation = nil; timeline.focusCitedEntry(entryId) }
     }
     public let timeline = TimelineView()
     public let composer = ComposerView()
@@ -873,12 +878,13 @@ public final class ThreadPanelView: DSView {
         fadeMask.actions = ["bounds": NSNull(), "position": NSNull(), "locations": NSNull()]
         layer?.addSublayer(fade)
         timeline.context.model = model
+        timeline.onFocusLost = { [weak self] in self?.composer.focus() }
         model.onChange = { [weak self] change in
             guard let self else { return }
             self.timeline.setItems(self.model.items, change: change)
             if !self.switchingThread, !self.model.threadRowsPending { self.timeline.isInert = false }
             if let match = self.pendingFindMatch { self.revealThreadFind(match) }
-            if let match = self.pendingCitation, self.timeline.revealFindEntry(match.entryId) { self.pendingCitation = nil }
+            if let match = self.pendingCitation, self.timeline.revealFindEntry(match.entryId) { self.pendingCitation = nil; self.timeline.focusCitedEntry(match.entryId) }
         }
         // Banners overlay the timeline without changing its content height (`z-20`).
         addSubview(errorBanner)
@@ -2253,15 +2259,17 @@ public final class ThreadPanelView: DSView {
         }
         panelResize.isHidden = !rightPanelOpen || rightPanelMaximized || sheet
         // Nightly 3814 keeps maximize beside the sheet controls (ChatView.tsx:3795-3804). It fades with the slide, `transition-opacity`
-        // over the same duration and curve (ChatView.tsx:11213-11224).
-        maximize.isHidden = (sheet && !ThreadDesign.uses3814(dark: effectiveAppearance.isDark)) || (!rightPanelOpen && panelGhost == nil)
+        // over the same duration and curve (ChatView.tsx:11213-11224), but only while opening: fading out on close would show it
+        // beside the thread details toggle that replaces it (PanelLayoutControls.tsx:241-253 at 4928, #26232).
+        maximize.isHidden = (sheet && !ThreadDesign.uses3814(dark: effectiveAppearance.isDark)) || !rightPanelOpen
         maximize.alphaValue = panelSlide.isRunning ? panelSlide.value : 1
         // The sheet covers the canvas at z=21, including its title bar.
         let controlsAboveSheet = sheet && ThreadDesign.uses3814(dark: effectiveAppearance.isDark)
         for control in [header.toggles[2], header.toggles[1], maximize] {
             control.layer?.zPosition = controlsAboveSheet ? 22 : 0
         }
-        panelResize.frame = NSRect(x: chat - 4, y: panelTop, width: 8, height: max(0, bounds.height - panelTop))
+        // `left-0 w-1`: the handle starts at the panel's edge, off the chat's scrollbar (RightPanelResizeHandle.tsx:22 at 4928, #35043).
+        panelResize.frame = NSRect(x: chat, y: panelTop, width: 4, height: max(0, bounds.height - panelTop))
         if rightPanelOpen || panelGhost != nil {
             // The window's panel controls: `mr-px` and 12px from the right, `gap-1`.
             var x = bounds.width - 12 - 1

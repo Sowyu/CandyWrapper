@@ -67,6 +67,8 @@ enum WorkIcons {
             default: break
             }
         }
+        // An info notice gets the zap, any other the alert (TimelineWorkEntryRow.logic.ts:170-175 at 4928, #23506).
+        if e.itemType == .systemNotice { return e.projectedItem?.item.string("level") == "info" ? .zap : .circleAlert }
         if e.itemType == .userInputRequest || e.itemType == .approvalRequest { return .messageCircle }
         if let icon = tool(WorkLog.toolPresentation(e)?.icon) { return icon }
         let action = WorkLog.toolGroupAction(e)
@@ -85,7 +87,7 @@ enum WorkIcons {
 // MARK: - One work log line
 
 /// `WorkLogRow` + `WorkLogLine` (WorkLog.tsx:52-100): a 24px line with a 24px icon cell, `gap-1.5`,
-/// a truncated label, the hover timestamp and a chevron cell that is reserved even when empty.
+/// a truncated label, the hover timestamp and a chevron cell when the row expands.
 final class WorkLineView: DSView {
     enum Style { case tool, plain, destructive, warning }
 
@@ -118,8 +120,8 @@ final class WorkLineView: DSView {
 
 
     var showsTime = false { didSet { if showsTime != oldValue { time.alphaValue = showsTime ? 1 : 0; needsLayout = true } } }
-    /// The chevron cell is `invisible` (still 16px) when there is nothing to expand.
-    var expandable = false { didSet { chevron.isHidden = !expandable } }
+    /// Without anything to expand there is no chevron cell (#35549).
+    var expandable = false { didSet { chevron.isHidden = !expandable; if expandable != oldValue { needsLayout = true } } }
     /// The trailing slot holds only the timestamp, flush right, with no chevron cell (a failed error's row,
     /// MessagesTimeline.tsx:5444-5450).
     var timeOnlyTrailing = false { didSet { if timeOnlyTrailing != oldValue { needsLayout = true } } }
@@ -225,12 +227,15 @@ final class WorkLineView: DSView {
         let h: CGFloat = 24
         iconView.frame = NSRect(x: 4, y: 4, width: 16, height: 16)
         dotGrid?.frame = iconView.frame
-        // Trailing slot, right to left: chevron cell (16), timestamp.
-        let chevronX = timeOnlyTrailing ? bounds.width + 3 : bounds.width - 16
-        chevron.frame = NSRect(x: chevronX + 2, y: 6, width: 12, height: 12)
+        // Trailing slot, right to left: the timestamp flush right while shown, then the chevron cell (16) only when
+        // the row expands, `gap-1.5` apart (TimelineWorkEntryRow.tsx:627-637 at 4928, #35549).
+        var right = bounds.width
         let timeWidth = showsTime ? ceil(time.textWidth) : 0
-        time.frame = NSRect(x: chevronX - 6 - timeWidth, y: 4, width: timeWidth, height: 16)
-        var right = showsTime ? time.frame.minX - 6 : chevronX - 6
+        time.frame = NSRect(x: right - 3 - timeWidth, y: 4, width: timeWidth, height: 16)
+        if showsTime { right = time.frame.minX - 6 }
+        let chevronX = expandable && !timeOnlyTrailing ? right - 16 : right
+        chevron.frame = NSRect(x: chevronX + 2, y: 6, width: 12, height: 12)
+        if expandable && !timeOnlyTrailing { right = chevronX - 6 }
         if let a = trailingAction, !a.isHidden {
             let w = a.preferredWidth
             a.frame = NSRect(x: right - w, y: 0, width: w, height: h)

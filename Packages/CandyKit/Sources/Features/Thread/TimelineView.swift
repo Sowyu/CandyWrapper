@@ -532,6 +532,14 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         return true
     }
 
+    /// A citation jump also moves VoiceOver to the cited response, unless someone is typing
+    /// (AssistantCitationSource.tsx:207-214 at 4928, #37813).
+    public func focusCitedEntry(_ entryId: String) {
+        guard let row = visible[entryId] else { return }
+        if window?.firstResponder is NSTextView { return }
+        NSAccessibility.post(element: row, notification: .layoutChanged, userInfo: [.uiElements: [row]])
+    }
+
     /// Scrolls to the row showing a work entry or message, as the image gallery's "Open in thread" does.
     @discardableResult
     public func revealEntry(containing entryId: String) -> Bool {
@@ -800,7 +808,8 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         let gutter = laneFrame.x
         minimap.isHidden = minimap.items.count < 2 || gutter <= 12
         minimap.persistentGutter = gutter >= 48
-        let height = min(CGFloat(max(1, minimap.items.count - 1)) * 8, max(1, bounds.height - topClearance - 288))
+        // `max(4rem, calc(100% - 14.75rem))` of the timeline, so an open terminal shrinks the rail (MessagesTimeline.logic.ts:286-288 at 4928, #32151).
+        let height = min(CGFloat(max(1, minimap.items.count - 1)) * 8, max(64, bounds.height - topClearance - 236))
         minimap.frame = NSRect(x: 12, y: topClearance + (bounds.height - topClearance - height) / 2, width: min(40, max(0, gutter - 12)), height: height)
         updateMinimapPosition()
     }
@@ -827,6 +836,8 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
             }
         }
         minimap.currentIndex = current
+        // The exact bottom, not the follow zone: Next can still scroll inside that (TimelineMinimap.tsx:89-90 at 4928, #33038).
+        minimap.atEnd = maxScroll - viewport.minY <= 1
         minimap.inView = inView
     }
     /// `resolveTimelineMinimapVisibleRange` (MessagesTimeline.logic.ts:402-430): the first and last row on screen.
@@ -990,8 +1001,17 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         return view
     }
 
+    /// Focus inside a row that leaves (a finished approval or question, a row scrolled out) goes back to the composer
+    /// (`recoveryArea`, workspaceFocus.ts:243-268 at 4928, #33192).
+    public var onFocusLost: (@MainActor () -> Void)?
+
     private func recycle(_ view: TimelineRowView) {
         guard !view.pooled else { return }
+        // A text selection makes its Markdown view first responder; that is not a focused control.
+        if let focused = window?.firstResponder as? NSView, !(focused is MarkdownView), focused.isDescendant(of: view) {
+            window?.makeFirstResponder(nil)
+            onFocusLost?()
+        }
         view.pooled = true
         // NSView's `prepareForReuse` unhides the view and resets its alpha, so it runs first.
         // The other order left every recycled row on screen at its old frame.

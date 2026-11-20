@@ -75,7 +75,7 @@ final class HtmlRenderRowView: TimelineRowView {
         let dark = effectiveAppearance.isDark
         let themed = URL(string: url.absoluteString.split(separator: "#", maxSplits: 1)[0] + HtmlRenderTheme(dark: dark).fragment
                          + HtmlRenderTheme.containScrollFragment) ?? url
-        frameView.activate(.init(src: themed, title: ref.title, dark: dark))
+        frameView.activate(.init(src: themed, title: ref.title, allow: "fullscreen", dark: dark))
     }
 
     override func viewDidMoveToWindow() {
@@ -175,7 +175,7 @@ final class HtmlRenderRowView: TimelineRowView {
             let dark = self.effectiveAppearance.isDark
             let themed = URL(string: url.absoluteString.split(separator: "#", maxSplits: 1)[0] + HtmlRenderTheme(dark: dark).fragment) ?? url
             let model = self.context.model
-            HtmlRenderDialogView(page: .init(src: themed, title: ref.title, dark: dark), reference: ref) { data, frame in
+            HtmlRenderDialogView(page: .init(src: themed, title: ref.title, allow: "fullscreen", dark: dark), reference: ref) { data, frame in
                 Self.handle(data, frame: frame, model: model)
             }.present(in: window)
         }
@@ -397,7 +397,9 @@ final class McpAppRowView: TimelineRowView {
                 return self.setDisplayMode(mode, userInitiated: self.window?.isKeyWindow == true && self.frameView.userIsActive)
             }))
         self.bridge = bridge
-        frameView.activate(.init(src: url, title: "\(e.app.server) app", allow: e.app.allowAttribute, dark: effectiveAppearance.isDark))
+        let dark = effectiveAppearance.isDark
+        frameView.activate(.init(src: McpAppHostBridge.withColorScheme(url, dark: dark), title: "\(e.app.server) app",
+                                 allow: e.app.allowAttribute, dark: dark))
         // The tool's definition (for `toolInfo` at initialize) and the stored call (arguments and result).
         Task { [weak self] in
             var info = target; info["name"] = .string(e.app.tool)

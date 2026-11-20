@@ -291,7 +291,9 @@ public enum WorkLog {
             entry.toolData = item.raw
         case .systemNotice:
             entry.label = item.string("message") ?? ""
-            entry.sourceActivityKind = "runtime.warning"
+            // An info notice reads as plain work with the zap icon (session-logic.ts:429 and
+            // TimelineWorkEntryRow.logic.ts:170-175 at 4928, #23506).
+            if item.string("level") != "info" { entry.sourceActivityKind = "runtime.warning" }
         case .error:
             (entry.label, entry.detail) = providerErrorPresentation(item)
             if item["failure"]?["class"]?.stringValue == "usage_limit", item.status != .completed {

@@ -156,7 +156,7 @@ import Testing
 
     @Test func themeFragmentDecodesAndMessagesCarryTheVariables() throws {
         let dark = HtmlRenderTheme(dark: true)
-        #expect(dark.variables["--background"] == "#0a0a0a")
+        #expect(dark.variables["--background"] == "#000000")
         #expect(dark.variables["--accent"] == "#346bf1")
         #expect(dark.variables["--chart-6"] == "#a3e635")
         let encoded = String(dark.fragment.dropFirst("#t3-theme=".count))
@@ -167,7 +167,7 @@ import Testing
         #expect(HtmlRenderTheme.contentHeight(json(#"{"jsonrpc":"2.0","method":"ui/notifications/size-changed","params":{"height":-1}}"#)) == nil)
         #expect(HtmlRenderTheme.linkRequest(json(#"{"jsonrpc":"2.0","id":3,"method":"ui/open-link","params":{"url":"javascript:alert(1)"}}"#)) == nil)
         #expect(HtmlRenderTheme.linkRequest(json(#"{"jsonrpc":"2.0","id":3,"method":"ui/open-link","params":{"url":"https://t3.codes"}}"#))?.url == "https://t3.codes")
-        #expect(McpAppHostBridge.styleVariables(dark.variables)["--color-background-primary"] == "#0a0a0a")
+        #expect(McpAppHostBridge.styleVariables(dark.variables)["--color-background-primary"] == "#000000")
     }
 
     // MARK: Bridge
@@ -265,6 +265,25 @@ import Testing
         guard case .htmlRender(let ref, _)? = entry?.kind else { Issue.record("expected an html-render entry"); return }
         #expect(ref.title == "Report")
         #expect(entry?.isWebContent == true)
+    }
+
+    /// #33347 (session-logic.ts:735-756, itemDetail.ts at 4928): an app call keeps its tool row, whose output reads the
+    /// provider result, and adds the app card as `mcp-app:<id>`.
+    @Test func mcpAppCallKeepsItsToolRowBesideTheCard() {
+        let call = tool("maps.show", json(#"{"t3McpApp":{"attachmentId":"a1","server":"maps","tool":"show","resourceUri":"ui://maps/view"},"result":{"content":[{"type":"text","text":"Shown"}],"structuredContent":{}}}"#))
+        let row = ProjectedTurnItem(position: 0, visibility: "local", sourceThreadId: "t", sourceItemId: call.id, item: call)
+        let entries = TimelineEntries.derive(visibleTurnItems: [row])
+        #expect(entries.map(\.id) == ["item-1", "mcp-app:item-1"])
+        guard case .work? = entries.first?.kind, case .mcpApp? = entries.last?.kind else { Issue.record("expected a work row and an app card"); return }
+        #expect(TurnItemDetail.outputText(call) == "Shown")
+    }
+
+    /// #31338 and #33352 (mcpApps/host.ts:134-151, McpAppFrame.tsx:129-134 at 4928).
+    @Test func appResultsKeepOnlyMcpBlocksAndTheUrlCarriesTheScheme() {
+        let result = McpAppHostBridge.normalize(json(#"{"content":[{"type":"text","text":"a"},{"type":"image","mimeType":"image/png"},{"type":"image","data":"AA==","mimeType":"image/png"}]}"#))
+        #expect(result["content"]?.arrayValue?.count == 2)
+        let url = McpAppHostBridge.withColorScheme(URL(string: "https://host/app?sig=1")!, dark: true)
+        #expect(url.absoluteString == "https://host/app?sig=1&t3-color-scheme=dark")
     }
 
     /// A page can post any JSON number as a request id; a huge one must not trap converting to Int.

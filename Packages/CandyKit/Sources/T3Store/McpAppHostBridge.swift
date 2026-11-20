@@ -70,9 +70,28 @@ public final class McpAppHostBridge {
         post(.object(["jsonrpc": .string("2.0"), "id": id, "error": .object(["code": .number(Double(code)), "message": .string(message)])]))
     }
 
-    /// `normalizeMcpAppToolResult`: absent fields reported as null would make the SDK drop the message.
+    /// `isMcpContentBlock` (mcpApps/host.ts:134-151 at 4928, #31338): a block MCP defines, with its string fields.
+    /// An image whose bytes storage stripped is not one.
+    static func isMcpContentBlock(_ block: JSONValue) -> Bool {
+        guard let type = block["type"]?.stringValue else { return false }
+        func string(_ v: JSONValue?) -> Bool { if case .string = v { true } else { false } }
+        if type == "resource" {
+            guard let resource = block["resource"], resource.objectValue != nil else { return false }
+            return string(resource["uri"]) && (string(resource["text"]) || string(resource["blob"]))
+        }
+        let fields: [String]? = switch type {
+        case "text": ["text"]
+        case "image", "audio": ["data", "mimeType"]
+        case "resource_link": ["uri", "name"]
+        default: nil
+        }
+        return fields?.allSatisfy { string(block[$0]) } ?? false
+    }
+
+    /// `normalizeMcpAppToolResult`: the SDK drops the whole message over a null for an absent field or a content
+    /// block MCP does not define.
     static func normalize(_ result: JSONValue) -> JSONValue {
-        var o: [String: JSONValue] = ["content": .array(result["content"]?.arrayValue ?? [])]
+        var o: [String: JSONValue] = ["content": .array((result["content"]?.arrayValue ?? []).filter(isMcpContentBlock))]
         if let s = result["structuredContent"], s.objectValue != nil { o["structuredContent"] = s }
         if result["isError"]?.boolValue == true { o["isError"] = .bool(true) }
         if let m = result["_meta"], m.objectValue != nil { o["_meta"] = m }
@@ -109,6 +128,17 @@ public final class McpAppHostBridge {
         if case .string = v { return true }
         if case .number(let n) = v { return n.isFinite }
         return false
+    }
+
+    /// The app paints before `ui/initialize`, so its URL carries the host's scheme, which a 4928 host's page script
+    /// turns into a `color-scheme` meta tag (`MCP_APP_COLOR_SCHEME_PARAM`, McpAppFrame.tsx:129-134 and shared
+    /// mcpApp.ts:206-215 at 4928, #33352). An older host ignores the parameter.
+    public static func withColorScheme(_ url: URL, dark: Bool) -> URL {
+        guard var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        var items = (parts.queryItems ?? []).filter { $0.name != "t3-color-scheme" }
+        items.append(URLQueryItem(name: "t3-color-scheme", value: dark ? "dark" : "light"))
+        parts.queryItems = items
+        return parts.url ?? url
     }
 
     /// Handles one message the app posted; the caller has checked its source.
