@@ -214,8 +214,11 @@ public final class ComposerSelectionStore {
             if let fallback { sources = [from(fallback.selection)] }
             let found = sources.compactMap { $0 }
             slug = found.first?.model ?? entry?.defaultModel
-            // Options follow the same chain but only from sources naming this model.
-            options = found.first { $0.model == slug && $0.options != nil }?.options
+            // Options follow the same chain but only from sources naming this model. A started thread's options, even
+            // none, outrank the project's (#16546 at 4928, modelSelection.ts `selectionsByInstance(thread ?? project)`).
+            let optionSources = fallback != nil || thread == nil ? found
+                : ([draft.selectionByInstance[id], from(thread?.modelSelection)]).compactMap { $0 }
+            options = optionSources.first { $0.model == slug && $0.options != nil }?.options
         }
         let model = slug.flatMap { entry?.model($0) }
         let descriptors = ModelTraits.descriptors(model, selections: options)

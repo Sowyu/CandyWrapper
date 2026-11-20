@@ -715,7 +715,11 @@ public enum ComposerContext {
         let cleaned = label.replacingOccurrences(of: #"[\[\]\\\r\n]"#, with: " ", options: .regularExpression)
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
-        let cut = String((cleaned as NSString).substring(to: min(200, (cleaned as NSString).length)))
+        // The 200-unit cap never splits a surrogate pair (#29158 at 4928).
+        let ns = cleaned as NSString
+        var end = min(200, ns.length)
+        if end < ns.length, end > 0, (0xD800...0xDBFF).contains(ns.character(at: end - 1)), (0xDC00...0xDFFF).contains(ns.character(at: end)) { end -= 1 }
+        let cut = ns.substring(to: end)
         return cut.isEmpty ? kind : cut
     }
 
@@ -927,7 +931,8 @@ public enum ComposerContext {
         return s
     }()
 
-    private static let fragmentAttribute = try! NSRegularExpression(pattern: #"data-t3-context-fragment=["']([^"']+)["']"#)
+    /// `encodeURIComponent` leaves `'` as is, so each quote style ends only at its own quote (#21537 at 4928).
+    private static let fragmentAttribute = try! NSRegularExpression(pattern: #"data-t3-context-fragment=(?:"([^"]+)"|'([^']+)')"#)
 
     /// `decodeComposerContextClipboardHtml` plus `readPastedComposerContext`: the version-1
     /// fragment's records whose ids the pasted text references. Clipboard data is untrusted, so
@@ -935,7 +940,7 @@ public enum ComposerContext {
     public static func pastedRecords(html: String, pastedText: String) -> [String: JSONValue] {
         guard html.count <= 16_000_000 * 9 + 4096,
               let m = fragmentAttribute.firstMatch(in: html, range: NSRange(location: 0, length: (html as NSString).length)),
-              let raw = (html as NSString).substring(with: m.range(at: 1)).removingPercentEncoding,
+              let raw = (html as NSString).substring(with: m.range(at: 1).location != NSNotFound ? m.range(at: 1) : m.range(at: 2)).removingPercentEncoding,
               let fragment = try? JSONDecoder().decode(JSONValue.self, from: Data(raw.utf8)),
               case .number(1)? = fragment["version"], case .array(let records)? = fragment["records"] else { return [:] }
         let ids = Set(referencedIds(pastedText))

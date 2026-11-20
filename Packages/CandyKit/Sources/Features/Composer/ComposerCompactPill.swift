@@ -38,8 +38,12 @@ final class ComposerCompactPill: ControlView {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
+    /// `@max-[480px]/composer-surface:hidden` on the word (#27033 at 4928): a narrow composer shows the count alone.
+    var narrow = false { didSet { if narrow != oldValue { word.isHidden = narrow; invalidateIntrinsicContentSize(); needsLayout = true } } }
+
     override var intrinsicContentSize: NSSize {
-        NSSize(width: (modern ? 8 + 16 + 6 + ceil(word.textWidth) + 6 + ceil(count.textWidth) + 8 : 1 + 10 + 14 + 6 + ceil(word.textWidth) + 6 + ceil(count.textWidth) + 10 + 1), height: Self.height)
+        let wordWidth = narrow ? 0 : ceil(word.textWidth) + 6
+        return NSSize(width: (modern ? 8 + 16 + 6 + wordWidth + ceil(count.textWidth) + 8 : 1 + 10 + 14 + 6 + wordWidth + ceil(count.textWidth) + 10 + 1), height: Self.height)
     }
 
     override func layout() {
@@ -53,7 +57,7 @@ final class ComposerCompactPill: ControlView {
         let ww = ceil(word.textWidth)
         let line: CGFloat = modern ? 20 : 16
         word.frame = NSRect(x: x, y: ((bounds.height - line) / 2).rounded(), width: ww, height: line)
-        x += ww + 6
+        if !narrow { x += ww + 6 }
         count.frame = NSRect(x: x, y: word.frame.minY, width: ceil(count.textWidth), height: line)
     }
 

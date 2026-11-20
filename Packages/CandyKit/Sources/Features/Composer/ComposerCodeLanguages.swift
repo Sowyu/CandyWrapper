@@ -43,7 +43,7 @@ enum ComposerCodeLanguages {
         ("yaml", "YAML"),
         ("zig", "Zig"),
     ]
-    static let aliases = ["cs": "csharp", "c++": "cpp", "js": "javascript", "md": "markdown", "py": "python", "rb": "ruby", "rs": "rust", "sh": "bash", "shell": "bash", "ts": "typescript", "yml": "yaml", "text": ""]
+    static let aliases = ["cs": "csharp", "c++": "cpp", "js": "javascript", "md": "markdown", "py": "python", "rb": "ruby", "rs": "rust", "sh": "bash", "shell": "bash", "ts": "typescript", "yml": "yaml", "text": "", "plaintext": "", "txt": ""]
     static func language(_ info: String) -> String { info.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? "" }
     static func label(_ info: String) -> String {
         let id = language(info)

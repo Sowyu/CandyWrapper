@@ -226,12 +226,16 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         spinnerView?.frame = iconView.frame
         dotView?.frame = NSRect(x: 4 + 9, y: rowY + 9, width: 6, height: 6)
         var right = bounds.width - 4
-        for b in ([dismiss].filter { !$0.isHidden } + buttons.reversed()) {
+        let actionViews = [dismiss].filter { !$0.isHidden } + buttons.reversed()
+        for b in actionViews {
             let s = b.intrinsicContentSize
             right -= s.width
             b.frame = NSRect(x: right, y: rowY + (24 - s.height) / 2, width: s.width, height: s.height)
             right -= 4
         }
+        // `ComposerBanner.Actions className="min-w-14 sm:min-w-12"` (#22236 at 4928): stacked notices line up their
+        // details buttons whether they carry an X alone or actions too.
+        if !actionViews.isEmpty { right = min(right, bounds.width - 4 - 48 - 4) }
         if !elapsed.isHidden {
             let width = ceil(elapsed.textWidth)
             right -= width

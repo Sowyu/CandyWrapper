@@ -287,7 +287,7 @@ public struct Keymap: Sendable, Equatable {
     /// and remapped rules stay as they are.
     static func shortcut(_ rule: ResolvedKeybindingRule, _ context: KeybindingContext) -> KeybindingShortcut {
         var s = rule.shortcut
-        if context["composerRequiresModifier"], rule.command == "composer.sendAlternate", s.key == "enter", s.modKey,
+        if context["composerRequiresModifier"], rule.command == "composer.sendAlternate" || rule.command == "composer.sendBackground", s.key == "enter", s.modKey,
            !s.metaKey, !s.ctrlKey, !s.altKey, !s.shiftKey {
             s.shiftKey = true
         }

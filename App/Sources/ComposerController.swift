@@ -1674,9 +1674,12 @@ final class ComposerController {
     /// An option pick replaced typed text: it goes to the end of the thread's prompt (ChatView.tsx:10253-10270).
     private func carryDisplaced(_ text: String) {
         guard let key = draftKey else { return }
-        let next = UserInputAnswers.carryDisplaced(prompts[key] ?? "", text)
+        let current = prompts[key] ?? ""
+        let next = UserInputAnswers.carryDisplaced(current, text)
         prompts[key] = next.isEmpty ? nil : next
         scheduleSave()
+        // #24331 (usePendingThreadRequests.ts at 4928): the moved text is out of sight until the question is answered.
+        if next != current { toast(.info, "Your typed text was set aside", "It will be back in the composer once the question is answered.") }
     }
 
     /// `runtime-request.respond` or `thread.user-input.dismiss` (ChatView.tsx:10114-10230). The
@@ -4901,7 +4904,11 @@ extension ComposerController {
             toast(.info, "Still bringing a pasted attachment into this message.", "Stash again once its chip resolves.")
             return
         }
-        let prompt = composer.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPrompt = composer.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A trailing chip parses only with whitespace after it, so one space stays to restore it (#28352 at 4928).
+        let trimmedEnd = (String(composer.text.reversed().drop(while: \.isWhitespace).reversed()) as NSString).length
+        let endsWithChip = ComposerInlineTokens.collect(composer.text).last.map { NSMaxRange($0.range) == trimmedEnd } ?? false
+        let prompt = endsWithChip ? trimmedPrompt + " " : trimmedPrompt
         let attachments = currentAttachments
         let images = attachments.filter { $0.kind == .image }, files = attachments.filter { $0.kind == .file }
         if prompt.isEmpty, attachments.isEmpty {

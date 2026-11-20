@@ -1076,6 +1076,7 @@ public final class ComposerView: DSView {
         compactPill.isHidden = !showsCompactPill || splitCompact
         if !compactPill.isHidden {
             // `flex items-center gap-2` with the send button.
+            compactPill.narrow = bounds.width <= 480
             let pw = compactPill.intrinsicContentSize.width
             compactPill.frame = NSRect(x: actionsLeft - 8 - pw, y: midY - 14, width: pw, height: 28)
             actionsLeft = compactPill.frame.minX
