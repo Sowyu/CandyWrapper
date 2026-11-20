@@ -1420,7 +1420,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | ecea6ca3e6 | #21878 | thread | fix(web): edit from here uses a pencil icon | port |
 | 3d5baafecf | #22100 | thread | fix(web): respect reduced motion in thread loading controls | port |
 | 6ca95bd92a | #23626 | thread | fix(web): Enter no longer skips an unanswered question | ported: Next and Enter stay on an unanswered question (T3Store `UserInputSession.advance`) |
-| 616c426f5f | #27372 | thread | fix(shared): TypeScript files no longer show as videos | ported: `video/mp2t` and `video/vnd.dlna.mpeg-tts` attachments stay files in sent messages and their chips (thread-2, T3Store `isPlayableVideoMime`). Left: the composer's own check in ComposerAttachments (Features/Composer) |
+| 616c426f5f | #27372 | thread | fix(shared): TypeScript files no longer show as videos | ported: `video/mp2t` and `video/vnd.dlna.mpeg-tts` attachments stay files in sent messages and their chips (thread-2, T3Store `isPlayableVideoMime`). The composer side needs nothing (thread-4): no composer chip takes its kind from a `video/` type, and the reattach check that reads one (ComposerAttachments.matchesReattachMarker) only runs on a file of the same name and size |
 | 8d012a688e | #27522 | thread | fix(web): a new thread's first reply shows without reloading | port |
 | a0d6cc8ba9 | #21594 | thread | fix(client-runtime): goal token counts no longer read 1000k | ported: goal usage reads 1m, not 1000k, from 999,500 tokens (thread-2, ThreadRecoveryPresentation) |
 | f47700849e | #22141 | thread | fix(web): show the result of the notified delegated task | port |
