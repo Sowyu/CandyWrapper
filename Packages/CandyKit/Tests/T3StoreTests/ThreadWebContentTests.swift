@@ -286,6 +286,12 @@ import Testing
         #expect(url.absoluteString == "https://host/app?sig=1&t3-color-scheme=dark")
     }
 
+    /// #30712 (mcpApps/host.ts:483 at 4928): a link's name is its path's last segment, never its query.
+    @Test func downloadNamesComeFromThePathBeforeTheQuery() {
+        let files = ThreadMcpAppDownload.read(json(#"[{"type":"resource_link","uri":"https://host/files/report.pdf?sig=a/b"}]"#))
+        #expect(files?.first?.name == "report.pdf")
+    }
+
     /// A page can post any JSON number as a request id; a huge one must not trap converting to Int.
     @Test func hugeNumericIdsDoNotCrash() {
         #expect(McpAppHostBridge.key(.number(7)) == "7")
