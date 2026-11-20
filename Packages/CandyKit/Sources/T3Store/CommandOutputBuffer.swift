@@ -37,8 +37,12 @@ public struct CommandOutputBuffer: Sendable {
                     let parameters = i
                     while i < input.count, !(input[i].asciiValue.map { (0x40...0x7e).contains($0) } ?? false) { i += 1 }
                     guard i < input.count else { pending = input.count - start <= 4096 ? String(input[start...]) : ""; break }
-                    let args = String(input[parameters..<i]).split(separator: ";", omittingEmptySubsequences: false).map { Int($0) ?? 0 }
-                    csi(input[i], args)
+                    let raw = String(input[parameters..<i])
+                    // Private and intermediate parameters, and colons outside SGR, are controls this buffer cannot
+                    // apply (4928 shared terminalOutput.ts:502, #29736).
+                    if raw.allSatisfy({ $0.isASCII && ($0.isNumber || $0 == ";" || $0 == ":") }), input[i] == "m" || !raw.contains(":") {
+                        csi(input[i], raw.split(separator: ";", omittingEmptySubsequences: false).map { Int($0) ?? 0 })
+                    }
                 } else if input[i] == "]" || input[i] == "P" || input[i] == "_" || input[i] == "^" {
                     i += 1
                     while i < input.count, input[i] != "\u{7}", !(input[i] == "\u{1b}" && i + 1 < input.count && input[i + 1] == "\\") { i += 1 }
@@ -139,10 +143,11 @@ public struct CommandOutputBuffer: Sendable {
         row = max(0, min(lines.count - 1, r)); column = max(0, min(Self.limit, c))
     }
     private mutating func eraseLine(_ mode: Int) {
+        // Erase modes other than 0, 1 and 2 leave the line alone (terminalOutput.ts:195-205, #29737).
         if mode == 2 { lines[row] = [] }
         else if mode == 1 {
             for index in 0..<min(column + 1, lines[row].count) { lines[row][index] = " " }
-        } else if column < lines[row].count { lines[row].removeSubrange(column...) }
+        } else if mode == 0, column < lines[row].count { lines[row].removeSubrange(column...) }
     }
     private mutating func csi(_ command: Character, _ parameters: [Int]) {
         let value = parameters.first ?? 0, amount = min(Self.limit, max(1, value))
@@ -163,7 +168,7 @@ public struct CommandOutputBuffer: Sendable {
                 lines = Array(repeating: [], count: lines.count)
             } else if value == 1 {
                 for index in 0..<row { lines[index] = [] }; eraseLine(1)
-            } else {
+            } else if value == 0 {
                 eraseLine(0)
                 for index in (row + 1)..<lines.count { lines[index] = [] }
             }

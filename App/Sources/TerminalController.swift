@@ -639,7 +639,9 @@ final class TerminalController {
             return
         }
         guard let env = threadId.environmentId else { return }
-        let target = FileLinks.resolveAgainst(link, cwd: cwd)
+        // An OSC 8 `file://` URI names its file, with any `#L` position (4928 terminal-links.ts:163-170, #36025).
+        let target = link.lowercased().hasPrefix("file://") ? FileLinks.resolveLink(link, cwd: cwd)?.targetPath ?? link
+            : FileLinks.resolveAgainst(link, cwd: cwd)
         let defaults = UserDefaults.standard
         guard let editor = OpenInEditors.preferred(available: availableEditors?(env) ?? [], last: defaults.string(forKey: OpenInEditors.lastEditorKey)) else {
             surface.apply(.message("No available editor can open \(target) in environment \(env)."))

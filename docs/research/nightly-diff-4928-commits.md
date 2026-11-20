@@ -1375,41 +1375,41 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| bfee44655c | #22106 | terminal | fix(web): keep a closed split terminal's tab in view | left (panels-2): not checked |
+| bfee44655c | #22106 | terminal | fix(web): keep a closed split terminal's tab in view | left (panels-3): not checked on screen; TerminalDrawerView's tab strip needs a split closed while scrolled to confirm the tab stays in view |
 | 947916887c | #27515 | terminal | feat(pi): import terminal Pi sessions during setup | n/a: Pi session import runs in the server's setup |
-| 8f79233ccb | #24020 | terminal | fix(web): keep terminal close confirmations on their original thread | left (panels-2): not checked |
-| cd7791de1e | #24251 | terminal | fix(web): expired terminal context toasts say "them" for several contexts | left (panels-2): not checked |
+| 8f79233ccb | #24020 | terminal | fix(web): keep terminal close confirmations on their original thread | already in CandyWrapper (panels-3): the close confirmation is a modal dialog (TerminalController.confirmClose), so the thread cannot change while it is open |
+| cd7791de1e | #24251 | terminal | fix(web): expired terminal context toasts say "them" for several contexts | n/a (panels-3): CandyWrapper shows no expired terminal context toast |
 | f513369612 | #28189 | terminal | fix(web): terminal URLs like redis:// no longer become broken file links | ported (panels-2): the tail of a non-web URL such as redis:// or file:/// is no file link, TerminalLinks.extract |
-| d7171d30a4 | #27843 | terminal | fix(shared): inverted terminal ranges emit no fake lines | left (panels-2): not checked |
-| ee265cc539 | #29696 | terminal | fix(client-runtime): terminals fit their pane again after a reconnect | left (panels-2): not checked |
-| 77b948e3e7 | #29804 | terminal | fix(web): big terminal selections no longer break sending | left (panels-2): not checked |
-| 7f92cb0e49 | #29736 | terminal | fix(shared): ignore unsupported command output control parameters | left (panels-2): not checked |
-| 16ca47b3d3 | #29737 | terminal | fix(shared): ignore unsupported command output erase modes | left (panels-2): not checked |
-| 059804dfda | #30526 | terminal | fix(web): validate terminal links against filesystem metadata | left (panels-2): not checked |
+| d7171d30a4 | #27843 | terminal | fix(shared): inverted terminal ranges emit no fake lines | n/a (panels-3): CandyWrapper shows a terminal record's text as sent and slices no lines from its range (MarkdownContextChips) |
+| ee265cc539 | #29696 | terminal | fix(client-runtime): terminals fit their pane again after a reconnect | left (panels-3): refitting after a reattach snapshot needs a check of TerminalController's attach stream against a server restart |
+| 77b948e3e7 | #29804 | terminal | fix(web): big terminal selections no longer break sending | n/a (panels-3): xterm.js selection size limit; SwiftTerm's selection goes to Add to chat as text |
+| 7f92cb0e49 | #29736 | terminal | fix(shared): ignore unsupported command output control parameters | ported (panels-3): private parameters and colons outside SGR are ignored, CommandOutputBuffer |
+| 16ca47b3d3 | #29737 | terminal | fix(shared): ignore unsupported command output erase modes | ported (panels-3): erase modes other than 0, 1 and 2 (K) and 0-3 (J) leave the text, CommandOutputBuffer |
+| 059804dfda | #30526 | terminal | fix(web): validate terminal links against filesystem metadata | left (panels-3): validating path links against filesystem metadata needs a stat RPC before TerminalLinks marks a path |
 | 1b14cb3d8c | #30603 | terminal | fix(web): terminal links keep route and pnpm paths in one piece | ported (panels-2): route segments like [id] and (group)/ and pnpm paths with @ stay in one link |
-| a3cd0aa823 | #29164 | terminal | fix(web): deleting an archived thread also clears its draft, staged uploads and terminal state | left (panels-2): not checked |
+| a3cd0aa823 | #29164 | terminal | fix(web): deleting an archived thread also clears its draft, staged uploads and terminal state | left (panels-3): deleting an archived thread clearing its terminal state touches the thread delete path in the app, not checked |
 | 9cd7a04797 | #33440 | terminal | fix(web): sending from an empty citation comment clears the composer | left (panels-2): composer, outside the terminal |
-| facd190640 | #33129 | terminal | fix(web): opening the terminal with Cmd+J no longer re-renders the whole sidebar | left (panels-2): not checked |
+| facd190640 | #33129 | terminal | fix(web): opening the terminal with Cmd+J no longer re-renders the whole sidebar | n/a (panels-3): React re-render cost |
 | 05adc163fc | #34182 | terminal | fix(web): hide empty replies when renders show the result | left (panels-2): thread timeline, outside the terminal |
 | f697d4db3e | #34050 | terminal | fix(web): local server cards in the browser empty state take pointer clicks | left (panels-2): browser empty state, see the browser batch |
-| 3445b0b400 | #24773 | terminal | fix(web): terminal output no longer edits a hidden question draft | left (panels-2): not checked |
+| 3445b0b400 | #24773 | terminal | fix(web): terminal output no longer edits a hidden question draft | n/a (panels-3): CandyWrapper's terminal output never writes into a composer draft |
 | 34de974868 | #34899 | terminal | fix(web): clicking the timeline's empty padding keeps following a streaming reply | left (panels-2): thread timeline, outside the terminal |
 | a2685e64d3 | #35404 | terminal | fix(web): SCP-style Git remotes no longer become terminal file links | ported (panels-2): an SCP-style Git remote's tail is no file link |
-| 8a38c63706 | #26433 | terminal | fix(web): thread navigation shortcuts work from the terminal and macOS composer | left (panels-2): not checked |
-| 1acee5b8be | #36025 | terminal | fix(web): terminal OSC 8 file URIs open the file they name | left (panels-2): not checked |
-| ed7e5010ba | #36117 | terminal | fix(web): terminal "Add to chat" now adds to a queued message being edited | left (panels-2): not checked |
+| 8a38c63706 | #26433 | terminal | fix(web): thread navigation shortcuts work from the terminal and macOS composer | already in CandyWrapper (panels-3): thread navigation shortcuts go through the app-wide Shortcuts registry, which runs with the terminal focused |
+| 1acee5b8be | #36025 | terminal | fix(web): terminal OSC 8 file URIs open the file they name | ported (panels-3): an OSC 8 file:// link opens the file it names with its #L position, TerminalController.openLink through FileLinks.resolveLink |
+| ed7e5010ba | #36117 | terminal | fix(web): terminal "Add to chat" now adds to a queued message being edited | left (panels-3): Add to chat into a queued message being edited is a Features/Composer change, held for the composer agent |
 | 764c0475b5 | #36174 | terminal | fix(web): terminal TypeScript links preserve error locations | ported (panels-2): `file(42,7): error TS…:` links to file:42:7 |
-| 1721f187c6 | #36380 | terminal | fix(web): clearing a running terminal keeps its screen and input modes | left (panels-2): not checked |
-| 43a71d9b1a | #29654 | terminal | fix(web): a terminal reopened while its open is pending no longer closes itself | left (panels-2): not checked |
-| 382312aba8 | #29612 | terminal | fix(web): the sidebar shortcut honors terminal and preview focus conditions | left (panels-2): not checked |
-| e0ca4fcecb | #32047 | terminal | fix(web, mobile): a failed terminal resize is sent again | left (panels-2): not checked |
+| 1721f187c6 | #36380 | terminal | fix(web): clearing a running terminal keeps its screen and input modes | n/a (panels-3): SwiftTerm keeps its modes through a clear; T3's fix replays its own retained buffer |
+| 43a71d9b1a | #29654 | terminal | fix(web): a terminal reopened while its open is pending no longer closes itself | left (panels-3): reopening a terminal while its open is pending needs a check of TerminalController's open and attach ordering |
+| 382312aba8 | #29612 | terminal | fix(web): the sidebar shortcut honors terminal and preview focus conditions | already in CandyWrapper (panels-3): sidebar.toggle runs through the Shortcuts registry with its when-clauses, whatever has focus |
+| e0ca4fcecb | #32047 | terminal | fix(web, mobile): a failed terminal resize is sent again | left (panels-3): resending a failed resize needs a retry in TerminalController's outbox on a failed terminal.resize |
 | 2cb2fa1385 | #37071 | terminal | fix(web): terminal links open bare compiler filenames | ported (panels-2): a bare `name.ext:line:col` links |
-| e101cae1b9 | #37088 | terminal | fix(terminal): show shell startup failures across attachments | left (panels-2): not checked |
-| 8dba23e420 | #37103 | terminal | fix(web): large terminal pastes reach the program intact | left (panels-2): not checked |
-| 46f3ab39f2 | #37133 | terminal | fix(web): open terminal file links naming the server hostname | left (panels-2): not checked |
+| e101cae1b9 | #37088 | terminal | fix(terminal): show shell startup failures across attachments | left (panels-3): shell startup failures across attachments need the attach snapshot's failure state shown in TerminalSurfaceView |
+| 8dba23e420 | #37103 | terminal | fix(web): large terminal pastes reach the program intact | already in CandyWrapper (panels-3): pastes go out in ordered chunks through TerminalRPC.writeChunks and the attachment outbox |
+| 46f3ab39f2 | #37133 | terminal | fix(web): open terminal file links naming the server hostname | left (panels-3): file URIs naming the server's hostname need the server config hostname passed to the link resolver |
 | 304cf149c8 | #37201 | terminal | fix(web): terminal file links preserve numeric filename suffixes | ported (panels-2): `$`, `+` and `@` in names keep numeric suffixes in the link |
 | 48a64a8b68 | #35305 | terminal | feat(web): make terminal close confirmation optional | ported (settings-2): General > Confirmations > Terminal close confirmation, and TerminalController.confirmClose skips the dialog when it is off |
-| 17c401ddc0 | #38998 | terminal | fix(web): drawer drops a background terminal closed by another client | left (panels-2): not checked |
+| 17c401ddc0 | #38998 | terminal | fix(web): drawer drops a background terminal closed by another client | left (panels-3): dropping a background terminal another client closed needs the drawer to follow the session list's closed state |
 
 ## Small fixes, thread (266)
 
