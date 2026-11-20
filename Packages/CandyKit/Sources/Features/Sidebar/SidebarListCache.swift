@@ -367,6 +367,7 @@ public final class SidebarListCache {
             guard let section = layout.sections[at] else { return nil }
             var model = row(thread, section: section, ctx: ctx, state: state, nowMs: nowMs)
             model.inProjectSection = layout.inProjectSection[at]
+            model.folderMultiline = model.inProjectSection && state.boringSidebarMultilineRows
             layout.validUntil[at] = rows[thread.id]?.validUntil ?? .max
             out.append((at, .row(model)))
         }

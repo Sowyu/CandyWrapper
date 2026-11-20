@@ -23,6 +23,9 @@ public class ComposerBannerView: DSView {
     /// Docked under another attachment (the queue strip): no top corners and no top border, so
     /// the two share one outline (ComposerBanner.Attachment's adjacent-sibling rule).
     public var joinsAbove = false { didSet { if joinsAbove != oldValue { needsLayout = true } } }
+    /// Another attachment docks under this one, so this one is not the one touching the composer and draws no
+    /// dark seam shade; stacked shades would band (#32683, ComposerBanner.tsx:83 and index.css:220 at 4928).
+    public var dockedBelow = false { didSet { if dockedBelow != oldValue { needsDisplay = true } } }
     /// `placement` (ComposerBanner.tsx:37-71): `attached` docks over the next attachment with the
     /// 17pt overlap masked off; `floating` is a whole rounded card with no overlap, used for the
     /// notices the banner stack shows above the column when it expands.
@@ -90,7 +93,7 @@ public class ComposerBannerView: DSView {
             tint.backgroundColor = Themed.color(\.error, 0.08).cgColor(in: self)
             surface.layer?.borderColor = Themed.color(\.error, 0.32).cgColor(in: self)
         }
-        seam.isHidden = !dark || ditherFloating || (ComposerDesign.uses3814(dark: dark) && joinsAbove)
+        seam.isHidden = !dark || ditherFloating || dockedBelow
         seam.colors = [Themed.black(0).cgColor, Themed.black(0.18).cgColor]
         CATransaction.commit()
     }

@@ -22,6 +22,8 @@ public final class QueuedRunsView: ComposerBannerView {
     public private(set) var expanded = true
 
     public var attachmentMediaURL: (@Sendable (String) async -> URL?)?
+    /// A queued image thumbnail was clicked: its message's images and the clicked one (#33298, QueuedRunsControl.tsx at 4928).
+    public var onExpandImage: (([ExpandedImagePreviewView.Item], Int) -> Void)?
     public var threadTitle: ((ThreadId) -> String?)?
     public var senderThreadTitles: [String: String] = [:] { didSet { if senderThreadTitles != oldValue { rebuild() } } }
     public var scheduledTaskTitles: [String: String] = [:] { didSet { if scheduledTaskTitles != oldValue { rebuild() } } }
@@ -377,7 +379,12 @@ private final class ModernQueuedRowView: DSView {
         if imageIds != thumbnailIds {
             thumbnailTask?.cancel(); thumbnailIds = imageIds
             thumbnails.forEach { $0.removeFromSuperview() }; thumbnails = imageIds.map { _ in DSView() }
-            for tile in thumbnails { tile.layer?.cornerRadius = 6; tile.layer?.masksToBounds = true; tile.layer?.borderWidth = 1; tile.layer?.contentsGravity = .resizeAspectFill; bubble.addSubview(tile) }
+            for tile in thumbnails {
+                tile.layer?.cornerRadius = 6; tile.layer?.masksToBounds = true; tile.layer?.borderWidth = 1; tile.layer?.contentsGravity = .resizeAspectFill
+                tile.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(expandThumbnail(_:))))
+                tile.setAccessibilityRole(.button)
+                bubble.addSubview(tile)
+            }
             loadThumbnails()
         }
         message = item.message; self.editing = editing; guest = item.guestName != nil
@@ -457,6 +464,22 @@ private final class ModernQueuedRowView: DSView {
         let sw = source.intrinsicContentSize.width
         source.frame = NSRect(x: timestamp.frame.minX - sw - 8, y: y + 4, width: sw, height: 16)
     }
+    /// `buildExpandedImagePreview(thumbnails, id)`: the message's images in the viewer, opened at the clicked one.
+    /// A thumbnail that hasn't loaded yet is disabled (`disabled={!thumbnail.previewUrl}`).
+    @objc private func expandThumbnail(_ gesture: NSClickGestureRecognizer) {
+        guard let tile = gesture.view, let index = thumbnails.firstIndex(where: { $0 === tile }), tile.layer?.contents != nil,
+              let owner, let resolve = owner.attachmentMediaURL else { return }
+        let names = Dictionary(message?.attachments.compactMap { a in a["id"]?.stringValue.map { ($0, a["name"]?.stringValue ?? "Image") } } ?? [],
+                               uniquingKeysWith: { a, _ in a })
+        let items = thumbnailIds.map { id in
+            ExpandedImagePreviewView.Item(key: "queued:" + id, name: names[id] ?? "Image") { side in
+                guard let source = await resolve(id) else { return nil }
+                return await ComposerImageIO.thumbnail(source, side: side, cover: false)
+            }
+        }
+        owner.onExpandImage?(items, index)
+    }
+
     private func loadThumbnails() {
         thumbnailTask?.cancel(); thumbnailTask = nil
         guard window != nil, !isHiddenOrHasHiddenAncestor, let resolve = owner?.attachmentMediaURL else {

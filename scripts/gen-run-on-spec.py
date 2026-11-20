@@ -83,6 +83,30 @@ def strip(kind, label):
             '<div class="flex min-w-0 flex-1 items-center justify-start overflow-x-clip overflow-y-visible"></div>'
             '</div></div></div></div></div>')
 
+def git_strip(env_kind, env_label):
+    # BranchToolbar.tsx:798-850 at 4928 from a 576px composer (#27114): the machine, a separator and the
+    # workspace (BranchToolbarEnvModeSelector.tsx:110-150) in the flex-1 host, then the branch selector
+    # (BranchToolbarBranchSelector.tsx:847-903) with `ml-auto`. No pull request, so no badge.
+    sep = ('<div role="separator" aria-orientation="vertical" data-orientation="vertical" data-slot="separator" '
+           'class="shrink-0 bg-border data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:w-px '
+           "data-[orientation=vertical]:not-[[class^='h-']]:not-[[class*='_h-']]:self-stretch mx-0.5 h-3.5!\" data-composer-context-control></div>")
+    workspace_cls = CONTROL_XS.replace(" min-w-0 max-w-full", "") + " min-w-0 shrink"
+    workspace = (f'<button type="button" role="combobox" aria-haspopup="listbox" aria-label="Workspace" class="{workspace_cls}">'
+                 f'{lucide("folder", "size-3")}{context_label("<span>Current checkout</span>")}</button>')
+    branch_cls = CONTROL_XS.replace(" min-w-0 max-w-full", "") + " min-w-0 max-w-full active:scale-100"
+    branch = (f'<div class="flex min-w-0 items-center gap-1 min-w-0 flex-initial justify-end @xl/composer-surface:ml-auto">'
+              f'<span class="flex min-w-0"><button type="button" role="combobox" class="{branch_cls}">{lucide("git-branch", "size-3 shrink-0")}'
+              + context_label('<span title="main" class="inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap overflow-x-clip overflow-y-visible '
+                              '[&>span]:[text-box:trim-both_cap_alphabetic] [&>span]:-mb-1 [&>span]:pb-1 [&>span]:overflow-x-clip [&>span]:overflow-y-visible w-full" aria-hidden="true">'
+                              '<span class="min-w-0 truncate">main</span></span>')
+              + '</button></span></div>')
+    return (f'<div data-slot="composer-shell" data-context-row="true" class="{SHELL}" style="width:600px">'
+            f'<div data-slot="composer-host" class="{HOST}"><div class="relative z-10" style="height:64px"></div></div>'
+            '<div class="min-h-0"><div class="relative z-0"><div class="pointer-events-auto">'
+            f'<div data-slot="composer-context-strip" class="{STRIP}">'
+            f'<div class="min-h-7 min-w-10 items-center gap-1 sm:min-h-6 hidden @xl/composer-surface:flex flex-1">{picker(env_kind, env_label)}{sep}{workspace}</div>'
+            f'{branch}</div></div></div></div></div>')
+
 ENVS = [("local", "mac-mini", "This Mac"), ("env2", "server", "sandbox-env2")]
 cases = [
     {"name": "trigger.local", "html": picker("mac-mini", "This Mac"), "native": {"kind": "trigger", "selected": "local"}},
@@ -90,6 +114,7 @@ cases = [
     {"name": "locked.remote", "html": locked("server", "sandbox-env2"), "native": {"kind": "locked", "selected": "env2"}},
     {"name": "popup.remote", "html": popup(ENVS, "env2"), "native": {"kind": "popup", "selected": "env2"}},
     {"name": "strip.remote", "html": strip("server", "sandbox-env2"), "native": {"kind": "strip", "selected": "env2"}},
+    {"name": "strip.git.wide", "html": git_strip("server", "sandbox-env2"), "native": {"kind": "strip.git", "selected": "env2"}},
 ]
 spec = {"sourceVersion": "v0.1.11-nightly.20261119.4928", "component": "run-on", "states": ["rest", "hover"], "themes": ["light", "dark"], "cases": cases}
 with open(os.path.join(ROOT, "design/component-reference/run-on.json"), "w") as f:

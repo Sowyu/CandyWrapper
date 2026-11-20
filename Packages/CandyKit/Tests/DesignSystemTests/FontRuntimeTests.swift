@@ -13,11 +13,16 @@ import AppKit
     @Test func rolesDoNotDoubleScale() {
         defer { FontRuntime.apply(.init()) }
         var input = FontRuntimeInput()
-        input.interfaceSize = 20; input.promptSize = 18; input.codeSize = 16
+        input.interfaceSize = 20; input.promptSize = 18; input.codeSize = 16; input.advanced = true
         FontRuntime.apply(input)
         #expect(DSFont.ui(14).pointSize == 17.5)
         #expect(FontRuntime.font(.prompt, size: 14).pointSize == 18)
         #expect(DSFont.mono(13).pointSize == 16)
+        // #26559: without Advanced typography the prompt is `text-sm` of the interface size, in its family.
+        input.advanced = false; input.promptFamily = "Menlo"
+        FontRuntime.apply(input)
+        #expect(FontRuntime.font(.prompt, size: 14).pointSize == 17.5)
+        #expect(FontRuntime.font(.prompt, size: 14).familyName == DSFont.ui(14).familyName)
     }
     @Test func detachedLabelCatchesUpAndDoesNotCompoundSize() {
         defer { FontRuntime.apply(.init()) }

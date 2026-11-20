@@ -113,6 +113,8 @@ public final class ComposerView: DSView {
         guard scrollCollapsed else { return }
         scrollCollapsed = false; needsLayout = true; onHeightChange?()
     }
+    /// Sits over the chip last clicked, for popovers that open from it.
+    public var chipAnchor: NSView { editor.chipAnchor }
     public var onOpenChip: ((String) -> Bool)? {
         get { editor.onOpenChip }
         set { editor.onOpenChip = newValue }
@@ -243,6 +245,11 @@ public final class ComposerView: DSView {
     }
     /// The open thread's timeline messages, read on ArrowUp or ArrowDown for prompt history.
     public var historyMessages: (() -> [PromptHistory.Message])?
+    /// A recall put this message's prompt in the editor, so its mentions can come back with it (#31314).
+    public var onHistoryRecall: ((String) -> Void)?
+    /// `composerRunsDraftLocally` (composerDispatch.ts:59-74 at 4928, #32912): the draft is a command the client
+    /// answers itself, so a running turn shows the plain send button instead of queue or steer.
+    public var runsDraftLocally: ((String) -> Bool)?
     /// The active prompt-history recall (`promptHistoryPositionRef`).
     private var historyPosition: PromptHistory.Position?
 
@@ -549,9 +556,9 @@ public final class ComposerView: DSView {
         get { editor.recordsForCopy }
         set { editor.recordsForCopy = newValue }
     }
-    public var onPasteRecords: (([String: JSONValue]) -> Void)? {
-        get { editor.onPasteRecords }
-        set { editor.onPasteRecords = newValue }
+    public var onPasteFragment: ((ComposerContextImport.Fragment) -> [String: String])? {
+        get { editor.onPasteFragment }
+        set { editor.onPasteFragment = newValue }
     }
     /// An edit or a caret move (the menu controller follows the trigger).
     var onCaretChange: (() -> Void)?
@@ -620,7 +627,8 @@ public final class ComposerView: DSView {
         alphaValue = placeholderInput.projectRequired ? 0.75 : 1
         // With a question open the round button is only Stop (`renderStopGenerationButton(true)`).
         let face = questionFooter != nil ? .stop
-            : ComposerLogic.primaryAction(run: runState, hasContent: hasContent, busy: isBusy, mode: sendMode, editingQueued: editingQueued,
+            : ComposerLogic.primaryAction(run: hasContent && runsDraftLocally?(prompt) == true ? ComposerLogic.RunState() : runState,
+                                          hasContent: hasContent, busy: isBusy, mode: sendMode, editingQueued: editingQueued,
                                           stopHeld: stopTracker.holdsStop)
         if primary.face != face { needsLayout = true }
         primary.face = face
@@ -706,6 +714,49 @@ public final class ComposerView: DSView {
         editor.insertText(insert, replacementRange: range)
     }
 
+    /// A paste point held for content that arrives later, like a pasted image still preparing
+    /// (`composerAttachmentInsertion.ts` at 4928, #35528 and #37010).
+    @MainActor public final class InsertionMark {
+        fileprivate var location: Int
+        fileprivate var prefix: String
+        fileprivate let order: Int
+        fileprivate init(location: Int, prefix: String, order: Int) { self.location = location; self.prefix = prefix; self.order = order }
+    }
+    private var insertionMarks: [InsertionMark] = []
+    private var nextInsertionOrder = 0
+
+    /// Holds the caret's place for a later `insert(_:at:)`.
+    public func markInsertionPoint() -> InsertionMark {
+        let location = editor.selectedRange().location
+        let mark = InsertionMark(location: location, prefix: (editor.string as NSString).substring(to: location), order: nextInsertionOrder)
+        nextInsertionOrder += 1
+        insertionMarks.append(mark)
+        return mark
+    }
+
+    public func dropInsertionMark(_ mark: InsertionMark) { insertionMarks.removeAll { $0 === mark } }
+
+    /// Inserts at the held point, before text typed there since and after an earlier paste's content
+    /// at the same point; the caret stays where the user left it. If the text before the point changed,
+    /// the content goes at the caret instead.
+    public func insert(_ text: String, at mark: InsertionMark) {
+        dropInsertionMark(mark)
+        let ns = editor.string as NSString
+        guard mark.location <= ns.length, ns.substring(to: mark.location) == mark.prefix else { return insertAtCaret(text) }
+        var insert = text
+        if mark.location > 0, let scalar = Unicode.Scalar(ns.character(at: mark.location - 1)),
+           !CharacterSet.whitespacesAndNewlines.contains(scalar) { insert = " " + insert }
+        let caret = editor.selectedRange(), before = ns.length // `ns` is the live storage string
+        editor.insertText(insert, replacementRange: NSRange(location: mark.location, length: 0))
+        let added = (editor.string as NSString).length - before
+        editor.setSelectedRange(NSRange(location: caret.location >= mark.location ? caret.location + added : caret.location, length: caret.length))
+        let next = editor.string as NSString
+        for other in insertionMarks where other.location > mark.location || (other.location == mark.location && other.order > mark.order) {
+            other.location = min(next.length, other.location + added)
+            other.prefix = next.substring(to: other.location)
+        }
+    }
+
     /// The composer's target changed (thread, draft, queued edit): a recall from the old one is not active here.
     public func resetPromptHistory() { historyPosition = nil }
 
@@ -717,6 +768,7 @@ public final class ComposerView: DSView {
         guard let step = PromptHistory.step(backward ? .backward : .forward, entries: PromptHistory.entries(messages),
                                             position: historyPosition, currentPrompt: prompt) else { return false }
         historyPosition = step.position
+        if let id = step.position?.entryId { onHistoryRecall?(id) }
         editor.setText(step.prompt)
         editor.scrollRangeToVisible(editor.selectedRange())
         return true

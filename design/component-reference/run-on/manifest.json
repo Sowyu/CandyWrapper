@@ -7,6 +7,10 @@
     "height" : 96,
     "width" : 136.1484375
   },
+  "strip.git.wide" : {
+    "height" : 96,
+    "width" : 600
+  },
   "strip.remote" : {
     "height" : 96,
     "width" : 600

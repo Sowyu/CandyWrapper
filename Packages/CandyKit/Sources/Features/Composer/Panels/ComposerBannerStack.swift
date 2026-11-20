@@ -123,6 +123,8 @@ public final class ComposerBannerStackView: DSView {
             if item.view.superview !== column { column.addSubview(item.view) }
             item.view.placement = modern ? .attached : .floating
             item.view.joinsAbove = modern && item.id != stacked.first?.id
+            // The front item, attached outside this view, always docks under the stacked ones (#32683).
+            item.view.dockedBelow = modern
             item.view.isHidden = false
         }
         for view in column.subviews where !stacked.contains(where: { $0.view === view }) {

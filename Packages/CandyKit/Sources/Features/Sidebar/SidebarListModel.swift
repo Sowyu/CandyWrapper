@@ -62,6 +62,9 @@ public struct SidebarRowModel: Equatable, Sendable {
     public var terminalProcessCount = 0
     /// Dither: the row sits under its project's header, so it leaves the project out.
     public var inProjectSection = false
+    /// A folder row on two lines, the title then the meta line (`folder-multiline`, #26463, Labs
+    /// "Two-line folder rows"): 54pt with a meta line, 36pt without.
+    public var folderMultiline = false
     /// Dither's compact row, from `SidebarListState.dither`.
     public var dither = false
 
@@ -252,7 +255,8 @@ public enum SidebarItem: Equatable, Sendable {
     var height: CGFloat {
         switch self {
         // Dither (after Capy): a two-line card, title then a small meta line.
-        case .row(let r): r.variant == .card ? (r.dither ? 48 : (!r.hasMetaLine && !ThemeRuntime.isGlass(dark: false) && !ThemeRuntime.isGlass(dark: true) ? 64 : 82)) : 36
+        case .row(let r): r.variant == .card ? (r.dither ? 48 : (!r.hasMetaLine && !ThemeRuntime.isGlass(dark: false) && !ThemeRuntime.isGlass(dark: true) ? 64 : 82))
+            : r.folderMultiline && r.hasMetaLine ? 54 : 36
         case .draft: 82 // `li py-0.5` around `h-[4.875rem]`
         case .showMore: 36
         case .shelfHeader: 32
@@ -276,6 +280,8 @@ public struct SidebarListState: Equatable, Sendable {
     /// The Working beta shelf (`sidebarWorkingShelfEnabled`) and whether it is open (collapsed by default).
     public var boringSidebarEnabled = false
     public var usesProjectFolders: Bool { boringSidebarEnabled && !dither }
+    /// `boringSidebarMultilineRows` (Labs, #26463): folder threads on two lines.
+    public var boringSidebarMultilineRows = false
     public var workingShelfEnabled = false
     public var workingExpanded = false
     /// When this client saw threads leave the Working shelf; the inbox orders by it. Not compared.
@@ -347,7 +353,7 @@ public struct SidebarListState: Equatable, Sendable {
             && a.capabilities.threadSnooze == b.capabilities.threadSnooze && a.environments == b.environments
             && a.terminalProcesses == b.terminalProcesses && a.issueStates == b.issueStates && a.selectedThreadIds == b.selectedThreadIds
             && a.renamingThreadId == b.renamingThreadId && a.scratchRoots == b.scratchRoots && a.grouping == b.grouping
-            && a.boringSidebarEnabled == b.boringSidebarEnabled && a.workingShelfEnabled == b.workingShelfEnabled && a.workingExpanded == b.workingExpanded
+            && a.boringSidebarEnabled == b.boringSidebarEnabled && a.boringSidebarMultilineRows == b.boringSidebarMultilineRows && a.workingShelfEnabled == b.workingShelfEnabled && a.workingExpanded == b.workingExpanded
             && a.heldOrder?.section == b.heldOrder?.section && a.heldOrder?.order == b.heldOrder?.order
             && a.collapsedProjects == b.collapsedProjects && a.dither == b.dither
             && a.projectSortOrder == b.projectSortOrder && a.projectOrder == b.projectOrder
@@ -528,7 +534,7 @@ public enum SidebarListBuilder {
                                                                       projectIcon: nil, count: pinned.count, expanded: expanded, isPinned: true)))
                 for t in pinned where expanded || t.id == state.activeThreadId {
                     guard case .row(var model) = row(t, .pinned) else { continue }
-                    model.inProjectSection = true
+                    model.inProjectSection = true; model.folderMultiline = state.boringSidebarMultilineRows
                     items.append(.row(model))
                 }
             }
@@ -589,7 +595,7 @@ public enum SidebarListBuilder {
             header.dot = folderDot(hidden, visits: state.localVisits)
             return [.projectHeader(header)] + list.filter { expanded || $0.id == state.activeThreadId }.map {
                 guard case .row(var model) = row($0) else { return row($0) }
-                model.inProjectSection = true
+                model.inProjectSection = true; model.folderMultiline = state.boringSidebarMultilineRows
                 return .row(model)
             }
         }
@@ -637,7 +643,7 @@ public enum SidebarListBuilder {
                 projectIcon: (group?.representative ?? project).map(ProjectIconSource.init), count: list.count, expanded: expanded)))
             for t in list where expanded || t.id == state.activeThreadId {
                 guard case .row(var model) = row(t) else { continue }
-                model.inProjectSection = true
+                model.inProjectSection = true; model.folderMultiline = state.boringSidebarMultilineRows
                 items.append(.row(model))
             }
         }

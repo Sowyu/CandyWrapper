@@ -1,0 +1,10 @@
+{
+  "two-line" : {
+    "height" : 70,
+    "width" : 240
+  },
+  "two-line.no-meta" : {
+    "height" : 52,
+    "width" : 240
+  }
+}

@@ -120,8 +120,11 @@ public enum BackgroundWorkPresentation {
         let waiting = SidebarModel.backgroundWorkHoldsCompletion(tasks, awaitedMarked: awaitedMarked)
         let items = tasks.map { task -> Item in
             let description = task.description?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let label = task.kind == .subagent && description != nil
-                ? ThreadRelationships.subagentDisplayTitle(description!).trimmingCharacters(in: .whitespacesAndNewlines) : description
+            // Commands and monitors read as the command a person would type (#28446, threadExecution.ts at 4928).
+            let label = description.map { d in
+                task.kind == .subagent ? ThreadRelationships.subagentDisplayTitle(d).trimmingCharacters(in: .whitespacesAndNewlines)
+                    : task.kind == .command || task.kind == .monitor ? commandDisplayText(d) : d
+            }
             return Item(taskId: task.taskId, kind: task.kind, label: label.flatMap { $0.isEmpty ? nil : $0 } ?? noun(task.kind).singular,
                         childThreadId: task.kind == .subagent ? task.childThreadId : nil)
         }.enumerated().sorted { (noun($0.element.kind).order, $0.offset) < (noun($1.element.kind).order, $1.offset) }.map(\.element)

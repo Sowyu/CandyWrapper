@@ -88,6 +88,8 @@ public struct ClientSettings: Equatable, Sendable {
         "proactivePanelsEnabled": SettingSpec(.bool, .bool(false)),
         "showSkillsInSlashMenu": SettingSpec(.bool, .bool(true)),
         "boringSidebarEnabled": SettingSpec(.bool, .bool(false)),
+        // #26463 (contracts settings.ts at 4928): folder threads on two lines in the boring sidebar.
+        "boringSidebarMultilineRows": SettingSpec(.bool, .bool(false)),
         // T3 3814 packages/contracts/src/settings.ts:476: absent preferences use the new default.
         "sidebarWorkingShelfEnabled": SettingSpec(.bool, .bool(true)),
         "sidebarProjectGroupingMode": SettingSpec(.literals(["repository", "repository_path", "separate"]), .string("repository")),

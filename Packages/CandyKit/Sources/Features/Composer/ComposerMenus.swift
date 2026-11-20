@@ -512,7 +512,7 @@ public enum ComposerMenus {
     public static func emptyText(kind: ComposerTriggerKind, loading: Bool, pullRequestsAvailable: Bool = true,
                                  pullRequestsFailed: Bool = false, query: String = "") -> String {
         if loading {
-            return kind == .skill ? "Searching workspace skills..." : kind == .pullRequest ? "Finding pull request..." : "Searching workspace files..."
+            return kind == .skill || kind == .slashCommand ? "Searching workspace skills..." : kind == .pullRequest ? "Finding pull request..." : "Searching workspace files..."
         }
         switch kind {
         case .skill: return "No skills found. Try / to browse provider commands."
@@ -955,18 +955,30 @@ public enum ComposerContext {
     /// fragment's records whose ids the pasted text references. Clipboard data is untrusted, so
     /// records need a known shape (an object with a valid kind and id) to come through.
     public static func pastedRecords(html: String, pastedText: String) -> [String: JSONValue] {
+        var out: [String: JSONValue] = [:]
+        for record in pastedFragment(html: html, pastedText: pastedText)?.records ?? [] {
+            if let id = record["contextId"]?.stringValue { out[id] = record }
+        }
+        return out
+    }
+
+    /// The same, in fragment order and with the environment that copied them (`fragment.source`).
+    public static func pastedFragment(html: String, pastedText: String) -> ComposerContextImport.Fragment? {
         guard html.count <= 16_000_000 * 9 + 4096,
               let m = fragmentAttribute.firstMatch(in: html, range: NSRange(location: 0, length: (html as NSString).length)),
               let raw = (html as NSString).substring(with: m.range(at: 1).location != NSNotFound ? m.range(at: 1) : m.range(at: 2)).removingPercentEncoding,
               let fragment = try? JSONDecoder().decode(JSONValue.self, from: Data(raw.utf8)),
-              case .number(1)? = fragment["version"], case .array(let records)? = fragment["records"] else { return [:] }
+              case .number(1)? = fragment["version"], case .array(let records)? = fragment["records"] else { return nil }
         let ids = Set(referencedIds(pastedText))
-        var out: [String: JSONValue] = [:]
+        var seen = Set<String>(), picked: [JSONValue] = []
         for record in records.prefix(200) {
             guard let id = record["contextId"]?.stringValue, let kind = record["kind"]?.stringValue, ids.contains(id),
                   ComposerTriggers.matches(idPattern, id), ComposerTriggers.matches(kindPattern, kind) else { continue }
-            out[id] = record
+            // A later record for the same id wins, as the `Map` in `readPastedComposerContext` does.
+            if !seen.insert(id).inserted { picked.removeAll { $0["contextId"]?.stringValue == id } }
+            picked.append(record)
         }
-        return out
+        guard !picked.isEmpty else { return nil }
+        return ComposerContextImport.Fragment(records: picked, sourceEnvironmentId: fragment["source"]?["environmentId"]?.stringValue)
     }
 }

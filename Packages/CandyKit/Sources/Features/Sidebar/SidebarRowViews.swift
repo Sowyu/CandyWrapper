@@ -1098,6 +1098,26 @@ final class SidebarSlimRowView: SidebarRowBase {
     /// A settled row's Archive, left of Un-settle on hover (the user, 2026-10-29). Built on the first settled row.
     private var archiveButton: RowActionButton?
     var actions = SidebarRowActions()
+    /// The two-line folder row's meta line (`folder-multiline`, SidebarThreadRow.tsx:1266-1325 at 4928), built on the
+    /// first such row so one-line rows never make it.
+    private var meta: MetaLine?
+
+    /// `mt-0.5 flex items-center gap-1.5 text-secondary-label text-xs`: the worktree glyph and branch, or a scratch
+    /// thread's machine, then the terminal, pull request and issue, then the machine and agents at the end.
+    @MainActor final class MetaLine {
+        /// `ThreadWorktreeIndicator`: `size-3.5 text-icon-muted` (ThreadStatusIndicators.tsx:801).
+        let branchIcon = IconView(name: .folderGit2, size: 14)
+        let branch = MiddleTruncateView("", font: DSFont.ui(12))
+        let scratch = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 12, height: 12))
+        let machine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
+        let provider = ProviderStackView()
+        var views: [NSView] { [branchIcon, branch, scratch, machine, provider] }
+        init(in row: NSView) {
+            branch.lineHeight = 16
+            branch.showsTitle = false
+            views.forEach(row.addSubview)
+        }
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1139,7 +1159,11 @@ final class SidebarSlimRowView: SidebarRowBase {
         HoverReveal.fade(monogram, to: dim ? 0.4 : 1) // `transition-opacity` (Sidebar.tsx:1827-1830)
         title.text = r.title
         title.font = SB.font(14, r.recedes ? .regular : .medium)
-        if hovered {
+        if r.inProjectSection {
+            // A folder row is not `slim`, so its title takes the card's colors (SidebarThreadRow.tsx:1086-1094 at 4928).
+            title.color = r.recedes && !hovered ? SB.c(\.foreground, 0.75)
+                : r.status == .failed && !r.isUnread && !r.isWoke ? SB.c(\.foreground, 0.95) : SB.c(\.foreground)
+        } else if hovered {
             title.color = SB.c(\.foreground)
         } else if unsettle {
             title.color = SB.c(\.secondaryLabel, DesignGeometry.usesClassic(self) ? 0.7 : 1)
@@ -1151,6 +1175,7 @@ final class SidebarSlimRowView: SidebarRowBase {
         if r.isRegeneratingTitle { title.color = SB.c(\.mutedForeground) }
         SidebarTitleGlimmer.sync(&glimmer, over: title, active: r.isRegeneratingTitle)
         pin.isHidden = !showsPin(r)
+        configureMeta(r)
         terminal.count = r.terminalProcessCount
         prBadge.badge = r.pullRequestBadge
         issueBadge.badge = r.issueBadge
@@ -1225,6 +1250,31 @@ final class SidebarSlimRowView: SidebarRowBase {
         needsLayout = true
     }
 
+    private func configureMeta(_ r: SidebarRowModel) {
+        guard r.folderMultiline else {
+            meta?.views.forEach { $0.isHidden = true }
+            return
+        }
+        let meta = self.meta ?? MetaLine(in: self)
+        self.meta = meta
+        let showsScratch = r.branch == nil && r.scratchMachineLabel != nil
+        let color = SB.c(\.secondaryLabel)
+        meta.branch.value = r.branch ?? (showsScratch ? r.scratchMachineLabel ?? "" : "")
+        meta.branch.color = color
+        meta.branch.isHidden = meta.branch.value.isEmpty
+        meta.branchIcon.isHidden = !(r.branch != nil && r.hasWorktree)
+        meta.branchIcon.strokeColor = SB.c(\.iconMuted)
+        meta.scratch.kind = showsScratch ? r.scratchMachine : nil
+        meta.scratch.isHidden = !showsScratch
+        meta.scratch.color = color
+        // An empty meta line is left out and its trailing icons join the title line (`titleLineIcons`).
+        meta.provider.set(r.providers, dither: false)
+        meta.provider.isHidden = false
+        meta.machine.kind = r.environmentMachine
+        meta.machine.isHidden = r.environmentMachine == nil || showsScratch
+        meta.machine.color = SB.c(\.sidebarMutedForeground, 0.7)
+    }
+
     override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
@@ -1232,8 +1282,11 @@ final class SidebarSlimRowView: SidebarRowBase {
         CATransaction.setDisableActions(true)
         surface.frame = bounds
         CATransaction.commit()
+        let multiline = row?.folderMultiline == true, metaShown = multiline && row?.hasMetaLine == true
+        // The two-line row's title line is `h-6` under `py-1.5`; the one-line row centers in its height.
+        let lineHeight: CGFloat = metaShown ? 36 : h
         var x: CGFloat = 10
-        monogram.frame = NSRect(x: x, y: (h - 16) / 2, width: 16, height: 16)
+        monogram.frame = NSRect(x: x, y: (lineHeight - 16) / 2, width: 16, height: 16)
         x += 16 + 10
         let tw = ceil(time.textWidth)
         let pill = wokeIcon.isHidden ? tw : 12 + 4 + tw // `size-3` icon, `gap-1`
@@ -1243,7 +1296,7 @@ final class SidebarSlimRowView: SidebarRowBase {
             let bw = b.preferredWidth
             // `-mr-1`; Settle's `-mr-2 px-2` puts its check flush with the timestamps (T3 4928 SidebarThreadRow.tsx:1508, #33053).
             let outset: CGFloat = row?.action == .settle ? 8 : 4
-            b.frame = NSRect(x: w - 10 + outset - bw, y: (h - 24) / 2, width: bw, height: 24)
+            b.frame = NSRect(x: w - 10 + outset - bw, y: (lineHeight - 24) / 2, width: bw, height: 24)
             if wokeBeside { timeRight = b.frame.minX }
         }
         var slot = lift == nil ? max(32, w - 10 - timeRight + pill) : lift?.verb == nil ? -10 : dropBadge?.preferredWidth ?? 0 // `min-w-8`
@@ -1254,31 +1307,63 @@ final class SidebarSlimRowView: SidebarRowBase {
             if (state.hovered || isKeyboardFocused), lift == nil { slot = max(slot, w - 10 - a.frame.minX) }
         }
         let slotX = w - 10 - slot
-        if lift != nil { dropBadge?.frame = NSRect(x: slotX, y: (h - 20) / 2, width: max(0, slot), height: 20) }
-        time.frame = NSRect(x: timeRight - tw, y: (h - 16) / 2, width: tw + 1, height: 16)
+        if lift != nil { dropBadge?.frame = NSRect(x: slotX, y: (lineHeight - 20) / 2, width: max(0, slot), height: 20) }
+        time.frame = NSRect(x: timeRight - tw, y: (lineHeight - 16) / 2, width: tw + 1, height: 16)
         if !wokeIcon.isHidden {
-            wokeIcon.frame = NSRect(x: timeRight - pill, y: (h - 12) / 2, width: 12, height: 12)
-            wokeButton.frame = NSRect(x: timeRight - pill, y: (h - 20) / 2, width: pill, height: 20)
+            wokeIcon.frame = NSRect(x: timeRight - pill, y: (lineHeight - 12) / 2, width: 12, height: 12)
+            wokeButton.frame = NSRect(x: timeRight - pill, y: (lineHeight - 20) / 2, width: pill, height: 20)
         }
         var right = slotX - 10
+        if let meta, metaShown { layoutMeta(meta, width: w) }
         // `{title}{pin}{terminal}{issueBadge}{prBadge}` in a `gap-2.5` row.
-        if !prBadge.isHidden {
+        if !metaShown, !prBadge.isHidden {
             let pw = prBadge.preferredWidth
-            prBadge.frame = NSRect(x: right - pw, y: (h - 16) / 2, width: pw, height: 16); right -= pw + 10
+            prBadge.frame = NSRect(x: right - pw, y: (lineHeight - 16) / 2, width: pw, height: 16); right -= pw + 10
         }
+        if !metaShown, !issueBadge.isHidden {
+            let iw = issueBadge.preferredWidth
+            issueBadge.frame = NSRect(x: right - iw, y: (lineHeight - 16) / 2, width: iw, height: 16); right -= iw + 10
+        }
+        if !metaShown, !terminal.isHidden { terminal.frame = NSRect(x: right - 14, y: (lineHeight - 14) / 2, width: 14, height: 14); right -= 14 + 10 }
+        if !pin.isHidden { pin.frame = NSRect(x: right - 12, y: (lineHeight - 12) / 2, width: 12, height: 12); right -= 12 + 10 }
+        // An empty meta line is left out and the machine and agents follow the title (`titleLineIcons`, #26803).
+        if let meta, multiline, !metaShown {
+            meta.branch.isHidden = true; meta.branchIcon.isHidden = true; meta.scratch.isHidden = true
+            let stack = meta.provider.preferredWidth
+            var left = right
+            if stack > 0 { meta.provider.frame = NSRect(x: right - stack, y: (lineHeight - 14) / 2, width: stack, height: 14); left = right - stack - 4 }
+            if !meta.machine.isHidden { meta.machine.frame = NSRect(x: left - 14, y: (lineHeight - 14) / 2, width: 14, height: 14); left -= 14 + 4 }
+            if left < right { right = left + 4 - 10 }
+        }
+        title.frame = NSRect(x: x, y: (lineHeight - 20) / 2, width: max(0, right - x), height: 20)
+        placeRenameField(row?.isRenaming == true ? renameField : nil, over: title,
+                         frame: NSRect(x: x, y: (lineHeight - 22) / 2, width: max(0, right - x), height: 22))
+    }
+
+    /// Lays out the meta line at `y = 32`: `py-1.5`, the 24pt title line, then `mt-0.5`.
+    private func layoutMeta(_ meta: MetaLine, width w: CGFloat) {
+        let stack = meta.provider.preferredWidth
+        let y: CGFloat = 32, right = w - 10
+        // `ml-auto inline-flex gap-1`: the machine, then the agents, at the end.
+        var trailing = right - stack
+        meta.provider.frame = NSRect(x: trailing, y: y + 1, width: stack, height: 14)
+        if !meta.machine.isHidden { meta.machine.frame = NSRect(x: trailing - (stack > 0 ? 4 : 0) - 14, y: y + 1, width: 14, height: 14); trailing = meta.machine.frame.minX }
+        // `gap-1.5` from the end: issue, pull request, terminal.
         if !issueBadge.isHidden {
             let iw = issueBadge.preferredWidth
-            issueBadge.frame = NSRect(x: right - iw, y: (h - 16) / 2, width: iw, height: 16); right -= iw + 10
+            issueBadge.frame = NSRect(x: trailing - 6 - iw, y: y, width: iw, height: 16); trailing = issueBadge.frame.minX
         }
-        if !terminal.isHidden { terminal.frame = NSRect(x: right - 14, y: (h - 14) / 2, width: 14, height: 14); right -= 14 + 10 }
-        if !pin.isHidden { pin.frame = NSRect(x: right - 12, y: (h - 12) / 2, width: 12, height: 12); right -= 12 + 10 }
-        title.frame = NSRect(x: x, y: (h - 20) / 2, width: max(0, right - x), height: 20)
-        placeRenameField(row?.isRenaming == true ? renameField : nil, over: title,
-                         frame: NSRect(x: x, y: (h - 22) / 2, width: max(0, right - x), height: 22))
+        if !prBadge.isHidden {
+            let pw = prBadge.preferredWidth
+            prBadge.frame = NSRect(x: trailing - 6 - pw, y: y, width: pw, height: 16); trailing = prBadge.frame.minX
+        }
+        if !terminal.isHidden { terminal.frame = NSRect(x: trailing - 6 - 14, y: y + 1, width: 14, height: 14); trailing = terminal.frame.minX }
+        var x: CGFloat = 36 // `ps-9`, under the title
+        if !meta.branchIcon.isHidden { meta.branchIcon.frame = NSRect(x: x, y: y + 1, width: 14, height: 14); x += 14 + 6 }
+        if !meta.scratch.isHidden { meta.scratch.frame = NSRect(x: x, y: y + 2, width: 12, height: 12); x += 12 + 6 }
+        meta.branch.frame = NSRect(x: x, y: y, width: max(0, trailing - 6 - x), height: 16)
     }
 }
-
-/// `SidebarSectionHeader` (Sidebar.tsx:789-830): `mx-0.5 h-8` around a CollapsibleSectionHeader.
 final class SidebarShelfRowView: SidebarRowBase {
     let header = CollapsibleSectionHeaderView("")
     var onToggle: (@MainActor (SidebarShelf) -> Void)?

@@ -238,6 +238,8 @@ public final class ComposerImageShelfView: DSView {
     public var tiles: [Tile] = [] { didSet { if tiles != oldValue { rebuild() } } }
     public var onRemove: ((String) -> Void)?
     public var onRetry: ((String) -> Void)?
+    /// Copy snapshot in a snapshot's accessibility popover (#37771); true once the clipboard has it.
+    public var onCopySnapshot: ((String) async -> Bool)?
     public var onExpand: ((String) -> Void)?
     private var views: [TileView] = []
 
@@ -315,7 +317,10 @@ public final class ComposerImageShelfView: DSView {
             if details?.source != tile.source {
                 details?.removeFromSuperview(); details = nil
                 if let source = tile.source {
-                    let view = SnapShotAttachmentDetailsView(source: source)
+                    let id = tile.id
+                    let view = SnapShotAttachmentDetailsView(source: source, onCopy: { [weak self] in
+                        await self?.owner?.onCopySnapshot?(id) ?? false
+                    })
                     addSubview(view, positioned: .below, relativeTo: remove); details = view
                 }
             }

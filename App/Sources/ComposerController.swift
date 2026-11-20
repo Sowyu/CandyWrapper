@@ -3456,6 +3456,8 @@ extension ComposerController {
         var exactPullRequestTask: Task<Void, Never>?
         /// `server.refreshProviders` requests by `env|instance|cwd`, at most one per TTL (5 minutes).
         var workspaceRefresh: [String: Date] = [:]
+        /// Workspace snapshot asks still in flight (`isProviderWorkspaceSnapshotScanning`, #28209).
+        var workspaceScanning: Set<String> = []
         var pullRequestsSupported: [String: Bool] = [:]
     }
 
@@ -3476,12 +3478,21 @@ extension ComposerController {
         }
         composer.recordsForCopy = { [weak self] ids in
             guard let self, let env = targetEnvironmentId else { return nil }
+            // `buildContextClipboardFragment` (ChatComposer.tsx:1319-1373): attachment chips copy their
+            // record, and the copy remembers their files so another draft can take the bytes.
             let records = contextRecords(for: ids)
-            return (ids.compactMap { records[$0] }, env)
+            var copied: [String: URL] = [:]
+            let out: [JSONValue] = ids.compactMap { id in
+                if let record = records[id] { return record }
+                guard let a = currentAttachments.first(where: { $0.contextId == id }), !a.needsReattach else { return nil }
+                let record = a.clipboardRecord
+                if let attachmentId = record["attachmentId"]?.stringValue { copied[attachmentId] = a.fileURL }
+                return record
+            }
+            if !out.isEmpty { ComposerCopiedAttachments.remember(environmentId: env, files: copied) }
+            return (out, env)
         }
-        composer.onPasteRecords = { [weak self] records in
-            self?.menuState.records.merge(records) { $1 }
-        }
+        composer.onPasteFragment = { [weak self] fragment in self?.importPastedContext(fragment) ?? [:] }
     }
 
     // MARK: Inputs
@@ -3611,10 +3622,10 @@ extension ComposerController {
                                                  showSkills: ClientSettingsStore.shared.current.bool("showSkillsInSlashMenu"),
                                                  compactAvailable: compact, freshSessionAvailable: freshSessionCommandAvailable,
                                                  sideChat: sideChatSlash?())
-            return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .slashCommand, loading: false))
+            return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .slashCommand, loading: workspaceSkillsScanning))
         case .skill:
             let items = ComposerMenus.skillItems(query: trigger.query, provider: providerKey, skills: provider?.skills(cwd: cwd) ?? [])
-            return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .skill, loading: false))
+            return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .skill, loading: workspaceSkillsScanning))
         case .path:
             let threads = ComposerMenus.threadItems(query: trigger.query, threads: menuThreads,
                                                     excluding: currentThreadScopedId, browse: browsingThreads)
@@ -3814,6 +3825,13 @@ extension ComposerController {
         return errors.contains { $0["projectId"]?.stringValue == projectId }
     }
 
+    /// The skill and command menus say they are searching while this provider's workspace skills are asked for
+    /// (#28209, ChatComposer.tsx and useProviderWorkspaceSnapshotRefresh.ts at 4928).
+    private var workspaceSkillsScanning: Bool {
+        guard let env = targetEnvironmentId, let cwd = menuCwd, let provider = menuProvider else { return false }
+        return menuState.workspaceScanning.contains("\(env)|\(provider.instanceId.rawValue)|\(cwd)")
+    }
+
     /// `server.refreshProviders` for the composer's provider and cwd when the workspace snapshot is
     /// missing or older than its TTL (ChatComposer.tsx:2214-2300). The reply carries the providers.
     fileprivate func refreshWorkspaceSnapshot() {
@@ -3824,11 +3842,15 @@ extension ComposerController {
         if let snapshot = provider.workspaceSnapshot(cwd), snapshot.slashCommandsPending != true,
            let checked = T3Timestamp(snapshot.checkedAt).date, Date().timeIntervalSince(checked) < ttl { return }
         menuState.workspaceRefresh[key] = Date()
+        menuState.workspaceScanning.insert(key)
         let supervisor = shell.supervisor
         let payload = workspaceRefreshInput(env: env, instance: provider.instanceId.rawValue, cwd: cwd)
         Task { [weak self] in
             let reply = try? await supervisor.request("server.refreshProviders", payload: payload)
-            guard let self, environments.session(env) === shell else { return }
+            guard let self else { return }
+            menuState.workspaceScanning.remove(key)
+            if panel.menus.isOpen { panel.menus.reload() }
+            guard environments.session(env) === shell else { return }
             guard let providers = try? reply?["providers"]?.decode(as: [ServerProvider].self) else {
                 menuState.workspaceRefresh.removeValue(forKey: key)
                 return
@@ -4023,12 +4045,22 @@ extension ComposerController {
         composer.pasteDirectory = Self.attachmentWorkDirectory
         composer.imageShelf.onRemove = { [weak self] id in self?.removeImage(id) }
         composer.imageShelf.onRetry = { [weak self] id in self?.retryAttachment(id) }
+        composer.imageShelf.onCopySnapshot = { [weak self] id in await self?.copySnapshot(id) ?? false }
         composer.onOpenChip = { [weak self] source in
             guard let self, let token = ComposerInlineTokens.collect(source + " ").first else { return false }
             let skillName: String? = switch token.kind {
             case .skill(let name): name
             case .context("skill", let id, _): self.menuState.records[id]?["name"]?.stringValue
             default: nil
+            }
+            // The model chip opens its details (`ModelMentionChip`'s ContextChipPopover, ModelMentionChip.tsx:100-125).
+            if case .model(let instance, let slug) = token.kind,
+               let provider = self.serverConfig.providers.first(where: { $0.instanceId.rawValue == instance }),
+               let model = provider.models.first(where: { $0.slug == slug }) {
+                let name = ProviderCatalog([provider]).entries.first?.displayName ?? provider.instanceId.rawValue
+                ModelMentionDetailsView.show(label: ModelNames.display(model), provider: model.subProvider ?? name,
+                                             source: source, from: self.composer.chipAnchor)
+                return true
             }
             if let name = skillName, let skill = self.menuProvider?.skills(cwd: self.menuCwd).first(where: { $0.name == name }) {
                 let open: (() -> Void)? = self.openThreadId == nil || skill.path.isEmpty ? nil : { [weak self] in
@@ -4055,6 +4087,30 @@ extension ComposerController {
             await self?.mediaAttachmentURL(id)
         }
         panel.queue.attachmentMediaURL = panel.model.attachmentMediaURL
+        panel.queue.onExpandImage = { [weak self] items, index in self?.presentPreview(items, index: index) }
+        // `replacePromptFromHistory` (ChatComposer.tsx, composerPromptHistory.ts at 4928, #31314): a recalled prompt
+        // brings its thread and machine records, so its mentions stay chips for the machine they name.
+        composer.runsDraftLocally = { [weak self] text in
+            guard let self else { return false }
+            if case .thread = target, onSideChat != nil, sideChatDisabledReason?() == nil, SideChats.parseCommand(text) != nil { return true }
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            // `holdsOnlyText`: no attachments, contexts or reply.
+            guard currentAttachments.isEmpty, ComposerContext.referencedIds(trimmed).isEmpty,
+                  draftKey.flatMap({ replyTargets[$0] }) == nil else { return false }
+            return (usageLimitsOffered && UsageLimitsLogic.isUsageLimitsCommand(trimmed))
+                || (pickers.current.entry?.driver == "codex" && pickers.currentMultiple == nil && ComposerLogic.isCodexFeedbackCommand(trimmed))
+                || (freshSessionCommandAvailable && ComposerMenus.isClearCommand(trimmed))
+        }
+        composer.onHistoryRecall = { [weak self] id in
+            guard let self, let message = projection.flatMap({ p in TimelineRowsInput(projection: p).entries.lazy.compactMap { entry -> ChatMessage? in
+                if case .message(let m, _) = entry.kind, m.id.rawValue == id { return m }
+                return nil
+            }.first }) ?? optimistic.first(where: { $0.id.rawValue == id }),
+                  case .array(let records)? = message.context?["records"] else { return }
+            for record in records where ["thread", "environment"].contains(record["kind"]?.stringValue ?? "") {
+                if let contextId = record["contextId"]?.stringValue { menuState.records[contextId] = record }
+            }
+        }
         panel.model.attachmentImage = { [weak self] id, side, cover in
             guard let source = await self?.attachmentSource(id) else { return nil }
             return await ComposerImageIO.thumbnail(source, side: side, cover: cover, measurementKey: id)
@@ -4422,6 +4478,111 @@ extension ComposerController {
         focusComposer()
     }
 
+    /// `importContextFragment` (useComposerContextImport.ts:292-458): pasted records join the draft
+    /// under ids that can't collide with its own, and pasted attachment chips bring their bytes.
+    fileprivate func importPastedContext(_ fragment: ComposerContextImport.Fragment) -> [String: String] {
+        guard let key = draftKey, let env = targetEnvironmentId else { return [:] }
+        var existing = menuState.records
+        for a in currentAttachments { existing[a.contextId] = a.clipboardRecord }
+        let attached = Set(currentAttachments.map(\.fileURL))
+        let plan = ComposerContextImport.plan(
+            fragment, existing: existing, environmentId: env, linkedEnvironments: Set(composerLinkedNames.keys),
+            isQuestion: questionRequestId != nil,
+            alreadyAttached: { record in
+                guard let source = fragment.sourceEnvironmentId, let id = record["attachmentId"]?.stringValue,
+                      let file = ComposerCopiedAttachments.file(environmentId: source, attachmentId: id) else { return false }
+                return attached.contains(file)
+            })
+        menuState.records.merge(plan.records) { $1 }
+        if let source = fragment.sourceEnvironmentId {
+            for attachment in plan.attachments { importPastedAttachment(attachment, from: source, key: key, environmentId: env) }
+        }
+        return plan.rewritten
+    }
+
+    /// `runAttachmentImport` (useComposerContextImport.ts:157-270): the copied file when this app still
+    /// has it, else a download from the environment that holds the upload.
+    private func importPastedAttachment(_ attachment: ComposerContextImport.Attachment, from source: String, key: String, environmentId env: String) {
+        let fail = { [weak self] (reason: String) -> Void in
+            self?.toast(.error, "Couldn't bring \(attachment.name) into this message", "\(reason) Remove the chip or attach the file again.")
+        }
+        let local = ComposerCopiedAttachments.file(environmentId: source, attachmentId: attachment.attachmentId)
+        let work = Self.attachmentWorkDirectory
+        // Counted as a preparing image (`pendingDraftWork`), so a send waits for the bytes and the limit counts them.
+        preparingImages[key, default: 0] += 1
+        let done = { [weak self] in
+            self?.preparingImages[key, default: 1] -= 1
+            self?.resumeSendAfterPreparing(key)
+        }
+        Task { [weak self] in
+            var file = local
+            if file == nil {
+                guard let self else { return }
+                guard environments.session(source) != nil else {
+                    done()
+                    return fail("The environment it came from is not connected.")
+                }
+                file = await attachmentSource(attachment.attachmentId, environmentId: source)
+            }
+            // A private copy, so removing the chip in either draft never deletes the other's bytes.
+            let copy: URL? = await Task.detached {
+                guard let file else { return nil }
+                try? FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+                let dest = work.appendingPathComponent(UUID().uuidString.lowercased(), isDirectory: true)
+                    .appendingPathComponent(attachment.name.replacingOccurrences(of: "/", with: "_"))
+                do {
+                    try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try FileManager.default.copyItem(at: file, to: dest)
+                    return dest
+                } catch { return nil }
+            }.value
+            guard let self else { return }
+            defer { done() }
+            guard let copy else {
+                return fail(local == nil ? "The original attachment is no longer available." : "Downloading it from the source failed.")
+            }
+            // The draft these bytes belong to may have been sent or switched away from meanwhile, and a
+            // chip the user deleted while they downloaded stays out of the draft (#23447, :197-210).
+            guard draftKey == key, ComposerContext.referencedIds(composer.text).contains(attachment.contextId) else {
+                try? FileManager.default.removeItem(at: copy)
+                return
+            }
+            // This import is still counted in `preparingImages`.
+            guard (draftAttachments[key]?.count ?? 0) + (preparingImages[key] ?? 1) - 1 < ComposerAttachmentRules.maxAttachments else {
+                try? FileManager.default.removeItem(at: copy)
+                return fail("The attachment limit has been reached.")
+            }
+            let size = (try? copy.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            var added = ComposerAttachment(id: attachment.localId, kind: attachment.kind == "image" ? .image : .file, name: attachment.name,
+                                           mimeType: attachment.mimeType, sizeBytes: size, fileURL: copy, environmentId: env)
+            added.snapShotSource = attachment.record["source"]
+            draftAttachments[key, default: []].append(added)
+            startUpload(added.id, key: key)
+            refresh()
+        }
+    }
+
+    /// `copyComposerSnapshot` and `copySnapshot` (ChatComposer.tsx:1374-1386, copySnapshot.ts at 4928): the
+    /// image, its chip as text, and the fragment, so another composer pastes the snapshot as a chip.
+    private func copySnapshot(_ id: String) async -> Bool {
+        guard let a = currentAttachments.first(where: { $0.id == id && $0.kind == .image }), let env = targetEnvironmentId,
+              let html = ComposerContext.clipboardHTML(text: a.reference, records: [a.clipboardRecord], environmentId: env) else { return false }
+        let url = a.fileURL, isPNG = a.mimeType.lowercased() == "image/png"
+        let png: Data? = await Task.detached {
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            if isPNG { return data }
+            return NSBitmapImageRep(data: data)?.representation(using: .png, properties: [:])
+        }.value
+        guard let png else { return false }
+        ComposerCopiedAttachments.remember(environmentId: env, files: [a.clipboardRecord["attachmentId"]?.stringValue ?? a.id: url])
+        let item = NSPasteboardItem()
+        item.setData(png, forType: .png)
+        item.setString(a.reference, forType: .string)
+        item.setString(html, forType: .html)
+        NSPasteboard.general.clearContents()
+        return NSPasteboard.general.writeObjects([item])
+    }
+
     fileprivate func addFiles(_ files: [ComposerIncomingFile], pastedText: Bool = false) {
         guard !files.isEmpty, let key = draftKey, let env = targetEnvironmentId else { return }
         if questionRequestId != nil {
@@ -4506,6 +4667,8 @@ extension ComposerController {
         refresh()
         guard !images.isEmpty else { return }
         preparingImages[key, default: 0] += images.count
+        // The chips go where the images were pasted, not where the caret is once they are ready (#35528, #37010).
+        let mark = imagesGetChips ? composer.markInsertionPoint() : nil
         let work = Self.attachmentWorkDirectory
         let generation = preparingGenerations[key, default: 0]
         Task { [weak self] in
@@ -4528,12 +4691,17 @@ extension ComposerController {
             // `cancelPreparingComposerImages` (preparingComposerImages.ts at 4928): a discarded draft stays discarded.
             guard preparingGenerations[key, default: 0] == generation else {
                 for a in prepared { try? FileManager.default.removeItem(at: a.fileURL) }
+                if let mark { composer.dropInsertionMark(mark) }
                 return
             }
             preparingImages[key, default: images.count] -= images.count
             draftAttachments[key, default: []] += prepared
-            if imagesGetChips, key == draftKey, !prepared.isEmpty {
-                composer.insertAtCaret(prepared.map(\.reference).joined(separator: " ") + " ")
+            if let mark {
+                if key == draftKey, !prepared.isEmpty {
+                    composer.insert(prepared.map(\.reference).joined(separator: " ") + " ", at: mark)
+                } else {
+                    composer.dropInsertionMark(mark)
+                }
             }
             for a in prepared { startUpload(a.id, key: key) }
             // Only failures are reported here, so a later error is never cleared by this one.
@@ -4882,13 +5050,15 @@ extension ComposerController {
     /// A sent image's bytes on disk: the file it was sent from, else the server copy, fetched once
     /// through `assets.createUrl` (resource `attachment`) into the cache directory. T3 leans on the
     /// browser's cache for the same bytes (`private, max-age=3600`, apps/server/src/http.ts:420-423).
-    fileprivate func attachmentSource(_ attachmentId: String) async -> URL? {
+    fileprivate func attachmentSource(_ attachmentId: String, environmentId: String? = nil) async -> URL? {
         if let local = sentFiles[attachmentId], FileManager.default.fileExists(atPath: local.path) { return local }
         let safe = attachmentId.replacingOccurrences(of: "[^A-Za-z0-9_-]", with: "_", options: .regularExpression)
         let cached = Self.attachmentCacheDirectory.appendingPathComponent(safe)
         if FileManager.default.fileExists(atPath: cached.path) { return cached }
         if let running = attachmentFetches[attachmentId] { return await running.value }
-        guard case .thread(let threadId) = target, let shell = environments.session(threadId.environmentId) else { return nil }
+        let owner: String?
+        if let environmentId { owner = environmentId } else if case .thread(let threadId) = target { owner = threadId.environmentId } else { owner = nil }
+        guard let shell = owner.flatMap({ environments.session($0) }) else { return nil }
         let supervisor = shell.supervisor, base = shell.http.baseURL
         let fetch = Task<URL?, Never> {
             do {
