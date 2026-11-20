@@ -526,31 +526,31 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 50c1c5dc53 | #26901 | browser | feat: side chats beside the main thread | left: planned in side-chats-4928.md (sidebar-2) |
+| 50c1c5dc53 | #26901 | browser | feat: side chats beside the main thread | ported (side-chats): the right panel's Side chat tab with its state dot, the + menu row behind `sideChats`, the pane's header with Bring back, Delete and Close over the side chat's embedded chat, the fork, mode and send sequence with the unused-thread cleanup, closing a never-run side chat deletes it, opening a side chat routes to its parent's tab. Left: the details card's Side chats section (Features/Git), the side chat composer's attachments, chips and `/` menu |
 | b5c83cdb95 | #28326 | thread | Show the full title in lineage/side-chat row tooltips | left: planned in side-chats-4928.md (sidebar-2) |
 | 171f78b879 | #29917 | thread | fix(client): project removal counts only listed threads, not side chats or subagents | already in CandyWrapper: SettingsPages.swift:80 counts only lineage.isListed threads (sidebar-2) |
 | 12ec17ce4c | #29891 | thread | fix(web): opening a project from the command palette no longer lands in a subagent or side chat | already in CandyWrapper: PaletteCommands.swift:717 skips threads that are not listed (sidebar-2) |
-| 725cfc9c3d | #31114 | thread | fix(threads): side chats inherit parent permissions by default | left: planned in side-chats-4928.md (sidebar-2) |
-| e455200077 | #32315 | thread | fix: side chats start with the parent's permission mode and reasoning level | left: planned in side-chats-4928.md (sidebar-2) |
+| 725cfc9c3d | #31114 | thread | fix(threads): side chats inherit parent permissions by default | ported (side-chats): the start copies the parent composer's permission mode with thread.runtime-mode.set |
+| e455200077 | #32315 | thread | fix: side chats start with the parent's permission mode and reasoning level | ported (side-chats): mode and the parent composer's model selection, reasoning included, go with the first message |
 | 915676ee6a | #30370 | thread | fix(web): deleting the open thread no longer opens a side chat or subagent | already in CandyWrapper: the delete fallback skips threads that are not lineage.isListed (sidebar-2) |
 | b8c2cfad6b | #29832 | composer | fix(web): deleting a thread clears its side chats' drafts | left: planned in side-chats-4928.md (sidebar-2) |
-| b10cdded50 | #32929 | thread | fix(web): a new side chat focuses its message input | left: planned in side-chats-4928.md (sidebar-2) |
+| b10cdded50 | #32929 | thread | fix(web): a new side chat focuses its message input | ported (side-chats): SideChatController.start focuses the pane's composer |
 | 46015ec958 | #33160 | thread | fix(web): Go to source on a side chat quote keeps you on its parent thread | left: planned in side-chats-4928.md (sidebar-2) |
 | d63db06436 | #34686 | pr/git | fix(contracts): side chats open after an abandoned worktree setup | left: planned in side-chats-4928.md (sidebar-2) |
 | 76ae36ef8c | #36800 | pr/git | fix(web): deleting a thread with side chats offers to delete its worktree | left: planned in side-chats-4928.md (sidebar-2) |
-| 2dd810d0f6 | #36932 | thread | fix(web,mobile): /btw and /side drafts show the send arrow while a turn runs | left: planned in side-chats-4928.md (sidebar-2) |
+| 2dd810d0f6 | #36932 | thread | fix(web,mobile): /btw and /side drafts show the send arrow while a turn runs | left: needs the composer's primary button to read `/side` text while a turn runs |
 | a31fab93a2 | #31360 | thread | fix(web): focus side-chat composer when selecting its tab | left: planned in side-chats-4928.md (sidebar-2) |
 | d23f479a87 | #32117 | thread | fix(web): right panel shortcuts work while a side chat has focus | left: planned in side-chats-4928.md (sidebar-2) |
 | def3722faa | #31931 | thread | fix(web): Shift+F6 moves from a side chat back to the main chat | left: planned in side-chats-4928.md (sidebar-2) |
 | 4fa5f0e0e6 | #32907 | thread | fix(web): a side chat's subagent opens its parent as a side chat tab, not a bare page | left: planned in side-chats-4928.md (sidebar-2) |
-| 0de6ddb823 | #37228 | thread | fix(web): editing a queued message into /btw no longer saves it to the main thread | left: planned in side-chats-4928.md (sidebar-2) |
-| 052ca497cf | #38350 | composer | fix(web,mobile): side chats keep your attachments and context | left: planned in side-chats-4928.md (sidebar-2) |
+| 0de6ddb823 | #37228 | thread | fix(web): editing a queued message into /btw no longer saves it to the main thread | ported (side-chats): ComposerController.sendSideChat refuses in a queued edit with T3's toast |
+| 052ca497cf | #38350 | composer | fix(web,mobile): side chats keep your attachments and context | left: `/side` with attachments says to remove them; carrying them needs the upload path in ComposerController |
 
 ## New feature pin-archive-projects (1)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| ffaa1dba76 | #26154 | sidebar | feat: pin favorite projects and archive old ones | left: pinned and archived projects span the palette, settings and the filter menu, see PROGRESS.md |
+| ffaa1dba76 | #26154 | sidebar | feat: pin favorite projects and archive old ones | ported (side-chats): pinnedAt and archivedAt, pickable groups in the filter, draft picker and palette, pin buttons and Pin project in the filter, the project menu and the palette, pinned and archived folder order, unarchive on re-add. Left: Project settings' Pin and Archive rows (Features/Settings), the pin shortcut in pickers, the draft picker's pin button |
 
 ## New feature managed-policy (2)
 
@@ -1317,11 +1317,11 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 52d755f91c | #28460 | sidebar | fix(clients): pasting a path copied from Finder or Explorer adds that folder | skip: path paste in Add project and the palette, outside the sidebar |
 | e925dd6819 | #27785 | sidebar | fix(web): allow folder references on saved local desktop servers | skip: composer folder references, outside the sidebar |
 | 5b9731cedc | #26690 | sidebar | fix(web): screen readers can browse and Tab through the threads sidebar again without going into focus mode | skip: web ARIA focus mode |
-| e1e520c93c | #29704 | sidebar | fix(web): show the project pin before the remote badge | left: the filter row pin comes with pin projects |
+| e1e520c93c | #29704 | sidebar | fix(web): show the project pin before the remote badge | ported (side-chats): SidebarProjectScopeView rows, sidebar-project-filter spec |
 | 115739c1e0 |  | sidebar | fix(web): keep the project filter menu aligned with its trigger | left: filter popup anchoring, with the filter row work |
 | 7239986680 | #29643 | sidebar | fix(web): deleting the open thread no longer opens a snoozed or settled thread | ported 9a0153d1 |
 | dd8c122c5d | #30063 | sidebar | fix(client): keep snoozed failures hidden without completion times | ported 9a0153d1 |
-| 20e92ffe02 | #29639 | sidebar | fix(web): sidebar project filter rows line up and stay still on hover | left: filter row columns come with pin projects |
+| 20e92ffe02 | #29639 | sidebar | fix(web): sidebar project filter rows line up and stay still on hover | ported (side-chats): the pin column and stand-ins, sidebar-project-filter spec |
 | 37481f044e | #30346 | sidebar | fix(web): dragging a sidebar thread no longer scrolls the list out from under the pointer | skip: dnd-kit auto-scroll, web only |
 | fb9f1c6f33 | #31642 | sidebar | fix(web): keep the folder path caret in place while editing | skip: palette folder path field, outside the sidebar |
 | bfb388415e | #30596 | sidebar | fix(ui): snooze menu times match the menu's typography | ported 9f448337 (MenuItem.detail) |
