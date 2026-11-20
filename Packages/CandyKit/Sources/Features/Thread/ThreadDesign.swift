@@ -10,6 +10,8 @@ enum ThreadDesign {
     /// Nightly 3824's chat tables (#26449) also draw in Redesign; Glass keeps the older table.
     static func newTables(dark: Bool) -> Bool { uses3814(dark: dark) || ThemeRuntime.isDither(dark: dark) }
     static var newTables: Bool { newTables(dark: NSAppearance.current.isDark) }
+    /// Redesign lays out code blocks and tables on `RedesignTokens.Card`.
+    static var redesign: Bool { layoutUses3814 == nil && ThemeRuntime.isDither(dark: NSAppearance.current.isDark) }
 
     static func layout(in appearance: NSAppearance, design: Bool? = layoutUses3814, _ make: () -> MarkdownLayout) -> MarkdownLayout {
         var result: MarkdownLayout?
