@@ -313,7 +313,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | 23e3465ec6 | #32830 | thread | fix(clients): unloaded thread links show their title and project icon | ported: a thread chip this client hasn't loaded asks `orchestration.getThreadLinkMetadata` once where the server sets `threadLinkMetadata`, then shows the title and project icon (thread-2, App ThreadSession `linkMetadataThread`) |
-| f558007b20 | #30709 | thread | fix(clients): parse angle-bracketed thread link destinations | port |
+| f558007b20 | #30709 | thread | fix(clients): parse angle-bracketed thread link destinations | already in CandyWrapper (thread-4): thread links come from the Markdown parser's link runs (ThreadLink(href:)), which reads CommonMark's angle-bracketed destinations |
 
 ## Port group labs-cleanup (1)
 
@@ -428,7 +428,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 5cbdf00481 | #30173 | thread | fix(web): mostly vertical trackpad scrolls no longer navigate back or forward | port |
+| 5cbdf00481 | #30173 | thread | fix(web): mostly vertical trackpad scrolls no longer navigate back or forward | n/a (thread-4): browser behavior AppKit doesn't share: no history swipe in CandyWrapper |
 
 ## Port group connect-signin (1)
 
@@ -654,7 +654,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 2718951b9f | #33164 | settings | feat(web): add Japanese translation | left (settings-3): with #31313, see docs/research/translation-4928.md |
 | fdefab4df3 | #33165 | settings | feat(web): add Korean translation | left (settings-3): with #31313, see docs/research/translation-4928.md |
 | 13eb5c95a6 | #33166 | settings | feat(web): add Russian translation | left (settings-3): with #31313, see docs/research/translation-4928.md |
-| b823ddadd9 | #37954 | thread | fix(i18n): catalogs match the source, with a CI check | port |
+| b823ddadd9 | #37954 | thread | fix(i18n): catalogs match the source, with a CI check | n/a (thread-4): i18n catalogs; CandyWrapper is English only |
 | 055b44919e | #37893 | settings | feat(web,mobile,desktop): translate the whole app into every supported language | left (settings-3): with #31313, see docs/research/translation-4928.md |
 | 759a173e15 | #38565 | terminal | fix(web): idle numbered terminals show their name in the app language | port |
 | 6ea01d4cbe | #38649 | settings | fix(web): No project folder follows the app language | left (settings-3): with #31313, see docs/research/translation-4928.md |
@@ -1435,20 +1435,20 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 609dd0f7dd | #27144 | thread | fix(web): plain text code blocks match the text around them | ported in eceea265 |
 | 12d1e4c23c | #22339 | thread | fix(web): keep truncated Markdown task previews read-only | port |
 | 469afd8b53 | #23351 | thread | fix(chat): commands that exit 0 no longer show as failed | ported (thread-3): WorkLog.checkFailure trusts the exit code over output and command text |
-| da94a13e59 | #23954 | thread | fix(web): tab to equations only when they overflow | port |
+| da94a13e59 | #23954 | thread | fix(web): tab to equations only when they overflow | n/a (thread-4): DOM screen reader, focus or tab order behavior; CandyWrapper's rows use AppKit accessibility |
 | f3bbd0fd07 | #21378 | thread | fix(web): video full-screen buttons work in HTML renders | port |
 | 447d71d901 | #25838 | thread | fix(web): chat stays centered while the thread details card fits beside it | port |
 | 191cd7e789 | #25948 | thread | fix(web): match HTML render backgrounds to the dark chat theme | port |
 | fd08b170b6 | #26871 | thread | fix(web): punctuation after a file chip stays on the chip's line | already in CandyWrapper: a chip is a run of the same attributed text, and line breaking never breaks before closing punctuation (Features/Markdown/MarkdownLayout `text`) |
 | f2cd7a1e63 | #25199 | thread | fix(web): show complete tooltip labels when opening | n/a: CSS tooltip entry animation; AppKit tooltips draw whole |
-| 09ac55639a | #26716 | thread | fix(web): popovers fade out in place instead of jumping after a pick | port |
+| 09ac55639a | #26716 | thread | fix(web): popovers fade out in place instead of jumping after a pick | n/a (thread-4): browser behavior AppKit doesn't share: a React re-render moved the popover during its exit |
 | eef35b0262 | #26762 | thread | fix(clients): stop loading thread families when opening chats | port |
 | 0343c83aa6 | #24833 | thread | fix(web,mobile): lineage and agent rows show which account a subagent runs on | ported: lineage rows draw the subagent's instance badge on its glyph and lift the status dot to the top corner while any instance shows one (thread-2, ThreadRelationshipIconView). Workflow member rows wear the coordinator's badge with the dot on top too (thread-4, ThreadLineageWorkflowMemberView) |
 | 2c59bf66c7 | #24898 | thread | fix(web,mobile): subagent cards show which account each subagent runs on | ported: subagent cards draw the instance badge on the avatar's glyph and lift the dot the same way (thread-2, SubagentCardLinkView, ThreadViewModel `providerBadge`) |
-| bfd37b774b | #27310 | thread | fix(web): Queued messages can be edited during Compact and send | port |
+| bfd37b774b | #27310 | thread | fix(web): Queued messages can be edited during Compact and send | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
 | b0aa468aa1 | #23621 | thread | fix(web): copy and save images embedded as data URLs | already in CandyWrapper: copy and save use the loader's decoded image, and MarkdownImages.decodeData reads data URLs |
 | c2dc2eaaf5 | #24050 | thread | fix(web,mobile): Hebrew and Arabic read right to left in questions, citations, attachments and diff comments | port |
-| b5ced43833 | #25746 | thread | fix(web): local visit migration preserves mark unread | port |
+| b5ced43833 | #25746 | thread | fix(web): local visit migration preserves mark unread | n/a (thread-4): migrates web localStorage visits |
 | 6525e4cb59 | #26232 | thread | fix(web): maximize button no longer jumps when the right panel closes | port |
 | aa8dbbe54f | #27741 | thread | fix(web): skill labels show the skill's own name | port |
 | 4ed4950b7c | #23024 | thread | fix(client): reject incomplete GitHub owner paths before lookup | port |
@@ -1474,7 +1474,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 567a105705 | #30606 | thread | fix(client-runtime): expire missing file metadata per thread | port |
 | c15e49a77c | #26435 | thread | fix: keep older pending questions answerable | ported (thread-3): history pages reveal older approval and question cards (ThreadReduction.mergeOlderHistory) |
 | 9bfecb8f1e | #29000 | thread | fix(web): deleted forks no longer remain in Lineage | port |
-| c0cb75e815 | #31653 | thread | fix(web): screen readers no longer read out a secret typed into the request card | port |
+| c0cb75e815 | #31653 | thread | fix(web): screen readers no longer read out a secret typed into the request card | n/a (thread-4): DOM screen reader, focus or tab order behavior; CandyWrapper's rows use AppKit accessibility |
 | 66a2f35711 | #30367 | thread | fix(shared): long assistant quote chips no longer end in a broken character | n/a (thread-3): Swift String.prefix cuts at whole characters (MarkdownContextChips, ThreadAssistantCitation) |
 | 6f51361a27 | #30391 | thread | fix(client-runtime): subagent previews no longer end in a broken character | n/a (thread-3): Swift String.prefix cuts at whole characters (SubagentCardRowView.hoverPreview) |
 | 53f1d09470 | #30528 | thread | fix(web): refresh resource timeline while diagnostics is open | port |
@@ -1488,14 +1488,14 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 48bb784e3d | #32403 | thread | fix(shared): inline code like `allocator.cc:217` becomes a file chip | ported in 93df13b9 |
 | 57ded10b74 | #25694 | thread | fix(web): restore bold weight in rendered Markdown | ported in eceea265 |
 | 28eff11d81 | #27582 | thread | fix(web): lineage phase headers truncate instead of overflowing the details card | port |
-| 6417151c09 | #32926 | thread | fix(web): fill combobox search fields | port |
+| 6417151c09 | #32926 | thread | fix(web): fill combobox search fields | n/a (thread-4): browser behavior AppKit doesn't share: CSS width of a combobox input |
 | 9c0baf481e | #24084 | thread | fix(web): keep the wide table scrollbar visible when it overflows | port |
 | 78756043c2 | #27993 | thread | fix(web): file chip tooltips show the whole path | already in CandyWrapper: Features/Markdown/MarkdownView.swift FileChipHitView shows the whole targetPath |
 | 69dd6956d5 | #33192 | thread | fix(web): return focus to composer after timeline prompts | port |
 | 2b1db482d0 | #28667 | thread | fix(web): open citation comments with the caret at the end | port |
 | 739aba73b7 | #29025 | thread | fix(web,mobile): per-thread auto-settle menu says what it does | port |
-| ceed427d79 | #29601 | thread | fix(web): removing a queued message's attachment counts as an edit when its run starts | port |
-| 6e4711d376 | #33525 | thread | fix(web): clicked workspace areas no longer show the focus ring after a stray key | port |
+| ceed427d79 | #29601 | thread | fix(web): removing a queued message's attachment counts as an edit when its run starts | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
+| 6e4711d376 | #33525 | thread | fix(web): clicked workspace areas no longer show the focus ring after a stray key | n/a (thread-4): DOM screen reader, focus or tab order behavior; CandyWrapper's rows use AppKit accessibility |
 | 45e0143cf1 | #33598 | thread | fix(web): thread title menu opens without a half-second wait on desktop | n/a: the desktop shell's menu delay; CandyWrapper's title menu opens on click |
 | ad989057ba | #32643 | thread | fix(web): dropdown items over the desktop title bar respond to clicks | n/a: Electron's title bar drag region |
 | 046efd791e | #26630 | thread | fix(web): scrolling pans expanded images and Mermaid diagrams | left (thread-3): ExpandedImagePreviewView is Features/Composer, another agent's area; plain scroll pans, pinch or Ctrl+scroll zooms |
@@ -1504,7 +1504,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | e4d86abca9 | #33181 | thread | fix(web): remote Lineage rows keep their title when the environment name is long | port |
 | ac5e48c612 | #32719 | thread | fix(web): notify when a new request replaces the pending one in a run | port |
 | 57d5e98272 | #33038 | thread | fix(web): minimap next turn is disabled at the bottom of a thread | port |
-| e509db3a2f | #32605 | thread | fix(web): Tab reaches the add-project and new-project submit buttons | port |
+| e509db3a2f | #32605 | thread | fix(web): Tab reaches the add-project and new-project submit buttons | n/a (thread-4): DOM screen reader, focus or tab order behavior; CandyWrapper's rows use AppKit accessibility |
 | 20723d6d9b | #32520 | thread | fix: Claude monitor wakes no longer fire a completion alert per line | port |
 | 08af12da49 | #33994 | thread | fix(shared): show zero seconds in minute durations | already in CandyWrapper: durations read `1m 0s` (screens-port, T3Store ThreadRelationships `formatDuration`) |
 | 3051b32502 | #33943 | thread | fix: chat file links open the file agents cite | ported (thread-4): WorkspaceLinkLookup (T3Store) with FilesController.citedFile: bare names, package-relative paths and repeated prefixes find their file through projects.searchEntries before opening or revealing |
@@ -1519,51 +1519,51 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 1c17285e58 | #28084 | thread | fix(shared): cite assistant messages with IDs over 512 characters | ported (thread-4): ThreadAssistantCitation.parse takes ids up to 4,096 characters and hrefs up to 256,168 |
 | d835e430db | #22874 | thread | fix(web): question answers submit while normal sends are blocked | port |
 | 691b9709b0 | #26408 | thread | fix(web): Ctrl + "+" zooms on keyboard layouts with a dedicated plus key | n/a: browser zoom shortcuts on keyboard layouts; CandyWrapper has no page zoom |
-| b3f5d52701 | #24138 | thread | fix(composer): steer instead of queueing during automatic compaction | port |
+| b3f5d52701 | #24138 | thread | fix(composer): steer instead of queueing during automatic compaction | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
 | f3da8ff63b | #30575 | thread | feat(gitlab): resolve overview threads from Summary and Timeline | ported (panels-2): `overviewThreads` decode after the line threads and head "Overview" without a file glyph in the Timeline; Summary cards leave out the location |
 | afa617b465 | #15255 | thread | fix(web): branch picker no longer interrupts a running turn | port |
-| 3ed5fb29bd | #26311 | thread | fix(shared): Claude plugin skills no longer show their name twice | port |
-| e6afd2a24b | #22148 | thread | fix(web): render citation chips in the collapsed composer | port |
-| 6f2ce81958 | #24433 | thread | fix(web): copying commands with prose no longer adds code fences | port |
+| 3ed5fb29bd | #26311 | thread | fix(shared): Claude plugin skills no longer show their name twice | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
+| e6afd2a24b | #22148 | thread | fix(web): render citation chips in the collapsed composer | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
+| 6f2ce81958 | #24433 | thread | fix(web): copying commands with prose no longer adds code fences | n/a (thread-4): T3 serializes a DOM selection back to Markdown; CandyWrapper copies a selection's text with chip and formula sources (MarkdownTextBox.copyText) |
 | 1a1a57376c | #22226 | thread | fix(web): start clone when destination is picked in file manager | port |
 | 1843c93e39 | #30768 | thread | fix(chat): keep scratch file links usable | port |
 | 3aea6553d3 | #18442 | thread | fix(clients): show the right app name and thread context | port |
 | a9f2d7d5f4 | #34306 | thread | fix(web): "Show full message" only appears when it at least doubles the message | ported (thread-4): UserMessageRowView and WorkflowOpeningRowView fold only when the laid-out text is at least 352pt; shouldCollapseUserMessage is gone |
 | b20bbc595d | #34581 | thread | fix: deliver steering after worktree setup | ported in 818d32f4: promote-to-steer on a preparing run. CW already treated preparing and starting runs as running. CW blocks sends during setup, so the planComposerTurn change is n/a |
-| b859968cab | #25866 | thread | fix(web): a pending approval is announced once, not once per queued message | port |
+| b859968cab | #25866 | thread | fix(web): a pending approval is announced once, not once per queued message | n/a (thread-4): DOM screen reader, focus or tab order behavior; CandyWrapper's rows use AppKit accessibility |
 | bba1c13d87 | #24313 | thread | fix(web): opening a thread dismisses its notification toasts | port |
-| a6c26d3e77 | #27909 | thread | fix(web): the composer shows arrow ligatures like sent messages | port |
+| a6c26d3e77 | #27909 | thread | fix(web): the composer shows arrow ligatures like sent messages | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
 | 2a8ec9c8e1 | #23573 | thread | fix(web): single-digit numbered lists no longer clip in wide fonts | port |
-| 9b98bd07ba | #23615 | thread | fix(shared): new chats use the global default when the project default model is hidden | port |
-| 25d2239f9b | #25901 | thread | fix(web): screen readers hear when a thread is pinned or an action is undone | port |
+| 9b98bd07ba | #23615 | thread | fix(shared): new chats use the global default when the project default model is hidden | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
+| 25d2239f9b | #25901 | thread | fix(web): screen readers hear when a thread is pinned or an action is undone | n/a (thread-4): DOM screen reader, focus or tab order behavior; CandyWrapper's rows use AppKit accessibility |
 | 4d52d321cb | #33772 | thread | fix(client-runtime): MCP App requests with undefined values reach the server | port |
 | 94f7984d2c | #23617 | thread | fix(web): preserve typed question answers when Stop cancels a turn | ported: answers typed into a question that closed cancelled or expired move to the end of the thread's prompt (UserInputAnswers `returningUnsent`, ComposerController `leaveQuestion`); thread chips they reference are not carried |
 | c0b67b7631 | #34649 | thread | fix(web): wrap interruption footers as one sentence | port |
-| 7271ea06a2 | #30889 | thread | fix(web): editing a queued message keeps its thread mention chips | port |
+| 7271ea06a2 | #30889 | thread | fix(web): editing a queued message keeps its thread mention chips | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
 | cc624432ac | #27781 | thread | fix(web): formatted link labels wrap inside table cells | port |
 | b18fefde72 | #25986 | thread | fix(web): switching a cold Claude thread to Codex no longer compacts first | port |
 | a24f7a1150 | #34527 | thread | fix(web): code blocks always show their own highlighted source | n/a (thread-3): CandyWrapper highlights each block from its own source; no hash-keyed cache |
-| 1c65ad032e | #30738 | thread | fix(web): Cmd+A in the rendered Markdown preview selects only the file | port |
+| 1c65ad032e | #30738 | thread | fix(web): Cmd+A in the rendered Markdown preview selects only the file | n/a (thread-4): browser behavior AppKit doesn't share: browser select-all |
 | 1c3d5f7e82 | #34657 | thread | fix(web): a link to a thread on a linked machine no longer opens a blank pane | port |
 | a6d676fd9a | #24336 | thread | fix(web): keep background tasks visible during follow-up turns | port |
 | 32882540fb | #34685 | thread | fix(web): interruption footer label sits on the reason's baseline | port |
 | dbfbe3993f | #34806 | thread | fix(web): questions without options no longer mention a selected option | port |
 | 101e5f99a2 | #34855 | thread | fix(web): review comments in question answers reach the agent with their text | port |
-| 204b140073 | #34846 | thread | fix(web): context row under the composer hides chat text scrolling behind it | port |
+| 204b140073 | #34846 | thread | fix(web): context row under the composer hides chat text scrolling behind it | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
 | 415e1cabe6 | #34883 | thread | fix(web): html render images open with the rest of their page in the viewer | ported in d1f3d2fc |
 | d8b0a05a74 | #34784 | thread | fix(clients): Claude question option previews are shown under their option | ported: the option `preview` decodes (T3Store UserInputQuestion.Option) and shows under its option, outside the button, at `ps-8 pe-2 pb-1.5`, 12/16 in foreground/70 (QuestionPanelView `previews`). Plain text with its line breaks; T3 renders it as ChatMarkdown, which needs a 12px MarkdownView composer-5: Markdown previews still left, a 12px MarkdownView needs a body size through MarkdownLayout (13 font-size sites in Features/Markdown, another agent's area). |
-| efd683ccc3 | #35102 | thread | fix(web): a failed send leaves the timeline when a new draft was typed | port |
+| efd683ccc3 | #35102 | thread | fix(web): a failed send leaves the timeline when a new draft was typed | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
 | 3d6ece2b29 | #35036 | thread | fix(web): file links the agent cited from another project open that project's file | ported (thread-4): citedFile searches the environment's other project roots when the thread's own has no match, after filesystem.getMetadata says the literal file is missing |
 | ced85c64ff | #35076 | thread | fix(client): a message the host never answers fails after 60 seconds instead of spinning forever | port |
-| 83ee96f485 | #35074 | thread | fix(web): chat text selection stays continuous while scrolling | port |
+| 83ee96f485 | #35074 | thread | fix(web): chat text selection stays continuous while scrolling | n/a (thread-4): browser behavior AppKit doesn't share: DOM selection during scroll |
 | d2b8f291d6 | #35045 | thread | fix(web): icon-only chat header controls show their name on hover | port |
 | 5574cca053 | #35043 | thread | fix(web): panel resize handle no longer covers the chat scrollbar | port |
 | 3a815e9749 | #35031 | thread | fix(client-runtime): relative Markdown images in a remote thread no longer show the desktop's file | n/a (thread-3): CandyWrapper never retries a remote thread's media on this Mac's server, so a relative path cannot show the desktop's file |
 | 4d641633b2 | #35267 | thread | fix(web): bare URLs end at Chinese and Japanese punctuation | ported (thread-4): MarkdownDocument.endingBareURLsAtCJKPunctuation writes an ASCII bare URL before a CJK mark as an explicit autolink, so it links, ends at the mark and closes its emphasis |
 | 13645b1904 | #35549 | thread | fix(web): align timeline activity timestamps | port |
 | 932cbd4e44 | #31115 | thread | fix(web): the Fix action on a thread details PR row stays inside the card | port |
-| c0df40aa54 | #33405 | thread | fix(web): queued message preview keeps inline image labels in place | port |
-| 9c7618ba1c | #35603 | thread | fix(web): gitignore fences in the rich-text composer highlight as ini, as chat does | port |
+| c0df40aa54 | #33405 | thread | fix(web): queued message preview keeps inline image labels in place | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
+| 9c7618ba1c | #35603 | thread | fix(web): gitignore fences in the rich-text composer highlight as ini, as chat does | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
 | 451e3756a5 | #33953 | thread | fix(web): keep later navigation when thread deletion completes | port |
 | b63d3c5923 | #26888 | thread | fix(web): sent messages honor their theme foreground | ported (thread-4): sent message text uses messageForeground, which equals the foreground in the default themes. Left: inline code in sent messages tinted from the message foreground (10% fill, index.css), which needs a per-view chip fill in MarkdownLayout |
 | dfded9d759 | #27436 | thread | fix(web): keep the child thread open when its remote parent was deleted | port |
@@ -1574,58 +1574,58 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | cfad310913 | #35680 | thread | fix(client-runtime): long MCP app download names no longer split an emoji | n/a (thread-3): Swift String.prefix cuts at whole characters (ThreadMcpAppDownload.swift:33) |
 | 4cfcfaf2fd | #35574 | thread | fix(web): a question answer restored with undo is no longer sent twice | port |
 | c1b42c17dc | #33873 | thread | fix(client-runtime): last user message sort ignores agent-posted messages | port |
-| f8372d1baf | #35681 | thread | fix(web): long screen-reader announcements keep emoji whole at the cutoff | port |
+| f8372d1baf | #35681 | thread | fix(web): long screen-reader announcements keep emoji whole at the cutoff | n/a (thread-4): DOM screen reader, focus or tab order behavior; CandyWrapper's rows use AppKit accessibility |
 | 9b0387d6cd | #32334 | thread | fix(web): triple-click selects the whole line around links and file chips | n/a (thread-3): browser triple-click box rules; CandyWrapper draws its own selection |
 | c99201cc15 | #33036 | thread | fix(web): minimap Next turn no longer sticks on adjacent user messages | port |
-| 4137412fe9 | #35739 | thread | fix(web): screen readers at Everything hear context compaction start | port |
+| 4137412fe9 | #35739 | thread | fix(web): screen readers at Everything hear context compaction start | n/a (thread-4): DOM screen reader, focus or tab order behavior; CandyWrapper's rows use AppKit accessibility |
 | 05cc444a4a | #35781 | thread | fix(web): a failed commit keeps the commit message you typed | port |
-| ed2a319814 | #27209 | thread | fix(web): arrow and page keys scroll the conversation again after a click or F6 | port |
+| ed2a319814 | #27209 | thread | fix(web): arrow and page keys scroll the conversation again after a click or F6 | n/a (thread-4): browser behavior AppKit doesn't share: DOM focus after a click or F6 |
 | f999dc1018 | #35859 | thread | fix(web): preserve single tildes in sent user messages | ported (thread-4): MarkdownDocument.keepingSingleTildes escapes a lone ~ outside code in sent messages before parsing |
 | 1e96606cb2 | #29409 | thread | fix(client-runtime): reopened files show host edits instead of the first read | port |
-| 7556047418 | #35914 | thread | fix(web): copying an image with a spaced path keeps it an image | port |
-| b62e80e0a3 | #35932 | thread | fix(web): copying an alert callout keeps its alert Markdown | port |
+| 7556047418 | #35914 | thread | fix(web): copying an image with a spaced path keeps it an image | n/a (thread-4): T3 serializes a DOM selection back to Markdown; CandyWrapper copies a selection's text with chip and formula sources (MarkdownTextBox.copyText) |
+| b62e80e0a3 | #35932 | thread | fix(web): copying an alert callout keeps its alert Markdown | n/a (thread-4): T3 serializes a DOM selection back to Markdown; CandyWrapper copies a selection's text with chip and formula sources (MarkdownTextBox.copyText) |
 | fb2e5a0128 | #33042 | thread | fix(client-runtime): imported threads that never ran no longer sit in Working as Waiting | port |
 | dd7918e1e2 | #33347 | thread | fix(web,mobile): MCP app calls keep their tool row and result beside the app card | port |
 | 5f69cac5c9 | #36079 | thread | fix(web): turn diffs cut off at the size limit say changes are incomplete | port |
-| 74573fc29b | #36090 | thread | fix(web): new project publish option tells screen readers whether it is on | port |
+| 74573fc29b | #36090 | thread | fix(web): new project publish option tells screen readers whether it is on | n/a (thread-4): DOM screen reader, focus or tab order behavior; CandyWrapper's rows use AppKit accessibility |
 | f62fa296f0 | #36228 | thread | fix(web): Add to another machine can find ignored files past the first 200 | port |
-| c83e78fe07 | #36285 | thread | fix(web): Shift+Return after closed inline code or bold starts a plain line | port |
-| 66ec37079a | #36298 | thread | fix(shared): hosted thread URLs inside other links stay as written | port |
+| c83e78fe07 | #36285 | thread | fix(web): Shift+Return after closed inline code or bold starts a plain line | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
+| 66ec37079a | #36298 | thread | fix(shared): hosted thread URLs inside other links stay as written | already in CandyWrapper (thread-4): thread chips come from parsed link runs, so a thread URL inside another link's label or destination stays that link |
 | 250d372e51 | #36321 | thread | fix(web): images in expanded tool rows page through the group's viewed images | ported in 2eb8794e |
 | cfc71e1a99 | #36357 | thread | fix(web): preview annotations in question answers reach the agent with their text | port |
 | 48cdefed5a | #32108 | thread | fix(web): size markdown media whose width and height carry a px unit | skip: CandyWrapper draws no raw HTML `<img>` in replies yet; take it with raw HTML support |
 | c8db8be305 | #36334 | thread | fix(web): a run waiting on foreground subagents says so instead of Thinking | ported: the Thinking row reads Waiting on a subagent or Waiting on N subagents while the run's newest entries are its own running subagents (thread-2, TimelineRows `.thinking(label:)`). Zen keeps Thinking since it hides the cards |
 | cf382b0c44 | #24637 | thread | fix(web,mobile): explain missing file access for host videos | port |
 | 4c7685729f | #36497 | thread | fix(web): clicking a label in an inline HTML render no longer jumps the chat | free with the runtime: the label fix is in the bootstrap the server injects |
-| a4723422e7 | #26692 | thread | fix(web): screen readers no longer say "Message" twice entering the composer | port |
+| a4723422e7 | #26692 | thread | fix(web): screen readers no longer say "Message" twice entering the composer | n/a (thread-4): DOM screen reader, focus or tab order behavior; CandyWrapper's rows use AppKit accessibility |
 | 31d9b3bcd6 | #34569 | thread | fix(web): edited HTML previews outside the workspace no longer turn white | port |
-| 2c61677d59 | #36250 | thread | fix(web): overlays close on a click over the desktop header | port |
+| 2c61677d59 | #36250 | thread | fix(web): overlays close on a click over the desktop header | n/a (thread-4): browser behavior AppKit doesn't share: Electron drag region |
 | 8656cdb3a9 | #35701 | thread | fix(web): reply labels no longer cut an emoji in half | already in CandyWrapper (thread-4): ComposerReply cuts the label at 64 Characters, never inside an emoji; the quote chip's label (ThreadAssistantCitation.label) now cuts at a composed character too |
 | cf60628ef9 | #25213 | thread | fix(client-runtime): cache running threads when their view closes | port |
 | 33372a25a2 | #23506 | thread | fix(pi): info notifications no longer render as warnings | port |
 | 947c056894 | #23666 | thread | fix(web): a context submenu near the right edge no longer covers its parent menu | port |
 | 3b18dc2935 | #25445 | thread | fix(web): manual compaction counts history beyond the loaded page | port |
 | 2fa77fbf55 | #24045 | thread | fix(web): horizontal table scrolling preserves timeline follow | port |
-| f161a4d2b5 | #28103 | thread | fix(shared): preserve literal ampersands in citation Markdown paths | port |
+| f161a4d2b5 | #28103 | thread | fix(shared): preserve literal ampersands in citation Markdown paths | skip (thread-4): needs Codex file citation directives (shared/codexMarkdownDirectives.ts), which CandyWrapper doesn't render yet |
 | 71c2410a67 | #28929 | thread | fix(web): thread details slides in on close | left (settings-4928, thread-4): on a non-maximized close, header.toggles[0] (ThreadPanelView) should start at the panel header's right edge minus 12pt and slide home over the panel's close (SettingsPanelMotion.duration, the panel's easing), driven from panelSlide in ThreadPanelView.layout so it ends on its resting pixels; needs the screen to compare with T3 |
-| 666631e94e | #36712 | thread | fix(web): copied inline code keeps meaningful edge spaces | port |
-| e2f164d6bb | #28968 | thread | fix(web): let subagent lists pass scrolling to the details panel | port |
+| 666631e94e | #36712 | thread | fix(web): copied inline code keeps meaningful edge spaces | n/a (thread-4): T3 serializes a DOM selection back to Markdown; CandyWrapper copies a selection's text with chip and formula sources (MarkdownTextBox.copyText) |
+| e2f164d6bb | #28968 | thread | fix(web): let subagent lists pass scrolling to the details panel | n/a (thread-4): browser behavior AppKit doesn't share: NSScrollView passes scrolling on at the edge |
 | a678948483 | #28388 | thread | fix(web): pending-question digit shortcuts ignore dialogs, menus and selects | port |
 | 6cb47acfb8 | #36768 | thread | fix(web): Escape that cancels a thread rename no longer also closes the find bar | port |
-| cebdf39984 | #29570 | thread | fix(web): cancelled queued-message edits release their staged uploads | port |
+| cebdf39984 | #29570 | thread | fix(web): cancelled queued-message edits release their staged uploads | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
 | c666345bb9 | #29637 | thread | fix(web): subagent previews drop image marks and full link URLs | port |
 | e330593141 | #36779 | thread | fix(web): bare URLs no longer swallow Arabic commas and question marks | ported (thread-4): MarkdownDocument.endingBareURLsAtCJKPunctuation also ends a bare URL at the Arabic comma, semicolon, question mark and full stop |
-| 60e4be49cf | #36758 | thread | fix(shared): open relative Codex citations with filename punctuation | port |
+| 60e4be49cf | #36758 | thread | fix(shared): open relative Codex citations with filename punctuation | skip (thread-4): needs Codex file citation directives (shared/codexMarkdownDirectives.ts), which CandyWrapper doesn't render yet |
 | 154c5014a7 | #29834 | thread | fix(web): long preview annotation comments are no longer dropped from the message | port |
-| bf74669509 | #36830 | thread | fix(web): copied email links keep their destination | port |
+| bf74669509 | #36830 | thread | fix(web): copied email links keep their destination | n/a (thread-4): T3 serializes a DOM selection back to Markdown; CandyWrapper copies a selection's text with chip and formula sources (MarkdownTextBox.copyText) |
 | a4bf7922f5 | #33248 | thread | fix(clients): undoing a settle puts the thread back where you placed it | port |
-| 2abf7be914 | #35255 | thread | fix(web): trackpad scrolling no longer stalls on gaps between right panel tabs | port |
+| 2abf7be914 | #35255 | thread | fix(web): trackpad scrolling no longer stalls on gaps between right panel tabs | n/a (thread-4): browser behavior AppKit doesn't share: wheel events over DOM gaps |
 | 3238db7a86 | #36858 | thread | fix(web): Cite is offered for text an agent sent with send_to_user | port |
-| 3c77d3d64b | #36867 | thread | fix(web): copied literal Markdown sends as shown | port |
+| 3c77d3d64b | #36867 | thread | fix(web): copied literal Markdown sends as shown | n/a (thread-4): T3 serializes a DOM selection back to Markdown; CandyWrapper copies a selection's text with chip and formula sources (MarkdownTextBox.copyText) |
 | 2137f360e6 | #34308 | thread | fix(web): open editors when saving their preference fails | port |
 | 0cf9423d8b | #34402 | thread | fix(web): keep thread find working with many matches in one row | port |
 | b5e4342a90 | #36876 | thread | fix(web): Arabic and Hebrew folds in chat read right to left | port |
-| 093c317858 | #36915 | thread | fix(web): copying from a later list item keeps its numbers | port |
+| 093c317858 | #36915 | thread | fix(web): copying from a later list item keeps its numbers | n/a (thread-4): T3 serializes a DOM selection back to Markdown; CandyWrapper copies a selection's text with chip and formula sources (MarkdownTextBox.copyText) |
 | fa647599e0 | #36922 | thread | fix(web): Arabic and Hebrew artifact template cards read right to left | port |
 | b9a68e0f57 | #36929 | thread | fix(source-control): repository paths match however their names are percent-encoded | port |
 | 7873016460 | #36948 | thread | fix(web): allow tooltip text to wrap naturally | port |
@@ -1634,7 +1634,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 5bd2d0cb82 | #30712 | thread | fix(client-runtime): derive MCP download names before URI suffixes | port |
 | 3a87ca8c6a | #30806 | thread | fix(client-runtime): tool output no longer rounds integers beyond 2^53 | port |
 | 6c7a87cbcb | #30387 | thread | fix(web,mobile): a late MCP app teardown no longer closes the app that replaced it | port |
-| dd3d4a4e4a | #37024 | thread | fix(web): prevent stray highlights when selecting shell commands | port |
+| dd3d4a4e4a | #37024 | thread | fix(web): prevent stray highlights when selecting shell commands | n/a (thread-4): browser behavior AppKit doesn't share: DOM selection highlight |
 | eb8b1f5246 | #31738 | thread | fix(client): avoid worktree setup flash after editing first message | port |
 | e6344bebd8 | #31338 | thread | fix(client-runtime): MCP app results with images reach the app instead of waiting forever | port |
 | 25a1afe7d5 | #29711 | thread | fix(client-runtime): opening an old search result keeps messages in order | ported (thread-3): plain history pages interleave at shared rows (ThreadReduction.interleave) |
@@ -1644,21 +1644,21 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 37b71a4ffe | #37079 | thread | fix(web): remove redundant subagent action from background row | port |
 | 79e47e9096 | #32402 | thread | fix(shared): inline code paths like `docker/Dockerfile` become file chips | ported in 93df13b9 |
 | b35c9702f9 | #36997 | thread | fix(acp): optional text questions can be left blank | port |
-| 8897a6ebe1 | #37183 | thread | fix(web): keep thread mentions when editing sent messages | port |
+| 8897a6ebe1 | #37183 | thread | fix(web): keep thread mentions when editing sent messages | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
 | 598296e850 | #37284 | thread | fix(web): copied code blocks drop the fence's trailing newline | ported (thread-4): a code block's Copy drops the fence's trailing newline (MarkdownCodeCopy) |
 | 58b6e1c5ba | #37395 | thread | fix(web): a disabled Merge back button shows why it is disabled | port |
-| 1b84e72a6d | #37507 | thread | fix(web): Cmd+Enter on an edited queued message steers it into the running turn | port |
+| 1b84e72a6d | #37507 | thread | fix(web): Cmd+Enter on an edited queued message steers it into the running turn | skip (thread-4): Features/Composer and ComposerController belong to the composer agent working now; check there |
 | 56f41466f5 | #37557 | thread | fix(web): sending a new thread's first message no longer scrolls the sidebar | port |
 | dfeaf7b137 | #37579 | thread | fix(web): Tab from a citation comment reaches Save, not Cancel | port |
-| 1ae5590a32 | #37204 | thread | fix(web): find in thread no longer announces streamed count refreshes | port |
+| 1ae5590a32 | #37204 | thread | fix(web): find in thread no longer announces streamed count refreshes | n/a (thread-4): DOM screen reader, focus or tab order behavior; CandyWrapper's rows use AppKit accessibility |
 | 6f5861fa27 | #37750 | thread | fix(shared): inline code paths with spaces become file chips | ported in 93df13b9 |
-| 8ca0c88cfd | #31724 | thread | fix(web): screen readers see one Notifications landmark, not two | port |
-| 959f422d45 | #31676 | thread | fix(web): screen reader announcements no longer linger after they stop applying | port |
-| 6e650b3849 | #31710 | thread | fix(web): returning to the window keeps a text selection | port |
+| 8ca0c88cfd | #31724 | thread | fix(web): screen readers see one Notifications landmark, not two | n/a (thread-4): DOM screen reader, focus or tab order behavior; CandyWrapper's rows use AppKit accessibility |
+| 959f422d45 | #31676 | thread | fix(web): screen reader announcements no longer linger after they stop applying | n/a (thread-4): DOM screen reader, focus or tab order behavior; CandyWrapper's rows use AppKit accessibility |
+| 6e650b3849 | #31710 | thread | fix(web): returning to the window keeps a text selection | n/a (thread-4): browser behavior AppKit doesn't share: DOM selection on window focus |
 | 4b758f49ec | #37813 | thread | fix(web): citation jumps move focus to the cited response | port |
 | d775f6bff1 | #32371 | thread | fix(web,mobile): message timestamps follow a system time zone change | port |
 | 77aaabb061 | #37879 | thread | fix(web): reveal a turn file whose path ends in whitespace | port |
-| 411f0f7d87 | #30031 | thread | fix(web): make dark-mode scrollbar thumbs visible | port |
+| 411f0f7d87 | #30031 | thread | fix(web): make dark-mode scrollbar thumbs visible | n/a (thread-4): browser behavior AppKit doesn't share: NSScroller draws the thumbs |
 | ebd007e6ae | #37900 | thread | fix(web): View instructions closes the skill details popover | port |
 | 44ebe67195 | #35300 | thread | fix(web): preserve citations when adding review comments | port |
 | a2bace5cf4 | #35577 | thread | fix(web): the message minimap no longer shows a track line on themes with an opaque border | port |
@@ -1672,7 +1672,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 2df750e0c9 | #38303 | thread | fix(web): MCP app full screen header clears the native window controls | port |
 | 009966d073 | #38329 | thread | fix(web): find in thread paints only matches near the viewport | port |
 | 24467d671d | #38368 | thread | fix(client): a subagent prompt that opens with comment dividers no longer freezes the thread | ported (thread-3): WorkflowOpening.scriptStart without backtracking, 57.6 to 0.001 ms |
-| 42763ff8b1 | #38400 | thread | fix(web): screen readers read a pull request's number once in thread details | port |
+| 42763ff8b1 | #38400 | thread | fix(web): screen readers read a pull request's number once in thread details | n/a (thread-4): DOM screen reader, focus or tab order behavior; CandyWrapper's rows use AppKit accessibility |
 | 70e4319da8 | #38458 | thread | fix(web): switching back to a thread no longer jumps through its HTML renders | port |
 | 9758cf9e13 | #38476 | thread | fix(web): typing into a simulator no longer answers a waiting question | port |
 | 373ec12be6 | #38558 | thread | fix(web): very wide or tall lone images in user messages show the whole image | ported in 11fea921 |
