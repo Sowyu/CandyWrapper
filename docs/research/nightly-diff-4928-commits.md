@@ -137,8 +137,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 |---|---|---|---|---|
 | 854247e242 | #27519 | thread | fix(web): expanded SVG diagrams fill the image viewer | left (thread-3): ExpandedImagePreviewView is Features/Composer, another agent's area; needs the SVG mime type passed and no upper zoom cap for vectors |
 | a4b6afe184 | #27440 | thread | fix(client-runtime): threads with many images no longer flood a remote with URL requests | ported (thread-3): AssetURLLimit, 6 assets.createUrl at a time |
-| e0f69e9ea4 | #29741 | thread | fix(web,mobile): chat images reload when the agent rewrites the file | left (thread-3): needs the thread's workspace mutation id (client-runtime state/assets.ts, threadDetail.ts at 4928) in MarkdownImageSource's key so a rewritten file signs a new URL |
-| a11ad7424d |  | thread | fix(web): show app bundle icons and open apps from markdown links | left (thread-3): app bundle icons need the server's NativeAppIconResolver asset and an app-icon chip in FileLinks; open goes through externalLauncher |
+| e0f69e9ea4 | #29741 | thread | fix(web,mobile): chat images reload when the agent rewrites the file | left (thread-4): needs three pieces: deriveWorkspaceMutationId (threadDetail.ts at 4928) in T3Store over the visible items and the last checkpoint, published by ThreadSession to a MarkdownImages.workspaceMutationId that posts once per change; the id in MarkdownImageSource.key for workspace files so visible images re-sign; and assets.createUrl's fileRevision read in ThreadSession's resourceURL so an unchanged revision with over 5 minutes left keeps the shown image (keepUnchangedFile, client-runtime state/assets.ts). About an hour with tests |
+| a11ad7424d |  | thread | fix(web): show app bundle icons and open apps from markdown links | left (thread-4): needs a bitmap icon path in the Markdown file chip (FileChip and MarkdownLayout draw IconDefinition glyphs only), fed by assets.createUrl native-app-icon {app-path} on remote hosts or NSWorkspace.icon(forFile:) on this Mac, plus Open app through shell.openInEditor file-manager on the client host; needs a component reference for the chip |
 | 330b9f4840 | #34333 | thread | fix(web): arrow keys and buttons step through the images an agent viewed | ported in 2eb8794e |
 
 ## Port group scheduled-tasks (4)
@@ -1808,7 +1808,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 2f777bdd49 | #28264 | connections | perf(web): main thread updates no longer re-render an open side chat | n/a: React render perf |
 | 39bca5365c | #28267 | composer | perf(web): typing in a thread no longer re-renders sidebar drafts | n/a: React render perf |
 | 35df72f268 | #28270 | thread | perf(web): render minimap highlights without extra nodes | n/a: DOM perf |
-| 1915569b19 | #18416 | thread | perf(client-runtime): merge shell deltas once per received batch | partly in CandyWrapper: one redraw per pull, the reducer still merges per item, see perf-sweep-4928.md |
+| 1915569b19 | #18416 | thread | perf(client-runtime): merge shell deltas once per received batch | partly in CandyWrapper: one redraw per pull; left (thread-4): the reducer still merges per item and needs a ShellStore benchmark with a 50-event chunk before batching (perf-sweep-4928.md) |
 | 21483318f2 | #18421 | files | perf(web): coalesce overlapping file tree refreshes | n/a: web perf |
 | 3f105e00e3 | #21277 | thread | perf(clients): bound subagent preview processing to the visible prefix | ported (thread-3): SubagentCardRowView hoverPreview reads only to the 280-character cut |
 | 7a633ce081 | #24005 | pr/git | fix(shared): keep Azure clone URLs valid when switching protocols | n/a: server clone URL |
