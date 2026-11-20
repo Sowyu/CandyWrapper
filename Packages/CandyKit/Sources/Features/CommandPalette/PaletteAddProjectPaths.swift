@@ -114,13 +114,63 @@ public enum PaletteAddProjectPaths {
         public init(name: String, fullPath: String) { self.name = name; self.fullPath = fullPath }
     }
 
-    /// `filterFilesystemBrowseEntries`: prefix matches, case-insensitive; dot folders only when the
-    /// query starts with a dot; the exact name match, if any.
+    /// `filterFilesystemBrowseEntries` (4928 client-runtime state/filesystem.ts:86-143, #26376): exact,
+    /// prefix, word boundary, substring, then fuzzy subsequence matches, best first; dot folders only when
+    /// the query starts with a dot; the exact name match, if any. Swift compares names canonically, so
+    /// Finder's decomposed names match composed typing without T3's NFC pass.
     public static func filter(_ entries: [Entry], query: String) -> (visible: [Entry], exact: Entry?) {
         let lower = query.lowercased()
         let showHidden = query.hasPrefix(".")
-        let visible = entries.filter { $0.name.lowercased().hasPrefix(lower) && (showHidden || !$0.name.hasPrefix(".")) }
+        let candidates = entries.filter { showHidden || !$0.name.hasPrefix(".") }
+        let visible = lower.isEmpty ? candidates : candidates.enumerated()
+            .compactMap { i, e in score(e.name.lowercased(), lower).map { (i, e, $0) } }
+            .sorted { $0.2 != $1.2 ? $0.2 < $1.2 : $0.0 < $1.0 }
+            .map(\.1)
         return (visible, query.isEmpty ? nil : visible.first { $0.name == query })
+    }
+
+    /// `scoreQueryMatch` (packages/shared/src/searchRanking.ts:88-140) with the browse tiers: exact 0,
+    /// prefix 1000, boundary 2000 (markers space, -, _ and .), includes 3000, fuzzy 4000.
+    static func score(_ valueString: String, _ queryString: String) -> Int? {
+        let value = Array(valueString), query = Array(queryString)
+        guard !value.isEmpty, !query.isEmpty else { return nil }
+        let penalty = min(64, max(0, value.count - query.count))
+        if value == query { return 0 }
+        if value.starts(with: query) { return 1000 + penalty }
+        func index(of needle: [Character]) -> Int? {
+            guard needle.count <= value.count else { return nil }
+            for i in 0...(value.count - needle.count) where Array(value[i..<(i + needle.count)]) == needle { return i }
+            return nil
+        }
+        let boundary = [" ", "-", "_", "."].compactMap { m in index(of: Array(m) + query).map { $0 + 1 } }.min()
+        if let boundary { return 2000 + boundary * 2 + penalty }
+        if let i = index(of: query) { return 3000 + i * 2 + penalty }
+        // `scoreSubsequenceMatch`.
+        var qi = 0, first = -1, previous = -1, gaps = 0
+        for (vi, c) in value.enumerated() where c == query[qi] {
+            if first == -1 { first = vi }
+            if previous != -1 { gaps += vi - previous - 1 }
+            previous = vi
+            qi += 1
+            if qi == query.count { return 4000 + first * 2 + gaps * 3 + (vi - first + 1 - query.count) + min(64, value.count - query.count) }
+        }
+        return nil
+    }
+
+    /// `getFilesystemBrowseTabCompletion` (state/filesystem.ts:145-171, #28243): a single match enters the
+    /// folder; several extend the query to their common prefix when it adds something and all start with it.
+    public static func tabCompletion(_ visible: [Entry], filterQuery: String) -> (name: String, isComplete: Bool)? {
+        guard let first = visible.first else { return nil }
+        if visible.count == 1 { return (first.name, true) }
+        var prefix = Array(first.name)
+        for e in visible.dropFirst() {
+            let c = Array(e.name)
+            var n = 0
+            while n < prefix.count, n < c.count, String(prefix[n]).lowercased() == String(c[n]).lowercased() { n += 1 }
+            prefix = Array(prefix[0..<n])
+        }
+        let name = String(prefix), lowerName = name.lowercased()
+        return lowerName.count > filterQuery.lowercased().count && visible.allSatisfy { $0.name.lowercased().hasPrefix(lowerName) } ? (name, false) : nil
     }
 
     /// `filterPinnedBrowseEntries`: the clone destination keeps the repository folder pinned at the

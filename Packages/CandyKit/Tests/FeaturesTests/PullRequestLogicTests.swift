@@ -513,3 +513,22 @@ struct UsageRanking4928Tests {
         #expect(UsagePriceLogic.parse(model: "m", [.input: "1,2,3", .output: "1"]) == nil)
     }
 }
+
+/// 4928 add-project browse (client-runtime state/filesystem.ts:86-171, #26376, #28243).
+struct AddProjectBrowse4928Tests {
+    static func e(_ n: String) -> PaletteAddProjectPaths.Entry { .init(name: n, fullPath: "/r/\(n)") }
+
+    @Test func folderSearchRanksPrefixThenBoundaryThenSubstringThenFuzzy() {
+        let all = ["my-app", "app", "zapper", "a-p-p", ".app", "other"].map(Self.e)
+        #expect(PaletteAddProjectPaths.filter(all, query: "app").visible.map(\.name) == ["app", "my-app", "zapper", "a-p-p"])
+        #expect(PaletteAddProjectPaths.filter(all, query: ".a").visible.map(\.name) == [".app"])
+        #expect(PaletteAddProjectPaths.filter(all, query: "").visible.count == 5)
+    }
+
+    @Test func tabCompletesASingleMatchOrTheCommonPrefix() {
+        #expect(PaletteAddProjectPaths.tabCompletion([Self.e("src")], filterQuery: "s")! == ("src", true))
+        #expect(PaletteAddProjectPaths.tabCompletion([Self.e("Project-a"), Self.e("project-b")], filterQuery: "p")! == ("Project-", false))
+        #expect(PaletteAddProjectPaths.tabCompletion([Self.e("ab"), Self.e("cd")], filterQuery: "") == nil)
+        #expect(PaletteAddProjectPaths.tabCompletion([], filterQuery: "x") == nil)
+    }
+}

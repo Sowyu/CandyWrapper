@@ -50,6 +50,8 @@ public final class CommandPaletteController {
         /// Return before the rows get it: the query, the highlighted row and the modifier keys; true when used
         /// (browse adds the typed path, New project creates).
         public var onSubmit: ((_ query: String, _ highlighted: PaletteEntry?, _ flags: NSEvent.ModifierFlags) -> Bool)?
+        /// Tab before focus moves on: the query and the highlighted row; true when used (browse completes folders).
+        public var onTab: ((_ query: String, _ highlighted: PaletteEntry?) -> Bool)?
         /// Base UI's `autoHighlight="always"`: false in browse and the add-project steps.
         public var autoHighlight = true
         /// The control inside the input's end (the browse "Add" button).
@@ -335,6 +337,10 @@ public final class CommandPaletteController {
             if let submit = active?.onSubmit, submit(query, highlightedEntry, NSApp.currentEvent?.modifierFlags ?? []) { return true }
             if let entry = highlightedEntry ?? ((active?.autoHighlight ?? true) ? firstEnabled : nil) { execute(entry) }
             return true
+        case #selector(NSResponder.insertTab(_:)):
+            // Not while an input method composes (CommandPalette.tsx `isComposing`, #28243).
+            guard let tab = activeMode?.onTab, !view.input.hasMarkedText else { return false }
+            return tab(query, highlightedEntry)
         case #selector(NSResponder.deleteBackward(_:)):
             guard query.isEmpty, isInSubmenu else { return false }
             pop()

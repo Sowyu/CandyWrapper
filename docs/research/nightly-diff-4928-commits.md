@@ -406,7 +406,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| dc032d7c8f | #34978 | thread | feat(web,mobile): Add project lists only GitHub until you turn other hosts on | skip: the Add project palette flow, outside the sidebar |
+| dc032d7c8f | #34978 | thread | feat(web,mobile): Add project lists only GitHub until you turn other hosts on | ported (panels-2): Add project lists the hosts `offeredSourceControlProviders` turns on, GitHub by default; a server without the setting keeps every host. The Settings switch belongs to the Settings agent |
 | f419698aea | #35202 | sidebar | feat(web): drop folders on the sidebar to add them as projects | ported 9a0153d1; adds on the primary environment, see #38722 |
 
 ## Port group terminal (2)
@@ -569,7 +569,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 707dcdaa16 | #24904 | sidebar | feat: optionally clone repos into ghq-style <host>/<owner>/<repo> folders | port; needs wire: clone layout setting |
+| 707dcdaa16 | #24904 | sidebar | feat: optionally clone repos into ghq-style <host>/<owner>/<repo> folders | left (panels-2): ghq-style clone folders need the clone layout setting and its wire |
 
 ## New feature dictation (20)
 
@@ -738,7 +738,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | cde3620577 | #26633 | browser | fix(web): forward native Copy and Cut from server browser tabs | port |
 | 9cb59bf858 | #22328 | browser | fix(web): mod+L focuses the browser address bar from a focused page | port |
 | 17948307cc | #28064 | browser | fix(client): the folder browser shows folders added or removed while T3 runs | port |
-| 6717d92cf3 | #28243 | browser | fix(web): Tab completes folder names in the add-project browser | port |
+| 6717d92cf3 | #28243 | browser | fix(web): Tab completes folder names in the add-project browser | ported (panels-2): Tab opens the highlighted or only folder, or extends to the common prefix, Mode.onTab in CommandPaletteController |
 | b5d9f85b9a | #26027 | browser | fix(web): keep inward mini browser resizes from growing | port |
 | 1436c4571f | #29347 | browser | fix(client-runtime): connect to the primary environment while the browser reports offline | port |
 | 350ecd63be | #32569 | browser | fix(web): closing the right panel returns focus to where it was | port |
@@ -1352,7 +1352,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | cc0a7bb9d8 | #28644 | sidebar | fix(shared): file links with parentheses in the path keep their parent folder labels | skip: Markdown links, outside the sidebar |
 | 47474723cb | #28616 | sidebar | fix(web): clear failed badges when threads are opened | ported 9f448337 |
 | 04572419e4 | #36785 | sidebar | fix(clients): a one-hour snooze no longer reads "2h left" | ported 9a0153d1 |
-| 752bdaeb70 | #26376 | sidebar | feat(client): add-project folder search matches substrings and fuzzy subsequences | skip: Add project folder search, outside the sidebar |
+| 752bdaeb70 | #26376 | sidebar | feat(client): add-project folder search matches substrings and fuzzy subsequences | ported (panels-2): folder search ranks exact, prefix, boundary, substring and fuzzy matches, PaletteAddProjectPaths.filter |
 | 9888694f80 | #36909 | sidebar | fix(client): refresh open archive when threads are archived elsewhere | skip: Settings archive list, outside the sidebar |
 | 304dc13648 | #30428 | sidebar | fix(web): opening a project or deleting the open thread skips delegated tasks | left: needs delegatedFrom; the delete fallback skips nested threads already |
 | 26bf047d5e | #30597 | sidebar | fix(client-runtime): a disconnected machine's scratch folder no longer lists as a second "No project" | already in CandyWrapper: ThreadSession.swift keeps the last scratch folder while a machine is away |

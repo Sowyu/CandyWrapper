@@ -143,7 +143,10 @@ final class PaletteAddProjectFlow {
                                   title: "Local folder", description: "Browse a folder on disk", icon: .folderPlus,
                                   action: .run({ [weak self] in self?.startBrowse(env) }, keepOpen: true)))
         let readiness = self.readiness(env)
-        let providers = Self.providerSources.sorted { l, r in
+        // `isSourceControlProviderOffered` (4928 client-runtime operations/projects.ts, #34978): only GitHub
+        // until Settings turns other hosts on. A 3824 server has no such setting and keeps every host.
+        let offered = threads.composer.config(env)?.settings.raw["offeredSourceControlProviders"]?.objectValue
+        let providers = Self.providerSources.filter { offered == nil || (offered?[$0]?.boolValue ?? ($0 == "github")) }.sorted { l, r in
             let lr = readiness[l]?.ready ?? false, rr = readiness[r]?.ready ?? false
             return lr != rr ? lr : Self.sourceLabel(l) < Self.sourceLabel(r)
         }
@@ -290,6 +293,8 @@ final class PaletteAddProjectFlow {
         var resolvedPath = ""
         var willCreate = false
         var canSubmit = false
+        var entries: [PaletteAddProjectPaths.Entry] = []
+        var filter = ""
     }
 
     /// Everything a browse query shows and what Enter would add.
@@ -314,6 +319,8 @@ final class PaletteAddProjectFlow {
         case .loading?: v.status = "Loading folders..."
         case nil: break
         }
+        v.entries = relativeNeedsProject ? [] : entries
+        v.filter = filter
         var items: [PaletteEntry] = []
         if !relativeNeedsProject, PaletteAddProjectPaths.canNavigateUp(dir) {
             items.append(PaletteEntry(value: "browse:up", searchTerms: [query, ".."], title: "..", icon: .cornerLeftUp,
@@ -365,6 +372,21 @@ final class PaletteAddProjectFlow {
             return true
         }
         mode.footerLabel = { highlighted in highlighted?.value.hasPrefix("browse:") == true ? "Select" : nil }
+        // Shell-style Tab (CommandPalette.tsx, #28243): the highlighted folder or a single match opens,
+        // several extend the query to their common prefix.
+        mode.onTab = { [weak self] query, highlighted in
+            guard let self else { return false }
+            let v = self.browseView(query, cloneDestination: cloneDestination)
+            if highlighted?.value == "browse:up" { self.browseUp(query, cloneDestination: cloneDestination); return true }
+            let picked = highlighted.flatMap { h in v.entries.first { "browse:\($0.fullPath)" == h.value } }
+            let completion = picked.map { (name: $0.name, isComplete: true) } ?? PaletteAddProjectPaths.tabCompletion(v.entries, filterQuery: v.filter)
+            if let completion, completion.isComplete {
+                self.browseTo(completion.name, query: query, cloneDestination: cloneDestination)
+            } else if let completion, !(cloneDestination && !self.pinnedCloneName.isEmpty) {
+                self.controller?.replaceQuery(PaletteAddProjectPaths.directoryPath(query) + completion.name)
+            }
+            return true
+        }
         mode.accessory = submitButton { [weak self] in
             guard let self, let query = self.controller?.query else { return ("Add", "Enter", false) }
             let v = self.browseView(query, cloneDestination: cloneDestination)
@@ -645,6 +667,9 @@ final class PaletteAddProjectFlow {
 
     /// `getNewProjectGitHubTarget`: GitHub ready on that machine, with its account when known.
     private func gitHubTarget(_ env: String) -> (account: String?, ready: Bool) {
+        // A host turned off in Settings is no publish target (getNewProjectPublishTargets, 4928 #34978).
+        let offered = threads.composer.config(env)?.settings.raw["offeredSourceControlProviders"]?.objectValue
+        guard offered?["github"]?.boolValue != false else { return (nil, false) }
         guard readiness(env)["github"]?.ready == true, case .some(.some(let result)) = discovery[env] else { return (nil, false) }
         let github = SourceControlDiscoveryItem.list(result).providers.first { $0.kind == "github" }
         return (github?.auth?["account"]?.stringValue, true)
