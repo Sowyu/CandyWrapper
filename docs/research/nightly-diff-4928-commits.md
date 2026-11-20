@@ -970,28 +970,28 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| de2b1d3358 | #23745 | files | fix(web): keep HTML prototype selection rings visible | left (panels-2): not checked |
-| f06dd4bbf5 | #25737 | files | feat(web): allow resizing the file explorer | left (panels-2): not checked |
-| 78f1ba8285 | #25555 | files | fix(web): preserve PDF scroll and zoom across autoreloads | left (panels-2): not checked |
-| 461df465ab | #26579 | files | fix(web): file context menu actions respond to pointer clicks | left (panels-2): not checked |
-| 433bff1e30 | #28521 | files | fix(web): clicking a file in the Files tree keeps focus on that row | left (panels-2): not checked |
+| de2b1d3358 | #23745 | files | fix(web): keep HTML prototype selection rings visible | n/a (panels-3): HTML prototype selection rings belong to T3's design-mode overlay, which CandyWrapper's HTML preview does not have |
+| f06dd4bbf5 | #25737 | files | feat(web): allow resizing the file explorer | left (panels-3): a resizable Files tree needs a drag handle in FilesPanelView between tree and file (160-560pt, file at least 256pt) |
+| 78f1ba8285 | #25555 | files | fix(web): preserve PDF scroll and zoom across autoreloads | skip (panels-3): PDFs open in Quick Look in CandyWrapper, which keeps its own scroll and zoom |
+| 461df465ab | #26579 | files | fix(web): file context menu actions respond to pointer clicks | n/a (panels-3): base-ui pointer handling; CandyWrapper's context menus are AppKit menus |
+| 433bff1e30 | #28521 | files | fix(web): clicking a file in the Files tree keeps focus on that row | left (panels-3): not checked on screen; a clicked file row should keep keyboard focus in FileTreeView |
 | 09647d188d | #30601 | files | fix(shared): CSV and TSV attachments keep their table under generic file types | already in CandyWrapper: FilePreviewKind.of picks the table from the .csv or .tsv extension, whatever the MIME type |
-| 9ef52de293 | #23203 | files | fix(shared): keep spreadsheet shorthand as inline code | left (panels-2): not checked |
-| 1ab3afe892 | #34360 | files | fix(web): opening a file focuses its editor so Cmd+F searches it | left (panels-2): not checked |
-| eceeab4d5c | #34346 | files | fix(web): Cmd+F in the Files panel focuses its search | left (panels-2): not checked |
-| f10a5029f5 | #35067 | files | fix(web): Files tree keeps expanded folders across remounts | left (panels-2): not checked |
-| 08544ba3e5 | #32693 | files | fix(web): open documents no longer reload after every agent command | left (panels-2): not checked |
-| 8cb551a3ce | #36664 | files | fix(web): saved files show external edits after a failed reload | left (panels-2): not checked |
-| 8b633d9a9e | #29802 | files | fix(web): PDF find matches curly quotes when you type straight ones | left (panels-2): not checked |
-| f05cd350d2 | #29996 | files | fix(web): opening a very large folder no longer freezes the Files panel | left (panels-2): not checked |
-| 2afee52025 | #33125 | files | fix(web): distinguish media Back from window close | left (panels-2): not checked |
-| 5f80af6805 | #36936 | files | fix(web): restore word selection in inline code | left (panels-2): not checked |
-| 71adeef080 | #37064 | files | fix(web): open PDF links in the file viewer | left (panels-2): not checked |
-| 109e9dbdfd | #37361 | files | fix(web): file tabs keep their scroll position when you switch back | left (panels-2): not checked |
-| 6dd092315e | #31785 | files | fix(web): file tree icons and ignored rows follow the theme's muted text | left (panels-2): not checked |
-| f4d0855a50 | #33805 | files | fix(web): PDF attachment chips no longer look like failed ones | left (panels-2): not checked |
-| 0d405f664a | #38510 | files | fix(web): a ~\ home path opens as a read-only home file, not as a project file | left (panels-2): not checked |
-| e48d6f3181 | #38749 | files | fix(web): PDFs in the desktop file panel can be saved again | left (panels-2): not checked |
+| 9ef52de293 | #23203 | files | fix(shared): keep spreadsheet shorthand as inline code | left (panels-3): spreadsheet shorthand staying inline code is FileLinks.inlineCodeCandidate in Features/Markdown, held for the Markdown agent |
+| 1ab3afe892 | #34360 | files | fix(web): opening a file focuses its editor so Cmd+F searches it | left (panels-3): focusing the opened file's code view so Cmd+F searches it needs a first-responder hand-off in FileSurfaceView |
+| eceeab4d5c | #34346 | files | fix(web): Cmd+F in the Files panel focuses its search | left (panels-3): Cmd+F in the Files panel focusing its search needs the panel's find shortcut routed to FilesPanelView's search field |
+| f10a5029f5 | #35067 | files | fix(web): Files tree keeps expanded folders across remounts | left (panels-3): keeping expanded folders across remounts needs FileTreeModel's expanded set stored per environment and cwd |
+| 08544ba3e5 | #32693 | files | fix(web): open documents no longer reload after every agent command | left (panels-3): not checked whether FilesController reloads open documents after agent commands |
+| 8cb551a3ce | #36664 | files | fix(web): saved files show external edits after a failed reload | left (panels-3): showing external edits after a failed reload needs CodeFileView's saved state checked against FileSaveFailureTests |
+| 8b633d9a9e | #29802 | files | fix(web): PDF find matches curly quotes when you type straight ones | skip (panels-3): PDF find runs in Quick Look in CandyWrapper |
+| f05cd350d2 | #29996 | files | fix(web): opening a very large folder no longer freezes the Files panel | already in CandyWrapper (panels-3): FileTreeModel caps expandable ignored folders (expandableDirectoryPaths) and the tree is virtualized |
+| 2afee52025 | #33125 | files | fix(web): distinguish media Back from window close | skip (panels-3): media open in Quick Look in CandyWrapper, which has its own close |
+| 5f80af6805 | #36936 | files | fix(web): restore word selection in inline code | left (panels-3): word selection in inline code is Features/Markdown, held for the Markdown agent |
+| 71adeef080 | #37064 | files | fix(web): open PDF links in the file viewer | skip (panels-3): PDF links open in Quick Look in CandyWrapper |
+| 109e9dbdfd | #37361 | files | fix(web): file tabs keep their scroll position when you switch back | left (panels-3): keeping a file tab's scroll position needs FileSurfaceView to store each path's scroll offset when it hides |
+| 6dd092315e | #31785 | files | fix(web): file tree icons and ignored rows follow the theme's muted text | ported (panels-3): the tree's chevrons, guides and ignored rows take the theme's contrast muted text, FilesPanelView |
+| f4d0855a50 | #33805 | files | fix(web): PDF attachment chips no longer look like failed ones | skip (panels-3): PDF chips hand off to Quick Look in CandyWrapper; the chip look is the composer's |
+| 0d405f664a | #38510 | files | fix(web): a ~\ home path opens as a read-only home file, not as a project file | left (panels-3): a ~\\ home path needs FilesLogic's relative path split to read ~\\ as home |
+| e48d6f3181 | #38749 | files | fix(web): PDFs in the desktop file panel can be saved again | skip (panels-3): PDFs open in Quick Look in CandyWrapper, which saves them itself |
 
 ## Small fixes, issues (2)
 

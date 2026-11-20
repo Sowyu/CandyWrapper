@@ -320,11 +320,10 @@ final class FileTreeRowView: DSView {
         addSubview(label)
     }
 
-    /// `--trees-fg-muted`, the chevron's color.
-    static let mutedFG = NSColor(srgbRed: 0x84 / 255.0, green: 0x84 / 255.0, blue: 0x8a / 255.0, alpha: 1)
-    /// `--trees-status-ignored`: light #adadb1, dark #4a4a4e.
-    static let ignoredFG = NSColor(name: nil) { $0.isDark ? NSColor(srgbRed: 0x4a / 255.0, green: 0x4a / 255.0, blue: 0x4e / 255.0, alpha: 1)
-        : NSColor(srgbRed: 0xad / 255.0, green: 0xad / 255.0, blue: 0xb1 / 255.0, alpha: 1) }
+    /// `--trees-fg-muted` and `--trees-status-ignored`, the chevron's and ignored rows' color: the theme's
+    /// muted text (4928 pierre-tree-theme.ts, #31785).
+    static var mutedFG: NSColor { Themed.color(\.contrastMutedForeground) }
+    static var ignoredFG: NSColor { Themed.color(\.contrastMutedForeground) }
 
     func configure(_ row: FileTreeModel.Row, selected: Bool, guides showGuides: Bool) {
         let iconChanged = row.isDirectory != self.row.isDirectory || (!row.isDirectory && row.path != self.row.path) || icon.superview == nil
