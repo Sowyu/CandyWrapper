@@ -464,7 +464,6 @@ The code marks known shortcuts with `// ponytail:`, each naming when to fix it (
 ## Waiting on the user
 
 - The Mac mini M2 Pro needs Xcode, `.git/info/secret-patterns` and, for releases, the signing backups. [Full list](docs/research/bringup-2026-11-19.md#only-the-user-can-supply) (asked 2026-11-19).
-- The first release with the CandyWrapper Helper: scripts/release builds and signs it and puts its manifest in the app (checked in a dry run, which stops at the published build 64), and uploads its tarballs with the release (that step runs only in a real release). Release when you say so. (asked 2026-10-24)
 - Client activity reports: CandyWrapper never sends `server.reportClientActivity`. T3 sends it every 25 s per machine, and the server runs its provider checks, usage-limit refreshes and git fetch with PR status only while a client reports in, so with only CandyWrapper connected those refresh at startup or by hand. Report only while CandyWrapper is the frontmost window (recommended, nothing while it's in the background), every 25 s like T3, or not at all? Since Nightly 3669 the server also pauses periodic pull request discovery while no client holds a foreground lease (5bb54a0f77), so with only CandyWrapper connected, PR status refreshes only on demand. (asked 2026-10-22, updated 2026-10-25)
 - The Allow Remote Access design was built as proposed but never confirmed (`docs/decisions.md`).
 - An off-machine backup of the Sparkle signing key (`docs/release.md`).

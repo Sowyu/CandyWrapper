@@ -4,6 +4,8 @@ The user asked to delete CandyWrapper's own Orchestrator feature. This file list
 
 ## Decision on the CandyWrapper Helper
 
+> Superseded the same day: the helper was removed with Connectors (`docs/research/connectors-removal-2026-11-21.md`). `HiddenTerminal` and the parts of `HelperInstall` the cleanup below uses stay.
+
 The helper stays. Settings > Connectors runs `candywrapper-helper config get` and `config set` through a hidden T3 terminal to read and change each machine's Claude and Codex MCP servers and skills (`App/Sources/ConnectorsController.swift`, `docs/connectors.md`). That needs the binary, `scripts/build-helper`, the release's tarballs and `SHA256SUMS`, `helper-manifest.json` in the app, `HelperInstall.configCommand`, `HelperInstall.MarkerReader` and `HiddenTerminal`.
 
 Only the relay goes: the always-on service that `install` set up with a LaunchAgent or a systemd user unit, its pairing, its tokens, its WebSocket links and its hand-back of the "while closed" task. Removing it lets the helper drop its dependencies on T3Protocol, T3Transport, T3Store and libcurl, so it builds from AgentConfig alone.
