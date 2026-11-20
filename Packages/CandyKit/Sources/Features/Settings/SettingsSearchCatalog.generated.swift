@@ -41,6 +41,7 @@ extension SettingsSearch {
         .item(SettingsSearchItem(id: "auto-resume-limited-threads", title: "Resume after usage limits", to: .threads, searchTerms: ["usage quota rate limit reset recover continue"])),
         .item(SettingsSearchItem(id: "working-shelf", title: "Working section", to: .general, searchTerms: ["hide fold running monitoring threads inbox sidebar shelf"])),
         .item(SettingsSearchItem(id: "boring-sidebar", title: "Boring sidebar (group by project)", to: .beta, searchTerms: ["beta folders project tree classic sidebar"])),
+        .item(SettingsSearchItem(id: "boring-sidebar-multiline", title: "Two-line folder rows", to: .beta, targetId: "boring-sidebar", searchTerms: ["beta boring sidebar folder rows multiline branch pull request details"])),
         .item(SettingsSearchItem(id: "tool-call-visibility", title: "Tool calls in chat", to: .chat, searchTerms: ["hide tool calls commands edits searches work log activity quiet chat zen final answers only"])),
         .item(SettingsSearchItem(id: "screen-reader-window-title", title: "Screen reader window title", to: .chat, searchTerms: ["accessibility a11y screen reader nvda jaws voiceover orca narrator window title tab title alt tab taskbar thread status order working approval"])),
         .item(SettingsSearchItem(id: "guest-links", title: "Guest links", to: .beta, scope: .environment, searchTerms: ["beta share guest invite link teammate watch t3 connect tunnel"])),

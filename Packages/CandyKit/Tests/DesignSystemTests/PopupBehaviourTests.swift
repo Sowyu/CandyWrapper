@@ -132,6 +132,25 @@ struct PopupBehaviourTests {
         #expect(!button.isPopupOpen)
     }
 
+    /// Screen pass 3, item 1: a dialog opened from a menu owns Return and Escape. The menu kept them, so the
+    /// Unrestricted confirm opened from the access menu ignored both.
+    @Test func aDialogOverAnOpenMenuOwnsTheKeys() throws {
+        let (w, root) = window()
+        let button = ButtonView("Open")
+        button.frame = NSRect(x: 100, y: 100, width: 80, height: 32)
+        root.addSubview(button)
+        _ = try #require(MenuPopupView.show([MenuItem("Copy"), MenuItem("Paste")], from: button))
+        let host = PopupHost.host(for: w)
+        let modal = ModalHost.present(DialogView(kind: .alertDialog, title: "Sure?"), in: w, blurBackdrop: false)
+        #expect(!host.handleKey(.escape))
+        #expect(!host.handleKey(.enter))
+        #expect(!host.handleMouseDown(at: CGPoint(x: 400, y: 300)))
+        #expect(host.popups.count == 1)
+        modal.close(animated: false)
+        #expect(host.handleKey(.escape))
+        #expect(host.popups.isEmpty)
+    }
+
     /// The menu tracks only its own bounds. Tracking its visible rect, which reaches over the whole popup host, put
     /// the pointer inside from the start, so AppKit sent no moves and rows never highlighted on hover.
     @Test func menuTracksItsOwnBounds() throws {

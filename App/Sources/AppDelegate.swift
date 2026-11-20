@@ -565,6 +565,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         threads.composer.onAddProject = { [weak commands] in commands?.addProject() }
         threads.composer.scratchEnvironment = { [weak palette] in palette?.scratchTargetEnvironmentId }
         threads.composer.onStartWithoutProject = { [weak palette] env in palette?.startScratchThread(env) }
+        threads.composer.openScratchProject = { [weak palette] env in await palette?.openScratchProject(env) }
         threads.composer.onManageProjects = { [weak settings] in
             settings?.open()
             settings?.show(.projects)

@@ -221,6 +221,19 @@ public final class DiffPanelView: DSView {
     }
 
     /// The review section and its title (DiffPanel.tsx:313-325): `turn:<id>` and "Turn n", or the git scope.
+    /// `useDiffPanelSessionStore.collapsedFileKeysByScopeKey` (DiffPanel.tsx:353-355, 678-692): each thread and section
+    /// keeps the files the user folded or opened for the session, so a reload (an app switch, a refresh) keeps them
+    /// instead of applying `diffFilesCollapsed` again.
+    // ponytail: grows by one small map per thread and section visited this session; prune if sessions run for weeks
+    static var folds: [String: [String: Bool]] = [:]
+    private var foldScope: String? { threadId.map { "\($0.rawValue):\(reviewSection.id)" } }
+    private func recordFolds() {
+        guard let scope = foldScope else { return }
+        var map = Self.folds[scope] ?? [:]
+        for (i, file) in list.diff.files.enumerated() { map[file.path] = list.collapsed.contains(i) }
+        Self.folds[scope] = map
+    }
+
     private var reviewSection: (id: String, title: String) {
         if let target = toolCallTarget { return ("tool-call:\(target.threadId.rawValue):\(target.itemId.rawValue)", "Tool call") }
         return switch gitScope {
@@ -437,7 +450,7 @@ public final class DiffPanelView: DSView {
             self?.beginReview(start)
             self?.beginReview(end, extending: true)
         }
-        list.onCollapsedChange = { [weak self] in self?.updateCollapseButton() }
+        list.onCollapsedChange = { [weak self] in self?.recordFolds(); self?.updateCollapseButton() }
         list.onContextExpanded = { [weak self] in
             guard let self, !self.find.isHidden else { return }
             self.search()
@@ -742,7 +755,7 @@ public final class DiffPanelView: DSView {
         scroll.isHidden = false
         list.annotations = []
         updateContextLoader()
-        list.setDiff(diff, collapsedByDefault: collapsed)
+        list.setDiff(diff, collapsedByDefault: collapsed, folds: foldScope.flatMap { Self.folds[$0] } ?? [:])
         rebuildReviewAnnotations()
         fileTree.changes = Dictionary(diff.files.map { ($0.path, $0.change) }, uniquingKeysWith: { a, b in a == b ? a : .change })
         fileTree.model = DiffPanelSearch.tree(diff)

@@ -23,9 +23,17 @@ public final class DraftHeroView: DSView {
     public var isScratch = false { didSet { if isScratch != oldValue { updateChips(); needsDisplay = true; superview?.needsLayout = true } } }
     /// The project name was clicked; show the project menu under `anchor`.
     public var onPickProject: ((NSView) -> Void)?
+    /// "or start without a project" was clicked: open the scratch project as this draft's project
+    /// (DraftHeroHeadline.tsx:189-203, 323-346 at 4928).
+    public var onStartWithoutProject: (() -> Void)?
+    /// A machine offers a scratch folder (`scratchWorkspaceRoot`); without one T3 leaves the line out.
+    public var offersScratch = true { didSet { if offersScratch != oldValue { needsDisplay = true; window?.invalidateCursorRects(for: self) } } }
 
     private let projectAnchor = NSView()
     private var hovered = false { didSet { if hovered != oldValue { needsDisplay = true } } }
+    /// The "or start without a project" button's extent, empty while it is not drawn.
+    private var scratchLink = NSRect.zero
+    private var scratchHovered = false { didSet { if scratchHovered != oldValue { needsDisplay = true } } }
     private var tracking: NSTrackingArea?
 
     public override var wantsUpdateLayer: Bool { false }
@@ -130,10 +138,19 @@ public final class DraftHeroView: DSView {
         }
         let subTop = CGFloat(lines.count - 1) * 36 + 44
 
-        // ponytail: "or start without a project" is drawn but inert; scratch threads come with the project picker work
+        // `InlineButton tone="muted"` (button.tsx:103-113): muted, foreground and underlined 2pt below on hover.
+        guard offersScratch else { scratchLink = .zero; return }
         let sub = TextLine(NSAttributedString(string: "or start without a project",
-                                              attributes: [.font: Self.subFont, .foregroundColor: Themed.color(\.mutedForeground)]))
-        draw(sub.line, at: CGPoint(x: ((bounds.width - sub.width) / 2).rounded(), y: sub.baseline(top: subTop, lineHeight: 24)), in: ctx)
+                                              attributes: [.font: Self.subFont, .foregroundColor: Themed.color(scratchHovered ? \.foreground : \.mutedForeground)]))
+        let subX = ((bounds.width - sub.width) / 2).rounded(), subBaseline = sub.baseline(top: subTop, lineHeight: 24)
+        draw(sub.line, at: CGPoint(x: subX, y: subBaseline), in: ctx)
+        let link = NSRect(x: subX, y: subTop, width: sub.width, height: 24)
+        if link != scratchLink { scratchLink = link; window?.invalidateCursorRects(for: self) }
+        if scratchHovered {
+            let thickness = max(1, (Self.subFont.underlineThickness * 2).rounded() / 2)
+            ctx.setFillColor(Themed.color(\.foreground).cgColor(in: self))
+            ctx.fill(CGRect(x: subX, y: subBaseline + 2, width: sub.width, height: thickness))
+        }
     }
 
     /// The headline as one line when it fits, or broken at spaces as the browser wraps it, never inside the
@@ -212,12 +229,24 @@ public final class DraftHeroView: DSView {
         projectAnchor.frame.contains(convert(event.locationInWindow, from: nil))
     }
 
-    public override func mouseMoved(with event: NSEvent) { hovered = !capy && overProject(event) }
-    public override func mouseExited(with event: NSEvent) { hovered = false }
+    private func overScratchLink(_ event: NSEvent) -> Bool {
+        !capy && !isScratch && onStartWithoutProject != nil && scratchLink.contains(convert(event.locationInWindow, from: nil))
+    }
+
+    public override func mouseMoved(with event: NSEvent) {
+        hovered = !capy && overProject(event)
+        scratchHovered = overScratchLink(event)
+    }
+    public override func mouseExited(with event: NSEvent) { hovered = false; scratchHovered = false }
     public override func mouseDown(with event: NSEvent) {
         if !capy, overProject(event) { onPickProject?(projectAnchor) }
+        else if overScratchLink(event) { scratchHovered = false; onStartWithoutProject?() }
     }
-    public override func resetCursorRects() { if !capy { addCursorRect(projectAnchor.frame, cursor: .pointingHand) } }
+    public override func resetCursorRects() {
+        guard !capy else { return }
+        addCursorRect(projectAnchor.frame, cursor: .pointingHand)
+        if !isScratch, offersScratch, onStartWithoutProject != nil { addCursorRect(scratchLink, cursor: .pointingHand) }
+    }
 }
 
 extension DraftHeroView {

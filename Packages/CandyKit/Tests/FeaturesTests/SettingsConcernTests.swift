@@ -28,7 +28,7 @@ struct SettingsConcernTests {
         let context = SettingsPagesFidelityTests.context()
         let cases: [(SettingsSection, [String], [String])] = [
             (.general, ["thread-notifications", "project-grouping", "working-shelf", "quit-confirmation"], ["send-shortcut", "app-version"]),
-            (.chat, ["composer-rich-text", "send-shortcut", "follow-up-behavior"], ["thread-notifications", "diff-layout"]),
+            (.chat, ["composer-rich-text", "send-shortcut", "follow-up-behavior", "screen-reader-window-title"], ["thread-notifications", "diff-layout"]),
             (.diffs, ["diff-layout", "diff-color-scheme", "proactive-panels", "pull-request-links-open-in-app"], ["browser-link-target"]),
             (.threads, ["default-model", "new-threads", "response-streaming", "text-generation-model"], ["compact-idle-threads", "worktree-submodules"]),
             (.providers, ["compact-idle-threads"], ["default-model"]),
@@ -37,6 +37,8 @@ struct SettingsConcernTests {
             (.worktrees, ["worktree-submodules", "start-from-origin", "worktree-branch-naming", "storage-worktree-keep-when"], ["source-control-writing-style"]),
             (.maintenance, ["provider-update-checks", "background-activity", "diagnostics"], ["app-version"]),
             (.about, ["app-version", "privacy-policy", "open-source-licenses"], ["diagnostics"]),
+            // Screen pass 3, item 4: the routed page dropped the Issue trackers section.
+            (.sourceControl, ["source-control", "issue-trackers"], ["default-model"]),
         ]
         for (section, present, absent) in cases {
             let page = ConcernSettingsView(context: context, section: section)
@@ -44,7 +46,8 @@ struct SettingsConcernTests {
             for id in present { #expect(page.anchor(id) != nil, "\(id) in \(section)") }
             for id in absent { #expect(page.anchor(id) == nil, "\(id) outside \(section)") }
         }
-        for (id, section) in [("snooze-options", SettingsSection.threads), ("git-fetch-interval", .maintenance), ("network-access", .access), ("tool-call-visibility", .chat)] {
+        // Screen pass 3, items 7 and 8: both rows the app draws are searchable and land where they are.
+        for (id, section) in [("screen-reader-window-title", SettingsSection.chat), ("boring-sidebar-multiline", .beta), ("snooze-options", SettingsSection.threads), ("git-fetch-interval", .maintenance), ("network-access", .access), ("tool-call-visibility", .chat)] {
             #expect(SettingsSearch.items.first { $0.id == id }?.to == section)
         }
     }

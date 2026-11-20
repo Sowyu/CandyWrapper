@@ -109,6 +109,8 @@ final class ComposerController {
     /// Dither's project popover: "No project" starts a draft in this machine's scratch project, nil hides the row.
     var scratchEnvironment: (() -> String?)?
     var onStartWithoutProject: ((String) -> Void)?
+    /// `projects.ensureScratch` and the scratch project once the shell has it, nil after a failure (with its toast).
+    var openScratchProject: ((String) async -> ProjectShell?)?
     /// Dither's project popover: "Manage projects" opens Settings, Projects.
     var onManageProjects: (() -> Void)?
     /// The open draft's project is a Git repository: the strip shows the run context and branch.
@@ -438,6 +440,7 @@ final class ComposerController {
         composer.onResume = { [weak self] in self?.resume() }
         composer.onTextChange = { [weak self] text in self?.remember(text) }
         panel.hero.onPickProject = { [weak self] anchor in self?.pickProject(from: anchor) }
+        panel.hero.onStartWithoutProject = { [weak self] in self?.startDraftWithoutProject() }
         panel.contextStrip.runOn.onAutoBalance = { [weak self] in self?.chooseAutomaticEnvironment() }
         panel.contextStrip.runOn.onChange = { [weak self] env in self?.changeEnvironment(env) }
         composer.stageArt = sidebar.stage != .none && ClientSettingsStore.shared.current.string("environmentIdentificationMode") == "artwork"
@@ -479,6 +482,7 @@ final class ComposerController {
         panel.errorBanner.onOpenURL = { url in NSWorkspace.shared.open(url) }
         composer.historyMessages = { [weak self] in self?.historyMessages() ?? [] }
         pickers.onChange = { [weak self] _ in
+            self?.updateStripPermissions()
             self?.composer.needsLayout = true
             self?.onTargetChange?()
             self?.onModelChange?()
@@ -1511,6 +1515,18 @@ final class ComposerController {
         showDraft(project, stored: r.moved)
     }
 
+    /// "or start without a project" (DraftHeroHeadline.tsx:189-203 at 4928): the scratch project becomes this draft's
+    /// project, keeping what was typed, unless the user moved to another draft meanwhile.
+    // ponytail: T3 then focuses the project trigger; the hero's picker takes no focus here, so the composer keeps it
+    private func startDraftWithoutProject() {
+        guard case .draft(let original) = target, let env = scratchEnvironment?(), let open = openScratchProject else { return }
+        Task { [weak self] in
+            guard let project = await open(env), let self, case .draft(let current) = self.target, current.draftId == original.draftId,
+                  let group = SidebarModel.buildProjectGroups([project]).first else { return }
+            self.openPickedGroup(group, key: group.key, currentEnvironment: env)
+        }
+    }
+
     private func hasUserContent(_ session: DraftSession, prompt: String) -> Bool {
         DraftProjectMove.hasUserContent(prompt: prompt, attachmentCount: draftAttachments[session.draftId]?.count ?? 0)
     }
@@ -1996,6 +2012,16 @@ final class ComposerController {
     }
 
     /// The pickers follow the draft key, the server config and the open thread.
+    /// The new-thread strip's access chip. A model pick changes it too: a Codex draft is never Unrestricted.
+    private func updateStripPermissions() {
+        let unrestricted = pickers.isUnrestricted
+        let mode = unrestricted ? ComposerPickers.unrestrictedMode
+            : ComposerPickers.modes[pickers.current.runtimeMode] ?? ComposerPickers.modes[.fullAccess]!
+        let strip = panel.contextStrip
+        strip.permissions.text = mode.label
+        strip.permissions.glyphs = [pickers.current.runtimeMode == .fullAccess && !unrestricted ? ComposerPickers.fullAccessGlyph : mode.icon.definition]
+    }
+
     private func updatePickers() {
         dropUsageLimitsIfStale(instance: pickers.current.instanceId?.rawValue)
         let snapshot = sidebar?.snapshot
@@ -2021,11 +2047,8 @@ final class ComposerController {
         let strip = panel.contextStrip
         let modern = !ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark) && !ThemeRuntime.isGlass(dark: composer.effectiveAppearance.isDark)
         strip.showsPermissions = modern && thread == nil
-        let unrestricted = pickers.isUnrestricted
-        let mode = unrestricted ? ComposerPickers.unrestrictedMode
-            : ComposerPickers.modes[pickers.current.runtimeMode] ?? ComposerPickers.modes[.fullAccess]!
-        strip.permissions.text = mode.label
-        strip.permissions.glyphs = [pickers.current.runtimeMode == .fullAccess && !unrestricted ? ComposerPickers.fullAccessGlyph : mode.icon.definition]
+        updateStripPermissions()
+        panel.hero.offersScratch = scratchEnvironment?() != nil
         strip.permissions.action = { [weak self, weak strip] in if let strip { self?.pickers.openPermissions(from: strip.permissions) } }
         panel.model.providers = serverConfig.providers
         onModelChange?()

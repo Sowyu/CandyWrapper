@@ -174,6 +174,7 @@ public struct MarkdownDocument: Sendable, Equatable {
         let b = Array(text.utf8)
         func run(_ i: Int, _ c: UInt8) -> Int { var j = i; while j < b.count, b[j] == c { j += 1 }; return j - i }
         func isWord(_ c: UInt8) -> Bool { (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c >= 0x80 }
+        func isLetter(_ c: UInt8) -> Bool { (c >= 65 && c <= 90) || (c >= 97 && c <= 122) }
         func starts(_ i: Int, _ prefix: String) -> Bool {
             let p = Array(prefix.utf8)
             guard i + p.count <= b.count else { return false }
@@ -247,7 +248,11 @@ public struct MarkdownDocument: Sendable, Equatable {
                 }
             }
             let www = starts(i, "www.")
-            if depth == 0, www || starts(i, "http://") || starts(i, "https://"), i == 0 || !isWord(b[i - 1]) || cjkMark(i - 3) == 3 || cjkMark(i - 2) == 2 {
+            // micromark's `previousProtocol` blocks only an ASCII letter before a scheme, so `见https://` links;
+            // `www.` needs a word boundary (`previousWww`).
+            let hasScheme = !www && (starts(i, "http://") || starts(i, "https://"))
+            let opens = i == 0 || (hasScheme ? !isLetter(b[i - 1]) : !isWord(b[i - 1]) || cjkMark(i - 3) == 3 || cjkMark(i - 2) == 2)
+            if depth == 0, www || hasScheme, opens {
                 var j = i
                 while j < b.count, b[j] >= 0x21, b[j] <= 0x7E, b[j] != UInt8(ascii: "<"), b[j] != UInt8(ascii: ">") { j += 1 }
                 if cjkMark(j) > 0 {

@@ -85,7 +85,9 @@ public final class ConcernSettingsView: SettingsPageBase {
             .init(.general, [G("behavior", "Composer", rows: ["composer-rich-text", "send-shortcut", "skills-in-slash-menu"])]),
             .init(.general, [G("behavior", "Follow-ups", rows: ["follow-up-behavior"])]),
             // 4928 ChatSettingsPanel's Activity section (SettingsPanels.tsx:1396-1398).
-            .init(.general, [G("behavior", "Activity", rows: ["tool-call-visibility"])])
+            .init(.general, [G("behavior", "Activity", rows: ["tool-call-visibility"])]),
+            // Its Screen reader section (SettingsPanels.tsx:1400-1403); CandyWrapper has the window title row only.
+            .init(.general, [G("behavior", "Screen reader", rows: ["screen-reader-window-title"])])
         ]
         case .diffs: return [
             .init(.general, [G("behavior", "Diffs", rows: ["diff-layout", "hide-whitespace-changes", "default-diff-file-state"])]),
@@ -131,6 +133,8 @@ public final class ConcernSettingsView: SettingsPageBase {
             return [.init(.providers, scope: true)]
         case .sourceControl: return [.init(.sourceControl, scope: true, [G("source-control-defaults", nil), G("source-control", nil),
             G("Version Control", nil), G("Source Control Providers", nil), G("Server environment", nil),
+            // `IssueTrackerSettings` after discovery (SourceControlSettings.tsx:658-660).
+            G("issue-trackers", nil),
             G("source-control-text-generation", "Writing", rows: ["source-control-writer-model", "source-control-writing-style"])])]
         default: return []
         }
