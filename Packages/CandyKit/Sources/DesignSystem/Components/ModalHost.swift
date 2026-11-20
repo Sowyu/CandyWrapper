@@ -271,6 +271,12 @@ public final class ModalHost: DSView {
     /// `excluding`: a subview left out, such as an open overlay taking a fresh backdrop. The other subviews draw one by
     /// one at their frames, so the overlay keeps the first responder and never leaves the screen.
     public static func blurredSnapshot(of view: NSView, excluding excluded: NSView? = nil) -> CGImage? {
+        snapshot(of: view, excluding: excluded).flatMap { blurred($0, pointSize: view.bounds.size) }
+    }
+
+    /// The window drawn at half size before the blur. Every view draws into this one context, so a view that leaves
+    /// a `saveGState` unbalanced moves everything drawn after it.
+    static func snapshot(of view: NSView, excluding excluded: NSView? = nil) -> CGImage? {
         let size = view.bounds.size
         guard let half = context(Int(size.width / 2), Int(size.height / 2)) else { return nil }
         half.scaleBy(x: CGFloat(half.width) / max(1, size.width), y: CGFloat(half.height) / max(1, size.height))
@@ -288,7 +294,7 @@ public final class ModalHost: DSView {
         } else {
             view.displayIgnoringOpacity(view.bounds, in: context)
         }
-        return half.makeImage().flatMap { blurred($0, pointSize: size) }
+        return half.makeImage()
     }
 
     /// `image` drawn at a quarter of `pointSize` and blurred with sigma 1.
