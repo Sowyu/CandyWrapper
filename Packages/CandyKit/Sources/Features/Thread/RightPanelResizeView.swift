@@ -6,6 +6,8 @@ import DesignSystem
 final class RightPanelResizeView: DSView {
     var onDrag: ((CGFloat) -> Void)?
     private var previousX: CGFloat = 0
+    /// Redesign's handle fills the gap beside the card, so its line sits in the gap's middle.
+    var centersLine = false { didSet { if centersLine != oldValue { needsLayout = true } } }
     private let line = CALayer()
     private var hovered = false { didSet { if hovered != oldValue { redisplay(transitioning: [.background]) } } }
     private var pressed = false { didSet { if pressed != oldValue { redisplay(transitioning: [.background]) } } }
@@ -21,7 +23,7 @@ final class RightPanelResizeView: DSView {
     override func layout() {
         super.layout()
         // The hover line sits on the handle's left edge (`left-0 -translate-x-1/2`), where the panel border is.
-        line.frame = NSRect(x: 0, y: 0, width: 1, height: bounds.height)
+        line.frame = NSRect(x: centersLine ? ((bounds.width - 1) / 2).rounded() : 0, y: 0, width: 1, height: bounds.height)
     }
 
     override func updateLayer() {
