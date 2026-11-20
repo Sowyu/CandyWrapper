@@ -445,6 +445,21 @@ public actor ConnectionSupervisor {
         try await withTimeout(timeout) { try await self.request(tag, payload: payload) }
     }
 
+    /// A live socket can still carry a message the host never answers, and the liveness checks alone would leave the
+    /// send pending forever, so a message send fails after 60 s (#35076, client-runtime operations/commands.ts
+    /// MESSAGE_DISPATCH_TIMEOUT). Giving up sends `Interrupt`.
+    public static let messageDispatchTimeout: Duration = .seconds(60)
+
+    /// `orchestration.dispatchCommand` for a user message, failing with T3's text after `messageDispatchTimeout`.
+    public func dispatchMessage(_ payload: JSONValue, hostLabel: String, timeout: Duration = messageDispatchTimeout) async throws -> JSONValue {
+        let unconfirmed = RPCClientError.failure([.fail(RPCTypedError(tag: "EnvironmentRpcUnavailableError", fields: [
+            "message": .string("\(hostLabel) did not confirm the message within \(timeout.components.seconds) seconds."),
+        ]))])
+        return try await withTimeout(timeout, error: unconfirmed) {
+            try await self.request("orchestration.dispatchCommand", payload: payload)
+        }
+    }
+
     /// Reads one snapshot, then interrupts the stream. `scheduledTasks.list` was removed in 3814;
     /// its subscription works on older servers too (packages/contracts/src/rpc.ts:1828-1833).
     public func firstSnapshot(_ tag: String, payload: JSONValue = .object([:]), timeout: Duration = .seconds(30)) async throws -> JSONValue {

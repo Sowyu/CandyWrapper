@@ -123,6 +123,25 @@ struct ConnectionRecoveryTests {
         await connection.close()
     }
 
+    /// A message the host never answers fails with T3's text and interrupts the request (#35076).
+    @Test func anUnansweredMessageFailsAfterItsTimeout() async {
+        let h = Harness([.succeed])
+        let s = ConnectionSupervisor(dependencies: h.dependencies)
+        await s.connect()
+        #expect(await eventually { await s.state.phase == .connected })
+        do {
+            _ = try await s.dispatchMessage(.object(["type": .string("message.dispatch")]), hostLabel: "Studio", timeout: .milliseconds(100))
+            Issue.record("no timeout")
+        } catch let error as RPCClientError {
+            #expect(error.typedError?.message == "Studio did not confirm the message within 0 seconds.")
+        } catch {
+            Issue.record("\(error)")
+        }
+        #expect(await eventually { h.lastSocket!.sent.contains { if case .interrupt = $0 { true } else { false } } })
+        #expect(await s.state.phase == .connected)
+        await s.disconnect()
+    }
+
     @Test func socketURLsAskForFrameParts() {
         let http = EnvironmentHTTP(baseURL: URL(string: "http://127.0.0.1:47391")!)
         let url = http.webSocketURL(ticket: "t", identity: ClientIdentity(appVersion: "1"))
