@@ -22,6 +22,19 @@ public enum PopupSurface {
         return NSColor(name: nil) { ThemeRuntime.framesPanes(dark: $0.isDark) ? WindowGlass.resolve(pane, in: $0) : WindowGlass.resolve(solid, in: $0) }
     }
 
+    /// A stock shadow's color, clear under Redesign, which draws `redesignFloating` instead.
+    static func stock(_ color: NSColor) -> NSColor {
+        NSColor(name: nil) { ThemeRuntime.isDither(dark: $0.isDark) ? .clear : WindowGlass.resolve(color, in: $0) }
+    }
+
+    /// Redesign's floating shadow, clear in every other theme.
+    public static var redesignFloating: BoxShadow {
+        var shadow = RedesignTokens.Shadow.floating.box
+        let color = shadow.color
+        shadow.color = NSColor(name: nil) { ThemeRuntime.isDither(dark: $0.isDark) ? WindowGlass.resolve(color, in: $0) : .clear }
+        return shadow
+    }
+
     /// `--popover-foreground` through the contrast layer.
     static var text: NSColor { Themed.color(\.contrastPopoverForeground) }
 
@@ -34,12 +47,13 @@ public enum PopupSurface {
             let stock = Themed.color(\.contrastForeground, 0.1)
             box.border = NSColor(name: nil) { ThemeRuntime.isDither(dark: $0.isDark) ? DitherChrome.rim(dark: $0.isDark) : WindowGlass.resolve(stock, in: $0) }
             if self == .glass {
-                box.shadows = [BoxShadow(y: 16, blur: 40, spread: -18, color: Themed.pick(light: Themed.black(0.55), dark: .clear)),
-                               BoxShadow(y: 18, blur: 44, spread: -18, color: Themed.pick(light: .clear, dark: Themed.black(0.8)))]
+                box.shadows = [BoxShadow(y: 16, blur: 40, spread: -18, color: Self.stock(Themed.pick(light: Themed.black(0.55), dark: .clear))),
+                               BoxShadow(y: 18, blur: 44, spread: -18, color: Self.stock(Themed.pick(light: .clear, dark: Themed.black(0.8))))]
             } else {
-                box.shadows = [BoxShadow(y: 20, blur: 25, spread: -5, color: Themed.black(0.25)),
-                               BoxShadow(y: 8, blur: 10, spread: -6, color: Themed.black(0.25))]
+                box.shadows = [BoxShadow(y: 20, blur: 25, spread: -5, color: Self.stock(Themed.black(0.25))),
+                               BoxShadow(y: 8, blur: 10, spread: -6, color: Self.stock(Themed.black(0.25)))]
             }
+            box.shadows.append(Self.redesignFloating)
         case .opaque, .tooltip:
             box.fill = Themed.color(\.popover)
             box.border = Themed.color(\.contrastBorder)

@@ -284,8 +284,9 @@ public final class ToastView: DSView {
         // --background, which is what it gives over a plain window. Real blur if toasts sit over busy content.
         box.fill = WindowGlass.floating(stock: Themed.color(\.popover).blended(over: Themed.color(\.background), alpha: PopupSurface.dropdownGlassAlpha))
         box.border = Themed.color(\.contrastForeground, 0.1)
-        box.shadows = [BoxShadow(y: 20, blur: 25, spread: -5, color: Themed.black(0.25)),
-                       BoxShadow(y: 8, blur: 10, spread: -6, color: Themed.black(0.25))]
+        box.shadows = [BoxShadow(y: 20, blur: 25, spread: -5, color: PopupSurface.stock(Themed.black(0.25))),
+                       BoxShadow(y: 8, blur: 10, spread: -6, color: PopupSurface.stock(Themed.black(0.25))),
+                       PopupSurface.redesignFloating]
         decoration.boxStyle = box
         titleText.color = Themed.color(\.contrastPopoverForeground)
         messageText.color = Themed.color(\.contrastMutedForeground)

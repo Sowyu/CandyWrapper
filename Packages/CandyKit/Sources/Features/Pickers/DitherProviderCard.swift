@@ -73,7 +73,7 @@ final class DitherProviderCardView: DSView {
         name.lineHeight = 20
         name.smoothsFont = false
         addSubview(name)
-        dot.layer?.cornerRadius = 3.5
+        dot.layer?.cornerRadius = RedesignTokens.Radius.capsule(7)
         dot.toolTip = info.statusText
         addSubview(dot)
         if let onManage {
@@ -97,7 +97,7 @@ final class DitherProviderCardView: DSView {
         if let used = info.used {
             let pair = (CALayer(), CALayer())
             for l in [pair.0, pair.1] {
-                l.cornerRadius = 1.5
+                l.cornerRadius = RedesignTokens.Radius.capsule(3)
                 l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
                 layer?.addSublayer(l)
             }

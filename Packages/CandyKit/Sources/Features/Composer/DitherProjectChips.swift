@@ -37,7 +37,7 @@ public final class DitherChipView: ControlView {
         scalesWhenPressed = false
         for l in [fill, dot] { l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()] }
         fill.cornerRadius = DitherPill.radius
-        dot.cornerRadius = 3
+        dot.cornerRadius = RedesignTokens.Radius.capsule(6)
         layer?.masksToBounds = false
         addSubview(pill)
         layer?.addSublayer(fill)
@@ -108,7 +108,7 @@ public final class DitherChipView: ControlView {
 
     public override func updateLayer() {
         fill.backgroundColor = interactive && state.hoverOrPressed
-            ? (effectiveAppearance.isDark ? Themed.white(0.08) : Themed.black(0.05)).cgColor : nil
+            ? RedesignTokens.State.fill(state, dark: effectiveAppearance.isDark)?.cgColor : nil
         dot.backgroundColor = (online == true ? Themed.color(\.success) : Themed.color(\.secondaryLabel)).cgColor(in: self)
     }
 
@@ -315,14 +315,12 @@ public final class DitherProjectPopoverView: DSView, PopupContent {
         let dark = effectiveAppearance.isDark
         layer?.backgroundColor = Themed.color(\.popover).cgColor(in: self)
         layer?.cornerRadius = DitherChrome.cardRadius
-        layer?.borderWidth = 0.5
-        layer?.borderColor = (dark ? Themed.white(0.08) : Themed.black(0.08)).cgColor
-        // `--sh-overlay`, its widest layer: 0 3 8 /.13 dark, 0 6 18 /.03 light, plus the 1px contact shadow folded in.
-        layer?.shadowColor = Themed.black(1).cgColor
-        layer?.shadowOpacity = dark ? 0.26 : 0.08
-        layer?.shadowRadius = dark ? 6 : 9
-        layer?.shadowOffset = CGSize(width: 0, height: dark ? -3 : -4)
-        for l in hairlines { l.backgroundColor = (dark ? Themed.white(0.08) : Themed.black(0.08)).cgColor }
+        layer?.borderWidth = 1
+        layer?.borderColor = RedesignTokens.Surface.rim(dark: dark).cgColor
+        if let layer {
+            RedesignTokens.Shadow.floating.apply(to: layer, path: SmoothCorners.path(layer.bounds, DitherChrome.cardRadius, flipped: false), dark: dark)
+        }
+        for l in hairlines { l.backgroundColor = RedesignTokens.Surface.rim(dark: dark).cgColor }
     }
 
     public override func viewDidChangeEffectiveAppearance() {
@@ -405,7 +403,7 @@ final class DitherMenuRowView: ControlView {
     }
 
     override func updateLayer() {
-        fill.backgroundColor = highlighted ? (effectiveAppearance.isDark ? Themed.white(0.065) : Themed.black(0.04)).cgColor : nil
+        fill.backgroundColor = highlighted ? RedesignTokens.State.fill(RedesignTokens.State.hover, dark: effectiveAppearance.isDark).cgColor : nil
     }
 
     private func restyle() {

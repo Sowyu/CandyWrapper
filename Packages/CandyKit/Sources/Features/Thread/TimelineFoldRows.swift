@@ -60,6 +60,8 @@ final class TurnFoldRowView: TimelineRowView {
         let tw = ceil(time.textWidth)
         time.frame = NSRect(x: bounds.width - 2 - tw, y: 4 + (TL.relaxed - 16) / 2, width: tw, height: 16)
         let ruleTop = top + (skeleton == nil ? 0 : WorkHistorySkeletonView.height) + 8
+        // Redesign drops the hairline, as under "Working for": the gap alone ends the fold (the user).
+        rule.isHidden = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         rule.frame = NSRect(x: 0, y: ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? ruleTop : TL.snap(ruleTop),
                             width: bounds.width, height: 1)
     }

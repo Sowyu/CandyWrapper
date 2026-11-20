@@ -958,7 +958,7 @@ public final class ComposerView: DSView {
         outline.layer?.cornerRadius = cardRadius
         // Dither: frosted glass, the art blurred through a lighter tint.
         glass.layer?.backgroundColor = ThemeRuntime.isDither(dark: dark)
-            ? Themed.color(dark ? \.surfaceRaised : \.card).cgColor(in: self).copy(alpha: 0.62)
+            ? RedesignTokens.Surface.fill(RedesignTokens.Surface.resting, in: self)
             : Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
         outline.layer?.borderColor = ThemeRuntime.isDither(dark: dark) ? DitherChrome.rim(dark: dark).cgColor
             : (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
@@ -966,9 +966,17 @@ public final class ComposerView: DSView {
         dropHighlight.borderColor = Themed.color(\.primary, 0.7).cgColor(in: self)
         // Classic Glass: depth from the pane's density and its highlight, not a soft drop shadow.
         let frost = WindowGlass.isActive(for: self)
-        shadowLayer.shadowOpacity = dark || frost ? 0 : (modern ? 0.05 : 0.4)
-        shadowLayer.shadowRadius = modern ? 1 : 14
-        shadowLayer.shadowOffset = CGSize(width: 0, height: modern ? 1 : 12)
+        if capy {
+            // Redesign: the resting shadow every surface on the picture shares.
+            let shadow = RedesignTokens.Shadow.resting
+            shadowLayer.shadowOpacity = shadow.opacity(dark: dark)
+            shadowLayer.shadowRadius = shadow.radius
+            shadowLayer.shadowOffset = CGSize(width: 0, height: shadow.y)
+        } else {
+            shadowLayer.shadowOpacity = dark || frost ? 0 : (modern ? 0.05 : 0.4)
+            shadowLayer.shadowRadius = modern ? 1 : 14
+            shadowLayer.shadowOffset = CGSize(width: 0, height: modern ? 1 : 12)
+        }
         glassEdge = WindowGlass.syncEdge(glassEdge, on: glass.layer, in: self, radius: cardRadius, edge: false)
         CATransaction.commit()
     }
@@ -984,7 +992,7 @@ public final class ComposerView: DSView {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         shadowLayer.frame = box
         // Spread -18: the shadow shape is the box inset by 18.
-        let spread: CGFloat = modern ? 0 : 18
+        let spread: CGFloat = modern || capy ? 0 : 18
         let shadowBox = box.insetBy(dx: spread, dy: spread), shadowRadius = max(0, cardRadius - spread)
         shadowLayer.shadowPath = capy ? SmoothCorners.path(shadowBox, shadowRadius, flipped: false)
             : CGPath(roundedRect: shadowBox, cornerWidth: shadowRadius, cornerHeight: shadowRadius, transform: nil)

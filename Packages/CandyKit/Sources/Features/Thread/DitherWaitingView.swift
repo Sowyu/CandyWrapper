@@ -48,7 +48,7 @@ public final class DitherWaitingView: ControlView {
         addSubview(label)
         addSubview(grid)
         for d in dots {
-            d.cornerRadius = Self.dot / 2
+            d.cornerRadius = RedesignTokens.Radius.capsule(Self.dot)
             d.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull()]
             grid.layer?.addSublayer(d)
         }

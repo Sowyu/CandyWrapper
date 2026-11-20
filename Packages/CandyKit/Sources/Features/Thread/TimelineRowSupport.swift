@@ -436,8 +436,13 @@ final class FillView: DSView {
     /// A frosted pane under classic Glass (a user bubble): edge and highlight even without a border.
     var pane = false { didSet { needsDisplay = true } }
     private var paneEdge: GlassEdgeLayer?
-    /// Dither: a pane over the art frosts it.
-    private var paneBlur: BackdropBlurView?
+    /// Redesign: a card on the reading column (`RedesignTokens.Card`) in place of `fill` and `border`.
+    var redesignCard = false { didSet { if redesignCard != oldValue { needsDisplay = true } } }
+    private var showsCard: Bool {
+        redesignCard && fill != nil && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+    }
+    private var shownFill: NSColor? { showsCard ? RedesignTokens.Card.fill : fill }
+    private var shownBorder: NSColor? { showsCard ? RedesignTokens.Card.border : border }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -483,12 +488,20 @@ final class FillView: DSView {
         layer.cornerRadius = 0
         let shape = joinedFill ?? CAShapeLayer()
         if joinedFill == nil { layer.insertSublayer(shape, at: 0); joinedFill = shape }
-        let r = drawnRadius, j = min(r, joinedRadius)
+        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        let r = drawnRadius, j = min(r, dither ? RedesignTokens.Radius.joined : joinedRadius)
         shape.frame = layer.bounds
-        shape.fillColor = fill?.cgColor(in: self)
-        shape.path = Self.roundedPath(layer.bounds, topLeft: r, topRight: joinedTop ? j : r,
+        shape.fillColor = shownFill?.cgColor(in: self)
+        // The border follows the shape too; the layer's own would draw square corners. Inset half a point so the stroke
+        // stays inside the bounds, as a layer border does.
+        let stroke = shownBorder
+        shape.strokeColor = stroke?.cgColor(in: self)
+        shape.lineWidth = stroke == nil ? 0 : 1
+        let rect = stroke == nil ? layer.bounds : layer.bounds.insetBy(dx: 0.5, dy: 0.5)
+        shape.path = Self.roundedPath(rect, topLeft: r, topRight: joinedTop ? j : r,
                                       bottomRight: joinedBottom ? j : r, bottomLeft: r, flipped: isFlipped)
         layer.backgroundColor = nil
+        layer.borderWidth = 0
     }
 
     /// A rectangle with its own radius per visual corner; `flipped` puts the top at `minY`.
@@ -510,16 +523,15 @@ final class FillView: DSView {
     }
 
     override func updateLayer() {
-        layer?.backgroundColor = fill?.cgColor(in: self)
-        layer?.borderColor = border?.cgColor(in: self)
-        layer?.borderWidth = border == nil ? 0 : 1
+        layer?.backgroundColor = shownFill?.cgColor(in: self)
+        layer?.borderColor = shownBorder?.cgColor(in: self)
+        layer?.borderWidth = shownBorder == nil || joinedTop || joinedBottom ? 0 : 1
         let radius = drawnRadius
         layer?.cornerRadius = radius
         if joinedTop || joinedBottom || joinedFill != nil { syncJoinedFill() }
         // ponytail: the Glass edge and blur keep the full radius on a joined corner; shape them too if Glass bursts look off
         paneEdge = WindowGlass.syncEdge(paneEdge, on: layer, in: self, radius: radius, edge: border == nil,
                                         show: fill != nil && (pane || border != nil))
-        if pane { paneBlur = WindowGlass.syncBubbleBlur(paneBlur, in: self, radius: radius) } else { paneBlur?.removeFromSuperview(); paneBlur = nil }
     }
 }
 

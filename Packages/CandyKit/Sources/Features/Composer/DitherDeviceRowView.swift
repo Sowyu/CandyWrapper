@@ -43,7 +43,7 @@ public final class DitherDeviceRowView: ControlView {
         scalesWhenPressed = false
         for l in [fill, dot] { l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()] }
         fill.cornerRadius = DitherPill.radius
-        dot.cornerRadius = 3
+        dot.cornerRadius = RedesignTokens.Radius.capsule(6)
         layer?.masksToBounds = false
         addSubview(pill)
         layer?.addSublayer(fill)
@@ -99,7 +99,7 @@ public final class DitherDeviceRowView: ControlView {
     }
 
     public override func updateLayer() {
-        fill.backgroundColor = state.hoverOrPressed ? (effectiveAppearance.isDark ? Themed.white(0.08) : Themed.black(0.05)).cgColor : nil
+        fill.backgroundColor = state.hoverOrPressed ? RedesignTokens.State.fill(state, dark: effectiveAppearance.isDark)?.cgColor : nil
         dot.backgroundColor = Themed.color(\.secondaryLabel).cgColor(in: self)
     }
 

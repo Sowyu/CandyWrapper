@@ -1402,10 +1402,14 @@ private struct Builder {
         let frame = CGRect(x: 0, y: 0, width: width, height: height)
         // Light: 1px border at 70% on --secondary. Dark: a transparent border on --input at 32%.
         // Classic Glass: a dense pane, so code reads as on a solid card.
-        box.items.append(.box(frame, fill: WindowGlass.pick(stock: Themed.color(light: \.secondary, 1, dark: \.input, 0.32),
-                                                            frost: WindowGlass.denseFill),
-                              border: WindowGlass.pick(stock: Themed.color(light: \.border, 0.7, dark: \.border, 0), frost: WindowGlass.edge),
-                              radius: ThreadDesign.uses3814 ? 8 : 10))
+        if ThreadDesign.redesign {
+            box.items.append(.box(frame, fill: RedesignTokens.Card.fill, border: RedesignTokens.Card.border, radius: RedesignTokens.Card.radius))
+        } else {
+            box.items.append(.box(frame, fill: WindowGlass.pick(stock: Themed.color(light: \.secondary, 1, dark: \.input, 0.32),
+                                                                frost: WindowGlass.denseFill),
+                                  border: WindowGlass.pick(stock: Themed.color(light: \.border, 0.7, dark: \.border, 0), frost: WindowGlass.edge),
+                                  radius: ThreadDesign.uses3814 ? 8 : 10))
+        }
         // Header: `pt-1.5 pr-1.5 pl-3`, the 24px buttons set its height; title 11px mono at 72% foreground.
         // `MarkdownCodeBlockTitleContent` (ChatMarkdown.tsx:801-840): a fence title shows its file icon and the title; a bare
         // language shows only the icon of a file in that language (`syntheticFileNameForLanguageId`, pierre-icons.ts:123-169),
@@ -1603,8 +1607,12 @@ private struct Builder {
         box.items.insert(.scroll(codeIndex: -index - 1, viewport: viewport, contentWidth: tableWidth), at: 0)
         box.items.append(.endClip)
         // Classic Glass sets the table on a dense pane, below the faded content.
-        box.items.insert(.box(viewport, fill: WindowGlass.pick(stock: .clear, frost: WindowGlass.denseFill),
-                              border: WindowGlass.pick(stock: .clear, frost: WindowGlass.edge), radius: 8), at: 0)
+        if ThreadDesign.redesign {
+            box.items.insert(.box(viewport, fill: RedesignTokens.Card.fill, border: RedesignTokens.Card.border, radius: RedesignTokens.Card.radius), at: 0)
+        } else {
+            box.items.insert(.box(viewport, fill: WindowGlass.pick(stock: .clear, frost: WindowGlass.denseFill),
+                                  border: WindowGlass.pick(stock: .clear, frost: WindowGlass.edge), radius: 8), at: 0)
+        }
         y = viewport.maxY
         // Nightly 3824 wraps cells directly and keeps only Copy (MarkdownTable.tsx:29-34, #26449), Redesign too.
         // Glass retains its table controls.
@@ -1670,7 +1678,9 @@ extension MarkdownLayout {
     /// A cell's `0.75rem` side padding, without the first column's leading or the last column's trailing
     /// side (`:is(th, td):first-child` and `:last-child`, index.css:2146-2152).
     static func tableCellPadding(_ column: Int, of columns: Int) -> (lead: CGFloat, total: CGFloat) {
-        let lead: CGFloat = column == 0 ? 0 : 12, trail: CGFloat = column == columns - 1 ? 0 : 12
+        // Redesign's table sits on a card, so its outer cells keep the card's inset from its edge too.
+        let edge: CGFloat = ThreadDesign.redesign ? RedesignTokens.Space.m : 0
+        let lead: CGFloat = column == 0 ? edge : 12, trail: CGFloat = column == columns - 1 ? edge : 12
         return (lead, lead + trail)
     }
 
