@@ -73,12 +73,38 @@ struct Nightly4928WireTests {
         let sent = [Self.json(#"{"type":"once","runAt":"2026-11-20T09:30:00+01:00"}"#), Self.json(#"{"type":"lunar","phase":"full"}"#)]
         for (t, expected) in zip(tasks, sent) {
             let draft = ScheduledTaskLogic.draft(t)
-            #expect(draft.scheduleMode == .kept)
+            #expect(draft.scheduleMode == (t.schedule == .once(runAt: "2026-11-20T09:30:00+01:00") ? .once : .kept))
             let input = try ScheduledTaskLogic.upsertInput(draft, projectId: "p1", projectExists: true,
                                                            selection: ("codex", "gpt"), storedSecret: false).get()
             #expect(input["schedule"] == expected)
             #expect(input["threadMode"] == nil)
         }
+    }
+
+    /// The Once editor (scheduledTasksSettings.logic.ts:163-181, 244-260): local `datetime-local` values,
+    /// the saved instant kept while its clock time is unchanged, and T3's run time errors.
+    @Test func onceDraftsEditTheRunTime() throws {
+        var berlin = Calendar(identifier: .gregorian)
+        berlin.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        var d = ScheduledTaskDraft()
+        d.scheduleMode = .once
+        d.savedRunAt = "2026-11-20T09:30:00+01:00"
+        d.runAt = "2026-11-20T09:30"
+        #expect(ScheduledTaskLogic.onceRunAt(d, calendar: berlin) == "2026-11-20T09:30:00+01:00")
+        d.runAt = "2026-11-21T10:15"
+        #expect(ScheduledTaskLogic.onceRunAt(d, calendar: berlin) == "2026-11-21T09:15:00.000Z")
+        d.runAt = "2026-11-21T"
+        #expect(ScheduledTaskLogic.onceError(d, calendar: berlin) == "Pick a date and time.")
+        // 02:30 on 29 March 2026 doesn't exist in Berlin.
+        d.runAt = "2026-03-29T02:30"
+        #expect(ScheduledTaskLogic.onceError(d, calendar: berlin) == "That time does not exist in your time zone.")
+        #expect(ScheduledTaskLogic.dateTimeLocal(Date(timeIntervalSince1970: 0), calendar: berlin) == "1970-01-01T01:00")
+        #expect(ScheduledTaskLogic.suggestedRunAt(now: Date(timeIntervalSince1970: 3601)).timeIntervalSince1970 == 7200)
+        d.runAt = ""
+        d.title = "T"; d.prompt = "P"
+        if case .failure(let e) = ScheduledTaskLogic.upsertInput(d, projectId: "p", projectExists: true, selection: ("c", "m"), storedSecret: false) {
+            #expect(e.copy.title == "Invalid run time")
+        } else { Issue.record("an empty run time must not save") }
     }
 
     /// Section 5: closed enums now keep values a newer server sends.

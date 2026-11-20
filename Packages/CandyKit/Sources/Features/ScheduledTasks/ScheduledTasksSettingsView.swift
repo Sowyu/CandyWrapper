@@ -578,14 +578,23 @@ final class ScheduledTaskFormView: DSView {
         if case .interval(let ms) = e.task?.schedule, ms < ScheduledTaskLogic.minIntervalMs {
             rows.append(text("This task uses a legacy interval below one minute. Saving updates it to at least one minute.", color: Themed.color(\.mutedForeground)))
         }
-        let scheduleModes: [ScheduledTaskDraft.ScheduleMode] = [.fixed, .interval, .webhook]
-        let toggle = ToggleGroupView(variant: .segmented, items: [("At a time", nil), ("Every interval", nil), ("On webhook", nil)],
+        // Older servers reject one-time schedules, so Once shows only where it can save (ScheduledTasksSettings.tsx:1473-1476, 1997-2001).
+        let offersOnce = e.context.configs[e.environmentId]?.capabilities.contains("oneTimeSchedules") == true || d.scheduleMode == .once
+        let scheduleModes: [ScheduledTaskDraft.ScheduleMode] = offersOnce ? [.fixed, .once, .interval, .webhook] : [.fixed, .interval, .webhook]
+        let names: [ScheduledTaskDraft.ScheduleMode: String] = [.fixed: "At a time", .once: "Once", .interval: "Every interval", .webhook: "On webhook"]
+        let toggle = ToggleGroupView(variant: .segmented, items: scheduleModes.map { (names[$0]!, nil) },
                                      selected: scheduleModes.firstIndex(of: d.scheduleMode))
         toggle.setAccessibilityLabel("Schedule type")
         toggle.onChange = { [weak e, weak toggle] i in
             guard let e else { return }
             guard let i else { toggle?.selectedIndex = scheduleModes.firstIndex(of: e.draft.scheduleMode); return }
             e.draft.scheduleMode = scheduleModes[i]
+            // Once starts at the next whole hour, kept as an instant too (ScheduledTasksSettings.tsx:1972-1985).
+            if scheduleModes[i] == .once, e.draft.runAt.isEmpty {
+                let suggested = ScheduledTaskLogic.suggestedRunAt()
+                e.draft.runAt = ScheduledTaskLogic.dateTimeLocal(suggested)
+                e.draft.savedRunAt = ScheduledTaskLogic.isoString(suggested)
+            }
             if scheduleModes[i] == .webhook, e.draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 e.draft.prompt = ScheduledTaskLogic.defaultWebhookPrompt
             }
@@ -645,8 +654,13 @@ final class ScheduledTaskFormView: DSView {
             let timeRow = ScheduledTaskInlineRow([runAt, ScheduledTaskSized(time, width: 128), on, days], trailing: [])
             timeRow.gapAfter = [2: 12]
             rows.append((timeRow, 32))
+        case .once:
+            // `Run on` and a `datetime-local` field, `w-56` (ScheduledTasksSettings.tsx:2210-2224).
+            let runOn = LabelView("Run on", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.contrastForeground))
+            runOn.lineHeight = 16
+            let picker = ScheduledTaskRunOnField(value: d.runAt) { [weak e] v in e?.draft.runAt = v }
+            rows.append((ScheduledTaskInlineRow([runOn, ScheduledTaskSized(picker, width: 224)], trailing: []), 32))
         case .kept:
-            // ponytail: no date picker for `once` yet, add one with T3's datetime-local field when the editor gets it
             let label = e.task.map { ScheduledTaskLogic.scheduleLabel($0.schedule) } ?? "Custom schedule"
             rows.append(text("\(label). Pick a schedule type to replace it.", color: Themed.color(\.mutedForeground)))
         case .interval:
@@ -790,6 +804,76 @@ final class ScheduledTaskPairView: DSView {
 }
 
 /// A fixed-width control in an inline row.
+/// The `datetime-local` field of `Once`: a date button that opens the calendar, then the `HH:MM` time.
+/// `onChange` gets the local `YYYY-MM-DDTHH:MM`, or a partial value that fails `onceError` on save.
+final class ScheduledTaskRunOnField: DSView {
+    private let dateButton = ButtonView("Pick a date", icon: .calendar, variant: .outline, size: .sm)
+    private let time = InputView(placeholder: "09:00")
+    private var day: DateComponents?
+    private let onChange: (String) -> Void
+    private var calendarPopup: OpenPopup?
+
+    init(value: String, onChange: @escaping (String) -> Void) {
+        self.onChange = onChange
+        super.init(frame: .zero)
+        if let date = ScheduledTaskLogic.parseDateTimeLocal(value) {
+            day = Calendar.current.dateComponents([.year, .month, .day], from: date)
+            time.text = String(value.suffix(5))
+        }
+        dateButton.setAccessibilityLabel("Run date")
+        time.setAccessibilityLabel("Run time")
+        dateButton.action = { [weak self] in self?.toggleCalendar() }
+        time.onChange = { [weak self] _ in self?.emit() }
+        updateTitle()
+        [dateButton, time].forEach(addSubview)
+    }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: 224, height: 32) }
+
+    private func updateTitle() {
+        guard let day, let date = Calendar.current.date(from: day) else { dateButton.title = "Pick a date"; return }
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("yMMMd")
+        dateButton.title = f.string(from: date)
+    }
+
+    private func emit() {
+        let t = time.text.trimmingCharacters(in: .whitespaces)
+        let hm = t.split(separator: ":").compactMap { Int($0) }
+        let clock = hm.count == 2 ? String(format: "%02d:%02d", hm[0], hm[1]) : t
+        guard let day else { return onChange("") }
+        onChange(String(format: "%04d-%02d-%02dT", day.year ?? 0, day.month ?? 0, day.day ?? 0) + clock)
+    }
+
+    private func toggleCalendar() {
+        if let calendarPopup, let host = dateButton.popupHost, host.popups.contains(where: { $0 === calendarPopup }) {
+            host.close(calendarPopup)
+            return
+        }
+        let today = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        let shown = day ?? today
+        let calendar = CalendarView(month: DateComponents(year: shown.year, month: shown.month), selected: day, today: today)
+        let start = Calendar.current.startOfDay(for: Date())
+        calendar.isDisabled = { parts in Calendar.current.date(from: parts).map { $0 < start } ?? true }
+        calendar.onSelect = { [weak self] parts in
+            guard let self else { return }
+            self.day = parts
+            self.updateTitle()
+            self.emit()
+            if let popup = self.calendarPopup { self.dateButton.popupHost?.close(popup) }
+        }
+        calendar.setAccessibilityLabel("Choose run date")
+        calendarPopup = PopoverView(content: calendar).show(from: dateButton, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4))
+    }
+
+    override func layout() {
+        super.layout()
+        let tw: CGFloat = 80
+        time.frame = NSRect(x: bounds.width - tw, y: 0, width: tw, height: bounds.height)
+        dateButton.frame = NSRect(x: 0, y: 0, width: bounds.width - tw - 8, height: bounds.height)
+    }
+}
+
 final class ScheduledTaskSized: DSView {
     let content: NSView
     let width: CGFloat
