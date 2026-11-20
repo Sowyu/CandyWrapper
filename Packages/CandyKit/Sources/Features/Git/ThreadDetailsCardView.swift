@@ -697,6 +697,8 @@ public final class ThreadDetailsCardView: DSView {
     private var scriptsView: NSView? { !scripts.isHidden ? scripts : !addScript.isHidden ? addScript : nil }
 
     private func updateRows() {
+        lineage.showsLineagePart = on("lineage")
+        lineage.showsSideChats = on("sideChats")
         runContext.isHidden = density != .full || relationsOnly || !on("environment")
         openIn.isHidden = !showsOpenIn || density == .essential || relationsOnly || !on("openIn")
         branch.isHidden = !showsVersionControl || !isRepo || relationsOnly || !on("branch")
@@ -767,7 +769,7 @@ public final class ThreadDetailsCardView: DSView {
         let sections = (showsUsage ? usage.preferredHeight : 0) + (showsContext ? context.preferredHeight : 0)
         return sections == 0 && above <= 2 ? 8 + 32 + 8 : sections
     }
-    private var showsLineage: Bool { !lineage.isEmpty && on("lineage") }
+    private var showsLineage: Bool { !lineage.isEmpty }
 
     /// The box's 22pt radius less its 1pt border.
     static let innerRadius: CGFloat = 21

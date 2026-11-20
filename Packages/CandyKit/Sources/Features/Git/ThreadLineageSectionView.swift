@@ -394,7 +394,16 @@ public final class ThreadLineageSectionView: DSView {
     /// Each item's view and height, and how far it sits in (`ps-6.5` under an open workflow).
     private var layoutItems: [(view: NSView, height: CGFloat, indent: CGFloat)] = []
 
-    public var isEmpty: Bool { lineage.isEmpty }
+    /// The card's Lineage and Side chats items (`showLineage`, `showSideChats`).
+    public var showsLineagePart = true { didSet { if showsLineagePart != oldValue { rebuild() } } }
+    public var showsSideChats = true { didSet { if showsSideChats != oldValue { rebuild() } } }
+    /// Disconnect lives in the Lineage heading, so a thread with only side chats still shows it (:660-671).
+    private var lineageVisible: Bool { showsLineagePart && (!lineage.isEmpty || (lineage.canDetach && !lineage.sideChats.isEmpty)) }
+    private var sideChatsVisible: Bool { showsSideChats && !lineage.sideChats.isEmpty }
+    /// The Side chats section's divider and heading when it follows Lineage.
+    private let sideHead = ThreadLineageSideHeadView()
+
+    public var isEmpty: Bool { !lineageVisible && !sideChatsVisible }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -436,8 +445,8 @@ public final class ThreadLineageSectionView: DSView {
         phaseAccessories = []
         let turning = turningWorkflow
         turningWorkflow = nil
-        heading.text = lineage.title
-        more.isHidden = !lineage.canDetach
+        heading.text = lineageVisible ? lineage.title : lineage.sideChatsTitle
+        more.isHidden = !lineage.canDetach || !lineageVisible
         more.isEnabled = busy != .merge && busy != .detach
         let nowMs = TimestampFormat.nowMs()
         let canMerge = lineage.mergeTarget != nil && lineage.mergeRunId != nil
@@ -493,15 +502,28 @@ public final class ThreadLineageSectionView: DSView {
                 layoutItems.append((b, 32, 0))
             }
         }
-        add("related", lineage.related)
-        add("active", lineage.active)
+        let showLineage = lineageVisible
+        if showLineage {
+            add("related", lineage.related)
+            add("active", lineage.active)
+        }
         let modern = ThreadDesign.uses3814(dark: effectiveAppearance.isDark)
-        previousHeader.isHidden = lineage.previous.isEmpty || modern
-        previousRow.isHidden = lineage.previous.isEmpty || !modern
-        if !lineage.previous.isEmpty {
+        let previous = showLineage ? lineage.previous : []
+        previousHeader.isHidden = previous.isEmpty || modern
+        previousRow.isHidden = previous.isEmpty || !modern
+        if !previous.isEmpty {
             updatePreviousHeader()
             layoutItems.append((modern ? previousRow : previousHeader, 32, 0))
-            if previousExpanded { add("previous", lineage.previous) }
+            if previousExpanded { add("previous", previous) }
+        }
+        sideHead.isHidden = !(showLineage && sideChatsVisible)
+        if sideChatsVisible {
+            if showLineage {
+                if sideHead.superview == nil { addSubview(sideHead) }
+                sideHead.title.text = lineage.sideChatsTitle
+                layoutItems.append((sideHead, ThreadLineageSideHeadView.height, 0))
+            }
+            add("sideChats", lineage.sideChats)
         }
         for (group, rowList) in lists where !shownLists.contains(group) {
             rowList.removeFromSuperview()
@@ -601,7 +623,8 @@ public final class ThreadLineageSectionView: DSView {
         more.frame = NSRect(x: bounds.width - 8 - 6 - 24, y: 1 + 8 + 4, width: 24, height: 24)
         var y: CGFloat = 1 + 8 + 32 + 4
         for (v, h, indent) in layoutItems {
-            v.frame = NSRect(x: 8 + indent, y: y, width: inner - indent, height: h)
+            // The second section's rule spans the card like the first one's.
+            v.frame = v === sideHead ? NSRect(x: 0, y: y, width: bounds.width, height: h) : NSRect(x: 8 + indent, y: y, width: inner - indent, height: h)
             y += h
         }
     }
@@ -609,6 +632,7 @@ public final class ThreadLineageSectionView: DSView {
     private func restyle() {
         if !lineage.previous.isEmpty { updatePreviousHeader() }
         heading.color = Themed.color(\.contrastMutedForeground)
+        sideHead.title.color = heading.color
         counts.failed.color = Themed.color(\.destructiveForeground)
         needsDisplay = true
     }
@@ -616,6 +640,31 @@ public final class ThreadLineageSectionView: DSView {
     public override var wantsUpdateLayer: Bool { true }
     public override func updateLayer() { divider.backgroundColor = Themed.color(\.contrastBorder, 0.65).cgColor(in: self) }
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
+}
+
+/// A second `ThreadDetailsSection` after Lineage: the first section's 10pt bottom, its rule, then the same 8pt gap,
+/// 32pt heading and 4pt under it (ThreadRelationshipsControl.tsx:1104-1122).
+final class ThreadLineageSideHeadView: DSView {
+    static let height: CGFloat = 10 + 1 + 8 + 32 + 4
+    let title = LabelView("Side chats", font: DSFont.ui(11, weight: .medium))
+    private let rule = CALayer()
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        rule.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        layer?.addSublayer(rule)
+        title.lineHeight = 16
+        addSubview(title)
+        setAccessibilityRole(.group)
+        setAccessibilityLabel("Side chats")
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    override func layout() {
+        super.layout()
+        rule.frame = CGRect(x: 0, y: 10, width: bounds.width, height: 1)
+        title.frame = NSRect(x: 8 + (ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 10 : 6), y: 10 + 1 + 8 + 8, width: max(0, bounds.width - 16 - 40), height: 16)
+    }
+    override var wantsUpdateLayer: Bool { true }
+    override func updateLayer() { rule.backgroundColor = Themed.color(\.contrastBorder, 0.65).cgColor(in: self) }
 }
 
 /// "Show N more" (`ThreadLineageRowList`, :103-112): a 32pt row, plus icon, `text-sm font-medium

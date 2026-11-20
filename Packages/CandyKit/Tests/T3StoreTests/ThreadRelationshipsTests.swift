@@ -186,6 +186,17 @@ import Testing
         #expect(l.title == "Lineage · 2 running")
     }
 
+    /// Side chats leave Lineage for their own section (4928 ThreadRelationshipsControl.tsx:620-630, 1104-1122).
+    @Test func sideChatsGetTheirOwnSection() {
+        let p = projection("me")
+        var side = child("s1", of: "me", .fork, status: .running)
+        side.lineage.sideChat = true
+        let l = ThreadRelationships.lineage(threadId: "me", threads: [thread("me"), side, child("f1", of: "me", .fork, status: .idle)], projection: p)
+        #expect(l.related.map(\.threadId) == ["f1"])
+        #expect(l.sideChats.map(\.threadId) == ["s1"])
+        #expect(l.sideChatsTitle == "Side chats · 1 running")
+    }
+
     /// A provider-native parent shows its own status from its projection unless it has a live run (3473,
     /// ThreadRelationshipsControl.tsx:440-443).
     @Test func aNativeParentRowShowsItsOwnStatus() {

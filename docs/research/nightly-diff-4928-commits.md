@@ -526,7 +526,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 50c1c5dc53 | #26901 | browser | feat: side chats beside the main thread | port |
+| 50c1c5dc53 | #26901 | browser | feat: side chats beside the main thread | port. Partly: the thread details card lists a thread's side chats in their own Side chats section behind its item toggle (thread-2, ThreadRelationships `sideChats`, ThreadLineageSectionView); the side chat pane is left |
 | b5c83cdb95 | #28326 | thread | Show the full title in lineage/side-chat row tooltips | port |
 | 171f78b879 | #29917 | thread | fix(client): project removal counts only listed threads, not side chats or subagents | port |
 | 12ec17ce4c | #29891 | thread | fix(web): opening a project from the command palette no longer lands in a subagent or side chat | port |
