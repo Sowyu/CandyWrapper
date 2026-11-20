@@ -2,7 +2,7 @@
 //
 // Usage: swift record.swift <baseURL> <tokenFile> <outFile> <scenario> [pairingToken]
 //   tokenFile   bearer token cache for this (sandbox) server; created on first pairing.
-//   scenario    basic | turn | turn2 | threads | composer | requests | queue | git | settings | issues
+//   scenario    basic | turn | turn2 | threads | composer | requests | queue | git | settings | issues | side-chat
 // Secrets (access token, ws ticket, pairing token) and the account email are
 // redacted when the transcript is written.
 import Foundation
@@ -675,6 +675,63 @@ case "issues":
         try await request("issues.candidates", ["projectId": project, "tracker": "github", "scope": "acme/demo-repo"])
     }
     await pause(2)
+
+case "side-chat":
+    // A 4928 side chat (useSideChat.ts, commands.ts:1100-1115): fork the thread titled CANDY_SIDE_CHAT_PARENT, one
+    // tiny turn there, Bring back (`thread.merge_back`), then a second, empty fork that `onlyIfUnused` deletes.
+    let parentTitle = ProcessInfo.processInfo.environment["CANDY_SIDE_CHAT_PARENT"] ?? "Run Shell Commands"
+    try await request("server.getConfig")
+    try await request("orchestration.subscribeShell", ["requestCompletionMarker": true])
+    await pause(3)
+    func find(_ any: Any, _ match: ([String: Any]) -> Bool) -> [String: Any]? {
+        if let d = any as? [String: Any] { if match(d) { return d }; for v in d.values { if let f = find(v, match) { return f } } }
+        if let a = any as? [Any] { for v in a { if let f = find(v, match) { return f } } }
+        return nil
+    }
+    guard let parent = find(await state.snapshot(), { $0["title"] as? String == parentTitle && $0["lineage"] != nil })?["id"] as? String else {
+        print("no thread titled \(parentTitle) in \(await state.snapshot().count) stream items"); flush(); exit(2)
+    }
+    let side = uuid()
+    try await request("orchestration.dispatchCommand", [
+        "type": "thread.fork", "commandId": uuid(), "createdBy": "user", "creationSource": "web", "sourceThreadId": parent,
+        "targetThreadId": side, "sourcePoint": ["type": "latest_stable"], "sideChat": true, "title": "Side chat",
+    ])
+    await pause(3)
+    let shell = find(await state.snapshot(), { $0["id"] as? String == side && $0["lineage"] != nil })
+    print("side chat shell:", shell.map { "lineage \(($0["lineage"] as? [String: Any]) ?? [:])" } ?? "missing")
+    try await request("orchestration.subscribeThread", ["threadId": side, "requestCompletionMarker": true,
+                                                        "acceptBoundedSnapshot": true, "acceptCompactTurnItems": true])
+    await pause(1)
+    try await request("orchestration.dispatchCommand", [
+        "type": "message.dispatch", "createdBy": "user", "creationSource": "web", "commandId": uuid(), "threadId": side,
+        "messageId": uuid(), "text": "Reply with just: ok", "attachments": [] as [Any],
+        "dispatchMode": ["type": "start_immediately"], "deliveryIntent": "auto",
+        "modelSelection": ["instanceId": "claudeAgent", "model": "claude-haiku-5-5"],
+    ])
+    let done = await waitFor("side chat turn", timeout: 180, { e in
+        (e["type"] as? String) == "run.updated" && ["completed", "failed", "interrupted"].contains(payload(e)["status"] as? String ?? "")
+    })
+    print("side chat run:", done.map { payload($0)["status"] ?? "?" } ?? "none")
+    if let run = done.flatMap({ payload($0)["id"] as? String }) {
+        try await request("orchestration.dispatchCommand", [
+            "type": "thread.merge_back", "commandId": uuid(), "createdBy": "user", "creationSource": "web",
+            "sourceThreadId": side, "targetThreadId": parent, "sourcePoint": ["type": "run", "runId": run],
+        ])
+    }
+    let empty = uuid()
+    try await request("orchestration.dispatchCommand", [
+        "type": "thread.fork", "commandId": uuid(), "createdBy": "user", "creationSource": "web", "sourceThreadId": parent,
+        "targetThreadId": empty, "sourcePoint": ["type": "latest_stable"], "sideChat": true, "title": "Side chat",
+    ])
+    await pause(2)
+    let discard = try await request("orchestration.dispatchCommand", ["type": "thread.delete", "commandId": uuid(), "threadId": empty, "onlyIfUnused": true])
+    let keep = try await request("orchestration.dispatchCommand", ["type": "thread.delete", "commandId": uuid(), "threadId": side, "onlyIfUnused": true])
+    await pause(3)
+    print("discard empty:", await state.exit(discard).map { "\($0["exit"] ?? $0)" } ?? "none")
+    print("discard used:", await state.exit(keep).map { "\($0["exit"] ?? $0)" } ?? "none")
+    let after = await state.snapshot()
+    print("empty fork deleted:", find(after, { ($0["type"] as? String) == "thread.deleted" && "\($0)".contains(empty) }) != nil)
+    print("used fork deleted:", find(after, { ($0["type"] as? String) == "thread.deleted" && "\($0)".contains(side) }) != nil)
 
 default:
     print("unknown scenario"); exit(2)

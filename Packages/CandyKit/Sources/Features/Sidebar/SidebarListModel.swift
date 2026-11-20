@@ -297,8 +297,9 @@ public struct SidebarListState: Equatable, Sendable {
         return keys.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && seen.insert($0).inserted }
     }
 
+    /// An archived project is no filter choice, so its scope reads as all projects (Sidebar.tsx at 4928, #26154).
     func scopeGroups(_ groups: [SidebarModel.ProjectGroup]) -> [SidebarModel.ProjectGroup] {
-        groups.filter { projectScopeKeys.contains($0.key) }
+        groups.filter { projectScopeKeys.contains($0.key) && !$0.archived }
     }
     /// Drafts to show, the open one already frozen (see `SidebarContentView.setDrafts`).
     public var drafts: [SidebarDraft] = []
@@ -569,12 +570,15 @@ public enum SidebarListBuilder {
     /// while you filter to it, so it can start one (T3 3824 #26387, Sidebar.logic.ts:920-948, Sidebar.tsx:1283).
     static func folderSections(_ threads: [SidebarThread], ctx: Context, state: SidebarListState,
                                row: (SidebarThread) -> SidebarItem) -> [SidebarItem] {
-        let groups = SidebarModel.sortProjectGroups(ctx.groups, projects: ctx.projects, threads: ctx.threadShells,
+        let sorted = SidebarModel.sortProjectGroups(ctx.groups, projects: ctx.projects, threads: ctx.threadShells,
                                                      order: state.projectSortOrder, preferred: state.projectOrder)
+        // Pinned projects lead; an archived project keeps a folder for its active threads, below the rest (#26154).
+        let groups = ProjectOrganization.pickable(sorted) + sorted.filter(\.archived)
         let byGroup = Dictionary(grouping: threads, by: { ctx.groupByProject[$0.shell.projectId]?.key ?? "" })
         return groups.filter { group in ctx.scopedIds.map { !$0.isDisjoint(with: group.memberProjectIds) } ?? true }.flatMap { group -> [SidebarItem] in
             let list = byGroup[group.key] ?? []
-            if list.isEmpty, ctx.scopedIds == nil { return [] }
+            // A pinned open project keeps its folder so it can start a thread (`keepEmptyFolders`, #26154).
+            if list.isEmpty, ctx.scopedIds == nil, !(group.pinned && !group.archived) { return [] }
             let expanded = !state.collapsedProjects.contains(group.key)
             let hidden = expanded ? [] : list.filter { $0.id != state.activeThreadId }
             var header = SidebarProjectHeaderModel(key: group.key, label: group.label,

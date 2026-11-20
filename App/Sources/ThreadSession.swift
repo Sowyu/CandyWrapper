@@ -403,6 +403,7 @@ final class ThreadController {
     private(set) var automations: ThreadAutomationsController!
     private var checkoutStatus: SidebarCheckoutStatus!
     private(set) var lineage: ThreadLineageController!
+    private(set) var sideChats: SideChatController!
     /// Signed inline URLs of HTML renders and MCP Apps, by attachment id.
     private var webAssets: [String: (url: URL, expires: Date)] = [:]
     /// Runs whose Retry is in flight: one retry per failed run (ChatView.tsx:4047-4058).
@@ -468,6 +469,7 @@ final class ThreadController {
         addToMachine = AddProjectToMachineController(panel: panel, sidebar: sidebar, environments: environments, composer: composer, clones: clones)
         composer.onTargetChange = { [weak self] in
             self?.hideNoActiveThread(); self?.git.refresh(); self?.automations.sync(); self?.clones.syncBanner(); self?.updateServerUpdateNotice()
+            self?.sideChats?.sync()
             self?.onRouteChange?()
         }
         // The hover card's provider row (Sidebar.tsx:1354-1369, 466-469): the model's trigger label, with the
@@ -482,6 +484,30 @@ final class ThreadController {
             let badge = ProviderBadge.shows(entry, in: catalog)
             return (entry.driver, badge ? "\(model) \u{00B7} \(entry.displayName)" : model, history, badge ? ProviderBadge.accent(entry) : nil)
         }
+        // Project pins (4928 #26154, useProjectGroupUpdate.ts): offered where every member's server keeps them and this
+        // connection may change it; the write goes to each member in turn and the first failure says so.
+        sidebar.actions.canPinProject = { [weak self, weak environments] group in
+            guard let self, let environments else { return false }
+            return group.members.allSatisfy { member in
+                let env = member.id.environmentId
+                return env.flatMap { self.composer.config($0) }?.capabilities.contains(ProjectOrganization.capability) == true
+                    && environments.canOperate(env)
+            }
+        }
+        sidebar.actions.setProjectPinned = { [weak self, weak environments] group, pinned in
+            Task { [weak self] in
+                for member in group.members {
+                    guard let env = member.id.environmentId, let environments else { return }
+                    do {
+                        _ = try await environments.request(env, "projects.mutate", ProjectOrganization.update(projectId: member.id.localId.rawValue, pinned: pinned))
+                    } catch {
+                        let message = (error as? RPCClientError)?.typedError?.fields["message"]?.stringValue ?? "An error occurred."
+                        _ = self?.panel.toasts.show(ToastView(title: pinned ? "Failed to pin project" : "Failed to unpin project", message: message, kind: .error))
+                        return
+                    }
+                }
+            }
+        }
         checkoutStatus = SidebarCheckoutStatus(environments: environments) { [weak sidebar] in sidebar?.checkoutBranchChanged() }
         sidebar.actions.checkoutBranch = { [weak self] env, cwd in self?.checkoutStatus.branch(environmentId: env, cwd: cwd) }
         // Scratch rows name their machine; the sidebar learns each environment's scratch folder from its config.
@@ -494,6 +520,8 @@ final class ThreadController {
             if sidebar.state.hiddenThreadTags[env] != tags { sidebar.state.hiddenThreadTags[env] = tags }
         }
         lineage = ThreadLineageController(panel: panel)
+        sideChats = SideChatController(panel: panel, sidebar: sidebar, environments: environments, composer: composer)
+        sideChats.parentId = { [weak self] in self?.openThreadId }
         gallery = ThreadImageGalleryController(pill: panel.header.pill)
         gallery.onOpen = { [weak self] in self?.readSubagentCosts() }
         gallery.onOpenInThread = { [weak self] image in
@@ -1045,6 +1073,13 @@ final class ThreadController {
     var opensElsewhere: ((ThreadId) -> Bool)?
 
     func open(_ id: ThreadId, force: Bool = false) {
+        // A side chat opens as its parent with its tab shown (`resolveThreadOpenRoute`, lib/sideChatPane.ts:22-35).
+        let route = SideChats.openRoute(id, shell: sidebar?.snapshot?.threads.first { $0.id == id })
+        if let side = route.sideChat {
+            open(route.open, force: force)
+            if openThreadId == route.open { panel.mutatePanel { $0.openSideChat(side.localId); return [] } }
+            return
+        }
         panel.model.environmentId = id.environmentId
         // A forced open reloads the thread already showing, as after a reconnect.
         if !force, opensElsewhere?(id) == true { return }
@@ -1652,6 +1687,7 @@ final class ThreadController {
         scripts.refresh()
         pullRequests.sync()
         lineage.sync()
+        sideChats.sync()
         if let perf = perfOpen {
             perfOpen = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + perf.delay) { [weak self] in

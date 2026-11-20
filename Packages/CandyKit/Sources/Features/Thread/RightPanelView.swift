@@ -58,6 +58,17 @@ final class RightPanelView: DSView {
     var pullRequestStatus: [String: PullRequestStateTone] = [:] { didSet { if pullRequestStatus != oldValue { apply(state) } } }
     /// The state an issue tab's glyph wears, once its detail is read (`IssueSurfaceIcon`, RightPanelTabs.tsx:786-812).
     var issueStatus: [String: IssueState] = [:] { didSet { if issueStatus != oldValue { apply(state) } } }
+    /// Side chat tabs' titles and state dots, by surface id (RightPanelTabs.tsx:963-969, :739-760).
+    public var sideChatTitles: [String: String] = [:] { didSet { if sideChatTitles != oldValue { apply(state) } } }
+    public var sideChatStates: [String: SideChats.TabState] = [:] { didSet { if sideChatStates != oldValue { apply(state) } } }
+    /// A side chat tab's surface: the app puts the side chat's pane in it while the tab shows.
+    public let sideChatHost = SideChatHostView()
+    /// The side chat the panel shows now, nil when none does; called when it changes.
+    public var onSideChatShown: ((ThreadId?) -> Void)?
+    private var shownSideChat: ThreadId?
+    /// `sideChatsOffered` and why one can't start now (ChatView.tsx:2847-2885): the + menu's Side chat row.
+    public var sideChatOffered = false
+    public var sideChatDisabledReason: String?
     let add = ButtonView(nil, icon: .plus, variant: .ghostMuted, size: .iconXs).menuTrigger()
     private var tabs: [PanelTabView] = []
     /// The tab list (`ScrollArea` with hidden scrollbars): clips at `pr-28`, the room the window's
@@ -129,7 +140,7 @@ final class RightPanelView: DSView {
         tabs.forEach { $0.removeFromSuperview() }
         tabs = state.surfaces.map { surface in
             let favicon = browserFavicons[surface.id]
-            let tab = PanelTabView(title: browserTitles[surface.id] ?? terminalTitles[surface.id] ?? surface.title, identity: icon(for: surface),
+            let tab = PanelTabView(title: browserTitles[surface.id] ?? terminalTitles[surface.id] ?? sideChatTitles[surface.id] ?? surface.title, identity: icon(for: surface),
                                    tinted: surface.kind != .file && surface.kind != .pullRequest && surface.kind != .issue && favicon == nil)
             tab.isActive = surface.id == state.activeSurfaceId
             tab.onSelect = { [weak self] in self?.onActivate?(surface.id) }
@@ -163,6 +174,9 @@ final class RightPanelView: DSView {
         if active?.kind == .browser { if browser.superview !== self { addSubview(browser) } } else { browser.removeFromSuperview() }
         if active?.kind == .terminal { if terminal.superview !== self { addSubview(terminal) } } else { terminal.removeFromSuperview() }
         if active?.kind == .device { if device.superview !== self { addSubview(device) } } else { device.removeFromSuperview(); device.viewer.clear() }
+        let sideChat = state.isOpen ? active?.sideChatThreadId : nil
+        if sideChat != nil { if sideChatHost.superview !== self { addSubview(sideChatHost, positioned: .below, relativeTo: strip) } } else { sideChatHost.removeFromSuperview() }
+        if sideChat != shownSideChat { shownSideChat = sideChat; onSideChatShown?(sideChat) }
         needsLayout = true
     }
 
@@ -183,6 +197,7 @@ final class RightPanelView: DSView {
             return IconView(name: status.map(IssueListLogic.icon) ?? .circleDot, size: 12,
                             strokeColor: status.map(IssueListLogic.color) ?? Themed.color(\.foreground))
         }
+        if case .sideChat = surface { return SideChatTabIcon(state: sideChatStates[surface.id]) }
         if let image = browserFavicons[surface.id] {
             // `size-3 rounded-sm object-contain`.
             let view = NSImageView(image: image)
@@ -208,6 +223,7 @@ final class RightPanelView: DSView {
         case .issue: IconView(name: .circleDot, size: 12, strokeColor: Themed.color(\.foreground))
         case .browser: IconView(name: .globe2, size: 12, strokeColor: Themed.color(\.foreground))
         case .terminal: IconView(name: .terminalSquare, size: 12, strokeColor: Themed.color(\.foreground))
+        case .sideChat: IconView(name: .messagesSquare, size: 12, strokeColor: Themed.color(\.foreground))
         }
     }
 
@@ -216,9 +232,11 @@ final class RightPanelView: DSView {
     func showAddMenu(fromShortcut: Bool = false) {
         let actions = SurfaceLauncherView.actions(filesAvailable: filesAvailable, diffAvailable: diffAvailable,
                                                   pullRequestAvailable: pullRequestAvailable, pullRequestsAvailable: pullRequestsAvailable,
-                                                  browserAvailable: browserAvailable, terminalAvailable: terminalAvailable)
+                                                  browserAvailable: browserAvailable, terminalAvailable: terminalAvailable,
+                                                  sideChat: sideChatOffered ? sideChatDisabledReason == nil : nil)
         let items = actions.map { action -> MenuItem in
             var item = MenuItem(action.label, icon: action.icon, shortcut: action.shortcut, disabled: action.kind == nil)
+            if action.label == "Side chat", action.kind == nil { item.tooltip = sideChatDisabledReason ?? SurfaceLauncherView.sideChatHint }
             item.action = { [weak self] in if let kind = action.kind { self?.onAdd?(kind) } }
             return item
         }
@@ -438,6 +456,7 @@ final class RightPanelView: DSView {
         browser.frame = content
         terminal.frame = content
         device.frame = content
+        sideChatHost.frame = content
         // The launcher centers against the whole panel (`pb-(--workspace-topbar-height)`).
         lazyLauncher.loaded?.frame = NSRect(x: edge, y: Self.tabBarHeight, width: content.width, height: max(0, content.height - Self.tabBarHeight))
     }
@@ -590,7 +609,7 @@ final class SurfaceLauncherView: DSView {
     }
 
     static func actions(filesAvailable: Bool, diffAvailable: Bool, pullRequestAvailable: Bool = false, pullRequestsAvailable: Bool = false,
-                        browserAvailable: Bool = false, terminalAvailable: Bool = false) -> [Action] {
+                        browserAvailable: Bool = false, terminalAvailable: Bool = false, sideChat: Bool? = nil) -> [Action] {
         [Action(label: "Browser", icon: .globe2, shortcut: "B", kind: browserAvailable ? .browser : nil),
          Action(label: "Terminal", icon: .terminalSquare, shortcut: "T", kind: terminalAvailable ? .terminal : nil),
          Action(label: "Files", icon: .files, shortcut: "F", kind: filesAvailable ? .files : nil),
@@ -598,7 +617,12 @@ final class SurfaceLauncherView: DSView {
          Action(label: "Pull request", icon: .gitPullRequestArrow, shortcut: "P", kind: pullRequestAvailable ? .pullRequest : nil),
          Action(label: "Linked pull requests", icon: .link, shortcut: "L", kind: pullRequestsAvailable ? .pullRequests : nil),
          Action(label: "Device", icon: .smartphone, shortcut: "M", kind: .device)]
+        // Listed only where side chats are offered (RightPanelTabs.tsx:410-422); nil leaves it out.
+        + (sideChat.map { [Action(label: "Side chat", icon: .messagesSquare, shortcut: "S", kind: $0 ? .sideChat : nil)] } ?? [])
     }
+    /// `SURFACE_UNAVAILABLE_HINTS.sideChat` (RightPanelTabs.tsx:190).
+    static let sideChatHint = "Side chats start after the first message."
+
 
     var filesAvailable = true { didSet { rebuild() } }
     var diffAvailable = true { didSet { rebuild() } }

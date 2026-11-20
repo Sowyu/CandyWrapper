@@ -91,6 +91,10 @@ final class ComposerController {
     var onTargetChange: (() -> Void)?
     /// The provider or model pick changed: the pending handoff row follows it (ChatView.tsx:7744-7757).
     var onModelChange: (() -> Void)?
+    /// Side chats (`SideChatController`): the `/side` menu rows, why one can't start, and the start itself.
+    var sideChatSlash: (() -> ComposerMenus.SideChatSlash?)?
+    var sideChatDisabledReason: (() -> String?)?
+    var onSideChat: ((String?) async -> Bool)?
     /// The model the next send uses.
     var selectedModel: ModelSelection? { pickers.current.modelSelection }
     /// After thread state or prompt content presence changes: the branch notice follows the prompt.
@@ -1347,6 +1351,33 @@ final class ComposerController {
         DispatchQueue.main.async { [weak self] in self?.composer.focus() }
     }
 
+    /// `/side` and `/btw` start a side chat with the rest as its message, ahead of an open question or a plan follow-up
+    /// (useComposerSend.ts:436-680 at 4928). True when the text was handled here.
+    // ponytail: text only; a draft with attachments says to remove them, as T3 does while answering, until side chats carry them (#38350)
+    private func sendSideChat(_ prompt: String, text: String) -> Bool {
+        guard let onSideChat else { return false }
+        if queuedEdit != nil {
+            // A queued message stays in its thread, so saving `/side` would send it to main (:790-797).
+            toast(.warning, "Side chat not started", "A queued message can't move to a side chat. Remove /side or /btw to save it.")
+            return true
+        }
+        if let reason = sideChatDisabledReason?() {
+            toast(.warning, "Side chat not started", reason)
+            return true
+        }
+        if !currentAttachments.isEmpty {
+            toast(.warning, "Side chat not started", "Remove the attachments and context, then send it again.")
+            return true
+        }
+        composer.text = ""
+        remember("")
+        Task { [weak self] in
+            // A start that failed gives the draft back, unless something new was typed meanwhile.
+            if await !onSideChat(prompt.isEmpty ? nil : prompt), let self, self.composer.text.isEmpty { self.composer.text = text }
+        }
+        return true
+    }
+
     private func remember(_ text: String) {
         // An open question: the editor is its custom answer, not the prompt.
         if questionRequestId != nil {
@@ -1789,6 +1820,7 @@ final class ComposerController {
     /// `redirecting`: the pending approvals were just declined for this send, which now goes.
     private func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool = false, redirecting: Bool = false, compactConfirmed: Bool = false) {
         guard !threadRewindBusy, !declineInFlight else { return }
+        if case .thread = target, let prompt = SideChats.parseCommand(text), sendSideChat(prompt, text: text) { return }
         let sentText = text
         // A send now would leave a still-compressing image out of the turn, so it waits and goes once they finish
         // (#37547, ChatComposer.tsx `useSubmitAfterPreparingImages` at 4928).
@@ -3397,7 +3429,8 @@ extension ComposerController {
             let items = ComposerMenus.slashItems(trigger: trigger, provider: providerKey, commands: provider?.slashCommands(cwd: cwd) ?? [],
                                                  skills: provider?.skills(cwd: cwd) ?? [],
                                                  showSkills: ClientSettingsStore.shared.current.bool("showSkillsInSlashMenu"),
-                                                 compactAvailable: compact, freshSessionAvailable: freshSessionCommandAvailable)
+                                                 compactAvailable: compact, freshSessionAvailable: freshSessionCommandAvailable,
+                                                 sideChat: sideChatSlash?())
             return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .slashCommand, loading: false))
         case .skill:
             let items = ComposerMenus.skillItems(query: trigger.query, provider: providerKey, skills: provider?.skills(cwd: cwd) ?? [])

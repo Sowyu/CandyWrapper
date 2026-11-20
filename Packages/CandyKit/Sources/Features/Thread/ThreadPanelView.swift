@@ -409,7 +409,10 @@ public final class ThreadPanelView: DSView {
     public let environmentBanner = EnvironmentBannerView()
     public var showsEnvironmentBanner = false { didSet { if showsEnvironmentBanner != oldValue { needsLayout = true } } }
     /// Redesign's header controls sit in the window's tab band, so its chat starts at the panel's top.
-    private var chatTop: CGFloat { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? 0 : ThreadHeaderView.height }
+    private var chatTop: CGFloat { isEmbedded || ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? 0 : ThreadHeaderView.height }
+    /// A side chat's chat inside its parent's right panel (`ChatView embedded`, SideChatPane.tsx:184-189): no
+    /// header of its own and no right panel; the side chat pane's header sits above it.
+    public var isEmbedded = false { didSet { if isEmbedded != oldValue { needsLayout = true } } }
     /// A notice from the banner stack (the project clone's progress or failure), docked over the
     /// composer on drafts and threads alike. Shown through `showsNoticeBanner`.
     /// The notice banners are built the first time they show; wire them through the lazy holders.
@@ -690,7 +693,7 @@ public final class ThreadPanelView: DSView {
     }
     /// How far the panel's top sits below the window's under Dither (the tab strip band), which the timeline reaches up through.
     private var ditherOverhang: CGFloat {
-        guard ThemeRuntime.isDither(dark: effectiveAppearance.isDark), let content = window?.contentView else { return 0 }
+        guard !isEmbedded, ThemeRuntime.isDither(dark: effectiveAppearance.isDark), let content = window?.contentView else { return 0 }
         let top = content.convert(NSPoint(x: 0, y: bounds.minY), from: self).y
         return min(DitherChrome.band, max(0, content.isFlipped ? top : content.bounds.height - top))
     }
@@ -934,6 +937,7 @@ public final class ThreadPanelView: DSView {
             if kind == .pullRequest { self?.onAddPullRequest?(); return }
             if kind == .browser, let add = self?.onAddBrowser { add(); return }
             if kind == .terminal { self?.onAddTerminal?(); return }
+            if kind == .sideChat { self?.onAddSideChat?(); return }
             self?.mutatePanel { $0.open(kind); return [] }
         }
         rightPanel.onCopyPath = { path in
@@ -1128,6 +1132,22 @@ public final class ThreadPanelView: DSView {
     }
     /// "Terminal" from the + menu or launcher (`addTerminalSurface`).
     public var onAddTerminal: (@MainActor () -> Void)?
+    /// The + menu's Side chat (`onAddSideChat`, RightPanelTabs.tsx:410-422): starts one with no message.
+    public var onAddSideChat: (@MainActor () -> Void)?
+    /// Side chat tabs closed by the user, local thread ids (useRightPanelSurfaceClose.ts:74-88).
+    public var onSideChatsClosed: (@MainActor ([ThreadId]) -> Void)?
+    /// The side chat tab surface and its tabs' titles, dots and + menu row (Features/SideChats).
+    public var sideChatHost: SideChatHostView { rightPanel.sideChatHost }
+    public var onSideChatShown: ((ThreadId?) -> Void)? {
+        get { rightPanel.onSideChatShown }
+        set { rightPanel.onSideChatShown = newValue }
+    }
+    public func setSideChatTabs(titles: [String: String], states: [String: SideChats.TabState], offered: Bool, disabledReason: String?) {
+        rightPanel.sideChatOffered = offered
+        rightPanel.sideChatDisabledReason = disabledReason
+        rightPanel.sideChatTitles = titles
+        rightPanel.sideChatStates = states
+    }
     /// A terminal tab asks before it closes (`confirmTerminalClose`); `close` finishes it.
     public var confirmCloseTerminalTab: (@MainActor (TerminalPanelSurface, _ close: @escaping @MainActor () -> Void) -> Void)?
 
@@ -1327,6 +1347,8 @@ public final class ThreadPanelView: DSView {
             animateSheetLayer(rightPanelBackdrop.layer, opening: true, duration: duration, translate: false)
         }
         onPanelChange?(next, closed)
+        let sideChats = closed.compactMap(\.sideChatThreadId)
+        if !sideChats.isEmpty { onSideChatsClosed?(sideChats) }
     }
 
     /// RightPanelSheet.tsx and sheet.tsx: a 32px translation plus opacity. Restored routes do not animate.
@@ -2134,7 +2156,7 @@ public final class ThreadPanelView: DSView {
         updateTimelineStatus()
         placePanelToggles()
         header.syncPill()
-        header.isHidden = chat == 0 || ditherHeader
+        header.isHidden = chat == 0 || ditherHeader || isEmbedded
         timeline.isHidden = chat == 0
         header.frame = NSRect(x: 0, y: 0, width: chat, height: ThreadHeaderView.height)
         fileDropOverlay.frame = NSRect(x: 8, y: chatTop + 8, width: max(0, chat - 16), height: max(0, bounds.height - chatTop - 16))

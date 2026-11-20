@@ -13,6 +13,10 @@ public struct ProjectShell: Codable, Hashable, Sendable, Identifiable {
     public var faviconPath: String?
     public var projectIcon: JSONValue?
     public var scripts: [JSONValue]
+    /// Pinned projects lead project pickers; archived ones leave them (4928 #26154, orchestrationProject.ts:20-22).
+    /// Absent on servers without `projectOrganization`.
+    public var pinnedAt: T3Timestamp?
+    public var archivedAt: T3Timestamp?
     public var createdAt: T3Timestamp
     public var updatedAt: T3Timestamp
 }

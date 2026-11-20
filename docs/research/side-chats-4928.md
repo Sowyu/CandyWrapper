@@ -1,5 +1,7 @@
 # Side chats at Nightly 4928, a plan
 
+Status 2026-11-19 (side-chats): pieces 1 to 5 are in, with parts of 6 and 7; see PROGRESS.md. Bring back is `thread.merge_back` of the side chat's latest finished run into the parent (SideChatPane.tsx:70-92). It is not a quote in the composer, as piece 5 below says. The 4928 sandbox accepted the fork, a turn, the merge back and the `onlyIfUnused` cleanup (`scripts/record-transcript.swift` scenario `side-chat`).
+
 Side chats are threads forked from the open thread that run in a right panel tab beside it. T3 added them in #26901 (`50c1c5dc53`, 102 files, +4,710 lines) and fixed them in 18 later commits, listed under "New feature side-chats" in [the commits appendix](nightly-diff-4928-commits.md). The sidebar-2 task sized this as larger than the rest of its work combined, so this file is the plan instead of the port.
 
 Already in CandyWrapper: the lineage's `sideChat` flag decodes (`ThreadLineage.sideChat`, orchestrationV2.ts:173), `lineage.isListed` keeps side chats out of the sidebar, search, settled counts and notifications (orchestrationV2.ts:177-179), and an open side chat now selects its parent's sidebar row (`SidebarModel.resolveListedAncestorThreadId`, sidebar-2). `thread.fork` is already built in `Features/Thread/ThreadLineageController.swift:494`.

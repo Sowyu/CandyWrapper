@@ -399,8 +399,12 @@ final class PaletteCommands {
         // Manual reads the stored order (CommandPaletteLookups.ts:73-83).
         var groups = order == .manual ? SidebarModel.orderProjectGroups(built, projects: snapshot.projects, preferred: SidebarProjectOrder.stored)
             : SidebarModel.sortLogicalProjectsForSidebar(built, threads: snapshot.threads, order: order)
-        if let current = threads.composer.activeProjectId, let i = groups.firstIndex(where: { $0.memberProjectIds.contains(current) }), i > 0 {
-            groups.insert(groups.remove(at: i), at: 0)
+        // Archived projects leave the pickers and pinned ones lead; the current project leads the unpinned ones
+        // (`pickableProjectGroups`, `buildSidebarProjectPickerEntries` at 4928, #26154).
+        groups = ProjectOrganization.pickable(groups)
+        if let current = threads.composer.activeProjectId, let i = groups.firstIndex(where: { $0.memberProjectIds.contains(current) }), !groups[i].pinned {
+            let pinned = groups.filter(\.pinned).count
+            if i > pinned { groups.insert(groups.remove(at: i), at: pinned) }
         }
         return groups
     }
@@ -540,6 +544,16 @@ final class PaletteCommands {
         actions.append(PaletteEntry(value: "action:settings", searchTerms: ["settings", "preferences", "configuration", "keybindings"],
                                     title: "Open settings", icon: .settings,
                                     action: .run({ [weak self] in self?.settings.open() }, keepOpen: false)))
+        // "Pin project" or "Unpin project" for the open thread's or draft's group, any group, archived too
+        // (CommandPalette.tsx:1778-1803 at 4928).
+        if let current = threads.composer.activeProjectId,
+           let group = (snapshot.map { SidebarModel.buildProjectGroups($0.projects, preferredEnvironmentId: envs.primaryId) } ?? [])
+            .first(where: { $0.memberProjectIds.contains(current) }), let sidebar, sidebar.actions.canPinProject(group) {
+            actions.append(PaletteEntry(value: "action:project-pin", searchTerms: ["pin", "unpin", "project", "favorite"],
+                                        title: group.pinned ? "Unpin project" : "Pin project", description: group.label,
+                                        icon: group.pinned ? .pinOff : .pin,
+                                        action: .run({ [weak sidebar] in sidebar?.actions.setProjectPinned(group, !group.pinned) }, keepOpen: false)))
+        }
         // "Project settings" for the open thread's or draft's group, else the first (CommandPalette.tsx:2264-2300).
         if let group = contextualProjectGroup() {
             actions.append(PaletteEntry(value: "action:project-settings",
@@ -578,7 +592,10 @@ final class PaletteCommands {
         if let env = scratchTargetEnvironmentId {
             // "No project" right after the current project, first when the current thread has none; it keeps
             // its own shortcut so the projects' mod+1..9 hold (CommandPalette.tsx:1388-1408).
-            let index = all.first.map(\.representative).map(isScratch) == true ? 0 : min(1, items.count)
+            // `newThreadNoProjectIndex` (CommandPalette.logic.ts at 4928): after the pinned projects and the first other one.
+            let index = ProjectOrganization.noProjectIndex(all.map { group in
+                (isScratch(group.representative), group.pinned, current.map(group.memberProjectIds.contains) ?? false)
+            })
             items.insert(PaletteEntry(value: "new-thread-in:no-project", searchTerms: ["no project", "without project", "none"],
                                       title: "No project", icon: .messageSquareDashed, shortcutCommand: "chat.newWithoutProject",
                                       action: .run({ [weak self] in self?.startScratchThread(env) }, keepOpen: false)), at: index)

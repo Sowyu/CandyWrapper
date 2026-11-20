@@ -49,6 +49,11 @@ public struct SidebarActions {
     public var discardDraft: (String) -> Void = { _ in }
     /// The scope popup's settings button and context menu (`/projects/$projectKey`), with the group key.
     public var openProjectSettings: (String) -> Void = { _ in }
+    /// `canPinProjectGroup` (useProjectGroupUpdate.ts at 4928): every member's server has `projectOrganization` and
+    /// this connection may change it.
+    public var canPinProject: (SidebarModel.ProjectGroup) -> Bool = { _ in false }
+    /// Pins or unpins every member of a project group (`setProjectGroupPinned`).
+    public var setProjectPinned: (SidebarModel.ProjectGroup, Bool) -> Void = { _, _ in }
     public var addProject: () -> Void = {}
     public var newThread: () -> Void = {}
     public var newThreadInProject: (ProjectShell) -> Void = { _ in }
@@ -320,12 +325,18 @@ public final class SidebarContentView: DSView {
         list.onProjectMenu = { [weak self] key, event, view in
             guard let self, let group = SidebarListBuilder.projectScopeGroups(snapshot: self.snapshot).first(where: { $0.key == key }) else { return }
             let project = group.representative
+            // Pin or Unpin sits before Project settings where the servers keep pins (Sidebar.tsx:1274-1285 at 4928).
+            let pin = self.actions.canPinProject(group)
+                ? [group.pinned ? MenuItem("Unpin project", icon: .pinOff) { [weak self] in self?.actions.setProjectPinned(group, false) }
+                                : MenuItem("Pin project", icon: .pin) { [weak self] in self?.actions.setProjectPinned(group, true) }]
+                : []
             let items = [
                 MenuItem("New thread") { [weak self] in self?.actions.newThreadInProject(project) },
                 MenuItem("Copy path") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(project.workspaceRoot, forType: .string)
                 },
+            ] + pin + [
                 MenuItem("Project settings", icon: .settings) { [weak self] in self?.actions.openProjectSettings(key) },
             ]
             MenuPopupView.showContextMenu(items, in: view, at: view.convert(event.locationInWindow, from: nil))
@@ -943,10 +954,14 @@ public final class SidebarContentView: DSView {
         let trigger: NSView = filterButton, field: NSView = search
         guard let host = trigger.popupHost else { return }
         if let open = scopePopup, host.popups.contains(where: { $0 === open }) { host.close(open); return }
+        let groups = SidebarListBuilder.projectScopeGroups(snapshot: snapshot, primaryEnvironmentId: state.environments.primaryId,
+                                                           order: SidebarProjectOrder.sortOrder, preferred: state.projectOrder)
         let view = SidebarProjectScopeView(
-            groups: SidebarListBuilder.projectScopeGroups(snapshot: snapshot, primaryEnvironmentId: state.environments.primaryId,
-                                                          order: SidebarProjectOrder.sortOrder, preferred: state.projectOrder),
-            selectedKey: state.projectScopeKey, minimumWidth: field.frame.width, environments: state.environments, selectedKeys: state.projectScopeKeys)
+            groups: groups, selectedKey: state.projectScopeKey, minimumWidth: field.frame.width, environments: state.environments,
+            selectedKeys: state.projectScopeKeys, canPin: actions.canPinProject)
+        view.onTogglePin = { [weak self] key, pinned in
+            if let group = groups.first(where: { $0.key == key }) { self?.actions.setProjectPinned(group, pinned) }
+        }
         view.onSelect = { [weak self] key in
             if let key { self?.toggleProjectScope(key) } else { self?.setProjectScopes([]) }
         }

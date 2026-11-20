@@ -1,0 +1,14 @@
+{
+  "no-pins" : {
+    "height" : 149,
+    "width" : 200
+  },
+  "pinned" : {
+    "height" : 149,
+    "width" : 200
+  },
+  "pinned-highlighted" : {
+    "height" : 149,
+    "width" : 200
+  }
+}
