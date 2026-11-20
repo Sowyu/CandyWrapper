@@ -263,7 +263,7 @@ public final class LinkEnvironmentFormView: DSView {
         else if selected == Self.anotherAddress, !machines.isEmpty { machineSelect.selectedIndex = machines.count }
         linkedNote.isHidden = m?.linked != true
         linkedNote.text = usesExisting
-            ? "This environment is already linked to \(m?.label ?? "it"). The agent can use that link as it is; change its access in Settings → Connections."
+            ? "This environment is already linked to \(m?.label ?? "it"). The agent can use that link as it is; change its access in Settings → Environments."
             : "Already linked. Linking again renews it with the access you pick."
         let address = needsAddress && !usesExisting
         addressTitle.isHidden = !address
@@ -275,8 +275,8 @@ public final class LinkEnvironmentFormView: DSView {
         codeTitle.isHidden = !code
         codeInput.isHidden = !code
         codeInput.isEnabled = !isBusy
-        codeInput.placeholder = m == nil ? "From that environment's Connections, or t3 pair there" : "Paste the code"
-        codeHint.text = m.map { "Create a link on \($0.label): Settings → Connections → Create link, then paste its code here." } ?? ""
+        codeInput.placeholder = m == nil ? "From Sharing & access there, or t3 pair" : "Paste the code"
+        codeHint.text = m.map { "Create a link on \($0.label): Settings → Sharing & access → Authorized clients → Create link, then paste its code here." } ?? ""
         codeHint.isHidden = !code || m == nil
         accessSelect.isEnabled = !isBusy
         accessTitle.isHidden = usesExisting
@@ -324,7 +324,7 @@ public enum LinkEnvironmentDialog {
     @MainActor
     public static func make(machines: [LinkableMachine]) -> (dialog: DialogView, form: LinkEnvironmentFormView, cancel: ButtonView, link: ButtonView) {
         let dialog = DialogView(title: "Link an environment",
-                                message: "Agents here can then launch, message and wait on threads there. It appears in that environment's Connections, where it can be revoked.")
+                                message: "Agents here can then launch, message and wait on threads there. It appears under Authorized clients in that environment's Sharing & access, where it can be revoked.")
         dialog.maxWidth = 448
         let form = LinkEnvironmentFormView(machines: machines)
         dialog.panelContent = [form]

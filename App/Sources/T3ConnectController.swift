@@ -47,7 +47,14 @@ final class T3ConnectController {
     init(environments: Environments, fake: Bool) {
         self.environments = environments
         self.fake = fake
+        // `shouldRelistAccountAfterWakeup` (connection/wakeups.ts, #29788): coming back to the app lists the account
+        // again, so a machine linked meanwhile shows without signing in again. One request per activation, no timer.
+        activeObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { if self?.signedIn != nil { self?.refreshMachines() } }
+        }
     }
+
+    private var activeObserver: NSObjectProtocol?
 
     @discardableResult
     func observe(_ change: @escaping () -> Void) -> UUID {

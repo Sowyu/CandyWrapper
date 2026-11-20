@@ -104,7 +104,7 @@ extension SettingsController {
     func forgetPeerLink(_ hostId: String, _ peerId: String) {
         guard case .links(let links)? = peerLinks[hostId], let link = links.first(where: { $0.environmentId == peerId }) else { return }
         let key = "\(hostId)/\(peerId)"
-        let message = "Forget \(link.label)? Agents here stop working there. Revoke \"T3 Code · …\" in \(link.label)'s Connections to end the session there too."
+        let message = "Forget \(link.label)? Agents here stop working there. Revoke \"T3 Code · …\" in \(link.label)'s Sharing & access to end the session there too."
         let copy = ConfirmCopy.resolve(message)
         confirm(copy.title, copy.description ?? "") { [weak self] in
             guard let self else { return }
