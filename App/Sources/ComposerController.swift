@@ -1321,18 +1321,16 @@ final class ComposerController {
     /// (`refreshSelection`, useLoadBalancedEnvironment.ts at 4928).
     private func hostSnapshots(_ environmentIds: [String]) async -> [ProviderLoadBalanceLogic.Candidate] {
         let weights = LoadBalancingLogic.weights(ClientSettingsStore.shared.current["loadBalancingWeights"])
-        let environments = environments
-        return await withTaskGroup(of: ProviderLoadBalanceLogic.Candidate?.self) { group in
-            for env in environmentIds {
-                group.addTask { @MainActor in
-                    guard let value = try? await environments.request(env, "server.getHostResources", .object([:]), timeout: .seconds(5)) else { return nil }
-                    return .init(id: env, resources: value, receivedAt: Date().timeIntervalSince1970 * 1000, weight: Double(weights[env] ?? 50))
-                }
-            }
-            var out: [ProviderLoadBalanceLogic.Candidate] = []
-            for await c in group { if let c { out.append(c) } }
-            return out
+        // Started together, read in order: every machine is asked at once.
+        let reads = environmentIds.map { env in
+            (env, Task { [environments] in try await environments.request(env, "server.getHostResources", .object([:]), timeout: .seconds(5)) })
         }
+        var out: [ProviderLoadBalanceLogic.Candidate] = []
+        for (env, read) in reads {
+            guard let value = try? await read.value else { continue }
+            out.append(.init(id: env, resources: value, receivedAt: Date().timeIntervalSince1970 * 1000, weight: Double(weights[env] ?? 50)))
+        }
+        return out
     }
 
     private func sampleLoadBalance() {
