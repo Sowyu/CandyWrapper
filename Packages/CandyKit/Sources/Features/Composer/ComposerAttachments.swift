@@ -8,6 +8,24 @@ import T3Protocol
 /// apps/web/src/components/chat/composerAttachmentFiles.ts, ChatComposer.tsx `addComposerAttachments`
 /// (:5762-5960), packages/client-runtime/src/state/attachments.ts and lib/attachmentUploadState.ts.
 public enum ComposerAttachmentRules {
+    /// `composerImageDedupKey` (composerAttachmentFiles.ts at 4928, #37116): a draft drops an image only as a
+    /// byte-for-byte repeat of one it has, so distinct images with the same name, type and size stay. Nil when the
+    /// file can't be read, so it matches nothing.
+    public static func imageDedupKey(name: String, mimeType: String, url: URL) -> String? {
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
+        // FNV-1a over the bytes; T3 uses cyrb53, any stable hash serves within one draft.
+        var hash: UInt64 = 0xcbf29ce484222325
+        data.withUnsafeBytes { for byte in $0 { hash = (hash ^ UInt64(byte)) &* 0x100000001b3 } }
+        return "\(name.isEmpty ? "image" : name)\u{0}\(mimeType)\u{0}\(data.count)\u{0}\(String(hash, radix: 16))"
+    }
+
+    /// The images a draft takes from `incoming`, in order, dropping repeats of `existing` and of each other
+    /// (`addImages` in composerDraftStore.ts at 4928).
+    public static func dedupedImages(_ incoming: [(key: String?, index: Int)], existing: [String?]) -> [Int] {
+        var seen = Set(existing.compactMap { $0 })
+        return incoming.filter { item in item.key.map { seen.insert($0).inserted } ?? true }.map(\.index)
+    }
+
     /// `PROVIDER_SEND_TURN_MAX_ATTACHMENTS`.
     public static let maxAttachments = 100
     /// `PROVIDER_SEND_TURN_MAX_IMAGE_BYTES`: 10 MiB; larger images are re-encoded to fit.
@@ -227,6 +245,8 @@ public struct ComposerAttachment: Equatable, Sendable, Identifiable {
     /// A file whose upload did not survive a relaunch (`composerFileNeedsReattach`): no server copy,
     /// so its chip asks for the file again and the send waits.
     public var needsReattach = false
+    /// An image's `composerImageDedupKey` as pasted: name, type, size and a hash of its bytes.
+    public var dedupKey: String?
 
     public init(id: String = UUID().uuidString.lowercased(), kind: Kind, name: String, mimeType: String, sizeBytes: Int,
                 fileURL: URL, status: ComposerFileRow.Status = .uploading(0), attachmentId: String? = nil, environmentId: String) {

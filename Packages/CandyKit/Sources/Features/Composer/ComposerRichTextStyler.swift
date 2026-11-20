@@ -107,6 +107,25 @@ enum ComposerRichTextStyler {
         return nil
     }
 
+    /// `listNormalizationPlugin` (#22997, composer-rich-text-doc.ts at 4928): a line whose list marker an edit
+    /// completed later, like a space typed after the `-` of `-get md`, becomes a list item. Only an edit that
+    /// reaches the marker converts, a top-level one with the space after it; a lone `- ` and an unfinished task
+    /// box stay text while they are being typed. Formatted markers stay text.
+    static func laterListMarker(_ line: String, caret: Int) -> (source: String, kind: ComposerBlockAttachment.Kind, consumed: Int)? {
+        guard let first = line.utf16.first, Array("-*+0123456789".utf16).contains(first),
+              let prefix = ComposerBlockAttachment.prefix(line), prefix.source.last?.isWhitespace == true else { return nil }
+        let length = prefix.source.utf16.count
+        guard caret <= length else { return nil }
+        switch prefix.kind {
+        case .task, .ordered: break
+        case .bullet:
+            let content = (line as NSString).substring(from: length)
+            if prefix.source.hasPrefix("-"), content.isEmpty || content.range(of: #"^\[(?:[ xX]\]?)?$"#, options: .regularExpression) != nil { return nil }
+        default: return nil
+        }
+        return (prefix.source, prefix.kind, length)
+    }
+
     /// The layout line a block atom starts.
     static func layoutLine(_ block: ComposerBlockAttachment?) -> ComposerBlockLayout.Line {
         guard let block else { return .paragraph }
@@ -193,6 +212,11 @@ enum ComposerRichTextStyler {
                     newBlock = rule
                     info.rule = (NSRange(location: resultLineStart, length: 1 + caret - lineStart - rule.consumed),
                                  input.attributedSubstring(from: NSRange(location: lineStart, length: caret - lineStart)))
+                } else if typing, let caret, caret > lineStart, caret <= lineEnd,
+                          let later = laterListMarker(line, caret: caret - lineStart),
+                          plain(input, NSRange(location: lineStart, length: later.consumed)),
+                          !input.containsAttachments(in: NSRange(location: lineStart, length: later.consumed)) {
+                    newBlock = later
                 }
             } else if !code, typing, let caret, let bullet = block, case .bullet = bullet.kind, caret > lineStart + 1, caret <= lineEnd,
                       caret - lineStart == 5, text.character(at: lineStart + 1) == 91,
@@ -279,7 +303,8 @@ enum ComposerRichTextStyler {
                         let kept = NSMutableAttributedString(attributedString: part)
                         kept.addAttributes(lineBase, range: NSRange(location: 0, length: kept.length))
                         result.append(kept)
-                    } else if attrs[.attachment] != nil {
+                    } else if attrs[.attachment] != nil || attrs[ComposerMarkdownSource.key] != nil {
+                        // Chips, and shown Markdown source, which the editor styles itself (#30421).
                         flushPlain(); result.append(part)
                     } else if let id = attrs[.composerCodePair] as? Int, literalPairs.contains(id) {
                         flushPlain()

@@ -71,6 +71,13 @@ public final class ButtonView: ControlView {
         didSet { restyle(); invalidateIntrinsicContentSize() }
     }
 
+    /// Corners rounder than the button's own radius, like a banner's corner action taking the banner's corner
+    /// (`rounded-se-(--composer-banner-corner-top)`, ComposerBanner.tsx at 4928, #29018). Each is at least the
+    /// button's radius; nil keeps one radius. The box is masked to them, so a focus ring there is cut too.
+    public var cornerRadii: (topLeading: CGFloat, topTrailing: CGFloat, bottomLeading: CGFloat, bottomTrailing: CGFloat)? {
+        didSet { needsLayout = true }
+    }
+
     private let decoration = BoxDecorationLayer()
     private let label = LabelView()
     private var leadingIconView: NSView?
@@ -130,6 +137,7 @@ public final class ButtonView: ControlView {
     public override func layout() {
         super.layout()
         decoration.layout(boxSize: bounds.size)
+        applyCornerMask()
         var m = size.metrics
         if let iconSize { m.icon = iconSize }
         let iconY = (bounds.height - m.icon) / 2
@@ -248,6 +256,36 @@ public final class ButtonView: ControlView {
         super.viewDidChangeEffectiveAppearance()
         decoration.setNeedsDisplay()
         restyle()
+    }
+
+    /// The box path with `cornerRadii`, in the decoration's coordinates (its frame starts `outset` outside the box).
+    func cornerMaskPath() -> CGPath? {
+        guard let radii = cornerRadii else { return nil }
+        let own = decoration.boxStyle.radius
+        let box = CGRect(x: -decoration.frame.minX, y: -decoration.frame.minY, width: bounds.width, height: bounds.height)
+        let rtl = userInterfaceLayoutDirection == .rightToLeft
+        // The view is flipped, so the layer's minY is the top.
+        func r(_ v: CGFloat) -> CGFloat { min(max(v, own), min(box.width, box.height) / 2) }
+        let tl = r(rtl ? radii.topTrailing : radii.topLeading), tr = r(rtl ? radii.topLeading : radii.topTrailing)
+        let bl = r(rtl ? radii.bottomTrailing : radii.bottomLeading), br = r(rtl ? radii.bottomLeading : radii.bottomTrailing)
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: box.minX + tl, y: box.minY))
+        path.addArc(tangent1End: CGPoint(x: box.maxX, y: box.minY), tangent2End: CGPoint(x: box.maxX, y: box.maxY), radius: tr)
+        path.addArc(tangent1End: CGPoint(x: box.maxX, y: box.maxY), tangent2End: CGPoint(x: box.minX, y: box.maxY), radius: br)
+        path.addArc(tangent1End: CGPoint(x: box.minX, y: box.maxY), tangent2End: CGPoint(x: box.minX, y: box.minY), radius: bl)
+        path.addArc(tangent1End: CGPoint(x: box.minX, y: box.minY), tangent2End: CGPoint(x: box.maxX, y: box.minY), radius: tl)
+        path.closeSubpath()
+        return path
+    }
+
+    private func applyCornerMask() {
+        guard let path = cornerMaskPath() else { decoration.mask = nil; return }
+        let mask = decoration.mask as? CAShapeLayer ?? CAShapeLayer()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        mask.frame = CGRect(origin: .zero, size: decoration.frame.size)
+        mask.path = path
+        decoration.mask = mask
+        CATransaction.commit()
     }
 
     private func restyle() {

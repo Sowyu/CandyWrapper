@@ -468,6 +468,19 @@ public enum ModelTraits {
 
     /// The options a send carries (`modelOptionsForDispatch`): only ids that were set explicitly,
     /// resolved against the descriptors, plus the implicit fast mode default.
+    /// `hasRuntimeModelCatalog` (providerModels.ts at 4928): drivers that discover their models at runtime.
+    static let runtimeCatalogDrivers: Set<String> = ["opencode", "antigravity", "cursor", "pi", "acpRegistry"]
+
+    /// `isRuntimeModelDefaultAlias`: Antigravity's and ACP's default marker (`DEFAULT_MODEL_BY_PROVIDER`, model.ts:144-159).
+    static func isRuntimeDefaultMarker(_ driver: String, _ model: String?) -> Bool {
+        (driver == "antigravity" && model == "antigravity-default") || (driver == "acpRegistry" && model == "default")
+    }
+
+    /// `keepsUnavailableModelOptions`: Antigravity lists its default only as an alias, so its lookups are not gaps.
+    static func keepsUnavailableModelOptions(_ driver: String, _ model: String?) -> Bool {
+        driver != "antigravity" && !isRuntimeDefaultMarker(driver, model) && runtimeCatalogDrivers.contains(driver)
+    }
+
     public static func dispatchOptions(_ model: ServerProviderModel?, _ selections: [ProviderOptionSelection]?) -> [ProviderOptionSelection]? {
         let withFast = withImplicitFastMode(model, selections)
         guard let withFast, !withFast.isEmpty else { return nil }
@@ -506,7 +519,9 @@ public enum ModelTraits {
                 }
             }
             let label = ultrathink && d.id == primary ? "Ultrathink"
-                : d.type == .boolean ? "\(d.label) \(d.currentValue?.bool == true ? "On" : "Off")" : currentLabel(d)
+                : d.type == .boolean ? "\(d.label) \(d.currentValue?.bool == true ? "On" : "Off")"
+                // Pi's thinking select shows its own label before a level is picked (#27397, modelTraits.ts:168-176 at 4928).
+                : currentLabel(d) ?? (d.id == "thinking" ? d.label : nil)
             guard let label, !label.isEmpty else { continue }
             if reasoningIndex == -1, d.type == .select, reasoningIds.contains(d.id) { reasoningIndex = labels.count }
             labels.append(label)

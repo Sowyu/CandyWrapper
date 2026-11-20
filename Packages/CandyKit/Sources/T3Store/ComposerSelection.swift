@@ -182,8 +182,14 @@ public final class ComposerSelectionStore {
     /// Section 5.3: draft, then thread, then project default, then (new drafts) sticky and server
     /// defaults, then the instance default.
     public func resolve(_ key: String, _ ctx: ComposerSelectionContext) -> ResolvedComposerSelection {
-        let draft = drafts[key] ?? ComposerModelDraft()
+        var draft = drafts[key] ?? ComposerModelDraft()
         let thread = ctx.thread
+        // A seeded model is what an unstarted thread sends; once the thread has run, its own selection wins unless the
+        // user picked (`draftModelSelectionApplies` and `threadHasStarted`, chatThreadActions.ts at 4928, #24619).
+        if let thread, !draft.explicit, thread.latestRunId != nil || thread.latestUserMessageAt != nil || ctx.hasStartedSession {
+            draft.activeInstance = nil
+            draft.selectionByInstance = [:]
+        }
         let isNew = thread == nil
         var candidates: [ProviderInstanceId?] = [draft.activeInstance, thread?.providerInstanceId,
                                                  thread?.modelSelection.instanceId, ctx.projectDefaultModel?.instanceId]
@@ -218,11 +224,36 @@ public final class ComposerSelectionStore {
             // none, outrank the project's (#16546 at 4928, modelSelection.ts `selectionsByInstance(thread ?? project)`).
             let optionSources = fallback != nil || thread == nil ? found
                 : ([draft.selectionByInstance[id], from(thread?.modelSelection)]).compactMap { $0 }
-            options = optionSources.first { $0.model == slug && $0.options != nil }?.options
+            // Options belong to their model, an alias counting as the model (`composerModelIdentity`, #36621,
+            // composerDraftStore.ts at 4928): a pick of another model takes none of the thread's.
+            let shown = slug.map { entry?.model($0)?.slug ?? $0 }
+            options = optionSources.first { (entry?.model($0.model)?.slug ?? $0.model) == shown && $0.options != nil }?.options
+            // A disabled instance falls back to another of its driver: with no pick of its own, the fallback shows the
+            // model and options picked on the requested instance when it lists that model (`withFallbackInstanceOptions`,
+            // #23957, composerDraftStore.ts at 4928). Options picked with another model stay behind.
+            if fallback == nil, let requested = candidates.lazy.compactMap({ $0 }).first, requested != id,
+               let entry, ctx.catalog.entry(requested)?.driver == entry.driver {
+                func on(_ s: ModelSelection?) -> InstanceModelSelection? {
+                    guard let s, s.instanceId == requested else { return nil }
+                    return InstanceModelSelection(model: s.model, options: s.optionSelections.isEmpty ? nil : s.optionSelections)
+                }
+                let carried = [draft.selectionByInstance[requested], on(thread?.modelSelection), on(ctx.projectDefaultModel)].compactMap { $0 }
+                if found.isEmpty, let m = carried.first?.model, entry.model(m) != nil { slug = m }
+                if options == nil, let source = carried.first(where: { $0.options != nil }),
+                   (entry.model(source.model)?.slug ?? source.model) == slug.map({ entry.model($0)?.slug ?? $0 }) {
+                    options = source.options
+                }
+            }
         }
-        let model = slug.flatMap { entry?.model($0) }
+        var model = slug.flatMap { entry?.model($0) }
+        // A session's default marker names its current model, not a missing one (`isRuntimeModelDefaultAlias`, #37528).
+        if model == nil, let entry, ModelTraits.isRuntimeDefaultMarker(entry.driver, slug) { model = entry.models.first { $0.isDefault == true } }
         let descriptors = ModelTraits.descriptors(model, selections: options)
-        let selection = entry.flatMap { e in slug.map { ModelSelection(instanceId: e.id, model: model?.slug ?? $0, selections: ModelTraits.dispatchOptions(model, options)) } }
+        // Drivers that list models at runtime can briefly leave out the chosen one; it keeps its options meanwhile
+        // (`keepsUnavailableModelOptions`, providerModels.ts at 4928, #24872 and #37528).
+        let keepsOptions = model == nil && entry.map { ModelTraits.keepsUnavailableModelOptions($0.driver, slug) } == true
+        let selection = entry.flatMap { e in slug.map { ModelSelection(instanceId: e.id, model: model?.slug ?? $0,
+                                                                        selections: keepsOptions ? options : ModelTraits.dispatchOptions(model, options)) } }
 
         // Runtime mode (ChatView.tsx:2200-2208), shown filtered by the provider's supported modes.
         let modes = entry?.runtimeModes ?? RuntimeMode.all

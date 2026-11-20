@@ -186,7 +186,8 @@ struct ComposerRichTextTests {
         editor.setText("")
         editor.insertText("**bold**", replacementRange: NSRange(location: 0, length: 0))
         #expect(editor.expandedText == "**bold**")
-        #expect(editor.string == "bold")
+        // The caret sits on the styled edge, so 4928 shows the bold's Markdown (#30421).
+        #expect(editor.string == "**bold**")
         editor.breakUndoCoalescing()
         editor.undoManager?.undo()
         #expect(editor.expandedText == "")
