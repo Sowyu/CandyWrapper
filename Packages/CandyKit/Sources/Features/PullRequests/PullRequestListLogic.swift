@@ -264,18 +264,19 @@ public enum PullRequestListLogic {
 
     /// `partitionPullRequestsWithPriority`: Authored and Review requested from their own complete
     /// reads, the feed fills Others; the feed's copy of a partitioned row replaces it in place.
+    /// Rows match by URL, since each list may hold a pull request under another environment (#37704).
     public static func partition(_ entries: [Entry], authored: [Entry], reviewRequested: [Entry]) -> [Group] {
-        var authoredOrder = authored.map(key)
-        var authoredByKey = Dictionary(authored.map { (key($0), $0) }, uniquingKeysWith: { a, _ in a })
+        var authoredOrder = authored.map(\.url)
+        var authoredByKey = Dictionary(authored.map { ($0.url, $0) }, uniquingKeysWith: { a, _ in a })
         authoredOrder = authoredOrder.reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
         var reviewOrder: [String] = []
         var reviewByKey: [String: Entry] = [:]
-        for e in reviewRequested where authoredByKey[key(e)] == nil && reviewByKey[key(e)] == nil {
-            reviewOrder.append(key(e)); reviewByKey[key(e)] = e
+        for e in reviewRequested where authoredByKey[e.url] == nil && reviewByKey[e.url] == nil {
+            reviewOrder.append(e.url); reviewByKey[e.url] = e
         }
         var others: [Entry] = []
         for e in entries {
-            let k = key(e)
+            let k = e.url
             if authoredByKey[k] != nil { authoredByKey[k] = e } else if reviewByKey[k] != nil { reviewByKey[k] = e } else { others.append(e) }
         }
         let byRecency: (Entry, Entry) -> Bool = { $0.updatedAt > $1.updatedAt }
@@ -294,7 +295,8 @@ public enum PullRequestListLogic {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !needle.isEmpty else { return 0 }
         let number = needle.hasPrefix("#") ? String(needle.dropFirst()) : needle
-        if !number.isEmpty, number.allSatisfy { $0.isASCII && $0.isNumber } { return String(e.number) == number ? 100 : 0 }
+        // A number in the title still ranks by the title (pullRequestList.logic.ts, #33692).
+        if String(e.number) == number { return 100 }
         let title = e.title.lowercased()
         let terms = needle.split(whereSeparator: \.isWhitespace).map(String.init)
         if title == needle { return 90 }

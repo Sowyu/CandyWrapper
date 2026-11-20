@@ -359,6 +359,11 @@ public enum PullRequestLabelChip {
         let color = PullRequestListLogic.labelColor(label.color).flatMap(PullRequestStyle.hex)
         let badge = BadgeView(title, variant: color == nil ? .secondary : .label, size: size)
         if let color { badge.labelColor = color }
+        // PullRequestSummaryTab.tsx (#28732): the label's description on hover and for VoiceOver.
+        if let d = label.description?.trimmingCharacters(in: .whitespacesAndNewlines), !d.isEmpty {
+            badge.toolTip = d
+            badge.setAccessibilityLabel("\(title): \(d)")
+        }
         return badge
     }
 }

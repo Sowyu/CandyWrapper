@@ -366,7 +366,7 @@ public final class PullRequestsPageView: DSView {
         authorItems[0].closesOnClick = true
         for a in m.authors.prefix(10) {
             var item = MenuItem.radio(a.actor.login, checked: f.author?.lowercased() == a.actor.login.lowercased()) { _ in var n = f; n.author = a.actor.login; update(n) }
-            item.shortcut = "\(a.mergedCount) merges loaded"
+            item.shortcut = "\(a.mergedCount) \(a.mergedCount == 1 ? "merge" : "merges") loaded"  // #37651
             item.closesOnClick = true
             authorItems.append(item)
         }

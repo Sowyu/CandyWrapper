@@ -4,6 +4,12 @@ import T3Protocol
 /// The detail panel's logic (pullRequestDetail.logic.ts, pullRequestPresentation.tsx,
 /// pullRequestFilesViewed.logic.ts, PullRequestDetailPanel.tsx constants).
 public enum PullRequestDetailLogic {
+    /// The hosts whose markdown keeps single line breaks, `hardLineBreaks` in each source control
+    /// definition (source-control-github/src/shared/definition.ts:145, forgejo :123, azure-devops :155).
+    public static func hardLineBreaks(_ provider: String?) -> Bool {
+        ["github", "forgejo", "azure-devops"].contains(provider ?? "")
+    }
+
     /// `PULL_REQUEST_MERGE_METHOD_LABELS`.
     public static func mergeMethodLabel(_ method: String) -> String {
         switch method {
@@ -39,6 +45,18 @@ public enum PullRequestDetailLogic {
     }
 
     /// `ACTION_FAILURE_LABELS` (PullRequestDetailPanel.tsx:221-232).
+    /// `readableFailure` (pullRequestDetail.logic.ts:1539-1563): the host's reason without the
+    /// operation prefix, the hint when the reason is only tool noise, at most 320 characters.
+    public static func readableFailure(_ raw: String, hint: String) -> String {
+        var detail = raw
+        if let r = detail.range(of: #"^Pull request operation \w+ failed:\s*"#, options: [.regularExpression, .caseInsensitive]) { detail.removeSubrange(r) }
+        detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let noise = [#"^(GitHub|GitLab|Bitbucket|Azure DevOps|Forgejo|GitCafe|Cursor Origin)?\s*(cli|api)?\s*(command\s*)?failed\.?$"#,
+                     #"^exited? with (code|status) \d+\.?$"#, #"^unknown error\.?$"#]
+        if detail.isEmpty || noise.contains(where: { detail.range(of: $0, options: [.regularExpression, .caseInsensitive]) != nil }) { return hint }
+        return detail.count <= 320 ? detail : String(detail.prefix(319)) + "…"
+    }
+
     public static func actionFailure(_ action: String, provider: String? = nil, inPanel: Bool = false) -> String {
         let term = ChangeRequestTerminology.of(kind: provider)
         return switch action {

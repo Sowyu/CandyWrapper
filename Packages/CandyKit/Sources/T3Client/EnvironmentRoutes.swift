@@ -41,8 +41,9 @@ public enum EnvironmentRoute {
         }
     }
 
-    /// `upsertRoute`: replaces the route with the same origin in place, else inserts it after every
-    /// route of the same or a faster kind (`insertRoute`).
+    /// `upsertRoute` (connection/routes.ts:159-169): replaces the route with the same origin in place,
+    /// else inserts it first among its kind, so a route paired at a new address, such as localhost
+    /// beside a saved 127.0.0.1, connects with its fresh token (#25591).
     public static func upsert(_ url: URL, into routes: [URL]) -> [URL] {
         if let i = routes.firstIndex(where: { origin($0) == origin(url) }) {
             var next = routes
@@ -50,7 +51,7 @@ public enum EnvironmentRoute {
             return next
         }
         let rank = kind(url)
-        guard let i = routes.firstIndex(where: { kind($0) > rank }) else { return routes + [url] }
+        guard let i = routes.firstIndex(where: { kind($0) >= rank }) else { return routes + [url] }
         var next = routes
         next.insert(url, at: i)
         return next

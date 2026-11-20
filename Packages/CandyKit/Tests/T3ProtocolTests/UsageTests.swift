@@ -432,3 +432,28 @@ struct ScheduledTaskLogicTests {
         #expect(ScheduledTask.list(UsageTests.json(#"{"tasks": [{"id": "x", "schedule": {"type": "cron"}}]}"#)).isEmpty)
     }
 }
+
+/// Nightly 4928 reset choices (packages/shared/src/usageLimits.ts `resetCreditChoices`, #34106).
+struct ResetChoices4928Tests {
+    @Test func optionsBecomeOneChoiceEach() throws {
+        let json: JSONValue = .object(["checkedAt": .string("2026-11-19T00:00:00Z"), "windows": .array([]),
+            "resetCredits": .object(["availableCount": .number(3), "options": .array([
+                .object(["creditId": .string("weekly"), "label": .string("Weekly reset"), "description": .string("Clears the weekly window."), "availableCount": .number(2)]),
+                .object(["creditId": .string("fable"), "label": .string("Fable reset"), "description": .string("Refills Fable only."), "availableCount": .number(1),
+                         "expiresAt": .string("2026-11-20T00:00:00Z")]),
+                .object(["creditId": .string("broken")]),
+            ])])])
+        let credits = try #require(ProviderUsageLimits(json: json)?.resetCredits)
+        #expect(credits.options?.map(\.creditId) == ["weekly", "fable"])
+        let now = T3Timestamp.parseEpochMs("2026-11-19T00:00:00Z")!
+        let choices = UsageLimitsLogic.resetChoices(credits, target: .instance("claude"), nowMs: now)
+        #expect(choices.map(\.summary) == ["Weekly reset · 2 left", "Fable reset · 1 left · expires in 1d 0h"])
+        #expect(choices.map(\.actionLabel) == ["Use", "Use"])
+        #expect(choices[1].confirmDescription == "Fable reset: Refills Fable only. This cannot be undone.")
+        #expect(choices[1].target.payload == .object(["instanceId": .string("claude"), "creditId": .string("fable")]))
+        // A 3824 server lists no options: one choice, the banked count.
+        let plain = UsageLimitsLogic.resetChoices(UsageResetCredits(availableCount: 1), target: .instance("claude"), nowMs: now)
+        #expect(plain.map(\.actionLabel) == ["Use reset"])
+        #expect(plain[0].target == .instance("claude"))
+    }
+}

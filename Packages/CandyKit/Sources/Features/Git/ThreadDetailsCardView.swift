@@ -38,6 +38,18 @@ public final class DetailsRowControl: ControlView {
     public var secondary: ControlView? { didSet { oldValue?.removeFromSuperview(); secondary.map(addSubview); update() } }
     /// A view right of the label (`flex-1` label, then this at its natural size).
     public var trailing: NSView? { didSet { oldValue?.removeFromSuperview(); trailing.map(addSubview); needsLayout = true } }
+    /// Muted text after the label, `gap-1.5`, truncating before `trailing`: the Changes row's
+    /// comparison base, "Uncommitted" or "vs main" (GitActionsControl.tsx:1143-1147, 1805-1818, #30085).
+    public var detail: String? {
+        didSet {
+            guard detail != oldValue else { return }
+            detailLabel.text = detail ?? ""
+            detailLabel.isHidden = detail == nil
+            detailLabel.toolTip = detail
+            needsLayout = true
+        }
+    }
+    private let detailLabel = LabelView()
     /// The hover tooltip (attached on first use; T3 shows the workspace path on the run context).
     public var tooltipText: String? {
         didSet {
@@ -80,6 +92,11 @@ public final class DetailsRowControl: ControlView {
         addSubview(wrappedLabel)
         addSubview(middle)
         addSubview(chevron)
+        detailLabel.font = DSFont.ui(13)
+        detailLabel.lineHeight = 20
+        detailLabel.color = Themed.color(\.mutedForeground)
+        detailLabel.isHidden = true
+        addSubview(detailLabel)
         update()
     }
 
@@ -133,7 +150,12 @@ public final class DetailsRowControl: ControlView {
             trailing.frame = NSRect(x: right - w, y: midY - 8, width: w, height: 16)
             right -= w + 10
         }
-        let frame = NSRect(x: x, y: midY - 10, width: max(0, right - x), height: 20)
+        var frame = NSRect(x: x, y: midY - 10, width: max(0, right - x), height: 20)
+        if detail != nil {
+            frame.size.width = min(frame.width, ceil(label.textWidth))
+            let dx = frame.maxX + 6
+            detailLabel.frame = NSRect(x: dx, y: frame.minY, width: max(0, right - dx), height: 20)
+        }
         label.frame = frame
         let wraps = wrapsText && ThreadDesign.uses3814(dark: effectiveAppearance.isDark)
         wrappedLabel.isHidden = !wraps
@@ -446,7 +468,7 @@ public final class DetailsSplitPart: ControlView {
     }
 }
 
-/// The Changes row totals use `font-mono text-xs tabular-nums gap-1.5` and foreground diff roles.
+/// The Changes row totals use `font-mono tabular-nums gap-2` at the row's 13px (#31858) and foreground diff roles.
 /// Glass and Redesign retain their previous type, spacing and colors.
 public final class DiffTotalsView: DSView {
     private let plus = LabelView()
@@ -459,14 +481,14 @@ public final class DiffTotalsView: DSView {
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        for l in [plus, minus] { l.font = DSFont.mono(DesignGeometry.usesClassic(self) ? 11 : 12); l.lineHeight = 16; addSubview(l) }
+        for l in [plus, minus] { l.font = DSFont.mono(DesignGeometry.usesClassic(self) ? 11 : 13); l.lineHeight = 16; addSubview(l) }
         update()
     }
 
-    private var gap: CGFloat { DesignGeometry.usesClassic(self) ? 4 : 6 }
+    private var gap: CGFloat { DesignGeometry.usesClassic(self) ? 4 : 8 }
 
     private func updateMetrics() {
-        let font = DSFont.mono(DesignGeometry.usesClassic(self) ? 11 : 12)
+        let font = DSFont.mono(DesignGeometry.usesClassic(self) ? 11 : 13)
         guard plus.font != font else { return }
         plus.font = font; minus.font = font
         invalidateIntrinsicContentSize()
@@ -528,6 +550,8 @@ public final class ThreadDetailsCardView: DSView {
     public let changes = DetailsRowControl(kind: .row)
     public let initGit = DetailsRowControl(kind: .row)
     public let totals = DiffTotalsView()
+    /// The Changes row's comparison base, `GitActionsLogic.changesBaseLabel` (#30085).
+    public var changesBase: String? { get { changes.detail } set { changes.detail = newValue } }
     /// The thread's pull request rows under the branch (ThreadDetailsPrRows.tsx): the current one,
     /// then the rest of its links while expanded, then "Show N more" or "Show less". A row the host
     /// answered for is a `ThreadDetailsPrRowView` (two lines), the rest are `DetailsRowControl`s.

@@ -136,6 +136,7 @@ public final class CommitSummaryView: BoxView {
         addSubview(totals)
         edit.action = { [weak self] in self?.toggleEditing() }
         allBox.onChange = { [weak self] _ in self?.selection.toggleAll(); self?.refresh() }
+        allBox.setAccessibilityLabel("Include all files")  // GitActionsControl.tsx (#29658)
         list.onToggle = { [weak self] path in self?.selection.toggle(path); self?.refresh() }
         list.onOpen = { [weak self] path in self?.onOpenFile?(path) }
         refresh()
@@ -317,6 +318,7 @@ final class CommitFileRowView: ControlView {
         fill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
         layer?.addSublayer(fill)
         label.text = file.path
+        box.setAccessibilityLabel("Include \(file.path)")  // #29658
         label.font = DSFont.mono(14)
         label.lineHeight = 20
         label.truncation = .start

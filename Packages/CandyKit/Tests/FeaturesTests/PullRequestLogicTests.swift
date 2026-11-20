@@ -143,6 +143,12 @@ struct PullRequestListLogicTests {
         #expect(groups[0].entries.last?.title == "Fresher copy")
         #expect(groups[1].entries.map(\.number) == [4])
         #expect(groups[2].entries.map(\.number) == [9])
+        // #37704: the same pull request read on two environments shows once.
+        var elsewhere = Self.entry(9); elsewhere.environmentId = "env-2"
+        var here = Self.entry(9); here.environmentId = "env-1"
+        let split = L.partition([elsewhere], authored: [here], reviewRequested: [])
+        #expect(split.map(\.key) == [.authored])
+        #expect(split.first?.entries.map(\.environmentId) == ["env-2"])
     }
 
     @Test func scoresAndRanksSearches() {
@@ -152,7 +158,10 @@ struct PullRequestListLogicTests {
         #expect(L.score(Self.entry(1, title: "The wizard that welcomes"), "welcome wizard") == 70)
         #expect(L.score(Self.entry(1, title: "A wizard, of sorts"), "welcome wizard") == 30)
         #expect(L.score(Self.entry(42), "#42") == 100)
-        #expect(L.score(Self.entry(42), "43") == 0)
+        #expect(L.score(Self.entry(42), "43") < 30)
+        // #33692: a number in the title ranks like any other title match.
+        #expect(L.rank([Self.entry(2, title: "Unrelated work", updatedAt: "2026-08-01T00:00:00Z"),
+                        Self.entry(1, title: "Upgrade Node to 24", updatedAt: "2026-07-01T00:00:00Z")], "24").map(\.number) == [1, 2])
         let older = Self.entry(1, title: "no match here", updatedAt: "2026-07-01T00:00:00Z")
         let newer = Self.entry(2, title: "none here either", updatedAt: "2026-08-01T00:00:00Z")
         #expect(L.rank([older, newer], "wizard").map(\.number) == [2, 1])

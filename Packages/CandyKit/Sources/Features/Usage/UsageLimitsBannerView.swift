@@ -42,11 +42,11 @@ public final class UsageLimitsBannerView: ComposerBannerView {
                 b.action = { [weak self] in self?.onOpenURL?(external.url) }
                 add(UsageLeadingButton(b), 32, gap: 4)
             }
-            if let credits = a.limits.resetCredits, a.resetCreditTarget ?? a.instanceId.map({ .instance($0) }) != nil,
+            if let credits = a.limits.resetCredits, let target = a.resetCreditTarget ?? a.instanceId.map({ .instance($0) }),
                credits.availableCount > 0 {
-                let r = UsageResetCreditsView(credits: credits, nowMs: nowMs)
+                let r = UsageResetCreditsView(credits: credits, nowMs: nowMs, target: target)
                 resetViews.append((a, r))
-                add(r, 24, gap: 4)
+                add(r, r.height(forWidth: 0), gap: 4)
             }
         }
         for n in report.notices { add(glassLabel(n, font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 16), 16, gap: 8) }

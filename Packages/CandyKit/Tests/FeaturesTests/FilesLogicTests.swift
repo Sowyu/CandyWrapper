@@ -16,6 +16,15 @@ struct FilesLogicTests {
         #expect(FilePreviewKind.of("main.swift") == .text)
     }
 
+    /// delimitedPreview.test.ts cases from #36738.
+    @Test func semicolonCSV() {
+        #expect(DelimitedTable.parse("a;b\r\n1;2,5", delimiter: ",").rows == [["a", "b"], ["1", "2,5"]])
+        #expect(DelimitedTable.parse("name,notes\nAlice,\"a;b;c\"", delimiter: ",").rows == [["name", "notes"], ["Alice", "a;b;c"]])
+        #expect(DelimitedTable.parse("a,b;c", delimiter: ",").rows == [["a", "b;c"]])
+        #expect(DelimitedTable.parse("id,notes;more;extra\n1,plain\n2,ordinary", delimiter: ",").rows[0] == ["id", "notes;more;extra"])
+        #expect(DelimitedTable.parse("a;b\tvalue", delimiter: "\t").rows == [["a;b", "value"]])
+    }
+
     @Test func delimitedParsing() {
         let r = DelimitedTable.parse("\u{FEFF}a,\"b,c\",\"say \"\"hi\"\"\"\r\n1,\"two\nlines\",3\n", delimiter: ",")
         #expect(r.rows == [["a", "b,c", "say \"hi\""], ["1", "two\nlines", "3"]])

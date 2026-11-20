@@ -105,9 +105,10 @@ final class DiffFileHeaderView: DiffRowView {
         let statWidth = stat.preferredWidth
         var statRight = bounds.width - 12
         if !viewedBox.isHidden {
+            // A fixed `w-18` box so Viewed and Changed line up file to file (#28665).
             let lw = ceil(viewedLabel.textWidth)
-            viewedLabel.frame = NSRect(x: statRight - lw, y: 8, width: lw + 1, height: 16)
-            viewedBox.frame = NSRect(x: statRight - lw - 6 - 16, y: 8, width: 16, height: 16)
+            viewedBox.frame = NSRect(x: statRight - 72, y: 8, width: 16, height: 16)
+            viewedLabel.frame = NSRect(x: viewedBox.frame.maxX + 6, y: 8, width: lw + 1, height: 16)
             statRight = viewedBox.frame.minX - 12
         }
         stat.frame = NSRect(x: statRight - statWidth, y: 0, width: statWidth, height: DiffStyle.headerHeight)
@@ -148,10 +149,16 @@ final class DiffFileHeaderView: DiffRowView {
         title.hovered = title.frame.contains(convert(event.locationInWindow, from: nil))
     }
 
+    private var viewedArea: NSRect { NSRect(x: viewedBox.frame.minX, y: 0, width: 72, height: DiffStyle.headerHeight) }
+
     /// The name opens the file; anywhere else toggles the file (DiffPanel.tsx:1107-1160).
     override func mouseUp(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if !viewedBox.isHidden, viewedBox.frame.union(viewedLabel.frame).contains(point) { return }
+        // The whole `h-8 w-18` label toggles the tick (#37033); the box handles its own clicks.
+        if !viewedBox.isHidden, viewedArea.contains(point) {
+            if !viewedBox.frame.contains(point) { viewedBox.value = viewedBox.value == .on ? .off : .on; onViewed?(path, viewedBox.value == .on) }
+            return
+        }
         if title.frame.contains(point), let onOpenFile { onOpenFile(path) } else { onToggle?(file) }
     }
     /// The header is a button in T3, and Chromium focuses a pressed button, so focus lands in the diff

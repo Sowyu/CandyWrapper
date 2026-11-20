@@ -51,6 +51,8 @@ struct GitActionsLogicTests {
         #expect(q(Self.status(changes: true), isDefault: true) == ("Commit & push", .runAction, .commitPush, false))
         #expect(q(Self.status(changes: true, pr: "open")) == ("Commit & push", .runAction, .commitPush, false))
         #expect(q(Self.status(changes: true, upstream: false), remote: false) == ("Commit", .runAction, .commit, false))
+        // #24117: changes on a branch behind upstream commit without pushing.
+        #expect(q(Self.status(changes: true, behind: 1)) == ("Commit", .runAction, .commit, false))
         #expect(q(Self.status(upstream: false), remote: false) == ("Publish repository", .openPublish, nil, false))
         #expect(q(Self.status(upstream: false)) == ("Push", .showHint, nil, true))
         #expect(q(Self.status(upstream: false, ahead: 1)) == ("Push & create PR", .runAction, .createPr, false))
@@ -84,7 +86,10 @@ struct GitActionsLogicTests {
         let dirty = Self.status(changes: true, ahead: 1)
         let d = L.menuItems(dirty, busy: false)
         #expect(!d[0].disabled && !d[1].disabled && d[2].disabled)
-        #expect(L.disabledReason(d[2], status: dirty, busy: false, hasPrimaryRemote: true) == "Commit local changes before creating a pull request.")
+        #expect(L.disabledReason(d[2], status: dirty, busy: false, hasPrimaryRemote: true) == "Create pull request is currently unavailable.")
+        // #36786: a dirty branch with nothing to push says so.
+        let dirtyFeature = Self.status(changes: true)
+        #expect(L.disabledReason(L.menuItems(dirtyFeature, busy: false)[1], status: dirtyFeature, busy: false, hasPrimaryRemote: true) == "No local commits to push.")
         #expect(L.disabledReason(L.menuItems(clean, busy: true)[1], status: clean, busy: true, hasPrimaryRemote: true) == "Git action in progress.")
         // Footnotes.
         #expect(L.menuNotes(Self.status(ref: nil)).first?.hasPrefix("Detached HEAD") == true)
@@ -105,6 +110,9 @@ struct GitActionsLogicTests {
         #expect(!L.includesCommit(.commitPush, status: Self.status(), featureBranch: false))
         #expect(L.includesCommit(.commitPush, status: Self.status(), featureBranch: true))
         #expect(L.featureBranchUnavailableReason(branchName: "main", hasWorkingTreeChanges: true) == nil)
+        // #29845: Push and Create PR don't commit, so they can't name a feature branch.
+        #expect(L.featureBranchUnavailableReason(branchName: "main", hasWorkingTreeChanges: true, action: .push)?.hasPrefix("This action doesn't commit") == true)
+        #expect(L.featureBranchUnavailableReason(branchName: "main", hasWorkingTreeChanges: true, action: .commitPush) == nil)
         #expect(L.featureBranchUnavailableReason(branchName: "main", hasWorkingTreeChanges: false)?.hasSuffix("continue on main.") == true)
     }
 
@@ -231,5 +239,20 @@ struct BranchToolbarLogicTests {
                 == .object(["type": .string("worktree"), "baseRef": .string("main"), "startFromOrigin": .bool(true)]))
         #expect(B.workspaceStrategy(mode: .worktree, branch: "t3/1", worktreePath: "/wt", startFromOrigin: false)
                 == .object(["type": .string("existing_worktree"), "worktreePath": .string("/wt"), "branch": .string("t3/1")]))
+    }
+}
+
+/// Nightly 4928 Changes row totals (GitActionsControl.logic.ts:657-699).
+struct ChangesTotals4928Tests {
+    @Test func zeroBranchTotalsFallBackToTheWorkingTree() {
+        var s = GitActionsLogicTests.status(changes: true)
+        s.workingTree.insertions = 2
+        s.branchChanges = VcsStatus.BranchChanges(baseRef: "main", insertions: 0, deletions: 0)
+        #expect(GitActionsLogic.changesTotals(s)?.insertions == 2)
+        #expect(GitActionsLogic.changesBaseLabel(s) == "Uncommitted")
+        s.branchChanges = VcsStatus.BranchChanges(baseRef: "main", insertions: 5, deletions: 1)
+        #expect(GitActionsLogic.changesTotals(s)?.insertions == 5)
+        #expect(GitActionsLogic.changesBaseLabel(s) == "vs main")
+        #expect(GitActionsLogic.changesBaseLabel(nil) == nil)
     }
 }

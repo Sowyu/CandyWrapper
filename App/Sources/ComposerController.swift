@@ -5294,7 +5294,7 @@ extension ComposerController {
             guard let target = account.resetCreditTarget ?? account.instanceId.map({ .instance($0) }) else { continue }
             view.onUse = { [weak self, weak view] in
                 guard let self, let view else { return }
-                UsageResetCredit.confirmAndUse(in: self.panel.window, environments: self.environments, environmentId: env, target: target) { busy, status in
+                UsageResetCredit.confirmAndUse(in: self.panel.window, environments: self.environments, environmentId: env, target: target, choice: view.chosen) { busy, status in
                     view.busy = busy
                     if let status { view.statusText = status }
                 }

@@ -118,6 +118,7 @@ struct PanelScreensFidelityTests {
             view.runContext.icons = [EnvironmentMachineIcon.definition("mac-mini"), IconName.folder.definition]
             view.scriptsRow = .add
             view.totals.insertions = 2
+            view.changesBase = nil  // these screens predate the comparison base (#30085)
             view.openIn.primary.icon = IconName.brandFinder.definition
             return (view, CGRect(x: 808, y: 60, width: 280, height: 230), "git")
         case "45-go-to-file":

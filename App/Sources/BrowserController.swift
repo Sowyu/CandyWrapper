@@ -661,14 +661,16 @@ final class BrowserController {
             // The search engine setting picks the template (PreviewView.tsx, preview.ts:136-145).
             let settings = ClientSettingsStore.shared.current
             let template = PreviewURL.searchTemplate(engine: settings.string("browserSearchEngine"), customURL: settings.string("browserCustomSearchUrl"))
-            guard let self, let url = PreviewURL.resolveAddressBarInput(text, searchTemplate: template) else { return }
+            guard let self, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            guard let url = PreviewURL.resolveAddressBarInput(text, searchTemplate: template) else { return self.invalidAddress() }
             // Incognito visits stay out of the project's history (PreviewView.tsx, #34859).
             let profile = self.panelTab?.tabId.flatMap { self.currentState?.sessions[$0] }?.profileId
             if self.navigate(to: url), profile != "incognito" { self.recordVisit(url) }
         }
         view.empty.onOpen = { [weak self] raw in
             // A server tab's browser runs on the environment, where loopback is already right.
-            guard let self, let url = PreviewURL.normalize(raw) else { return }
+            guard let self, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            guard let url = PreviewURL.normalize(raw) else { return self.invalidAddress() }
             if self.navigate(to: url) { self.recordVisit(raw) }
         }
         view.empty.onRemoveRecent = { [weak self] url in
@@ -683,6 +685,11 @@ final class BrowserController {
 
     /// `navigateToResolvedUrl`: the server tab's viewer navigates (it needs control); without a
     /// tab, `preview.open` makes one at the URL.
+    /// PreviewView.tsx (#23577): an address the preview can't open says so instead of doing nothing.
+    private func invalidAddress() {
+        panel.toasts.show(ToastView(title: "Could not open this address", message: "Enter an http or https URL.", kind: .error))
+    }
+
     private func navigate(to url: String) -> Bool {
         let snapshot = panelTab?.tabId.flatMap { currentState?.sessions[$0] }
         if snapshot?.isServerTab == true, let stream = panelStream {

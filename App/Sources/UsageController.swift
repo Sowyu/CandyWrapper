@@ -19,11 +19,14 @@ enum UsageResetCredit {
     }
 
     /// Redeeming spends a credit the provider granted, so it never fires on a bare click.
+    /// `choice` names the kind of reset when the server lists several, such as Claude's Fable resets (#34106).
     static func confirmAndUse(in window: NSWindow?, environments: Environments, environmentId: String, target: UsageResetCreditTarget,
+                              choice: UsageLimitsLogic.ResetChoice? = nil,
                               update: @escaping @MainActor (_ busy: Bool, _ status: String?) -> Void) {
         guard let window else { return }
+        let target = choice?.target ?? target
         let d = DialogView(kind: .alertDialog, title: "Use a reset credit?",
-                           message: "This redeems one credit on your account and clears the current rate-limit windows. It cannot be undone.")
+                           message: choice?.confirmDescription ?? "This redeems one credit on your account and clears the current rate-limit windows. It cannot be undone.")
         let cancel = ButtonView("Cancel", variant: .outline)
         let use = ButtonView("Use credit")
         d.footerButtons = [cancel, use]
@@ -96,7 +99,7 @@ final class UsageController {
         page.onBreakdown = { [weak self] b in self?.breakdown = b; self?.render() }
         page.onSelectModel = { [weak self] key in self?.openModel(key) }
         page.onEnableCursor = { [weak self] env in self?.enableCursor(env) }
-        page.limits.onUseReset = { [weak self] account in self?.useReset(account) }
+        page.limits.onUseReset = { [weak self] account, choice in self?.useReset(account, choice: choice) }
         page.limits.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
         composer?.configObservers.append { [weak self] _ in
             guard let self, self.isVisible else { return }
@@ -643,10 +646,10 @@ final class UsageController {
         }
     }
 
-    private func useReset(_ account: UsageLimitAccount) {
+    private func useReset(_ account: UsageLimitAccount, choice: UsageLimitsLogic.ResetChoice?) {
         guard let redeem = account.redeem else { return }
         let key = account.key
-        UsageResetCredit.confirmAndUse(in: window, environments: environments, environmentId: redeem.environmentId, target: redeem.target) { [weak self] busy, status in
+        UsageResetCredit.confirmAndUse(in: window, environments: environments, environmentId: redeem.environmentId, target: redeem.target, choice: choice) { [weak self] busy, status in
             guard let self else { return }
             self.resetStatus = busy ? (key, "Using reset credit\u{2026}") : status.map { (key, $0) }
             self.page.limits.model.resetStatus = self.resetStatus

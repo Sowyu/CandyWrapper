@@ -35,6 +35,7 @@ public struct VcsStatus: Codable, Hashable, Sendable {
         public var baseRef: String?
         public var insertions: Int
         public var deletions: Int
+        public init(baseRef: String? = nil, insertions: Int, deletions: Int) { self.baseRef = baseRef; self.insertions = insertions; self.deletions = deletions }
     }
     /// `VcsStatusChangeRequest`.
     public struct ChangeRequest: Codable, Hashable, Sendable {

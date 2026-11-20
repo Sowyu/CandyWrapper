@@ -19,7 +19,9 @@ public struct PullRequestActor: Codable, Hashable, Sendable {
 public struct PullRequestLabel: Codable, Hashable, Sendable {
     public var name: String
     public var color: String?
-    public init(name: String, color: String? = nil) { self.name = name; self.color = color }
+    /// Optional since 4928 (pullRequest.ts:98); older servers leave it out.
+    public var description: String?
+    public init(name: String, color: String? = nil, description: String? = nil) { self.name = name; self.color = color; self.description = description }
 }
 
 /// `PullRequestCheck` (pullRequest.ts:150). `status`: pending, action-required, success,

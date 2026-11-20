@@ -94,7 +94,8 @@ public enum GitActionsLogic {
 
         guard hasBranch else { return hint("Commit", "Create and checkout a ref before pushing or opening a \(terms.singular).") }
         if hasChanges {
-            if !s.hasUpstream && !hasPrimaryRemote { return run("Commit", .commit) }
+            // GitActionsControl.logic.ts (#24117): behind upstream, Commit alone, since a push would be refused.
+            if isBehind || (!s.hasUpstream && !hasPrimaryRemote) { return run("Commit", .commit) }
             if hasOpenPr || isDefaultRef { return run("Commit & push", .commitPush) }
             return run("Commit, push & \(terms.shortLabel)", .commitPushPr)
         }
@@ -129,17 +130,16 @@ public enum GitActionsLogic {
         case .commit:
             return hasChanges ? "Commit is currently unavailable." : "Worktree is clean. Make changes before committing."
         case .push:
+            // GitActionsControl.logic.ts:229-242 (#36786): local changes no longer hide the real reason.
             if !hasBranch { return "Detached HEAD: check out a branch before pushing." }
-            if hasChanges { return "Commit or stash local changes before pushing." }
             if isBehind { return "Branch is behind upstream. Pull/rebase before pushing." }
             if !s.hasUpstream && !hasPrimaryRemote { return "Add an \"origin\" remote before pushing." }
             if !isAhead { return "No local commits to push." }
             return "Push is currently unavailable."
         case .pr:
             if !hasBranch { return "Detached HEAD: check out a branch before creating a \(terms.singular)." }
-            if hasChanges { return "Commit local changes before creating a \(terms.singular)." }
             if !s.hasUpstream && !hasPrimaryRemote { return "Add an \"origin\" remote before creating a \(terms.singular)." }
-            if !isAhead { return "No local commits to include in a \(terms.singular)." }
+            if (s.aheadOfDefaultCount ?? s.aheadCount) <= 0 { return "No local commits to include in a \(terms.singular)." }
             if isBehind { return "Branch is behind upstream. Pull/rebase before creating a \(terms.singular)." }
             return "Create \(terms.singular) is currently unavailable."
         }
@@ -180,11 +180,34 @@ public enum GitActionsLogic {
                           continueLabel: "Push & create \(terms.shortLabel)")
     }
 
+    /// `resolveChangesTotals` (GitActionsControl.logic.ts:657-699, #28439): branch totals unless they
+    /// are zero while the working tree has edits; `baseRef` nil means uncommitted work.
+    /// ponytail: no branch preview source; take the Diff panel's base comparison once it reports file stats (#19553).
+    public static func changesTotals(_ status: VcsStatus?) -> (insertions: Int, deletions: Int, baseRef: String?)? {
+        guard let s = status else { return nil }
+        let tree = (insertions: s.workingTree.insertions, deletions: s.workingTree.deletions, baseRef: String?.none)
+        if let b = s.branchChanges, b.insertions > 0 || b.deletions > 0 { return (b.insertions, b.deletions, b.baseRef) }
+        if tree.insertions > 0 || tree.deletions > 0 { return tree }
+        return s.branchChanges.map { ($0.insertions, $0.deletions, $0.baseRef) } ?? tree
+    }
+
+    /// `changesBaseLabel` (GitActionsControl.tsx:1143-1147, #30085).
+    public static func changesBaseLabel(_ status: VcsStatus?) -> String? {
+        guard let t = changesTotals(status) else { return nil }
+        return t.baseRef.map { "vs \($0)" } ?? "Uncommitted"
+    }
+
     /// `resolveFeatureBranchUnavailableReason` (logic.ts:395-405): the server names the feature
     /// branch from the uncommitted changes, so a clean tree can't use it.
-    public static func featureBranchUnavailableReason(branchName: String, hasWorkingTreeChanges: Bool) -> String? {
-        hasWorkingTreeChanges ? nil
-            : "There are no changes to commit, so a feature branch can't be named. Create a branch yourself or continue on \(branchName)."
+    /// Push and Create PR don't commit, so they can't name one either (#29845).
+    public static func featureBranchUnavailableReason(branchName: String, hasWorkingTreeChanges: Bool, action: GitStackedAction? = nil) -> String? {
+        if !hasWorkingTreeChanges {
+            return "There are no changes to commit, so a feature branch can't be named. Create a branch yourself or continue on \(branchName)."
+        }
+        if action == .push || action == .createPr {
+            return "This action doesn't commit your changes, so a feature branch can't be named. Create a branch yourself or continue on \(branchName)."
+        }
+        return nil
     }
 
     /// `includesCommit` in `runGitActionWithToast` (GitActionsControl.tsx:1335-1339).
