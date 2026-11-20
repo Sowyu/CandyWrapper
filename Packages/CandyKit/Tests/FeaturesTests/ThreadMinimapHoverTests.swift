@@ -1,6 +1,6 @@
 import AppKit
 import Testing
-import DesignSystem
+@testable import DesignSystem
 @testable import Features
 
 /// The rail stayed in its hovered fisheye after the card closed or the pointer left (v1.14.14, Redesign). Every exit
@@ -61,5 +61,53 @@ struct ThreadMinimapHoverTests {
         }
         #expect(host.popups.isEmpty, "the card closes")
         #expect(try pixels(map) == resting, "the rail is back to rest")
+    }
+    enum Theme: CaseIterable { case standard, redesign, glass }
+
+    /// T3's resting strips are dim and the strips of turns on screen bright. In every theme, over the background behind
+    /// the rail (T3's panel, or the brightest dot dark and the darkest dot light of Redesign's art and Glass's frost),
+    /// a resting strip keeps at least T3's contrast ratio to an on-screen one, and stays visible over both extremes.
+    @Test(arguments: Theme.allCases, [false, true])
+    func restingStripsAreDimmerThanOnScreenOnes(_ theme: Theme, dark: Bool) throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        var input = previous
+        input.ditherLight = theme == .redesign; input.ditherDark = theme == .redesign
+        input.glassLight = theme == .glass; input.glassDark = theme == .glass
+        ThemeRuntime.apply(input)
+        let (window, map) = makeRail()
+        defer { map.removeFromSuperview(); window.close() }
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        let cached = try #require(map.bitmapImageRepForCachingDisplay(in: map.bounds))
+        map.cacheDisplay(in: map.bounds, to: cached)
+        let rep = try #require(cached.converting(to: .sRGB, renderingIntent: .default))
+        let scale = CGFloat(rep.pixelsWide) / map.bounds.width
+        func lum(_ c: SIMD3<Double>) -> Double { BackdropMarks.luminance(c) }
+        func strip(_ i: Int, over ground: SIMD3<Double>) throws -> Double {
+            let y = Int((CGFloat(i) / 9 * (map.bounds.height - 2) + 1) * scale)
+            let c = try #require(rep.colorAt(x: Int(4 * scale), y: y))
+            let a = Double(c.alphaComponent)
+            #expect(a > 0, "strip \(i) draws")
+            return lum(SIMD3(Double(c.redComponent), Double(c.greenComponent), Double(c.blueComponent)) * a + ground * (1 - a))
+        }
+        let t3 = BackdropMarks.reference(ThreadMinimapView.strips, dark: dark)
+        let t3Ratio = BackdropMarks.contrast(t3.states[2], t3.states[0])
+        let panel = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background.srgb
+        let solid = SIMD3(panel.x, panel.y, panel.z)
+        let grounds: [SIMD3<Double>]
+        if let worst = BackdropMarks.worstBackground(dark: dark) {
+            #expect(theme != .standard)
+            grounds = [SIMD3(repeating: worst), solid]
+        } else {
+            #expect(theme == .standard)
+            grounds = [solid]
+        }
+        for ground in grounds {
+            let rest = try strip(0, over: ground), on = try strip(9, over: ground)
+            #expect(BackdropMarks.contrast(on, rest) >= t3Ratio * 0.97, "\(theme) dark \(dark): \(BackdropMarks.contrast(on, rest)) < T3's \(t3Ratio)")
+            #expect(BackdropMarks.contrast(rest, lum(ground)) >= BackdropMarks.contrast(t3.states[0], t3.background) * 0.97,
+                    "\(theme) dark \(dark): the resting strip is fainter than T3's")
+            #expect(dark ? on > rest : on < rest)
+        }
     }
 }

@@ -402,9 +402,9 @@ public enum DitherArt {
     nonisolated static let readableMembers: Set<String> = ["--muted-foreground", "--contrast-muted-foreground",
                                                            "--secondary-label", "--contrast-secondary-label"]
 
-    nonisolated static func worstBackground(_ background: TokenColor, dark: Bool, dim: Double) -> Double {
+    nonisolated static func worstBackground(_ background: TokenColor, dark: Bool, dim: Double, veiled: Bool = true) -> Double {
         let scrim = dark ? dim : max(dim, 0.65 + 0.35 * dim)
-        let cover = scrim + Double(veilAlpha) * (1 - scrim)
+        let cover = veiled ? scrim + Double(veilAlpha) * (1 - scrim) : scrim
         let bg = (background.srgb.x + background.srgb.y + background.srgb.z) / 3
         let shift = reach / 255 * (1 - cover)
         return min(max(dark ? bg + shift : bg - shift, 0), 1)

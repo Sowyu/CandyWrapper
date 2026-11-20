@@ -2579,7 +2579,7 @@ final class ComposerController {
                     .first { $0.slug == fallback.selection.model }?.name ?? fallback.selection.model
                 let defaultModel = fallback.provider.models.first { $0.slug == fallback.defaultSelection.model }?.name ?? fallback.defaultSelection.model
                 let providerName = fallback.provider.displayName ?? fallback.provider.driver
-                let resets = fallback.resetsAt.map { UsageLimitsView.upcoming($0, nowMs: Int64(Date().timeIntervalSince1970 * 1000)) }
+                let resets = fallback.resetsAt.map { UsageTime.upcoming($0, nowMs: Int64(Date().timeIntervalSince1970 * 1000)) }
                 let banner = panel.lazyFallbackBanner.view
                 banner.apply(.init(variant: .neutral, icon: .gauge, title: "Using \(fallbackName)",
                                    description: resets.map { "\(providerName) is out of usage · resets \($0)" } ?? "\(providerName) is out of usage",
