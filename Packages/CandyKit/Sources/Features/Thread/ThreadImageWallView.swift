@@ -73,8 +73,10 @@ final class GalleryMasonryView: DSView {
 
     private var contentWidth: CGFloat { max(1, outerWidth - metrics.inset.left - metrics.inset.right) }
 
-    /// Re-flows when the scroll view's width changed since the last layout; the host calls it from its own layout.
-    func fitWidth() { if outerWidth != lastWidth { relayout() } }
+    /// Re-flows when the scroll view's width changed since the last layout, and otherwise makes the tiles the visible
+    /// rect now needs: with every size known up front nothing else would tile once the scroll view gets its frame.
+    /// The host calls it from its own layout.
+    func fitWidth() { if outerWidth != lastWidth { relayout() } else { tile(); measure() } }
 
     private var columnWidth: CGFloat {
         let n = CGFloat(columnCount)
@@ -251,7 +253,7 @@ final class GalleryTileView: ControlView {
         addSubview(caption)
         ring.cornerRadius = radius + 2
         ring.cornerCurve = .continuous
-        ring.borderWidth = 2
+        ring.borderWidth = 0
         layer?.addSublayer(ring)
         setAccessibilityRole(.button)
     }
@@ -292,7 +294,10 @@ final class GalleryTileView: ControlView {
         CATransaction.setAnimationDuration(Tokens.Motion.quick)
         CATransaction.setAnimationTimingFunction(Tokens.Motion.curve)
         shade.opacity = on ? 1 : 0
-        ring.borderColor = keyFocused || state.focusVisible ? Themed.color(\.ring).cgColor(in: self) : nil
+        // A zero width, not a nil color: a layer with a width and no color still draws its default black border.
+        let ringOn = keyFocused || state.focusVisible
+        ring.borderWidth = ringOn ? 2 : 0
+        ring.borderColor = ringOn ? Themed.color(\.ring).cgColor(in: self) : nil
         CATransaction.commit()
         if animated, !Motion.reduced {
             NSAnimationContext.runAnimationGroup { ctx in
@@ -399,7 +404,8 @@ final class GalleryViewerView: DSView {
     }
 
     private func restyle() {
-        layer?.backgroundColor = Themed.color(\.background, Double(Tokens.Surface.floating)).cgColor(in: self)
+        // Opaque: a see-through veil let the wall's header read through the count.
+        layer?.backgroundColor = Themed.color(\.background, Double(Tokens.Surface.opaque)).cgColor(in: self)
     }
 
     /// The veil returns to the wall; the picture and the controls keep their clicks.
@@ -505,7 +511,6 @@ public final class ThreadImageWallView: DSView {
         viewer.onOpenInThread = { [weak self] image in self?.onOpenInThread?(image) }
         addSubview(viewer)
         self.viewer = viewer
-        masonry.focused = index
         Self.fade(viewer, in: true, rise: false) {}
         window?.makeFirstResponder(self)
     }
@@ -528,8 +533,9 @@ public final class ThreadImageWallView: DSView {
         guard let key = Self.key(event) else { return false }
         if let viewer {
             switch key {
-            case .left: viewer.step(-1); masonry.focused = viewer.index
-            case .right: viewer.step(1); masonry.focused = viewer.index
+            // The ring follows only when the keyboard put it on the wall; a click leaves no ring behind.
+            case .left: viewer.step(-1); if masonry.focused != nil { masonry.focused = viewer.index }
+            case .right: viewer.step(1); if masonry.focused != nil { masonry.focused = viewer.index }
             case .escape: closeViewer()
             default: return false
             }

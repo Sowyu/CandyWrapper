@@ -127,6 +127,9 @@ struct RedesignBaselineTests {
             }
             let toast = ToastView(title: "Permissions have changed for Sandbox", message: "Pair again using a new link with the permissions you need.", actionTitle: "Open Connections", secondaryTitle: "Dismiss")
             try capture("toast", toast, NSSize(width: 360, height: toast.height(forWidth: 360)))
+            let wall = ThreadImageWallView(frame: .zero)
+            wall.images = Self.wallImages()
+            try capture("image-gallery", wall, NSSize(width: 900, height: 640))
             for name in ["root"] {
                 let view = Self.palette(name)
                 try capture("command-palette-" + name, view, NSSize(width: 576, height: view.intrinsicContentSize.height))
@@ -232,6 +235,18 @@ struct RedesignBaselineTests {
 
     /// Snapshot's offscreen layer renderer, with synchronous art and animations at their model end state.
     /// Art normally arrives after a debounce on a worker; capture fixed pixels before that work can run.
+    /// The full image gallery's wall: pictures of many proportions, measured up front, so the masonry places them all.
+    @MainActor static func wallImages() -> [GalleryImage] {
+        let sizes: [(Int, Int)] = [(2040, 600), (1179, 2556), (64, 64), (3840, 2160), (1024, 1024), (1600, 1200), (900, 1200), (1920, 1080),
+                                   (3000, 700), (800, 1200), (600, 1200), (1250, 1000), (1500, 500), (1200, 800), (200, 150), (500, 1500)]
+        return sizes.enumerated().map { i, size in
+            let image = GalleryImage(source: .url("https://baseline.invalid/wall-\(i).png"), threadId: "t", agent: "Main", entryId: "e\(i)",
+                                     at: T3Timestamp("2026-10-28T11:\(10 + i):00Z"))
+            MarkdownImages.record(CGSize(width: size.0, height: size.1), for: image.key)
+            return image
+        }
+    }
+
     static func image(_ view: NSView, size: NSSize, dark: Bool) -> NSBitmapImageRep {
         let canvas = ConnectionsFidelityTests.Canvas(frame: NSRect(origin: .zero, size: size))
         canvas.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)

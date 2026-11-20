@@ -494,11 +494,17 @@ public final class ThreadImageGalleryController {
         if animated { ThreadImageWallView.fade(wall, in: false, rise: true, done: finish) } else { finish() }
     }
 
-    /// The thread panel the pill sits in, or the window's content view.
+    /// The window's thread panel, beside the sidebar; the pill floats over it in a band of its own, so it is found in
+    /// the window rather than above the pill. The content view when there is none, as in tests.
     static func wallHost(for pill: NSView) -> NSView? {
-        var view: NSView? = pill
-        while let v = view { if v is ThreadPanelView { return v }; view = v.superview }
-        return pill.window?.contentView
+        guard let content = pill.window?.contentView else { return nil }
+        var queue: [NSView] = [content]
+        while !queue.isEmpty {
+            let view = queue.removeFirst()
+            if view is ThreadPanelView, !view.isHiddenOrHasHiddenAncestor { return view }
+            queue += view.subviews
+        }
+        return content
     }
 }
 

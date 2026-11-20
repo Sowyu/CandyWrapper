@@ -140,6 +140,19 @@ struct ThreadImageWallTests {
         #expect(!keys.contains { ImageDecodeCache.memory.object(forKey: "\($0)|cover" as NSString) != nil }, "its decodes leave the cache")
     }
 
+    /// With every size known before the card opens, as after the wall measured them, the card still makes its tiles
+    /// once its scroll view has a frame. On screen the card came up empty.
+    @Test func aCardOfMeasuredPicturesTilesOnLayout() {
+        let window = Self.window()
+        defer { window.contentView = nil; window.close() }
+        let card = ThreadImageGalleryView()
+        card.images = Self.measuredImages()
+        window.contentView!.addSubview(card)
+        card.layoutSubtreeIfNeeded()
+        #expect(card.grid.frames.count == 10)
+        #expect(!card.grid.tiles.isEmpty)
+    }
+
     // MARK: Count and hover
 
     @Test func theCountSitsOnTheCardsRightPadding() {
@@ -187,6 +200,13 @@ struct ThreadImageWallTests {
         #expect(tile.showsCaption)
         masonry.focused = 1
         #expect(!tile.showsCaption && tile.shade.opacity == 0)
+        // A picture opened large by a click and closed again leaves no ring on its tile.
+        masonry.focused = nil
+        if wallTile, let wall = masonry.superview?.superview?.superview?.superview as? ThreadImageWallView ?? window.contentView?.subviews.first as? ThreadImageWallView {
+            wall.openViewer(at: 0)
+            wall.closeViewer()
+            #expect(masonry.focused == nil && !tile.showsCaption)
+        }
         // Scrolling a hovered tile out of the live rect drops it, so a still pointer can't keep it lit.
         tile.mouseEntered(with: event)
         masonry.images = []
