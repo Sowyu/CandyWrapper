@@ -204,7 +204,7 @@ final class ChangedFilesCardView: DSView {
         // `bg-secondary dark:bg-input/20`; the dark header's `bg-background` plus the same overlay
         // composites to the card's own color.
         layer?.backgroundColor = Themed.color(light: \.secondary, dark: \.input, 0.2).cgColor(in: self)
-        // Redesign: a card on the reading column.
+        // Redesign: a card on the picture (`RedesignTokens.Card`).
         let card = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         if card { layer?.backgroundColor = RedesignTokens.Card.fill.cgColor(in: self) }
         layer?.borderColor = card ? RedesignTokens.Card.border.cgColor(in: self) : nil

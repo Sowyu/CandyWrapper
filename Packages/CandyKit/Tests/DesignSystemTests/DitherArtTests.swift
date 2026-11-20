@@ -40,6 +40,64 @@ struct DitherArtTests {
         #expect(DitherArt.fade(0.5) == 0.15 && DitherArt.fade(1) < 0.4)
     }
 
+    /// Blur: a hard black and white edge comes out as a smooth ramp, never past the dots' reach, so text keeps the
+    /// contrast it has over Dither.
+    @Test func blurIsSmoothAndHeldToTheReach() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "dither-blur-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let ctx = CGContext(data: nil, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 256,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        ctx.setFillColor(red: 0, green: 0, blue: 0, alpha: 1); ctx.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+        ctx.setFillColor(red: 1, green: 1, blue: 1, alpha: 1); ctx.fill(CGRect(x: 32, y: 0, width: 32, height: 64))
+        let url = dir.appending(path: "edge.png")
+        try NSBitmapImageRep(cgImage: ctx.makeImage()!).representation(using: .png, properties: [:])!.write(to: url)
+        let bg = 10.0 / 255
+        let art = try #require(DitherArt.render(.init(url: url, width: 120, height: 40, background: [bg, bg, bg], scale: 2, blur: true)))
+        let b = bytes(art), row = art.bytesPerRow
+        let line = (0..<120).map { Int(b[10 * row + $0 * 4]) }
+        #expect(line.max()! <= 10 + Int(DitherArt.reach.rounded()))
+        // No hard edge and no dither: the ramp rises steadily through many levels between the two sides.
+        #expect(zip(line, line.dropFirst()).allSatisfy { $0 <= $1 }, "\(line)")
+        #expect(line.filter { $0 > line.first! && $0 < line.last! }.count >= 8, "\(line)")
+        #expect(line.first! < 20 && line.last! > 80)
+    }
+
+    /// Flipping Background to Blur moves the art from the main panel to the whole window and asks for a blurred
+    /// render at Blur's canvas size, with no relaunch; flipping back returns it. Synchronous, so no other test runs
+    /// while the theme runtime shows Redesign.
+    @MainActor @Test func backgroundSwitchMovesTheArtLive() throws {
+        _ = NSApplication.shared
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        var input = ThemeRuntimeInput(light: ThemeDefinition.dither.colors(for: .light).map { ThemeRuntimeHalf(colors: $0) },
+                                      dark: ThemeDefinition.dither.colors(for: .dark).map { ThemeRuntimeHalf(colors: $0) })
+        input.ditherLight = true; input.ditherDark = true
+        ThemeRuntime.apply(input)
+        let shell = SidebarLayoutView(defaults: UserDefaults(suiteName: "cw.dither-blur.\(UUID().uuidString)")!)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800), styleMask: [.titled], backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        window.contentView = shell
+        defer { window.contentView = nil }
+        shell.layoutSubtreeIfNeeded()
+        func art() -> DitherArtView? { (shell.subviews + shell.main.subviews).first { $0 is DitherArtView } as? DitherArtView }
+        #expect(art()?.superview === shell.main)
+        #expect(art()?.requestForTesting?.blur == false)
+        input.ditherBlur = true
+        ThemeRuntime.apply(input)
+        shell.layoutSubtreeIfNeeded()
+        #expect(art()?.superview === shell)
+        #expect(art()?.frame == shell.bounds)
+        #expect(art()?.requestForTesting?.blur == true)
+        #expect(art()?.requestForTesting?.width == Int((shell.bounds.width / DitherArt.blurPixel).rounded(.up)))
+        input.ditherBlur = false
+        ThemeRuntime.apply(input)
+        shell.layoutSubtreeIfNeeded()
+        #expect(art()?.superview === shell.main)
+        #expect(art()?.requestForTesting?.blur == false)
+        #expect(art()?.requestForTesting?.width == Int((shell.main.bounds.width / DitherArt.dot).rounded(.up)))
+    }
+
     /// "Use desktop" never leaves the panel blank: a nil desktop URL or a file that won't decode still renders art,
     /// and a `.madesktop`, which macOS's own wallpapers are, renders its still thumbnail.
     @Test func unreadableOrMissingPicturesStillRenderArt() throws {
@@ -227,6 +285,25 @@ struct DitherTabStripAccessibilityTests {
                         // At no dim a lighter dark background can leave even white short; then the text is white.
                         #expect(ratio >= 4.5 || (dark && l > 0.999), "\(theme.id) dim \(dim) dark \(dark): \(ratio)")
                     }
+                }
+            }
+        }
+    }
+
+    /// Blur puts the sidebar on the picture: its text, muted text and icons keep 4.5:1 over the worst blurred pixel.
+    @Test func sidebarTextKeepsContrastOverTheBlur() {
+        for dim in [0, 35, 90] {
+            var input = ThemeRuntimeInput(light: ThemeDefinition.dither.colors(for: .light).map { ThemeRuntimeHalf(colors: $0) },
+                                          dark: ThemeDefinition.dither.colors(for: .dark).map { ThemeRuntimeHalf(colors: $0) })
+            input.ditherLight = true; input.ditherDark = true; input.ditherDim = dim; input.ditherBlur = true
+            let palettes = ThemeRuntime.resolve(input)
+            for dark in [false, true] {
+                let p = palettes.palette(dark: dark, sidebar: true)
+                let worst = WindowGlass.linear(DitherArt.worstBackground(p.background, dark: dark, dim: Double(dim) / 100, veiled: false))
+                for c in [p.sidebarForeground, p.sidebarMutedForeground, p.sidebarIconColor] {
+                    let l = WindowGlass.luminance(c)
+                    let ratio = (max(l, worst) + 0.05) / (min(l, worst) + 0.05)
+                    #expect(ratio >= 4.5 || (dark && l > 0.999), "dim \(dim) dark \(dark): \(ratio)")
                 }
             }
         }

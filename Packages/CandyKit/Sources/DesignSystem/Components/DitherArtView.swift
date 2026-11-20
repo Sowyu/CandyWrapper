@@ -1,3 +1,4 @@
+import Accelerate
 import AppKit
 import ImageIO
 import os
@@ -83,6 +84,12 @@ public final class DitherArtView: NSView {
             return made
         }
         if !on, let current { current.removeFromSuperview(); return nil }
+        // Blur sits behind the whole window and Dither in the main panel, so a switch moves the art.
+        if let current, current.superview !== view {
+            current.removeFromSuperview()
+            current.frame = view.bounds
+            view.addSubview(current, positioned: .below, relativeTo: nil)
+        }
         current?.refresh()
         return current
     }
@@ -128,7 +135,7 @@ public final class DitherArtView: NSView {
     /// Dots resolve in, in Bayer order, over 0.75 s, and the last frame is the static art itself, so the art ends
     /// exactly as it rests. Core Animation flips the ten frames; they exist only while it plays.
     func playReveal() {
-        guard !Motion.reduced else { return }
+        guard !Motion.reduced, !ThemeRuntime.ditherBlur else { return }
         guard let request = shown, let contents = art.contents else { revealsWhenShown = true; return }
         revealsWhenShown = false
         let final = DitherArtImage(image: (contents as! CGImage))
@@ -188,13 +195,40 @@ public final class DitherArtView: NSView {
         refresh()
     }
 
-    /// A window moved to another screen shows that screen's desktop picture.
+    /// A window moved to another screen shows that screen's desktop picture. A hidden window holds no art.
     public override func viewWillMove(toWindow newWindow: NSWindow?) {
-        if let window { NotificationCenter.default.removeObserver(self, name: NSWindow.didChangeScreenNotification, object: window) }
+        if let window {
+            NotificationCenter.default.removeObserver(self, name: NSWindow.didChangeScreenNotification, object: window)
+            NotificationCenter.default.removeObserver(self, name: NSWindow.didChangeOcclusionStateNotification, object: window)
+        }
         if let newWindow {
             NotificationCenter.default.addObserver(self, selector: #selector(desktopMayHaveChanged), name: NSWindow.didChangeScreenNotification, object: newWindow)
+            NotificationCenter.default.addObserver(self, selector: #selector(visibilityChanged), name: NSWindow.didChangeOcclusionStateNotification, object: newWindow)
         }
         super.viewWillMove(toWindow: newWindow)
+    }
+
+    /// A miniaturized or ordered-out window drops its art, which renders again when the window shows. A window only
+    /// covered by others keeps it, so it never flashes empty.
+    @objc private func visibilityChanged(_ note: Notification) {
+        guard let window else { return }
+        if !window.isVisible || window.isMiniaturized {
+            guard shown != nil || pending != nil else { return }
+            debounce?.cancel()
+            shown = nil; pending = nil
+            art.contents = nil
+        } else if shown == nil {
+            refresh()
+        }
+    }
+
+    /// Moving between the main panel (Dither) and the window (Blur): the old art never shows at the new place.
+    public override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        art.removeAnimation(forKey: "reveal")
+        art.contents = nil
+        shown = nil
+        pending = nil
     }
 
     /// A move between screens refreshes the art for the new backing scale.
@@ -210,7 +244,8 @@ public final class DitherArtView: NSView {
     /// cropped or short by a few dots until the new one renders.
     private func placeArt() {
         guard let shown else { return }
-        let w = CGFloat(shown.width) * DitherArt.dot, h = CGFloat(shown.height) * DitherArt.dot
+        let unit = DitherArt.unit(blur: shown.blur)
+        let w = CGFloat(shown.width) * unit, h = CGFloat(shown.height) * unit
         art.frame = CGRect(x: 0, y: bounds.height - h, width: w, height: h)
     }
 
@@ -276,6 +311,8 @@ public final class DitherArtView: NSView {
         } else {
             scrim.colors = nil
         }
+        // Blur runs under the band too, so the band shows the picture and needs no blend.
+        blend.isHidden = ThemeRuntime.ditherBlur
         let band = DitherChrome.bandColor(in: self)
         // Bottom (no band) to top (all band).
         let ts = (0...10).reversed().map { Double($0) / 10 }
@@ -296,10 +333,13 @@ public final class DitherArtView: NSView {
         let url = ThemeRuntime.ditherPicture ?? DitherArt.desktopPicture(for: window.screen)
         let background = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background
         let scale = window.backingScaleFactor
-        let request = DitherArt.Request(url: url, width: Int((rect.width / DitherArt.dot).rounded(.up)),
-                                        height: Int((rect.height / DitherArt.dot).rounded(.up)),
+        let blur = ThemeRuntime.ditherBlur, unit = DitherArt.unit(blur: blur)
+        art.magnificationFilter = blur ? .linear : .nearest
+        let request = DitherArt.Request(url: url, width: Int((rect.width / unit).rounded(.up)),
+                                        height: Int((rect.height / unit).rounded(.up)),
                                         background: [background.srgb.x, background.srgb.y, background.srgb.z], scale: scale,
-                                        fallbacks: [DitherArt.desktopPicture(for: window.screen), DitherArt.defaultDesktop].compactMap { $0 }.filter { $0 != url })
+                                        fallbacks: [DitherArt.desktopPicture(for: window.screen), DitherArt.defaultDesktop].compactMap { $0 }.filter { $0 != url },
+                                        blur: blur)
         guard request != shown, request != pending else { return }
         pending = request
         debounce?.cancel()
@@ -327,6 +367,7 @@ public final class DitherArtView: NSView {
     }
 
     var contentsForTesting: CGImage? { art.contents.map { $0 as! CGImage } }
+    var requestForTesting: DitherArt.Request? { pending ?? shown }
     var scrimAlphaForTesting: CGFloat { scrim.backgroundColor.flatMap { NSColor(cgColor: $0)?.alphaComponent } ?? 0 }
 }
 
@@ -338,6 +379,14 @@ private struct DitherArtFrames: @unchecked Sendable { let images: [CGImage] }
 public enum DitherArt {
     /// Dot size in points.
     public nonisolated static let dot: CGFloat = 2
+    /// Blur's pixel size in points. The blurred picture has no detail finer than its radius, so the layer scales a
+    /// canvas a quarter of the dots' on each side up smoothly, at a sixteenth of the memory.
+    public nonisolated static let blurPixel: CGFloat = 8
+    /// Blur's Gaussian sigma in points (radius about 3 sigma, 96 pt): text-sized and icon-sized detail in the picture
+    /// is gone, while its colors and the shapes a quarter of a window wide still read.
+    public nonisolated static let blurSigma: CGFloat = 32
+    /// Points per canvas pixel.
+    public nonisolated static func unit(blur: Bool) -> CGFloat { blur ? blurPixel : dot }
     /// The background's share over an open thread: the user's "Background dim" (35% by default), so the art keeps its
     /// colors and text reads over it without halos (the user, 2026-10-22).
     nonisolated static var threadScrim: CGFloat { ThemeRuntime.ditherDim }
@@ -401,6 +450,10 @@ public enum DitherArt {
     /// over it (`ThemeRuntime.resolve`).
     nonisolated static let readableMembers: Set<String> = ["--muted-foreground", "--contrast-muted-foreground",
                                                            "--secondary-label", "--contrast-secondary-label"]
+    /// Blur: the sidebar's own text and icon colors, which sit on the picture there, plus the muted ones above.
+    nonisolated static let readableSidebarMembers: Set<String> = readableMembers.union([
+        "--sidebar-foreground", "--contrast-sidebar-foreground", "--sidebar-muted-foreground",
+        "--contrast-sidebar-muted-foreground", "--sidebar-icon-color"])
 
     nonisolated static func worstBackground(_ background: TokenColor, dark: Bool, dim: Double, veiled: Bool = true) -> Double {
         let scrim = dark ? dim : max(dim, 0.65 + 0.35 * dim)
@@ -420,6 +473,8 @@ public enum DitherArt {
         var scale: CGFloat
         /// Tried in order when `url` won't render.
         var fallbacks: [URL] = []
+        /// Blurred and smooth instead of dithered (`ThemeRuntime.ditherBlur`); the canvas is in `blurPixel`s.
+        var blur = false
     }
 
     nonisolated static func smoothstep(_ a: Double, _ b: Double, _ x: Double) -> Double {
@@ -464,7 +519,7 @@ public enum DitherArt {
         if request.url == nil { log.notice("no chosen or desktop picture") }
         for url in [request.url].compactMap({ $0 }) + request.fallbacks {
             let t0 = Date()
-            guard let picture = picture(url, maxPixels: max(w, h) * 2) else { continue }
+            guard let picture = picture(url, maxPixels: max(w, h) * (request.blur ? 1 : 2)) else { continue }
             if let art = render(request, picture: picture) { return art }
             log.error("can't dither \(url.path, privacy: .private): \(picture.width) x \(picture.height), \(picture.bitsPerComponent) bits")
         }
@@ -526,7 +581,22 @@ public enum DitherArt {
         let pw = Double(picture.width) * cover, ph = Double(picture.height) * cover
         ctx.interpolationQuality = .high
         ctx.draw(picture, in: CGRect(x: (Double(w) - pw) / 2, y: (Double(h) - ph) / 2, width: pw, height: ph))
+        if request.blur { blur(ctx, width: w, height: h) }
         let bg = request.background.count == 3 ? request.background.map { $0 * 255 } : [0, 0, 0]
+        if request.blur {
+            // The same fade and reach as the dots, without the steps, so text keeps the contrast it has over Dither.
+            for y in 0..<h {
+                let keep = 1 - fade((Double(y) + 0.5) / Double(h))
+                for x in 0..<w {
+                    let i = (y * w + x) * 4
+                    var d = (0..<3).map { (Double(data[i + $0]) - bg[$0]) * keep }
+                    let m = d.map(abs).max() ?? 0
+                    if m > reach { d = d.map { $0 * reach / m } }
+                    for c in 0..<3 { data[i + c] = UInt8(min(max(bg[c] + d[c], 0), 255).rounded()) }
+                }
+            }
+            return ctx.makeImage()
+        }
         // Three strengths per hue (none, half the reach, the full reach): a clean halftone, not a mush of shades.
         let step = reach / 2
         // Row 0 of the buffer is the top of the picture.
@@ -547,6 +617,23 @@ public enum DitherArt {
             }
         }
         return ctx.makeImage()
+    }
+
+    /// Blurs `ctx`'s pixels in place by about `blurSigma`, the edges extended so no dark rim creeps in. Runs once per
+    /// render. Two tent passes are four box passes, which match a Gaussian closely; vImage needs no GPU context.
+    nonisolated static func blur(_ ctx: CGContext, width w: Int, height h: Int, sigma points: CGFloat = blurSigma) {
+        guard let data = ctx.data else { return }
+        let sigma = Double(points / blurPixel)
+        // A box of width b has variance (b² - 1) / 12, and four of them make the Gaussian's σ². A tent of width 2b - 1 is
+        // two such boxes.
+        let box = Int((sqrt(12 * sigma * sigma / 4 + 1)).rounded()) | 1
+        var buffer = vImage_Buffer(data: data, height: vImagePixelCount(h), width: vImagePixelCount(w), rowBytes: ctx.bytesPerRow)
+        guard let scratch = malloc(ctx.bytesPerRow * h) else { return }
+        defer { free(scratch) }
+        var temp = vImage_Buffer(data: scratch, height: vImagePixelCount(h), width: vImagePixelCount(w), rowBytes: ctx.bytesPerRow)
+        let k = UInt32(2 * box - 1)
+        vImageTentConvolve_ARGB8888(&buffer, &temp, nil, 0, 0, k, k, nil, vImage_Flags(kvImageEdgeExtend))
+        vImageTentConvolve_ARGB8888(&temp, &buffer, nil, 0, 0, k, k, nil, vImage_Flags(kvImageEdgeExtend))
     }
 
     /// The art partly resolved, one frame per reveal: a dot whose Bayer threshold is above the reveal shows the

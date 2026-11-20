@@ -52,6 +52,8 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var ditherPicture: String?
     /// How much the background dims the art behind an open thread, 0 to 90 (percent).
     public var ditherDim = 35
+    /// Redesign's "Background": the picture blurred behind the whole window instead of dithered in the main panel.
+    public var ditherBlur = false
     /// Redesign's accent, a `DitherAccent` id.
     public var ditherAccent = DitherAccent.teal.id
     /// "Ignore Reduce Transparency": Redesign and Glass draw as if macOS's Reduce Transparency were off.
@@ -77,6 +79,8 @@ public enum ThemeRuntime {
     nonisolated(unsafe) public private(set) static var glassOpacity: CGFloat = 0.8
     /// Redesign's dim over the art behind an open thread (the "Background dim" setting).
     nonisolated(unsafe) public private(set) static var ditherDim: CGFloat = 0.35
+    /// Redesign's "Background" is Blur: the picture blurred behind the whole window (`DitherArtView`).
+    nonisolated(unsafe) public private(set) static var ditherBlur = false
     /// Redesign's accent (the "Accent color" setting). Its palette roles arrive through the Dither half's colors.
     nonisolated(unsafe) public private(set) static var ditherAccent = DitherAccent.teal
     public private(set) static var input = ThemeRuntimeInput()
@@ -112,7 +116,8 @@ public enum ThemeRuntime {
             || next.glassLight != old.glassLight || next.glassDark != old.glassDark
             || next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark
             || (next.glassOpacity != old.glassOpacity && (next.glassLight || next.glassDark || next.ditherLight || next.ditherDark))
-            || (next.ditherDim != old.ditherDim && (next.ditherLight || next.ditherDark)) {
+            || (next.ditherDim != old.ditherDim && (next.ditherLight || next.ditherDark))
+            || (next.ditherBlur != old.ditherBlur && (next.ditherLight || next.ditherDark)) {
             let resolved = resolve(next)
             if !resolved.isSame(as: palettes) {
                 palettes = resolved
@@ -125,6 +130,10 @@ public enum ThemeRuntime {
         }
         if next.ditherDim != old.ditherDim {
             ditherDim = CGFloat(min(max(next.ditherDim, 0), 90)) / 100
+            changed = true
+        }
+        if next.ditherBlur != old.ditherBlur {
+            ditherBlur = next.ditherBlur
             changed = true
         }
         if next.ditherAccent != old.ditherAccent {
@@ -209,6 +218,8 @@ public enum ThemeRuntime {
                 }
             })
         }
+        // The main panel's backgrounds, which Blur's scrim lays over the picture behind the sidebar too.
+        let grounds = (light: (light?.0 ?? Tokens.light).background, dark: (dark?.0 ?? Tokens.dark).background)
         func glass(_ palette: Palette, dark: Bool, sidebar: Bool) -> Palette {
             // Redesign light: the sidebar's menu icons, which T3 mixes toward the sidebar, take the muted icon color
             // so they keep 3:1.
@@ -216,6 +227,20 @@ public enum ThemeRuntime {
             if !dark, input.ditherLight {
                 let members = palette.members, icon = palette.iconMuted
                 palette = Palette(members: { Palette.memberNames[$0] == "--sidebar-icon-color" ? icon : members[$0] })
+            }
+            // Blur: the sidebar sits on the picture too, so its muted text keeps 4.5:1 over the brightest (dark) or
+            // darkest (light) blurred pixel, which is never past the dots' reach.
+            if sidebar, input.ditherBlur, dark ? input.ditherDark : input.ditherLight {
+                // The scrim over the picture is the main panel's background, also behind the sidebar.
+                let ground = dark ? grounds.dark : grounds.light
+                let worst = WindowGlass.linear(DitherArt.worstBackground(ground, dark: dark,
+                                                                         dim: Double(min(max(input.ditherDim, 0), 90)) / 100, veiled: false))
+                let members = palette.members
+                return Palette(members: { i in
+                    let c = members[i]
+                    guard DitherArt.readableSidebarMembers.contains(Palette.memberNames[i]), c.srgb.w >= 1 else { return c }
+                    return WindowGlass.readable(c, over: worst, ratio: 4.6, dark: dark)
+                })
             }
             // Dither: the main panel's cards, bubbles and popovers become frosted panes over its art. The sidebar and
             // the panel's own background stay solid.

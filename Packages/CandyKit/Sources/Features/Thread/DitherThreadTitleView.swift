@@ -1,38 +1,7 @@
 import AppKit
 import DesignSystem
 
-/// Redesign's reading column: one resting glass surface behind the thread's lane, so assistant text, tool rows, command
-/// output, code and tables read over any picture while the picture shows on both sides (docs/research/redesign-system.md,
-/// "Reading column"). One blur for the whole column replaces a blur per user bubble.
-///
-/// The rows fade out over the column's top (the thread panel's timeline mask), so no message reads under the header
-/// pill and no header bar shows (the user removed header bars in every theme, 324b6bcf). The thread's project and
-/// title sit in that clear top.
-final class DitherReadingColumnView: DSView {
-    let title = DitherThreadTitleView()
-    private let surface = DitherPillSurface()
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        surface.radius = RedesignTokens.Radius.panel
-        addSubview(surface)
-        addSubview(title)
-        setAccessibilityElement(false)
-    }
-
-    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-    override func layout() {
-        super.layout()
-        surface.frame = bounds
-    }
-
-    override func accessibilityChildren() -> [Any]? { title.isHidden ? [] : [title] }
-}
-
-/// The thread's project and title at the top of the reading column: the project in the muted color, a slash, then the title in the
+/// Redesign: the thread's project and title at the top of an open thread, straight on the picture: the project in the muted color, a slash, then the title in the
 /// text color at 500, 13pt on a 20pt line, the title truncating first.
 final class DitherThreadTitleView: DSView {
     private let project = LabelView("", font: DSFont.ui(13), color: Themed.color(\.mutedForeground))
