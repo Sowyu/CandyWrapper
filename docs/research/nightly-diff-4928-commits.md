@@ -154,7 +154,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 70f475f511 | #28516 | thread | feat(clients): surface child approvals in parent threads | port |
+| 70f475f511 | #28516 | thread | feat(clients): surface child approvals in parent threads | left (thread-2): needs a watch per approving child through `watchThread`, `PendingRequests.derive` on each, and a card list above the composer shell, outside the banner stack, reusing PendingApprovalInlineView, plus a spec case and reference. The banner's Open approval works meanwhile |
 
 ## Port group usage-page (5)
 
@@ -312,7 +312,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 23e3465ec6 | #32830 | thread | fix(clients): unloaded thread links show their title and project icon | port |
+| 23e3465ec6 | #32830 | thread | fix(clients): unloaded thread links show their title and project icon | ported: a thread chip this client hasn't loaded asks `orchestration.getThreadLinkMetadata` once where the server sets `threadLinkMetadata`, then shows the title and project icon (thread-2, App ThreadSession `linkMetadataThread`) |
 | f558007b20 | #30709 | thread | fix(clients): parse angle-bracketed thread link destinations | port |
 
 ## Port group labs-cleanup (1)
@@ -337,7 +337,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| ad9e87111f | #33092 | thread | feat(web): send messages while attachments upload | ported: Send stays enabled while uploads run and the send goes once they land; approval redirects still wait (ComposerAttachmentRules `sendBlockReason`). The message shows only once it sends, not as sending meanwhile. Left in composer-3: the timeline's sending state needs send() to echo and clear before uploads land and wait in its dispatch Task (chatViewSend.ts awaitAttachmentUploads), with each upload's outcome kept after the draft lets go of its attachments |
+| ad9e87111f | #33092 | thread | feat(web): send messages while attachments upload | ported: Send stays enabled while uploads run and the send goes once they land; approval redirects still wait (ComposerAttachmentRules `sendBlockReason`). In a thread the message now shows at once with files reading "Sending…", the composer clears, and the dispatch waits for each upload, whose outcome outlives the draft; a failed upload takes the message back and restores the draft (thread-2, ComposerController `sendingUploads`). Left: a new thread's first send still waits in the composer |
 
 ## Port group design-icons (1)
 
@@ -600,7 +600,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 3d78e915e3 | #30000 | settings | feat(web): a Labs setting hides tool calls so threads read like a chat | ported (settings-4928): Show all, Hide successful and Hide all filter the timeline; Zen filters like Hide all until its final-answer pass is ported |
+| 3d78e915e3 | #30000 | settings | feat(web): a Labs setting hides tool calls so threads read like a chat | ported (settings-4928): Show all, Hide successful and Hide all filter the timeline; Zen shows the prompts, each ended turn's final answer, steer answers and errors, with no folds and no working row once the answer lands (thread-2, TimelineRows `filteringToolCalls`). Left: Zen's live answer line in the working row (`liveAnswerPreview`) |
 
 ## New feature reclaim-db (1)
 
@@ -625,7 +625,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 88109cea46 | #31207 | composer | feat(web,mobile): @-mention a model to name it for the agent | ported: `@` lists up to 8 models of ready instances whose names start a word for every query word, after machines and threads (ComposerModelMentions.items); a pick writes `model:<instance>/<slug>`, and the editor chips a reference the server lists, followed by whitespace, with the provider logo and the model accent in the logo's hue (ComposerChipLook `.model`). Left: the chip's popover, chips in sent messages (ChatMarkdown, Features/Thread) and skipping `$…$` math (no composer math ranges in CW yet) |
+| 88109cea46 | #31207 | composer | feat(web,mobile): @-mention a model to name it for the agent | ported: `@` lists up to 8 models of ready instances whose names start a word for every query word, after machines and threads (ComposerModelMentions.items); a pick writes `model:<instance>/<slug>`, and the editor chips a reference the server lists, followed by whitespace, with the provider logo and the model accent in the logo's hue (ComposerChipLook `.model`). Sent messages chip known references too, copying the source (thread-2, MarkdownContextChips `modelDocument`). Left: the chip's popover (a tooltip for now), chips in assistant replies, and skipping `$…$` math (no composer math ranges in CW yet) |
 
 ## New feature mcp-client-setup (3)
 
@@ -663,7 +663,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| c0f85e7f79 | #33124 | thread | feat(web): reply to an assistant response from its hover actions | ported: a finished assistant message gets Reply (TimelineMessageRows `AssistantMetaContent`), the composer shows "Replying to" with the response's opening as a link and Cancel reply, and the send leads with a `response` reference and record carrying its subagents (ComposerReply, ComposerController `replyToResponse`); behind `serverUpdateStaging` since 3824 rejects the kind. Left: the sent message's reply card (`ResponseReplyCard`, Features/Thread) and the stash keeping a reply |
+| c0f85e7f79 | #33124 | thread | feat(web): reply to an assistant response from its hover actions | ported: a finished assistant message gets Reply (TimelineMessageRows `AssistantMetaContent`), the composer shows "Replying to" with the response's opening as a link and Cancel reply, and the send leads with a `response` reference and record carrying its subagents (ComposerReply, ComposerController `replyToResponse`); behind `serverUpdateStaging` since 3824 rejects the kind. The sent message draws its reference as the reply card, subagent names over the response's opening, and a click goes to the response (thread-2, MarkdownLayout `citationParagraph`). Left: the stash keeping a reply |
 
 ## New feature agent-theming (5)
 
@@ -897,7 +897,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 8f0d66de5f | #26109 | connections | fix(web): servers still restarting after an app update no longer offer the update again | port |
 | 7cd9a73b2f | #24493 | connections | fix(web): thread alerts missed during a disconnect fire on reconnect | port |
 | aa46f7ada4 | #25591 | connections | fix(client-runtime): re-pairing at a new address uses the new token | port |
-| 95d4da5a93 | #28592 | connections | fix(clients): open a delegated child's approval on the environment it runs in | port |
+| 95d4da5a93 | #28592 | connections | fix(clients): open a delegated child's approval on the environment it runs in | already in CandyWrapper: the child input banner opens the child's scoped thread id, which carries its own environment (Features/Thread/ThreadLineageController `updateChildInputs`) |
 | 322f6544df | #30498 | connections | feat(web): show a newly created pairing link without expanding the client list | port |
 | d520d5bb85 | #26464 | connections | fix(web): show saved service access with Local environment off | port |
 | dff0b1159b | #25198 | connections | fix(connect): show why relay unlink failed | port |
@@ -1420,14 +1420,14 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | ecea6ca3e6 | #21878 | thread | fix(web): edit from here uses a pencil icon | port |
 | 3d5baafecf | #22100 | thread | fix(web): respect reduced motion in thread loading controls | port |
 | 6ca95bd92a | #23626 | thread | fix(web): Enter no longer skips an unanswered question | ported: Next and Enter stay on an unanswered question (T3Store `UserInputSession.advance`) |
-| 616c426f5f | #27372 | thread | fix(shared): TypeScript files no longer show as videos | port |
+| 616c426f5f | #27372 | thread | fix(shared): TypeScript files no longer show as videos | ported: `video/mp2t` and `video/vnd.dlna.mpeg-tts` attachments stay files in sent messages and their chips (thread-2, T3Store `isPlayableVideoMime`). Left: the composer's own check in ComposerAttachments (Features/Composer) |
 | 8d012a688e | #27522 | thread | fix(web): a new thread's first reply shows without reloading | port |
-| a0d6cc8ba9 | #21594 | thread | fix(client-runtime): goal token counts no longer read 1000k | port |
+| a0d6cc8ba9 | #21594 | thread | fix(client-runtime): goal token counts no longer read 1000k | ported: goal usage reads 1m, not 1000k, from 999,500 tokens (thread-2, ThreadRecoveryPresentation) |
 | f47700849e | #22141 | thread | fix(web): show the result of the notified delegated task | port |
 | 5ad7da060d | #22367 | thread | fix(web): keep markdown separators visible in dark mode | ported in eceea265 |
 | 9ceb949a01 | #22875 | thread | fix(web): copied Markdown tables keep formula pipes | port |
 | c40b32a729 | #23448 | thread | fix(web): keep ACP agent logos in multi-model selections | port |
-| 3bd744fc11 | #23679 | thread | fix(web): show clipboard errors in anchored copy notifications | port |
+| 3bd744fc11 | #23679 | thread | fix(web): show clipboard errors in anchored copy notifications | n/a: web clipboard API errors; NSPasteboard writes don't fail this way |
 | 17580724fc | #26067 | thread | fix(web): byte sizes just under the next unit no longer read "1024 KB" | port |
 | 9ad6c7ef8b | #26145 | thread | fix(web,mobile): long links in secret requests wrap and can be copied | port |
 | 22463861cd | #26151 | thread | fix(web): clicking a secret request card focuses its field again | port |
@@ -1439,12 +1439,12 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | f3bbd0fd07 | #21378 | thread | fix(web): video full-screen buttons work in HTML renders | port |
 | 447d71d901 | #25838 | thread | fix(web): chat stays centered while the thread details card fits beside it | port |
 | 191cd7e789 | #25948 | thread | fix(web): match HTML render backgrounds to the dark chat theme | port |
-| fd08b170b6 | #26871 | thread | fix(web): punctuation after a file chip stays on the chip's line | port |
-| f2cd7a1e63 | #25199 | thread | fix(web): show complete tooltip labels when opening | port |
+| fd08b170b6 | #26871 | thread | fix(web): punctuation after a file chip stays on the chip's line | already in CandyWrapper: a chip is a run of the same attributed text, and line breaking never breaks before closing punctuation (Features/Markdown/MarkdownLayout `text`) |
+| f2cd7a1e63 | #25199 | thread | fix(web): show complete tooltip labels when opening | n/a: CSS tooltip entry animation; AppKit tooltips draw whole |
 | 09ac55639a | #26716 | thread | fix(web): popovers fade out in place instead of jumping after a pick | port |
 | eef35b0262 | #26762 | thread | fix(clients): stop loading thread families when opening chats | port |
-| 0343c83aa6 | #24833 | thread | fix(web,mobile): lineage and agent rows show which account a subagent runs on | port |
-| 2c59bf66c7 | #24898 | thread | fix(web,mobile): subagent cards show which account each subagent runs on | port |
+| 0343c83aa6 | #24833 | thread | fix(web,mobile): lineage and agent rows show which account a subagent runs on | ported: lineage rows draw the subagent's instance badge on its glyph and lift the status dot to the top corner while any instance shows one (thread-2, ThreadRelationshipIconView). Left: workflow member rows |
+| 2c59bf66c7 | #24898 | thread | fix(web,mobile): subagent cards show which account each subagent runs on | ported: subagent cards draw the instance badge on the avatar's glyph and lift the dot the same way (thread-2, SubagentCardLinkView, ThreadViewModel `providerBadge`) |
 | bfd37b774b | #27310 | thread | fix(web): Queued messages can be edited during Compact and send | port |
 | b0aa468aa1 | #23621 | thread | fix(web): copy and save images embedded as data URLs | port |
 | c2dc2eaaf5 | #24050 | thread | fix(web,mobile): Hebrew and Arabic read right to left in questions, citations, attachments and diff comments | port |
@@ -1454,8 +1454,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 4ed4950b7c | #23024 | thread | fix(client): reject incomplete GitHub owner paths before lookup | port |
 | 41b3b0b1b6 | #25002 | thread | fix(clients): background work Stop stays pending until the stopped tasks leave | port |
 | 510aa5af40 | #26095 | thread | fix(web): Arabic paragraphs with many English terms now read right to left | port |
-| b46a4edc03 | #26398 | thread | fix(web): dark-mode <picture> images load instead of showing "Image unavailable" | port |
-| 58f8ab47a0 | #27794 | thread | fix(web): bare URL links keep trailing underscores and tildes | port |
+| b46a4edc03 | #26398 | thread | fix(web): dark-mode <picture> images load instead of showing "Image unavailable" | skip: CandyWrapper draws no raw HTML `<picture>` in replies yet; take it with raw HTML support |
+| 58f8ab47a0 | #27794 | thread | fix(web): bare URL links keep trailing underscores and tildes | ported: a bare URL takes back the trailing `_` and `~` that GFM's autolink drops (thread-2, MarkdownDocument `keepingBareLinkTails`) |
 | 16f35ce29b | #27841 | thread | fix(shared): truncate keeps emoji whole | port |
 | 46e90bad0d | #28585 | thread | fix(web): many automations no longer hide the thread details Automations section | ported (settings-4928): automations no longer count toward the card's density fit; the list's 13.5rem scroll cap is not ported |
 | 5884d43481 | #23588 | thread | fix(web): sort pull request lists and timelines by time | port |
@@ -1483,7 +1483,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | ef81fd15ca | #31888 | thread | fix(web): keep task updates static in the timeline | port |
 | 6dcaf6cbe7 | #29285 | thread | fix(web): remote subagents no longer split from the lineage list | port |
 | 8bf1b64cae | #32141 | thread | fix(web): the citation comment box opens at the quote instead of sliding in from the corner | port |
-| 07508ffd2f | #31794 | thread | fix(web): popovers over the desktop header respond to the pointer | port |
+| 07508ffd2f | #31794 | thread | fix(web): popovers over the desktop header respond to the pointer | n/a: Electron's title bar drag region; AppKit hit-tests popups above the window chrome |
 | 08a3909406 | #31825 | thread | fix: show latest reply age in active thread rows | ported 9a0153d1 |
 | 48bb784e3d | #32403 | thread | fix(shared): inline code like `allocator.cc:217` becomes a file chip | ported in 93df13b9 |
 | 57ded10b74 | #25694 | thread | fix(web): restore bold weight in rendered Markdown | ported in eceea265 |
@@ -1496,8 +1496,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 739aba73b7 | #29025 | thread | fix(web,mobile): per-thread auto-settle menu says what it does | port |
 | ceed427d79 | #29601 | thread | fix(web): removing a queued message's attachment counts as an edit when its run starts | port |
 | 6e4711d376 | #33525 | thread | fix(web): clicked workspace areas no longer show the focus ring after a stray key | port |
-| 45e0143cf1 | #33598 | thread | fix(web): thread title menu opens without a half-second wait on desktop | port |
-| ad989057ba | #32643 | thread | fix(web): dropdown items over the desktop title bar respond to clicks | port |
+| 45e0143cf1 | #33598 | thread | fix(web): thread title menu opens without a half-second wait on desktop | n/a: the desktop shell's menu delay; CandyWrapper's title menu opens on click |
+| ad989057ba | #32643 | thread | fix(web): dropdown items over the desktop title bar respond to clicks | n/a: Electron's title bar drag region |
 | 046efd791e | #26630 | thread | fix(web): scrolling pans expanded images and Mermaid diagrams | port |
 | 16a6c1c41f | #33647 | thread | fix(web): show details for background commands | port |
 | 934c7f8d8e | #33724 | thread | fix(web): center short PR titles in thread details | port |
@@ -1506,19 +1506,19 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 57d5e98272 | #33038 | thread | fix(web): minimap next turn is disabled at the bottom of a thread | port |
 | e509db3a2f | #32605 | thread | fix(web): Tab reaches the add-project and new-project submit buttons | port |
 | 20723d6d9b | #32520 | thread | fix: Claude monitor wakes no longer fire a completion alert per line | port |
-| 08af12da49 | #33994 | thread | fix(shared): show zero seconds in minute durations | port |
+| 08af12da49 | #33994 | thread | fix(shared): show zero seconds in minute durations | already in CandyWrapper: durations read `1m 0s` (screens-port, T3Store ThreadRelationships `formatDuration`) |
 | 3051b32502 | #33943 | thread | fix: chat file links open the file agents cite | port |
 | 283fa1f1cd | #34011 | thread | fix(clients): scroll truncated command output notice with logs | port |
 | d256170b34 | #34006 | thread | fix: file links with line ranges open at their first line | ported in 93df13b9: a range opens at its first line; the label check ignores the end line |
-| d6d1763d41 | #33820 | thread | fix(web): sent messages keep the numbers written on list items | port |
+| d6d1763d41 | #33820 | thread | fix(web): sent messages keep the numbers written on list items | ported: sent messages keep each ordered item's written number and draw every level in digits; the gutter widens by the numbers shown (thread-2, MarkdownDocument `keepWrittenNumbers`). Left: copying a list keeps CommonMark's numbers (markdown-clipboard.ts) |
 | 43915a4064 | #34095 | thread | fix(web): question panel header text sits centered in its row | port |
 | ccc7b2d96f | #33352 | thread | fix(web): MCP App cards no longer flash white in dark mode while the app loads | port |
 | 32fdad5f49 | #32151 | thread | fix(web): timeline minimap preview no longer steals hover or jumps around | port |
 | 5b11efe5df | #30473 | thread | fix(clients): images the agent opens stay visible in the chat | ported in 2eb8794e |
-| 11611419f3 | #33396 | thread | fix(web): trackpad flicks over the right panel tabs no longer navigate back | port |
+| 11611419f3 | #33396 | thread | fix(web): trackpad flicks over the right panel tabs no longer navigate back | n/a: browser back-swipe navigation, which AppKit views don't have |
 | 1c17285e58 | #28084 | thread | fix(shared): cite assistant messages with IDs over 512 characters | port |
 | d835e430db | #22874 | thread | fix(web): question answers submit while normal sends are blocked | port |
-| 691b9709b0 | #26408 | thread | fix(web): Ctrl + "+" zooms on keyboard layouts with a dedicated plus key | port |
+| 691b9709b0 | #26408 | thread | fix(web): Ctrl + "+" zooms on keyboard layouts with a dedicated plus key | n/a: browser zoom shortcuts on keyboard layouts; CandyWrapper has no page zoom |
 | b3f5d52701 | #24138 | thread | fix(composer): steer instead of queueing during automatic compaction | port |
 | f3da8ff63b | #30575 | thread | feat(gitlab): resolve overview threads from Summary and Timeline | port |
 | afa617b465 | #15255 | thread | fix(web): branch picker no longer interrupts a running turn | port |
@@ -1567,7 +1567,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 451e3756a5 | #33953 | thread | fix(web): keep later navigation when thread deletion completes | port |
 | b63d3c5923 | #26888 | thread | fix(web): sent messages honor their theme foreground | port |
 | dfded9d759 | #27436 | thread | fix(web): keep the child thread open when its remote parent was deleted | port |
-| 9ac4535b06 | #35634 | thread | fix(shared): token counts just below a unit boundary use the next unit | port |
+| 9ac4535b06 | #35634 | thread | fix(shared): token counts just below a unit boundary use the next unit | ported: token counts pick their unit after rounding, so 999,999 reads 1M (thread-2, T3Store `formatTokens`) |
 | c6b18c4741 | #33353 | thread | fix(web,mobile): keep line breaks in pending question text | port |
 | c4e74fe767 | #29511 | thread | Typeset equations that fail only because of an unescaped percent | port |
 | 9ccc0f8a60 | #33558 | thread | fix(editors): JetBrains IDEs open file links in the thread's project | port |
@@ -1593,8 +1593,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 66ec37079a | #36298 | thread | fix(shared): hosted thread URLs inside other links stay as written | port |
 | 250d372e51 | #36321 | thread | fix(web): images in expanded tool rows page through the group's viewed images | ported in 2eb8794e |
 | cfc71e1a99 | #36357 | thread | fix(web): preview annotations in question answers reach the agent with their text | port |
-| 48cdefed5a | #32108 | thread | fix(web): size markdown media whose width and height carry a px unit | port |
-| c8db8be305 | #36334 | thread | fix(web): a run waiting on foreground subagents says so instead of Thinking | port |
+| 48cdefed5a | #32108 | thread | fix(web): size markdown media whose width and height carry a px unit | skip: CandyWrapper draws no raw HTML `<img>` in replies yet; take it with raw HTML support |
+| c8db8be305 | #36334 | thread | fix(web): a run waiting on foreground subagents says so instead of Thinking | ported: the Thinking row reads Waiting on a subagent or Waiting on N subagents while the run's newest entries are its own running subagents (thread-2, TimelineRows `.thinking(label:)`). Zen keeps Thinking since it hides the cards |
 | cf382b0c44 | #24637 | thread | fix(web,mobile): explain missing file access for host videos | port |
 | 4c7685729f | #36497 | thread | fix(web): clicking a label in an inline HTML render no longer jumps the chat | free with the runtime: the label fix is in the bootstrap the server injects |
 | a4723422e7 | #26692 | thread | fix(web): screen readers no longer say "Message" twice entering the composer | port |
@@ -1987,7 +1987,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | a1621a81af | #25225 | - | fix(server): show MCP App forms from failed tool results | n/a: server only |
 | cb5fac907a | #24080 | - | fix(server): mark unread no longer brings back a dismissed wake | n/a: server only |
 | 44d508fd8b | #27239 | - | feat(server): `t3 service protect` keeps the server alive when agents fill memory | n/a: server only |
-| 6b1245cced | #27252 | - | fix(server): Stop always completes, and an agent that ignores it can be force stopped | n/a: server only |
+| 6b1245cced | #27252 | - | fix(server): Stop always completes, and an agent that ignores it can be force stopped | ported: the thread's now lines show Stopping with its time, and Agent not responding to Stop with Force stop once the request has `unresponsiveAt`, behind `threadForceStop` (thread-2, T3Store `RunStop`, ComposerController `forceStop`) |
 | 476590d0ad | #27430 | - | feat(desktop): back/forward buttons and trackpad swipe navigation | n/a: desktop only |
 | e4ecaf629d | #27373 | - | feat(mobile): message media, file cards and grouped steers match web | n/a: mobile only |
 | 028ed851d5 | #19066 | - | fix(server): Codex generated images show in chat, including on Android with a Windows host | n/a: server only |

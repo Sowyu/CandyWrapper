@@ -451,7 +451,7 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case providers, settings, keybindings, environment, keybindingsConfigPath, availableEditors, remoteOpenTargets, shellRevealInFileManager,
              shellRevealInFileManagerKind,
-             scratchWorkspaceRoot, newProjectsRoot, lastEventLoopStall, threadFind, threadFindProgressive, observability, issues,
+             scratchWorkspaceRoot, newProjectsRoot, lastEventLoopStall, threadFind, threadFindProgressive, threadLinkMetadata, observability, issues,
              directEndpoints, serverTime, cwd
     }
 
@@ -469,6 +469,8 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
         // These flags live at ServerConfig's top level (server.ts:687-688).
         if try c.decodeIfPresent(Bool.self, forKey: .threadFind) == true { capabilities.insert("threadFind") }
         if try c.decodeIfPresent(Bool.self, forKey: .threadFindProgressive) == true { capabilities.insert("threadFindProgressive") }
+        // `threadLinkMetadata` (4928 server.ts:725): `orchestration.getThreadLinkMetadata` answers unloaded thread chips.
+        if (try? c.decodeIfPresent(Bool.self, forKey: .threadLinkMetadata)) == true { capabilities.insert(ThreadLinkMetadata.configFlag) }
         keybindingsConfigPath = try? c.decodeIfPresent(String.self, forKey: .keybindingsConfigPath)
         keybindingIssues = (try? c.decodeIfPresent([JSONValue].self, forKey: .issues)) ?? []
         observability = try? c.decodeIfPresent(JSONValue.self, forKey: .observability)

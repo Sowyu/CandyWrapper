@@ -494,12 +494,12 @@ private func messageFlags(_ row: TimelineRow?) -> (meta: Bool, copy: Bool, strea
             if case .workLive(_, _, _, _, let active, _)? = row?.kind { #expect(active) } else { Issue.record("no live row: \(set.map(\.id))") }
         }
         #expect(live(failed).isEmpty)
-        guard let last = failed.last, case .thinking(let groupId?, _, _) = last.kind, last.id == "live-activity-row" else {
+        guard let last = failed.last, case .thinking(let groupId?, _, _, _) = last.kind, last.id == "live-activity-row" else {
             Issue.record("a failed latest tool hands the row back to thinking with its group: \(failed.map(\.id))")
             return
         }
         let open = rows(.failed, expanded: [groupId])
-        if case .thinking(_, let expanded?, _) = open[open.count - 2].kind { #expect(expanded) } else { Issue.record("no open thinking row") }
+        if case .thinking(_, let expanded?, _, _) = open[open.count - 2].kind { #expect(expanded) } else { Issue.record("no open thinking row") }
         if case .work(let grouped, true, _) = open[open.count - 1].kind { #expect(grouped.map(\.id) == ["latest-command"]) } else { Issue.record("no group body") }
         #expect(live(declined).first?.active == false)
         #expect(declined.last.map { kind($0) == "thinking" && $0.id == "live-activity-row" } == true)
@@ -683,5 +683,44 @@ struct ToolCallVisibilityTests {
         #expect(ids("showAll") == ["ok", "failed", "running", "thinking", "m"])
         #expect(ids("hideSuccessful") == ["failed", "running", "thinking", "m"])
         #expect(ids("hideAll") == ["thinking", "m"])
+    }
+
+    /// #36334: a run whose newest entries are its own running subagents says it waits on them.
+    @Test func thinkingWaitsOnSubagents() {
+        let at: T3Timestamp = "2026-01-01T00:00:00Z"
+        func agent(_ id: String, _ status: String) -> TimelineEntry {
+            let item = turnItem("{\"id\":\"\(id)\",\"type\":\"subagent\",\"runId\":\"r1\",\"status\":\"\(status)\",\"updatedAt\":\"\(at.raw)\"}")
+            return TimelineEntry(id: id, createdAt: at, kind: .event(ProjectedTurnItem(local: item)))
+        }
+        let entries = [message("u", role: .user, at: at), message("a", role: .assistant, run: "r1", at: at),
+                       agent("s1", "running"), agent("s2", "completed"), agent("s3", "running")]
+        var input = TimelineRowsInput(entries: entries, latestRun: TimelineLatestRun(runId: "r1", status: .running, startedAt: at), isWorking: true)
+        input.activeTurnStartedAt = at
+        func label(_ rows: [TimelineRow]) -> String?? {
+            rows.lazy.compactMap { if case .thinking(_, _, _, let label) = $0.kind { label } else { nil } }.first
+        }
+        #expect(label(TimelineRows.derive(input)) == .some("Waiting on 2 subagents"))
+        input.entries.append(message("b", role: .assistant, run: "r1", at: at))
+        #expect(label(TimelineRows.derive(input)) != .some("Waiting on 2 subagents"))
+    }
+
+    /// Zen (MessagesTimeline.logic.ts:1527-1551): each ended turn's final answer and the prompts; the running turn's
+    /// answer waits, errors stay.
+    @Test func zenShowsFinalAnswersOnly() {
+        let at: T3Timestamp = "2026-01-01T00:00:00Z"
+        let entries: [TimelineEntry] = [
+            message("u1", role: .user, at: at),
+            message("a1", role: .assistant, run: "r1", at: at),
+            work("cmd", at: at) { $0.itemType = .commandExecution; $0.runId = "r1" },
+            message("a2", role: .assistant, run: "r1", at: at),
+            message("u2", role: .user, at: at),
+            work("boom", at: at) { $0.tone = .error; $0.runId = "r2" },
+            message("a3", role: .assistant, run: "r2", at: at),
+        ]
+        var input = TimelineRowsInput(entries: entries, latestRun: TimelineLatestRun(runId: "r2", status: .running, startedAt: at), isWorking: true)
+        #expect(TimelineRows.filteringToolCalls(entries, visibility: "zen", input: input).map(\.id) == ["u1", "a2", "u2", "boom"])
+        input.isWorking = false
+        input.latestRun = nil
+        #expect(TimelineRows.filteringToolCalls(entries, visibility: "zen", input: input).map(\.id) == ["u1", "a2", "u2", "boom", "a3"])
     }
 }

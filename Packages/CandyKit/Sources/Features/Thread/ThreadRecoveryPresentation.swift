@@ -9,7 +9,11 @@ public enum ThreadGoalPresentation {
             .usageLimited: "Goal hit a usage limit", .budgetLimited: "Goal reached its token budget", .complete: "Goal complete"]
         var parts = [labels[goal.status] ?? "Goal set"]
         func tokens(_ value: Int) -> String {
-            value < 1_000 ? "\(value)" : value < 1_000_000 ? "\(Int((Double(value) / 1_000).rounded()))k" : ThreadContextWindowUsage.tokens(Double(value))
+            // `formatGoalTokens` (4928 client-runtime state/threadExecution.ts:716-721, #21594): 999,500 reads 1m, not 1000k.
+            let thousands = Int((Double(value) / 1_000).rounded())
+            if value < 1_000 { return "\(value)" }
+            if thousands < 1_000 { return "\(thousands)k" }
+            return String(format: "%.1f", Double(value) / 1_000_000).replacing(/\.0$/, with: "") + "m"
         }
         if let used = goal.tokensUsed, used > 0 {
             parts.append(tokens(used) + (goal.tokenBudget.map { " / " + tokens($0) } ?? "") + " tokens")

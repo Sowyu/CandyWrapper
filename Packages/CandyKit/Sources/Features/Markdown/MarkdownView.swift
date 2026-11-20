@@ -408,7 +408,7 @@ public final class MarkdownView: DSView {
                 expandedTables = expandedTables, runsShell = onRunShellCommand != nil, streaming = streaming,
                 fits = chatLaneInset.map { width + $0 >= 576 } ?? false
             layoutInBackground(width) {
-                MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: skills), hiddenContextIds: contexts?.inlineAudioContextIds ?? []), width: width,
+                MarkdownLayout(document: MarkdownContextChips.modelDocument(MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: skills), hiddenContextIds: contexts?.inlineAudioContextIds ?? []), models: contexts?.models ?? [:]), width: width,
                                wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, expandedTables: expandedTables,
                                diagrams: diagrams, contexts: contexts, runsShell: runsShell, fitsExpandedTables: fits, streaming: streaming,
                                reusing: reuse, parallel: true)

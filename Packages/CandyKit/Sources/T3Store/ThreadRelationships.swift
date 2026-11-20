@@ -419,9 +419,17 @@ public enum ThreadRelationships {
         public var canDetach = false
         /// Workflow members' threads that exist here, so their rows can open them.
         public var availableMembers: Set<ThreadId> = []
+        /// Side chats: hidden forks that live in this thread's view, in their own section (4928 ThreadRelationshipsControl.tsx:620-630).
+        public var sideChats: [Row] = []
+        /// Nothing for the Lineage section; side chats have their own.
         public var isEmpty: Bool { related.isEmpty && active.isEmpty && previous.isEmpty && runningCount == 0 }
         /// "Lineage" or "Lineage · N running".
         public var title: String { runningCount > 0 ? "Lineage · \(runningCount) running" : "Lineage" }
+        /// "Side chats" or "Side chats · N running" (:1104-1112).
+        public var sideChatsTitle: String {
+            let running = sideChats.filter { $0.edge.status == "running" }.count
+            return running > 0 ? "Side chats · \(running) running" : "Side chats"
+        }
         public init() {}
 
         #if DEBUG
@@ -490,7 +498,8 @@ public enum ThreadRelationships {
             for m in (workflow?.phases.flatMap(\.members) ?? []) + (workflow?.unphased ?? []) {
                 if let c = m.childThreadId, g.nodes[c]?.missing == false { out.availableMembers.insert(c) }
             }
-            if !isSubagent || parent { out.related.append(row) }
+            if !parent, node?.thread?.lineage.sideChat == true { out.sideChats.append(row) }
+            else if !isSubagent || parent { out.related.append(row) }
             else if settledStatuses.contains(r.edge.status ?? "") { out.previous.append(row) }
             else { out.active.append(row) }
         }

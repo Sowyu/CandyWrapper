@@ -792,7 +792,7 @@ final class ThinkingRowView: WorkRowBase {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         onClick = { [weak self] in
-            guard let self, case .thinking(let groupId?, _, _)? = self.item?.row.kind else { return }
+            guard let self, case .thinking(let groupId?, _, _, _)? = self.item?.row.kind else { return }
             self.context.disclosure(self.item?.id)
             self.context.model?.toggleGroup(groupId)
         }
@@ -802,9 +802,10 @@ final class ThinkingRowView: WorkRowBase {
         super.configure(item)
         let l = line(0)
         // While a `/compact` waits for its row, the slot stays at its height with nothing in it (:3793-3795).
-        if case .thinking(_, _, let compacting) = item.row.kind { blank = compacting } else { blank = false }
+        var label: String?
+        if case .thinking(_, _, let compacting, let waiting) = item.row.kind { blank = compacting; label = waiting } else { blank = false }
         l.isHidden = blank
-        l.configure(icon: .brain, text: "Thinking", style: .tool, time: nil, expanded: false, active: !blank, now: context.now())
+        l.configure(icon: .brain, text: label ?? "Thinking", style: .tool, time: nil, expanded: false, active: !blank, now: context.now())
         l.label.style = .focus // `LiveActivityRow ... shimmer` (MessagesTimeline.tsx:3796)
         l.expandable = false
         // Dither: Capy's dot grid in place of the brain.

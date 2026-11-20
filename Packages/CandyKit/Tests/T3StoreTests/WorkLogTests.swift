@@ -56,6 +56,10 @@ private func dynamicTool(_ name: String, input: String) -> TurnItem {
         #expect(normalizeCompactToolLabel("Ran command complete ") == "Ran command")
         #expect(normalizeCompactToolLabel("Read file Completed") == "Read file")
         #expect(formatTokens(39_602) == "39.6K" && formatTokens(1_000_000) == "1M" && formatTokens(804) == "804" && formatTokens(150_400) == "150K")
+        // #35634: the unit follows the rounding.
+        #expect(formatTokens(999_999) == "1M" && formatTokens(999_499) == "999K" && formatTokens(999.6) == "1K" && formatTokens(999_999_999_999_999) == "1000T")
+        // #27372: TypeScript files labelled as transport streams stay files.
+        #expect(isPlayableVideoMime("video/mp4") && !isPlayableVideoMime("video/MP2T") && !isPlayableVideoMime("image/png"))
         #expect(formatCompactDiffCount(999) == "999" && formatCompactDiffCount(1_200) == "1.2k" && formatCompactDiffCount(1_000) == "1k")
         #expect(formatCompactDiffCount(12_345) == "12k" && formatCompactDiffCount(2_500_000) == "2.5m")
         #expect(liveThoughtLine("**Planning the fix**\nThen more.") == "Planning the fix")
@@ -279,5 +283,10 @@ private func dynamicTool(_ name: String, input: String) -> TurnItem {
         #expect(summarizeT3ToolCalls("write-pr-guides", [call(["failed", "failed"])]).label == "Could not start 2 review guides")
         #expect(T3McpTools.all["unwatch_pull_request"]?.running == "Unwatching")
         #expect(T3McpTools.all["task_cancel"]?.detail == "a delegated task")
+    }
+
+    @Test func imageExtensionCheckReadsFromTheEnd() {
+        for yes in ["a.png", "/w/b.JPEG \n", "x.webp", "s.svg\t"] { #expect(WorkLog.endsWithImageExtension(yes), "\(yes)") }
+        for no in ["a.pngx", "readme", "a.jpegs", "npm test", ".", ""] { #expect(!WorkLog.endsWithImageExtension(no), "\(no)") }
     }
 }

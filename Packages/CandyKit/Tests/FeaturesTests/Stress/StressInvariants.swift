@@ -111,7 +111,7 @@ enum StressInvariants {
             switch row.kind {
             case .workLive(_, _, let id, let expanded, _, _): group = (id, expanded)
             case .workToggle(let t): group = (t.groupId, t.expanded)
-            case .thinking(let id?, let expanded?, _): group = (id, expanded)
+            case .thinking(let id?, let expanded?, _, _): group = (id, expanded)
             case .turnFold(let run, _, let expanded):
                 if expanded != input.expandedRunIds.contains(run) { problems.append("turn fold \(run.rawValue) expansion lost") }
             case .attemptFold(_, let attempt, _, let expanded):
@@ -141,7 +141,7 @@ enum StressInvariants {
             input.expandedWorkGroupIds = groups
             for row in TimelineRows.derive(input) {
                 switch row.kind {
-                case .workLive(_, _, let id, _, _, _), .thinking(let id?, _, _): groups.insert(id)
+                case .workLive(_, _, let id, _, _, _), .thinking(let id?, _, _, _): groups.insert(id)
                 case .workToggle(let t): groups.insert(t.groupId)
                 case .turnFold(let run, _, _): input.expandedRunIds.insert(run)
                 default: break

@@ -45,12 +45,19 @@ public func formatTokens(_ value: Double) -> String {
         let digits = abs(v) >= 100 ? 0 : abs(v) >= 10 ? 1 : 2
         return String(format: "%.\(digits)f", v).replacing(/\.0+$/, with: "")
     }
-    let a = abs(value)
-    if a >= 1e12 { return trim(value / 1e12) + "T" }
-    if a >= 1e9 { return trim(value / 1e9) + "B" }
-    if a >= 1e6 { return trim(value / 1e6) + "M" }
-    if a >= 1e3 { return trim(value / 1e3) + "K" }
-    return String(Int(value.rounded()))
+    // The unit is chosen after rounding, so 999,999 reads 1M, not 1000K (4928 usageFormat.ts, #35634).
+    if abs(value.rounded()) < 1e3 { return String(Int(value.rounded())) }
+    let suffixes = ["K", "M", "B", "T"]
+    var scaled = value / 1e3, unit = 0
+    while abs(Double(trim(scaled)) ?? 0) >= 1e3, unit < suffixes.count - 1 { scaled /= 1e3; unit += 1 }
+    return trim(scaled) + suffixes[unit]
+}
+
+/// `GENERIC_MIME_TYPES` video entries (4928 shared/image.ts, #27372): macOS and Windows label TypeScript `.ts` files
+/// as MPEG transport streams, which no player here plays, so they stay files.
+public func isPlayableVideoMime(_ mime: String) -> Bool {
+    let m = mime.lowercased()
+    return m.hasPrefix("video/") && m != "video/mp2t" && m != "video/vnd.dlna.mpeg-tts"
 }
 
 /// `formatCompactDiffCount` (apps/web/src/components/chat/DiffStatLabel.tsx:8-20).

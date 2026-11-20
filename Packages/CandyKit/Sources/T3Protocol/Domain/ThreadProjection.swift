@@ -72,6 +72,21 @@ public struct AppThread: Codable, Hashable, Sendable, Identifiable {
         return try? JSONValue.object(object).decode(as: AppThread.self)
     }
 
+    /// `applyThreadPullRequestLinkUpdate` (4928 source-control-core shared/threadPullRequests.ts:331-341): the link with
+    /// the same host, repository and number takes the update's place; nothing else changes.
+    // ponytail: keys compare lowercased, without T3's URL authority and canonical-repository rewrite, and a legacy `linkedPullRequest` isn't converted; port `normalizeThreadPullRequestKey` if a mirrored host misses updates
+    public func applyingPullRequestLink(_ link: JSONValue) -> AppThread? {
+        guard var object = raw.objectValue, case .array(var links)? = object["pullRequests"] else { return nil }
+        func key(_ v: JSONValue) -> String? {
+            guard let host = v["host"]?.stringValue, let repo = v["repository"]?.stringValue, let number = v["number"]?.intValue else { return nil }
+            return "\(host.trimmingCharacters(in: .whitespaces).lowercased())/\(repo.trimmingCharacters(in: .whitespaces).lowercased())#\(number)"
+        }
+        guard let target = key(link), let index = links.firstIndex(where: { key($0) == target }) else { return nil }
+        links[index] = link
+        object["pullRequests"] = .array(links)
+        return try? JSONValue.object(object).decode(as: AppThread.self)
+    }
+
     /// `isProviderNativeSubagentThread` (orchestrationV2.ts:442-451).
     public var isProviderNativeSubagent: Bool {
         lineage?.relationshipToParent == .subagent && creationSource == "provider"

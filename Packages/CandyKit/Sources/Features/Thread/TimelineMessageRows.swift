@@ -316,6 +316,7 @@ final class UserMessageRowView: TimelineRowView {
         markdown.contextChips = MarkdownContextChips.message(context: m.context, attachments: m.attachments, document: document,
                                                              environmentId: model?.environmentId,
                                                              environment: { model?.linkedEnvironment?($0) },
+                                                             text: text, providers: model?.providers ?? [],
                                                              thread: { model?.linkedThread?(ThreadId($0)) })
         if let load = model?.attachmentImage {
             markdown.contextImageLoader = { id, side in await load(id, side, true) }
@@ -1212,7 +1213,7 @@ final class UserMessageAttachmentsView: DSView {
         for a in m.attachments {
             let type = a["type"]?.stringValue ?? "", id = a["id"]?.stringValue ?? "", name = a["name"]?.stringValue ?? ""
             let mime = a["mimeType"]?.stringValue ?? ""
-            if mime.hasPrefix("video/") || (a["downloadable"] != .bool(false) && InlineAudioSource.isAudio(name: name, mimeType: mime)) { media.append(a) }
+            if isPlayableVideoMime(mime) || (a["downloadable"] != .bool(false) && InlineAudioSource.isAudio(name: name, mimeType: mime)) { media.append(a) }
             else if type == "image" {
                 if !name.hasPrefix("preview-annotation-") { images.append(Image(attachmentId: id, name: name, source: a["source"])) }
             } else if !(type == "file" && chipped.contains(id)) {
@@ -1221,7 +1222,7 @@ final class UserMessageAttachmentsView: DSView {
         }
         if standaloneMedia {
             images = []
-            media = media.filter { !($0["mimeType"]?.stringValue ?? "").lowercased().hasPrefix("video/") }
+            media = media.filter { !isPlayableVideoMime($0["mimeType"]?.stringValue ?? "") }
         }
         if fileCards { files = [] }
         guard images.map(\.attachmentId) != self.images.map(\.attachmentId) || files != self.files || media != self.media else { return }

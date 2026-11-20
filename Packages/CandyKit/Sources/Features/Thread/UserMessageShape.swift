@@ -48,7 +48,7 @@ struct UserMessageShape: Equatable {
             if type == "image" {
                 if !name.hasPrefix("preview-annotation-") { images.append(a) }
             } else if type == "file" {
-                if mime.lowercased().hasPrefix("video/") { videos.append(a) }
+                if isPlayableVideoMime(mime) { videos.append(a) }
                 else if a["downloadable"] != .bool(false), InlineAudioSource.isAudio(name: name, mimeType: mime) { audio.append(a) }
                 else {
                     files.append(a)
