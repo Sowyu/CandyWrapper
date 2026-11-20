@@ -1,4 +1,4 @@
-# <img src="docs/readme/icon.png" alt="CandyWrapper icon" width="64" align="middle"> CandyWrapper-Native
+# <img src="docs/readme/icon.png" alt="CandyWrapper icon" width="64" align="middle"> CandyWrapper
 
 ```text
 🚨 HUMAN WRITTEN NOTE & AI-ASSISTED DEVELOPMENT NOTICE 🚨
