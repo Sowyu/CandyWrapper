@@ -88,9 +88,28 @@ public struct ComposerChipLook: Equatable, Sendable {
         }
     }
 
-    /// `--context-chip-accent` per kind.
+    /// T3's name for the kind's accent (`CONTEXT_CHIP_ACCENTS`, lib/contextChipAccents.ts at 4928).
+    var accentName: String? {
+        switch kind {
+        case .mention: "mention"
+        case .citation: "citation"
+        case .skill: "skill"
+        case .image: "image"
+        case .file: "file"
+        case .video: "video"
+        case .environment: "environment"
+        case .thread: "thread"
+        case .reviewComment: "review-comment"
+        case .terminal: "terminal"
+        case .pullRequest(let state): state.flatMap { ["open", "draft", "merged", "closed"].contains($0) ? "pr-" + $0 : nil } ?? "pull-request"
+        case .unresolved: nil
+        }
+    }
+
+    /// `--context-chip-accent` per kind. The default themes take T3's solved `--context-chip-*` colors.
     var accent: NSColor? {
         if let accentOverride, !ComposerDesign.current { return accentOverride }
+        if ComposerDesign.current, let name = accentName, let solved = ContextChipAccents.standard(name) { return solved }
         return switch kind {
         case .mention: OKLab.oklch(0.62, 0.11, 215)
         case .citation: OKLab.oklch(0.62, 0.16, 259)
@@ -205,13 +224,13 @@ final class ComposerChipAttachment: NSTextAttachment {
         let font = chipFont
         func width(_ s: String) -> CGFloat { TextLine(NSAttributedString(string: s, attributes: [.font: font])).width }
         let detailWidth = look.detail.map { 0.33 * FileChipStyle.em(size) + TextLine(NSAttributedString(string: $0, attributes: [.font: detailFont])).width } ?? 0
-        let reserve = ComposerDesign.current ? size + 0.2 * size + (look.kind == .image ? 14 : 0) + detailWidth : FileChipStyle.leading(size) + FileChipStyle.trailing(size) + detailWidth
+        let reserve = ComposerDesign.current ? size + 0.2 * size + detailWidth : FileChipStyle.leading(size) + FileChipStyle.trailing(size) + detailWidth
         var text = look.label
         if width(text) + reserve > maxWidth {
             while !text.isEmpty, width(text + "…") + reserve > maxWidth { text.removeLast() }
             text += "…"
         }
-        return (text, CGSize(width: width(text) + reserve, height: ComposerDesign.current ? (look.kind == .image ? 18 : 16) : FileChipStyle.height(size)))
+        return (text, CGSize(width: width(text) + reserve, height: ComposerDesign.current ? 16 : FileChipStyle.height(size)))
     }
 
     static let size: CGFloat = 14
@@ -327,15 +346,9 @@ final class ComposerChipAttachment: NSTextAttachment {
     }
     @MainActor private static func draw3814(look: ComposerChipLook, label: String, icon: IconDefinition,
                                           in rect: CGRect, ctx: CGContext, hovered: Bool, thumbnail: CGImage?) {
-        let image = look.kind == .image
+        // 4928's image chip is inline like the others: the bubble is gone (ContextChip.tsx:8-50, contextChipParts.tsx:173-198).
         let ink = look.foreground
-        var x = rect.minX
-        if image {
-            let path = CGPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerWidth: 7.5, cornerHeight: 7.5, transform: nil)
-            ctx.addPath(path); ctx.setFillColor(ink.withAlphaComponent(0.1).cgColor); ctx.fillPath()
-            ctx.addPath(path); ctx.setStrokeColor(ink.withAlphaComponent(0.3).cgColor); ctx.setLineWidth(1); ctx.strokePath()
-            x += 7
-        }
+        let x = rect.minX
         let iconRect = CGRect(x: x, y: rect.midY - size / 2, width: size, height: size)
         if let thumbnail {
             ctx.saveGState()
@@ -437,4 +450,32 @@ private final class ChipView: NSView {
         ComposerChipAttachment.draw(look: look, label: label, icon: icon, iconColor: iconColor, in: bounds, ctx: ctx, thumbnail: thumbnail)
     }
     override func viewDidChangeEffectiveAppearance() { needsDisplay = true }
+}
+
+
+/// 4928 solves each chip accent's OKLCH lightness to a 5:1 contrast on the theme's canvas, surfaces and message
+/// bubble at runtime (`contextChipVariables`, apps/web/src/themePalette.ts:736-772, applied for the standard
+/// themes at :1769). These are its results for the standard light and dark colors, read from T3's main chunk
+/// in Chromium.
+// ponytail: standard themes only; port contextChipVariables over ThemePalette when a custom T3 palette needs chips
+enum ContextChipAccents {
+    static let light: [String: UInt32] = [
+        "citation": 0x2361be, "element": 0x8c5800, "environment": 0x327037, "file": 0x006a99, "image": 0x006a99,
+        "mention": 0x006d80, "model": 0x6c6500, "pr-closed": 0xb23649, "pr-draft": 0x5d6470, "pr-merged": 0x6c51ba,
+        "pr-open": 0x00724f, "pull-request": 0x5358c0, "review-comment": 0x6c51ba, "skill": 0x92439f,
+        "terminal": 0x00724f, "thread": 0x006f6b, "video": 0xa54800,
+    ]
+    static let dark: [String: UInt32] = [
+        "citation": 0x4e8cee, "element": 0xc27f19, "environment": 0x5c9b5e, "file": 0x0f96d3, "image": 0x0f96d3,
+        "mention": 0x0d9ab4, "model": 0x989016, "pr-closed": 0xe46371, "pr-draft": 0x868e99, "pr-merged": 0x957bea,
+        "pr-open": 0x08a170, "pull-request": 0x7983ef, "review-comment": 0x957bea, "skill": 0xbf6ecc,
+        "terminal": 0x08a170, "thread": 0x009e97, "video": 0xdd6e29,
+    ]
+    static func standard(_ name: String) -> NSColor? {
+        guard let l = light[name], let d = dark[name] else { return nil }
+        return Themed.pick(light: color(l), dark: color(d))
+    }
+    static func color(_ v: UInt32) -> NSColor {
+        NSColor(srgbRed: CGFloat(v >> 16 & 0xff) / 255, green: CGFloat(v >> 8 & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: 1)
+    }
 }

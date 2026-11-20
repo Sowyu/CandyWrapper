@@ -91,7 +91,8 @@ public final class DetailsMetaControl: ControlView {
         let modern = ThreadDesign.uses3814(dark: effectiveAppearance.isDark)
         let color: NSColor = switch tone {
         case .muted: Themed.color(\.mutedForeground)
-        case .primary: Themed.color(modern ? \.primaryForeground : \.primary)
+        // 4928: `text-foreground/80`, `hover:text-foreground` (ThreadDetailsControl.tsx:62-66).
+        case .primary: modern ? Themed.color(\.foreground, state.enabled && state.hoverOrPressed ? 1 : 0.8) : Themed.color(\.primary)
         case .destructive: Themed.color(\.destructive)
         }
         label.color = color
@@ -103,7 +104,8 @@ public final class DetailsMetaControl: ControlView {
         hoverIconView?.isHidden = !hovered
         var box = BoxStyle()
         box.radius = 6
-        box.fill = modern && tone == .primary ? Themed.color(\.primary, hovered ? 0.85 : 1)
+        // A faint pill at 4928: `bg-black/[0.035]`, `hover:bg-black/[0.06]`, dark white at 8% and 12%.
+        box.fill = modern && tone == .primary ? Themed.pick(light: Themed.black(hovered ? 0.06 : 0.035), dark: Themed.white(hovered ? 0.12 : 0.08))
             : modern && tone == .destructive ? Themed.color(\.destructive, hovered ? 0.16 : 0.1)
             : hovered ? detailsHoverFill() : nil
         fill.boxStyle = box
