@@ -11,9 +11,10 @@ public final class SnapShotAttachmentDetailsView: DSView {
     private let app = LabelView("", font: DSFont.ui(11, weight: .medium), color: .white)
     private let title = LabelView("", font: DSFont.ui(10), color: .white.withAlphaComponent(0.7))
     private let contents: ButtonView
-    public init(source: JSONValue) {
+    /// `onCopySnapshot` (#37771): the popover offers Copy snapshot when set.
+    public init(source: JSONValue, onCopy: (@MainActor () async -> Bool)? = nil) {
         self.source = source
-        contents = SnapShotContents.button(source)
+        contents = SnapShotContents.button(source, onCopy: onCopy)
         super.init(frame: .zero)
         gradient.colors = [NSColor.clear.cgColor, NSColor.black.withAlphaComponent(0.55).cgColor, NSColor.black.withAlphaComponent(0.85).cgColor]
         gradient.locations = [0, 0.5, 1]
@@ -55,22 +56,22 @@ public enum SnapShotContents {
         return source["accessibleText"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 
-    @MainActor public static func button(_ source: JSONValue) -> ButtonView {
+    @MainActor public static func button(_ source: JSONValue, onCopy: (@MainActor () async -> Bool)? = nil) -> ButtonView {
         let included = includesAccessibility(source)
         let button = ButtonView(nil, icon: included ? .text : .image, variant: .overlay, size: .iconMicro)
         button.iconSize = 12
         button.toolTip = included ? "Accessibility data" : "No accessibility data"
         button.setAccessibilityLabel(included ? "View accessibility data" : "No accessibility data")
-        button.action = { [weak button] in if let button { showPopover(source, from: button) } }
+        button.action = { [weak button] in if let button { showPopover(source, from: button, onCopy: onCopy) } }
         return button
     }
 
-    @MainActor static func showPopover(_ source: JSONValue, from anchor: NSView) {
+    @MainActor static func showPopover(_ source: JSONValue, from anchor: NSView, onCopy: (@MainActor () async -> Bool)? = nil) {
         let details = SnapShotSource.details(source)
         let text = details ?? (includesAccessibility(source)
             ? "Structured accessibility elements were included, but they have no readable names or values."
             : "The app or capture backend did not provide verified accessibility data.")
-        let body = SnapShotAccessibilityDetailsBody(text: text, hasData: details != nil, isJSON: source["accessibility"]?["format"]?.stringValue == "element-tree")
+        let body = SnapShotAccessibilityDetailsBody(text: text, hasData: details != nil, isJSON: source["accessibility"]?["format"]?.stringValue == "element-tree", onCopy: onCopy)
         _ = PopoverView(content: body, width: .md).show(from: anchor, placement: PopupPlacement(side: .top, align: .center, sideOffset: 4))
     }
 }
@@ -79,7 +80,10 @@ private final class SnapShotAccessibilityDetailsBody: DSView {
     private let title = popoverTitle("Accessibility data")
     private let scroll = NSScrollView()
     private let bodyHeight: CGFloat
-    init(text: String, hasData: Bool, isJSON: Bool) {
+    /// `SnapShotCopyButton` (SnapShotAttachmentDetails.tsx at 4928): xs ghost-muted, a check for a second after a copy.
+    private let copy: ButtonView?
+    init(text: String, hasData: Bool, isJSON: Bool, onCopy: (@MainActor () async -> Bool)?) {
+        copy = onCopy.map { _ in ButtonView(nil, icon: .copy, variant: .ghostMuted, size: .xs) }
         let font = hasData ? DSFont.mono(11) : DSFont.ui(12)
         bodyHeight = min(256, ceil((text as NSString).boundingRect(with: CGSize(width: 266, height: 10_000), options: .usesLineFragmentOrigin, attributes: [.font: font]).height) + 20)
         super.init(frame: .zero)
@@ -98,11 +102,29 @@ private final class SnapShotAccessibilityDetailsBody: DSView {
         scroll.documentView = view; scroll.drawsBackground = false
         scroll.useT3Scrollbars(.native) // `overflow-auto` (SnapShotAttachmentDetails.tsx:43)
         addSubview(title); addSubview(scroll)
+        if let copy, let onCopy {
+            copy.iconSize = 12
+            copy.toolTip = "Copy snapshot"
+            copy.setAccessibilityLabel("Copy snapshot")
+            copy.action = { [weak copy] in
+                Task { @MainActor in
+                    let ok = await onCopy()
+                    guard let copy else { return }
+                    guard ok else { return AnchoredCopyToast.show(from: copy, success: false) }
+                    copy.icon = .check; copy.isEnabled = false
+                    try? await Task.sleep(for: .seconds(1)) // ANCHORED_COPY_TOAST_TIMEOUT_MS
+                    copy.icon = .copy; copy.isEnabled = true
+                }
+            }
+            addSubview(copy)
+        }
     }
     override var intrinsicContentSize: NSSize { NSSize(width: 286, height: bodyHeight + 26) }
     override func layout() {
         super.layout()
-        title.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 18)
+        title.frame = NSRect(x: 0, y: 0, width: bounds.width - (copy == nil ? 0 : 36), height: 18)
+        // `-my-1.5` keeps the 24pt button inside the title's row.
+        copy?.frame = NSRect(x: bounds.width - 28, y: -3, width: 28, height: 24)
         scroll.frame = NSRect(x: 0, y: 26, width: bounds.width, height: bodyHeight)
     }
 }

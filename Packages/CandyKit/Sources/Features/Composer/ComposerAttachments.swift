@@ -259,6 +259,16 @@ public struct ComposerAttachment: Equatable, Sendable, Identifiable {
                         "name": .string(name), "mimeType": .string(mimeType), "sizeBytes": .number(Double(sizeBytes))])
     }
 
+    /// What a copy of its chip carries (`uploadedAttachmentContextRecord ?? attachmentContextRecord`,
+    /// ChatComposer.tsx:1348-1363): the uploaded id, else the draft id, and a snapshot's source (#37771).
+    public var clipboardRecord: JSONValue {
+        var copy = self
+        if copy.attachmentId == nil { copy.attachmentId = id }
+        guard case .object(var fields)? = copy.contextRecord else { return .null }
+        if kind == .image, let snapShotSource { fields["source"] = snapShotSource }
+        return .object(fields)
+    }
+
     public var row: ComposerFileRow { ComposerFileRow(id: id, name: name, sizeBytes: sizeBytes, status: status) }
 }
 

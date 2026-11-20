@@ -549,9 +549,9 @@ public final class ComposerView: DSView {
         get { editor.recordsForCopy }
         set { editor.recordsForCopy = newValue }
     }
-    public var onPasteRecords: (([String: JSONValue]) -> Void)? {
-        get { editor.onPasteRecords }
-        set { editor.onPasteRecords = newValue }
+    public var onPasteFragment: ((ComposerContextImport.Fragment) -> [String: String])? {
+        get { editor.onPasteFragment }
+        set { editor.onPasteFragment = newValue }
     }
     /// An edit or a caret move (the menu controller follows the trigger).
     var onCaretChange: (() -> Void)?

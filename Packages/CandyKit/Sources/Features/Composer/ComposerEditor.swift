@@ -62,7 +62,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     /// Copy: the records behind the copied context ids, and the environment they come from.
     var recordsForCopy: (([String]) -> (records: [JSONValue], environmentId: String)?)?
     /// Paste: records from the clipboard fragment for the pasted links.
-    var onPasteRecords: (([String: JSONValue]) -> Void)?
+    var onPasteFragment: ((ComposerContextImport.Fragment) -> [String: String])?
 
     /// Double-clicking a citation chip opens its comment editor (AssistantCitationCommentEditor). Checks the
     /// character at the insertion point and the one before it, since a click on a chip's right half lands after it.
@@ -793,14 +793,15 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         let plain = pboard.string(forType: .string).map(ComposerPasteboard.normalizedLineBreaks)
         // Images, and files without text, become attachments (`shouldHandleComposerAttachmentPaste`); Paste as Text
         // keeps the text even when the source also put an image of it on the clipboard (#38475).
-        if !(bypass && plain?.isEmpty == false), onPasteAttachments?(pboard) == true { return }
+        // Copied context wins over the image beside it, so a copied snapshot pastes as its chip (#37771,
+        // ComposerPromptEditorTiptap.tsx:1563-1568 at 4928).
+        let fragment = plain.flatMap { text in pboard.string(forType: .html).flatMap { ComposerContext.pastedFragment(html: $0, pastedText: text) } }
+        if !(bypass && plain?.isEmpty == false), fragment == nil, onPasteAttachments?(pboard) == true { return }
         // Large text becomes a text file unless Cmd+Shift+V asked for it inline (`foldPastedText`).
-        if let text = plain, onPasteText?(text, bypass) == true { return }
-        guard let text = plain else { return super.pasteAsPlainText(sender) }
-        if let html = pboard.string(forType: .html) {
-            let records = ComposerContext.pastedRecords(html: html, pastedText: text)
-            if !records.isEmpty { onPasteRecords?(records) }
-        }
+        if fragment == nil, let text = plain, onPasteText?(text, bypass) == true { return }
+        guard var text = plain else { return super.pasteAsPlainText(sender) }
+        // The draft takes the records under its own ids and the text follows (`importPastedComposerText`).
+        if let fragment, let ids = onPasteFragment?(fragment) { text = ComposerContextImport.rewrite(text, ids: ids) }
         // T3 reads only the plain text flavor (handlePaste): a page's HTML arrives as the text the
         // browser wrote beside it, and Markdown in it becomes blocks and marks.
         breakUndoCoalescing()
