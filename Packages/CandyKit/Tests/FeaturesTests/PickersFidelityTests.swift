@@ -74,11 +74,15 @@ struct PickersFidelityTests {
         Case(reference: "13-model-picker", rect: CGRect(x: 317, y: 411, width: 362, height: 298), backdropAt: CGPoint(x: 314, y: 420)) { p in
             let config = try! PickersFidelityTests.recordedConfig()
             let view = ModelPickerView(catalog: ProviderCatalog(config.providers), favorites: [], active: "claudeAgent", activeModel: "claude-haiku-5-5")
+            // Redesign docks the picker as one column since 2026-11-20 (the user's layout): list, Reasoning, footer.
+            let dock = DockedModelPickerView(picker: view)
+            dock.column.update(descriptors: p.current.descriptors, ultrathink: false, locked: false, model: p.current.modelTriggerLabel(spoken: true))
+            dock.footer.update(descriptors: p.current.descriptors, runtimeMode: p.current.runtimeMode)
             // The capture focuses the search field on open (blue underline).
             var focused = view.search.state
             focused.focused = true
             view.search.previewState(focused)
-            let popup = PickerPopupView(view)
+            let popup = PickerPopupView(dock)
             return (popup, popup.popupSize)
         },
         Case(reference: "41-traits-picker", rect: CGRect(x: 502, y: 505, width: 160, height: 204), backdropAt: CGPoint(x: 499, y: 510)) { p in
