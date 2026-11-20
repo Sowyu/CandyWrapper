@@ -280,6 +280,10 @@ final class ComposerController {
     private var sendAfterPreparing: [String: (mode: ComposerLogic.SendMode, background: Bool)] = [:]
     /// Uploaded attachment ids to their local file, so a sent image shows before the server copy is fetched.
     private var sentFiles: [String: URL] = [:]
+    /// Attachments a sent message took while their upload ran (#33092): the upload writes its outcome here once the
+    /// draft lets go of it, and the message's dispatch waits on it (`awaitAttachmentUploads`, attachmentUploadQueue.ts:548-553).
+    private var sendingUploads: [String: ComposerAttachment] = [:]
+    private var sendingUploadWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
     /// Server copies being fetched, so a cell and a chip asking for one image share one download.
     private var attachmentFetches: [String: Task<URL?, Never>] = [:]
     /// The prompt stash (`usePromptStashStore`), shared by every thread and environment like T3's.
@@ -1920,10 +1924,18 @@ final class ComposerController {
         // A plain send waits for running uploads and goes once they land (#33092, useComposerSend.ts:838-916 at
         // 4928); an approval redirect needs them first. Interrupted files block.
         guard ComposerAttachmentRules.sendBlockReason(attachments, redirectsApproval: !requests.approvals.isEmpty) == nil else { return }
+        // In a thread the message shows as sending and the composer clears at once; the dispatch waits for the
+        // uploads (useComposerSend.ts:1061-1062, 1314-1344 at 4928).
+        var awaitingUploads = false
         if let key = draftKey, ComposerAttachmentRules.uploadBlockReason(attachments) != nil {
-            sendAfterRetry[key] = (sentText, mode, background)
-            refresh()
-            return
+            if case .thread = target, pickers.currentMultiple == nil {
+                awaitingUploads = true
+            } else {
+                // ponytail: a new thread's first send still waits in the composer; echo it too if drafts with big files feel slow
+                sendAfterRetry[key] = (sentText, mode, background)
+                refresh()
+                return
+            }
         }
         if let limit = ComposerAttachmentRules.providerLimitError(attachments.map { ($0.kind == .image, $0.sizeBytes) }) {
             if let key = draftKey { threadErrors.set(key, limit) }
@@ -2070,10 +2082,19 @@ final class ComposerController {
         let referenced = contextRecords(for: trimmed)
         let records = ComposerContext.referencedIds(trimmed).compactMap { referenced[$0] } + attachments.compactMap(\.contextRecord)
         let context: JSONValue? = records.isEmpty ? nil : .object(["version": .number(1), "records": .array(records)])
+        // While uploads run, the echo binds each attachment to the id it has and a file isn't downloadable yet
+        // (`optimisticMessageAttachments`, ChatView.logic.ts:1463-1487).
+        let echoed = awaitingUploads ? attachments.map(Self.sendingEcho) : []
+        let echoContext: JSONValue? = awaitingUploads
+            ? .object(["version": .number(1), "records": .array(ComposerContext.referencedIds(trimmed).compactMap { referenced[$0] } + echoed.compactMap(\.record))])
+            : context
         optimistic.append(ChatMessage(id: messageId, role: .user, text: messageText, createdAt: now, inputIntent: intent,
-                                      context: context, attachments: uploaded))
+                                      context: echoContext, attachments: awaitingUploads ? echoed.map(\.attachment) : uploaded))
         pendingMessageId = messageId
-        for a in attachments { if let id = a.attachmentId { sentFiles[id] = a.fileURL } }
+        for a in attachments { sentFiles[a.attachmentId ?? a.id] = a.fileURL }
+        if awaitingUploads {
+            for a in attachments where a.chatAttachment == nil { sendingUploads[a.id] = a }
+        }
         // The draft's attachments leave with the message; the server claims their uploads.
         if let key = draftKey {
             draftAttachments[key] = nil
@@ -2161,7 +2182,25 @@ final class ComposerController {
                 command["sourcePlanRef"] = .object(["threadId": .string(threadId.localId.rawValue), "planId": .string(plan.id.rawValue)])
             }
             let runtimeChange = picks.runtimeModeToPersist, interactionChange = picks.interactionModeToPersist
-            Task { [weak self] in
+            let referencedRecords = ComposerContext.referencedIds(trimmed).compactMap { referenced[$0] }
+            Task { [weak self, command] in
+                var attachments = attachments, command = command
+                if awaitingUploads {
+                    guard let self else { return }
+                    attachments = await self.settleSendingUploads(attachments)
+                    // A failed upload sends nothing: the message leaves and the draft gets its text and files back.
+                    guard attachments.allSatisfy({ $0.chatAttachment != nil }) else {
+                        self.restoreAttachments(attachments, key: picksKey)
+                        self.sendFailed(CancellationError(), messageId: messageId, text: text, draft: nil, key: picksKey, planFollowUp: planFollowUp)
+                        if let picksKey { self.threadErrors.set(picksKey, "Retry or remove failed uploads before sending.") }
+                        self.refresh()
+                        return
+                    }
+                    for a in attachments { if let id = a.attachmentId { self.sentFiles[id] = a.fileURL } }
+                    command["attachments"] = .array(attachments.compactMap(\.chatAttachment))
+                    let records = referencedRecords + attachments.compactMap(\.contextRecord)
+                    command["context"] = records.isEmpty ? nil : .object(["version": .number(1), "records": .array(records)])
+                }
                 do {
                     // Changed access and interaction modes are persisted before the message, each
                     // aborting the send on failure (persistThreadSettingsForNextTurn, ChatView.tsx:6267-6340).
@@ -3976,7 +4015,14 @@ extension ComposerController {
     }
 
     private func updateAttachment(_ id: String, key: String, _ change: (inout ComposerAttachment) -> Void) {
-        guard let i = draftAttachments[key]?.firstIndex(where: { $0.id == id }) else { return }
+        guard let i = draftAttachments[key]?.firstIndex(where: { $0.id == id }) else {
+            // The upload belongs to a message already sent: keep its outcome for the dispatch waiting on it.
+            guard sendingUploads[id] != nil else { return }
+            change(&sendingUploads[id]!)
+            if case .uploading = sendingUploads[id]!.status { return }
+            for waiter in sendingUploadWaiters.removeValue(forKey: id) ?? [] { waiter.resume() }
+            return
+        }
         change(&draftAttachments[key]![i])
         persistDraftAttachments()
         if key == draftKey { refresh() }
@@ -4360,10 +4406,34 @@ extension ComposerController {
             switch result {
             case .uploaded: updateAttachment(id, key: key) { $0.status = .ready }
             case .failed(let reason): updateAttachment(id, key: key) { $0.status = .failed(reason) }
-            case .cancelled: break
+            case .cancelled:
+                // A sent message's upload has no draft row to restart it, so its dispatch stops waiting.
+                if draftAttachments[key]?.contains(where: { $0.id == id }) != true, sendingUploads[id] != nil {
+                    updateAttachment(id, key: key) { $0.status = .failed("Upload cancelled") }
+                }
             }
             resumeSendAfterRetry(key)
         }
+    }
+
+    /// The attachment as a sending message shows it: bound to its minted id, else its local one, a file marked not
+    /// downloadable so its card reads "Sending…".
+    private static func sendingEcho(_ a: ComposerAttachment) -> (attachment: JSONValue, record: JSONValue?) {
+        var bound = a
+        bound.attachmentId = a.attachmentId ?? a.id
+        bound.status = .ready
+        guard case .object(var fields)? = bound.chatAttachment else { return (.null, bound.contextRecord) }
+        if a.kind == .file, a.chatAttachment == nil { fields["downloadable"] = .bool(false) }
+        return (.object(fields), bound.contextRecord)
+    }
+
+    /// Waits until each of a sent message's uploads lands, fails or is cancelled, then returns them as they ended.
+    private func settleSendingUploads(_ attachments: [ComposerAttachment]) async -> [ComposerAttachment] {
+        for a in attachments {
+            guard let held = sendingUploads[a.id], case .uploading = held.status, attachmentTasks[a.id] != nil else { continue }
+            await withCheckedContinuation { sendingUploadWaiters[a.id, default: []].append($0) }
+        }
+        return attachments.map { sendingUploads.removeValue(forKey: $0.id) ?? $0 }
     }
 
     /// One ready upload at send time (#32910): kept when the server still mints its URL, uploaded again from the local

@@ -337,7 +337,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| ad9e87111f | #33092 | thread | feat(web): send messages while attachments upload | ported: Send stays enabled while uploads run and the send goes once they land; approval redirects still wait (ComposerAttachmentRules `sendBlockReason`). The message shows only once it sends, not as sending meanwhile. Left in composer-3: the timeline's sending state needs send() to echo and clear before uploads land and wait in its dispatch Task (chatViewSend.ts awaitAttachmentUploads), with each upload's outcome kept after the draft lets go of its attachments |
+| ad9e87111f | #33092 | thread | feat(web): send messages while attachments upload | ported: Send stays enabled while uploads run and the send goes once they land; approval redirects still wait (ComposerAttachmentRules `sendBlockReason`). In a thread the message now shows at once with files reading "Sending…", the composer clears, and the dispatch waits for each upload, whose outcome outlives the draft; a failed upload takes the message back and restores the draft (thread-2, ComposerController `sendingUploads`). Left: a new thread's first send still waits in the composer |
 
 ## Port group design-icons (1)
 
