@@ -21,9 +21,9 @@ fi
 # Detach into a new session so harness time limits and shell exits don't kill it.
 # (nohup fails here: there is no controlling terminal.)
 /usr/bin/python3 - "$sandbox" "$bin" "$port" <<'PY'
-import os, subprocess, sys
+import os, pwd, subprocess, sys
 sandbox, binary, port = sys.argv[1], sys.argv[2], sys.argv[3]
-env = {"HOME": os.environ["HOME"], "USER": os.environ.get("USER", "mrm"), "LOGNAME": os.environ.get("USER", "mrm"),
+env = {"HOME": os.environ["HOME"], "USER": pwd.getpwuid(os.getuid()).pw_name, "LOGNAME": pwd.getpwuid(os.getuid()).pw_name,
        "SHELL": "/bin/zsh", "LANG": "en_US.UTF-8", "TMPDIR": os.environ.get("TMPDIR", "/tmp"),
        "PATH": os.environ["HOME"] + "/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
        "T3CODE_TELEMETRY_ENABLED": "false", "T3CODE_HOME": sandbox + "/t3home"}

@@ -13,7 +13,7 @@ guard args.count >= 3 else { print("usage: measure-launch <app-binary> <t3-home>
 let binary = args[1], home = args[2]
 let timeout = args.count >= 4 ? Double(args[3]) ?? 60 : 60
 
-let user = ProcessInfo.processInfo.environment["USER"] ?? "mrm"
+let user = NSUserName()
 let homeDir = NSHomeDirectory()
 let env = [
     "HOME=\(homeDir)", "USER=\(user)", "LOGNAME=\(user)", "SHELL=/bin/zsh", "LANG=en_US.UTF-8",

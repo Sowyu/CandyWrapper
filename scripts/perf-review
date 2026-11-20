@@ -25,6 +25,7 @@ import hashlib
 import plistlib
 import json
 import os
+import pwd
 import re
 import shutil
 import signal
@@ -326,7 +327,7 @@ class PerfServer:
         home = os.environ["HOME"]
         # env -i: the shell inherits the live service's T3 variables, which would make this server try
         # to attach to the live service launcher.
-        env = {"HOME": home, "USER": os.environ.get("USER", "mrm"), "LOGNAME": os.environ.get("USER", "mrm"),
+        env = {"HOME": home, "USER": pwd.getpwuid(os.getuid()).pw_name, "LOGNAME": pwd.getpwuid(os.getuid()).pw_name,
                "SHELL": "/bin/zsh", "LANG": "en_US.UTF-8", "TMPDIR": os.environ.get("TMPDIR", "/tmp"),
                "PATH": home + "/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
                "T3CODE_TELEMETRY_ENABLED": "false", "T3CODE_HOME": self.home}

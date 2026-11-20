@@ -36,8 +36,14 @@ t3="$HOME/.t3/runtime/versions/$version/t3"
 [ -x "$t3" ] || t3="$HOME/CandyWrapper-research/runtimes/t3-$version-darwin-arm64/t3"
 ln -sf "$t3" "$bin/t3"
 user="$(id -un)"
+# The GUI session belongs to whoever owns the console: mrm (502) on the old Mac mini, administrator (501) here.
+gui_uid="$(stat -f %u /dev/console)"
+if [ "$gui_uid" != "$(id -u)" ]; then
+  echo "run-app: the GUI session belongs to uid $gui_uid ($(stat -f %Su /dev/console)), not $user; run it as that user" >&2
+  exit 1
+fi
 # launchctl asuser puts the app in the GUI session. env -i drops the live service's T3 variables.
-exec sudo launchctl asuser "$(id -u)" sudo -u "$user" /bin/sh -c 'echo $$ > /tmp/candywrapper-app.pid; echo $$ > "$0"; exec "$@"' "$app.pid" \
+exec sudo launchctl asuser "$gui_uid" sudo -u "$user" /bin/sh -c 'echo $$ > /tmp/candywrapper-app.pid; echo $$ > "$0"; exec "$@"' "$app.pid" \
   env -i HOME="$HOME" USER="$user" LOGNAME="$user" LANG=en_US.UTF-8 T3CODE_TELEMETRY_ENABLED=false \
   "$home" PATH="$bin:/usr/bin:/bin:/usr/sbin:/sbin" ${CANDY_LAUNCH_TIMING:+CANDY_LAUNCH_TIMING=1} ${CANDY_STALLS:+CANDY_STALLS=1} ${CANDY_THREAD_TIMING:+CANDY_THREAD_TIMING=1} \
   ${CANDY_THREAD_CACHE:+CANDY_THREAD_CACHE="$CANDY_THREAD_CACHE"} ${CANDY_SIDEBAR_TIMING:+CANDY_SIDEBAR_TIMING="$CANDY_SIDEBAR_TIMING"} ${CANDY_THEME:+CANDY_THEME="$CANDY_THEME"} ${CANDY_ORCHESTRATOR:+CANDY_ORCHESTRATOR="$CANDY_ORCHESTRATOR"} ${CANDY_HELPER_MANIFEST:+CANDY_HELPER_MANIFEST="$CANDY_HELPER_MANIFEST"} ${CANDY_HELPER_TEST_HOME:+CANDY_HELPER_TEST_HOME="$CANDY_HELPER_TEST_HOME"} ${CANDY_CONNECTORS_CONFIG_HOME:+CANDY_CONNECTORS_CONFIG_HOME="$CANDY_CONNECTORS_CONFIG_HOME"} ${CANDY_DEBUG_PENDING_PROVIDERS:+CANDY_DEBUG_PENDING_PROVIDERS="$CANDY_DEBUG_PENDING_PROVIDERS"} ${CANDY_FAKE_LINEAGE:+CANDY_FAKE_LINEAGE="$CANDY_FAKE_LINEAGE"} ${CANDY_RUNTIMES:+CANDY_RUNTIMES="$CANDY_RUNTIMES"} ${CANDY_IMAGE_TIMING:+CANDY_IMAGE_TIMING=1} ${CANDY_RPC_TRACE:+CANDY_RPC_TRACE="$CANDY_RPC_TRACE"} ${CANDY_SLOW_LINK:+CANDY_SLOW_LINK="$CANDY_SLOW_LINK"} ${CANDY_WALLPAPER:+CANDY_WALLPAPER="$CANDY_WALLPAPER"} ${CANDY_WALLPAPER_PLACEMENT:+CANDY_WALLPAPER_PLACEMENT="$CANDY_WALLPAPER_PLACEMENT"} ${MallocStackLogging:+MallocStackLogging="$MallocStackLogging"} \
