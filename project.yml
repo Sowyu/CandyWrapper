@@ -109,8 +109,8 @@ targets:
         CODE_SIGN_STYLE: Manual
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: NO
-        MARKETING_VERSION: "1.15.0"
-        CURRENT_PROJECT_VERSION: "82"
+        MARKETING_VERSION: "1.15.1"
+        CURRENT_PROJECT_VERSION: "83"
         CANDY_UPDATE_PUBLIC_KEY: "uEahF8lFv2jlwRpuV6iYH7ExKGN6uDNatub9V3IyxtE="
       configs:
         Debug:
