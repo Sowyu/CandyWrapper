@@ -67,14 +67,15 @@ MB = ("peer/menu-button flex w-full cursor-pointer items-center gap-[var(--sideb
 SNAPSHOT = ('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
             'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H6a3 3 0 0 0-3 3v2M16 3h2a3 3 0 0 1 3 3v2M21 16v2a3 3 0 0 1-3 3h-2M8 21H6a3 3 0 0 1-3-3v-2"></path>'
             '<rect width="10" height="8" x="7" y="8" rx="2"></rect><circle cx="12" cy="12" r="1.5"></circle></svg>')
-# Nightly 3754 settingsSearch.ts:85-143 and SettingsSidebarNav.tsx:83-106, 350-403.
+# Nightly 4928 settingsSearch.ts:95-176 (`SETTINGS_NAV_LABELS`, `SETTINGS_NAV_GROUPS`) and SettingsSidebarNav.tsx:88-110:
+# Voice with lucide mic after Keybindings, "Source control & issues". Secrets shows only behind its feature flag.
 # Keep the old theme's stylesheet; only the concern groups and their content changed.
 NAV_GROUPS = [
     (None, [("General", "settings-2"), ("Appearance", "palette"), ("Chat", "message-square-text"),
-            ("Diffs & pull requests", "file-diff"), ("Keybindings", "keyboard"), ("SnapShots", None)]),
+            ("Diffs & pull requests", "file-diff"), ("Keybindings", "keyboard"), ("Voice", "mic"), ("SnapShots", None)]),
     ("Agents", [("Providers", "bot"), ("Threads", "messages-square"), ("Browser", "globe"),
                 ("Devices", "smartphone"), ("Scheduled tasks", "calendar-clock")]),
-    ("Code", [("Projects", "panels-top-left"), ("Source control", "git-branch"), ("Worktrees", "folder-tree")]),
+    ("Code", [("Projects", "panels-top-left"), ("Source control & issues", "git-branch"), ("Worktrees", "folder-tree")]),
     ("Connections", [("Environments", "server"), ("Sharing & access", "shield-check")]),
     (None, [("Maintenance", "wrench"), ("Labs", "flask-conical"), ("About", "info"), ("Archive", "archive")]),
 ]
