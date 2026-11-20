@@ -23,6 +23,7 @@ Run them from the repo root.
 | Run the fast lane after each change, under a minute | `scripts/test --fast` |
 | Run the opt-in tests against a real `t3 serve`, the sandbox server and the Keychain | `scripts/test-integration`, after `scripts/sandbox-server` |
 | Build an app to test | `scripts/build-test-app <task>` |
+| Check the app target compiles, errors only | `scripts/check-app-build` |
 | Start the sandbox T3 server | `scripts/sandbox-server` |
 | Start the 2994 Nightly sandbox server on 47392 | `SANDBOX_DIR=~/CandyWrapper-research/sandbox-2994 SANDBOX_PORT=47392 scripts/sandbox-server 0.0.46-nightly.20261011.2994`, token in that folder |
 | Regenerate the Xcode project after editing `project.yml` | `~/CandyWrapper-research/tools/xcodegen/bin/xcodegen` |
@@ -31,7 +32,7 @@ Run them from the repo root.
 | Test the secret scan | `scripts/secretscan-test` |
 | Release, only when the user asks | `scripts/release --notes notes.md <commit>`, see `docs/release.md` |
 
-`scripts/test` wraps `swift test` and first waits out any Origin energy run, as `scripts/preflight`, `scripts/run-app` and `scripts/perf-review` do. Don't call `swift test` directly. It takes several minutes, so run it in the background with a 30-minute limit. `scripts/run-app` runs until the app quits, so start it in the background too. An interrupted test run can leave a `t3 serve --base-dir .../Packages/CandyKit/.build/localserver-...` behind. Stop that PID.
+`scripts/test` wraps `swift test` and first waits out any Origin energy run, as `scripts/preflight`, `scripts/run-app` and `scripts/perf-review` do. `swift test` never builds the app target, so every task that edits `App/Sources` runs `scripts/check-app-build` before its last commit and fixes what it prints. Don't call `swift test` directly. It takes several minutes, so run it in the background with a 30-minute limit. `scripts/run-app` runs until the app quits, so start it in the background too. An interrupted test run can leave a `t3 serve --base-dir .../Packages/CandyKit/.build/localserver-...` behind. Stop that PID.
 
 ## Code map
 
