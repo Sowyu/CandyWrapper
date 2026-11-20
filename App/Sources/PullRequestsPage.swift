@@ -21,6 +21,8 @@ final class PullRequestsPageController {
     private let detail: PullRequestDetailBinding
     /// "Add project" in the empty state.
     var onAddProject: (() -> Void)?
+    /// The linked threads count searches the palette for the pull request's link.
+    var onSearchThreads: ((String) -> Void)?
 
     // The route's search params.
     private var query = ""
@@ -82,6 +84,10 @@ final class PullRequestsPageController {
             if reconnected, self.visible { self.reload(keepRows: true) }
         }
         detail.toast = { [weak self] title, message, kind in self?.toast(title, message, kind) }
+        // The count opens the palette on the pull request's link (PullRequestThreadLinks.tsx:163-171).
+        container.lazyDetail.configure { [weak self] view in
+            view.onShowLinkedThreads = { [weak self] in if let url = self?.detail.detail?.url { self?.onSearchThreads?(url) } }
+        }
         detail.onStatus = { [weak self] id, tone in self?.container.pullRequestStatus[id] = tone }
         detail.onActed = { [weak self] action in
             guard let self, let target = self.detail.target, let entry = self.entry(for: target) else { self?.reload(); return }
@@ -186,6 +192,7 @@ final class PullRequestsPageController {
 
     func didHide() {
         visible = false
+        detail.stopLinkedRefreshes()
         liveTimer?.invalidate()
         liveTimer = nil
         monitors.forEach(NSEvent.removeMonitor)

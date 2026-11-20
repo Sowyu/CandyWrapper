@@ -73,6 +73,9 @@ final class PullRequestDetailBinding {
     private var stackGeneration = 0
     /// The last stack read for this pull request succeeded (`pullRequestStackView` `isFresh`).
     private var stackFresh = false
+    /// `pullRequests.subscribeLinkedThreadRefreshes` while the page shows a pull request (4928 rpc.ts:1293-1301).
+    private var linkedRefreshes: (environmentId: String, task: Task<Void, Never>)?
+    private var linkedGeneration = 0
 
     init(surface: LazyView<PullRequestDetailView>, environments: Environments, capabilities: PullRequestCapabilities) {
         self.surface = surface
@@ -160,6 +163,10 @@ final class PullRequestDetailBinding {
         view.commentSaving = false
         view.tab = .summary
         view.currentMergeMethod = nil
+        view.linkedThreadCount = nil
+        view.linkedThreadsFailed = false
+        view.maintainerEditsChoice = nil
+        view.maintainerEditsSaving = false
         // `usePullRequestDefaultMergeMethodResolver`: the project's override over the environment's setting.
         view.projectDefaultMergeMethod = Self.serverSettings?(environmentId).flatMap {
             ProjectSettings.resolve($0, projectId: target.projectId).settings["pullRequestMergeMethod"].stringValue
@@ -214,6 +221,7 @@ final class PullRequestDetailBinding {
                 self.onStatus?(target.surfaceId, PullRequestStateTone(state: d.state, isDraft: d.isDraft))
                 self.loadActivity(gen: gen)
                 self.loadChangeBreakdown(gen: gen)
+                self.readLinkedThreads()
                 if self.view.tab == .code { self.patchKey = nil; self.loadCode() }
             } catch {
                 guard let self, self.generation == gen else { return }
@@ -222,6 +230,51 @@ final class PullRequestDetailBinding {
                 self.view.showFailure(title: title, message: message)
             }
         }
+    }
+
+    // MARK: Linked threads on the page
+
+    /// `PullRequestThreadLinks display="count"` (4928 PullRequestThreadLinks.tsx:76-90, 137-181): only on the
+    /// page and where threads link many pull requests (`threadPullRequests`). A 4928 server signals link
+    /// changes on its own stream (`linkedThreadRefreshes`, client-runtime state/pullRequests.ts:833-850);
+    /// an older one is read again on each detail read, with no timer, where T3 polls every 10 s.
+    private func readLinkedThreads() {
+        guard view.context == .page, let env = environmentId, let shell, var ref = reference, let target,
+              capabilities.has(env, "threadPullRequests") else { stopLinkedRefreshes(); return }
+        ref.host = target.host
+        linkedGeneration += 1
+        let gen = linkedGeneration
+        Task { [weak self] in
+            do {
+                let r = try await shell.supervisor.request("pullRequests.linkedThreads", payload: ref.payload).decode(as: PullRequestLinkedThreadsResult.self)
+                guard let self, self.linkedGeneration == gen else { return }
+                // ponytail: archived threads drop out; T3 also hides threads the sidebar hides (`visibleLinkedThreads`), add that if counts disagree
+                self.view.linkedThreadCount = r.threads.filter { $0.archivedAt == nil }.count
+                self.view.linkedThreadsFailed = false
+            } catch {
+                guard let self, self.linkedGeneration == gen else { return }
+                // "Retain the last count while refresh temporarily clears query data": a failure keeps it.
+                self.view.linkedThreadsFailed = self.view.linkedThreadCount == nil
+            }
+        }
+        guard capabilities.has(env, "linkedThreadRefreshes"), linkedRefreshes?.environmentId != env else { return }
+        stopLinkedRefreshes()
+        // The stream's first value is its baseline; each later one means a link changed.
+        let first = FirstValue()
+        let task = shell.supervisor.subscribe("pullRequests.subscribeLinkedThreadRefreshes", payload: { .object([:]) }, handler: { [weak self] event in
+            guard case .value = event else { return }
+            await MainActor.run {
+                guard !first.take(), self?.linkedRefreshes?.environmentId == env else { return }
+                self?.readLinkedThreads()
+            }
+        })
+        linkedRefreshes = (env, task)
+    }
+
+    /// The page hid or moved to another environment: the stream closes, as an unmounted atom's does.
+    func stopLinkedRefreshes() {
+        linkedRefreshes?.task.cancel()
+        linkedRefreshes = nil
     }
 
     /// The diff stats' code, tests, mocks, generated and docs split, read as soon as the detail shows
@@ -1364,4 +1417,12 @@ extension ThreadPullRequestsController: MarkdownLinkHandler {
         if let previewPopup, let window = anchor.window { PopupHost.host(for: window).close(previewPopup, returnFocus: false) }
         previewPopup = nil
     }
+}
+
+/// Whether a stream's first value has arrived yet, read on the main actor.
+@MainActor
+private final class FirstValue: @unchecked Sendable {
+    private var seen = false
+    /// True the first time only.
+    func take() -> Bool { defer { seen = true }; return !seen }
 }

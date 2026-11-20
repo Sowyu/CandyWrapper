@@ -158,6 +158,13 @@ public final class PullRequestDetailView: DSView {
 
     // Native stack (PullRequestStackMenu.tsx).
     private let stackButton = ButtonView("", icon: .layers, variant: .ghost, size: .xs).menuTrigger()
+    /// `PullRequestThreadLinks display="count"` on the page (4928 PullRequestThreadLinks.tsx:137-181,
+    /// PullRequestDetailPanel.tsx:1578-1586): the threads linking this pull request, or "?" when the read failed.
+    private let threadsButton = ButtonView("", icon: .messageSquare, variant: .ghost, size: .xs)
+    /// Linked threads from `pullRequests.linkedThreads`; nil before the first answer.
+    public var linkedThreadCount: Int? { didSet { syncThreadsButton() } }
+    public var linkedThreadsFailed = false { didSet { syncThreadsButton() } }
+    public var onShowLinkedThreads: (() -> Void)?
     private let stackMergeButton = ButtonView("Merge stack", icon: .gitMerge, variant: .default, size: .xs)
     /// The host's stack for this pull request, nil without one.
     public var stack: PullRequestStackDetail? { didSet { rebuildActions() } }
@@ -248,6 +255,10 @@ public final class PullRequestDetailView: DSView {
         stackMergeButton.iconSize = 14
         stackMergeButton.action = { [weak self] in self?.confirmStack("merge") }
         [stackButton, stackMergeButton].forEach(headerBox.addSubview)
+        threadsButton.iconSize = 14
+        threadsButton.isHidden = true
+        threadsButton.action = { [weak self] in self?.onShowLinkedThreads?() }
+        headerBox.addSubview(threadsButton)
         for v in [condensedNumber, condensedTitle, condensedAvatar, condensedTime, condensedBase, condensedArrow, condensedHead, condensedFiles, condensedFilesIcon, condensedStat] as [NSView] {
             headerBox.addSubview(v)
         }
@@ -1047,6 +1058,17 @@ public final class PullRequestDetailView: DSView {
         CollapseMotion.clipBelow(fold.compactMap(\.layer), in: box, from: oldRule, to: tabRule.frame.minY, duration: 0.2, timing: easeOut)
     }
 
+    private func syncThreadsButton() {
+        let count = linkedThreadCount ?? 0
+        let shows = context == .page && (count > 0 || linkedThreadsFailed)
+        threadsButton.isHidden = !shows
+        threadsButton.title = count > 0 ? "\(count)" : "?"
+        let label = count > 0 ? (count == 1 ? "Linked from 1 thread" : "Linked from \(count) threads") : "Linked threads"
+        threadsButton.setAccessibilityLabel(label)
+        threadsButton.toolTip = "\(label). Search in the command palette."
+        needsLayout = true
+    }
+
     // MARK: Layout
 
     /// The header's height: the 28pt top row, the fold (or the condensed row) and the tab bar.
@@ -1085,6 +1107,10 @@ public final class PullRequestDetailView: DSView {
         if !stackButton.isHidden {
             let sw = ceil(stackButton.intrinsicContentSize.width)
             stackButton.frame = NSRect(x: r - sw, y: 2, width: sw, height: 24); r -= sw + 4
+        }
+        if !threadsButton.isHidden {
+            let tw = ceil(threadsButton.intrinsicContentSize.width)
+            threadsButton.frame = NSRect(x: r - tw, y: 2, width: tw, height: 24); r -= tw + 4
         }
         // The two top rows share the line: repository and number, or number and title while condensed.
         [repo, numberLink, numberIcon].forEach { $0.isHidden = condensed }
