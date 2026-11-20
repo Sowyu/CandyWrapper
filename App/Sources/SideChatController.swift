@@ -21,7 +21,7 @@ final class SideChatController {
     private var shown: Shown?
 
     /// The shown tab's pane, its embedded chat, subscription and model controls.
-    private final class Shown {
+    @MainActor private final class Shown {
         let id: ThreadId
         let pane: SideChatPaneView
         let chat = ThreadPanelView()
