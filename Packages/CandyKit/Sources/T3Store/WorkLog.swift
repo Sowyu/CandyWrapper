@@ -206,9 +206,27 @@ public enum WorkLog {
     /// else a read whose detail is one image path.
     public static func viewedImagePath(_ e: WorkLogEntry) -> String? {
         if let path = e.viewedImagePath { return path }
-        guard let detail = e.detail?.jsTrimmed, !detail.isEmpty, !detail.contains(where: \.isNewline),
-              toolGroupAction(e) == .read, isWorkspaceImagePath(detail) else { return nil }
+        // The row pass asks this of every work entry on each update, so the extension test, which rejects nearly all of
+        // them without copying, goes first.
+        guard let raw = e.detail, endsWithImageExtension(raw) else { return nil }
+        let detail = raw.jsTrimmed
+        guard !detail.isEmpty, !detail.contains(where: \.isNewline), toolGroupAction(e) == .read, isWorkspaceImagePath(detail) else { return nil }
         return detail
+    }
+
+    /// `isWorkspaceImagePath` on the text before trailing whitespace, read from the end without a copy.
+    static func endsWithImageExtension(_ text: String) -> Bool {
+        var ext: [UInt8] = []
+        for c in text.utf8.reversed() {
+            if ext.isEmpty, c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0D { continue }
+            if c == UInt8(ascii: ".") { break }
+            guard ext.count < 4 else { return false }
+            ext.append(c | 0x20)
+        }
+        switch String(decoding: ext.reversed(), as: UTF8.self) {
+        case "avif", "gif", "ico", "jpeg", "jpg", "png", "svg", "webp": return true
+        default: return false
+        }
     }
 
     /// `workEntriesViewedImagePaths` (4928 client-runtime/src/work-log/presentation.ts:451-455): the distinct images a

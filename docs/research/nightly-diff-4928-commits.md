@@ -1439,7 +1439,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | f3bbd0fd07 | #21378 | thread | fix(web): video full-screen buttons work in HTML renders | port |
 | 447d71d901 | #25838 | thread | fix(web): chat stays centered while the thread details card fits beside it | port |
 | 191cd7e789 | #25948 | thread | fix(web): match HTML render backgrounds to the dark chat theme | port |
-| fd08b170b6 | #26871 | thread | fix(web): punctuation after a file chip stays on the chip's line | port |
+| fd08b170b6 | #26871 | thread | fix(web): punctuation after a file chip stays on the chip's line | already in CandyWrapper: a chip is a run of the same attributed text, and line breaking never breaks before closing punctuation (Features/Markdown/MarkdownLayout `text`) |
 | f2cd7a1e63 | #25199 | thread | fix(web): show complete tooltip labels when opening | port |
 | 09ac55639a | #26716 | thread | fix(web): popovers fade out in place instead of jumping after a pick | port |
 | eef35b0262 | #26762 | thread | fix(clients): stop loading thread families when opening chats | port |

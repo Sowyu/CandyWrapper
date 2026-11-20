@@ -280,4 +280,9 @@ private func dynamicTool(_ name: String, input: String) -> TurnItem {
         #expect(T3McpTools.all["unwatch_pull_request"]?.running == "Unwatching")
         #expect(T3McpTools.all["task_cancel"]?.detail == "a delegated task")
     }
+
+    @Test func imageExtensionCheckReadsFromTheEnd() {
+        for yes in ["a.png", "/w/b.JPEG \n", "x.webp", "s.svg\t"] { #expect(WorkLog.endsWithImageExtension(yes), "\(yes)") }
+        for no in ["a.pngx", "readme", "a.jpegs", "npm test", ".", ""] { #expect(!WorkLog.endsWithImageExtension(no), "\(no)") }
+    }
 }
