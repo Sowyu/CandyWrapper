@@ -245,6 +245,8 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     public var message: String?
     /// `available` or `unavailable`; absent means available.
     public var availability: String?
+    /// Why the agent cannot run (contracts server.ts:99, Nightly 4928); the Welcome page shows it.
+    public var unavailableReason: String?
     public var models: [ServerProviderModel]
     /// `subProviders` (4928, contracts server.ts): the backends `models` run on, in order, matched by
     /// `ServerProviderModel.subProvider`. Pickers group models under them.
@@ -300,7 +302,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case instanceId, driver, displayName, accentColor, badgeLabel, continuation, showInteractionModeToggle
         case supportsConversationRollback, reportsContextWindow, supportedRuntimeModes, requiresNewThreadForModelChange, enabled, installed
-        case status, message, availability, models, subProviders, slashCommands, skills, workspaceSnapshots, version, auth, checkedAt, usageLimits
+        case status, message, availability, unavailableReason, models, subProviders, slashCommands, skills, workspaceSnapshots, version, auth, checkedAt, usageLimits
         case updateState, versionAdvisory, compatibilityAdvisory, setup, nativeSessions, configurableProviders, runtimePaths
     }
     private enum ContinuationKeys: String, CodingKey { case groupKey }
@@ -327,6 +329,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
         status = try c.decode(ServerProviderStatus.self, forKey: .status)
         message = try c.decodeIfPresent(String.self, forKey: .message)
         availability = try c.decodeIfPresent(String.self, forKey: .availability)
+        unavailableReason = try? c.decodeIfPresent(String.self, forKey: .unavailableReason)
         models = try c.decodeIfPresent([ServerProviderModel].self, forKey: .models) ?? []
         subProviders = try? c.decodeIfPresent([SubProvider].self, forKey: .subProviders)
         // Lenient: a malformed entry drops the list, never the provider.
@@ -408,6 +411,8 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     public var environmentThemes: [JSONValue] = []
     /// `environment.platform.os` (`darwin`, `linux`, `win32`).
     public var platformOS: String?
+    /// `ServerConfig.cwd`: where the server runs; the Welcome page's install terminal starts there.
+    public var cwd: String?
     /// `environment.label`: the descriptor's name for the host.
     public var environmentLabel: String?
     /// `availableEditors`: the editor ids the server found on its machine (`EditorId`, e.g. `file-manager`).
@@ -447,7 +452,7 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
         case providers, settings, keybindings, environment, keybindingsConfigPath, availableEditors, remoteOpenTargets, shellRevealInFileManager,
              shellRevealInFileManagerKind,
              scratchWorkspaceRoot, newProjectsRoot, lastEventLoopStall, threadFind, threadFindProgressive, observability, issues,
-             directEndpoints, serverTime
+             directEndpoints, serverTime, cwd
     }
 
     public init(from decoder: Decoder) throws {
@@ -457,6 +462,7 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
         keybindings = Keymap.decodeRules(try c.decodeIfPresent(JSONValue.self, forKey: .keybindings))
         let environment = try? c.decodeIfPresent(JSONValue.self, forKey: .environment)
         platformOS = environment?["platform"]?["os"]?.stringValue
+        cwd = try? c.decodeIfPresent(String.self, forKey: .cwd)
         environmentLabel = environment?["label"]?.stringValue
         serverTime = try? c.decodeIfPresent(T3Timestamp.self, forKey: .serverTime)
         capabilities = Set((environment?["capabilities"]?.objectValue ?? [:]).compactMap { $0.value.boolValue == true ? $0.key : nil })

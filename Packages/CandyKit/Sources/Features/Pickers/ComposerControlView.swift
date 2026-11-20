@@ -228,6 +228,7 @@ enum ProviderIcon {
         case "muse": return IconView(definition: ProviderPackageIcons.muse, size: size)
         case "opencode": return ProviderPackageIcons.openCode(size: size)
         case "antigravity": return ProviderPackageIcons.antigravity(size: size)
+        case "kiro": return IconView(name: .brandKiro, size: size, strokeColor: color)
         case "acpRegistry": return IconView(name: .brandACPRegistry, size: size, strokeColor: color)
         default:
             // ponytail: initials for drivers without a bundled glyph; per-agent ACP registry icons load from URLs in T3, add them with remote icon loading
