@@ -37,6 +37,11 @@ public struct EnvironmentRowStatus: Sendable, Equatable {
             return
         }
         let error = state?.presentedError
+        // Waiting on the host's approval is muted, with the "Approve this device…" text (SavedEnvironmentRows.tsx:99-101).
+        if state?.awaitingApproval == true {
+            (text, isError) = (error ?? "Waiting for approval", false)
+            return
+        }
         switch status {
         case .connected: (text, isError) = ("Connected", false)
         case .connecting: (text, isError) = ("Connecting", false)

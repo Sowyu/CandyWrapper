@@ -104,6 +104,22 @@ struct SettingsLogicTests {
         #expect(KeybindingsLogic.commandLabel("composer.sendAlternate") == "Composer: Opposite Queue or Steer Action")
     }
 
+    /// 4928 unassigns a default by saving its keys under `when: "false"` (KeybindingsSettings.logic.ts, #28687).
+    @Test func unassignedDefaultsKeepTheirDefault() throws {
+        let rows = KeybindingsLogic.rows(Keymap.default.rules)
+        let sidebar = try #require(rows.first { $0.command == "sidebar.toggle" && $0.key == "mod+b" })
+        let (target, replace) = try #require(KeybindingsLogic.unassignInput(sidebar))
+        #expect(target == KeybindingTarget(command: "sidebar.toggle", key: "mod+b", when: "false"))
+        #expect(replace == KeybindingsLogic.removeInput(sidebar))
+        var rules = Keymap.default.rules.filter { !($0.command == "sidebar.toggle" && KeybindingsLogic.input($0.shortcut) == "mod+b") }
+        rules.append(try #require(ResolvedKeybindingRule(key: "mod+b", command: "sidebar.toggle", when: "false")))
+        let off = try #require(KeybindingsLogic.rows(rules).first { $0.command == "sidebar.toggle" })
+        #expect(off.isUnassigned && off.source == .custom && off.defaultKey == "mod+b" && off.defaultWhen == "")
+        #expect(off.conflicts == [])
+        #expect(KeybindingsLogic.unassignInput(off) == nil)
+        #expect(KeybindingsLogic.resetInput(off)?.0 == KeybindingTarget(command: "sidebar.toggle", key: "mod+b"))
+    }
+
     @Test func rowsSourcesAndConflicts() {
         var rules = Keymap.default.rules
         let rows = KeybindingsLogic.rows(rules)

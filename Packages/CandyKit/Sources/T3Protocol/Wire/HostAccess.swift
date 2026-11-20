@@ -171,12 +171,55 @@ public struct AuthPairingLink: Decodable, Sendable, Equatable {
     public var label: String?
     public var createdAt: T3Timestamp
     public var expiresAt: T3Timestamp
+    /// Set while a T3 Connect device waits for approval (4928 auth.ts:369-379). Older servers never send it.
+    public var connectDeviceRequest: AuthConnectDeviceRequest?
     /// `permissions ?? scopes` (toDesktopPairingLinkRecord).
     public var granted: [String] { permissions ?? scopes ?? [] }
 
-    public init(id: String, scopes: [String], label: String? = nil, createdAt: T3Timestamp, expiresAt: T3Timestamp) {
+    public init(id: String, scopes: [String], label: String? = nil, createdAt: T3Timestamp, expiresAt: T3Timestamp,
+                connectDeviceRequest: AuthConnectDeviceRequest? = nil) {
         self.id = id; self.permissions = scopes; self.label = label; self.createdAt = createdAt; self.expiresAt = expiresAt
+        self.connectDeviceRequest = connectDeviceRequest
     }
+}
+
+/// `AuthConnectDeviceRequest` (auth.ts:362-367): a T3 Connect device waiting for someone here to approve it.
+public struct AuthConnectDeviceRequest: Decodable, Sendable, Equatable {
+    public var verificationCode: String
+    /// What the device said about itself. Absent until it asks.
+    public var client: AuthClientSession.Client?
+    public init(verificationCode: String, client: AuthClientSession.Client? = nil) {
+        self.verificationCode = verificationCode; self.client = client
+    }
+}
+
+/// `AuthConnectDevice` (auth.ts:381-388): a T3 Connect device key this environment trusts.
+public struct AuthConnectDevice: Decodable, Sendable, Equatable {
+    public var proofKeyThumbprint: String
+    public var verificationCode: String
+    public var client: AuthClientSession.Client?
+    public var approvedAt: T3Timestamp
+    public init(proofKeyThumbprint: String, verificationCode: String, client: AuthClientSession.Client? = nil, approvedAt: T3Timestamp) {
+        self.proofKeyThumbprint = proofKeyThumbprint; self.verificationCode = verificationCode; self.client = client; self.approvedAt = approvedAt
+    }
+}
+
+public enum ConnectDeviceNames {
+    /// `connectDeviceName` (ConnectionsSettings.logic.ts:513-522).
+    public static func name(_ client: AuthClientSession.Client?) -> String {
+        client?.label ?? client?.os ?? client?.browser ?? "this device"
+    }
+
+    /// `describeConnectDeviceClient` (ConnectionsSettings.logic.ts:525-537): what the device says, deduplicated.
+    public static func describe(_ client: AuthClientSession.Client?) -> String {
+        var seen: Set<String> = []
+        let bits = [client?.label, client?.os, client?.browser, client?.ipAddress].compactMap { $0 }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+        return bits.isEmpty ? "Unknown device" : bits.joined(separator: " · ")
+    }
+
+    /// The session subject a T3 Connect client signs in with (`CLOUD_CONNECT_SESSION_SUBJECT`).
+    public static let sessionSubject = "cloud-connect"
 }
 
 /// `AuthClientSession` (auth.ts:344-365).
@@ -215,8 +258,11 @@ public struct AuthClientSession: Decodable, Sendable, Equatable {
 public struct AuthAccessSnapshot: Sendable, Equatable {
     public var pairingLinks: [AuthPairingLink] = []
     public var clientSessions: [AuthClientSession] = []
-    public init(pairingLinks: [AuthPairingLink] = [], clientSessions: [AuthClientSession] = []) {
-        self.pairingLinks = pairingLinks; self.clientSessions = clientSessions
+    /// Nil from servers before 4928, which have no device approval (auth.ts:405-406). A change to the
+    /// trusted devices arrives as a whole new snapshot (server ws.ts:3546-3550).
+    public var connectDevices: [AuthConnectDevice]?
+    public init(pairingLinks: [AuthPairingLink] = [], clientSessions: [AuthClientSession] = [], connectDevices: [AuthConnectDevice]? = nil) {
+        self.pairingLinks = pairingLinks; self.clientSessions = clientSessions; self.connectDevices = connectDevices
     }
 
     /// Applies one stream event (`{version, revision, type, payload}`). Unknown types change nothing.
@@ -226,6 +272,7 @@ public struct AuthAccessSnapshot: Sendable, Equatable {
         case "snapshot":
             pairingLinks = try (payload["pairingLinks"] ?? .array([])).decode(as: [AuthPairingLink].self)
             clientSessions = try (payload["clientSessions"] ?? .array([])).decode(as: [AuthClientSession].self)
+            connectDevices = try payload["connectDevices"].map { try $0.decode(as: [AuthConnectDevice].self) }
         case "pairingLinkUpserted":
             let link = try payload.decode(as: AuthPairingLink.self)
             pairingLinks = pairingLinks.filter { $0.id != link.id } + [link]
@@ -243,9 +290,14 @@ public struct AuthAccessSnapshot: Sendable, Equatable {
         }
     }
 
-    /// Newest first (`sortDesktopPairingLinks`).
+    /// Pending T3 Connect device requests, newest first (ConnectionsSettings.tsx:766-768).
+    public var connectDeviceRequests: [AuthPairingLink] {
+        pairingLinks.filter { $0.connectDeviceRequest != nil }.sorted { ($0.createdAt.epochMs ?? 0) > ($1.createdAt.epochMs ?? 0) }
+    }
+
+    /// Newest first (`sortDesktopPairingLinks`), without the device requests (ConnectionsSettings.tsx:763-765).
     public var sortedLinks: [AuthPairingLink] {
-        pairingLinks.sorted { ($0.createdAt.epochMs ?? 0) > ($1.createdAt.epochMs ?? 0) }
+        pairingLinks.filter { $0.connectDeviceRequest == nil }.sorted { ($0.createdAt.epochMs ?? 0) > ($1.createdAt.epochMs ?? 0) }
     }
 
     /// This device, then connected ones, then newest (`sortDesktopClientSessions`).

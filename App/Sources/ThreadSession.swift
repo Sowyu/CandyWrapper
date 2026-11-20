@@ -1398,11 +1398,16 @@ final class ThreadController {
             panel.showsEnvironmentBanner = false
             updateDisconnect = remote && elapsed >= 20
             if remote && elapsed < 20 { wake = 20 - elapsed }
-        } else if reconnecting && reconnectingFor < 2 {
+        } else if reconnecting && reconnectingFor < 2 && !state.awaitingApproval {
             panel.showsEnvironmentBanner = false
             wake = 2 - reconnectingFor
         } else {
-            banner.text = "\(environments.label(id) ?? "Remote") is \(reconnecting ? "reconnecting" : "offline")"
+            // Waiting on device approval skips the grace and names it (useSystemComposerBanners.tsx:189-216).
+            // ponytail: T3 puts the "Approve this device…" text under the title; it is the tooltip here until the banner grows a description line
+            let label = environments.label(id) ?? "Remote"
+            banner.text = state.awaitingApproval ? "\(label) is waiting to approve this device"
+                : "\(label) is \(reconnecting ? "reconnecting" : "offline")"
+            banner.toolTip = state.awaitingApproval ? state.presentedError : nil
             banner.isError = state.status == .error
             banner.showsReconnect = !reconnecting
             banner.showsDisconnect = remote && elapsed >= 20

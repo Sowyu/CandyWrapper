@@ -105,6 +105,10 @@ public final class KeybindingsSettingsView: SettingsPageBase {
                     guard let (target, replace) = KeybindingsLogic.resetInput(row) else { return }
                     self?.context.saveKeybinding?(target, replace)
                 }
+                v.onUnassign = { [weak self] row in
+                    guard let (target, replace) = KeybindingsLogic.unassignInput(row) else { return }
+                    self?.context.saveKeybinding?(target, replace)
+                }
                 if v.isEditable != canWrite { v.isEditable = canWrite }
                 if v.isSaving != (savingCommand == row.command) { v.isSaving = savingCommand == row.command }
                 views[row.id] = v
@@ -155,6 +159,21 @@ public final class KeybindingsSettingsView: SettingsPageBase {
         func height(forWidth width: CGFloat) -> CGFloat { 48 + 20 + 48 }
         override func layout() { super.layout(); label.frame = NSRect(x: 16, y: 48, width: bounds.width - 32, height: 20) }
     }
+}
+
+/// The muted "Unassigned" text button that starts recording, where the pill would be.
+final class UnassignedPill: ControlView {
+    private let label: LabelView
+    init(label: LabelView) {
+        self.label = label
+        super.init(frame: .zero)
+        scalesWhenPressed = false
+        addSubview(label)
+        setAccessibilityRole(.button)
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override var intrinsicContentSize: NSSize { NSSize(width: ceil(label.textWidth) + 1, height: 28) }
+    override func layout() { super.layout(); label.frame = NSRect(x: 0, y: (bounds.height - 20) / 2, width: bounds.width, height: 20) }
 }
 
 /// `KeybindingPill`: the shortcut as Kbd keys (⌘, ⇧, ⌥, ⌃, letters uppercased) in a ghost button that
@@ -399,6 +418,7 @@ final class KeybindingRowView: DSView, SettingsGroupRow, FocusWithinObserver {
     let row: KeybindingRow
     private let settingsRow: SettingsRowView
     private let pill = KeybindingPillButton()
+    private var unassignedPill: UnassignedPill?
     private let recorder = ShortcutRecorderView()
     private let save = ButtonView("Save", size: .sm)
     private let actionsButton = ButtonView(nil, icon: .ellipsis, variant: .ghostMuted, size: .iconSm).menuTrigger()
@@ -415,6 +435,11 @@ final class KeybindingRowView: DSView, SettingsGroupRow, FocusWithinObserver {
     var onSave: ((KeybindingTarget, KeybindingTarget?) -> Void)?
     var onRemove: ((KeybindingRow) -> Void)?
     var onReset: ((KeybindingRow) -> Void)?
+    var onUnassign: ((KeybindingRow) -> Void)?
+    /// "Unassigned" in place of the pill (KeybindingsSettings.tsx, #28687).
+    private let unassigned = LabelView("Unassigned", font: DSFont.ui(14), color: Themed.color(\.mutedForeground))
+    private let unassignedNote = LabelView("No keyboard shortcut assigned. Click Unassigned to set one.", font: DSFont.ui(12),
+                                           color: Themed.color(\.mutedForeground))
     var isEditable = true { didSet { update() } }
     var isSaving = false { didSet { update() } }
 
@@ -429,7 +454,11 @@ final class KeybindingRowView: DSView, SettingsGroupRow, FocusWithinObserver {
         keyDraft = row.key
         whenDraft = row.binding.whenAst
         badge = row.source == .default ? nil : BadgeView(row.source.rawValue, variant: .outline, size: .sm)
-        controls = SettingsControlGroup([warning, actionsButton, save, pill, recorder], gap: 6)
+        unassigned.lineHeight = 20
+        unassignedNote.lineHeight = 16
+        let unassignedPill = UnassignedPill(label: unassigned)
+        controls = SettingsControlGroup([warning, actionsButton, save, pill, unassignedPill, recorder], gap: 6)
+        self.unassignedPill = unassignedPill
         settingsRow = SettingsRowView(title: KeybindingsLogic.commandLabel(row.command), control: controls)
         super.init(frame: .zero)
         settingsRow.detailView = when
@@ -445,8 +474,15 @@ final class KeybindingRowView: DSView, SettingsGroupRow, FocusWithinObserver {
         pill.value = row.key
         pill.setAccessibilityLabel("Edit shortcut for \(KeybindingsLogic.commandLabel(row.command)): \(row.binding.shortcut.label)")
         pill.action = { [weak self] in self?.startRecording() }
+        unassignedPill.action = { [weak self] in self?.startRecording() }
+        unassignedPill.setAccessibilityLabel("Edit shortcut for \(KeybindingsLogic.commandLabel(row.command)): Unassigned")
         recorder.setAccessibilityLabel("Keybinding for \(KeybindingsLogic.commandLabel(row.command))")
-        recorder.onRecord = { [weak self] key in self?.keyDraft = key; self?.recording = false; self?.update() }
+        recorder.onRecord = { [weak self] key in
+            guard let self else { return }
+            // Giving an unassigned row a shortcut brings back its default condition.
+            if self.row.isUnassigned, self.whenExpression == "false" { self.whenDraft = KeybindingWhenNode.parse(self.row.defaultWhen) }
+            self.keyDraft = key; self.recording = false; self.update()
+        }
         recorder.onCancel = { [weak self] in guard let self else { return }; self.keyDraft = self.row.key; self.recording = false; self.update() }
         recorder.onEnd = { [weak self] in self?.recording = false; self?.update() }
         save.action = { [weak self] in self?.commit() }
@@ -482,7 +518,12 @@ final class KeybindingRowView: DSView, SettingsGroupRow, FocusWithinObserver {
         warningTip?.text = (description ?? "") + " The most recent matching binding wins when both conditions can apply."
         warning.setAccessibilityLabel(description ?? "")
         let showPill = !recording && keyDraft == row.key && !row.key.isEmpty && !isDirty
-        pill.isHidden = !showPill
+        pill.isHidden = !showPill || row.isUnassigned
+        unassignedPill?.isHidden = !showPill || !row.isUnassigned
+        unassignedPill?.isEnabled = isEditable
+        // The note replaces the when clause until the row is edited.
+        let showsNote = row.isUnassigned && !isDirty
+        settingsRow.detailView = showsNote ? unassignedNote : when
         recorder.isHidden = showPill
         recorder.value = keyDraft
         save.isHidden = !isDirty
@@ -499,7 +540,7 @@ final class KeybindingRowView: DSView, SettingsGroupRow, FocusWithinObserver {
     /// `KeybindingHoverRowMenu`: fades in over 150 ms while the row is hovered, holds keyboard focus or has
     /// the menu open (KeybindingsSettings.tsx:989); only for rows it can act on.
     private func updateMenu() {
-        let canAct = (row.source == .custom && row.defaultKey != nil) || row.source != .default
+        let canAct = true  // a default can Unassign, anything else Remove or Reset (KeybindingsSettings.tsx, #28687)
         actionsButton.isHidden = !canAct || !isEditable
         HoverReveal.fade([actionsButton], visible: hovering || focusWithin || actionsButton.state.popupOpen)
         actionsButton.isEnabled = !isSaving
@@ -512,7 +553,13 @@ final class KeybindingRowView: DSView, SettingsGroupRow, FocusWithinObserver {
             reset.action = { [weak self] in guard let self else { return }; self.onReset?(self.row) }
             items.append(reset)
         }
-        if row.source != .default {
+        // Unassign turns a default off; Reset to default is the way back, so it never offers Remove.
+        if row.source == .default {
+            var unassign = MenuItem("Unassign", destructive: true)
+            unassign.action = { [weak self] in guard let self else { return }; self.onUnassign?(self.row) }
+            items.append(unassign)
+        }
+        if row.source != .default && !row.isUnassigned {
             var remove = MenuItem("Remove", destructive: true)
             remove.action = { [weak self] in guard let self else { return }; self.onRemove?(self.row) }
             items.append(remove)

@@ -52,6 +52,8 @@ final class SettingsController {
     var onRouteChange: (() -> Void)?
     /// The nav's brand link to "/".
     var onHome: () -> Void = {}
+    /// Closes Settings and opens a thread (a scheduled task's thread link).
+    var onOpenThread: ((ThreadId) -> Void)?
     /// Runs before Settings shows: a floating Usage closes, as T3 routes from `/usage` to `/settings`.
     var willOpen: () -> Void = {}
     /// The local environment's descriptor, read when the page opens (label, machine, version).
@@ -82,6 +84,10 @@ final class SettingsController {
     var revokingLink: String?
     var revokingClient: String?
     var revokingOthers = false
+    /// The pairing link id or key thumbprint whose approve, deny or revoke is in flight.
+    var connectDeviceBusy: String?
+    /// `requireConnectDeviceApproval` as last saved from this page, ahead of the server's config push.
+    var connectApprovalSaved: Bool?
     var ticker: Timer?
     /// Rereads the T3 Connect link state every 30 s while Connections shows a tunnel (`updateLinkPoll`).
     var linkPoll: Timer?
@@ -139,8 +145,11 @@ final class SettingsController {
         actions.reorderRoutes = { [weak self] id, routes in self?.reorderRoutes(id, routes) }
         actions.createPairingLink = { [weak self] in self?.presentCreateLink() }
         actions.revokePairingLink = { [weak self] id in self?.revokePairingLink(id) }
-        actions.revokeClient = { [weak self] id in self?.revokeClient(id) }
-        actions.revokeOtherClients = { [weak self] in self?.revokeOtherClients() }
+        actions.revokeClient = { [weak self] id in self?.requestRevokeClient(id) }
+        actions.revokeOtherClients = { [weak self] in self?.requestRevokeOtherClients() }
+        actions.approveConnectDevice = { [weak self] id in self?.approveConnectDevice(id) }
+        actions.denyConnectDevice = { [weak self] id in self?.denyConnectDevice(id) }
+        actions.revokeConnectDevice = { [weak self] id in self?.requestRevokeConnectDevice(id) }
         actions.setLoadBalancing = { [weak self] on in
             ClientSettingsStore.shared.update(["loadBalancingEnabled": .bool(on)])
             self?.refresh()
@@ -284,6 +293,7 @@ final class SettingsController {
             let d = primaryDescriptor?.environmentId == id ? primaryDescriptor : nil
             m.thisMachine = machineModel(id, descriptor: d)
             m.access = accessModel()
+            m.connectDevices = connectDevicesModel()
         }
         m.environments = environments.saved.map { r in
             let state = environments.state(r.environmentId)

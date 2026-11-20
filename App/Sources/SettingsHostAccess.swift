@@ -72,6 +72,7 @@ extension SettingsController {
         linkPoll?.invalidate()
         linkPoll = nil
         credentials = [:]
+        connectApprovalSaved = nil
     }
 
     /// Reads hosts that are connected and not read yet. Called on each refresh, so a machine that
@@ -294,6 +295,15 @@ extension SettingsController {
                               control: .toggle(.init(isOn: linkState?.holdsWebhooks ?? false,
                                                      isEnabled: !(!canManageRelay || !signedIn || linkLoading || linkBusy), tooltip: reason,
                                                      label: "Hold webhook requests while this environment is offline"))))
+            // `Require approval for new devices` (4928 SavedEnvironmentRows.tsx:824-848), on servers that have it.
+            if let required = connectApprovalRequired {
+                let canManage = grants(environments.primaryId, AuthScopes.accessWrite)
+                rows.append(.init(id: "connect-device-approval", title: "Require approval for new devices",
+                                  detail: "Devices that sign in to your T3 Connect account wait until someone already connected here approves them.",
+                                  control: .toggle(.init(isOn: required, isEnabled: canManage && !linkBusy,
+                                                         tooltip: canManage ? nil : "Your session does not have permission to manage access.",
+                                                         label: "Require approval for new T3 Connect devices"))))
+            }
         }
         return rows
     }
@@ -351,7 +361,7 @@ extension SettingsController {
                          scopes: c.granted, revoking: revokingClient == c.sessionId)
         }
         let known = canRead && accessError == nil && accessLoaded
-        return .init(summary: ConnectionsPageModel.Access.summary(clients: access.clientSessions.count, links: access.pairingLinks.count),
+        return .init(summary: ConnectionsPageModel.Access.summary(clients: access.clientSessions.count, links: access.sortedLinks.count),
                      canRead: canRead, canWrite: canWrite, loading: canRead && !accessLoaded, error: accessError,
                      links: links, clients: clients, revokingOthers: revokingOthers,
                      canRevokeOthers: !known || access.clientSessions.contains { !$0.current })
@@ -381,6 +391,8 @@ extension SettingsController {
                             on ? "T3 Connect keeps webhook requests for up to 24 hours while this environment is offline."
                                : "Requests to an offline environment now fail. Anything already held is still delivered.", .success)
             }
+        case "connect-device-approval":
+            setConnectApproval(on) { _ in }
         default:
             // Bridge-only rows are disabled; nothing reaches here.
             refreshPage()
@@ -519,6 +531,135 @@ extension SettingsController {
             }
             revokingOthers = false
             refreshPage()
+        }
+    }
+
+    // MARK: T3 Connect devices
+
+    /// The primary server's `requireConnectDeviceApproval`, nil on servers before 4928 (settings.ts:1393-1396).
+    var connectApprovalRequired: Bool? {
+        guard let id = environments.primaryId else { return nil }
+        guard let sent = composer?.config(id)?.settings.raw["requireConnectDeviceApproval"]?.boolValue else { return nil }
+        return connectApprovalSaved ?? sent
+    }
+
+    /// `ConnectDeviceApprovalSettings`' rows, with `access:read`, once the snapshot has `connectDevices`.
+    func connectDevicesModel() -> ConnectionsPageModel.ConnectDevices? {
+        guard let id = environments.primaryId, grants(id, AuthScopes.accessRead), let devices = access.connectDevices else { return nil }
+        let now = Date()
+        var rows: [ConnectionsPageModel.ConnectDevices.Row] = access.connectDeviceRequests.compactMap { link in
+            guard let request = link.connectDeviceRequest, (link.expiresAt.date ?? now) >= now else { return nil }
+            return .init(id: link.id, pending: true, device: ConnectDeviceNames.describe(request.client),
+                         code: request.verificationCode, busy: connectDeviceBusy == link.id)
+        }
+        rows += devices.map { d in
+            .init(id: d.proofKeyThumbprint, pending: false, device: ConnectDeviceNames.describe(d.client), code: d.verificationCode,
+                  trustedSince: d.approvedAt.date.map(AccessTime.absolute) ?? d.approvedAt.raw, busy: connectDeviceBusy == d.proofKeyThumbprint)
+        }
+        return .init(rows: rows, canWrite: grants(id, AuthScopes.accessWrite))
+    }
+
+    /// `server.updateSettings({requireConnectDeviceApproval})`; `done` gets whether it saved.
+    func setConnectApproval(_ on: Bool, done: @escaping (Bool) -> Void) {
+        guard let id = environments.primaryId else { return done(false) }
+        connectApprovalSaved = on
+        refreshPage()
+        Task {
+            do {
+                _ = try await environments.request(id, "server.updateSettings", .object(["patch": .object(["requireConnectDeviceApproval": .bool(on)])]))
+                done(true)
+            } catch {
+                connectApprovalSaved = nil
+                toast("Could not save setting", "\(error)", .error)
+                refreshPage()
+                done(false)
+            }
+        }
+    }
+
+    private func runConnectDevice(_ key: String, failure: String, _ call: @escaping (EnvironmentHTTP, String) async throws -> Void) {
+        guard let id = environments.primaryId, let shell = environments.session(id), grants(id, AuthScopes.accessWrite) else { return }
+        connectDeviceBusy = key
+        refreshPage()
+        let http = shell.http, token = shell.token
+        Task {
+            do { try await call(http, token) } catch {
+                toast(failure, Self.message(error, fallback: "An error occurred."), .error)
+            }
+            connectDeviceBusy = nil
+            refreshPage()
+        }
+    }
+
+    func approveConnectDevice(_ linkId: String) {
+        runConnectDevice(linkId, failure: "Could not approve the device") { http, token in
+            try await http.approveConnectDevice(pairingLinkId: linkId, token: token)
+        }
+    }
+
+    /// Deny revokes the request's pairing link (ConnectDeviceApprovalSettings.tsx:93-104).
+    func denyConnectDevice(_ linkId: String) {
+        runConnectDevice(linkId, failure: "Could not deny the device") { http, token in
+            try await http.revokePairingLink(id: linkId, token: token)
+        }
+    }
+
+    func requestRevokeConnectDevice(_ thumbprint: String) {
+        let device = access.connectDevices?.first { $0.proofKeyThumbprint == thumbprint }
+        requestConnectRevoke("Revoke \(ConnectDeviceNames.name(device?.client))?") { [weak self] in
+            self?.runConnectDevice(thumbprint, failure: "Could not revoke the device") { http, token in
+                try await http.revokeConnectDevice(proofKeyThumbprint: thumbprint, token: token)
+            }
+        }
+    }
+
+    /// A T3 Connect client's session (ConnectionsSettings.tsx:793-802).
+    func requestRevokeClient(_ sessionId: String) {
+        guard let session = access.clientSessions.first(where: { $0.sessionId == sessionId }),
+              session.subject == ConnectDeviceNames.sessionSubject else { return revokeClient(sessionId) }
+        requestConnectRevoke("Revoke \(ConnectDeviceNames.name(session.client))?") { [weak self] in self?.revokeClient(sessionId) }
+    }
+
+    /// ConnectionsSettings.tsx:803-814: asks first when other T3 Connect devices would go too.
+    func requestRevokeOtherClients() {
+        let connect = !(access.connectDevices ?? []).isEmpty
+            || access.clientSessions.contains { !$0.current && $0.subject == ConnectDeviceNames.sessionSubject }
+        guard connect else { return revokeOtherClients() }
+        requestConnectRevoke("Revoke all other clients?") { [weak self] in self?.revokeOtherClients() }
+    }
+
+    /// `requestConnectRevoke` (ConnectionsSettings.tsx:777-784): with approval off a revoked device signs
+    /// straight back in, so `RevokeConnectDeviceDialog` offers to turn it on first. Otherwise it revokes now.
+    func requestConnectRevoke(_ title: String, revoke: @escaping () -> Void) {
+        guard connectApprovalRequired == false, grants(environments.primaryId, AuthScopes.accessWrite),
+              let window, modal == nil else { return revoke() }
+        let dialog = DialogView(kind: .alertDialog, title: title,
+                                message: "Approval for new devices is off, so a revoked device signed in to your T3 Connect account can connect again on its own.")
+        var turnOn = true
+        let choice = OnboardingChoiceRowView(title: "Require approval for new devices",
+                                             detail: "The device has to be approved here before it can connect again.",
+                                             selected: true) { turnOn = $0 }
+        choice.bare = true
+        dialog.panelContent = [choice]
+        let cancel = ButtonView("Cancel", variant: .outline)
+        let ok = ButtonView("Revoke", variant: .destructive)
+        dialog.footerButtons = [cancel, ok]
+        let host = ModalHost.present(dialog, in: window)
+        host.onDismiss = { [weak self] in self?.modal = nil }
+        modal = host
+        cancel.action = { [weak host] in host?.close() }
+        ok.action = { [weak self, weak host, weak cancel, weak ok] in
+            guard let self else { return }
+            guard turnOn else { host?.close(); return revoke() }
+            cancel?.isEnabled = false
+            ok?.isEnabled = false
+            self.setConnectApproval(true) { saved in
+                cancel?.isEnabled = true
+                ok?.isEnabled = true
+                guard saved else { return }
+                host?.close()
+                revoke()
+            }
         }
     }
 

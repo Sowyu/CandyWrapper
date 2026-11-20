@@ -47,3 +47,24 @@ struct ThreadServersTests {
         #expect(card.preferredHeight == before)
     }
 }
+
+/// Long server lists page four at a time and stay out of the card's density fit (4928 ThreadServersPanel.tsx, #28684).
+@MainActor
+struct ThreadServersPagingTests {
+    @Test func pagesFourAtATime() {
+        let view = ThreadServersView()
+        func height(rows: Int) -> CGFloat { CGFloat(8 + 20 + rows * 44 + 32 + 8) }
+        let servers = (0..<9).map { DiscoveredLocalServer(host: "localhost", port: 3000 + $0, url: "http://localhost:\(3000 + $0)", pid: 40 + $0) }
+        view.configure(servers: servers, supportsStop: true, canOpen: true, canStop: true, stopping: nil)
+        #expect(view.preferredHeight == height(rows: 4))
+        #expect(view.overflowHeight == 0)
+        view.subviews.compactMap { $0 as? DetailsRowControl }.first?.action?()
+        #expect(view.preferredHeight == height(rows: 8))
+        #expect(view.overflowHeight == CGFloat(4 * 44))
+        view.subviews.compactMap { $0 as? DetailsRowControl }.first?.action?()
+        #expect(view.preferredHeight == height(rows: 9))
+        // Show less returns to the first page.
+        view.subviews.compactMap { $0 as? DetailsRowControl }.first?.action?()
+        #expect(view.preferredHeight == height(rows: 4))
+    }
+}

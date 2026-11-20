@@ -283,6 +283,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environments.onSshFailure = { [weak settings] title, message in settings?.toast(title, message, .error) }
         self.settings = settings
         let commands = SidebarCommands(sidebar: sidebar, window: window, layout: layout, environments: environments, threads: threads)
+        threads.composer.openUsagePage = { [weak commands] in commands?.openUtilityPage(.usage) }
+        threads.panel.lazyDetailsCard.configure { [weak composer = threads.composer] _ in
+            DispatchQueue.main.async { composer?.refreshDetailsUsage() }
+        }
+        threads.composer.configObservers.append { [weak composer = threads.composer] _ in composer?.refreshDetailsUsage() }
         self.sidebarCommands = commands
         commands.closeSettings = { [weak settings] in settings?.close(record: false) }
         settings.willOpen = { [weak commands] in commands?.prepareForSettings() }
@@ -612,6 +617,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         sidebar.actions.goHome = goHome
         settings.onHome = goHome
+        settings.onOpenThread = { [weak settings, weak commands, weak threads] id in
+            settings?.close(); commands?.closeUtilityPage(); threads?.open(id)
+        }
         (window as? MainWindow)?.onUnhandledEscape = { [weak settings, weak window] in
             guard let settings, settings.isOpen, settings.modal == nil else { return false }
             // Only from Settings itself: an overlay or dialog elsewhere in the window keeps its Escape.

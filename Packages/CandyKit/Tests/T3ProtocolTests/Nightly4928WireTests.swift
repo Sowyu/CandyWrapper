@@ -73,12 +73,58 @@ struct Nightly4928WireTests {
         let sent = [Self.json(#"{"type":"once","runAt":"2026-11-20T09:30:00+01:00"}"#), Self.json(#"{"type":"lunar","phase":"full"}"#)]
         for (t, expected) in zip(tasks, sent) {
             let draft = ScheduledTaskLogic.draft(t)
-            #expect(draft.scheduleMode == .kept)
+            #expect(draft.scheduleMode == (t.schedule == .once(runAt: "2026-11-20T09:30:00+01:00") ? .once : .kept))
             let input = try ScheduledTaskLogic.upsertInput(draft, projectId: "p1", projectExists: true,
                                                            selection: ("codex", "gpt"), storedSecret: false).get()
             #expect(input["schedule"] == expected)
             #expect(input["threadMode"] == nil)
         }
+    }
+
+    /// The Once editor (scheduledTasksSettings.logic.ts:163-181, 244-260): local `datetime-local` values,
+    /// the saved instant kept while its clock time is unchanged, and T3's run time errors.
+    @Test func onceDraftsEditTheRunTime() throws {
+        var berlin = Calendar(identifier: .gregorian)
+        berlin.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        var d = ScheduledTaskDraft()
+        d.scheduleMode = .once
+        d.savedRunAt = "2026-11-20T09:30:00+01:00"
+        d.runAt = "2026-11-20T09:30"
+        #expect(ScheduledTaskLogic.onceRunAt(d, calendar: berlin) == "2026-11-20T09:30:00+01:00")
+        d.runAt = "2026-11-21T10:15"
+        #expect(ScheduledTaskLogic.onceRunAt(d, calendar: berlin) == "2026-11-21T09:15:00.000Z")
+        d.runAt = "2026-11-21T"
+        #expect(ScheduledTaskLogic.onceError(d, calendar: berlin) == "Pick a date and time.")
+        // 02:30 on 29 March 2026 doesn't exist in Berlin.
+        d.runAt = "2026-03-29T02:30"
+        #expect(ScheduledTaskLogic.onceError(d, calendar: berlin) == "That time does not exist in your time zone.")
+        #expect(ScheduledTaskLogic.dateTimeLocal(Date(timeIntervalSince1970: 0), calendar: berlin) == "1970-01-01T01:00")
+        #expect(ScheduledTaskLogic.suggestedRunAt(now: Date(timeIntervalSince1970: 3601)).timeIntervalSince1970 == 7200)
+        d.runAt = ""
+        d.title = "T"; d.prompt = "P"
+        if case .failure(let e) = ScheduledTaskLogic.upsertInput(d, projectId: "p", projectExists: true, selection: ("c", "m"), storedSecret: false) {
+            #expect(e.copy.title == "Invalid run time")
+        } else { Issue.record("an empty run time must not save") }
+    }
+
+    /// Destination: thread modes, moving to a thread and leaving it (logic.ts:372-399, #30326, #31379).
+    @Test func destinationMovesAndUnbindsTheDraft() throws {
+        var d = ScheduledTaskDraft()
+        d.title = "T"; d.prompt = "P"; d.projectId = "p1"; d.workspaceMode = .root
+        let moved = ScheduledTaskLogic.move(d, toThread: "t9", projectId: "p2")
+        #expect(moved.threadId == "t9" && moved.projectId == "p2" && moved.threadMode == "continue")
+        var fresh = moved; fresh.threadMode = "fresh_session"
+        #expect(ScheduledTaskLogic.move(fresh, toThread: "t8", projectId: "p2").threadMode == "fresh_session")
+        let left = ScheduledTaskLogic.unbind(moved)
+        #expect(left.threadId == "" && left.threadMode == "continue" && left.workspaceMode == .worktree && left.startFromOrigin)
+        #expect(ScheduledTaskLogic.changeProject(moved, to: "p3").threadId == "")
+        #expect(ScheduledTaskLogic.changeProject(moved, to: "p2").threadId == "t9")
+        #expect(ScheduledTaskLogic.destinationNotes(mode: "new_thread", bound: false).count == 1)
+        #expect(ScheduledTaskLogic.destinationNotes(mode: "continue", bound: true)
+                == ["Each run continues this conversation, in its workspace and with its current model.", "Deleting the thread also deletes this task."])
+        let sent = try ScheduledTaskLogic.upsertInput(moved, projectId: "p2", projectExists: true, selection: ("c", "m"),
+                                                      storedSecret: false, threadModes: true).get()
+        #expect(sent["threadMode"] == .string("continue") && sent["threadId"] == .string("t9"))
     }
 
     /// Section 5: closed enums now keep values a newer server sends.

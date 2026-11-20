@@ -14,6 +14,8 @@ public struct KeybindingRow: Equatable, Sendable {
     public let defaultWhen: String
     public let binding: ResolvedKeybindingRule
     public var conflicts: [String]
+    /// A default shortcut turned off with `when: "false"` (4928 KeybindingsSettings.logic.ts:275-278, #28687).
+    public var isUnassigned: Bool { when == "false" && defaultKey != nil && key == defaultKey }
 }
 
 public struct KeybindingGroup: Equatable, Sendable {
@@ -53,7 +55,7 @@ public enum KeybindingsLogic {
         "modelPicker.toggle", "modelPicker.previousProvider", "modelPicker.nextProvider",
     ] + Keymap.modelPickerJumpCommands + [
         "thread.stop", "thread.steerQueuedMessage", "thread.editQueuedMessage", "thread.previous", "thread.next",
-        "thread.copyReference", "thread.settle", "thread.pin", "thread.undo",
+        "thread.copyReference", "thread.settle", "thread.pin", "thread.regenerateTitle", "thread.undo",  // 4928 keybindings.ts:38-47
     ] + Keymap.threadJumpCommands
 
     /// `keybindingSearchAnchorId`.
@@ -154,11 +156,16 @@ public enum KeybindingsLogic {
     static func defaultBinding(_ b: ResolvedKeybindingRule) -> (rule: ResolvedKeybindingRule, key: String, when: String)? {
         let key = input(b.shortcut), when = expression(b.whenAst)
         return defaultRows.first { $0.rule.command == b.command && $0.key == key && $0.when == when }
+            // An unassigned default keeps its keys under `when: "false"` (logic.ts:167-173).
+            ?? (when == "false" ? defaultRows.first { $0.rule.command == b.command && $0.key == key } : nil)
             ?? defaultRows.first { $0.rule.command == b.command && $0.when == when }
             ?? defaultRows.first { $0.rule.command == b.command }
     }
 
-    static func conflictsWithWhen(_ l: String, _ r: String) -> Bool { l.isEmpty || r.isEmpty || l == r }
+    static func conflictsWithWhen(_ l: String, _ r: String) -> Bool {
+        if l == "false" || r == "false" { return false }  // an unassigned shortcut never fires (logic.ts:187)
+        return l.isEmpty || r.isEmpty || l == r
+    }
 
     /// `keybindingConflictLabels`: commands on the same keys whose conditions can both hold.
     public static func conflictLabels(_ rows: [KeybindingRow], rowId: String, key: String, when: String) -> [String] {
@@ -333,6 +340,12 @@ public enum KeybindingsLogic {
     /// `rowKeybindingTarget`.
     public static func removeInput(_ row: KeybindingRow) -> KeybindingTarget {
         KeybindingTarget(command: row.command, key: row.key, when: row.when.trimmingCharacters(in: .whitespaces).isEmpty ? nil : row.when)
+    }
+
+    /// `unassignKeybinding` (KeybindingsSettings.tsx, #28687): the default's keys under `when: "false"`.
+    public static func unassignInput(_ row: KeybindingRow) -> (KeybindingTarget, replace: KeybindingTarget?)? {
+        guard row.source == .default else { return nil }
+        return (KeybindingTarget(command: row.command, key: row.key, when: "false"), removeInput(row))
     }
 
     /// `resetKeybinding`: the default keys and when, replacing the row.

@@ -207,8 +207,8 @@ public struct ScheduledTaskWebhookDelivery: Equatable, Sendable {
 
 /// The task editor's form (`DraftState`, scheduledTasksSettings.logic.ts:51-90).
 public struct ScheduledTaskDraft: Equatable, Sendable {
-    /// `kept` is a schedule the editor has no fields for yet (`once` or one from a newer server); a save sends `keptSchedule` back.
-    public enum ScheduleMode: String, Sendable { case fixed, interval, webhook, kept }
+    /// `kept` is a schedule the editor has no fields for (one from a newer server); a save sends `keptSchedule` back.
+    public enum ScheduleMode: String, Sendable { case fixed, once, interval, webhook, kept }
     public enum WorkspaceMode: String, Sendable { case root, worktree, existingWorktree = "existing_worktree" }
 
     public var editingId: String?
@@ -219,9 +219,15 @@ public struct ScheduledTaskDraft: Equatable, Sendable {
     public var keptSchedule: JSONValue?
     public var intervalMinutes = "15"
     public var timeOfDay = "09:00"
+    /// `Once`: the local `YYYY-MM-DDTHH:MM` of a `datetime-local` field, and the instant it was read from
+    /// (scheduledTasksSettings.logic.ts:126-129, 328-329).
+    public var runAt = ""
+    public var savedRunAt = ""
     public var weekdays: Set<Int> = [1, 2, 3, 4, 5]
     public var projectId = ""
     public var threadId = ""
+    /// `new_thread`, `continue` or `fresh_session` (4928 #30326, logic.ts:72).
+    public var threadMode = "new_thread"
     public var workspaceMode = WorkspaceMode.worktree
     public var baseRef = "main"
     public var startFromOrigin = true
@@ -421,6 +427,8 @@ public enum ScheduledTaskLogic {
             return .object(o)
         case .kept:
             return d.keptSchedule
+        case .once:
+            return onceRunAt(d).map { .object(["type": .string("once"), "runAt": .string($0)]) }
         case .interval:
             return .object(["type": .string("interval"), "everyMs": intervalMs(d.intervalMinutes).map(JSONValue.number) ?? .number(.nan)])
         case .fixed:
@@ -462,8 +470,9 @@ public enum ScheduledTaskLogic {
             }
             d.maxDeliveryAgeMinutes = age.map(String.init) ?? ""
         case .once(let runAt):
-            d.scheduleMode = .kept
-            d.keptSchedule = .object(["type": .string("once"), "runAt": .string(runAt)])
+            d.scheduleMode = .once
+            d.runAt = T3Timestamp.parseEpochMs(runAt).map { ScheduledTaskLogic.dateTimeLocal(Date(timeIntervalSince1970: Double($0) / 1000)) } ?? ""
+            d.savedRunAt = runAt
             d.weekdays = Set(0...6)
         case .unknown(let json):
             d.scheduleMode = .kept
@@ -472,6 +481,7 @@ public enum ScheduledTaskLogic {
         }
         d.projectId = t.projectId
         d.threadId = t.threadId ?? ""
+        d.threadMode = t.effectiveThreadMode
         let strategy = t.workspaceStrategy
         d.workspaceMode = ScheduledTaskDraft.WorkspaceMode(rawValue: strategy["type"]?.stringValue ?? "root") ?? .root
         d.baseRef = d.workspaceMode == .worktree ? strategy["baseRef"]?.stringValue ?? "main" : "main"
@@ -482,6 +492,96 @@ public enum ScheduledTaskLogic {
         d.interactionMode = t.interactionMode
         d.baseModelSelection = t.modelSelection
         return d
+    }
+
+    /// `THREAD_MODE_LABELS` (ScheduledTasksSettings.tsx, 4928 #30326), in T3's order.
+    public static let threadModes: [(mode: String, label: String)] = [
+        ("new_thread", "New thread each run"),
+        ("continue", "One thread, continuing the conversation"),
+        ("fresh_session", "One thread, fresh session each run"),
+    ]
+
+    /// `moveDraftToThread` (logic.ts:372-382): the thread's project comes along, and New thread becomes Continue.
+    public static func move(_ d: ScheduledTaskDraft, toThread id: String, projectId: String) -> ScheduledTaskDraft {
+        var d = d
+        d.threadId = id
+        d.projectId = projectId
+        if d.threadMode == "new_thread" { d.threadMode = "continue" }
+        return d
+    }
+
+    /// `unbindDraftFromThread` (logic.ts:385-394): leaves the thread, keeps the mode, and moves a
+    /// project-root workspace to a worktree, so new threads stay out of the shared checkout.
+    public static func unbind(_ d: ScheduledTaskDraft) -> ScheduledTaskDraft {
+        guard !d.threadId.isEmpty else { return d }
+        var d = d
+        d.threadId = ""
+        if d.workspaceMode == .root { d.workspaceMode = .worktree; d.startFromOrigin = true }
+        return d
+    }
+
+    /// `changeDraftProject` (logic.ts:396-399).
+    public static func changeProject(_ d: ScheduledTaskDraft, to projectId: String) -> ScheduledTaskDraft {
+        guard projectId != d.projectId else { return d }
+        var d = unbind(d)
+        d.projectId = projectId
+        return d
+    }
+
+    /// The Destination field's notes (ScheduledTasksSettings.tsx:1349-1362, 1440-1446).
+    public static func destinationNotes(mode: String, bound: Bool) -> [String] {
+        let detail = mode == "new_thread" ? "Each run starts a new thread with the workspace and model below."
+            : !bound ? (mode == "continue"
+                ? "The first run starts a thread with the workspace and model below. Later runs continue that conversation."
+                : "The first run starts a thread with the workspace and model below. Later runs post there, each in a fresh session without earlier runs' context.")
+            : mode == "continue" ? "Each run continues this conversation, in its workspace and with its current model."
+            : "Each run starts a fresh session in this thread, without earlier runs' context."
+        return mode == "new_thread" ? [detail] : [detail, "Deleting the thread also deletes this task."]
+    }
+
+    /// `toDateTimeLocalValue` (scheduledTasksSettings.logic.ts:163-167): local `YYYY-MM-DDTHH:MM`.
+    public static func dateTimeLocal(_ date: Date, calendar: Calendar = .current) -> String {
+        let c = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        return String(format: "%04d-%02d-%02dT%02d:%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0, c.hour ?? 0, c.minute ?? 0)
+    }
+
+    /// `new Date(datetimeLocal)`: the local time, or nil when it doesn't parse.
+    public static func parseDateTimeLocal(_ value: String, calendar: Calendar = .current) -> Date? {
+        let parts = value.split(whereSeparator: { $0 == "T" || $0 == "-" || $0 == ":" }).map { Int($0) }
+        guard parts.count == 5, parts.allSatisfy({ $0 != nil }) else { return nil }
+        let p = parts.map { $0! }
+        guard (1...12).contains(p[1]), (1...31).contains(p[2]), (0...23).contains(p[3]), (0...59).contains(p[4]) else { return nil }
+        return calendar.date(from: DateComponents(year: p[0], month: p[1], day: p[2], hour: p[3], minute: p[4]))
+    }
+
+    /// The `Invalid run time` problem of a `Once` draft (scheduleDraftErrors, logic.ts:169-181), or nil.
+    public static func onceError(_ d: ScheduledTaskDraft, calendar: Calendar = .current) -> String? {
+        guard let date = parseDateTimeLocal(d.runAt, calendar: calendar) else { return "Pick a date and time." }
+        // A time skipped by a daylight saving change parses to a different clock time.
+        return dateTimeLocal(date, calendar: calendar) == d.runAt ? nil : "That time does not exist in your time zone."
+    }
+
+    /// `scheduleFromDraft`'s once branch (logic.ts:244-260): the saved instant when the clock time is unchanged,
+    /// else the local time as ISO. Nil while `onceError` has a problem.
+    public static func onceRunAt(_ d: ScheduledTaskDraft, calendar: Calendar = .current) -> String? {
+        guard onceError(d, calendar: calendar) == nil, let date = parseDateTimeLocal(d.runAt, calendar: calendar) else { return nil }
+        if let ms = T3Timestamp.parseEpochMs(d.savedRunAt), dateTimeLocal(Date(timeIntervalSince1970: Double(ms) / 1000), calendar: calendar) == d.runAt {
+            return d.savedRunAt
+        }
+        // ponytail: an hour that repeats when clocks go back takes its first occurrence; T3 keeps the saved offset, port it if a user hits it
+        return isoString(date)
+    }
+
+    /// `Date.toISOString()`.
+    public static func isoString(_ date: Date) -> String {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f.string(from: date)
+    }
+
+    /// The next whole hour, `Once`'s first suggestion (ScheduledTasksSettings.tsx:1972-1985).
+    public static func suggestedRunAt(now: Date = Date()) -> Date {
+        Date(timeIntervalSince1970: (now.timeIntervalSince1970 / 3600).rounded(.up) * 3600)
     }
 
     /// JS `String(number)` for the interval field: `15`, `1.5`.
@@ -495,6 +595,8 @@ public enum ScheduledTaskLogic {
 
     public enum ValidationError: Error, Equatable, Sendable {
         case incomplete, invalidAge, signatureSecret, invalidInterval, checkoutPath
+        /// `Invalid run time` with T3's description (scheduleDraftErrors, logic.ts:169-181).
+        case invalidRunTime(String)
         /// `Invalid filter` with the row's message.
         case invalidFilter(String)
         /// `Invalid webhook settings` with a key or window message.
@@ -511,6 +613,7 @@ public enum ScheduledTaskLogic {
             case .signatureSecret: ("Signing secret is required", "Enter the signature header and secret.")
             case .invalidInterval: ("Invalid interval", "Enter an interval of at least one minute.")
             case .checkoutPath: ("Checkout path is required", "Enter the path of the checkout to run in.")
+            case .invalidRunTime(let message): ("Invalid run time", message)
             case .invalidFilter(let message): ("Invalid filter", message)
             case .invalidWebhook(let message): ("Invalid webhook settings", message)
             case .several(let list): list.first?.copy ?? ("", "")
@@ -520,11 +623,13 @@ public enum ScheduledTaskLogic {
 
     /// The `scheduledTasks.upsert` input `submit` builds (ScheduledTasksSettings.tsx:856-944), or the first problem.
     /// `selection` is the picked or default model; `storedSecret` whether the live task already has a signing secret.
+    /// `threadModes`: the server has `scheduledTaskThreadModes`, so `threadMode` is sent (ScheduledTasksSettings.tsx, #30326).
     public static func upsertInput(_ d: ScheduledTaskDraft, projectId: String, projectExists: Bool, selection: (instanceId: String, model: String)?,
-                                   storedSecret: Bool, creationSource: String = "web") -> Result<JSONValue, ValidationError> {
+                                   storedSecret: Bool, creationSource: String = "web", threadModes: Bool = false) -> Result<JSONValue, ValidationError> {
         let title = d.title.trimmingCharacters(in: .whitespacesAndNewlines), prompt = d.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, !prompt.isEmpty, projectExists, let selection else { return .failure(.incomplete) }
         if d.scheduleMode == .webhook, case .failure(let e) = parseFilterDrafts(d.filters) { return .failure(.invalidFilter(e.message)) }
+        if d.scheduleMode == .once, let problem = onceError(d) { return .failure(.invalidRunTime(problem)) }
         guard let schedule = schedulePayload(d) else {
             let errors = webhookDraftErrors(d)
             return .failure(errors.count > 1 ? .several(errors) : errors.first ?? .invalidAge)
@@ -556,6 +661,7 @@ public enum ScheduledTaskLogic {
             "workspaceStrategy": strategy, "modelSelection": model, "runtimeMode": .string(d.runtimeMode),
             "interactionMode": .string(d.interactionMode), "creationSource": .string(creationSource),
         ]
+        if threadModes { input["threadMode"] = .string(d.threadMode) }
         if let id = d.editingId { input["id"] = .string(id); input["requireExisting"] = .bool(true) }
         return .success(.object(input))
     }

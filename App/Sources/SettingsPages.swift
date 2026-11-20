@@ -75,6 +75,12 @@ extension SettingsController {
         c.threadCount = { [weak self] env, projectId in
             self?.environments.snapshot(env)?.threads.filter { $0.projectId.rawValue == projectId && $0.archivedAt == nil }.count ?? 0
         }
+        c.openThread = { [weak self] env, id in self?.onOpenThread?(ThreadId(EnvironmentScope.key(env, id))) }
+        c.schedulableThreads = { [weak self] env in
+            (self?.environments.snapshot(env)?.threads ?? []).filter { $0.archivedAt == nil && $0.lineage.isListed }.map {
+                ScheduledTaskThreadOption(id: $0.id.rawValue, projectId: $0.projectId.rawValue, title: $0.title, updatedAt: $0.updatedAt.raw)
+            }
+        }
         c.subscribeProviderAuth = { [weak self] env, instance, receive in
             guard let supervisor = self?.environments.session(env)?.supervisor else { return nil }
             return supervisor.subscribe("provider.auth.subscribe", payload: { .object(["instanceId": .string(instance)]) }) { event in

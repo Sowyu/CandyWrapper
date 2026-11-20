@@ -151,7 +151,8 @@ struct ThreadViewFidelityTests {
         // Full: run context, Open in, rule, branch, git actions, Changes. Compact drops run context, the rule and the idle git actions; essential Open in.
         #expect(abs(full - (2 + 8 + 32 + 32 + 10 + 1 + 8 + 32 * 3 + 10)) < 0.01)
         #expect(abs(compact - (full - 32 - 1 - 32)) < 0.01)
-        #expect(abs(essential - (compact - 32)) < 0.01)
+        // Essential also drops Open in, and with no Workspace row left the section and its padding go (4928 ThreadDetailsPanel.tsx:170-226).
+        #expect(abs(essential - (compact - 32 - 8 - 10)) < 0.01)
         #expect(card.density(fitting: full) == .full)
         #expect(card.density(fitting: full - 1) == .compact)
         #expect(card.density(fitting: compact - 1) == .essential)

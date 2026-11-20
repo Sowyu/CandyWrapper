@@ -1076,3 +1076,102 @@ public final class CreatePairingLinkFormView: DSView {
         if !warning.isHidden { warning.frame = NSRect(x: 0, y: y + 12, width: w, height: warning.height(forWidth: w)) }
     }
 }
+
+extension ConnectionsPageModel {
+    /// "T3 Connect devices" (4928 ConnectDeviceApprovalSettings.tsx:40-182): devices waiting for approval,
+    /// then the trusted ones. Shown only when either list has something (ConnectionsSettings.tsx:1448-1458).
+    public struct ConnectDevices: Equatable {
+        public struct Row: Equatable {
+            /// The pairing link id of a request, the key thumbprint of a trusted device.
+            public var id: String
+            public var pending: Bool
+            /// `describeConnectDeviceClient`.
+            public var device: String
+            public var code: String
+            /// `Trusted since <time>` for a trusted device.
+            public var trustedSince: String?
+            public var busy: Bool
+            public init(id: String, pending: Bool, device: String, code: String, trustedSince: String? = nil, busy: Bool = false) {
+                self.id = id; self.pending = pending; self.device = device; self.code = code; self.trustedSince = trustedSince; self.busy = busy
+            }
+        }
+        public var rows: [Row]
+        public var canWrite: Bool
+        public init(rows: [Row], canWrite: Bool) { self.rows = rows; self.canWrite = canWrite }
+    }
+}
+
+/// One `ITEM_ROW` of "T3 Connect devices" (`px-4 py-3`, a `space-y-1` text column and `size="xs"` buttons).
+/// A request reads "Waiting for approval · CODE" over the device and the warning, with Deny and Approve;
+/// a trusted device reads its description over "CODE · Trusted since <time>", with Revoke.
+final class ConnectDeviceRowView: DSView, SettingsGroupRow {
+    private let lead = LabelView("", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground))
+    private let code = LabelView("", font: DSFont.mono(14, weight: .medium), color: Themed.color(\.foreground))
+    private let detail = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+    private let detailCode = LabelView("", font: DSFont.mono(12), color: Themed.color(\.mutedForeground))
+    private let deny = ButtonView("Deny", variant: .destructiveOutline, size: .xs)
+    private let approve = ButtonView("Approve", variant: .default, size: .xs)
+    private let revoke = ButtonView("Revoke", variant: .destructiveOutline, size: .xs)
+    var onApprove: (() -> Void)?
+    var onDeny: (() -> Void)?
+    var onRevoke: (() -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        lead.lineHeight = 20
+        code.lineHeight = 20
+        detail.lineHeight = 16
+        detailCode.lineHeight = 16
+        for l in [lead, detail] { l.truncates = true }
+        for v in [lead, code, detail, detailCode, deny, approve, revoke] as [NSView] { addSubview(v) }
+        approve.action = { [weak self] in self?.onApprove?() }
+        deny.action = { [weak self] in self?.onDeny?() }
+        revoke.action = { [weak self] in self?.onRevoke?() }
+    }
+
+    func configure(_ r: ConnectionsPageModel.ConnectDevices.Row, canWrite: Bool) {
+        // ponytail: the device text truncates to one line; T3 wraps it, so wrap if long client labels get cut
+        if r.pending {
+            lead.text = "Waiting for approval · "
+            code.text = r.code
+            detail.text = "\(r.device). Approve only if the device in front of you shows this code."
+            detailCode.text = ""
+            approve.title = r.busy ? "Saving…" : "Approve"
+        } else {
+            lead.text = r.device
+            code.text = ""
+            detailCode.text = r.code
+            detail.text = " · Trusted since \(r.trustedSince ?? "")"
+            revoke.title = r.busy ? "Revoking…" : "Revoke"
+        }
+        deny.isHidden = !r.pending
+        approve.isHidden = !r.pending
+        revoke.isHidden = r.pending
+        for b in [deny, approve, revoke] { b.isEnabled = canWrite && !r.busy }
+        needsLayout = true
+    }
+
+    func height(forWidth width: CGFloat) -> CGFloat { 12 + 20 + 4 + 16 + 12 }
+
+    override func layout() {
+        super.layout()
+        let w = bounds.width
+        var right = w - 16
+        for b in [approve, revoke, deny] where !b.isHidden {
+            let s = b.intrinsicContentSize
+            right -= s.width
+            b.frame = NSRect(x: right, y: (bounds.height - s.height) / 2, width: s.width, height: s.height)
+            right -= 8
+        }
+        right -= 4
+        func place(_ a: LabelView, _ b: LabelView, y: CGFloat, h: CGFloat) {
+            let first = a.text.isEmpty ? b : a, second = a.text.isEmpty ? a : b
+            let fw = min(ceil(first.textWidth) + 1, max(0, right - 16))
+            first.frame = NSRect(x: 16, y: y, width: fw, height: h)
+            let sw = second.text.isEmpty ? 0 : min(ceil(second.textWidth) + 1, max(0, right - first.frame.maxX))
+            second.frame = NSRect(x: first.frame.maxX, y: y, width: sw, height: h)
+        }
+        place(lead, code, y: 12, h: 20)
+        place(detailCode, detail, y: 36, h: 16)
+    }
+}

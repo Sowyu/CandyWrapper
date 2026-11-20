@@ -16,7 +16,11 @@ func detailsRowRadius(_ view: NSView) -> CGFloat { ThemeRuntime.isDither(dark: v
 /// may carry a trailing view (the Changes totals). Hover and open fill with `detailsHoverFill`.
 public final class DetailsRowControl: ControlView {
     public var onContextMenu: ((NSEvent, NSView) -> Void)?
-    public override func rightMouseDown(with event: NSEvent) { onContextMenu?(event, self) }
+    public override func rightMouseDown(with event: NSEvent) {
+        // Rows without their own menu leave it to the card's items menu.
+        guard let onContextMenu else { return super.rightMouseDown(with: event) }
+        onContextMenu(event, self)
+    }
     public enum Kind: Sendable { case row, select, locked }
     public var kind: Kind { didSet { if kind != oldValue { update() } } }
     public var icons: [IconDefinition] = [] { didSet { if icons != oldValue { rebuildIcons() } } }
@@ -552,6 +556,10 @@ public final class ThreadDetailsCardView: DSView {
     public var onRelationsChange: (@MainActor () -> Void)?
     private var hadRelations = false
     public var density = Density.full { didSet { if density != oldValue { updateRows() } } }
+    /// The items chosen in Settings or the card's context menu (`resolveThreadDetailsVisibility`, #26904).
+    /// A missing id takes its default.
+    public var items: [String: Bool] = [:] { didSet { if items != oldValue { updateRows() } } }
+    private func on(_ id: String) -> Bool { items[id] ?? ThreadDetailsItems.all.first { $0.id == id }?.defaultVisible ?? true }
 
     /// `resolveThreadDetailsCardDensity` (threadDetailsCardLayout.ts:7-14): the richest density whose
     /// content fits `height`. T3 measures each density's content once it renders; the card knows its
@@ -562,10 +570,12 @@ public final class ThreadDetailsCardView: DSView {
         return .essential
     }
 
-    /// The density for the height the card can take. Lineage scrolls as it grows, so it does not count
-    /// toward the fit (ThreadDetailsCard.tsx:93-97).
+    /// The density for the height the card can take. Lineage, automations and the servers past the first
+    /// page scroll as they grow, so they do not count toward the fit (4928 ThreadDetailsCard.tsx, #28585, #28684).
     public func density(fitting height: CGFloat) -> Density {
-        Self.resolveDensity(height: height, full: preferredHeight(.full) - lineage.preferredHeight, compact: preferredHeight(.compact))
+        let growing = (showsLineage ? lineage.preferredHeight : 0) + (showsAutomations ? 1 + automations.preferredHeight : 0)
+            + (on("servers") ? servers.overflowHeight : 0)
+        return Self.resolveDensity(height: height, full: preferredHeight(.full) - growing, compact: preferredHeight(.compact))
     }
 
     private let decoration = BoxDecorationLayer()
@@ -578,6 +588,11 @@ public final class ThreadDetailsCardView: DSView {
     private let automationsDivider = CALayer()
     /// Related threads and subagents (`ThreadRelationshipsPanel`), the last section; it draws its own rule.
     public let lineage = ThreadLineageSectionView()
+    /// Usage limits and Context window, after the relationships at every density (ThreadDetailsPanel.tsx:285-288).
+    public let usage = ThreadDetailsUsageSectionView()
+    public let context = ThreadDetailsUsageSectionView()
+    /// "Choose what to show", only while no item has content (ThreadDetailsPanel.tsx:289-305).
+    public let chooseItems = DetailsRowControl(kind: .row)
     /// The card's rows, inside the 1pt border. A card taller than the space it gets scrolls them under T3's
     /// overlay bar with the edge fades (`ScrollArea scrollFade` in a `max-h` card, ThreadDetailsCard.tsx:122-135).
     private let content = DSView()
@@ -604,6 +619,15 @@ public final class ThreadDetailsCardView: DSView {
         servers.onHeightChange = { [weak self] in self?.relayout() }
         content.addSubview(automations)
         content.addSubview(lineage)
+        content.addSubview(usage)
+        content.addSubview(context)
+        chooseItems.icons = [IconName.slidersHorizontal.definition]
+        chooseItems.text = "Choose what to show"
+        chooseItems.action = { [weak self] in
+            guard let self else { return }
+            MenuPopupView.show(ThreadDetailsItems.menuItems(), from: self.chooseItems, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 0))
+        }
+        content.addSubview(chooseItems)
         lineage.onResize = { [weak self] in self?.relayout() }
         runContext.setAccessibilityLabel("Run context")
         branch.icons = [IconName.gitBranch.definition]
@@ -626,7 +650,20 @@ public final class ThreadDetailsCardView: DSView {
         gitActions.primary.onStateChange = { [weak self] in self?.updateRows() }
         setAccessibilityRole(.group)
         setAccessibilityLabel("Thread details")
+        items = ThreadDetailsItems.visibility(ClientSettingsStore.shared.current)
+        settingsObserver = ClientSettingsStore.shared.observe { [weak self] keys in
+            guard keys.contains("threadDetailsItems") || keys.contains("threadDetailsUsageEnabled") else { return }
+            self?.items = ThreadDetailsItems.visibility(ClientSettingsStore.shared.current)
+        }
         updateRows()
+    }
+
+    private var settingsObserver = 0
+    isolated deinit { ClientSettingsStore.shared.removeObserver(settingsObserver) }
+
+    /// Right-click shows and hides the card's items (ThreadDetailsPanel.tsx:146-164); fields keep their own menu.
+    public override func rightMouseDown(with event: NSEvent) {
+        MenuPopupView.showContextMenu(ThreadDetailsItems.menuItems(), in: self, at: convert(event.locationInWindow, from: nil))
     }
 
     private func relayout() {
@@ -660,23 +697,31 @@ public final class ThreadDetailsCardView: DSView {
     private var scriptsView: NSView? { !scripts.isHidden ? scripts : !addScript.isHidden ? addScript : nil }
 
     private func updateRows() {
-        runContext.isHidden = density != .full || relationsOnly
-        openIn.isHidden = !showsOpenIn || density == .essential || relationsOnly
-        branch.isHidden = !showsVersionControl || !isRepo || relationsOnly
-        gitActions.isHidden = !showsVersionControl || !isRepo || !showsGitActions || (density != .full && gitActions.primary.mode == .idle) || relationsOnly
-        changes.isHidden = !showsVersionControl || !isRepo || relationsOnly
-        initGit.isHidden = !showsVersionControl || isRepo || !showsGitActions || relationsOnly
-        scripts.isHidden = scriptsRow == nil || scriptsRow == .add || relationsOnly
-        addScript.isHidden = scriptsRow != .add || relationsOnly
+        runContext.isHidden = density != .full || relationsOnly || !on("environment")
+        openIn.isHidden = !showsOpenIn || density == .essential || relationsOnly || !on("openIn")
+        branch.isHidden = !showsVersionControl || !isRepo || relationsOnly || !on("branch")
+        gitActions.isHidden = !showsVersionControl || !isRepo || !showsGitActions || (density != .full && gitActions.primary.mode == .idle)
+            || relationsOnly || !on("gitActions")
+        changes.isHidden = !showsVersionControl || !isRepo || relationsOnly || !on("changes")
+        initGit.isHidden = !showsVersionControl || isRepo || !showsGitActions || relationsOnly || !on("gitActions")
+        scripts.isHidden = scriptsRow == nil || scriptsRow == .add || relationsOnly || !on("scripts")
+        addScript.isHidden = scriptsRow != .add || relationsOnly || !on("scripts")
+        pullRequestRows.forEach { $0.isHidden = !on("branch") }
         relayout()
     }
 
+    /// The Workspace section's rows at a density: environment, Open in and scripts (ThreadDetailsPanel.tsx:170-226).
+    private func workspaceRows(_ density: Density) -> Int {
+        (density == .full && on("environment") ? 1 : 0) + (showsOpenIn && density != .essential && on("openIn") ? 1 : 0) + (scriptsView != nil ? 1 : 0)
+    }
+
     private func versionRows(_ density: Density) -> [NSView] {
-        if relationsOnly { return pullRequestRows }
+        let prs = on("branch") ? pullRequestRows : []
+        if relationsOnly { return prs }
         guard showsVersionControl else { return [] }
-        guard isRepo else { return showsGitActions ? [initGit] : [] }
-        let actions: [NSView] = showsGitActions && (density == .full || gitActions.primary.mode != .idle) ? [gitActions] : []
-        return [branch] + pullRequestRows + actions + [changes]
+        guard isRepo else { return showsGitActions && on("gitActions") ? [initGit] : [] }
+        let actions: [NSView] = showsGitActions && on("gitActions") && (density == .full || gitActions.primary.mode != .idle) ? [gitActions] : []
+        return (on("branch") ? [branch] : []) + prs + actions + (on("changes") ? [changes] : [])
     }
 
     private var versionRows: [NSView] { versionRows(density) }
@@ -689,22 +734,40 @@ public final class ThreadDetailsCardView: DSView {
 
     /// The card's height at a density, with every section it shows there.
     public func preferredHeight(_ density: Density) -> CGFloat {
+        let base = baseHeight(density)
+        return relationsOnly ? base : base + tailHeight(base)
+    }
+
+    /// The height without the usage, context and "Choose what to show" tail.
+    private func baseHeight(_ density: Density) -> CGFloat {
         if relationsOnly {
-            let rows = pullRequestRows.reduce(0) { $0 + rowHeight($1) }
-            return 2 + (rows > 0 ? 8 + rows + 8 : 0) + (automations.isEmpty ? 0 : 1 + automations.preferredHeight) + lineage.preferredHeight + servers.preferredHeight
+            let rows = versionRows(density).reduce(0) { $0 + rowHeight($1) }
+            return 2 + (rows > 0 ? 8 + rows + 8 : 0) + (showsAutomations ? 1 + automations.preferredHeight : 0)
+                + (showsLineage ? lineage.preferredHeight : 0) + (on("servers") ? servers.preferredHeight : 0)
         }
-        var h: CGFloat = 2 + 8 + (density == .full ? 32 : 0) + (showsOpenIn && density != .essential ? 32 : 0) + (scriptsView != nil ? 32 : 0) + 10
+        let workspace = workspaceRows(density)
+        var h: CGFloat = 2 + (workspace > 0 ? 8 + CGFloat(workspace) * 32 + 10 : 0)
         let rows = versionRows(density)
         if showsVersionControl, !rows.isEmpty {
-            h += (density == .full ? 1 : 0) + 8 + 10 + rows.reduce(0) { $0 + rowHeight($1) }
+            h += (density == .full && workspace > 0 ? 1 : 0) + 8 + 10 + rows.reduce(0) { $0 + rowHeight($1) }
         }
         guard density == .full else { return h }
-        if !automations.isEmpty { h += 1 + automations.preferredHeight }
-        h += lineage.preferredHeight + servers.preferredHeight
+        if showsAutomations { h += 1 + automations.preferredHeight }
+        h += (showsLineage ? lineage.preferredHeight : 0) + (on("servers") ? servers.preferredHeight : 0)
         return h
     }
 
     public override var intrinsicContentSize: NSSize { NSSize(width: Self.width, height: preferredHeight) }
+
+    private var showsAutomations: Bool { !automations.isEmpty && on("automations") }
+    private var showsUsage: Bool { !usage.isEmpty && on("usage") }
+    private var showsContext: Bool { !context.isEmpty && on("context") }
+    /// The usage and context sections, or "Choose what to show" when the card would be empty (`h` is the 2pt border).
+    private func tailHeight(_ above: CGFloat) -> CGFloat {
+        let sections = (showsUsage ? usage.preferredHeight : 0) + (showsContext ? context.preferredHeight : 0)
+        return sections == 0 && above <= 2 ? 8 + 32 + 8 : sections
+    }
+    private var showsLineage: Bool { !lineage.isEmpty && on("lineage") }
 
     /// The box's 22pt radius less its 1pt border.
     static let innerRadius: CGFloat = 21
@@ -719,26 +782,27 @@ public final class ThreadDetailsCardView: DSView {
         content.frame = NSRect(x: 0, y: 0, width: width, height: height)
         let inner = width - 16
         var y: CGFloat = 8
-        servers.isHidden = servers.isEmpty || (!relationsOnly && density != .full)
+        servers.isHidden = servers.isEmpty || (!relationsOnly && density != .full) || !on("servers")
         if relationsOnly {
-            for row in pullRequestRows {
+            for row in versionRows(density) {
                 row.frame = NSRect(x: 8, y: y, width: inner, height: rowHeight(row))
                 y += rowHeight(row)
             }
             divider.isHidden = true
-            let lineageHeight = lineage.preferredHeight
-            lineage.isHidden = lineage.isEmpty
+            let lineageHeight = showsLineage ? lineage.preferredHeight : 0
+            lineage.isHidden = !showsLineage
             lineage.frame = NSRect(x: 0, y: height + 1 - lineageHeight, width: width, height: lineageHeight)
-            automations.isHidden = automations.isEmpty
+            automations.isHidden = !showsAutomations
             let ay = height + 1 - lineageHeight - 1 - automations.preferredHeight
             // The first section draws no rule over it.
-            automationsDivider.isHidden = automations.isHidden || pullRequestRows.isEmpty
+            automationsDivider.isHidden = automations.isHidden || versionRows(density).isEmpty
             automationsDivider.frame = CGRect(x: 0, y: ay, width: width, height: 1)
             automations.frame = NSRect(x: 0, y: ay + 1, width: width, height: automations.preferredHeight)
             servers.frame = NSRect(x: 0, y: ay - servers.preferredHeight, width: width, height: servers.preferredHeight)
+            for v in [usage, context, chooseItems] as [NSView] { v.isHidden = true }
             return
         }
-        if density == .full {
+        if !runContext.isHidden {
             runContext.frame = NSRect(x: 8, y: y, width: inner, height: 32)
             y += 32
         }
@@ -750,9 +814,11 @@ public final class ThreadDetailsCardView: DSView {
             row.frame = NSRect(x: 8, y: y, width: inner, height: 32)
             y += 32
         }
-        y += 10
+        let workspace = workspaceRows(density) > 0
+        y = workspace ? y + 10 : 0
         let rows = versionRows
-        let separated = density == .full
+        // No empty section steals the rule (ThreadDetailsPanel.tsx:166-169).
+        let separated = density == .full && workspace
         divider.isHidden = rows.isEmpty || !showsVersionControl || !separated
         divider.frame = CGRect(x: 0, y: y, width: width, height: 1)
         y += (separated ? 1 : 0) + 8
@@ -762,18 +828,40 @@ public final class ThreadDetailsCardView: DSView {
             y += h
         }
         let full = density == .full
-        let lineageHeight = full ? lineage.preferredHeight : 0
-        lineage.isHidden = lineage.isEmpty || !full
+        let tail = tailHeight(baseHeight(density))
+        let bottom = height + 1 - tail
+        let lineageHeight = full && showsLineage ? lineage.preferredHeight : 0
+        lineage.isHidden = !showsLineage || !full
         // The section's own bottom padding runs into the border's last point, as before the scroll area.
-        lineage.frame = NSRect(x: 0, y: height + 1 - lineageHeight, width: width, height: lineageHeight)
-        y = automations.isEmpty || !full ? y : height + 1 - lineageHeight - 1 - automations.preferredHeight
-        automations.isHidden = automations.isEmpty || !full
+        lineage.frame = NSRect(x: 0, y: bottom - lineageHeight, width: width, height: lineageHeight)
+        y = !showsAutomations || !full ? y : bottom - lineageHeight - 1 - automations.preferredHeight
+        automations.isHidden = !showsAutomations || !full
         automationsDivider.isHidden = automations.isHidden
         automationsDivider.frame = CGRect(x: 0, y: y, width: width, height: 1)
         automations.frame = NSRect(x: 0, y: y + 1, width: width, height: automations.preferredHeight)
-        let serverBottom = height + 1 - lineageHeight - (automations.isHidden ? 0 : 1 + automations.preferredHeight)
+        let serverBottom = bottom - lineageHeight - (automations.isHidden ? 0 : 1 + automations.preferredHeight)
         servers.frame = NSRect(x: 0, y: serverBottom - servers.preferredHeight, width: width, height: servers.preferredHeight)
+        layoutTail(width: width, height: height)
     }
+
+    /// Usage, then context, from the tail's top; "Choose what to show" when nothing else shows.
+    private func layoutTail(width: CGFloat, height: CGFloat) {
+        let base = baseHeight(density)
+        let tail = tailHeight(base)
+        var y = height + 1 - tail
+        let placeholder = !showsUsage && !showsContext && tail > 0
+        chooseItems.isHidden = !placeholder
+        if placeholder { chooseItems.frame = NSRect(x: 8, y: y + 8, width: width - 16, height: 32) }
+        usage.isHidden = !showsUsage
+        usage.separated = y > 1
+        if showsUsage { usage.frame = NSRect(x: 0, y: y, width: width, height: usage.preferredHeight); y += usage.preferredHeight }
+        context.isHidden = !showsContext
+        context.separated = y > 1
+        if showsContext { context.frame = NSRect(x: 0, y: y, width: width, height: context.preferredHeight) }
+    }
+
+    /// The card grows when the usage rows change.
+    public func usageChanged() { relayout() }
 
     /// The card grows when the automations change.
     public func automationsChanged() { relayout() }

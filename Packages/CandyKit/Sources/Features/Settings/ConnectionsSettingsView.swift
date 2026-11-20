@@ -109,6 +109,8 @@ public struct ConnectionsPageModel: Equatable {
     public var thisMachine: Machine?
     /// "Authorized clients", shown with `access:read` or `access:write` on this machine.
     public var access: Access?
+    /// "T3 Connect devices", under Authorized clients on a 4928 server that has a request or a trusted device.
+    public var connectDevices: ConnectDevices?
     public var environments: [Environment]
     /// T3 Connect configured: the empty state mentions connecting from it.
     public var cloudEnabled: Bool
@@ -175,6 +177,11 @@ public struct ConnectionsActions {
     public var revokePairingLink: (String) -> Void = { _ in }
     public var revokeClient: (String) -> Void = { _ in }
     public var revokeOtherClients: () -> Void = {}
+    /// A pending T3 Connect device, by its pairing link id.
+    public var approveConnectDevice: (String) -> Void = { _ in }
+    public var denyConnectDevice: (String) -> Void = { _ in }
+    /// A trusted T3 Connect device, by its key thumbprint.
+    public var revokeConnectDevice: (String) -> Void = { _ in }
     /// Load balancing switched on or off, and one machine's preference weight.
     public var setLoadBalancing: (Bool) -> Void = { _ in }
     public var setLoadPreference: (String, Int) -> Void = { _, _ in }
@@ -219,6 +226,8 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         section.onHeightChange = { [weak self] in self?.relayout() }
         return section
     }()
+    private(set) lazy var connectDevicesSection = SettingsSectionView(title: "T3 Connect devices", rows: [])
+    private var connectDeviceRows: [String: ConnectDeviceRowView] = [:]
     private(set) lazy var loadBalancingSection: LoadBalancingSectionView = {
         let section = LoadBalancingSectionView()
         section.onHeightChange = { [weak self] in self?.relayout() }
@@ -311,6 +320,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         } else if accessSection.superview != nil {
             accessSection.removeFromSuperview()
         }
+        applyConnectDevices(model.connectDevices)
         // Environments, in catalog order.
         var next: [String: EnvironmentRowView] = [:]
         var groupRows: [any SettingsGroupRow] = []
@@ -378,6 +388,31 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         }
         needsLayout = true
         onHeightChange?()
+    }
+
+    /// `ConnectDeviceApprovalSettings` (ConnectDeviceApprovalSettings.tsx:67-180): requests first, then trusted devices.
+    private func applyConnectDevices(_ m: ConnectionsPageModel.ConnectDevices?) {
+        guard let m, !m.rows.isEmpty else {
+            connectDevicesSection.removeFromSuperview()
+            connectDeviceRows = [:]
+            return
+        }
+        if connectDevicesSection.superview == nil { addSubview(connectDevicesSection) }
+        var next: [String: ConnectDeviceRowView] = [:]
+        var groupRows: [any SettingsGroupRow] = []
+        for r in m.rows {
+            let key = (r.pending ? "request:" : "device:") + r.id
+            let row = connectDeviceRows[key] ?? ConnectDeviceRowView()
+            row.configure(r, canWrite: m.canWrite)
+            let id = r.id
+            row.onApprove = { [weak self] in self?.actions.approveConnectDevice(id) }
+            row.onDeny = { [weak self] in self?.actions.denyConnectDevice(id) }
+            row.onRevoke = { [weak self] in self?.actions.revokeConnectDevice(id) }
+            next[key] = row
+            groupRows.append(row)
+        }
+        connectDeviceRows = next
+        connectDevicesSection.group.rows = groupRows
     }
 
     /// `LinkedEnvironmentsSettings`, under Environments and above Load balancing (ConnectionsSettings.tsx:1529-1536 at 3814).
@@ -545,6 +580,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         if showsAccess != false {
             if let machineSection { parts.append(machineSection) }
             if accessSection.superview != nil { parts.append(accessSection) }
+            if connectDevicesSection.superview != nil { parts.append(connectDevicesSection) }
         }
         if showsAccess != true {
             if showsAccess == false, thisAppSection.superview != nil { parts.append(thisAppSection) }
@@ -561,6 +597,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         case "linked-environments": model.linkedEnvironments.first.flatMap { linkedSections[$0.hostId]?.section }
         case "load-balancing": loadBalancingSection
         case "connections-environment": machineSection
+        case "connect-devices": connectDevicesSection.superview == nil ? nil : connectDevicesSection
         default: hostRows[id]
         }
     }
@@ -573,7 +610,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     public override func layout() {
         super.layout()
         let shown = visibleSections
-        let all: [NSView] = [thisAppSection, environmentsSection, accessSection, loadBalancingSection]
+        let all: [NSView] = [thisAppSection, environmentsSection, accessSection, connectDevicesSection, loadBalancingSection]
             + (machineSection.map { [$0] } ?? []) + linkedSections.values.map(\.section)
         for part in all { part.isHidden = !shown.contains(where: { $0 === part }) }
         var y: CGFloat = 0

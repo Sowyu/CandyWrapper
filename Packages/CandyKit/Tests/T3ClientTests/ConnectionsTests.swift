@@ -75,6 +75,13 @@ struct ConnectionsTests {
         #expect(EnvironmentRowStatus(enabled: true, state: s).text == "Reconnecting: boom")
         #expect(EnvironmentRowStatus(enabled: true, state: s).isError)
         #expect(s.statusText == "Failed to connect. Reconnecting... Reason: boom")
+        // Waiting on the host's approval is muted and shows the approval text (SavedEnvironmentRows.tsx:99-101).
+        s.failure = ConnectionFailureInfo(reason: ConnectionFailureInfo.approvalPendingReason, blocked: false, detail: "")
+        s.lastFailure = "Approve this device on Studio. It shows code UVWX-YZ23."
+        #expect(EnvironmentRowStatus(enabled: true, state: s) == .init(enabled: true, state: s))
+        #expect(EnvironmentRowStatus(enabled: true, state: s).text == "Approve this device on Studio. It shows code UVWX-YZ23.")
+        #expect(!EnvironmentRowStatus(enabled: true, state: s).isError)
+        s.failure = nil; s.lastFailure = "boom"
         s.phase = .blocked(.authentication)
         #expect(EnvironmentRowStatus(enabled: true, state: s).text == "Connection failed: boom")
         s.phase = .blocked(.unsupported)

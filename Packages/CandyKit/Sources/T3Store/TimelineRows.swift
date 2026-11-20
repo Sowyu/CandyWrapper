@@ -627,6 +627,26 @@ public enum TimelineRows {
 
     // MARK: Pre-passes (L:1246-1299)
 
+    /// `HIDEABLE_TOOL_CALL_ITEM_TYPES` (4928 client-runtime work-log/presentation.ts:355-361).
+    static let hideableToolCallItemTypes: Set<TurnItemType> = [.commandExecution, .fileChange, .fileSearch, .webSearch, .dynamicTool]
+
+    /// `workEntryHiddenByToolCallVisibility` (presentation.ts:363-370), the "Tool calls in chat" setting (#30000):
+    /// `hideAll` hides every command, edit, search and tool row, `hideSuccessful` only the completed ones that
+    /// show no failure.
+    public static func hiddenByToolCallVisibility(_ entry: WorkLogEntry, _ visibility: String) -> Bool {
+        guard visibility != "showAll", let type = entry.itemType, hideableToolCallItemTypes.contains(type) else { return false }
+        guard visibility == "hideSuccessful" else { return true }
+        return entry.toolLifecycleStatus == .completed && !WorkLog.displayIndicatesFailure(entry)
+    }
+
+    /// `timelineRowEntries`' filter (MessagesTimeline.logic.ts:1525-1560) for everything but `zen`.
+    // ponytail: `zen` filters like `hideAll`; port its final-answer-only pass (L:1527-1551) and its fold skip when someone uses it
+    public static func filteringToolCalls(_ entries: [TimelineEntry], visibility: String) -> [TimelineEntry] {
+        guard visibility != "showAll" else { return entries }
+        let mode = visibility == "hideSuccessful" ? "hideSuccessful" : "hideAll"
+        return entries.filter { entry in entry.work.map { !hiddenByToolCallVisibility($0, mode) } ?? true }
+    }
+
     /// `settleSupersededReasoning`: a later entry ends thinking even without a completion.
     ///
     /// Skipped: `withoutSubagentDelegationRows`, which hides `delegate_task` tool rows whose child
