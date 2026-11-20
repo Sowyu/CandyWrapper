@@ -424,7 +424,7 @@ final class ThreadContextWindowDetailsView: DSView {
             for part in legend {
                 row(part.name, "~" + tokens(part.value))
                 let dot = FillView(), segment = FillView()
-                dot.radius = 3.5
+                dot.radius = RedesignTokens.Radius.capsule(7)
                 for v in [dot, segment] { v.fill = part.color; v.setAccessibilityElement(false) }
                 addSubview(dot)
                 track.addSubview(segment)

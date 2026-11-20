@@ -7,7 +7,9 @@ public enum DesignGeometry {
         ThemeRuntime.framesPanes(dark: view.effectiveAppearance.isDark)
     }
 
+    /// Redesign maps T3's radius onto its own scale (`DitherChrome.radius`).
     public static func radius(_ previous: CGFloat, in view: NSView) -> CGFloat {
-        usesClassic(view) ? previous : max(0, previous - 2)
+        if ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) { return DitherChrome.radius(previous) }
+        return usesClassic(view) ? previous : max(0, previous - 2)
     }
 }

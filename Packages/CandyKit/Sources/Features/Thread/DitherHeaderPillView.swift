@@ -47,12 +47,15 @@ public final class DitherHeaderPillView: DSView {
     var cost: NSView?
     var toggles: [NSView] = []
 
-    private let frost = BackdropBlurView()
+    /// The resting glass every pill shares: blur, fill, rim and shadow.
+    private let frost = DitherPillSurface()
     /// As tall as the tabs, with 24pt controls 2pt in, so their hover fills stay inside the rim.
     private static let inset: CGFloat = 2, control: CGFloat = 24
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        layer?.masksToBounds = false
+        frost.radius = RedesignTokens.Radius.control
         addSubview(frost)
         changes.accessory = totals
         totals.glyphOffset = 1
@@ -62,7 +65,7 @@ public final class DitherHeaderPillView: DSView {
         gallery.toolTip = "Agent images (⇧⌘I)"
         gallery.setAccessibilityLabel("Agent images")
         galleryDot.isHidden = true
-        galleryDot.cornerRadius = 3
+        galleryDot.cornerRadius = RedesignTokens.Radius.capsule(6)
         gallery.layer?.addSublayer(galleryDot)
         addSubview(gallery)
         guest.iconDefinition = GuestShareIndicatorView.userIcon
@@ -113,9 +116,6 @@ public final class DitherHeaderPillView: DSView {
         galleryDot.frame = NSRect(x: gallery.bounds.width - 8, y: 3, width: 6, height: 6)
         galleryDot.backgroundColor = Themed.color(\.primary).cgColor(in: self)
         CATransaction.commit()
-        frost.cornerRadius = DitherChrome.controlRadius
-        frost.layer?.borderWidth = 1
-        frost.layer?.borderColor = DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor
     }
 
     private func showGuestMenu() {

@@ -781,7 +781,7 @@ final class RailButtonView: ControlView {
         if capy {
             // Capy's rail: the pick sits on a rounded fill, a hover on a fainter one.
             let selected = picker?.isRailSelected(entryId.map { .instance($0) } ?? .favorites) == true
-            fill.cornerRadius = 8
+            fill.cornerRadius = RedesignTokens.Radius.control
             let alpha: CGFloat? = selected ? 0.09 : lit ? 0.05 : nil
             Motion.setBackground(fill, alpha.map { Themed.color(\.contrastForeground, $0).cgColor(in: self) })
         } else {

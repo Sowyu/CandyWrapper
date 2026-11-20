@@ -632,7 +632,7 @@ final class SettingsSearchResultRow: ControlView {
 
     private func restyle() {
         var box = BoxStyle()
-        box.radius = dither ? 10 : 8
+        box.radius = dither ? RedesignTokens.Radius.control : 8
         if state.hovered { box.fill = Themed.color(\.sidebarRowHover, sidebar: dither) }
         if isActive { box.fill = Themed.color(\.sidebarRowSelected, sidebar: dither) }
         decoration.boxStyle = box

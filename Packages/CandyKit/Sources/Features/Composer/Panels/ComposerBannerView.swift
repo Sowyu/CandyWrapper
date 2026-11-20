@@ -33,7 +33,7 @@ public class ComposerBannerView: DSView {
     public var quietTimelineLine = false { didSet { if quietTimelineLine != oldValue { needsLayout = true; needsDisplay = true } } }
     public var placement = Placement.attached { didSet { if placement != oldValue { needsLayout = true; needsDisplay = true } } }
     /// Redesign floats every attachment as its own card: whole, frosted, with a drop shadow (`DitherPill`).
-    /// Redesign: the composer's own corner and no drop shadow in dark, for a panel that reads as part of it.
+    /// Redesign: the composer's own corner, for a panel that reads as part of it.
     var matchesComposer = false { didSet { if matchesComposer != oldValue { needsLayout = true } } }
     var ditherFloating: Bool { placement == .floating && ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
     /// What the content leaves at the bottom for the composer to cover: the overlap when attached, nothing floating.
@@ -121,7 +121,8 @@ public class ComposerBannerView: DSView {
         if dither {
             let layer = shade ?? CALayer()
             if shade == nil, let root = self.layer { root.insertSublayer(layer, at: 0); shade = layer }
-            layer.isHidden = matchesComposer && effectiveAppearance.isDark
+            // The composer casts the same resting shadow in both appearances, so a panel matching it does too.
+            layer.isHidden = false
             layer.frame = bounds
             DitherPill.shadow(layer, path: layer.bounds, radius: radius, dark: effectiveAppearance.isDark)
             layer.mask = DitherPill.outsideMask(layer.bounds, radius: radius, existing: layer.mask)

@@ -6,7 +6,7 @@ import DesignSystem
 /// soft drop shadow, on continuous corners. Pills (chips, Stash, notices) are 30pt with control corners; panels
 /// (approvals, the queue, the stash list) use card corners. Nothing draws while idle: the shadow has a fixed path.
 public enum DitherPill {
-    public static let height: CGFloat = 30
+    public static let height: CGFloat = RedesignTokens.Space.pill
     /// Control corners. Rows of pills sit `inset` in from the composer's sides, so a pill's smaller corner stays
     /// inside the composer's 16pt curve instead of looking like it hangs off it (the user, 2026-10-22).
     public static let radius: CGFloat = DitherChrome.controlRadius
@@ -15,49 +15,39 @@ public enum DitherPill {
     public static let gap: CGFloat = 8
     public static let spacing: CGFloat = 6
 
-    /// 62% over the backdrop blur. Without the blur, a timeline card scrolled under a panel would read through it,
-    /// so the fill goes opaque, as system materials do (the user's 1.14.10 subagent panel over the changed-files card, 2026-10-28).
-    @MainActor public static func fill(in view: NSView) -> CGColor {
-        let dark = view.effectiveAppearance.isDark
-        return Themed.color(dark ? \.surfaceRaised : \.card).cgColor(in: view).copy(alpha: blurs ? 0.62 : 1)!
+    /// The resting glass over the backdrop blur, opaque without the blur: a timeline card scrolled under a panel would
+    /// otherwise read through it (the user's 1.14.10 subagent panel over the changed-files card, 2026-10-28).
+    @MainActor public static func fill(in view: NSView) -> CGColor { RedesignTokens.Surface.fill(RedesignTokens.Surface.resting, in: view) }
+
+    @MainActor public static var blurs: Bool { RedesignTokens.Surface.blurs }
+    /// Tests pin Reduce Transparency here.
+    @MainActor public static var reduceTransparencyOverride: Bool? {
+        get { RedesignTokens.Surface.reduceTransparencyOverride }
+        set { RedesignTokens.Surface.reduceTransparencyOverride = newValue }
     }
 
-    /// Reduce Transparency turns the system backdrop off, so `BackdropBlurView` draws nothing. "Ignore Reduce
-    /// Transparency" brings the 62% fill back, as the user asked (2026-10-28).
-    // ponytail: assumes the blur returns with it; if macOS still flattens the effect view under Reduce Transparency, check BackdropBlurView's backdrop here
-    @MainActor public static var blurs: Bool {
-        !ThemeRuntime.reducesTransparency(system: reduceTransparencyOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency)
-    }
-    /// Tests pin the setting here.
-    @MainActor public static var reduceTransparencyOverride: Bool?
-
-    /// Under the product shadow ceiling in light; a little deeper in dark, where a lighter shadow vanishes.
+    /// The resting shadow.
     @MainActor public static func shadow(_ layer: CALayer, path: CGRect, radius: CGFloat, dark: Bool) {
-        layer.shadowColor = Themed.black(1).cgColor
-        layer.shadowOpacity = dark ? 0.28 : 0.08
-        layer.shadowRadius = 4
-        layer.shadowOffset = CGSize(width: 0, height: layer.isGeometryFlipped ? 2 : -2)
-        layer.shadowPath = SmoothCorners.path(path, radius, flipped: false)
+        RedesignTokens.Shadow.resting.apply(to: layer, path: SmoothCorners.path(path, radius, flipped: false), dark: dark)
     }
 
     /// The motion for a pill that appears: up 4pt and in from clear, 150 ms on Capy's curve.
     @MainActor public static func animateIn(_ view: NSView) {
         guard !Motion.reduced, let layer = view.layer else { return }
         let rise = CABasicAnimation(keyPath: "transform.translation.y")
-        rise.fromValue = 4
+        rise.fromValue = RedesignTokens.Motion.rise
         rise.toValue = 0
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 0
         fade.toValue = 1
         for a in [rise, fade] {
-            a.duration = 0.15
+            a.duration = RedesignTokens.Motion.quick
             a.timingFunction = curve
             layer.add(a, forKey: "pill.in." + a.keyPath!)
         }
     }
 
-    /// Capy's ease (`cubic-bezier(0.23, 1, 0.32, 1)`, capy-design.md).
-    @MainActor public static let curve = CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
+    @MainActor public static var curve: CAMediaTimingFunction { RedesignTokens.Motion.curve }
 }
 
 /// The pill chrome as a view, placed under a control that draws no surface of its own (the chips, the checkout and

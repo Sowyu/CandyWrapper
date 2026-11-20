@@ -118,7 +118,7 @@ enum SidebarDitherDropPlanner {
 final class SidebarDropLineView: DSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
-        layer?.cornerRadius = 1
+        layer?.cornerRadius = RedesignTokens.Radius.capsule(2)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
