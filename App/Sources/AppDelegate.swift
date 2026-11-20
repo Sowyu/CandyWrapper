@@ -591,8 +591,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case nil: return nil
             }
         }
-        let record: () -> Void = { [weak history, weak threads] in
+        windowTitle?.openThreadId = { [weak threads] in currentRoute()?.titlesOpenThread == false ? nil : threads?.openThreadId }
+        let record: () -> Void = { [weak history, weak threads, weak self] in
             let route = currentRoute()
+            self?.windowTitle?.update()
             history?.record(route)
             threads?.syncVisit()
             if case .thread? = route { threads?.costRouteShowsThread = true } else { threads?.costRouteShowsThread = false }
