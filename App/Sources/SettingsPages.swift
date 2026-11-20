@@ -12,6 +12,8 @@ import T3Store
 /// scopedSettings.ts, KeybindingsSettings.tsx:1390-1460); projects through `projects.mutate`.
 extension SettingsController {
     func setUpPageContext() {
+        guard !pageContextReady else { return }
+        pageContextReady = true
         let c = pageContext
         c.writeClient = { patch in ClientSettingsStore.shared.update(patch) }
         c.writeServer = { [weak self] patch in self?.writeServer(patch) }

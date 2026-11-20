@@ -119,6 +119,8 @@ final class WelcomeOnboardingController {
         }
     }
     func show() {
+        // Turn on writes through Settings' context, which Settings otherwise wires on its first open.
+        settings?.setUpPageContext()
         guard page == nil, let window, let content = window.contentView, let context = settings?.pageContext,
               let env = environments.primaryId ?? environments.environmentIds.first else { return }
         let model = WelcomePageModel(environmentId: env, label: environments.label(env) ?? "this computer")
