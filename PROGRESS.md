@@ -474,6 +474,7 @@ The code marks known shortcuts with `// ponytail:`, each naming when to fix it (
 
 Leave these alone during side-by-side checks.
 
+- Hovering an image in a thread shows no path or URL tooltip, at the user's request (2026-11-21): the viewed-images row, open tool rows, images in replies and the Redesign gallery. T3 shows the file path or URL in a code tooltip (MediaActions.tsx:248-276 at 4928). Right-click still copies and reveals the file, and each image keeps its accessibility label.
 - The sidebar title is the candy glyph and "Wrapper", and clicking it goes home.
 - The app icon is the white "sticker" candy with a thick black outline; Settings > Appearance > App icon puts a colored sticker or the old black, glossy candy (Classic) in the Dock while the app runs. T3's logo and name stay out of CandyWrapper's branding, to avoid a takedown.
 - Settings ends with two tabs of CandyWrapper's own. Redesign holds the Redesign switch, which is the theme picker's setting, then every Redesign-only row: Picture, Background dim, Accent color, Ignore Reduce Transparency, Collapse composer on scroll and two model picker switches. Experimental holds the Tabs switch.

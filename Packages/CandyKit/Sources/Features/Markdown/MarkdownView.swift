@@ -211,7 +211,6 @@ public final class MarkdownView: DSView {
         audioViews.values.forEach { $0.setVisible(visible) }
     }
     private var imageViews: [AsyncImageView] = []
-    private var imageTooltips: [TooltipController] = []
     private var imageItems: [ExpandedImagePreviewView.Item] = []
     private var linkViews: [MarkdownLinkHitView] = []
 
@@ -768,7 +767,7 @@ public final class MarkdownView: DSView {
     /// A decoded image reports its natural size, and the message lays out again around its own box.
     private func layoutImages() {
         imageItems = []
-        var placed: [(frame: CGRect, radius: CGFloat, fallback: String, tooltip: String?)] = []
+        var placed: [(frame: CGRect, radius: CGFloat, fallback: String)] = []
         imageKeys = []
         var audioKeys: Set<String> = []
         if bounds.width > 0 {
@@ -815,10 +814,10 @@ public final class MarkdownView: DSView {
                                             load: MarkdownImages.loader(source), reference: reference))
                     imageKeys.insert(key)
                     let sized = MarkdownImages.sizes[key] != nil && !failed
-                    placed.append((rect, sized ? (source.framed ? 9 : 0) : 10, failed ? MarkdownImages.unavailableLabel(alt, detail: MarkdownImages.missingFileAccess.contains(key) ? MarkdownImages.missingFileAccessMessage : nil) : "", reference?.tooltip ?? (alt.isEmpty ? "image" : alt)))
+                    placed.append((rect, sized ? (source.framed ? 9 : 0) : 10, failed ? MarkdownImages.unavailableLabel(alt, detail: MarkdownImages.missingFileAccess.contains(key) ? MarkdownImages.missingFileAccessMessage : nil) : ""))
                 case .image(let image, let rect):
                     imageItems.append(.init(key: "diagram-\(imageItems.count)-\(ObjectIdentifier(image))", name: "Diagram", load: { _ in image }))
-                    placed.append((rect, 10, "Image unavailable. The file may have been moved or deleted.", nil))
+                    placed.append((rect, 10, "Image unavailable. The file may have been moved or deleted."))
                 default: break
                 }
             }
@@ -828,13 +827,13 @@ public final class MarkdownView: DSView {
             audioViews[key]?.releasePlayer()
             audioViews.removeValue(forKey: key)?.removeFromSuperview()
         }
-        while imageViews.count > placed.count { imageViews.removeLast().removeFromSuperview(); imageTooltips.removeLast() }
+        while imageViews.count > placed.count { imageViews.removeLast().removeFromSuperview() }
         while imageViews.count < placed.count {
             let view = AsyncImageView(); view.cover = false
             // `text-xs text-muted-foreground`
             view.fallback.color = Themed.color(\.mutedForeground)
             view.fallback.font = DSFont.ui(12)
-            imageTooltips.append(TooltipController.attach(to: view, text: "", variant: .code))
+            // No path or URL tooltip on hover, unlike MediaActions.tsx:248-276, at the user's request (2026-11-21).
             view.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(expandMarkdownImage(_:))))
             view.onLoad = { [weak self, weak view] in
                 // A failed source keeps its slot and says so (ChatMarkdown.tsx:1455-1475).
@@ -852,7 +851,6 @@ public final class MarkdownView: DSView {
             view.skeleton = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
             view.set(key: item.key, fallbackText: place.fallback, loader: item.load)
             view.setAccessibilityLabel("Preview " + item.name)
-            imageTooltips[index].text = place.tooltip ?? ""
             view.onContextMenu = { [weak self] event, source in
                 MediaAttachmentContextMenu.show(name: item.name, load: (source as? AsyncImageView)?.loader ?? item.load, event: event, view: source,
                                                 reference: item.reference, openFile: self?.openInFileViewer(item.reference))

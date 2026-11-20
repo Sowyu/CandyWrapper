@@ -294,14 +294,6 @@ public enum MediaReference: Sendable, Equatable {
         guard lower.hasPrefix("http://") || lower.hasPrefix("https://") || url.hasPrefix("//") else { return nil }
         return .url(url)
     }
-
-    /// The tooltip: the file path or the URL (MediaActions.tsx `tooltip`).
-    public var tooltip: String {
-        switch self {
-        case .file(let path, _): path
-        case .url(let url): url
-        }
-    }
 }
 
 /// External link favicons (ChatMarkdown.tsx:1228-1270 `MarkdownLinkFavicon`): GitHub's mark in the link color,
