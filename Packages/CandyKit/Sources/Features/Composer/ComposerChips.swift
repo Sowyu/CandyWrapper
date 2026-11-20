@@ -318,7 +318,7 @@ final class ComposerChipAttachment: NSTextAttachment {
     @MainActor static func draw(look: ComposerChipLook, label: String, icon: IconDefinition, iconColor: NSColor?, in rect: CGRect, ctx: CGContext,
                                 hovered: Bool = false, thumbnail: CGImage? = nil) {
         if ComposerDesign.current {
-            draw3814(look: look, label: label, icon: icon, in: rect, ctx: ctx, hovered: hovered, thumbnail: thumbnail)
+            draw3814(look: look, label: label, icon: icon, iconColor: iconColor, in: rect, ctx: ctx, hovered: hovered, thumbnail: thumbnail)
             return
         }
         let em = FileChipStyle.em(size)
@@ -374,7 +374,7 @@ final class ComposerChipAttachment: NSTextAttachment {
         }
         ctx.restoreGState()
     }
-    @MainActor private static func draw3814(look: ComposerChipLook, label: String, icon: IconDefinition,
+    @MainActor private static func draw3814(look: ComposerChipLook, label: String, icon: IconDefinition, iconColor: NSColor?,
                                           in rect: CGRect, ctx: CGContext, hovered: Bool, thumbnail: CGImage?) {
         // 4928's image chip is inline like the others: the bubble is gone (ContextChip.tsx:8-50, contextChipParts.tsx:173-198).
         let ink = look.foreground
@@ -391,7 +391,9 @@ final class ComposerChipAttachment: NSTextAttachment {
             ctx.saveGState(); ctx.translateBy(x: x, y: iconRect.minY); ctx.scaleBy(x: size / 16, y: size / 16)
             ProjectMonogramView.draw(project, identity: ProjectMonogramView.identity(project), ctx: ctx); ctx.restoreGState()
         } else {
-            MarkdownView.drawIcon(icon, in: iconRect, color: ink.cgColor, ctx: ctx)
+            // A file's pierre icon keeps its file-type color (`PierreEntryIcon`, contextChipParts.tsx:338 at 4928); lucide
+            // glyphs take the chip's ink.
+            MarkdownView.drawIcon(icon, in: iconRect, color: (iconColor ?? ink).cgColor, ctx: ctx)
         }
         let line = TextLine(NSAttributedString(string: label, attributes: [.font: chipFont, .foregroundColor: ink]))
         let baseline = line.baseline(top: rect.midY - 8, lineHeight: 16)
