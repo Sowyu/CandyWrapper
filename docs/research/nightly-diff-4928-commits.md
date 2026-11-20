@@ -36,8 +36,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 861a51a6c4 | #26164 | usage | feat(server,web,mobile): fall back when the default provider is out of usage | ported, composer and store side: a new draft without its own pick starts on the server's `fallbackModelSelection` while its default provider is out of usage for its model (T3Store UsageFallback, ComposerSelectionStore.resolve), and the draft shows "Using <model>" with "<provider> is out of usage · resets <time>", "Use <default>" and a dismiss per window (ComposerController `updateFallbackBanner`, ThreadPanelView slot). Left for the Settings agent: the Fallback model row in Settings > Project defaults that writes `fallbackModelSelection` |
-| cb1de7ba23 | #27593 | settings | fix(web): configure reasoning for the fallback model | left for the Settings agent: the fallback model's effort is picked in Settings > Project defaults; the composer already starts the fallback with the options saved in `fallbackModelSelection` |
+| 861a51a6c4 | #26164 | usage | feat(server,web,mobile): fall back when the default provider is out of usage | ported, composer and store side: a new draft without its own pick starts on the server's `fallbackModelSelection` while its default provider is out of usage for its model (T3Store UsageFallback, ComposerSelectionStore.resolve), and the draft shows "Using <model>" with "<provider> is out of usage · resets <time>", "Use <default>" and a dismiss per window (ComposerController `updateFallbackBanner`, ThreadPanelView slot). Left for the Settings agent: the Fallback model row in Settings > Project defaults that writes `fallbackModelSelection`; the Settings row is ported (settings-2) |
+| cb1de7ba23 | #27593 | settings | fix(web): configure reasoning for the fallback model | ported (settings-2): Settings > New threads > Fallback model, with the effort picker once a fallback is set (GeneralSettingsView.swift newThreadsSection, SettingsModelPickerControl `unsetFrom`) |
 | bc448b8697 | #27859 | composer | fix(web): composer fallback keeps the effort of a model saved under an alias | ported with #26164: the fallback starts with its saved options as they are, so an effort saved under a model alias stays (ComposerSelectionStore.resolve) |
 
 ## Port group usage-meter (3)
@@ -92,7 +92,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 15fe283272 | #28162 | composer | fix(web): effort picker shows Default or the checkmark, flush right | ported: ComposerEffortRowView shows Default or the check, flush right |
 | 5fe18d79ac | #28307 | composer | fix(web): keep the model picker in place when its label changes | ported: the docked picker aligns to the trigger's end edge |
 | 575579d68a | #28409 | composer | fix(web): model picker stays put with long names and agent options | ported: 224pt model name cap, fixed height, other options open beside the column |
-| 77a728e3a1 | #28005 | connections | fix(web): show mixed automatic defaults across environments | left (settings-4928): ProjectDefaultsSettings' mixed automatic defaults (defaultModelSelectionsAreMixed, modelSelection.ts) and the effort-disabled status line; changes the default-theme model row |
+| 77a728e3a1 | #28005 | connections | fix(web): show mixed automatic defaults across environments | ported (settings-2): the Model row compares each target's effective default and reads "Automatic (mixed)" with T3's status lines (GeneralSettingsView.swift `effectiveDefaultsDiffer`) |
 | 72f05f6d8e | #29017 | composer | fix(web): model picker uses the full window height in short windows | ported: PopupPlacement `collision: .shift` keeps the docked picker on top and offers the whole window height (ComposerPickers.swift) |
 | 42cf5a168c | #26415 | composer | fix(web): compact model picker row indicators | ported: one-line model rows with the provider logo (ModelRowView `layoutModern`) |
 | 2d0efd3584 | #27034 | composer | feat(claude): Ultracode works with any effort, like Claude Desktop | ported: the footer's Ultracode toggle and the trigger's workflow icon; the server sends the descriptor |
@@ -215,7 +215,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 962eeefa03 | #24761 | thread | fix(client-runtime): retry messages after socket loss with the same command ID | port |
 | de21fbcff3 | #25919 | thread | fix(client): a thread whose subscription dies on a defect resubscribes instead of staying blank | port |
 | 7c22095fcc | #34623 | connections | fix(client-runtime): a stalled sign-in token or dead route no longer holds a reconnect for 40 seconds | port |
-| e396bb2e26 | #37990 | device | feat(client-runtime): direct links pair with the device key and renew themselves | left (settings-4928): direct links pair with the DPoP device key and renew (accessTokenRenewal, A18); T3Client work |
+| e396bb2e26 | #37990 | device | feat(client-runtime): direct links pair with the device key and renew themselves | left (settings-2): T3Client/Connect work (direct links pair with the DPoP device key and renew); another agent held T3Client's connection code this session |
 
 ## Port group composer-markdown (1)
 
@@ -331,7 +331,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 4f0b74e190 | #33209 | settings | feat(web): first run is one Welcome page instead of a 3-step wizard | left (settings-4928): replace App/Sources/WelcomeOnboardingController.swift's wizard with one WelcomePage (components/onboarding/WelcomePage.tsx:129, onboarding/welcomePage.logic.ts); default-theme references for it don't exist yet |
+| 4f0b74e190 | #33209 | settings | feat(web): first run is one Welcome page instead of a 3-step wizard | left (settings-2): WelcomePage.tsx is 2,031 lines: agents with install terminals (AgentInstallTerminal, :1289), Codex setup, project import (useProjectImport, :1476), phone pairing (:981) and the telemetry notice; it replaces App/Sources/WelcomeOnboardingController.swift's three steps, whose scan and import logic carries over. Needs a spec case from 27-welcome and an on-screen check |
 
 ## Port group send-while-uploading (1)
 
@@ -379,8 +379,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| a74ee4cc7c | #27275 | connections | fix(client-runtime): server updates stop waiting 32 minutes when the host returns without this update's outcome | left (settings-4928): stop waiting for a server update's outcome when the host comes back without it (client-runtime server update tracking) |
-| 5958d00ede | #35346 | settings | perf(web): Update everything downloads a server's update while providers install | left (settings-4928): start a server's update download while providers install, in Update everything's sequence |
+| a74ee4cc7c | #27275 | connections | fix(client-runtime): server updates stop waiting 32 minutes when the host returns without this update's outcome | left (settings-2): stop waiting for a server update's outcome when the host returns without it (client-runtime serverUpdate) |
+| 5958d00ede | #35346 | settings | perf(web): Update everything downloads a server's update while providers install | left (settings-2): Update everything's sequence starts each server's download while providers install |
 
 ## Port group rewind (1)
 
@@ -434,7 +434,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 1219f62845 | #23620 | connections | fix(web): T3 Connect sign-in offers Retry after Clerk fails to load | left (settings-4928): Retry after Clerk fails to load in T3 Connect sign-in (App/Sources/T3ConnectController.swift) |
+| 1219f62845 | #23620 | connections | fix(web): T3 Connect sign-in offers Retry after Clerk fails to load | skip (settings-2): CandyWrapper loads no Clerk script; the native client reads the session from the Keychain, so there is no load to fail and retry |
 
 ## Port group pr-diff (1)
 
@@ -471,8 +471,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| a941ab544d | #37823 | connections | fix(connect): restrict relay configuration and token destinations | left (settings-4928): check relay configuration and token destinations against T3's allow list before use (T3Client/Connect) |
-| 6b45d90047 | #38892 | connections | fix(connect): let remote clients with relay configuration link | left (settings-4928): let a remote client with relay configuration link; with a941ab544d |
+| a941ab544d | #37823 | connections | fix(connect): restrict relay configuration and token destinations | left (settings-2): T3Client/Connect relay allow list for configuration and token destinations; held for the T3Client owner |
+| 6b45d90047 | #38892 | connections | fix(connect): let remote clients with relay configuration link | left (settings-2): with #37823, T3Client/Connect |
 
 ## New feature simlock (6)
 
@@ -496,7 +496,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| f2943ee90e | #26288 | connections | feat(updates): switch your whole fleet between Stable and Nightly in one step | left (settings-4928): Update everything's Stable/Nightly switch for every machine (UpdateTrackSwitchDialog.tsx:43, sidebar/updateEverything.logic.ts) in App/Sources/ServerUpdates.swift and Features/Sidebar/SidebarUpdateCheck.swift |
+| f2943ee90e | #26288 | connections | feat(updates): switch your whole fleet between Stable and Nightly in one step | left (settings-2): UpdateTrackSwitchDialog.tsx:43 and sidebar/updateEverything.logic.ts; ServerUpdateViews.swift and UpdateController need the fleet-wide track switch |
 
 ## New feature secrets (10)
 
@@ -612,7 +612,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| b24959d579 | #28047 | composer | feat: Labs option to suggest your next prompt after Claude and Codex turns | left: needs `orchestration.subscribePromptSuggestion {threadId}` (stream of `{runId, text} | ported: on a server whose settings have `promptSuggestionsEnabled`, the open thread subscribes to `orchestration.subscribePromptSuggestion` once it has a run; the suggestion takes the default placeholder's place with an outline `⇥ Tab` (KbdView `outline`, new kbd-outline reference), Tab in the empty prompt takes it and Escape dismisses it per run (ComposerPromptSuggestion, ComposerView `promptSuggestion`, ComposerController). Left: the Labs switch in Settings, which writes the server setting (Features/Settings) |
+| b24959d579 | #28047 | composer | feat: Labs option to suggest your next prompt after Claude and Codex turns | left: needs `orchestration.subscribePromptSuggestion {threadId}` (stream of `{runId, text} | ported: on a server whose settings have `promptSuggestionsEnabled`, the open thread subscribes to `orchestration.subscribePromptSuggestion` once it has a run; the suggestion takes the default placeholder's place with an outline `⇥ Tab` (KbdView `outline`, new kbd-outline reference), Tab in the empty prompt takes it and Escape dismisses it per run (ComposerPromptSuggestion, ComposerView `promptSuggestion`, ComposerController). Left: the Labs switch in Settings, which writes the server setting (Features/Settings); the Labs switch is ported (settings-2, BetaSettingsView.swift) |
 | b48b8ea2a0 | #33706 | thread | fix(web): prompt suggestions show after a steered turn | ported with #28047: a steered run that never started is skipped (ComposerPromptSuggestion.offered) |
 
 ## New feature text-generators (1)
@@ -647,7 +647,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 2a6b2c8298 | #31313 | settings | feat(web): switch the UI language from Settings, with Spanish and Chinese | port; UI language switcher, 9 languages |
+| 2a6b2c8298 | #31313 | settings | feat(web): switch the UI language from Settings, with Spanish and Chinese | partly ported (settings-2): General > Display > Language with System default and English, the languages CandyWrapper ships; no translations |
 | afade9b562 | #33161 | settings | feat(web): add Brazilian Portuguese translation | port |
 | 93d502f237 | #33162 | settings | feat(web): add French translation | port |
 | d8631c8711 | #33163 | settings | feat(web): add German translation | port |
@@ -909,7 +909,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 42d645ae9e | #32924 | connections | fix(web): update Retry stops re-sending servers already on the target version | port |
 | 7eca0ed885 | #29462 | connections | fix(web): hand-started t3 servers get an update command that updates them | port |
 | 6790f85f53 | #27692 | connections | fix(web): point pairing copy at Sharing & access | port |
-| fa9d85fad5 | #35327 | connections | fix(web): a server updated with the app reconnects as soon as it is ready | left (settings-4928): reconnect as soon as the updated server answers instead of the backoff ladder |
+| fa9d85fad5 | #35327 | connections | fix(web): a server updated with the app reconnects as soon as it is ready | left (settings-2): the client half landed in task connection; Update everything still needs to reconnect on the server's ready signal |
 | 00f617db4e | #24400 | connections | fix(client-runtime): recover subscriptions that stop on a healthy connection | port |
 | cbf0f0a83f | #36445 | connections | fix(web): screen readers read the Update everything machine list as a table | port |
 | 757f71a7f6 | #29788 | connections | fix(client-runtime): new T3 Connect machines appear without signing in again | port |
@@ -923,7 +923,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | a6765d41d5 | #33795 | connections | fix(web): audio and server spinners respect reduced motion | port |
 | e1458f25e2 | #32048 | connections | fix(web): track switch no longer blocked when Local environment is off | port |
 | 1672b51630 | #32157 | connections | fix(web): Add Environment drops the old tab's error when switching mode | port |
-| 399ea10f4e | #37490 | connections | fix(web): Update everything no longer offers a Nightly build to a Stable desktop app | left (settings-4928): updateEverything.logic.ts stops offering Nightly to a Stable desktop; port with the track switch |
+| 399ea10f4e | #37490 | connections | fix(web): Update everything no longer offers a Nightly build to a Stable desktop app | left (settings-2): with #26288 |
 | 27411651a4 | #37825 | connections | fix(auth): bind automatic pairing codes to peer links | port |
 | c48825322d | #38442 | connections | fix(web): pairing links never use the desktop app's t3code:// address | port |
 | dcaff67177 | #38980 | connections | fix(web): removing a connection withdraws its permission update notice | port |
@@ -1183,7 +1183,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | bae3c1962c | #23160 | settings | fix(settings): offer Use existing CLI in managed Codex settings | port |
 | 08a463e299 | #24472 | settings | fix(settings): project edits keep overrides the client does not know | port |
 | c8a606c7b7 | #27316 | settings | fix(shared): durations under 10s drop a trailing .0 | port |
-| 305a90dce4 | #27442 | settings | fix(relay): show the account's real tunnel cap in T3 Connect settings | left (settings-4928): show the account's tunnel cap from the relay in T3 Connect settings; needs the cap field from the wire audit |
+| 305a90dce4 | #27442 | settings | fix(relay): show the account's real tunnel cap in T3 Connect settings | left (settings-2): CandyWrapper has no T3 Connect tunnel meter yet (useManagedTunnelUsage and TunnelUsageMeter, SavedEnvironmentRows.tsx:505-560); port the meter, then the cap from RelayEnvironmentLinkLimitExceededError's maxTunnels |
 | 94b80eaf4f | #22455 | settings | fix(web): language dialects use their base language's icon | port |
 | 6b276f5c40 | #22867 | settings | fix(web): project removal says provider sessions are kept | port |
 | e4926868da | #22906 | settings | fix(web): diagnostics cards use one border radius | port |
@@ -1200,7 +1200,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | be5a887b93 | #27899 | settings | feat: add assembly file highlighting and language selection | port |
 | de6d4bfead | #26335 | settings | fix(web): keep retention controls stable while editing days | port |
 | ea3767b248 | #26658 | settings | fix(web): scheduled task editor shows the destination thread | port |
-| 2b15ba077d | #27891 | settings | fix(web): model settings show "No reasoning" instead of labeling every model | port |
+| 2b15ba077d | #27891 | settings | fix(web): model settings show "No reasoning" instead of labeling every model | ported (settings-2): model rows label Fast mode and No reasoning only (ProvidersLogic.capabilities, ProviderOptionDescriptor.isReasoningControl) |
 | 1d4c5e023f | #24890 | settings | fix(web): show the correct Tailscale URL when switching to port 443 | port |
 | bfb44fbe6c | #24788 | settings | feat(web): copy the app version from General settings | port |
 | 7671644754 | #26798 | settings | fix(web): restore No project name and icon from settings | port |
@@ -1229,7 +1229,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 7f7bf263a8 | #32409 | settings | fix(web): recover ACP settings when projects change | port |
 | 8395f20124 | #29851 | settings | fix(web): editing a scheduled task shows its saved time when the hour has one digit | port |
 | 8913a4a254 | #30115 | settings | fix(web): keep typed unpublished variable rows across settings re-deliveries | port |
-| e85e0094dd | #33538 | settings | fix(web): checking for updates finds provider updates on every machine | left (settings-4928): Check for updates asks every connected machine for provider updates, not only the primary |
+| e85e0094dd | #33538 | settings | fix(web): checking for updates finds provider updates on every machine | left (settings-2): Check for updates asks every connected machine's providers, not only the primary |
 | 25da7ebca6 | #33730 | settings | fix(web): reclaim notice says the machine will be offline | port |
 | 7389423507 | #32576 | settings | fix(web): screen readers hear the add-project submit shortcut | port |
 | f7b81e1d11 | #33395 | settings | fix(web): settings search shortcuts follow the physical key on non-US layouts | port |
@@ -1244,7 +1244,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | dcad1942a9 | #34858 | settings | fix(client-runtime): provider toggles no longer wait for another provider's update | port |
 | 2b7e975a97 | #35008 | settings | fix(clients): say "Starting Claude" until the provider actually starts | port |
 | 12d4c62214 | #35101 | settings | fix(web): every settings nav group has a name for screen readers | port |
-| b2e86d7902 | #35100 | settings | fix(web): an invalid provider setting is refused at its field instead of taking the provider offline | left (settings-4928): refuse an invalid provider setting at its field (ProviderSettingsPanel field validation) instead of sending it |
+| b2e86d7902 | #35100 | settings | fix(web): an invalid provider setting is refused at its field instead of taking the provider offline | ported (settings-2): a refused value stays in the field marked invalid with "Enter a valid value. It was not saved." (ProvidersSettingsView.swift `ValidatedFieldControl`, `Field.pattern`) |
 | 32f3d8b160 | #35116 | settings | fix(client-runtime): Diagnostics Resource History keeps updating while open | port |
 | a30cb3283a | #35161 | settings | fix(web): Esc in the keybindings search clears it without closing Settings | port |
 | 1d218d1525 | #34697 | settings | feat(web): screen reader window title leads with the thread's status and name | port |
@@ -1257,7 +1257,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 6bb9b7b323 | #36303 | settings | fix(web): auto-settle days save when the edit is finished, not on every keystroke | port |
 | 0517d15c41 | #36392 | settings | fix(web): provider sign-in links only open web addresses | port |
 | ab9e6a2792 | #36437 | settings | fix(web): closing Settings no longer leaves it as a back/forward stop | port |
-| 62ba72fa15 | #36477 | settings | fix(web): onboarding rechecks an agent when its install command finishes | left (settings-4928): recheck the agent after its install command finishes, with the Welcome page port |
+| 62ba72fa15 | #36477 | settings | fix(web): onboarding rechecks an agent when its install command finishes | left (settings-2): with #33209, recheck an agent after its install command exits |
 | a81ec88f58 | #24641 | settings | fix(clients): allow portable provider handoffs after detach | port |
 | fe873f82c1 | #23578 | settings | fix(web): confirm before deleting scheduled tasks | ported (settings-4928): Delete asks first |
 | b2259d3c6c | #23590 | settings | fix(web): show working state while provider sessions start | port |
@@ -1408,7 +1408,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 8dba23e420 | #37103 | terminal | fix(web): large terminal pastes reach the program intact | port |
 | 46f3ab39f2 | #37133 | terminal | fix(web): open terminal file links naming the server hostname | port |
 | 304cf149c8 | #37201 | terminal | fix(web): terminal file links preserve numeric filename suffixes | port |
-| 48a64a8b68 | #35305 | terminal | feat(web): make terminal close confirmation optional | port |
+| 48a64a8b68 | #35305 | terminal | feat(web): make terminal close confirmation optional | ported (settings-2): General > Confirmations > Terminal close confirmation, and TerminalController.confirmClose skips the dialog when it is off |
 | 17c401ddc0 | #38998 | terminal | fix(web): drawer drops a background terminal closed by another client | port |
 
 ## Small fixes, thread (266)

@@ -279,14 +279,15 @@ Left for look-4928.
 
 ### Settings, `SettingsScreensFidelityTests`, ceiling 5%
 
-Left for settings-4928. In every case the diff covers the whole 2040x1400 crop: the settings sidebar has 4928's new sections, and the row grid changed.
+All 18 failing cases pass after task settings-2 (2026-11-19), with no ceiling raised. Numbers are before, then after.
 
-- `16a` light 6.55, dark 7.13. `16b` light 8.50, dark 9.25. `16c` light 6.21, dark 7.12. `49` as 16a.
-- `18-settings-providers` light 7.53, dark 14.02
-- `19-settings-keybindings` light 5.23, dark 5.31
-- `32-settings-source-control` light 6.13, dark 6.74
-- `39-settings-diagnostics` light 6.10 → 5.71, dark 43.03 → 42.80. The dark cards fill with 8/255 in T3 and 17/255 here, which covers most of the page. Below the counters T3 shows "Host & collection" where CandyWrapper shows "Live Processes".
-- `40-settings-integrations` light 5.81, dark 6.28
+- `16a` 6.55/7.13 → 1.66/1.68, and `49` the same. `16b` 8.50/9.25 → 3.43/3.53 and `16c` 6.21/7.12 → 1.70/1.71, after General gained Terminal close confirmation and Language.
+- `18-settings-providers` light 7.53 → 1.95, dark 14.02 → 1.97. The 4928 capture scrolls to 0.45 of a taller page, so the fixture scrolls to 701.5pt, not 3824's 665.5pt.
+- `19-settings-keybindings` 5.23/5.31 → 4.39/4.47. `32-settings-source-control` 6.13/6.74 → 3.28/3.31.
+- `39-settings-diagnostics` 5.71/42.80 → 4.34/4.31: the footprint draws inside the section card, and Host & collection follows it.
+- `40-settings-integrations` 5.81/6.28 → 4.81/4.93.
+
+What changed: Voice in the nav and "Source control & issues"; the row's control column is `auto` with `min-w-40` only for selects; descriptions wrap `text-pretty` (greedy, no one-word last line) instead of balanced; clamped text ends like Blink's line-clamp. The component cases pass too: providers.list 33.10/33.62 → 2.11/2.67 (the selected row fills with foreground/6%), source-control.repositories 10.17/12.99 → 4.18/4.50, provider.environment dark 25.26 → 2.48 (light 8.68 → 2.76) (each variable is a bordered card).
 
 ### Inventory sections
 
