@@ -91,27 +91,39 @@ struct PickersFidelityTests {
         },
     ]
 
-    static let cases: [Case] = [
-        Case(reference: "13-model-picker", rect: CGRect(x: 578, y: 434, width: 362, height: 283), backdropAt: CGPoint(x: 575, y: 440)) { p in
-            let config = try! PickersFidelityTests.recordedConfig(transcript: "26-nightly-4928")
-            let view = ModelPickerView(catalog: ProviderCatalog(config.providers), favorites: [], active: "claudeAgent", activeModel: "claude-haiku-5-5")
+    /// The docked 4928 picker as 13, 41 and 53 show it (ProviderModelPicker.tsx:472-495): the model list, the
+    /// Reasoning column and the footer, above the composer's model trigger. 41 and 53 open it on the effort column.
+    static func docked(_ p: ComposerPickers, effortFocused: Bool) -> (NSView, CGSize) {
+        let config = try! PickersFidelityTests.recordedConfig(transcript: "26-nightly-4928")
+        let view = ModelPickerView(catalog: ProviderCatalog(config.providers), favorites: [], active: "claudeAgent", activeModel: "claude-haiku-5-5")
+        let dock = DockedModelPickerView(picker: view)
+        dock.column.update(descriptors: p.current.descriptors, ultrathink: false, locked: false, model: p.current.modelTriggerLabel(spoken: true))
+        dock.footer.update(descriptors: p.current.descriptors, runtimeMode: p.current.runtimeMode)
+        if effortFocused {
+            dock.focusEffort(levelsOnly: false)
+        } else {
             // The capture focuses the search field on open (blue underline).
             var focused = view.search.state
             focused.focused = true
             view.search.previewState(focused)
-            let popup = PickerPopupView(view)
-            return (popup, popup.popupSize)
+        }
+        let popup = PickerPopupView(dock)
+        return (popup, popup.popupSize)
+    }
+
+    static let dockedRect = CGRect(x: 407, y: 324, width: 554, height: 393)
+
+    static let cases: [Case] = [
+        Case(reference: "13-model-picker", rect: dockedRect, backdropAt: CGPoint(x: 404, y: 330)) { p in
+            docked(p, effortFocused: false)
         },
-        // 3824 ComposerControlsBar.tsx:169-190 always puts Permissions in the effort menu.
-        // The old standalone 42 access select is retired; its replacement is the explicit 53 case.
-        // The 3824 capture plan also routes screen 42 to that same combined menu.
-        Case(reference: "41-traits-picker", rect: CGRect(x: 699, y: 382, width: 298, height: 335), backdropAt: CGPoint(x: 696, y: 390)) { p in
-            let popup = PickerPopupView(p.optionsMenu(includingTraits: true))
-            return (popup, popup.popupSize)
+        // At 4928 `composer.effort` opens the docked picker on its Reasoning column (composerEventScope.ts:79-92), and
+        // the 53 capture opens the same picker; its Permissions live in the footer.
+        Case(reference: "41-traits-picker", rect: dockedRect, backdropAt: CGPoint(x: 404, y: 330)) { p in
+            docked(p, effortFocused: true)
         },
-        Case(reference: "53-effort-menu-permissions", rect: CGRect(x: 699, y: 382, width: 298, height: 335), backdropAt: CGPoint(x: 696, y: 390)) { p in
-            let popup = PickerPopupView(p.optionsMenu(includingTraits: true))
-            return (popup, popup.popupSize)
+        Case(reference: "53-effort-menu-permissions", rect: dockedRect, backdropAt: CGPoint(x: 404, y: 330)) { p in
+            docked(p, effortFocused: true)
         },
     ]
 
@@ -123,7 +135,7 @@ struct PickersFidelityTests {
                 let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent(
                     "design/reference-4928/\(c.reference).\(theme).png"))))
                 let ref = Self.crop(full, c.rect)
-                let (view, natural) = c.make(try Self.pickers())
+                let (view, natural) = c.make(try Screen3824Fixtures.pickers())
                 let ours = Self.render(view, size: c.rect.size, backdrop: Self.color(full, c.backdropAt.x, c.backdropAt.y), dark: theme == "dark")
                 let (total, _, diff) = SidebarFidelityTests.compare(ref, ours, bands: [])
                 let base = "\(c.reference).\(theme)"
@@ -145,12 +157,13 @@ struct PickersFidelityTests {
                 "design/reference-4928/03c-kitchen-sink-bottom.\(theme).png"))))
             let p = try Screen3824Fixtures.pickers()
             let width = p.controlsView.intrinsicContentSize.width
-            // Preserve the official fractional anchor inside its enclosing 2x pixel crop.
-            // Measured boxes and fonts are in fixtures/screen-3824-composer-geometry.json.
-            let rect = CGRect(x: 841.5, y: 721, width: (width * 2).rounded(.up) / 2, height: 28)
+            // At 4928 the closed control is one model trigger; its provider logo starts at 811pt in 03c, inside the
+            // trigger's 1pt border and `px-2` (ComposerControl.tsx:12-16). The composer's end edge leaves the trigger at
+            // the same fractional x as the 3824 capture's 842.0703125.
+            let rect = CGRect(x: 802, y: 721, width: (width * 2).rounded(.up) / 2, height: 28)
             let ref = Self.crop(full, rect)
-            let ours = Self.render(p.controlsView, size: rect.size, backdrop: Self.color(full, 800, 730), dark: theme == "dark",
-                                   contentFrame: CGRect(x: 842.0703125 - rect.minX, y: 0, width: width, height: 28))
+            let ours = Self.render(p.controlsView, size: rect.size, backdrop: Self.color(full, 790, 730), dark: theme == "dark",
+                                   contentFrame: CGRect(x: 802.0703125 - rect.minX, y: 0, width: width, height: 28))
             let (total, _, diff) = SidebarFidelityTests.compare(ref, ours, bands: [])
             let base = "03c-footer-controls.\(theme)"
             try ref.representation(using: .png, properties: [:])!.write(to: Self.out.appendingPathComponent("\(base).ref.png"))

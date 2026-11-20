@@ -235,7 +235,8 @@ final class ComposerEffortRowView: ControlView {
 
     override func updateLayer() {
         let lit = (state.hovered || focused || state.popupOpen) && state.enabled
-        fill.backgroundColor = lit ? (capy ? Themed.color(\.contrastForeground, 0.07) : Themed.color(\.accent)).cgColor(in: self) : nil
+        // `hover:bg-foreground/[0.09] focus-visible:bg-foreground/[0.09]` (COLUMN_ROW, ComposerModelEffort.tsx:188).
+        fill.backgroundColor = lit ? (capy ? Themed.color(\.contrastForeground, 0.07) : Themed.color(\.contrastForeground, 0.09)).cgColor(in: self) : nil
         title.color = Themed.color(\.contrastForeground)
         switch kind {
         case .level: caption.color = Themed.color(\.contrastMutedForeground, 0.7)
@@ -417,19 +418,20 @@ final class ComposerEffortColumnView: DSView {
 
     override func layout() {
         super.layout()
-        let w = bounds.width
         leftRule.frame = CGRect(x: 0, y: 0, width: 1, height: bounds.height)
+        // `border-l` (ProviderModelPicker.tsx:481): the content box starts after the 1pt rule.
+        let b: CGFloat = 1, w = bounds.width - b
         // `px-3 pt-2.5`, the `h-8.25` box lifted 1pt with `pb-1.5` over its rule: matches the search row.
         let headingW = ceil(heading.textWidth)
-        heading.frame = NSRect(x: 12, y: 12, width: min(headingW, w - 24), height: 20)
-        let modelX = 12 + headingW + 8
-        modelLabel.frame = NSRect(x: modelX, y: 14, width: max(0, w - 12 - modelX), height: 16)
-        headerRule.frame = CGRect(x: 12, y: 41, width: w - 24, height: 1)
+        heading.frame = NSRect(x: b + 12, y: 12, width: min(headingW, w - 24), height: 20)
+        let modelX = b + 12 + headingW + 8
+        modelLabel.frame = NSRect(x: modelX, y: 14, width: max(0, b + w - 12 - modelX), height: 16)
+        headerRule.frame = CGRect(x: b + 12, y: 41, width: w - 24, height: 1)
         // `px-2 pt-2.5 pb-1.5 gap-0.5`, so the first level sits on the first model's line.
         var y = Self.contentTop - scrollOffset
         if !note.text.isEmpty {
             let h = note.layout(forWidth: w - 32).height
-            note.frame = NSRect(x: 16, y: y, width: w - 32, height: h)
+            note.frame = NSRect(x: b + 16, y: y, width: w - 32, height: h)
             y += h + 6
         } else {
             note.frame = .zero
@@ -438,13 +440,13 @@ final class ComposerEffortColumnView: DSView {
         for (i, row) in rows.enumerated() {
             if i == separatorAfter {
                 // `mt-1 border-t pt-1` on the options group, inside the column's `gap-0.5`.
-                optionsRule.frame = CGRect(x: 8, y: y + 2, width: w - 16, height: 1)
+                optionsRule.frame = CGRect(x: b + 8, y: y + 2, width: w - 16, height: 1)
                 y += 4 + 1 + 4 - 2
             }
-            row.frame = NSRect(x: 8, y: y, width: w - 16, height: row.height)
+            row.frame = NSRect(x: b + 8, y: y, width: w - 16, height: row.height)
             y += row.height + 2
         }
-        empty.frame = NSRect(x: 16, y: Self.contentTop + 6, width: w - 32, height: 20)
+        empty.frame = NSRect(x: b + 16, y: Self.contentTop + 6, width: w - 32, height: 20)
     }
 
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); rows.forEach { $0.capy = capy; $0.needsDisplay = true }; needsDisplay = true }
