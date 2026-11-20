@@ -36,6 +36,25 @@ struct DiffCommitScopeTests {
         #expect(panel.scopeTitle == "Fix the thing")
     }
 
+    /// A thread switch while the git diff loads cancels that load; the next thread must still load its own
+    /// (screen pass 3: a restored Diff panel stayed empty until Refresh).
+    @Test func threadSwitchDuringALoadStillLoadsTheNewThread() async throws {
+        let file: @Sendable (String) -> String = { name in "diff --git a/\(name) b/\(name)\n--- a/\(name)\n+++ b/\(name)\n@@ -1 +1 @@\n-a\n+b\n" }
+        let panel = DiffPanelView(frame: NSRect(x: 0, y: 0, width: 460, height: 600))
+        panel.workspaceRoot = "/one"
+        panel.gitLoader = { cwd, _, _ in
+            if cwd == "/one" { try await Task.sleep(for: .milliseconds(300)) }
+            return ReviewDiffPreview(cwd: cwd, sources: [.init(id: "b", kind: "branch-range", title: "Changes", baseRef: "main", headRef: "main",
+                                                               diff: file(cwd == "/one" ? "one.txt" : "two.txt"), diffHash: cwd, truncated: false)])
+        }
+        panel.threadId = "t1"
+        panel.setSummaries([])
+        panel.workspaceRoot = "/two"
+        panel.threadId = "t2"
+        panel.setSummaries([])
+        #expect(await eventually(seconds: 5) { panel.list.diff.files.first?.path == "two.txt" })
+    }
+
     @Test func oldServersShowNoCommitsMenu() async throws {
         struct Refused: LocalizedError { var errorDescription: String? { "Unknown method" } }
         let panel = DiffPanelView(frame: NSRect(x: 0, y: 0, width: 460, height: 600))
