@@ -698,10 +698,10 @@ public final class PullRequestDetailView: DSView {
             var item = MenuItem.checkbox("Allow edits from maintainers", checked: (maintainerEditsChoice ?? d.maintainerCanModify) == true) { [weak self] value in
                 self?.onMaintainerEdits?(value)
             }
-            // ponytail: one-line subtitle with the full hint as tooltip, T3 wraps it at max-w-xs; add wrapping subtitles if a reference shows it
+            // The hint wraps in T3's 320pt column, with "Saving…" as its own line under it (:334-349).
             let hint = "Maintainers can push to this branch. If your fork has workflows, this can also give access to its secrets."
-            item.subtitle = maintainerEditsSaving ? "Saving…" : hint
-            item.tooltip = hint
+            item.subtitle = maintainerEditsSaving ? hint + "\nSaving…" : hint
+            item.subtitleWrapWidth = 320
             item.isDisabled = maintainerEditsSaving || onMaintainerEdits == nil
             items += [item, .separator]
         }

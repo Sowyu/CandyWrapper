@@ -1013,7 +1013,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 5b89a53585 | #25588 | pr/git | feat(pull-requests): manage GitHub maintainer edits | ported (panels-2): "Allow edits from maintainers" checkbox in the ⋯ menu, `pullRequests.update` `maintainerCanModify`; the hint is a one-line subtitle plus tooltip |
+| 5b89a53585 | #25588 | pr/git | feat(pull-requests): manage GitHub maintainer edits | ported (panels-2): "Allow edits from maintainers" checkbox in the ⋯ menu, `pullRequests.update` `maintainerCanModify`; the hint wraps at 320pt with "Saving…" under it (panels-3, MenuItem.subtitleWrapWidth) |
 | 9d38d68d04 | #23225 | pr/git | fix(web): wait for fresh diff pages in review guides | left (panels-2): not checked |
 | a8d6b0e66b | #22522 | pr/git | fix(web): mouse Back/Forward over a streamed preview navigate the preview | left (panels-2): not checked |
 | 1c99a55444 | #23577 | pr/git | fix(web): report invalid preview addresses | left (panels-2): not checked |
@@ -1087,7 +1087,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | b3fdf2b10f | #33989 | pr/git | fix(web): PR links jump to the comment, diff line, checks or commits they name | left (panels-2): PR links that jump to a comment, line, checks or commits, 5.2 |
 | dea8472438 | #28732 | pr/git | feat(web): label chips show the label's description on hover | left (panels-2): not checked |
 | b6d3097379 | #28459 | pr/git | feat(web): composer strip names the worktree folder | ported: a started thread's strip names its worktree folder (BranchToolbarLogic `lockedWorkspaceLabel`, Features/Git) |
-| 8cbc95923a | #34168 | pr/git | fix(web): files marked Viewed stay folded when a pull request's Code tab opens again | left (panels-2): Viewed files folding on reopen, with #37605, 5.2 |
+| 8cbc95923a | #34168 | pr/git | fix(web): files marked Viewed stay folded when a pull request's Code tab opens again | ported (panels-3): Viewed marks that load after the diff fold their files, the reader's fold wins, PullRequestCodeView.applyFolds |
 | 75b22bf56c | #30620 | pr/git | fix(web): dismiss image path tooltips after preview and scroll | left (panels-2): not checked |
 | 8c9af5418a | #31972 | pr/git | fix(web): disable the git actions menu when nothing in it is usable | left (panels-2): not checked |
 | 1bdf470328 | #34048 | pr/git | fix(web): project actions auto-open Preview in web clients | left (panels-2): not checked |
@@ -1157,7 +1157,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 3a1dfb7acb | #37072 | pr/git | fix(web): HTML file previews use the current canvas color | left (panels-2): not checked |
 | 06150a08ec | #37392 | pr/git | fix(web): No project threads in New worktree mode send without a base branch | left (panels-2): not checked |
 | 558790aae5 | #37498 | pr/git | fix(web): stashed prompt previews show thread mentions by name, not as raw links | left (panels-2): not checked |
-| 1f698f01d9 | #37605 | pr/git | fix: PR diffs fold Viewed files the way GitHub does, on web and mobile | left (panels-2): Viewed files fold the way GitHub does, PullRequestCodeView |
+| 1f698f01d9 | #37605 | pr/git | fix: PR diffs fold Viewed files the way GitHub does, on web and mobile | ported (panels-3): `isFileDiffCollapsed` with `diffFilesCollapsed` folding all and Viewed folding otherwise, PullRequestDetailLogic |
 | cd42e1a497 | #37651 | pr/git | fix(web): the PR author filter says "1 merge loaded", not "1 merges loaded" | left (panels-2): not checked |
 | 0a842b222d | #37704 | pr/git | fix(web): list each pull request once across servers | left (panels-2): not checked |
 | 15271c8d00 | #37733 | pr/git | fix(pr): label and reviewer pickers send picks once, when they close | left (panels-2): not checked |

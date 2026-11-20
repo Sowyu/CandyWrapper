@@ -51,6 +51,8 @@ public final class DiffListView: DSView {
     public var viewedState: (@MainActor (String) -> (viewed: Bool, stale: Bool)?)? { didSet { updateViewedHeaders() } }
     /// A tick pressed: viewing a file folds it, clearing the tick opens it (`toggleFileDiffFoldForViewed`).
     public var onSetViewed: (@MainActor (String, Bool) -> Void)?
+    /// The reader folded or unfolded a file from its header, with its new state (`onItemCollapsedChange`).
+    public var onUserToggle: (@MainActor (Int, Bool) -> Void)?
     /// Cards under lines. Their views come from `annotationView` and are kept while their id stays.
     public var annotations: [DiffAnnotation] = [] { didSet { if annotations != oldValue { relayout() } } }
     public var annotationView: (@MainActor (DiffAnnotation) -> DiffAnnotationContent?)?
@@ -217,6 +219,17 @@ public final class DiffListView: DSView {
         fade.duration = 0.2
         fade.timingFunction = Self.easeOut
         layer.add(fade, forKey: "expand-fade")
+    }
+
+    /// Sets every file's fold at once, with one relayout; files that open fade in.
+    public func setCollapsedFiles(_ files: Set<Int>) {
+        let files = files.filter { diff.files.indices.contains($0) }
+        guard files != collapsed else { return }
+        fadingFiles = collapsed.subtracting(files)
+        collapsed = files
+        relayoutKeepingAnchor()
+        fadingFiles = []
+        onCollapsedChange?()
     }
 
     public func toggle(_ file: Int) { setCollapsed(file, !collapsed.contains(file)) }
@@ -473,7 +486,11 @@ public final class DiffListView: DSView {
         switch poolKind {
         case .header:
             let header = DiffFileHeaderView()
-            header.onToggle = { [weak self] in self?.toggle($0) }
+            header.onToggle = { [weak self] file in
+                guard let self else { return }
+                self.toggle(file)
+                self.onUserToggle?(file, self.collapsed.contains(file))
+            }
             header.onOpenFile = { [weak self] path in self?.onOpenFile?(path) ?? self?.togglePath(path) }
             header.onViewed = { [weak self] path, viewed in
                 guard let self else { return }

@@ -49,6 +49,8 @@ public final class PullRequestCodeView: DSView {
     var onSetViewed: (([String], Bool) -> Void)?
     /// The file last marked viewed or not, where a shift-click's range starts. A new scope forgets it.
     private var viewedAnchor: String?
+    /// The reader's own folds by path (`FileDiffFoldChoices`). A new scope forgets them (PullRequestCodeTab.tsx:494-500).
+    private var foldChoices: [String: Bool] = [:]
     /// The next slice is wanted (`loadNextSlice`), or a failed one again.
     var onLoadMore: (() -> Void)?
     /// The first slice failed and "Try again" was pressed (`diffQuery.refresh`).
@@ -86,9 +88,16 @@ public final class PullRequestCodeView: DSView {
             let range = PullRequestDetailLogic.viewedRange(self.paths, path: path,
                                                           anchor: NSEvent.modifierFlags.contains(.shift) ? self.viewedAnchor : nil)
             self.viewedAnchor = path
-            // The list folds the clicked file itself; the rest of the range folds the same way.
+            // The list folds the clicked file itself; the rest of the range folds the same way. With the setting off a
+            // press drops the reader's fold, so the file follows its mark; with it on, the press is the choice (:1020-1026).
+            let folded = self.defaultFold
+            for p in (range.isEmpty ? [path] : range) { self.foldChoices[p] = folded == nil ? nil : viewed }
             for other in range where other != path { if let i = self.paths.firstIndex(of: other) { self.list.setCollapsed(i, viewed) } }
             self.onSetViewed?(range.isEmpty ? [path] : range, viewed)
+        }
+        list.onUserToggle = { [weak self] file, collapsed in
+            guard let self, self.paths.indices.contains(file) else { return }
+            self.foldChoices[self.paths[file]] = collapsed
         }
         list.annotationView = { [weak self] a in self?.annotationView(a) }
         list.onNearEnd = { [weak self] in
@@ -101,7 +110,7 @@ public final class PullRequestCodeView: DSView {
     }
 
     func reset() {
-        commit = nil; paths = []; patches = []; nextCursor = nil; draft = nil; threadCards = [:]; viewedAnchor = nil
+        commit = nil; paths = []; patches = []; nextCursor = nil; draft = nil; threadCards = [:]; viewedAnchor = nil; foldChoices = [:]
         list.annotations = []
         list.setDiff(UnifiedDiff(""))
     }
@@ -110,7 +119,7 @@ public final class PullRequestCodeView: DSView {
     func set(patches: [String], loading: Bool, error: String?, nextCursor: String?, moreLoading: Bool, moreError: String?,
              commit: String?, commits: [PullRequestCommit]) {
         self.commits = commits.sorted { (T3Timestamp($0.committedDate).epochMs ?? 0) > (T3Timestamp($1.committedDate).epochMs ?? 0) }
-        if commit != self.commit { draft = nil; viewedAnchor = nil }
+        if commit != self.commit { draft = nil; viewedAnchor = nil; foldChoices = [:] }
         self.commit = commit
         self.nextCursor = nextCursor
         self.moreLoading = moreLoading
@@ -118,21 +127,12 @@ public final class PullRequestCodeView: DSView {
         scope.title = commit.flatMap { oid in commits.first { $0.oid == oid }?.messageHeadline } ?? "All commits"
         scope.isHidden = commits.isEmpty
         if patches != self.patches {
-            let grew = !self.patches.isEmpty && patches.count > self.patches.count && Array(patches.prefix(self.patches.count)) == self.patches
-            let wasCollapsed = list.collapsed
             self.patches = patches
             let diff = UnifiedDiff(patches.joined(separator: patches.allSatisfy { $0.hasSuffix("\n") } ? "" : "\n"))
-            let oldCount = paths.count
             paths = diff.files.map(\.path)
             list.setDiff(diff, collapsedByDefault: false)
-            if grew {
-                // An appended slice keeps what the reader already folded.
-                for f in wasCollapsed where f < oldCount { list.setCollapsed(f, true) }
-                for (i, p) in paths.enumerated() where i >= oldCount && PullRequestDetailLogic.isFileViewed(p, states: states, overlay: overlay) { list.setCollapsed(i, true) }
-            } else {
-                // Viewed files start folded.
-                for (i, p) in paths.enumerated() where PullRequestDetailLogic.isFileViewed(p, states: states, overlay: overlay) { list.setCollapsed(i, true) }
-            }
+            // An appended slice keeps what the reader folded: the choices are by path.
+            applyFolds()
         }
         let empty = !loading && error == nil && patches.allSatisfy(\.isEmpty) && nextCursor == nil
         let failed = !loading && error != nil && patches.isEmpty
@@ -161,6 +161,8 @@ public final class PullRequestCodeView: DSView {
     func setViewed(states: [String: String]?, overlay: [String: Bool], store: String?) {
         guard states != self.states || overlay != self.overlay || store != self.store else { return }
         self.states = states; self.overlay = overlay; self.store = store
+        // Marks that load after the diff still fold their files, unless the reader chose (#34168).
+        applyFolds()
         if store == nil {
             list.viewedState = nil
         } else {
@@ -172,6 +174,21 @@ public final class PullRequestCodeView: DSView {
             }
         }
         updateCounts()
+    }
+
+    /// `diffFilesCollapsed` on folds every file; off leaves it to the Viewed marks (PullRequestCodeTab.tsx:458).
+    private var defaultFold: Bool? { ClientSettingsStore.shared.current.bool("diffFilesCollapsed") ? true : nil }
+
+    private func foldsAsViewed(_ path: String) -> Bool {
+        store != nil && PullRequestDetailLogic.isFileViewed(path, states: states, overlay: overlay)
+            && !(overlay[path] == nil && PullRequestDetailLogic.isStale(path, states: states))
+    }
+
+    private func applyFolds() {
+        let folded = defaultFold
+        list.setCollapsedFiles(Set(paths.indices.filter {
+            PullRequestDetailLogic.isFileDiffCollapsed(paths[$0], folded: folded, choices: foldChoices, viewed: foldsAsViewed(paths[$0]))
+        }))
     }
 
     /// The conversations and the review being written (PullRequestCodeTab.tsx:478-560).

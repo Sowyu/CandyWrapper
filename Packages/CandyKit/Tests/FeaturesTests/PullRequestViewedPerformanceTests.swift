@@ -20,6 +20,10 @@ struct PullRequestViewedPerformanceTests {
         view.layoutSubtreeIfNeeded()
         let list = try #require(view.subviews.compactMap { $0 as? ScrollAreaView }
             .compactMap { $0.scrollView.documentView as? DiffListView }.first)
+        // The reader opens the file, so a Viewed mark loading later keeps it open (#34168).
+        list.setCollapsed(0, false)
+        list.onUserToggle?(0, false)
+        view.layoutSubtreeIfNeeded()
         let header = try #require(list.subviews.compactMap { $0 as? DiffFileHeaderView }.first)
         let configured = list.configuredRowViews
         let created = list.createdRowViews
@@ -47,5 +51,16 @@ struct PullRequestViewedPerformanceTests {
         view.setViewed(states: nil, overlay: [:], store: nil)
         #expect(header.viewedBox.isHidden)
         #expect(list.configuredRowViews == configured)
+    }
+
+    /// #37605 and #34168: with the setting off, a Viewed mark that arrives after the diff folds its file; the
+    /// reader's own fold outranks it; with the setting on, every file starts folded.
+    @Test func viewedFoldsFollowGitHub() {
+        typealias L = PullRequestDetailLogic
+        #expect(L.isFileDiffCollapsed("a", folded: nil, choices: [:], viewed: true))
+        #expect(!L.isFileDiffCollapsed("a", folded: nil, choices: [:], viewed: false))
+        #expect(!L.isFileDiffCollapsed("a", folded: nil, choices: ["a": false], viewed: true))
+        #expect(L.isFileDiffCollapsed("a", folded: true, choices: [:], viewed: false))
+        #expect(!L.isFileDiffCollapsed("a", folded: true, choices: ["a": false], viewed: false))
     }
 }

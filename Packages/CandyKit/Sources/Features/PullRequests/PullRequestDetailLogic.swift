@@ -551,6 +551,13 @@ public enum PullRequestDetailLogic {
         }
     }
 
+    /// `isFileDiffCollapsed` (4928 client-runtime pullRequestDiffFold.ts:6-13, #37605): the reader's own fold wins.
+    /// Otherwise the toolbar or the `diffFilesCollapsed` default decides, and with neither a Viewed file folds,
+    /// as GitHub does. `folded` nil means no toolbar choice and the setting off.
+    public static func isFileDiffCollapsed(_ path: String, folded: Bool?, choices: [String: Bool], viewed: Bool) -> Bool {
+        choices[path] ?? (folded ?? viewed)
+    }
+
     /// `getFileViewedRange` (pullRequestDiff.logic.ts:43-53, T3 3824 #26349): a shift-click marks every file from the
     /// last one toggled to this one; without that anchor in the list, only this file.
     public static func viewedRange(_ paths: [String], path: String, anchor: String?) -> [String] {
