@@ -115,8 +115,11 @@ private final class FlippedView: NSView {
 /// One `ComposerCommandMenuItem` row.
 private final class MenuRowView: DSView {
     let item: ComposerMenuItem
-    var isActive = false { didSet { if isActive != oldValue { needsDisplay = true; restyle() } } }
+    var isActive = false { didSet { if isActive != oldValue { needsDisplay = true; restyle(); syncDescriptionTip() } } }
     var onHover: (() -> Void)?
+    /// The full description over a cut-off one on the active row (#27414, ComposerCommandMenu.tsx:210-218, 282-295
+    /// at 4928: a tooltip held open while the row is active), built the first time it is needed.
+    private var descriptionTip: TooltipController?
     var onClick: (() -> Void)?
     private var icon: NSView?
     private let label = glassLabel(font: DSFont.ui(12, weight: .medium), color: Themed.color(\.foreground), lineHeight: 16)
@@ -199,6 +202,15 @@ private final class MenuRowView: DSView {
         x += prefixWidth + labelWidth + 8
         if let badge { right = badge.frame.minX - 8 }
         detail.frame = NSRect(x: x, y: midY - 8, width: max(0, right - x), height: 16)
+        syncDescriptionTip()
+    }
+
+    private func syncDescriptionTip() {
+        let cut = isActive && !detail.text.isEmpty && detail.frame.width > 0 && detail.textWidth > detail.frame.width + 0.5
+        guard cut || descriptionTip != nil else { return }
+        let tip = descriptionTip ?? TooltipController.attach(to: detail, text: detail.text, delay: 0)
+        descriptionTip = tip
+        if cut { tip.show(instant: true) } else { tip.hide() }
     }
 
     private func restyle() {
