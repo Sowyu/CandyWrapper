@@ -363,12 +363,12 @@ final class UsagePoolSectionView: DSView, SettingsGroupRow {
         addSubview(title)
         let color = UsageStyle.barColor(driver: pool.driver)
         cards = UsageLimitsLogic.displayWindows(pool).map { w in
-            let details = pool.driver == "cursor" ? UsageLimitsLogic.cursorWindowDetails(w.id) : nil
+            let details = pool.driver == "cursor" ? UsageLimitsLogic.cursorWindowDetails(w.id, pool: pool) : nil
             let status = owner.model.resetStatus.flatMap { s -> (UsageLimitAccount, String)? in
                 w.columns.first { $0.account.key == s.accountKey }.map { ($0.account, s.text) }
             }
             let card = UsagePoolCardView(window: w, color: color, nowMs: nowMs, label: details?.label, description: details?.description,
-                                         resetStatus: status)
+                                         resetStatus: status, hidesTitle: details != nil && details?.label == nil)
             card.onUseReset = { [weak owner] a, c in owner?.onUseReset?(a, c) }
             return card
         }
@@ -423,9 +423,13 @@ final class UsagePoolCardView: BoxView, SettingsGroupRow {
     private let resetStatus: TextBlockView?
     var onUseReset: ((UsageLimitAccount, UsageLimitsLogic.ResetChoice?) -> Void)?
 
+    /// UsageLimitsPooled.tsx (#34421): a Cursor pool whose Overall only repeats one figure shows no title.
+    private let hidesTitle: Bool
+
     init(window w: UsageLimitPoolWindow, color: NSColor, nowMs: Int64, label: String?, description: String?,
-         resetStatus status: (account: UsageLimitAccount, text: String)? = nil) {
+         resetStatus status: (account: UsageLimitAccount, text: String)? = nil, hidesTitle: Bool = false) {
         pool = w
+        self.hidesTitle = hidesTitle
         resetStatus = status.map { s in
             let name = s.account.displayName ?? UsageProviderLabels.driverLabel(s.account.driver)
             let t = TextBlockView()
@@ -474,7 +478,8 @@ final class UsagePoolCardView: BoxView, SettingsGroupRow {
     private func barWidth(_ width: CGFloat) -> CGFloat { twoColumns(width) ? width - 32 - 176 - 24 : width - 32 }
     /// `@2xl/pool`: labeled segments from a 672pt bar.
     private func wide(_ width: CGFloat) -> Bool { barWidth(width) >= 672 }
-    private var leftHeight: CGFloat { 20 + 4 + 36 + (refill == nil ? 0 : 4 + 16) }
+    private var titleHeight: CGFloat { hidesTitle ? 0 : 20 + 4 }
+    private var leftHeight: CGFloat { titleHeight + 36 + (refill == nil ? 0 : 4 + 16) }
 
     private func barHeight(_ width: CGFloat) -> CGFloat {
         (wide(width) ? 32 : 20 + CGFloat(legend.count) * (28 + 4)) + statusHeight(width)
@@ -498,12 +503,13 @@ final class UsagePoolCardView: BoxView, SettingsGroupRow {
         let bh = barHeight(width)
         let rowH = two ? max(leftHeight, bh) : leftHeight
         let leftY: CGFloat = 16 + (two ? (rowH - leftHeight) / 2 : 0)
+        title.isHidden = hidesTitle
         title.frame = NSRect(x: 16, y: leftY, width: min(176, ceil(title.textWidth) + 1), height: 20)
-        let bw = ceil(big.textWidth) + 1
-        big.frame = NSRect(x: 16, y: leftY + 24, width: bw, height: 36)
-        left.frame = NSRect(x: 16 + bw + 8, y: leftY + 24 + 12, width: ceil(left.textWidth) + 1, height: 20)
-        pace?.frame = NSRect(x: left.frame.maxX + 8, y: leftY + 24 + 15, width: 14, height: 14)
-        refill?.frame = NSRect(x: 16, y: leftY + 64, width: ceil(refill!.textWidth) + 1, height: 16)
+        let bw = ceil(big.textWidth) + 1, ty = leftY + titleHeight
+        big.frame = NSRect(x: 16, y: ty, width: bw, height: 36)
+        left.frame = NSRect(x: 16 + bw + 8, y: ty + 12, width: ceil(left.textWidth) + 1, height: 20)
+        pace?.frame = NSRect(x: left.frame.maxX + 8, y: ty + 15, width: 14, height: 14)
+        refill?.frame = NSRect(x: 16, y: ty + 40, width: ceil(refill!.textWidth) + 1, height: 16)
         let bx: CGFloat = two ? 16 + 176 + 24 : 16
         let by: CGFloat = two ? 16 + (rowH - bh) / 2 : 16 + leftHeight + 12
         let bwidth = barWidth(width)
