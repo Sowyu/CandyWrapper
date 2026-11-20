@@ -112,6 +112,36 @@ struct ConnectionTimingTests {
         }
     }
 
+    /// The shell resume after an HTTP shell, with and without `knownProjectIdentities` (state/shell.ts:703-707):
+    /// bytes and time until `synchronized`.
+    @Test(.timeLimit(.minutes(2)))
+    func shellResumeIdentities() async throws {
+        let (descriptorData, _) = try await Self.rawGet("/.well-known/t3/environment")
+        let descriptor = try JSONDecoder().decode(EnvironmentDescriptor.self, from: descriptorData)
+        let flags = descriptor.capabilities
+        let (body, _) = try await Self.rawGet(Self.shellPath(flags))
+        let http = try JSONDecoder().decode(ShellHttpSnapshot.self, from: body)
+        guard let digest = http.projectIdentities else { return }
+        var samples: [String: [[String: Double]]] = ["without": [], "with": []]
+        for _ in 0..<Self.runs {
+            for known in [false, true] {
+                let (connection, socket) = try await Self.open()
+                var payload: [String: JSONValue] = ["afterSequence": .number(Double(http.snapshot.snapshotSequence)),
+                                                    "requestCompletionMarker": .bool(true)]
+                if flags["shellThreadFamilies"]?.boolValue == true { payload["omitIdleSubagents"] = .bool(true) }
+                if flags["shellOlderSettled"]?.boolValue == true { payload["omitOlderSettled"] = .bool(true) }
+                if known { payload["knownProjectIdentities"] = .string(digest) }
+                let t0 = ContinuousClock.now
+                for try await value in await connection.stream("orchestration.subscribeShell", payload: .object(payload)) {
+                    if value["kind"]?.stringValue == "synchronized" { break }
+                }
+                samples[known ? "with" : "without"]!.append(["ms": (ContinuousClock.now - t0).milliseconds, "bytes": Double(socket.received)])
+                await connection.close()
+            }
+        }
+        for (label, values) in samples { Self.report("shell-resume-identities", [:], values, name: label) }
+    }
+
     // MARK: Thread open
 
     /// ThreadSession's open: the bounded HTTP snapshot, then `subscribeThread` from its sequence until
@@ -222,8 +252,12 @@ struct ConnectionTimingTests {
     func halfOpenRecovery() async throws {
         guard let proxy = Self.env["CW_TIMING_PROXY_URL"].flatMap(URL.init(string:)), let control = Self.env["CW_TIMING_PROXY_CONTROL"] else { return }
         let idleWait = Double(Self.env["CW_TIMING_IDLE_WAIT"] ?? "") ?? 30
-        let only = Self.env["CW_TIMING_SCENARIOS"].map { Set($0.split(separator: ",").map(String.init)) }
-        for scenario in ["idle", "turnRunning", "applicationActive", "systemWake", "networkPathChanged", "retryNow"] where only?.contains(scenario) ?? true {
+        let scenarios = ["idle", "turnRunning", "applicationActive", "systemWake", "networkPathChanged", "retryNow", "inputAfterIdle", "offlineReport"]
+        // Input comes this long after the freeze, past the 15 s quiet threshold, as a user who comes back to a window.
+        let inputAfter = Double(Self.env["CW_TIMING_INPUT_AFTER"] ?? "") ?? 20
+        // `CW_TIMING_SCENARIOS` lists the scenarios in order, repeats allowed.
+        let order = Self.env["CW_TIMING_SCENARIOS"].map { $0.split(separator: ",").map(String.init).filter(scenarios.contains) } ?? scenarios
+        for scenario in order {
             try "open".write(toFile: control, atomically: true, encoding: .utf8)
             try await Task.sleep(for: .milliseconds(150))
             let http = EnvironmentHTTP(baseURL: proxy)
@@ -234,8 +268,18 @@ struct ConnectionTimingTests {
             let generation = await supervisor.state.generation
             try "freeze".write(toFile: control, atomically: true, encoding: .utf8)
             try await Task.sleep(for: .milliseconds(150))
-            let frozenAt = ContinuousClock.now
+            var frozenAt = ContinuousClock.now
             switch scenario {
+            case "inputAfterIdle":
+                // The window's input hook, on a gate of its own so other tests' supervisors stay out of it.
+                try await Task.sleep(for: .seconds(inputAfter))
+                frozenAt = ContinuousClock.now
+                let gate = await InputQuietGate()
+                await gate.register(supervisor)
+                await gate.check(at: ProcessInfo.processInfo.systemUptime)
+            case "offlineReport":
+                // NWPathMonitor says offline while the socket is dead and the host is reachable.
+                await supervisor.networkChanged(online: false)
             case "applicationActive": await supervisor.wakeup(.applicationActive)
             case "systemWake": await supervisor.wakeup(.systemWake)
             case "networkPathChanged": await supervisor.networkPathChanged()
@@ -252,11 +296,36 @@ struct ConnectionTimingTests {
                 if state.phase == .connected, state.generation > generation { back = (ContinuousClock.now - frozenAt).milliseconds; break }
                 try await Task.sleep(for: .milliseconds(20))
             }
-            Self.report("half-open", ["scenario": Double(["idle", "turnRunning", "applicationActive", "systemWake", "networkPathChanged", "retryNow"].firstIndex(of: scenario)!)],
+            Self.report("half-open", ["scenario": Double(scenarios.firstIndex(of: scenario)!)],
                         [["noticed": noticed, "reconnected": back, "limit": idleWait * 1000]], name: scenario)
             await supervisor.disconnect()
         }
         try "open".write(toFile: control, atomically: true, encoding: .utf8)
+    }
+
+    /// Route checks (connection-2): how long the check takes to find the route to switch to. `CW_TIMING_PROXY_URL`
+    /// plays the preferred LAN route and `CW_TIMING_URL` the fallback; 10.255.255.1 is a LAN address on a network
+    /// the laptop left, which never answers.
+    @Test(.timeLimit(.minutes(5)))
+    func routeChoice() async throws {
+        guard let proxy = Self.env["CW_TIMING_PROXY_URL"].flatMap(URL.init(string:)) else { return }
+        let gone = URL(string: "http://10.255.255.1:3773")!
+        let answers: @Sendable (URL) async -> Bool = { route in
+            let session = URLSession(configuration: EnvironmentHTTP.defaultSession.configuration)
+            defer { session.finishTasksAndInvalidate() }
+            var http = EnvironmentHTTP(baseURL: route, session: session)
+            http.timeout = 2.5
+            return (try? await http.descriptor()) != nil
+        }
+        for (label, routes) in [("comingHome", [proxy]), ("leftHome", [gone, Self.baseURL]), ("leftHomeTwoDeadRoutes", [gone, URL(string: "http://10.255.255.2:3773")!, Self.baseURL])] {
+            var samples: [[String: Double]] = []
+            for _ in 0..<Self.runs {
+                let started = ContinuousClock.now
+                let outcome = await RouteCheck.check(routes, check: answers)
+                samples.append(["decided": (ContinuousClock.now - started).milliseconds, "found": outcome.first == nil ? 0 : 1])
+            }
+            Self.report("route-choice", [:], samples, name: label)
+        }
     }
 
     // MARK: Helpers
@@ -267,7 +336,10 @@ struct ConnectionTimingTests {
         if env["CW_TIMING_BASELINE"] == "1" {
             return .init(connect: ConnectionSupervisor.directConnector(http: http, environmentId: nil, identity: identity, token: { token }))
         }
-        return .direct(http: http, environmentId: nil, identity: identity, token: { token })
+        var deps = ConnectionSupervisor.Dependencies.direct(http: http, environmentId: nil, identity: identity, token: { token })
+        // `CW_TIMING_REMOTE=1` times the proxy as a remote host: a silent socket waits 2.5 s before it is replaced.
+        if env["CW_TIMING_REMOTE"] == "1" { deps.answersQuickly = false }
+        return deps
     }
 
     static func open() async throws -> (RPCConnection, CountingSocket) {
