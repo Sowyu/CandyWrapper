@@ -51,7 +51,7 @@ public final class ThreadImageGalleryView: DSView {
     private let reveal = ButtonView("Reveal in Finder", icon: .folderOpen, variant: .ghost, size: .xs)
 
     /// The picture shown large, or nil for the grid.
-    private var large: Int? { didSet { if large != oldValue { reload() } } }
+    var large: Int? { didSet { if large != oldValue { reload() } } }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: NSRect(origin: .zero, size: Self.size))
@@ -130,7 +130,6 @@ public final class ThreadImageGalleryView: DSView {
                         loader: Self.loader(image, onHash: { [weak self] hash in self?.onHash?(image, hash) }) { [weak self] in self?.onFailed?(image) },
                         preview: ImageDecodeCache.preview(for: image.pixelKey), loadingText: "Loading…")
             detail.text = Self.caption(image, long: true) + " · " + Self.name(image)
-            picture.toolTip = image.filePath
         } else {
             grid.images = images
         }
@@ -315,7 +314,6 @@ final class GalleryCellView: ControlView {
     func show(_ image: GalleryImage, loader: @escaping AsyncImageView.Loader) {
         thumb.set(key: image.pixelKey, fallbackText: "", loader: loader, loadingText: "")
         caption.text = ThreadImageGalleryView.caption(image)
-        toolTip = image.filePath ?? ThreadImageGalleryView.name(image)
         setAccessibilityLabel(ThreadImageGalleryView.name(image) + ", " + caption.text)
     }
 

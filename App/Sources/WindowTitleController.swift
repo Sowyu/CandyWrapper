@@ -11,7 +11,8 @@ import T3Store
 final class WindowTitleController {
     private weak var window: NSWindow?
     private weak var sidebar: SidebarContentView?
-    private let openThreadId: () -> ThreadId?
+    /// The open thread, nil while a route without one (Settings, Issues, Pull Requests, Usage) shows.
+    var openThreadId: () -> ThreadId?
     private var settingsObserver: Int?
 
     init(window: NSWindow, sidebar: SidebarContentView, environments: Environments, openThreadId: @escaping () -> ThreadId?) {

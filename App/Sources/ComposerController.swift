@@ -1803,6 +1803,7 @@ final class ComposerController {
         syncAttachmentViews()
         composer.editingQueued = queuedEdit != nil
         panel.model.optimisticMessages = optimistic
+        panel.queue.threadId = panel.isDraft ? nil : openThreadId
         panel.queue.state = target == nil || panel.isDraft ? ComposerLogic.QueueState()
             : ComposerLogic.QueueState(projection: projection, optimistic: optimistic,
                                        canStartQueuedRun: targetEnvironmentId.flatMap { capabilities[$0]?.queuedRunStart } ?? false,

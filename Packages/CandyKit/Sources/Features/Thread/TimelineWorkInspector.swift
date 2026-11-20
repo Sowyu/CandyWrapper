@@ -362,7 +362,6 @@ final class WorkDetailView: DSView {
     private var cache: (width: CGFloat, images: [String], laid: [Laid])?
     /// Tool output images by key, while the view is shown. Hiding or closing the row releases them.
     private var imageViews: [String: AsyncImageView] = [:]
-    private var imageTooltips: [String: TooltipController] = [:]
     private var blockScrollers: [Int: NSScrollView] = [:]
     private var buttons: [Int: ButtonView] = [:]
     private var icons: [Int: IconView] = [:]
@@ -480,10 +479,9 @@ final class WorkDetailView: DSView {
             let failed = MarkdownImages.failed.contains(image.key)
             view.set(key: image.key, fallbackText: failed ? MarkdownImages.unavailableLabel(image.alt) : "", loader: image.loader)
             view.setAccessibilityLabel("Preview " + image.alt)
-            imageTooltips[image.key]?.text = image.reference?.tooltip ?? ""
         }
         for (key, view) in imageViews where !kept.contains(key) {
-            view.removeFromSuperview(); imageViews[key] = nil; imageTooltips[key] = nil
+            view.removeFromSuperview(); imageViews[key] = nil
         }
         window?.invalidateCursorRects(for: self)
     }
@@ -496,8 +494,7 @@ final class WorkDetailView: DSView {
         view.fallback.color = Themed.color(\.mutedForeground)
         view.fallback.font = DSFont.ui(12)
         view.setAccessibilityRole(.button)
-        // The file's path in a code tooltip (MediaActions.tsx), as Markdown images do.
-        if image.reference != nil { imageTooltips[image.key] = TooltipController.attach(to: view, text: "", variant: .code) }
+        // No path tooltip on hover, unlike MediaActions.tsx:248-276, at the user's request (2026-11-21).
         view.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(expandImage(_:))))
         view.onLoad = { [weak self, weak view] in
             // A failed load keeps its slot and says so (ChatMarkdown.tsx:1497-1520).
@@ -529,7 +526,6 @@ final class WorkDetailView: DSView {
     private func releaseImages() {
         imageViews.values.forEach { $0.removeFromSuperview() }
         imageViews = [:]
-        imageTooltips = [:]
     }
 
     /// The tool output is not in a Markdown gallery, so the preview holds this one image (markdownImageGallery.ts:11-50).

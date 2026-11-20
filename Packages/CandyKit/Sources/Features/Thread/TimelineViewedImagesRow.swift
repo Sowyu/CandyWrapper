@@ -13,7 +13,6 @@ final class ViewedImagesRowView: TimelineRowView {
 
     private var images: [WorkImage] = []
     private var imageViews: [String: AsyncImageView] = [:]
-    private var tooltips: [String: TooltipController] = [:]
     private var contentVisible = true
 
     override func configure(_ item: TimelineItem) {
@@ -73,10 +72,9 @@ final class ViewedImagesRowView: TimelineRowView {
             view.requestedSide = Int((max(min(bounds.width, MarkdownStyle.imageMaxWidth), Self.maxHeight) * (window?.backingScaleFactor ?? 2)).rounded(.up))
             view.set(key: image.key, fallbackText: "", loader: image.loader)
             view.setAccessibilityLabel("Preview " + image.alt)
-            tooltips[image.key]?.text = image.reference?.tooltip ?? ""
         }
         for (key, view) in imageViews where !kept.contains(key) {
-            view.removeFromSuperview(); imageViews[key] = nil; tooltips[key] = nil
+            view.removeFromSuperview(); imageViews[key] = nil
         }
         window?.invalidateCursorRects(for: self)
     }
@@ -88,7 +86,7 @@ final class ViewedImagesRowView: TimelineRowView {
         view.fallback.color = Themed.color(\.mutedForeground)
         view.fallback.font = DSFont.ui(12)
         view.setAccessibilityRole(.button)
-        if image.reference != nil { tooltips[image.key] = TooltipController.attach(to: view, text: "", variant: .code) }
+        // No path tooltip on hover, at the user's request (2026-11-21). Right-click still reveals and copies the file.
         view.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(expand(_:))))
         view.onLoad = { [weak self, weak view] in
             guard let self, let view, let key = view.key, self.imageViews[key] === view else { return }
@@ -146,6 +144,5 @@ final class ViewedImagesRowView: TimelineRowView {
     private func release() {
         imageViews.values.forEach { $0.removeFromSuperview() }
         imageViews = [:]
-        tooltips = [:]
     }
 }

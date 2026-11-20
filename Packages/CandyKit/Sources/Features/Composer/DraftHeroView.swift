@@ -7,7 +7,7 @@ import T3Store
 /// at 30/36, weight 400, `tracking-tight`, centered, with the project as a picker (weight 500,
 /// dotted underline in `foreground/30`, solid on hover), then "or start without a project" in
 /// 14px medium `muted`, 8px below. J-composer-visuals section 9.
-public final class DraftHeroView: DSView {
+public final class DraftHeroView: DSView, HoverSyncPointerClient {
     /// 36 + 8 + 24.
     public static let height: CGFloat = 68
 
@@ -29,11 +29,11 @@ public final class DraftHeroView: DSView {
     /// A machine offers a scratch folder (`scratchWorkspaceRoot`); without one T3 leaves the line out.
     public var offersScratch = true { didSet { if offersScratch != oldValue { needsDisplay = true; window?.invalidateCursorRects(for: self) } } }
 
-    private let projectAnchor = NSView()
-    private var hovered = false { didSet { if hovered != oldValue { needsDisplay = true } } }
+    let projectAnchor = NSView()
+    private(set) var hovered = false { didSet { if hovered != oldValue { needsDisplay = true } } }
     /// The "or start without a project" button's extent, empty while it is not drawn.
-    private var scratchLink = NSRect.zero
-    private var scratchHovered = false { didSet { if scratchHovered != oldValue { needsDisplay = true } } }
+    private(set) var scratchLink = NSRect.zero
+    private(set) var scratchHovered = false { didSet { if scratchHovered != oldValue { needsDisplay = true } } }
     private var tracking: NSTrackingArea?
 
     public override var wantsUpdateLayer: Bool { false }
@@ -225,19 +225,29 @@ public final class DraftHeroView: DSView {
         tracking = area
     }
 
-    private func overProject(_ event: NSEvent) -> Bool {
-        projectAnchor.frame.contains(convert(event.locationInWindow, from: nil))
+    private func overProject(_ event: NSEvent) -> Bool { overProject(convert(event.locationInWindow, from: nil)) }
+    private func overProject(_ point: NSPoint) -> Bool { projectAnchor.frame.contains(point) }
+
+    private func overScratchLink(_ event: NSEvent) -> Bool { overScratchLink(convert(event.locationInWindow, from: nil)) }
+    private func overScratchLink(_ point: NSPoint) -> Bool {
+        !capy && !isScratch && onStartWithoutProject != nil && scratchLink.contains(point)
     }
 
-    private func overScratchLink(_ event: NSEvent) -> Bool {
-        !capy && !isScratch && onStartWithoutProject != nil && scratchLink.contains(convert(event.locationInWindow, from: nil))
+    /// The two links' hover inside the headline's area. HoverSync owns the area's enter and exit, and AppKit sends
+    /// `mouseMoved` only to an area it considers entered, so a real window never called `mouseMoved` here; HoverSync
+    /// forwards each pointer move to entered pointer clients instead (HoverSync.swift).
+    func hover(at point: NSPoint) {
+        hovered = !capy && overProject(point)
+        scratchHovered = overScratchLink(point)
     }
-
-    public override func mouseMoved(with event: NSEvent) {
-        hovered = !capy && overProject(event)
-        scratchHovered = overScratchLink(event)
+    private var pointerInside = false
+    public func hoverPointerMoved() {
+        guard pointerInside, let window else { return }
+        hover(at: convert(window.mouseLocationOutsideOfEventStream, from: nil))
     }
-    public override func mouseExited(with event: NSEvent) { hovered = false; scratchHovered = false }
+    public override func mouseEntered(with event: NSEvent) { pointerInside = true; hover(at: convert(event.locationInWindow, from: nil)) }
+    public override func mouseMoved(with event: NSEvent) { hover(at: convert(event.locationInWindow, from: nil)) }
+    public override func mouseExited(with event: NSEvent) { pointerInside = false; hovered = false; scratchHovered = false }
     public override func mouseDown(with event: NSEvent) {
         if !capy, overProject(event) { onPickProject?(projectAnchor) }
         else if overScratchLink(event) { scratchHovered = false; onStartWithoutProject?() }
