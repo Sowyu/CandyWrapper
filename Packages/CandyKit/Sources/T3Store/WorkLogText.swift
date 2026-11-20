@@ -89,17 +89,6 @@ private let failurePattern = try! NSRegularExpression(pattern: [
     #"<exited with exit code\s+[1-9]\d*\s*>"#, #"exit(?:ed)? with exit code\s+[1-9]\d*"#, #"exit code\s*[:\s]\s*[1-9]\d*\b"#,
 ].joined(separator: "|"), options: [.caseInsensitive])
 
-/// `shouldCollapseUserMessage` (MessagesTimeline.logic.ts:2286-2311): long user messages clip
-/// behind an expand control.
-///
-/// // ponytail: assistant citation chips are not replaced by their label first; port
-/// `collectAssistantCitations` when user messages quote citations.
-public func shouldCollapseUserMessage(_ text: String) -> Bool {
-    let visible = text.replacing(/!?\[([^\]\n]*)\]\((?:<[^>\n]*>|[^\s)]*)\)/) { String($0.1) }
-    guard !visible.jsTrimmed.isEmpty else { return false }
-    return visible.utf16.count > 600 || visible.split(separator: "\n", omittingEmptySubsequences: false).count > 8
-}
-
 /// `liveThoughtLine` (work-log/presentation.ts:763-776): the first sentence of a reasoning
 /// text, or its leading bold heading.
 ///

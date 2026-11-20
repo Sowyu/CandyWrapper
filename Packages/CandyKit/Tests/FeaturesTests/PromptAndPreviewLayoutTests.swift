@@ -20,7 +20,7 @@ struct PromptAndPreviewLayoutTests {
     }
 
     @Test func imagesNeverConsumeThePromptsCollapsedHeight() throws {
-        let text = (1...16).map { "Prompt line \($0): keep this text below the attached images." }.joined(separator: "\n")
+        let text = (1...24).map { "Prompt line \($0): keep this text below the attached images." }.joined(separator: "\n")
         for width: CGFloat in [320, 736] {
             for count in [1, 2, 5, 10] {
                 var plain = Self.item(images: 0, text: text)

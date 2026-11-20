@@ -189,7 +189,8 @@ final class UserMessageRowView: TimelineRowView {
     private let openLink = FoldedMessageLinkView()
     private var fold: UserMessagePresentation.Attribution?
     private var text = ""
-    private var collapsible = false
+    /// A fold can show: not a folded attribution, and some visible text. Whether it does depends on the laid-out height.
+    private var foldable = false
     /// The image grid and file rows above the text (MessagesTimeline.tsx:2402-2490).
     private let attachments = UserMessageAttachmentsView()
     /// Images and videos outside the bubble, and files sent without words (TimelineUserMessageRow.tsx:519-575 at 4928).
@@ -341,9 +342,8 @@ final class UserMessageRowView: TimelineRowView {
         if bubble.fill !== fill { bubble.fill = fill }
         markdown.isHidden = markdown.isHidden || shape.mediaOnly || shape.fileCardsOnly || shape.audioOnly
         // A folded message is never collapsible (`collapsible={!folded}`).
-        collapsible = fold == nil && shouldCollapseUserMessage(text)
+        foldable = fold == nil && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         toggle.title = item.ui.messageExpanded ? "Show less" : "Show full message"
-        toggle.isHidden = !collapsible
         time.text = TL.dayAwareTimestamp(m.createdAt, now: context.now())
         time.toolTip = nil
         // A burst of your messages shows its steer label once (TimelineUserMessageRow.tsx:888-895 at 4928).
@@ -371,7 +371,7 @@ final class UserMessageRowView: TimelineRowView {
             return nil
         }
         guard let rect = markdown.activeFindRect() else { return nil }
-        if collapsible, item?.ui.messageExpanded != true, rect.maxY > Self.collapsedHeight - Self.fade,
+        if metrics(bounds.width).collapsible, item?.ui.messageExpanded != true, rect.maxY > Self.collapsedHeight - Self.fade,
            case .message(let m, _, _, _, _, _)? = item?.row.kind {
             context.model?.toggleMessage(m.id.rawValue)
             return nil
@@ -433,40 +433,47 @@ final class UserMessageRowView: TimelineRowView {
     private var attributionSpace: CGFloat { switchSpace + (attribution.isHidden ? 0 : 16 + 4) }
     private var markerSpace: CGFloat { attributionSpace + (marker.isHidden ? 0 : UserIntentMarkerView.height + 4) }
 
-    private func metrics(_ width: CGFloat) -> (bubble: CGFloat, attachments: CGFloat, body: CGFloat, full: CGFloat) {
+    /// `useTallEnoughToFold` (4928 useTallEnoughToFold.ts, #34306): a fold shows only when the unclipped text is at
+    /// least twice the folded height, so opening it always at least doubles what was on screen.
+    static func tallEnoughToFold(_ height: CGFloat) -> Bool { height >= collapsedHeight * 2 }
+
+    private func metrics(_ width: CGFloat) -> (bubble: CGFloat, attachments: CGFloat, body: CGFloat, full: CGFloat, collapsible: Bool) {
         let maxBubble = width * 0.8
         if fold != nil {
             // Folded: the header's max-content width. Open: `w-full`, the body under the header in `px-3 pb-3`.
             // ponytail: no `max-h-96 overflow-auto` on the open body, so a long folded prompt shows in full; add an inner scroll view if that bothers
-            guard item?.ui.messageExpanded == true else { return (min(maxBubble, foldHeader.naturalWidth), 0, 0, 0) }
+            guard item?.ui.messageExpanded == true else { return (min(maxBubble, foldHeader.naturalWidth), 0, 0, 0, false) }
             let inner = maxBubble - Self.padding * 2
             let full = markdown.height(forWidth: inner)
-            return (maxBubble, attachments.height(forWidth: inner), full, full)
+            return (maxBubble, attachments.height(forWidth: inner), full, full, false)
         }
         if shape.mediaOnly {
             let size = mediaBlock.size(maxWidth: maxBubble)
-            return (size.width, size.height, 0, 0)
+            return (size.width, size.height, 0, 0, false)
         }
         if shape.fileCardsOnly {
             let n = CGFloat(fileCards.count)
-            return (min(maxBubble, UserFileCardView.width), n * UserFileCardView.height + max(0, n - 1) * 4, 0, 0)
+            return (min(maxBubble, UserFileCardView.width), n * UserFileCardView.height + max(0, n - 1) * 4, 0, 0, false)
         }
         if shape.audioOnly {
             let w = min(maxBubble, attachments.naturalWidth)
-            return (w, attachments.height(forWidth: w) - 8, 0, 0)
+            return (w, attachments.height(forWidth: w) - 8, 0, 0, false)
         }
         let inner = maxBubble - Self.padding * 2
         // `fit-content`: the max-content width (unwrapped) if it fits, else the full 80%.
         let natural = max(markdown.layout(forWidth: 100_000).contentWidth, attachments.naturalWidth)
         var bubbleWidth = natural > inner ? maxBubble : min(maxBubble, ceil(natural * 64) / 64 + Self.padding * 2)
-        if collapsible { bubbleWidth = max(bubbleWidth, min(maxBubble, toggle.intrinsicContentSize.width - 4 + Self.padding * 2)) }
+        // The bubble is as wide as its toggle when it folds. The text is measured at that width, as T3 measures it in the bubble.
+        let withToggle = max(bubbleWidth, min(maxBubble, toggle.intrinsicContentSize.width - 4 + Self.padding * 2))
+        let collapsible = foldable && !markdown.isHidden && Self.tallEnoughToFold(markdown.height(forWidth: withToggle - Self.padding * 2))
+        if collapsible { bubbleWidth = withToggle }
         // MessagesTimeline.tsx:2420-2528 puts attachments before CollapsibleUserMessageBody.
         // Only the prompt text uses its 176pt fold; images always keep their full height.
         let attachmentsHeight = attachments.height(forWidth: bubbleWidth - Self.padding * 2)
         let full = markdown.height(forWidth: bubbleWidth - Self.padding * 2)
         let expanded = item?.ui.messageExpanded ?? false
         let body = collapsible && !expanded ? min(full, Self.collapsedHeight) : full
-        return (bubbleWidth, attachmentsHeight, body, full)
+        return (bubbleWidth, attachmentsHeight, body, full, collapsible)
     }
 
     /// The bubble's hairline, for tests.
@@ -481,7 +488,7 @@ final class UserMessageRowView: TimelineRowView {
             let header = markerSpace + FoldedMessageHeaderView.height
             return item?.ui.messageExpanded == true ? header + m.attachments + m.body + Self.padding + 4 + 24 + 16 : header + 16
         }
-        let footer: CGFloat = collapsible ? 6 + 24 : 0
+        let footer: CGFloat = m.collapsible ? 6 + 24 : 0
         let actions: CGFloat = floatsActions(width) ? 0 : 4 + 24
         let pad = shape.drawsBubble ? Self.padding * 2 : 0
         return markerSpace + mediaAboveSpace(width) + m.attachments + m.body + footer + pad + actions + bottomPadding
@@ -496,7 +503,8 @@ final class UserMessageRowView: TimelineRowView {
         super.layout()
         let width = bounds.width
         let m = metrics(width)
-        let footer: CGFloat = collapsible ? 6 + 24 : 0
+        let footer: CGFloat = m.collapsible ? 6 + 24 : 0
+        toggle.isHidden = !m.collapsible
         // A folded message's body sits under its 36px header with `px-3 pb-3`. Media, file cards and a lone voice
         // note have no padding.
         let pad = shape.drawsBubble ? Self.padding : 0
@@ -529,7 +537,7 @@ final class UserMessageRowView: TimelineRowView {
             card.frame = NSRect(x: width - m.bubble, y: cardY, width: m.bubble, height: UserFileCardView.height)
             cardY += UserFileCardView.height + 4
         }
-        let clipped = collapsible && m.body < m.full
+        let clipped = m.collapsible && m.body < m.full
         CATransaction.begin(); CATransaction.setDisableActions(true)
         if clipped {
             // `linear-gradient(to bottom, black calc(100% - 1.75rem), transparent)` over the clamped body.
@@ -594,7 +602,6 @@ final class WorkflowOpeningRowView: TimelineRowView {
     private let markdown = MarkdownView(frame: .zero)
     private let toggle = ButtonView("Show full script", variant: .ghostMuted, size: .xs)
     private let fadeMask = CAGradientLayer()
-    private var collapsible = false
     /// One phase heading (`px-2 pb-0.5 text-2xs font-medium`) with its "settled/total", then its member rows.
     private struct Section { let heading: LabelView?; let count: LabelView?; let members: [SubagentCardLinkView] }
     private var sections: [Section] = []
@@ -641,9 +648,7 @@ final class WorkflowOpeningRowView: TimelineRowView {
         setAccessibilityLabel("Workflow started: \(headline.title)")
         markdown.cwd = nil
         markdown.document = context.document(item.id, Self.scriptMarkdown(m.text), lineBreaks: false)
-        collapsible = shouldCollapseUserMessage(m.text)
         toggle.title = item.ui.messageExpanded ? "Show less" : "Show full script"
-        toggle.isHidden = !collapsible
         toggle.setAccessibilityExpanded(item.ui.messageExpanded)
         needsLayout = true
     }
@@ -680,7 +685,7 @@ final class WorkflowOpeningRowView: TimelineRowView {
     /// A match below the fold opens it (`findRevealRef`, :204).
     override func activeFindRect() -> CGRect? {
         guard let rect = markdown.activeFindRect() else { return nil }
-        if collapsible, item?.ui.messageExpanded != true, rect.maxY > UserMessageRowView.collapsedHeight - UserMessageRowView.fade,
+        if body(bounds.width).collapsible, item?.ui.messageExpanded != true, rect.maxY > UserMessageRowView.collapsedHeight - UserMessageRowView.fade,
            case .message(let m, _, _, _, _, _)? = item?.row.kind {
             context.model?.toggleMessage(m.id.rawValue)
             return nil
@@ -706,10 +711,12 @@ final class WorkflowOpeningRowView: TimelineRowView {
         (section.heading == nil ? 0 : 16 + 2) + section.members.reduce(0) { $0 + SubagentCardLinkView.height($1.presentation!) }
     }
 
-    private func body(_ width: CGFloat) -> (shown: CGFloat, full: CGFloat) {
+    /// The script folds when it is tall enough (`useTallEnoughToFold`, WorkflowOpeningBlock.tsx at 4928, #34306).
+    private func body(_ width: CGFloat) -> (shown: CGFloat, full: CGFloat, collapsible: Bool) {
         let full = markdown.height(forWidth: max(0, width - 8))
+        let collapsible = UserMessageRowView.tallEnoughToFold(full)
         let folded = collapsible && item?.ui.messageExpanded != true
-        return (folded ? min(full, UserMessageRowView.collapsedHeight) : full, full)
+        return (folded ? min(full, UserMessageRowView.collapsedHeight) : full, full, collapsible)
     }
 
     /// Where the script starts: the header, then each section after `gap-3`.
@@ -718,7 +725,8 @@ final class WorkflowOpeningRowView: TimelineRowView {
     }
 
     override func height(forWidth width: CGFloat) -> CGFloat {
-        scriptTop(width) + body(width).shown + (collapsible ? 24 : 0) + 2 + 16
+        let b = body(width)
+        return scriptTop(width) + b.shown + (b.collapsible ? 24 : 0) + 2 + 16
     }
 
     override func layout() {
@@ -764,6 +772,7 @@ final class WorkflowOpeningRowView: TimelineRowView {
         }
         CATransaction.commit()
         let size = toggle.intrinsicContentSize
+        toggle.isHidden = !b.collapsible
         toggle.frame = NSRect(x: 0, y: top + b.shown, width: size.width, height: size.height)
     }
 }

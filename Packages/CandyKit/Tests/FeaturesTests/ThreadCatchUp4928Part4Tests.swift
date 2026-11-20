@@ -49,4 +49,26 @@ struct ThreadCatchUp4928Part4Tests {
         #expect(links("```\nhttp://a.com，b\n```").isEmpty)
         #expect(MarkdownDocument.endingBareURLsAtCJKPunctuation("plain https://a.com, text") == "plain https://a.com, text")
     }
+
+    /// #34306 (useTallEnoughToFold.ts at 4928): "Show full message" appears only when the text is at least twice the
+    /// 176pt fold, however many lines or characters it has.
+    @Test func userMessagesFoldOnlyWhenOpeningDoublesThem() throws {
+        func toggleShown(_ text: String, width: CGFloat = 736) throws -> Bool {
+            let row = UserMessageRowView()
+            row.context = TimelineContext()
+            row.configure(PromptAndPreviewLayoutTests.item(images: 0, text: text))
+            row.frame = CGRect(x: 0, y: 0, width: width, height: row.height(forWidth: width))
+            row.layoutSubtreeIfNeeded()
+            let bubble = try #require(row.subviews.first { $0.subviews.contains { $0 is MarkdownView } })
+            return try #require(bubble.subviews.compactMap { $0 as? ButtonView }.first).isHidden == false
+        }
+        // Ten short lines used to fold by T3's old line count; they are under 352pt, so they no longer do.
+        #expect(try !toggleShown((1...10).map { "Line \($0)" }.joined(separator: "\n")))
+        #expect(try !toggleShown(String(repeating: "word ", count: 130)))
+        #expect(try toggleShown((1...30).map { "Line \($0)" }.joined(separator: "\n")))
+        // The same text folds in a narrow lane, where it wraps past the threshold.
+        let long = String(repeating: "word ", count: 400)
+        #expect(try toggleShown(long, width: 320))
+        #expect(UserMessageRowView.tallEnoughToFold(352) && !UserMessageRowView.tallEnoughToFold(351.5))
+    }
 }

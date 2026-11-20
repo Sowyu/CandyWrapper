@@ -1528,7 +1528,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 1a1a57376c | #22226 | thread | fix(web): start clone when destination is picked in file manager | port |
 | 1843c93e39 | #30768 | thread | fix(chat): keep scratch file links usable | port |
 | 3aea6553d3 | #18442 | thread | fix(clients): show the right app name and thread context | port |
-| a9f2d7d5f4 | #34306 | thread | fix(web): "Show full message" only appears when it at least doubles the message | left (thread-3): the fold would need the body's laid-out height (twice 176 pt) instead of shouldCollapseUserMessage in TimelineMessageRows.swift, which the on-screen agent is editing; needs a fidelity check of user messages |
+| a9f2d7d5f4 | #34306 | thread | fix(web): "Show full message" only appears when it at least doubles the message | ported (thread-4): UserMessageRowView and WorkflowOpeningRowView fold only when the laid-out text is at least 352pt; shouldCollapseUserMessage is gone |
 | b20bbc595d | #34581 | thread | fix: deliver steering after worktree setup | ported in 818d32f4: promote-to-steer on a preparing run. CW already treated preparing and starting runs as running. CW blocks sends during setup, so the planComposerTurn change is n/a |
 | b859968cab | #25866 | thread | fix(web): a pending approval is announced once, not once per queued message | port |
 | bba1c13d87 | #24313 | thread | fix(web): opening a thread dismisses its notification toasts | port |
