@@ -48,9 +48,9 @@ A blur is allocated only where this table says a surface has one: resting and fl
 
 An open thread draws one resting glass surface behind the lane the messages and the composer share, 16 wider than the lane on each side, so the picture shows around it. Assistant text, tool rows, the work log, command output, code blocks, tables and user bubbles sit on it. Code blocks, tables and user bubbles are cards on that surface. The composer, the question card and the approval card float over it as resting glass.
 
-The column's top is its frosted band: a progressive blur over the rows, solid to the header pill's centre line and easing out 16 below the tab band, with the column's fill fading the same way. Rows scroll under it and never read under the header pill. The thread's project and title sit in the band on the lane's left edge, on the pill's centre line, and hide while tabs show, since the tab names the thread.
+The rows fade out at the column's top: gone above the tab band's 52, back in full 16 below it, through the timeline's mask. Nothing runs under the header pill, and there is no header bar, which the user removed from every theme (324b6bcf). I tried a frosted band with a progressive blur first; it ended in a visible hard edge and read as a bar. The thread's project and title sit in the column's clear top on the lane's left edge, on the pill's centre line, and hide while tabs show, since the tab names the thread.
 
-I tried a stronger veil, 0.55 of the background behind the lane with the same feather, against the column. The measurements and the choice are in "Choosing the column" below.
+I tried a stronger veil, 0.55 of the background behind the lane, against the column. The choice and the measurements are in "Choosing the column" below.
 
 ## States
 
@@ -69,4 +69,17 @@ One curve, `cubic-bezier(0.23, 1, 0.32, 1)` (`Motion.curve`). Hover and press ta
 
 ## Choosing the column
 
-Filled in from the on-screen trial.
+I put both over the busy picture (Sonoma Horizon) in dark, in the same thread. The 0.55 veil leaves the dither dots sharp behind every letter, so the text sits on noise, and the rows still run under the header pill. The column blurs the dots into soft color, gives code blocks and tables a surface to sit on, and needs one blur instead of one per user bubble. I chose the column.
+
+Measured on screen at 1x, from the column's brightest point in dark and its darkest point in light, over the brightest picture (iMac Silver), the darkest (Radial Sky Blue) and the busy one:
+
+| Appearance | Column behind text, worst | Body text | Ratio | Muted text | Ratio |
+|---|---|---|---|---|---|
+| Dark | #3d3e41, L 0.049, iMac Silver | #d6d6d7 | 7.3:1 | #c8c8c8 | 6.4:1 |
+| Light | #f7f7f7, L 0.931, Radial Sky Blue | #5c5c5c or darker | 6.2:1 | #5a5a5a (palette) | 6.4:1 |
+
+The light body figure is the lightest core pixel of a 1x glyph, so the real ratio is higher.
+
+## Glass
+
+Glass shares none of the changed paths: `DesignGeometry.radius`, the popup and toast shadows, the bubble cards and the table inset all branch on Redesign alone, and the bubble blur removed from `WindowGlass` was Redesign's. Glass draws as it did.
