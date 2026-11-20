@@ -45,6 +45,11 @@ public final class ThreadLineageController {
     /// coordinator row (ChatView.tsx:1044-1060), and Lineage shows a provider-native parent's own status
     /// (ThreadRelationshipsControl.tsx:228-239, 254-256, 440-443). Ordinary threads never load their parent.
     private var parentWatch: (id: ThreadId, stop: @MainActor () -> Void)?
+    /// One `subscribeThread` per subagent asking for approval, by scoped id, and what each asks
+    /// (`createChildThreadApprovalsAtom`, threadRequests.ts:379-416 at 4928, #28516). Only those children are watched.
+    private var childWatches: [ThreadId: @MainActor () -> Void] = [:]
+    private var childApprovalsById: [ThreadId: [PendingApproval]] = [:]
+    private var approvingChildren: [ThreadShell] = []
     private var parentProjection: ThreadProjection?
     /// The open thread's shell as of the last `sync`.
     private var shell: ThreadShell?
@@ -125,6 +130,7 @@ public final class ThreadLineageController {
             panel.timeline.setFooter(nil, height: 0)
             panel.header.parentThreadTitle = nil
             panel.childInputKey = nil
+            watchChildApprovals([])
             panel.showsSubagentStrip = false
             panel.parentPillTitle = nil
             armWake()
@@ -249,7 +255,11 @@ public final class ThreadLineageController {
     /// this thread waits on the user itself. Hidden subagent rows still ask through their parent.
     // ponytail: the children's titles are plain text where T3 makes each an inline button; Open question opens the first
     private func updateChildInputs(_ all: [ThreadShell], threadId: ThreadId) {
-        let children = shell?.pendingRuntimeRequest == nil ? ChildThreadInputs.pending(for: threadId, in: all) : []
+        let pending = ChildThreadInputs.pending(for: threadId, in: all)
+        // `childThreadApprovalsAtom` (threadRequests.ts:379-416 at 4928): every child asking for approval, whatever this
+        // thread waits on.
+        watchChildApprovals(pending.filter(ChildThreadInputs.isApproval))
+        let children = shell?.pendingRuntimeRequest == nil ? pending : []
         guard let first = children.first else { panel.childInputKey = nil; return }
         let approval = ChildThreadInputs.isApproval(first)
         panel.childInputBanner.apply(.init(variant: .neutral, icon: approval ? .shieldQuestion : .messageCircle,
@@ -346,6 +356,48 @@ public final class ThreadLineageController {
                 != ThreadRelationships.providerSubagentStatus(projection) { self.sync() }
         }
         parentWatch = (id, stop)
+    }
+
+    private func watchChildApprovals(_ children: [ThreadShell]) {
+        approvingChildren = children
+        let ids = Set(children.map(\.id))
+        for (id, stop) in childWatches where !ids.contains(id) {
+            stop()
+            childWatches[id] = nil
+            childApprovalsById[id] = nil
+        }
+        if let watchThread {
+            for child in children where childWatches[child.id] == nil {
+                let id = child.id
+                childWatches[id] = watchThread(id) { [weak self] projection in
+                    guard let self, self.childWatches[id] != nil else { return }
+                    let approvals = PendingRequests.derive(projection).approvals
+                    guard approvals != self.childApprovalsById[id] else { return }
+                    self.childApprovalsById[id] = approvals
+                    self.publishChildApprovals()
+                }
+            }
+        }
+        publishChildApprovals()
+    }
+
+    private func publishChildApprovals() {
+        let view = panel.childApprovals
+        if view.onRespond == nil {
+            view.onRespond = { [weak self] child, requestId, decision in
+                guard let dispatch = self?.dispatch else { return "Failed to submit approval decision." }
+                do {
+                    _ = try await dispatch(child, RuntimeRequestCommands.respond(threadId: child.localId, requestId: requestId, decision: decision))
+                    return nil
+                } catch {
+                    return (error as? LocalizedError)?.errorDescription ?? "Failed to submit approval decision."
+                }
+            }
+        }
+        view.canRespond = threadId?.environmentId.map { guest.canOperate?($0) ?? true } ?? true
+        view.set(approvingChildren.flatMap { child in
+            (childApprovalsById[child.id] ?? []).map { ChildApproval(threadId: child.id, title: child.title, approval: $0) }
+        })
     }
 
     /// The bar stands in for the composer only on a provider-native subagent thread.
