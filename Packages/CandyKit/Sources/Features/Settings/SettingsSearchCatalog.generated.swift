@@ -150,6 +150,7 @@ extension SettingsSearch {
         .item(SettingsSearchItem(id: "archive", title: "Archived threads", to: .archive, searchTerms: ["restore reopen deleted history projects"])),
         .item(SettingsSearchItem(id: "redesign", title: "Redesign", to: .redesign, searchTerms: ["theme look dither picture wallpaper candywrapper own experimental"])),
         .item(SettingsSearchItem(id: "redesign-picture", title: "Picture", to: .redesign, searchTerms: ["redesign background wallpaper image photo desktop picture art"])),
+        .item(SettingsSearchItem(id: "redesign-background", title: "Background", to: .redesign, searchTerms: ["redesign picture wallpaper dither blur dots soft backdrop"])),
         .item(SettingsSearchItem(id: "background-dim", title: "Background dim", to: .redesign, searchTerms: ["redesign picture wallpaper darken dim scrim opacity"])),
         .item(SettingsSearchItem(id: "accent-color", title: "Accent color", to: .redesign, searchTerms: ["redesign accent colour tint highlight switches send focus selection"])),
         .item(SettingsSearchItem(id: "ignore-reduce-transparency", title: "Ignore Reduce Transparency", to: .redesign, searchTerms: ["redesign glass blur accessibility reduce transparency picture"])),

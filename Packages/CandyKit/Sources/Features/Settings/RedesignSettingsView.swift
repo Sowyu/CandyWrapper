@@ -36,7 +36,7 @@ public final class RedesignSettingsView: SettingsPageBase {
                             control: master)
         binder.add { [weak master] in master?.isOn = library.isRedesignOn }
 
-        let look: [SettingsRowView] = [pictureRow(), dimRow(), accentRow()]
+        let look: [SettingsRowView] = [pictureRow(), backgroundRow(), dimRow(), accentRow()]
         let transparency = clientSwitch("ignore-reduce-transparency", "Show the picture, Glass and blur as if Reduce Transparency were off in macOS.",
                                         key: "ignoreReduceTransparency", reset: "ignore reduce transparency", title: "Ignore Reduce Transparency")
         let collapse = clientSwitch("composer-collapse",
@@ -78,6 +78,27 @@ public final class RedesignSettingsView: SettingsPageBase {
         binder.add { [weak group] in
             desktop.isHidden = DitherPicture.path == nil
             group?.invalidateIntrinsicContentSize()
+        }
+        return r
+    }
+
+    /// How Redesign draws its picture: dithered in the main panel, as before, or blurred behind the whole window (the
+    /// user, 2026-11-21: "either full blur or full dither").
+    private func backgroundRow() -> SettingsRowView {
+        let key = "redesignBackground", values = ["dither", "blur"]
+        let toggle = ToggleGroupView(variant: .segmented, items: [("Dither", nil), ("Blur", nil)], selected: 0)
+        toggle.setAccessibilityLabel("Background")
+        let r = row("redesign-background", title: "Background",
+                    detail: "Dither draws the picture in dots behind the chat. Blur softens it behind the whole window.", control: toggle)
+        toggle.onChange = { [weak self, weak toggle] i in
+            guard let self else { return }
+            // Clicking the pressed segment unpresses it; the choice stays.
+            guard let i else { toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 0; return }
+            self.context.writeClient?([key: .string(values[i])])
+        }
+        binder.add { [weak self, weak toggle] in
+            guard let self else { return }
+            toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 0
         }
         return r
     }
