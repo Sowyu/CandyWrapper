@@ -144,6 +144,16 @@ public actor ThreadStore {
         publish(reducer.applyHistoryPage(page, requestCursor: requestCursor))
     }
 
+    public func deferredWorkRequest(anchorId: TurnItemId) -> ThreadHistoryRequest? {
+        reducer.deferredWorkRequest(anchorId: anchorId)
+    }
+
+    public func applyDeferredWorkPage(_ page: ThreadHistoryPage, anchorId: TurnItemId, requestCursor: String) -> ThreadReducer.DeferredWorkResult {
+        let (changes, result) = reducer.applyDeferredWorkPage(page, anchorId: anchorId, requestCursor: requestCursor)
+        publish(changes)
+        return result
+    }
+
     public func failHistoryLoad(requestCursor: String, message: String) {
         publish(reducer.failHistoryLoad(requestCursor: requestCursor, message: message))
     }

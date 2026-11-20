@@ -158,28 +158,27 @@ public enum FileLinks {
     // MARK: Labels
 
     /// `buildFileLinkParentSuffixByPath` (fileLinks.ts): parent folders that tell same-named files apart
-    /// within one message, at least two segments deep.
+    /// within one message, at least two segments deep. Each path's depth is the first suffix no other path of
+    /// its name shares, read from one count of every suffix (fileLinks.ts at 4928, #34340), not a scan of every
+    /// other path per depth.
     public static func parentSuffixes(_ filePaths: [String]) -> [String: String] {
         var groups: [String: [String]] = [:]
+        var seen = Set<String>()
         for filePath in filePaths {
             let normalized = filePath.replacingOccurrences(of: "\\", with: "/")
-            guard let base = normalized.split(separator: "/").last.map(String.init) else { continue }
-            if groups[base]?.contains(normalized) != true { groups[base, default: []].append(normalized) }
+            guard let base = normalized.split(separator: "/").last.map(String.init), seen.insert(normalized).inserted else { continue }
+            groups[base, default: []].append(normalized)
         }
         var out: [String: String] = [:]
         for paths in groups.values where paths.count >= 2 {
-            let parents = Dictionary(uniqueKeysWithValues: paths.map { ($0, $0.split(separator: "/").map(String.init).dropLast().map { $0 }) })
-            for path in paths {
-                let segments = parents[path] ?? []
-                guard !segments.isEmpty else { continue }
-                var depth = segments.count
-                for d in 1...segments.count {
-                    let candidate = segments.suffix(d)
-                    let collision = paths.contains { $0 != path && Array((parents[$0] ?? []).suffix(d)) == Array(candidate) }
-                    if !collision { depth = d; break }
-                }
-                let suffixDepth = min(segments.count, max(depth, 2))
-                out[path] = segments.suffix(suffixDepth).joined(separator: "/")
+            let parents = paths.map { $0.split(separator: "/").dropLast().map(String.init) }
+            var suffixCounts: [String: Int] = [:]
+            for segments in parents where !segments.isEmpty {
+                for d in 1...segments.count { suffixCounts[segments.suffix(d).joined(separator: "/"), default: 0] += 1 }
+            }
+            for (path, segments) in zip(paths, parents) where !segments.isEmpty {
+                let depth = (1...segments.count).first { suffixCounts[segments.suffix($0).joined(separator: "/")] == 1 } ?? segments.count
+                out[path] = segments.suffix(min(segments.count, max(depth, 2))).joined(separator: "/")
             }
         }
         return out

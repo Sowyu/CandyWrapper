@@ -25,8 +25,18 @@ public enum ThreadFindText {
 
     public static func count(_ text: String, _ query: String) -> Int { occurrences(text, query).count }
 
-    /// `foldThreadSearchCase`.
+    /// `foldThreadSearchCase`. A typed straight apostrophe finds a curly one (#29759, at 4928): `‘` and `’` fold to `'`,
+    /// one UTF-16 unit each, so offsets stay put.
     static func fold(_ text: String) -> [UInt16] {
+        apostrophes(caseFolded(text))
+    }
+
+    private static func apostrophes(_ units: [UInt16]) -> [UInt16] {
+        guard units.contains(where: { $0 == 0x2018 || $0 == 0x2019 }) else { return units }
+        return units.map { $0 == 0x2018 || $0 == 0x2019 ? 0x27 : $0 }
+    }
+
+    private static func caseFolded(_ text: String) -> [UInt16] {
         let lowered = text.lowercased().replacingOccurrences(of: "ς", with: "σ")
         if lowered.utf16.count == text.utf16.count { return Array(lowered.utf16) }
         var out: [UInt16] = []

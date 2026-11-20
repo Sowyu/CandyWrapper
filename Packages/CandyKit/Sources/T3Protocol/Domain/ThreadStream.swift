@@ -7,6 +7,8 @@ public struct SubscribeThreadInput: Codable, Hashable, Sendable {
     public var afterSequence: Int?
     public var requestCompletionMarker: Bool?
     public var acceptBoundedSnapshot: Bool?
+    /// Folded work groups of settled runs arrive as one anchor row (`acceptDeferredWork`, orchestrationV2.ts:4094, #26240).
+    public var acceptDeferredWork: Bool?
     public var acceptCompactTurnItems: Bool?
     public var acceptDedupedBodies: Bool?
     public var acceptCompactIds: Bool?
@@ -14,8 +16,9 @@ public struct SubscribeThreadInput: Codable, Hashable, Sendable {
     public init(
         threadId: ThreadId, afterSequence: Int? = nil, requestCompletionMarker: Bool? = nil,
         acceptBoundedSnapshot: Bool? = nil, acceptCompactTurnItems: Bool? = nil,
-        acceptDedupedBodies: Bool? = nil, acceptCompactIds: Bool? = nil
+        acceptDedupedBodies: Bool? = nil, acceptCompactIds: Bool? = nil, acceptDeferredWork: Bool? = nil
     ) {
+        self.acceptDeferredWork = acceptDeferredWork
         self.threadId = threadId
         self.afterSequence = afterSequence
         self.requestCompletionMarker = requestCompletionMarker
@@ -128,7 +131,9 @@ public struct ThreadHistoryPage: Codable, Hashable, Sendable {
 
 /// Query of the history endpoint (`RT/threadHistoryHttp.ts:11-46`).
 public struct ThreadHistoryRequest: Hashable, Sendable {
-    public enum View: String, Sendable { case conversation, activity }
+    /// `work` loads a deferred work group: `cursor` is the anchor's `deferredWork.cursor` and `throughEntryId`
+    /// the anchor (threads.ts:727-860 at 4928, environmentHttp.ts:747-753).
+    public enum View: String, Sendable { case conversation, activity, work }
     public var threadId: ThreadId
     public var cursor: String
     public var throughEntryId: String?
@@ -145,7 +150,9 @@ public struct ThreadHistoryRequest: Hashable, Sendable {
     public var path: String {
         var components = URLComponents()
         components.path = "/api/orchestration/threads/\(threadId.rawValue)/history"
+        // `deferWork` only on plain pages, as T3 asks (RT/threadHistoryHttp.ts:28-35 at 4928).
         components.queryItems = [URLQueryItem(name: "cursor", value: cursor), URLQueryItem(name: "compactIds", value: "1")]
+            + (throughEntryId == nil ? [URLQueryItem(name: "deferWork", value: "1")] : [])
             + (throughEntryId.map { [URLQueryItem(name: "throughEntryId", value: $0)] } ?? [])
             + (view.map { [URLQueryItem(name: "view", value: $0.rawValue)] } ?? [])
         // URLComponents leaves `+` alone, and the server's query parser reads it as a space; the
@@ -154,7 +161,8 @@ public struct ThreadHistoryRequest: Hashable, Sendable {
         return components.string ?? components.path
     }
 
-    /// `/api/orchestration/threads/<id>/bounded?compactTurnItems=1`.
+    /// `/api/orchestration/threads/<id>/bounded?compactTurnItems=1...` with T3's opt-ins
+    /// (RT/boundedThreadSnapshotHttp.ts:31-38 at 4928). 3824 servers already take `deferWork` (d2429f733c).
     public static func boundedSnapshotPath(_ threadId: ThreadId) -> String {
         var components = URLComponents()
         components.path = "/api/orchestration/threads/\(threadId.rawValue)/bounded"
@@ -162,6 +170,7 @@ public struct ThreadHistoryRequest: Hashable, Sendable {
             URLQueryItem(name: "compactTurnItems", value: "1"),
             URLQueryItem(name: "dedupeBodies", value: "1"),
             URLQueryItem(name: "compactIds", value: "1"),
+            URLQueryItem(name: "deferWork", value: "1"),
         ]
         return components.string ?? components.path
     }

@@ -22,17 +22,21 @@ final class TurnFoldRowView: TimelineRowView {
         hoverChanged()
         setAccessibilityRole(.button)
         onClick = { [weak self] in
-            guard let self, case .turnFold(let runId, _, _)? = self.item?.row.kind else { return }
-            self.context.disclosure(self.item?.id)
-            self.context.model?.toggleRun(runId)
+            guard let self, let row = self.item?.row, case .turnFold(let runId, _, _, _) = row.kind else { return }
+            self.context.model?.clickFold(row) {
+                self.context.disclosure(self.item?.id)
+                self.context.model?.toggleRun(runId)
+            }
         }
     }
 
     override func configure(_ item: TimelineItem) {
         let sameRow = self.item?.id == item.id
         super.configure(item)
-        guard case .turnFold(_, let text, let expanded) = item.row.kind else { return }
-        label.text = text
+        guard case .turnFold(_, let text, let expanded, _) = item.row.kind else { return }
+        label.text = WorkHistorySkeletonView.label(text, item.ui)
+        skeleton = WorkHistorySkeletonView.update(skeleton, in: self, showing: item.ui.deferredWorkLoading)
+        setAccessibilityValue(item.ui.deferredWorkLoading ? "Loading work history" : nil)
         chevron.setRotation(expanded ? 90 : 0, motion: sameRow ? .morph : .none)
         time.text = TL.dayAwareTimestamp(item.row.createdAt, now: context.now())
         setAccessibilityLabel(text)
@@ -40,16 +44,22 @@ final class TurnFoldRowView: TimelineRowView {
         needsLayout = true
     }
 
-    override func height(forWidth width: CGFloat) -> CGFloat { 4 + TL.relaxed + 8 + 1 + 6 }
+    override func height(forWidth width: CGFloat) -> CGFloat {
+        4 + TL.relaxed + (item?.ui.deferredWorkLoading == true ? WorkHistorySkeletonView.height : 0) + 8 + 1 + 6
+    }
+
+    private var skeleton: WorkHistorySkeletonView?
 
     override func layout() {
         super.layout()
+        let top = 4 + TL.relaxed
+        skeleton?.frame = NSRect(x: 0, y: top, width: bounds.width, height: WorkHistorySkeletonView.height)
         let w = label.textWidth
         label.frame = NSRect(x: 4, y: 4, width: ceil(w) + 1, height: TL.relaxed)
         chevron.frame = NSRect(x: 4 + w + 4, y: 4 + (TL.relaxed - 14) / 2, width: 14, height: 14)
         let tw = ceil(time.textWidth)
         time.frame = NSRect(x: bounds.width - 2 - tw, y: 4 + (TL.relaxed - 16) / 2, width: tw, height: 16)
-        let ruleTop = 4 + TL.relaxed + 8
+        let ruleTop = top + (skeleton == nil ? 0 : WorkHistorySkeletonView.height) + 8
         rule.frame = NSRect(x: 0, y: ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? ruleTop : TL.snap(ruleTop),
                             width: bounds.width, height: 1)
     }
@@ -83,27 +93,36 @@ final class AttemptFoldRowView: TimelineRowView {
         hoverChanged()
         setAccessibilityRole(.button)
         onClick = { [weak self] in
-            guard let self, case .attemptFold(_, let attemptId, _, _)? = self.item?.row.kind else { return }
-            self.context.disclosure(self.item?.id)
-            self.context.model?.toggleAttempt(attemptId)
+            guard let self, let row = self.item?.row, case .attemptFold(_, let attemptId, _, _, _) = row.kind else { return }
+            self.context.model?.clickFold(row) {
+                self.context.disclosure(self.item?.id)
+                self.context.model?.toggleAttempt(attemptId)
+            }
         }
     }
+
+    private var skeleton: WorkHistorySkeletonView?
 
     override func configure(_ item: TimelineItem) {
         let sameRow = self.item?.id == item.id
         super.configure(item)
-        guard case .attemptFold(_, _, let text, let expanded) = item.row.kind else { return }
-        label.text = text
+        guard case .attemptFold(_, _, let text, let expanded, _) = item.row.kind else { return }
+        label.text = WorkHistorySkeletonView.label(text, item.ui)
+        skeleton = WorkHistorySkeletonView.update(skeleton, in: self, showing: item.ui.deferredWorkLoading)
+        setAccessibilityValue(item.ui.deferredWorkLoading ? "Loading work history" : nil)
         chevron.setRotation(expanded ? 90 : 0, motion: sameRow ? .morph : .none)
         setAccessibilityExpanded(expanded)
         needsLayout = true
     }
 
-    override func height(forWidth width: CGFloat) -> CGFloat { 34 + 8 }
+    override func height(forWidth width: CGFloat) -> CGFloat {
+        34 + (item?.ui.deferredWorkLoading == true ? WorkHistorySkeletonView.height : 0) + 8
+    }
 
     override func layout() {
         super.layout()
         box.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 34)
+        skeleton?.frame = NSRect(x: 0, y: 34, width: bounds.width, height: WorkHistorySkeletonView.height)
         chevron.frame = NSRect(x: 11, y: 10, width: 14, height: 14)
         let lw = ceil(label.textWidth)
         label.frame = NSRect(x: 33, y: 9, width: lw, height: 16)
@@ -114,6 +133,50 @@ final class AttemptFoldRowView: TimelineRowView {
 
     override func hoverChanged() {
         box.fill = TL.c(\.muted, hovered ? 0.35 : 0.2)
+    }
+}
+
+/// `WorkHistorySkeleton` (MessagesTimeline.tsx:1842-1857 at 4928): three skeleton lines under a fold while its deferred
+/// work loads, `space-y-2 px-1 pb-1 pt-3`, each a `size-3` block and a pill 2/5, 3/5 and 1/3 wide. It exists only while
+/// loading, so its pulse runs only then.
+final class WorkHistorySkeletonView: NSView {
+    static let height: CGFloat = 12 + 12 * 3 + 8 * 2 + 4
+    private let parts: [(SkeletonView, SkeletonView)] = (0..<3).map { _ in (SkeletonView(), SkeletonView(shape: .pill)) }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        for (icon, line) in parts { addSubview(icon); addSubview(line) }
+        setAccessibilityElement(false)
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+
+    override func layout() {
+        super.layout()
+        let lineSpace = max(0, bounds.width - 8 - 12 - 8)
+        for (index, (icon, line)) in parts.enumerated() {
+            let y = 12 + CGFloat(index) * 20
+            icon.frame = NSRect(x: 4, y: y, width: 12, height: 12)
+            let fraction: CGFloat = [2.0 / 5, 3.0 / 5, 1.0 / 3][index]
+            line.frame = NSRect(x: 24, y: y + 1, width: floor(lineSpace * fraction), height: 10)
+        }
+    }
+
+    /// " · Couldn't load work. Click to retry." after a failed load (MessagesTimeline.tsx:1832, 1881-1884).
+    static func label(_ text: String, _ ui: TimelineRowUI) -> String {
+        ui.deferredWorkFailed ? text + " · Couldn't load work. Click to retry." : text
+    }
+
+    /// Adds the skeleton to `host` while showing and drops it after.
+    static func update(_ view: WorkHistorySkeletonView?, in host: NSView, showing: Bool) -> WorkHistorySkeletonView? {
+        guard showing else { view?.removeFromSuperview(); return nil }
+        if let view { return view }
+        let made = WorkHistorySkeletonView()
+        host.addSubview(made)
+        host.needsLayout = true
+        return made
     }
 }
 

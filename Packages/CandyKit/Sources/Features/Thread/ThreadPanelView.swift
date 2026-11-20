@@ -394,6 +394,9 @@ public final class ThreadPanelView: DSView {
     public let composer = ComposerView()
     /// The queued messages docked above the composer; it hides itself when empty.
     public let queue = QueuedRunsView()
+    /// Subagents' approvals above the composer, outside the banner stack (ChildThreadApprovals.tsx, ChatView.tsx:3640
+    /// at 4928, #28516). Empty, it holds no views.
+    public let childApprovals = ChildApprovalsView()
     /// The runtime request docked between the queue and the composer (ChatComposer.tsx's top
     /// drawer). Show one through `drawer`; the composer controller configures them.
     public let approvalPanel = ApprovalPanelView()
@@ -857,6 +860,9 @@ public final class ThreadPanelView: DSView {
         addSubview(deviceRow)
         addSubview(commandMenu)
         addSubview(composer)
+        // Empty and hidden until a subagent asks; in place so a change can ask the panel for a layout.
+        childApprovals.isHidden = true
+        addSubview(childApprovals, positioned: .below, relativeTo: composer)
         composer.onHeightChange = { [weak self] in self?.needsLayout = true }
         menus.onLayoutChange = { [weak self] in self?.needsLayout = true }
         queue.onHeightChange = { [weak self] in self?.needsLayout = true }
@@ -1791,7 +1797,8 @@ public final class ThreadPanelView: DSView {
         lazyQuestionPanel.loaded?.joinsAbove = stripAbove
         // The default stack reserves all its rows; CandyWrapper's own themes retain the peek.
         let stackCap = bannerStack.hasStack ? (ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? bannerStack.height(width: bannerWidth) : ComposerBannerStackView.peekHeight) : 0
-        let above = max(y - top + stackCap, badgeShown ? stashBadge.preferredHeight - overlap : 0)
+        let approvalsHeight = placeChildApprovals(shown: docked, x: bannerX, width: bannerWidth, bottom: top - stackCap)
+        let above = max(y - top + stackCap + approvalsHeight, badgeShown ? stashBadge.preferredHeight - overlap : 0)
         let inset = docked ? 8 + above + height + 20 : 0
         if timeline.bottomInset != inset {
             timeline.bottomInset = inset
@@ -1799,6 +1806,19 @@ public final class ThreadPanelView: DSView {
             if terminalOpen { needsLayout = true }
         }
         if isDraft { timeline.isHidden = true }
+    }
+
+    /// Places the child approvals with their `mb-2` above `bottom` and returns the room they take, 0 when none show.
+    private func placeChildApprovals(shown: Bool, x: CGFloat, width: CGFloat, bottom: CGFloat) -> CGFloat {
+        guard shown, !childApprovals.isEmpty else {
+            childApprovals.isHidden = true
+            return 0
+        }
+        if childApprovals.superview !== self { addSubview(childApprovals, positioned: .below, relativeTo: composer) }
+        childApprovals.isHidden = false
+        let h = childApprovals.height(forWidth: width)
+        childApprovals.frame = NSRect(x: x, y: bottom - ChildApprovalsView.gap - h, width: width, height: h)
+        return h + ChildApprovalsView.gap
     }
 
     /// What the composer docks that is not in the banner stack.
@@ -1987,6 +2007,9 @@ public final class ThreadPanelView: DSView {
             shown.append(view)
         }
 
+
+        let approvalsHeight = placeChildApprovals(shown: docked && visible, x: x, width: width, bottom: top)
+        if approvalsHeight > 0 { top -= approvalsHeight }
 
         // The queue opens from its pill as a panel over everything above the row, floating over the timeline like the
         // stash list. The `/` menu and the stash list win while open.

@@ -68,6 +68,7 @@ final class ThreadSession {
         self.store = store
         relay.setStreaming { [weak self] streaming in Task { @MainActor in self?.requestPull(streaming: streaming) } }
         panel.onLoadEarlier = { [weak self] in self?.loadEarlier() }
+        panel.model.onLoadDeferredWork = { [weak self] anchors in await self?.loadDeferredWork(anchors) ?? false }
         shown = retained?.shown
         if retained != nil {
             Task { [weak self] in await self?.showRetained() }
@@ -262,6 +263,37 @@ final class ThreadSession {
                 self?.historyLoad = nil
                 await store.failHistoryLoad(requestCursor: request.cursor, message: "Could not load earlier turns.")
             }
+        }
+    }
+
+    /// Loads deferred work groups as an opened fold asks (`loadEarlier` with `workAnchorId`, threads.ts:727-860 at 4928,
+    /// #26240): `view: "work"` pages from each anchor's cursor until the group is complete, each merged at its anchor.
+    /// The anchors load side by side, like T3's `Promise.all` (MessagesTimeline.tsx:1815-1825). False when any failed.
+    private func loadDeferredWork(_ anchors: [String]) async -> Bool {
+        guard let shell else { return false }
+        var http = shell.http
+        http.timeout = 6
+        let store = self.store, token = shell.token
+        return await withTaskGroup(of: Bool.self) { group in
+            for anchor in anchors {
+                group.addTask {
+                    let anchorId = TurnItemId(anchor)
+                    var request = await store.deferredWorkRequest(anchorId: anchorId)
+                    while let current = request {
+                        guard let page = try? await http.get(current.path, token: token, as: ThreadHistoryPage.self) else { return false }
+                        switch await store.applyDeferredWorkPage(page, anchorId: anchorId, requestCursor: current.cursor) {
+                        case .loaded(let next?):
+                            request = ThreadHistoryRequest(threadId: current.threadId, cursor: next, throughEntryId: anchor, view: .work)
+                        case .loaded(nil), .noop: return true
+                        case .failed: return false
+                        }
+                    }
+                    return true
+                }
+            }
+            var ok = true
+            for await result in group { ok = ok && result }
+            return ok
         }
     }
 

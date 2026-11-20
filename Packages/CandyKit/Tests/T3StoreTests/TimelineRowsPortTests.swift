@@ -177,7 +177,7 @@ private func messageFlags(_ row: TimelineRow?) -> (meta: Bool, copy: Bool, strea
                 }
                 #expect(rows.prefix(3).map(\.id) == ["initial-prompt", isWorking ? "working-indicator-row" : "turn-fold:\(runId.rawValue)", "steer"])
                 #expect(rows[1].createdAt == time(0))
-                if !isWorking, case .turnFold(_, let label, let open) = rows[1].kind {
+                if !isWorking, case .turnFold(_, let label, let open, _) = rows[1].kind {
                     #expect(label == "Worked for 20s" && open == expanded)
                 }
                 #expect(rows.contains { $0.id == "final" })
@@ -336,7 +336,7 @@ private func messageFlags(_ row: TimelineRow?) -> (meta: Bool, copy: Bool, strea
         func shape(_ rows: [TimelineRow]) -> [String] {
             rows.map { row in
                 switch row.kind {
-                case .turnFold(_, let label, _): "fold:\(label)"
+                case .turnFold(_, let label, _, _): "fold:\(label)"
                 case .message(let m, _, _, _, _, _): "\(m.role.rawValue):\(m.id.rawValue)"
                 default: kind(row)
                 }
@@ -344,7 +344,7 @@ private func messageFlags(_ row: TimelineRow?) -> (meta: Bool, copy: Bool, strea
         }
         let settled = rows(.completed, working: false)
         #expect(shape(settled) == ["user:launch", "fold:Worked for 8s", "assistant:launch-answer", "user:resume", "fold:Worked for 8s", "assistant:resume-answer"])
-        guard case .turnFold(let launch, _, _)? = settled.first(where: { kind($0) == "turn-fold" })?.kind else {
+        guard case .turnFold(let launch, _, _, _)? = settled.first(where: { kind($0) == "turn-fold" })?.kind else {
             Issue.record("no launch fold")
             return
         }
@@ -382,7 +382,7 @@ private func messageFlags(_ row: TimelineRow?) -> (meta: Bool, copy: Bool, strea
         // The fold row carries the key that opens it.
         let plain = [message("imported-prompt", role: .user, at: at(0)), message("imported-update", role: .assistant, at: at(4)),
                      message("imported-answer", role: .assistant, at: at(8))]
-        guard case .turnFold(let key, _, _)? = derive(plain).first(where: { kind($0) == "turn-fold" })?.kind else {
+        guard case .turnFold(let key, _, _, _)? = derive(plain).first(where: { kind($0) == "turn-fold" })?.kind else {
             Issue.record("no fold for the imported turn")
             return
         }
@@ -520,7 +520,7 @@ private func messageFlags(_ row: TimelineRow?) -> (meta: Bool, copy: Bool, strea
             $0.isWorking = true
             $0.activeTurnStartedAt = "2026-01-01T00:01:00Z"
         }
-        #expect(rows.compactMap { if case .turnFold(let run, _, _) = $0.kind { run.rawValue } else { nil } } == ["turn-1"])
+        #expect(rows.compactMap { if case .turnFold(let run, _, _, _) = $0.kind { run.rawValue } else { nil } } == ["turn-1"])
         #expect(rows.contains { $0.id == "live-activity-row" })
     }
 
@@ -608,7 +608,7 @@ private func messageFlags(_ row: TimelineRow?) -> (meta: Bool, copy: Bool, strea
             message("assistant-final-entry", "assistant-final", role: .assistant, run: "turn-1", at: "2026-01-01T00:00:20Z", updated: "2026-01-01T00:00:22Z"),
         ]
         let collapsed = derive(entries)
-        guard case .turnFold(let run, let label, let open)? = collapsed.first(where: { kind($0) == "turn-fold" })?.kind else {
+        guard case .turnFold(let run, let label, let open, _)? = collapsed.first(where: { kind($0) == "turn-fold" })?.kind else {
             Issue.record("no fold: \(collapsed.map(\.id))")
             return
         }

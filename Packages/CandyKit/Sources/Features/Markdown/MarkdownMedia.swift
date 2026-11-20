@@ -176,11 +176,17 @@ public enum MarkdownImages {
     }
 
     static func signedURL(_ path: String) async -> (url: URL, size: CGSize?)? {
-        await assetURL?(path)
+        guard let assetURL, await AssetURLLimit.shared.acquire() else { return nil }
+        let result = await assetURL(path)
+        await AssetURLLimit.shared.release()
+        return result
     }
 
     public static func signedURL(resource: JSONValue) async -> (url: URL, size: CGSize?)? {
-        await resourceURL?(resource)
+        guard let resourceURL, await AssetURLLimit.shared.acquire() else { return nil }
+        let result = await resourceURL(resource)
+        await AssetURLLimit.shared.release()
+        return result
     }
 
     nonisolated static func download(_ url: URL, side: Int) async -> (image: CGImage, natural: CGSize)? {
@@ -338,4 +344,42 @@ enum MarkdownFavicons {
         }
         return .loading
     }
+}
+
+/// `ASSET_URL_MAX_IN_FLIGHT` (client-runtime state/assets.ts at 4928, #27440): a thread with hundreds of images asks
+/// for hundreds of signed URLs at once, and over a slow remote they all wait on one socket and read as stalled, so
+/// at most 6 `assets.createUrl` calls run at a time. A caller cancelled while it waits gives its turn back.
+// ponytail: one limit for every machine where T3 keeps one per environment; key it by environment if two remotes load images at once
+actor AssetURLLimit {
+    static let shared = AssetURLLimit(limit: 6)
+    private let limit: Int
+    private var running = 0
+    private var waiting: [(id: UUID, resume: CheckedContinuation<Bool, Never>)] = []
+
+    init(limit: Int) { self.limit = limit }
+
+    /// Waits for a turn; false when the caller was cancelled before it. Pair a true with `release`.
+    func acquire() async -> Bool {
+        if Task.isCancelled { return false }
+        if running < limit { running += 1; return true }
+        let id = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled { continuation.resume(returning: false) } else { waiting.append((id, continuation)) }
+            }
+        } onCancel: {
+            Task { await self.cancel(id) }
+        }
+    }
+
+    private func cancel(_ id: UUID) {
+        guard let index = waiting.firstIndex(where: { $0.id == id }) else { return }
+        waiting.remove(at: index).resume.resume(returning: false)
+    }
+
+    func release() {
+        if waiting.isEmpty { running -= 1 } else { waiting.removeFirst().resume.resume(returning: true) }
+    }
+
+    var inFlight: Int { running }
 }

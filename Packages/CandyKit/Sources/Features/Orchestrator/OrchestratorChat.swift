@@ -347,7 +347,9 @@ public enum OrchestratorChat {
         var byRun: [String: [String]] = [:]
         for item in items where !quiet.contains(item.type) {
             guard let run = item.runId?.rawValue else { continue }
-            byRun[run, default: []].append(item.title ?? item.type.rawValue.replacingOccurrences(of: "_", with: " "))
+            let name = item.title ?? item.type.rawValue.replacingOccurrences(of: "_", with: " ")
+            // A deferred group's anchor stands for its unsent rows (#26240); their names are unknown, so it repeats its own.
+            byRun[run, default: []] += Array(repeating: name, count: item.hasDeferredWork ? max(1, item.deferredWork?.itemCount ?? 1) : 1)
         }
         return byRun.mapValues { names in
             var unique: [String] = []

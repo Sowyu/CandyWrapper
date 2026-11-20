@@ -12,7 +12,7 @@ private func threadRows(_ name: String, titled prefix: String, _ edit: (inout Ti
 }
 
 private func foldLabels(_ rows: [TimelineRow]) -> [String] {
-    rows.compactMap { if case .turnFold(_, let label, _) = $0.kind { return label }; return nil }
+    rows.compactMap { if case .turnFold(_, let label, _, _) = $0.kind { return label }; return nil }
 }
 
 /// Replays every recorded `subscribeThread` stream and derives its timeline.

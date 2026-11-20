@@ -1,0 +1,46 @@
+{
+ "component": "child-approvals",
+ "source": "apps/web/src/components/chat/ChildThreadApprovals.tsx",
+ "states": [
+  "rest"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "wrapperStyle": "display:block;width:480px",
+ "cases": [
+  {
+   "name": "one",
+   "html": "<div class=\"flex max-h-80 flex-col gap-2 overflow-auto\"><section class=\"rounded-lg border border-border bg-background p-3 text-xs\"><p class=\"mb-2 font-medium\">Approval needed from Release notes</p><pre class=\"max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono\">git push origin main</pre><div class=\"mt-2 flex flex-wrap gap-2\"><button type=\"button\" data-slot=\"inline-button\" class=\"inline-flex shrink-0 cursor-pointer items-center gap-0.5 font-medium underline-offset-2 [text-align:var(--inline-button-text-align,center)] [white-space:var(--inline-button-white-space,nowrap)] hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-64 text-muted-foreground hover:text-foreground\"><span class=\"whitespace-normal\">Decline</span></button><button type=\"button\" data-slot=\"inline-button\" class=\"inline-flex shrink-0 cursor-pointer items-center gap-0.5 font-medium underline-offset-2 [text-align:var(--inline-button-text-align,center)] [white-space:var(--inline-button-white-space,nowrap)] hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-64 text-foreground\"><span class=\"whitespace-normal\">Approve</span></button><button type=\"button\" data-slot=\"inline-button\" class=\"inline-flex shrink-0 cursor-pointer items-center gap-0.5 font-medium underline-offset-2 [text-align:var(--inline-button-text-align,center)] [white-space:var(--inline-button-white-space,nowrap)] hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-64 text-muted-foreground hover:text-foreground\"><span class=\"whitespace-normal\">More</span></button></div></section></div>",
+   "native": {
+    "cards": [
+     {
+      "title": "Release notes",
+      "detail": "git push origin main"
+     }
+    ]
+   },
+   "wrapperStyle": "display:block;width:480px"
+  },
+  {
+   "name": "two",
+   "html": "<div class=\"flex max-h-80 flex-col gap-2 overflow-auto\"><section class=\"rounded-lg border border-border bg-background p-3 text-xs\"><p class=\"mb-2 font-medium\">Approval needed from Release notes</p><pre class=\"max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono\">rm -rf build/ dist/</pre><p class=\"mt-2 text-muted-foreground\">Clean the old artifacts before the release build.</p><div class=\"mt-2 flex flex-wrap gap-2\"><button type=\"button\" data-slot=\"inline-button\" class=\"inline-flex shrink-0 cursor-pointer items-center gap-0.5 font-medium underline-offset-2 [text-align:var(--inline-button-text-align,center)] [white-space:var(--inline-button-white-space,nowrap)] hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-64 text-muted-foreground hover:text-foreground\"><span class=\"whitespace-normal\">Decline</span></button><button type=\"button\" data-slot=\"inline-button\" class=\"inline-flex shrink-0 cursor-pointer items-center gap-0.5 font-medium underline-offset-2 [text-align:var(--inline-button-text-align,center)] [white-space:var(--inline-button-white-space,nowrap)] hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-64 text-foreground\"><span class=\"whitespace-normal\">Approve</span></button><button type=\"button\" data-slot=\"inline-button\" class=\"inline-flex shrink-0 cursor-pointer items-center gap-0.5 font-medium underline-offset-2 [text-align:var(--inline-button-text-align,center)] [white-space:var(--inline-button-white-space,nowrap)] hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-64 text-muted-foreground hover:text-foreground\"><span class=\"whitespace-normal\">More</span></button></div></section><section class=\"rounded-lg border border-border bg-background p-3 text-xs\"><p class=\"mb-2 font-medium\">Approval needed from Docs pass</p><pre class=\"max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono\">git push origin docs</pre><p class=\"mt-2 text-warning\">Provider process is gone. Interrupt or restart the child thread to respond.</p><div class=\"mt-2 flex flex-wrap gap-2\"><button type=\"button\" data-slot=\"inline-button\" class=\"inline-flex shrink-0 cursor-pointer items-center gap-0.5 font-medium underline-offset-2 [text-align:var(--inline-button-text-align,center)] [white-space:var(--inline-button-white-space,nowrap)] hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-64 text-muted-foreground hover:text-foreground\" disabled><span class=\"whitespace-normal\">Decline</span></button><button type=\"button\" data-slot=\"inline-button\" class=\"inline-flex shrink-0 cursor-pointer items-center gap-0.5 font-medium underline-offset-2 [text-align:var(--inline-button-text-align,center)] [white-space:var(--inline-button-white-space,nowrap)] hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-64 text-foreground\" disabled><span class=\"whitespace-normal\">Approve</span></button><button type=\"button\" data-slot=\"inline-button\" class=\"inline-flex shrink-0 cursor-pointer items-center gap-0.5 font-medium underline-offset-2 [text-align:var(--inline-button-text-align,center)] [white-space:var(--inline-button-white-space,nowrap)] hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-64 text-muted-foreground hover:text-foreground\" disabled><span class=\"whitespace-normal\">More</span></button></div></section></div>",
+   "native": {
+    "cards": [
+     {
+      "title": "Release notes",
+      "detail": "rm -rf build/ dist/",
+      "reason": "Clean the old artifacts before the release build."
+     },
+     {
+      "title": "Docs pass",
+      "detail": "git push origin docs",
+      "live": false
+     }
+    ]
+   },
+   "wrapperStyle": "display:block;width:480px"
+  }
+ ]
+}

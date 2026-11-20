@@ -22,7 +22,7 @@ private func rows(_ entries: [TimelineEntry], _ edit: (inout TimelineRowsInput) 
 }
 
 private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expanded: Bool)? {
-    for row in rows { if case .turnFold(let r, let l, let e) = row.kind { return (r, l, e) } }
+    for row in rows { if case .turnFold(let r, let l, let e, _) = row.kind { return (r, l, e) } }
     return nil
 }
 
@@ -102,7 +102,7 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
         let segment = RunId("steered-run:steer:steer")
         let collapsed = rows(entries) { $0.latestRun = latest }
         #expect(collapsed.map(\.id) == ["prompt", "turn-fold:steered-run", "steer", "turn-fold:steered-run:steer:steer", "final"])
-        let labels = collapsed.compactMap { row -> String? in if case .turnFold(_, let l, _) = row.kind { return l }; return nil }
+        let labels = collapsed.compactMap { row -> String? in if case .turnFold(_, let l, _, _) = row.kind { return l }; return nil }
         #expect(labels == ["Worked for 30s", "Continued for 20s"])
         #expect(collapsed[3].createdAt == at(10))
         let open = rows(entries) { $0.latestRun = latest; $0.expandedRunIds = [segment] }

@@ -14,7 +14,9 @@ public enum ProposedPlanText {
 
     /// `stripDisplayedPlanMarkdown`: the plan without its title heading and a leading "Summary" heading.
     public static func displayed(_ markdown: String) -> String {
-        var lines = markdown.replacing(/\s+$/, with: "").components(separatedBy: "\n").map { $0.hasSuffix("\r") ? String($0.dropLast()) : $0 }
+        // A slice drops its first line in constant time, so leading blank lines cost no more than one pass
+        // (proposedPlanText.ts at 4928, #28537).
+        var lines = ArraySlice(markdown.replacing(/\s+$/, with: "").components(separatedBy: "\n").map { $0.hasSuffix("\r") ? String($0.dropLast()) : $0 })
         if let first = lines.first, first.contains(/^\s{0,3}#{1,6}\s+/) { lines.removeFirst() }
         while lines.first?.trimmingCharacters(in: .whitespaces).isEmpty == true { lines.removeFirst() }
         if let first = lines.first, let m = first.firstMatch(of: /^\s{0,3}#{1,6}\s+(.+)$/),

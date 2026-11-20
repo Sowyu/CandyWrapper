@@ -221,7 +221,7 @@ struct ThreadTimelineTests {
         panel.setProjection(projection, projectTitle: "demo-repo", workspaceRoot: nil)
         panel.layoutSubtreeIfNeeded()
         let collapsed = panel.model.items.count
-        guard case .turnFold(let runId, _, false)? = panel.model.items.first(where: { TimelineView.kind($0.row) == .turnFold })?.row.kind else {
+        guard case .turnFold(let runId, _, false, _)? = panel.model.items.first(where: { TimelineView.kind($0.row) == .turnFold })?.row.kind else {
             Issue.record("expected a collapsed fold"); return
         }
         panel.model.toggleRun(runId)

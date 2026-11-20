@@ -273,6 +273,9 @@ public struct MarkdownDocument: Sendable, Equatable {
         while lineStart < text.endIndex {
             let newline = text[lineStart...].firstIndex(of: "\n")
             let line = text[lineStart..<(newline ?? text.endIndex)]
+            // A line left of an indented fence may end the list item holding it, which isn't tracked, so nothing
+            // after it is final (markdownStreamBlocks.ts:22-23 at 4928, #28285).
+            if let open = openFence, open.indent > 0, line.prefix(open.indent).contains(where: { $0 != " " && $0 != "\t" }) { break }
             if openFence == nil, openMath == nil, previousBlank, lineStart > text.startIndex, let first = line.first, startsTopLevelBlock(first, line) {
                 cut = lineStart
             }

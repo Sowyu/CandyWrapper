@@ -394,8 +394,10 @@ public enum WorkLog {
         guard isToolLikeForPresentation(entry), entry.itemType != .reasoning else { return false }
         if T3McpTools.definition(toolName(entry)) != nil, t3ToolResultIndicatesFailure(toolOutput(entry)) { return true }
         if let item = entry.structuredPayload, item.type == .commandExecution {
+            // The exit code outranks text in the output or the command: a search can print "ENOENT" and exit 0
+            // (work-log/presentation.ts at 4928, #23351).
+            if let code = item.exitCode { return code != 0 }
             if item["outputIndicatesFailure"]?.boolValue == true { return true }
-            if let code = item.exitCode, code != 0 { return true }
             if let output = item.output?.stringValue, toolOutputIndicatesFailure(String(output.prefix(32_768))) { return true }
         }
         let output = includeCommand

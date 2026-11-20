@@ -198,6 +198,32 @@ public struct TurnItem: Codable, Hashable, Sendable, Identifiable {
     public var unresponsiveAt: T3Timestamp? { string("unresponsiveAt").map { T3Timestamp($0) } }
     /// `checkpoint.filesTotal` (4928 orchestrationV2.ts:1833): set when `files` holds only the first 200.
     public var filesTotal: CheckpointFileTotals? { try? self["filesTotal"]?.decode(as: CheckpointFileTotals.self) }
+
+    /// `deferredWork` (orchestrationV2.ts:1615-1622, #26240): the first row of a folded work group a server sent as a
+    /// cursor instead of its rows, when the client asked with `acceptDeferredWork` or `deferWork=1`.
+    public var deferredWork: DeferredWork? { try? self["deferredWork"]?.decode(as: DeferredWork.self) }
+    /// A dictionary lookup, for passes over every row.
+    public var hasDeferredWork: Bool { self["deferredWork"] != nil }
+
+    public struct DeferredWork: Codable, Hashable, Sendable {
+        public var cursor: String
+        /// Rows in the group, this one included.
+        public var itemCount: Int
+        /// The group's last ordinal: rows after it are not part of the fold.
+        public var lastOrdinal: Int
+        public init(cursor: String, itemCount: Int, lastOrdinal: Int) {
+            self.cursor = cursor
+            self.itemCount = itemCount
+            self.lastOrdinal = lastOrdinal
+        }
+    }
+
+    /// This item with `deferredWork` replaced, or removed when nil (threadHistoryMerge.ts:166-168).
+    public func settingDeferredWork(_ work: DeferredWork?) -> TurnItem {
+        guard case .object(var object) = raw else { return self }
+        if let work, let value = try? JSONValueEncoder().encode(work) { object["deferredWork"] = value } else { object["deferredWork"] = nil }
+        return (try? TurnItem(json: .object(object))) ?? self
+    }
 }
 
 /// `OrchestrationV2ProjectedTurnItem` (orchestrationV2.ts:1610-1616): a row of

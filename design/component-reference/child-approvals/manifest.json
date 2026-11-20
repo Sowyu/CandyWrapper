@@ -1,0 +1,10 @@
+{
+  "one" : {
+    "height" : 90,
+    "width" : 480
+  },
+  "two" : {
+    "height" : 236,
+    "width" : 480
+  }
+}

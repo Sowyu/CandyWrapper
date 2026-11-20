@@ -137,7 +137,7 @@ private func wireEvent(_ type: String, _ payload: JSONValue, sequence: Int = 11)
 
     @Test func optInsMatchEndpointCapabilities() throws {
         let path = ThreadHistoryRequest.boundedSnapshotPath("t")
-        #expect(path.hasSuffix("compactTurnItems=1&dedupeBodies=1&compactIds=1"))
+        #expect(path.hasSuffix("compactTurnItems=1&dedupeBodies=1&compactIds=1&deferWork=1"))
         let history = ThreadHistoryRequest(threadId: "t", cursor: "a+b", throughEntryId: "i+1", view: .activity).path
         #expect(history.contains("compactIds=1") && !history.contains("dedupeBodies"))
         #expect(history.contains("a%2Bb") && history.contains("i%2B1"))
