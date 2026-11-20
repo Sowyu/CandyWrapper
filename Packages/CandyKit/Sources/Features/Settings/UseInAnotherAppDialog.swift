@@ -426,6 +426,7 @@ final class McpStatusLine: DSView, McpSized {
     }
     required init?(coder: NSCoder) { fatalError() }
     func height(forWidth width: CGFloat) -> CGFloat { 20 }
+    var labelWidth: CGFloat { ceil(label.text.naturalWidth) + 1 }
     override func layout() {
         super.layout()
         spinner.frame = NSRect(x: 0, y: 3, width: 14, height: 14)
@@ -530,25 +531,29 @@ final class McpSteps: DSView, McpSized {
 /// `TextButton`: `text-sm font-medium`, underlined on hover and keyboard focus.
 final class McpTextButton: ControlView, McpSized {
     private let label: LabelView
-    init(_ title: String, action: @escaping @MainActor @Sendable () -> Void) {
-        label = LabelView(title, font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground))
+    private let lineHeight: CGFloat
+    /// `size` 12 is `InlineButton` inside a `text-xs` line (ui/button.tsx:103-131).
+    init(_ title: String, size: CGFloat = 14, action: @escaping @MainActor @Sendable () -> Void) {
+        label = LabelView(title, font: DSFont.ui(size, weight: .medium), color: Themed.color(\.foreground))
+        lineHeight = size == 12 ? 16 : 20
         super.init(frame: .zero)
-        label.lineHeight = 20
+        label.lineHeight = lineHeight
         addSubview(label)
         self.action = action
         scalesWhenPressed = false
         setAccessibilityRole(.button); setAccessibilityLabel(title)
     }
     required init?(coder: NSCoder) { fatalError() }
-    func height(forWidth width: CGFloat) -> CGFloat { 20 }
+    func height(forWidth width: CGFloat) -> CGFloat { lineHeight }
+    var naturalWidth: CGFloat { ceil(label.textWidth) + 1 }
     override func stateDidChange(from old: State) {
         super.stateDidChange(from: old)
         label.isUnderlined = state.hovered || state.focusVisible
-        label.underlineDecoration = (4, 1)
+        label.underlineDecoration = (lineHeight == 16 ? 2 : 4, 1)
     }
     override func layout() {
         super.layout()
-        label.frame = NSRect(x: 0, y: 0, width: ceil(label.textWidth) + 1, height: 20)
+        label.frame = NSRect(x: 0, y: 0, width: naturalWidth, height: lineHeight)
     }
     override func hitTest(_ point: NSPoint) -> NSView? {
         let p = convert(point, from: superview)

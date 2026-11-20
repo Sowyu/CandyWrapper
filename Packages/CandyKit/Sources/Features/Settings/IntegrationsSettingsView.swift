@@ -6,11 +6,23 @@ import T3Protocol
 /// agent browser access, the browser defaults this device keeps, and the device hub rows.
 public final class IntegrationsSettingsView: ScopedSettingsPage {
     private var deviceInventoryTask: Task<Void, Never>?
-    private var deviceHostEditor: DeviceHostEditor?
+    /// Device sources under Devices (IntegrationsSettings.tsx:868-893 at 4928), in place of the Device hosts rows.
+    private var deviceSources: DeviceSourcesSection?
     public init(context: SettingsPageContext, groups: Set<String>? = nil) {
         super.init(context: context)
         if groups?.contains("browser") != false { body.append(browserSection()) }
-        if groups?.contains("devices") != false { body.append(devicesSection()) }
+        if groups?.contains("devices") != false {
+            body.append(devicesSection())
+            let sources = DeviceSourcesSection(context: context)
+            deviceSources = sources
+            anchors["device-sources"] = sources.section
+            body.append(sources.section)
+            binder.add { [weak self] in
+                guard let self, let sources = self.deviceSources else { return }
+                sources.setVisible(self.window != nil)
+                sources.refresh()
+            }
+        }
     }
 
     private func pullRequestRow() -> SettingsRowView {
@@ -243,35 +255,20 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
             (agent?.control as? SwitchView)?.isEnabled = self.context.scope.canWrite
             (hub?.control as? SwitchView)?.isEnabled = self.context.scope.canWrite && !self.context.scope.isProjectScope
         }
-        let addHost = ButtonView("Add host", icon: .plus, variant: .outline, size: .sm)
-        addHost.action = { [weak self] in self?.editDeviceHost(nil) }
-        let hostRow = row("device-hosts", title: "Device hosts", detail: "Add remote machines with simulator or emulator runtimes installed, and the selected environments will connect over SSH and set up device tools automatically.", control: addHost)
-        hostRow.title = "Device hosts"
-        let manage = ButtonView("Manage hosts", variant: .outline, size: .sm).menuTrigger()
-        manage.action = { [weak self, weak manage] in
-            guard let self, let manage else { return }
-            let hosts = self.context.scope.targets.first?.settings["deviceHosts"].arrayValue ?? []
-            let items: [MenuItem] = hosts.map { host in
-                var edit = MenuItem("Edit"); edit.action = { [weak self] in self?.editDeviceHost(host) }
-                var remove = MenuItem("Remove"); remove.action = { [weak self] in self?.removeDeviceHost(host) }
-                return .submenu(host["label"]?.stringValue ?? "Host", [edit, remove])
-            }
-            MenuPopupView.show(items.isEmpty ? [MenuItem("No remote device hosts")] : items, from: manage, placement: .dropdown)
-        }
-        let manageRow = row("device-hosts-manage", detail: "SSH aliases and identity files are resolved on each environment.", control: manage)
-        manageRow.title = "Remote device hosts"
-        binder.add { [weak self, weak addHost, weak manage] in
-            guard let self else { return }
-            let enabled = self.context.scope.canWrite && !self.context.scope.isProjectScope
-            addHost?.isEnabled = enabled; manage?.isEnabled = enabled
-        }
         let inspect = ButtonView("Check devices", variant: .outline, size: .sm)
         inspect.action = { [weak self] in self?.showDeviceInventory() }
         let inventoryRow = row("device-inventory", detail: "Check simulator support and installed device tools on each environment.", control: inspect)
         inventoryRow.title = "Device support"
-        let s = section("devices", "Devices", [hub, agent, hostRow, manageRow, inventoryRow])
+        let s = section("devices", "Devices", [hub, agent, inventoryRow])
         return s
     }
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // Device state is followed only while the page shows; a hidden page holds no subscription.
+        deviceSources?.setVisible(window != nil)
+        if window != nil { deviceSources?.refresh() }
+    }
+
     private func showDeviceInventory() {
         guard let request = context.request else { return }
         let dialog = DialogView(title: "Device support", message: "Checking devices…")
@@ -315,25 +312,6 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
                     content.append(LabelView(target.label + ": " + String(describing: error), font: DSFont.ui(12)))
                     dialog?.message = nil; dialog?.panelContent = content
                 }
-            }
-        }
-    }
-    private func editDeviceHost(_ host: JSONValue?) {
-        deviceHostEditor = DeviceHostEditor(context: context, original: host)
-        deviceHostEditor?.present()
-    }
-    private func removeDeviceHost(_ host: JSONValue) {
-        guard context.scope.canWrite, !context.scope.isProjectScope, let request = context.request else { return }
-        let targets = context.scope.targets
-        Task { [weak self] in
-            guard let self else { return }
-            for target in targets {
-                do {
-                    let current = self.context.scope.targets.first { $0.environmentId == target.environmentId }?.settings["deviceHosts"].arrayValue ?? []
-                    let next = try DeviceHostEditing.update(current, host: host, original: host, remove: true)
-                    let result = try await request(target.environmentId, "server.updateSettings", .object(["patch": .object(["deviceHosts": .array(next)])]))
-                    context.applySettings?(target.environmentId, result)
-                } catch { context.toast?("Device hosts not saved on all environments", String(describing: error), .error) }
             }
         }
     }

@@ -478,7 +478,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| be6ff17f51 | #25259 | device | feat(devices): lease simulators and emulators from a Simlock pool (alpha) | skip: alpha simulator pool, new feature list |
+| be6ff17f51 | #25259 | device | feat(devices): lease simulators and emulators from a Simlock pool (alpha) | partly (settings-5): the Device sources section this commit introduced (DeviceSourcesSettings.tsx) replaces Device hosts: local simulators, SSH hosts grouped across environments, Expo rows on supporting servers; the Simlock pool stays out by the user's choice |
 | be7d86fa66 | #26706 | device | feat(devices): Simlock setup uses each machine's agent-device token, checks tokens, and lists the pool through worker reconnects | skip: alpha simulator pool |
 | 812c0a71c7 | #26797 | device | feat(devices): support Android EAS Simulator sessions | skip: EAS simulator sessions, device alpha |
 | d06ba27166 | #35994 | device | fix(device): Simlock viewer stops retrying an ended lease and keeps its reason | skip: Simlock viewer |
@@ -938,7 +938,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 09ace626bb | #28323 | device | fix(web): device tools keep the typed text when a command fails | already in CandyWrapper (panels-3): DeviceToolsDrawerView never clears a field after a command, so a failure keeps the text; T3 also clears it after success, which CW does not |
 | a821f039c1 | #29352 | device | fix(client-runtime): connection diagnosis no longer blames the host while this device's sign-in loads | left (panels-3): diagnosis while this device's sign-in loads lives in Features/Settings ConnectionDiagnosis.swift, held for the Settings agent |
 | 3ee55151e0 | #29912 | device | fix(web): device host checks show the error without a stack trace | n/a (panels-3): CandyWrapper shows the server's message for a host check, never an Effect cause with a stack |
-| 202d5b5616 | #25971 | device | fix(devices): keep devices listed when simulator discovery fails | skip (panels-3): the discovery warning popover with Retry needs a device host whose discovery fails to check; the sandbox has no device runtime |
+| 202d5b5616 | #25971 | device | fix(devices): keep devices listed when simulator discovery fails | skip (panels-3): the discovery warning popover with Retry needs a device host whose discovery fails to check; the sandbox has no device runtime; settings-5 shows "iOS/Android list may be incomplete" in Device sources |
 | f475de2f75 | #27030 | device | fix(web): device tool update buttons fit their popovers | n/a (panels-3): CandyWrapper has no device tool update buttons yet (parity-checklist Device tools drawer, tool versions remain) |
 | aa37097093 | #35664 | device | fix(web): streamed device toolbar starts at the panel size | n/a (panels-3): a streamed browser tab in CandyWrapper sizes from its own view's bounds, not a published panel rect |
 | 9e32c95576 | #33199 | device | fix(client-runtime): show routes whose host refused this device's sign-in | left (panels-3): routes a host refused this device's sign-in need the connection driver's refusal state and Settings EnvironmentRoutesList, held for the Settings agent |
