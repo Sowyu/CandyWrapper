@@ -457,6 +457,15 @@ final class ComposerController {
             guard let supervisor = self?.shell?.supervisor, self?.serverConfig.capabilities.contains("modelCatalogRefresh") == true else { return }
             Task { _ = try? await supervisor.request("server.refreshProviders", payload: .object(["modelCatalogOnly": .bool(true)])) }
         }
+        // CandyWrapper-only Unrestricted access (UnrestrictedAccess, docs/decisions.md 2026-11-20).
+        pickers.unrestrictedAccess = { [weak self] id in
+            guard let self, let env = targetEnvironmentId else { return nil }
+            let provider = serverConfig.providers.first { $0.instanceId == id }
+            return UnrestrictedAccess.state(settings: serverConfig.settings.raw, instanceId: id.rawValue, driver: provider?.driver,
+                                            version: provider?.version,
+                                            canManage: environments.authSession(env).map { $0.grants(AuthScopes.providersManage) } ?? true)
+        }
+        pickers.onUnrestricted = { [weak self] on in self?.setUnrestricted(on) }
         panel.errorBanner.onDismiss = { [weak self] in self?.dismissThreadError() }
         // ThreadErrorBanner.tsx:17-27: the admin request goes to the clipboard with a toast either way.
         panel.errorBanner.onCopyAdminRequest = { [weak self] in
@@ -753,6 +762,28 @@ final class ComposerController {
 
     /// An environment's grants arrived: the send button may now say it can't change threads, and background work may now be stoppable.
     func grantsChanged() { syncSendBlock(); updateBackgroundWorkBanner(shellThread) }
+
+    /// Turns Unrestricted on (after the once-per-instance confirm, then Full access) or off for the open draft's
+    /// Claude instance. The reply and `settingsUpdated` redraw the menu and Settings.
+    private func setUnrestricted(_ on: Bool) {
+        guard let env = targetEnvironmentId, let id = pickers.current.instanceId else { return }
+        if on, pickers.unrestricted?.on == true { return pickers.chooseFullAccess() }
+        let write: @MainActor () -> Void = { [weak self] in
+            guard let self, let raw = serverConfigs[env]?.settings.raw else { return }
+            if on { pickers.chooseFullAccess() }
+            let payload = UnrestrictedAccess.payload(raw, instanceId: id.rawValue, driver: "claudeAgent", on: on)
+            Task { [weak self] in
+                do {
+                    if let result = try await self?.environments.request(env, "server.updateSettings", payload) { self?.applySettings(env, result) }
+                } catch {
+                    self?.toast(.error, on ? "Could not turn on Unrestricted" : "Could not turn off Unrestricted", "\(error)")
+                }
+            }
+        }
+        guard on else { return write() }
+        UnrestrictedAccess.confirm(in: composer.window, environment: env, instance: id.rawValue, machine: environments.label(env) ?? "this machine",
+                                   provider: pickers.current.entry?.displayName ?? "Claude", then: write)
+    }
 
     /// Applies the settings a `server.updateSettings` reply returned, before `settingsUpdated` arrives.
     func applySettings(_ environmentId: String, _ raw: JSONValue) {
@@ -1918,9 +1949,11 @@ final class ComposerController {
         let strip = panel.contextStrip
         let modern = !ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark) && !ThemeRuntime.isGlass(dark: composer.effectiveAppearance.isDark)
         strip.showsPermissions = modern && thread == nil
-        let mode = ComposerPickers.modes[pickers.current.runtimeMode] ?? ComposerPickers.modes[.fullAccess]!
+        let unrestricted = pickers.isUnrestricted
+        let mode = unrestricted ? ComposerPickers.ModeInfo(label: UnrestrictedAccess.label, description: UnrestrictedAccess.description, icon: .triangleAlert)
+            : ComposerPickers.modes[pickers.current.runtimeMode] ?? ComposerPickers.modes[.fullAccess]!
         strip.permissions.text = mode.label
-        strip.permissions.glyphs = [pickers.current.runtimeMode == .fullAccess ? ComposerPickers.fullAccessGlyph : mode.icon.definition]
+        strip.permissions.glyphs = [pickers.current.runtimeMode == .fullAccess && !unrestricted ? ComposerPickers.fullAccessGlyph : mode.icon.definition]
         strip.permissions.action = { [weak self, weak strip] in if let strip { self?.pickers.openPermissions(from: strip.permissions) } }
         panel.model.providers = serverConfig.providers
         onModelChange?()

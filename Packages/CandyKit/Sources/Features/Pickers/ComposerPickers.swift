@@ -36,6 +36,23 @@ public final class ComposerPickers {
     public final var onManageProvider: (@MainActor (ProviderInstanceId) -> Void)?
     /// The model picker opened, from any trigger (ProviderModelPicker.tsx:149 at 4928).
     public final var onModelPickerOpen: (@MainActor () -> Void)?
+    /// CandyWrapper's Unrestricted access for a Claude instance on the open environment; nil hides it (`UnrestrictedAccess`).
+    public var unrestrictedAccess: (ProviderInstanceId) -> UnrestrictedAccess.State? = { _ in nil }
+    /// Unrestricted picked (true) or turned off (false). The app confirms, writes the instance and, for true,
+    /// calls `chooseFullAccess()`.
+    public final var onUnrestricted: (@MainActor (Bool) -> Void)?
+    /// The open draft's Unrestricted state: a Claude instance that offers Full access.
+    public var unrestricted: UnrestrictedAccess.State? {
+        guard let id = current.instanceId, current.entry?.driver == "claudeAgent", current.runtimeModeOptions.contains(.fullAccess) else { return nil }
+        return unrestrictedAccess(id)
+    }
+    /// The draft runs Full access with Unrestricted on for its instance.
+    public var isUnrestricted: Bool { current.runtimeMode == .fullAccess && unrestricted?.on == true }
+    /// Sets the draft to Full access, after the app turned Unrestricted on.
+    public func chooseFullAccess() {
+        if current.runtimeMode != .fullAccess { store.setRuntimeMode(draftKey, .fullAccess) }
+        refresh(notify: true)
+    }
 
     /// Whether the draft may fan out to several models (a new thread on a server with
     /// `requiredWorktreeBootstrap`); the app sets it per draft.
@@ -110,6 +127,7 @@ public final class ComposerPickers {
         var themeGeneration: Int
         var appearance: NSAppearance.Name
         var effortDisplay: String
+        var unrestricted: UnrestrictedAccess.State?
     }
     public var permissionsShownInStrip = false { didSet { if permissionsShownInStrip != oldValue { controlsState = nil; refresh(notify: false) } } }
     private var controlsState: ControlsState?
@@ -131,7 +149,8 @@ public final class ComposerPickers {
                                   showsTraits: !current.descriptors.isEmpty, runtimeMode: current.runtimeMode,
                                   defaultRuntimeMode: context.projectDefaultRuntimeMode ?? context.serverDefaults.defaultRuntimeMode,
                                   interactionMode: current.interactionMode,
-                                  themeGeneration: ThemeRuntime.generation, appearance: modelButton.effectiveAppearance.name, effortDisplay: ClientSettingsStore.shared.current.string("effortDisplay"))
+                                  themeGeneration: ThemeRuntime.generation, appearance: modelButton.effectiveAppearance.name, effortDisplay: ClientSettingsStore.shared.current.string("effortDisplay"),
+                                  unrestricted: unrestricted)
         syncDocked()
         guard state != controlsState else { return }
         controlsState = state
@@ -147,7 +166,8 @@ public final class ComposerPickers {
         traitsButton.title = label
         traitsButton.toolTip = label
         controlsView.showsTraits = !current.descriptors.isEmpty
-        let mode = Self.modes[current.runtimeMode] ?? Self.modes[.fullAccess]!
+        let unrestrictedOn = isUnrestricted
+        let mode = unrestrictedOn ? ComposerPermissionsView.info(nil, unrestricted: nil) : Self.modes[current.runtimeMode] ?? Self.modes[.fullAccess]!
         accessButton.title = mode.label
         accessButton.icon = IconView(name: mode.icon, size: 16)
         accessButton.toolTip = mode.description
@@ -165,13 +185,14 @@ public final class ComposerPickers {
             // 4928's trigger keeps the control's `px-2` on both sides (ProviderModelPicker.tsx:373-379, ComposerControl.tsx:11-24).
             modelButton.paddingOverride = (8, ComposerDesign.uses3814(dark: modelButton.effectiveAppearance.isDark) ? 8 : 4)
             modelButton.maximumLabelWidth = 224
-            accessButton.icon = IconView(definition: current.runtimeMode == .fullAccess ? Self.fullAccessGlyph : mode.icon.definition, size: 16)
+            accessButton.icon = IconView(definition: current.runtimeMode == .fullAccess && !unrestrictedOn ? Self.fullAccessGlyph : mode.icon.definition, size: 16)
             accessButton.iconFollowsLabel = true
             // The picker's footer always holds Permissions, so the chip shows only off the default
             // (composerControlsOwnership.ts:1-31).
             let defaultMode = context.projectDefaultRuntimeMode ?? context.serverDefaults.defaultRuntimeMode
             controlsView.permissionsIconOnly = false
-            controlsView.hidesPermissions = current.runtimeMode == defaultMode || permissionsShownInStrip
+            // Unrestricted always shows its chip, so the danger stays visible.
+            controlsView.hidesPermissions = (current.runtimeMode == defaultMode && !unrestrictedOn) || permissionsShownInStrip
         } else {
             accessButton.iconFollowsLabel = false
             controlsView.permissionsIconOnly = false
@@ -217,7 +238,7 @@ public final class ComposerPickers {
         docked.picker.activeModel = current.model?.slug ?? current.modelSlug ?? ""
         docked.column.update(descriptors: current.descriptors, ultrathink: ultrathinkControlled,
                              locked: ultrathinkControlled && ModelTraits.ultrathinkInBody(prompt), model: current.modelTriggerLabel(spoken: true))
-        docked.footer.update(descriptors: current.descriptors, runtimeMode: current.runtimeMode)
+        docked.footer.update(descriptors: current.descriptors, runtimeMode: current.runtimeMode, unrestricted: isUnrestricted)
     }
 
     /// The new-thread strip's permissions control opens the access menu above itself, top and end aligned
@@ -225,7 +246,8 @@ public final class ComposerPickers {
     public func openPermissions(from trigger: NSView) {
         if closeIfOpen(trigger) { return }
         guard let host = trigger.popupHost else { return }
-        let menu = ComposerPermissionsMenu(modes: current.runtimeModeOptions, selected: current.runtimeMode) { [weak self] mode in
+        let menu = ComposerPermissionsMenu(modes: current.runtimeModeOptions, selected: current.runtimeMode, unrestricted: unrestricted,
+                                           onUnrestricted: { [weak self] on in self?.onUnrestricted?(on) }) { [weak self] mode in
             guard let self, mode != self.current.runtimeMode else { return }
             store.setRuntimeMode(draftKey, mode)
             refresh(notify: true)
@@ -239,7 +261,8 @@ public final class ComposerPickers {
     private func openFooterPermissions(_ trigger: NSView) {
         guard let host = trigger.popupHost, let parent = openPopup else { return }
         if let open = host.popups.first(where: { $0.trigger === trigger }) { host.close(open); return }
-        let menu = ComposerPermissionsMenu(modes: current.runtimeModeOptions, selected: current.runtimeMode) { [weak self] mode in
+        let menu = ComposerPermissionsMenu(modes: current.runtimeModeOptions, selected: current.runtimeMode, unrestricted: unrestricted,
+                                           onUnrestricted: { [weak self] on in self?.onUnrestricted?(on) }) { [weak self] mode in
             guard let self, mode != self.current.runtimeMode else { return }
             store.setRuntimeMode(draftKey, mode)
             refresh(notify: true)
@@ -496,7 +519,8 @@ public final class ComposerPickers {
     }
 
     func optionsMenu(includingTraits: Bool) -> ComposerOptionsMenu {
-        ComposerOptionsMenu(entries: includingTraits ? traitsEntries() : nil, modes: current.runtimeModeOptions, selected: current.runtimeMode) { [weak self] mode in
+        ComposerOptionsMenu(entries: includingTraits ? traitsEntries() : nil, modes: current.runtimeModeOptions, selected: current.runtimeMode,
+                            unrestricted: unrestricted, onUnrestricted: { [weak self] on in self?.onUnrestricted?(on) }) { [weak self] mode in
             guard let self else { return }; store.setRuntimeMode(draftKey, mode); refresh(notify: true)
         }
     }
@@ -514,14 +538,30 @@ public final class ComposerPickers {
     }
 
     func accessEntries() -> [PickerMenuEntry] {
-        current.runtimeModeOptions.map { mode in
+        let unrestricted = unrestricted, on = isUnrestricted
+        var out: [PickerMenuEntry] = current.runtimeModeOptions.map { mode in
             let info = Self.modes[mode] ?? ModeInfo(label: mode.rawValue, description: "", icon: .lock)
-            return .option(info.label, icon: info.icon, description: info.description, checked: mode == current.runtimeMode) { [weak self] in
+            return .option(info.label, icon: info.icon, description: info.description, checked: mode == current.runtimeMode && !on) { [weak self] in
                 guard let self else { return }
                 self.store.setRuntimeMode(self.draftKey, mode)
                 self.refresh(notify: true)
             }
         }
+        if let unrestricted {
+            out += unrestrictedEntries(unrestricted, checked: on, icons: true)
+        }
+        return out
+    }
+
+    /// Unrestricted after Full access, and "Turn off Unrestricted" while it is on for the instance.
+    func unrestrictedEntries(_ state: UnrestrictedAccess.State, checked: Bool, icons: Bool) -> [PickerMenuEntry] {
+        let info = ComposerPermissionsView.info(nil, unrestricted: state)
+        var out: [PickerMenuEntry] = [.option(info.label, icon: icons ? info.icon : nil, description: icons ? info.description : state.unsupportedHint, checked: checked) { [weak self] in self?.onUnrestricted?(true) }]
+        if state.on {
+            out += [.separator, .option("Turn off Unrestricted", description: icons ? "Turns it off for every Claude thread on this machine." : nil,
+                                        checked: false) { [weak self] in self?.onUnrestricted?(false) }]
+        }
+        return out
     }
 
     // MARK: Overflow menu (CompactComposerControlsMenu.tsx)
@@ -566,8 +606,10 @@ public final class ComposerPickers {
                 self.refresh(notify: true)
             }
             entry.keepsOpen = true
+            if mode == current.runtimeMode && isUnrestricted { entry.checked = false }
             out.append(entry)
         }
+        if let unrestricted { out += unrestrictedEntries(unrestricted, checked: isUnrestricted, icons: false) }
         return out
     }
 

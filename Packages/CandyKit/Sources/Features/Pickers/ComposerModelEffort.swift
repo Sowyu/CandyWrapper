@@ -538,9 +538,9 @@ final class ComposerPermissionsTriggerView: ControlView {
     private let icon: IconView
     private let label: LabelView
     private let chevron = IconView(name: .chevronUp, size: 12)
-    init(mode: RuntimeMode) {
-        let info = ComposerPickers.modes[mode] ?? ComposerPickers.modes[.fullAccess]!
-        icon = IconView(definition: mode == .fullAccess ? ComposerPickers.fullAccessGlyph : info.icon.definition, size: 14)
+    init(mode: RuntimeMode, unrestricted: Bool = false) {
+        let info = unrestricted ? ComposerPermissionsView.info(nil, unrestricted: nil) : ComposerPickers.modes[mode] ?? ComposerPickers.modes[.fullAccess]!
+        icon = IconView(definition: mode == .fullAccess && !unrestricted ? ComposerPickers.fullAccessGlyph : info.icon.definition, size: 14)
         label = LabelView(info.label, font: DSFont.ui(12))
         super.init(frame: .zero)
         scalesWhenPressed = false
@@ -585,7 +585,7 @@ final class ComposerPickerFooterView: DSView {
         layer?.addSublayer(rule)
     }
 
-    func update(descriptors: [ProviderOptionDescriptor], runtimeMode: RuntimeMode) {
+    func update(descriptors: [ProviderOptionDescriptor], runtimeMode: RuntimeMode, unrestricted: Bool = false) {
         [speed, ultracode].forEach { $0?.removeFromSuperview() }
         permissions?.removeFromSuperview()
         let controls = ComposerEffortControls(descriptors)
@@ -614,7 +614,7 @@ final class ComposerPickerFooterView: DSView {
             s.action = { [weak self] in self?.onBoolean?(toggle.id, !on) }
             ultracode = ComposerFooterGroupView([s])
         }
-        let trigger = ComposerPermissionsTriggerView(mode: runtimeMode)
+        let trigger = ComposerPermissionsTriggerView(mode: runtimeMode, unrestricted: unrestricted)
         trigger.opensPopupOnPress = true
         trigger.action = { [weak self, weak trigger] in if let trigger { self?.onPermissions?(trigger) } }
         permissions = trigger
@@ -649,18 +649,20 @@ final class ComposerPickerFooterView: DSView {
 final class ComposerPermissionsMenu: DSView, PickerPopupBody {
     let permissions: ComposerPermissionsView
     var onClose: (() -> Void)?
-    init(modes: [RuntimeMode], selected: RuntimeMode, onPick: @escaping (RuntimeMode) -> Void) {
-        permissions = ComposerPermissionsView(modes: modes, selected: selected)
+    init(modes: [RuntimeMode], selected: RuntimeMode, unrestricted: UnrestrictedAccess.State? = nil,
+         onUnrestricted: ((Bool) -> Void)? = nil, onPick: @escaping (RuntimeMode) -> Void) {
+        permissions = ComposerPermissionsView(modes: modes, selected: selected, unrestricted: unrestricted)
         super.init(frame: .zero)
         addSubview(permissions)
         permissions.onPick = { [weak self] mode in onPick(mode); self?.onClose?() }
+        permissions.onUnrestricted = { [weak self] on in self?.onClose?(); onUnrestricted?(on) }
     }
-    var naturalSize: CGSize { CGSize(width: 296, height: 130) }
+    var naturalSize: CGSize { CGSize(width: 296, height: 130 + permissions.extraHeight) }
     func handleKey(_ key: PopupKey) -> Bool {
         if key == .escape { onClose?(); return true }
         return permissions.handleKey(key)
     }
-    override func layout() { super.layout(); permissions.frame = NSRect(x: 4, y: 4, width: bounds.width - 8, height: 122) }
+    override func layout() { super.layout(); permissions.frame = NSRect(x: 4, y: 4, width: bounds.width - 8, height: 122 + permissions.extraHeight) }
 }
 
 // MARK: - Docked picker
