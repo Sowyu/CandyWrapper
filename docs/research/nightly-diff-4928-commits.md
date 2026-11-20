@@ -612,8 +612,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| b24959d579 | #28047 | composer | feat: Labs option to suggest your next prompt after Claude and Codex turns | port; needs wire: suggestion items |
-| b48b8ea2a0 | #33706 | thread | fix(web): prompt suggestions show after a steered turn | port |
+| b24959d579 | #28047 | composer | feat: Labs option to suggest your next prompt after Claude and Codex turns | left: needs `orchestration.subscribePromptSuggestion {threadId}` (stream of `{runId, text} | null`, rpc.ts:2121 at 4928) when server settings `promptSuggestionsEnabled` is true, ghost text in the empty composer that Tab accepts and Escape dismisses per run (usePromptSuggestion.ts, composerCommandKey.ts), and the Labs switch in Settings |
+| b48b8ea2a0 | #33706 | thread | fix(web): prompt suggestions show after a steered turn | left: with #28047, `offeredPromptSuggestion` skips a steered run that never started |
 
 ## New feature text-generators (1)
 
@@ -625,7 +625,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 88109cea46 | #31207 | composer | feat(web,mobile): @-mention a model to name it for the agent | port |
+| 88109cea46 | #31207 | composer | feat(web,mobile): @-mention a model to name it for the agent | left: @-mention a model needs a model chip kind in ComposerInlineTokens and the editor, model rows in the @ menu (composerModelMentions.ts), provider chip icons and a context record; about 900 lines at 4928 |
 
 ## New feature mcp-client-setup (3)
 
@@ -663,7 +663,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| c0f85e7f79 | #33124 | thread | feat(web): reply to an assistant response from its hover actions | port |
+| c0f85e7f79 | #33124 | thread | feat(web): reply to an assistant response from its hover actions | left: reply to a response starts in the assistant row's hover actions (Features/Thread, another agent's area) and adds a `replyTo` draft field, a quote chip above the composer and a context record on send (composerContextRecords.ts, composerContext.ts) |
 
 ## New feature agent-theming (5)
 
