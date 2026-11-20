@@ -819,8 +819,8 @@ public enum SidebarModel {
         return relative.isEmpty ? canonical : "\(canonical)::\(relative)"
     }
 
-    /// Port of `deriveProjectGroupLabel` (projectGrouping.ts:159-190).
-    public static func deriveProjectGroupLabel(representative: ProjectShell, members: [ProjectShell]) -> String {
+    /// Port of `deriveProjectGroupLabel` (client-runtime projectGrouping.ts:201-248 at 4928).
+    public static func deriveProjectGroupLabel(groupKey: String, representative: ProjectShell, members: [ProjectShell]) -> String {
         func unique(_ values: [String?]) -> [String] {
             var seen = Set<String>(), out: [String] = []
             for case let value? in values {
@@ -835,6 +835,11 @@ public enum SidebarModel {
         if titles.count == 1, !displayNames.contains(titles[0]), !repoNames.contains(titles[0]) { return titles[0] }
         if displayNames.count == 1 { return displayNames[0] }
         if repoNames.count == 1 { return repoNames[0] }
+        // A whole-repository group is named for the repository, not one member's folder: clones can disagree on its
+        // casing. A subfolder group keeps its own title (#35614).
+        if let identity = representative.repositoryIdentity, groupKey == identity.groupingKey {
+            return identity.groupingDisplayName ?? identity.name ?? representative.title
+        }
         return representative.title
     }
 
@@ -907,7 +912,7 @@ public enum SidebarModel {
             return ProjectGroup(
                 key: key,
                 label: group.count > 1
-                    ? deriveProjectGroupLabel(representative: representative, members: group) : representative.title,
+                    ? deriveProjectGroupLabel(groupKey: key, representative: representative, members: group) : representative.title,
                 representative: representative, members: group, memberProjectIds: ids[key] ?? [])
         }
     }

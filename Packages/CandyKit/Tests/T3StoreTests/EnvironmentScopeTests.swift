@@ -106,6 +106,29 @@ struct EnvironmentScopeTests {
         #expect(SidebarModel.buildProjectGroups([remote, local]).first?.representative.id == "remote:p1")
     }
 
+    /// projectGrouping.test.ts "labels a group by its repository when clones disagree on its casing" (#35614).
+    @Test func repositoryGroupsTakeTheRepositoryName() {
+        var id = identity("github.com/pingdotgg/t3code")
+        id.name = "t3code"; id.displayName = "T3 Code"; id.rootPath = "/work/NewCo"
+        var lowered = id
+        lowered.name = "T3CODE"; lowered.displayName = "t3 code"; lowered.rootPath = "/remote/NewCo"
+        let sub = EnvironmentScope.scope(project("p1") { $0.title = "design-study"; $0.workspaceRoot = "/work/NewCo/reference/design-study"; $0.repositoryIdentity = id }, "local")
+        let root = EnvironmentScope.scope(project("p2") { $0.title = "NewCo"; $0.workspaceRoot = "/work/NewCo"; $0.repositoryIdentity = id }, "local")
+        let clone = EnvironmentScope.scope(project("p3") { $0.title = "NewCo"; $0.workspaceRoot = "/remote/NewCo"; $0.repositoryIdentity = lowered }, "remote")
+        let groups = SidebarModel.buildProjectGroups([sub, root, clone], grouping: .init(mode: .repository), preferredEnvironmentId: "local")
+        #expect(groups.map(\.label) == ["T3 Code"])
+        // A subfolder group in repository_path mode keeps its own title.
+        var localId = id
+        localId.rootPath = "/work/t3code"
+        var remoteId = lowered
+        remoteId.rootPath = "/remote/t3code"
+        let design = EnvironmentScope.scope(project("d1") { $0.title = "Design docs"; $0.workspaceRoot = "/work/t3code/design"; $0.repositoryIdentity = localId }, "local")
+        let remoteDesign = EnvironmentScope.scope(project("d2") { $0.title = "design"; $0.workspaceRoot = "/remote/t3code/design"; $0.repositoryIdentity = remoteId }, "remote")
+        let top = EnvironmentScope.scope(project("d3") { $0.title = "t3code"; $0.workspaceRoot = "/work/t3code"; $0.repositoryIdentity = localId }, "local")
+        let paths = SidebarModel.buildProjectGroups([design, remoteDesign, top], grouping: .init(mode: .repositoryPath), preferredEnvironmentId: "local")
+        #expect(paths.map(\.label) == ["Design docs", "t3code"])
+    }
+
     @Test func samePathOnTwoEnvironmentsDoesNotCollapse() {
         // No repository identity: the physical key `env:path` decides, so two machines stay two groups.
         let a = EnvironmentScope.scope(project("p") { $0.workspaceRoot = "/w/demo" }, "a")

@@ -1345,7 +1345,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 2d80cb6bc7 | #36420 | sidebar | fix(clients): live working timers count on the host's clock | left: needs a server clock offset per environment |
 | dea07a1b12 | #36467 | sidebar | fix(web): rewind no longer offers file restore in project-folder threads | skip: rewind file restore, outside the sidebar |
 | 1f55acf13b | #36543 | sidebar | fix(client-runtime): refresh settled counts when threads move project | already in CandyWrapper: ShellReducer.swift invalidates counts on any update of an older settled thread |
-| 306914f016 | #35614 | sidebar | fix(client-runtime): grouped projects no longer take one folder's name as their label | left: repository-named group labels in project grouping |
+| 306914f016 | #35614 | sidebar | fix(client-runtime): grouped projects no longer take one folder's name as their label | ported (sidebar-2): deriveProjectGroupLabel names a whole-repository group after the repository |
 | 28f1786829 | #36590 | sidebar | fix(web): recreated folders no longer show deleted files | skip: files panel, outside the sidebar |
 | df8c1a1fd4 | #25269 | sidebar | fix(web): Narrator highlights the sidebar thread title where it is drawn | skip: web Narrator highlight |
 | 96735d7311 | #27109 | sidebar | fix(web): picking a sidebar search result scrolls the list to that thread | already in CandyWrapper: revealRouteRow scrolls to the opened result |
