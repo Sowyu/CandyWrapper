@@ -152,12 +152,20 @@ final class ProviderEnvironmentVariablesView: DSView, SettingsGroupRow {
             return line
         }
         note.isHidden = rows.isEmpty
+        refreshNote()
+    }
+
+    /// ProviderInstanceCard.tsx:561-565 (#23168): a stored secret can't be renamed or made plain in place.
+    private func refreshNote() {
+        note.text = "Sensitive values are stored separately and never returned to the app."
+            + (rows.contains { $0.valueRedacted == true } ? " Enter a new value to rename a saved one or make it plain text." : "")
         needsLayout = true
     }
 
     private func update(_ next: ProviderEnvironmentLogic.Draft) {
         guard let i = rows.firstIndex(where: { $0.id == next.id }), rows[i] != next else { return }
         rows[i] = next
+        refreshNote()
         onRowsChange?(rows)
     }
 
@@ -170,7 +178,9 @@ final class ProviderEnvironmentVariablesView: DSView, SettingsGroupRow {
     /// Each card is `p-2` around two 28pt lines `gap-1.5` apart, inside a 1pt border; cards sit `space-y-2` apart.
     static let cardHeight: CGFloat = 1 + 8 + 28 + 6 + 28 + 8 + 1
 
-    func height(forWidth width: CGFloat) -> CGFloat { rows.isEmpty ? 0 : CGFloat(rows.count) * (Self.cardHeight + 8) + 16 + 8 }
+    func height(forWidth width: CGFloat) -> CGFloat {
+        rows.isEmpty ? 0 : CGFloat(rows.count) * (Self.cardHeight + 8) + max(16, note.height(forWidth: width)) + 8
+    }
 
     override func layout() {
         super.layout()
@@ -179,7 +189,7 @@ final class ProviderEnvironmentVariablesView: DSView, SettingsGroupRow {
             line.frame = NSRect(x: 0, y: y, width: bounds.width, height: Self.cardHeight)
             y += Self.cardHeight + 8
         }
-        note.frame = NSRect(x: 0, y: y, width: bounds.width, height: 16)
+        note.frame = NSRect(x: 0, y: y, width: bounds.width, height: max(16, note.height(forWidth: bounds.width)))
     }
 
     /// One variable as a `rounded-lg border p-2` card: the name and the remove button on the first line, the value and
@@ -194,6 +204,7 @@ final class ProviderEnvironmentVariablesView: DSView, SettingsGroupRow {
         private let lock = ButtonView(nil, icon: .lock, variant: .ghostMuted, size: .iconMicro)
         private let remove = ButtonView(nil, icon: .x, variant: .ghostDestructive, size: .iconMicro)
         private var lockTip: TooltipController?
+        private var enabled = true
 
         init(_ row: ProviderEnvironmentLogic.Draft, index: Int, enabled: Bool) {
             self.row = row
@@ -223,9 +234,9 @@ final class ProviderEnvironmentVariablesView: DSView, SettingsGroupRow {
             style.border = Themed.color(\.border)
             boxStyle = style
             for v in [name, plain, secret, lock, remove] as [NSView] { addSubview(v) }
-            for c in [name, plain] { c.isEnabled = enabled }
+            self.enabled = enabled
+            plain.isEnabled = enabled
             secret.isEnabled = enabled
-            lock.isEnabled = enabled
             remove.isEnabled = enabled
             apply()
         }
@@ -258,6 +269,9 @@ final class ProviderEnvironmentVariablesView: DSView, SettingsGroupRow {
             lock.icon = row.sensitive ? .lock : .lockOpen
             lock.setAccessibilityLabel("Mark environment variable \(row.name.isEmpty ? "" : row.name + " ")as sensitive")
             lockTip?.text = row.sensitive ? "Sensitive, stored separately" : "Plain text"
+            // #23168: renaming or unlocking a stored secret would drop its value.
+            name.isEnabled = enabled && row.valueRedacted != true
+            lock.isEnabled = enabled && row.valueRedacted != true
         }
 
         override func layout() {
@@ -369,6 +383,7 @@ final class ProviderAccentColorButton: ControlView {
         panel.onChange = { [weak self] hex in self?.set(hex) }
         let popover = PopoverView(content: panel, padding: .none)
         panel.onClear = { [weak self] in self?.set(nil); self?.popupHost?.closeAll() }
+        panel.onAdd = { [weak self] hex in self?.set(hex); self?.popupHost?.closeAll() }
         popover.show(from: self, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 6))
     }
 }
@@ -377,6 +392,9 @@ final class ProviderAccentColorButton: ControlView {
 final class ProviderAccentColorPanel: DSView {
     var onChange: ((String) -> Void)?
     var onClear: (() -> Void)?
+    /// "Add color" commits the color on show while none is set (ProviderAccentColorPicker.tsx:94-102, #25014).
+    var onAdd: ((String) -> Void)?
+    private let add = ButtonView("Add color", size: .compact)
     private let plane: ColorSaturationValuePlaneView
     private let hue: ColorHueSliderView
     private let hexField = InputView(placeholder: "", text: "", size: .compact, font: .mono)
@@ -405,8 +423,10 @@ final class ProviderAccentColorPanel: DSView {
         hexField.onCommit = { [weak self] _ in self?.syncHex() }
         clear.action = { [weak self] in self?.onClear?() }
         clear.isHidden = !clearable
+        add.action = { [weak self] in guard let self else { return }; self.onAdd?(self.current) }
+        add.isHidden = clearable
         layer?.addSublayer(rule)
-        for v in [plane, hue, hexField, clear] as [NSView] { addSubview(v) }
+        for v in [plane, hue, hexField, clear, add] as [NSView] { addSubview(v) }
     }
 
     private var current: String { ProviderEnvironmentLogic.hex(h: hue.hue, s: plane.saturation, v: plane.value) }
@@ -417,7 +437,7 @@ final class ProviderAccentColorPanel: DSView {
         onChange?(current)
     }
 
-    override var intrinsicContentSize: NSSize { NSSize(width: 224, height: plane.intrinsicContentSize.height + 12 + 16 + 12 + 30 + 12 + (clearable ? 1 + 4 + 28 + 4 : 0)) }
+    override var intrinsicContentSize: NSSize { NSSize(width: 224, height: plane.intrinsicContentSize.height + 12 + 16 + 12 + 30 + 12 + (clearable ? 1 + 4 + 28 + 4 : 28 + 12)) }
 
     override func updateLayer() { rule.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self) }
 
@@ -433,5 +453,6 @@ final class ProviderAccentColorPanel: DSView {
         CATransaction.commit()
         rule.isHidden = !clearable
         clear.frame = NSRect(x: 4, y: y + 1 + 4, width: 216, height: 28)
+        add.frame = NSRect(x: 12, y: y, width: 200, height: 28)
     }
 }

@@ -54,6 +54,7 @@ public final class CodexSetupView: DSView, SettingsGroupRow {
     private let connectButton = ChatGptButtons.connection(size: .sm)
     private let differentButton = ButtonView("Use a different account", variant: .ghost, size: .sm)
     private let existingButton = ButtonView("Use existing CLI", variant: .ghostMuted, size: .sm)
+    private let updateButton = ButtonView("Update Codex", variant: .outline, size: .sm)
     private lazy var usageButton = ChatGptButtons.usage { [weak self] url in self?.context.openURL?(url) }
     private let notice = TextBlockView("", font: DSFont.ui(12), lineHeight: 16, color: Themed.color(\.mutedForeground))
     private let errorText = TextBlockView("", font: DSFont.ui(12), lineHeight: 16, color: Themed.color(\.destructive))
@@ -77,9 +78,10 @@ public final class CodexSetupView: DSView, SettingsGroupRow {
         state.provider = provider; state.enabled = enabled; state.readOnly = readOnly; state.autoStart = autoStart
         state.desktopBridge = context.receiveProviderAuthCallback != nil
         state.local = CodexSetupLogic.isLoopback(context.httpBaseURL?(environment))
-        for b in [waitingButton, cancelButton, changeButton, disconnectButton, connectButton, differentButton, existingButton] { b.isHidden = true }
+        for b in [waitingButton, cancelButton, changeButton, disconnectButton, connectButton, differentButton, existingButton, updateButton] { b.isHidden = true }
+        if presentation == .settings { existingButton.variant = .ghost }
         controls.views = presentation == .settings
-            ? [waitingButton, cancelButton, changeButton, disconnectButton, connectButton, differentButton]
+            ? [waitingButton, cancelButton, updateButton, changeButton, disconnectButton, connectButton, differentButton, existingButton]
             : [existingButton, differentButton, cancelButton, waitingButton, connectButton]
         wireButtons()
         help.onToggle = { [weak self] in guard let self else { return }; self.callbackHelpOpen.toggle(); self.changed() }
@@ -281,7 +283,7 @@ public final class CodexSetupView: DSView, SettingsGroupRow {
                 receivingCallback = nil
                 await run("provider.auth.complete", .object(["instanceId": .string(instance), "flowId": .string(flow), "callbackUrl": .string(callback)]))
             } catch {
-                self.error = "Could not finish sign-in on this computer. Try again or paste the redirect URL below."
+                self.error = "Could not finish sign-in on this computer. Try again."  // CodexSetupSection.tsx (#36753)
                 changed()
             }
         } else {
@@ -344,6 +346,10 @@ public final class CodexSetupView: DSView, SettingsGroupRow {
         }
         differentButton.action = { [weak self] in Task { await self?.setup(CodexSetupLogic.changeAccountMethod) } }
         existingButton.action = { [weak self] in self?.onModeChange?("existing") }
+        updateButton.action = { [weak self] in
+            guard let self else { return }
+            Task { _ = await self.run("provider.install.start", .object(["instanceId": .string(self.instance)])) }
+        }
     }
 
     private func cancelPressed() {
@@ -429,7 +435,7 @@ public final class CodexSetupView: DSView, SettingsGroupRow {
 
     private func render() {
         let s = state
-        for b in [waitingButton, cancelButton, changeButton, disconnectButton, connectButton, differentButton, existingButton] { b.isHidden = true }
+        for b in [waitingButton, cancelButton, changeButton, disconnectButton, connectButton, differentButton, existingButton, updateButton] { b.isHidden = true }
         let onboarding = presentation == .onboarding
         let waiting = s.waitingControl(onboarding: onboarding)
         waitingButton.variant = s.remoteWeb ? .default : .outline
@@ -464,11 +470,15 @@ public final class CodexSetupView: DSView, SettingsGroupRow {
             } else if s.installActive {
                 show(cancelButton, enabled: !(s.pending || s.readOnly))
             } else if s.authenticated {
+                // CodexSetupSection.tsx:1026-1037 (#21249): a managed install behind its release updates in place.
+                if s.updateAvailable { show(updateButton, enabled: !(s.unavailable || s.busy)) }
                 show(changeButton, enabled: !(s.unavailable || s.busy))
                 show(disconnectButton, enabled: !(s.unavailable || s.busy))
             } else {
                 show(connectButton, s.connectionTitle, enabled: !s.connectionDisabled)
                 if s.hasSavedAccount { show(differentButton, enabled: !(s.unavailable || s.busy)) }
+                // CodexSetupSection.tsx:1085-1094 (#23160).
+                if allowExistingCli { show(existingButton, enabled: !(s.readOnly || s.busy)) }
             }
             switch s.accountDescription {
             case .signedIn(let email):

@@ -136,6 +136,9 @@ public enum ProvidersLogic {
         models += custom.filter { !builtIn.contains($0.slug) }.map { c in
             DisplayModel(slug: c.slug, name: c.name, isCustom: true, capabilities: live.first { $0.slug == c.slug }.map { capabilities($0, flagMissingReasoning: false) } ?? [])
         }
+        // ProviderModelsSection.tsx (#23479): a favorite the provider no longer reports keeps a row, so its star can be cleared.
+        let reported = Set(models.map(\.slug))
+        models += favorites.subtracting(reported).sorted().map { DisplayModel(slug: $0, name: $0, isCustom: false, capabilities: []) }
         let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
         let original = Dictionary(models.enumerated().map { ($1.slug, $0) }, uniquingKeysWith: { a, _ in a })
         let sorted = models.sorted { l, r in
@@ -269,6 +272,9 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
     /// Per instance: the variables the rows last matched or published, and the rows (`ProviderEnvironmentSection` state).
     private var environmentDrafts: [String: (published: [ProviderEnvironmentLogic.Variable], rows: [ProviderEnvironmentLogic.Draft])] = [:]
     private var environmentDraftId = 0
+    /// Rows added here, and the variable names each instance's server has delivered (#30115).
+    private var localEnvironmentDraftIds = Set<Int>()
+    private var environmentSeenNames: [String: Set<String>] = [:]
     /// Instances with an update request in flight (`updatingProviderInstanceIds`).
     private var updatingInstances: Set<String> = []
     /// The instance the editor was built for.
@@ -587,6 +593,11 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             host?.close()
             self?.writeHubPatch(env.id, .object([UsageHubLogic.sourceId(u): .object(entry)]))
         }
+        // AddUsageLimitSourceDialog.tsx (#36755): Enter in any field adds the hub once it's valid.
+        let submit: @MainActor () -> Void = { if add.isEnabled { add.action?() } }
+        url.onSubmit = submit
+        key.onSubmit = submit
+        label.onSubmit = submit
         DispatchQueue.main.async { window.makeFirstResponder(url) }
     }
 
@@ -599,8 +610,9 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         confirm("\(question)\nIts saved settings, including any custom binary path, will be removed.\(consequence)", true, remove)
     }
 
-    private func mutate(_ env: String, _ mutation: JSONValue, patch: [String: JSONValue] = [:], failure: String) {
-        guard let request = context.request else { return }
+    private func mutate(_ env: String, _ mutation: JSONValue, patch: [String: JSONValue] = [:], failure: String,
+                        done: (@MainActor () -> Void)? = nil) {
+        guard let request = context.request else { done?(); return }
         Task { [weak self] in
             do {
                 let result = try await request(env, "server.updateSettings", .object(["patch": .object(patch), "providerInstanceMutation": mutation]))
@@ -608,6 +620,24 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             } catch {
                 self?.context.toast?(failure, "\(error)", .error)
             }
+            done?()
+        }
+    }
+
+    /// The custom model list last sent per instance, until its reply lands.
+    private var sentCustomModels: [String: [JSONValue]] = [:]
+
+    /// customModelSaves.logic.ts (#36906): a second edit before the first save's reply builds on that save, so it keeps it.
+    private func saveCustomModels(_ row: ProvidersLogic.Row, env: String, base: JSONValue, _ edit: ([JSONValue]) -> [JSONValue]) {
+        let list = edit(sentCustomModels[row.instanceId] ?? base["config"]?["customModels"]?.arrayValue ?? [])
+        var o = base.objectValue ?? [:]
+        var config = o["config"]?.objectValue ?? [:]
+        config["customModels"] = .array(list)
+        o["config"] = .object(config)
+        sentCustomModels[row.instanceId] = list
+        mutate(env, .object(["operation": .string("upsert"), "instanceId": .string(row.instanceId), "instance": .object(o)]),
+               failure: "Could not update provider instance") { [weak self] in
+            if self?.sentCustomModels[row.instanceId] == list { self?.sentCustomModels[row.instanceId] = nil }
         }
     }
 
@@ -990,6 +1020,7 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         addVariable.action = { [weak self] in
             guard let self else { return }
             self.environmentDraftId += 1
+            self.localEnvironmentDraftIds.insert(self.environmentDraftId)
             self.environmentDrafts[row.instanceId] = (generic, list.rows + [ProviderEnvironmentLogic.Draft(id: self.environmentDraftId)])
             self.refresh()
             self.onHeightChange?()
@@ -1051,27 +1082,19 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
                 self.writePreferences(env.id, row.instanceId, hidden: live(self).hidden, order: next)
             }
             modelsView.onAdd = { [weak self] slug in
-                var o = current().objectValue ?? [:]
-                var config = o["config"]?.objectValue ?? [:]
-                config["customModels"] = .array(custom.map(\.raw) + [.string(slug)])
-                o["config"] = .object(config)
                 self?.expandedModelAdd.remove(row.instanceId)
-                self?.upsert(row, .object(o), env: env.id)
+                self?.saveCustomModels(row, env: env.id, base: current()) { $0 + [.string(slug)] }
             }
             modelsView.customDefinitions = Dictionary(uniqueKeysWithValues: custom.map { ($0.slug, $0.raw) })
+            func slug(_ entry: JSONValue) -> String? { entry.stringValue ?? entry["slug"]?.stringValue }
             modelsView.onEdit = { [weak self] definition in
-                var o = row.instance.objectValue ?? [:]
-                var config = o["config"]?.objectValue ?? [:]
-                config["customModels"] = .array(custom.map { $0.slug == definition["slug"]?.stringValue ? definition : $0.raw })
-                o["config"] = .object(config)
-                self?.upsert(row, .object(o), env: env.id)
+                self?.saveCustomModels(row, env: env.id, base: current()) { list in
+                    list.map { slug($0) == definition["slug"]?.stringValue ? definition : $0 }
+                }
             }
-            modelsView.onRemove = { [weak self] slug in
-                var o = current().objectValue ?? [:]
-                var config = o["config"]?.objectValue ?? [:]
-                config["customModels"] = .array(custom.filter { $0.slug != slug }.map(\.raw))
-                o["config"] = .object(config)
-                self?.upsert(row, .object(o), env: env.id)
+            modelsView.onRemove = { [weak self] removed in
+                self?.saveCustomModels(row, env: env.id, base: current()) { $0.filter { slug($0) != removed } }
+                let slug = removed
                 self?.writePreferences(env.id, row.instanceId, hidden: hidden, order: order.filter { $0 != slug })
             }
             modelsView.onHeightChange = { [weak self] in self?.onHeightChange?() }
@@ -1162,8 +1185,14 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
     /// The rows to show: the page's drafts while what they last published still matches the server (T3 keeps
     /// its draft rows until the environment changes from elsewhere), else fresh rows from the server.
     private func envDrafts(_ instanceId: String, _ server: [ProviderEnvironmentLogic.Variable]) -> [ProviderEnvironmentLogic.Draft] {
-        if let held = environmentDrafts[instanceId], held.published == server { return held.rows }
-        let rows = server.map { v -> ProviderEnvironmentLogic.Draft in environmentDraftId += 1; return .init(id: environmentDraftId, v) }
+        let seen = environmentSeenNames[instanceId, default: []]
+        environmentSeenNames[instanceId] = seen.union(server.map(\.name))
+        let held = environmentDrafts[instanceId]
+        if let held, held.published == server { return held.rows }
+        var rows = server.map { v -> ProviderEnvironmentLogic.Draft in environmentDraftId += 1; return .init(id: environmentDraftId, v) }
+        // ProviderInstanceCard.tsx (#30115): a re-delivery keeps rows typed here that the server never acknowledged.
+        let names = Set(server.map(\.name))
+        rows += (held?.rows ?? []).filter { localEnvironmentDraftIds.contains($0.id) && !seen.contains($0.name) && !names.contains($0.name) }
         environmentDrafts[instanceId] = (server, rows)
         return rows
     }

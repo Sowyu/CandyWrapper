@@ -83,8 +83,13 @@ public final class ProviderAuthenticationView: DSView, SettingsGroupRow {
         if credentialIdentity != identity { credentialIdentity = identity; credentialDraft = [:]; callbackDraft = "" }
         let signedIn = provider?.auth?["status"]?.stringValue == "authenticated" || (provider?.auth?["status"]?.stringValue == "unknown" && phase == "succeeded")
         let unavailable = provider?.setup?["canAuthenticate"]?.boolValue == false
-        let description = active ? (phase == "starting" ? "Starting sign-in…" : phase == "verifying" ? "Checking your account…" : type == "terminal" ? "Complete sign-in in the terminal below." : type == "credentials" ? "Enter your credentials below." : "Finish signing in in your browser.")
-            : signedIn ? "Signed in." : unavailable ? "No in-app sign-in advertised. Follow the provider's docs to finish setup." : "Sign in on \(environmentLabel)."
+        // ProviderAuthenticationSection.tsx (#27759): Antigravity's API key and Agent Platform setups connect, not sign in.
+        let usesCredentials = provider?.driver == "antigravity" && ["gemini-api-key", "agent-platform"].contains(provider?.auth?["type"]?.stringValue ?? "")
+        let description = active ? (phase == "starting" ? (usesCredentials ? "Connecting…" : "Starting sign-in…")
+                                    : phase == "verifying" ? (usesCredentials ? "Checking credentials and loading models…" : "Checking your account…")
+                                    : type == "terminal" ? "Complete sign-in in the terminal below." : type == "credentials" ? "Enter your credentials below." : "Finish signing in in your browser.")
+            : signedIn ? "Signed in." : unavailable ? "No in-app sign-in advertised. Follow the provider's docs to finish setup."
+            : usesCredentials ? "Connect on \(environmentLabel) to load models." : "Sign in on \(environmentLabel)."
         var actions: [NSView] = []
         let base: [String: JSONValue] = ["instanceId": .string(instance)]
         if !active {
@@ -95,7 +100,8 @@ public final class ProviderAuthenticationView: DSView, SettingsGroupRow {
                 select.onChange = { [weak self] in self?.method = ids[$0] }; actions.append(select)
             }
             if !unavailable {
-                let b = button(signedIn ? "Change account" : ["failed", "cancelled"].contains(phase) ? "Retry sign-in" : "Sign in") { [weak self] in
+                let retry = ["failed", "cancelled"].contains(phase)
+                let b = button(signedIn ? "Change account" : retry ? (usesCredentials ? "Retry connection" : "Retry sign-in") : usesCredentials ? "Connect" : "Sign in") { [weak self] in
                     guard let self else { return }
                     var input = base
                     if !self.method.isEmpty { input["methodId"] = .string(self.method) }
