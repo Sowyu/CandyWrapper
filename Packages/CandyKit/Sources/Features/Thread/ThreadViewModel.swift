@@ -249,6 +249,8 @@ public final class ThreadViewModel {
     /// Retry on a failed workspace preparation: dispatches `prepared-run.retry` for the run.
     public var onRetryWorkspacePreparation: (@MainActor (RunId) -> Void)?
     public var onForkFromRun: (@MainActor (ThreadId, RunId) -> Void)?
+    /// "Reply to this response" on a finished assistant message (TimelineAssistantRows.tsx `AssistantReplyButton` at 4928).
+    public var onReplyToResponse: (@MainActor (ChatMessage, ProjectedTurnItem) -> Void)?
 
     /// Runs `orchestration.getTurnItem` and resolves the result off the main thread. Nil (previews,
     /// tests) leaves omitted output unfetched.

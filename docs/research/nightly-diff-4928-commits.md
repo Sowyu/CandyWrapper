@@ -663,7 +663,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| c0f85e7f79 | #33124 | thread | feat(web): reply to an assistant response from its hover actions | left: reply to a response starts in the assistant row's hover actions (Features/Thread, another agent's area) and adds a `replyTo` draft field, a quote chip above the composer and a context record on send (composerContextRecords.ts, composerContext.ts) |
+| c0f85e7f79 | #33124 | thread | feat(web): reply to an assistant response from its hover actions | ported: a finished assistant message gets Reply (TimelineMessageRows `AssistantMetaContent`), the composer shows "Replying to" with the response's opening as a link and Cancel reply, and the send leads with a `response` reference and record carrying its subagents (ComposerReply, ComposerController `replyToResponse`); behind `serverUpdateStaging` since 3824 rejects the kind. Left: the sent message's reply card (`ResponseReplyCard`, Features/Thread) and the stash keeping a reply |
 
 ## New feature agent-theming (5)
 

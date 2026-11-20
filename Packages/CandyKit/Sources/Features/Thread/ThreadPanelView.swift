@@ -418,6 +418,9 @@ public final class ThreadPanelView: DSView {
     /// `/clear`'s armed notice (ComposerFreshSession.tsx at 4928), keyed by thread; nil hides it.
     public let lazyFreshSessionBanner = LazyView { ComposerNoticeBannerView() }
     public var freshSessionKey: String? { didSet { if freshSessionKey != oldValue { needsLayout = true } } }
+    /// "Replying to" (ChatComposer.tsx `replyBannerItems` at 4928), keyed by the reply's context id; nil hides it.
+    public let lazyReplyBanner = LazyView { ComposerNoticeBannerView() }
+    public var replyKey: String? { didSet { if replyKey != oldValue { needsLayout = true } } }
     /// "Subagent needs input" (ChatView.tsx:7462-7497), keyed by the first child like T3's `child-input:<id>`.
     public let lazyChildInputBanner = LazyView { ComposerNoticeBannerView() }
     public var childInputBanner: ComposerNoticeBannerView { lazyChildInputBanner.view }
@@ -534,6 +537,8 @@ public final class ThreadPanelView: DSView {
         if docked && legacyStatus && showsGoal { items.append(notice("goal:" + thread, goalBanner)) }
         if docked && legacyStatus && showsBackgroundWork { items.append(notice("background-work:" + thread, backgroundWorkBanner)) }
         if docked, let key = branchMismatchKey { items.append(notice("branch-mismatch:" + key, branchBanner)) }
+        // The reply follows the thread's own banners (`[...props.bannerItems, ...replyBannerItems]`, ChatComposer.tsx at 4928).
+        if docked, let key = replyKey { items.append(notice("reply-to:" + key, lazyReplyBanner.view)) }
         return items
     }
 

@@ -269,6 +269,8 @@ final class ComposerController {
     /// `/clear` armed per thread key (freshSessionArms.ts at 4928): the next message starts a fresh provider session.
     /// The value tells a send's arm from one made while it was in flight.
     private var freshSessionArms: [String: UUID] = [:]
+    /// The response each thread's draft replies to (`replyTo` in composerDraftStore.ts at 4928), saved to `composer.replyTo.v1`.
+    private var replyTargets: [String: JSONValue] = [:]
     /// A send made while images were being prepared, by draft key; it goes with the composer's text once they join.
     private var sendAfterPreparing: [String: (mode: ComposerLogic.SendMode, background: Bool)] = [:]
     /// Uploaded attachment ids to their local file, so a sent image shows before the server copy is fetched.
@@ -304,6 +306,7 @@ final class ComposerController {
         self.environments = environments
         let defaults = UserDefaults.standard
         prompts = defaults.dictionary(forKey: Self.promptsKey) as? [String: String] ?? [:]
+        replyTargets = defaults.data(forKey: "composer.replyTo.v1").flatMap { try? JSONDecoder().decode([String: JSONValue].self, from: $0) } ?? [:]
         func decode(_ key: String) -> [String: DraftSession]? {
             defaults.data(forKey: key).flatMap { try? JSONDecoder().decode([String: DraftSession].self, from: $0) }
         }
@@ -1402,6 +1405,7 @@ final class ComposerController {
         UserDefaults.standard.set(try? JSONEncoder().encode(reviews), forKey: "composer.reviewComments.v1")
         let identities = ComposerContext.persistedIdentityRecords(prompts: Array(prompts.values), records: menuState.records)
         UserDefaults.standard.set(try? JSONEncoder().encode(identities), forKey: "composer.identities.v1")
+        UserDefaults.standard.set(try? JSONEncoder().encode(replyTargets), forKey: "composer.replyTo.v1")
         syncSidebarDrafts()
     }
 
@@ -1855,6 +1859,12 @@ final class ComposerController {
             updatePickers()
         }
         guard let shell, pendingMessageId == nil, let target else { return }
+        // The reply leads the message, so its card sits above the text it is about (useComposerSend.ts:785-792 at 4928).
+        if queuedEdit == nil, case .thread = target, replyAvailable, let key = draftKey, let reply = replyTargets[key],
+           let id = reply["contextId"]?.stringValue {
+            menuState.records[id] = reply
+            text = ComposerReply.prompt(text, replyingTo: reply)
+        }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if let edit = queuedEdit { if !trimmed.isEmpty { saveEdit(edit, text: trimmed) }; return }
         let attachments = currentAttachments
@@ -2041,7 +2051,10 @@ final class ComposerController {
         pendingMessageId = messageId
         for a in attachments { if let id = a.attachmentId { sentFiles[id] = a.fileURL } }
         // The draft's attachments leave with the message; the server claims their uploads.
-        if let key = draftKey { draftAttachments[key] = nil }
+        if let key = draftKey {
+            draftAttachments[key] = nil
+            if replyTargets.removeValue(forKey: key) != nil { updateReplyBanner() }
+        }
         composer.text = ""
         remember("")
         // `deriveThreadTitleSeed` (ChatView.tsx:5538-5542); records ride as `context`.
@@ -2397,6 +2410,13 @@ final class ComposerController {
     /// empty, and show the server's message (transport errors stay silent).
     /// `planFollowUp`: the plan card's refine or implement send (`onSubmitPlanFollowUp`, ChatView.tsx:10508-10516).
     private func sendFailed(_ error: Error, messageId: MessageId, text: String, draft: DraftSession?, key: String?, planFollowUp: Bool = false) {
+        // The reply returns above the composer, not in its text (`draftText`, ChatView.logic.ts at 4928).
+        var text = text
+        if let key, let reply = ComposerContext.referencedIds(text).compactMap({ menuState.records[$0] }).first(where: { $0["kind"]?.stringValue == "response" }),
+           let id = reply["contextId"]?.stringValue {
+            text = ComposerReply.draftText(text, contextId: id)
+            if replyTargets[key] == nil { replyTargets[key] = reply; scheduleSave(); updateReplyBanner() }
+        }
         optimistic.removeAll { $0.id == messageId }
         if pendingMessageId == messageId { pendingMessageId = nil }
         if let draft, target == .draft(draft) || target == nil {
@@ -2515,6 +2535,53 @@ final class ComposerController {
             banner.onAction = { [weak self] index in if index == nil { self?.disarmFreshSession(shown) } }
         }
         panel.freshSessionKey = shown
+    }
+
+    // MARK: Reply to a response (#33124)
+
+    /// A 4928 server reads `response` records; 3824 rejects an unknown kind without `payload`.
+    // ponytail: no capability names response records, so this keys on serverUpdateStaging (2026-11-14, after #33124 on 2026-11-12). Use a dedicated flag if T3 adds one
+    private var replyAvailable: Bool { serverConfig.capabilities.contains("serverUpdateStaging") }
+
+    /// `replyToResponse` (ChatComposer.tsx at 4928) behind `replyToResponseStable` (ChatView.tsx): an open question
+    /// owns the composer and its answer would not carry the reply, so the reply waits with a toast.
+    private func replyToResponse(_ message: ChatMessage, _ projected: ProjectedTurnItem) {
+        guard replyAvailable, case .thread(let threadId) = target, let key = draftKey, let env = threadId.environmentId else { return }
+        guard requests.userInputs.isEmpty, questionRequestId == nil, queuedEdit == nil else {
+            toast(.warning, "The composer is not ready", "Try replying after the connection or pending input is resolved.")
+            return
+        }
+        let subagents = projection.map { projection in
+            ComposerReply.subagents(projection, itemId: projected.sourceItemId) { [weak self] env, thread in
+                self?.sidebar?.snapshot?.threads.first { $0.id.localId.rawValue == thread && (env == nil || $0.id.environmentId == env) }?.title
+            }
+        } ?? []
+        guard let record = ComposerReply.record(environmentId: env, threadId: threadId.localId.rawValue, messageId: message.id.rawValue,
+                                                text: message.text, itemId: projected.sourceItemId.rawValue, subagents: subagents) else { return }
+        replyTargets[key] = record
+        scheduleSave()
+        updateReplyBanner()
+        composer.focus()
+    }
+
+    /// `replyBannerItems` (ChatComposer.tsx at 4928): "Replying to", the response's opening as a link to it, and Cancel reply.
+    private func updateReplyBanner() {
+        let key = draftKey
+        let record = key.flatMap { replyTargets[$0] }
+        let shown = record.flatMap { $0["contextId"]?.stringValue }
+        if let record, let shown, let key, panel.replyKey != shown, let citation = ComposerReply.citation(record) {
+            let banner = panel.lazyReplyBanner.view
+            banner.apply(.init(variant: .neutral, icon: .reply, title: ComposerReply.bannerTitle(record), dismissLabel: "Cancel reply",
+                               descriptionParts: [.init(text: citation.label, link: citation.label)]))
+            banner.onLink = { _ in MarkdownView.onOpenCitation?(citation) }
+            banner.onAction = { [weak self] index in
+                guard index == nil, let self else { return }
+                self.replyTargets[key] = nil
+                self.scheduleSave()
+                self.updateReplyBanner()
+            }
+        }
+        panel.replyKey = shown
     }
 
     /// #31739: a model or effort pick on a started thread saves on the thread at once, so the next turn from any
@@ -3637,6 +3704,7 @@ extension ComposerController {
         composer.imageShelf.onExpand = { [weak self] id in self?.expandDraftImage(id) }
         panel.model.onOpenAttachment = { [weak self] file, download in self?.openSentAttachment(file, download: download) }
         panel.model.onRollbackCheckpoint = { [weak self] checkpoint, scope in self?.rollBack(checkpointId: checkpoint, scopeId: scope) }
+        panel.model.onReplyToResponse = { [weak self] message, projected in self?.replyToResponse(message, projected) }
         panel.model.attachmentMediaURL = { [weak self] id in
             await self?.mediaAttachmentURL(id)
         }
@@ -5288,6 +5356,7 @@ extension ComposerController {
 
     private func updateThreadBanners() {
         updateFreshSessionBanner()
+        updateReplyBanner()
         let thread = shellThread
         panel.showsGoal = thread?.goal != nil
         if let goal = thread?.goal {
