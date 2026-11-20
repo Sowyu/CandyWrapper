@@ -102,7 +102,10 @@ struct PanelScreensFidelityTests {
             let view = CommitDialog(branch: "main", isDefaultRef: true,
                                     files: [VcsStatus.File(path: "hello.py", insertions: 1, deletions: 0),
                                             VcsStatus.File(path: "notes.md", insertions: 1, deletions: 0)], canChangeBranch: true, canWrite: true)
-            return (view.dialog, CGRect(x: 294, y: 106, width: 512, height: 568), "git")
+            // The dialog sits centered in the 780pt viewport. At 4928 its `leading-snug` title (dialog.tsx:227) makes it
+            // 576.5pt tall in the capture, from y 102, so the crop follows the dialog's own height.
+            let h = (view.dialog.height(forWidth: 512) * 2).rounded() / 2
+            return (view.dialog, CGRect(x: 294, y: ((780 - h) / 2 * 2).rounded() / 2, width: 512, height: h), "git")
         case "43-find-in-thread":
             let view = ThreadFindBarView()
             view.present(query: "markdown", index: 0, total: 2)
