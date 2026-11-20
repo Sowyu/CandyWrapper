@@ -227,7 +227,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| e66c3168a4 | #20058 | thread | fix(threads): allow snoozing pending input requests | port; needs wire: snooze pending input |
+| e66c3168a4 | #20058 | thread | fix(threads): allow snoozing pending input requests | left: the snooze rule lives in threadSettled.ts (`pendingUserInputAt`, a snoozed question wakes only for a newer one); it belongs with the sidebar snooze logic in T3Store |
 
 ## Port group clear-command (1)
 
@@ -291,7 +291,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| f016a16b39 | #19659 | thread | fix(acp): preserve native form questions and typed answers | port |
+| f016a16b39 | #19659 | thread | fix(acp): preserve native form questions and typed answers | already in CandyWrapper: the client half keeps `__proto__` question ids as own drafts, which Swift dictionaries do anyway (T3Store UserInputAnswers); the rest is the ACP server |
 
 ## Port group agent-signin (4)
 
@@ -1551,7 +1551,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 101e5f99a2 | #34855 | thread | fix(web): review comments in question answers reach the agent with their text | port |
 | 204b140073 | #34846 | thread | fix(web): context row under the composer hides chat text scrolling behind it | port |
 | 415e1cabe6 | #34883 | thread | fix(web): html render images open with the rest of their page in the viewer | port |
-| d8b0a05a74 | #34784 | thread | fix(clients): Claude question option previews are shown under their option | port |
+| d8b0a05a74 | #34784 | thread | fix(clients): Claude question option previews are shown under their option | left: needs the option `preview` field decoded and a MarkdownView under each option in QuestionPanelView (`ps-9 pe-2 pb-1.5 text-xs text-foreground/70`), outside the option button |
 | efd683ccc3 | #35102 | thread | fix(web): a failed send leaves the timeline when a new draft was typed | port |
 | 3d6ece2b29 | #35036 | thread | fix(web): file links the agent cited from another project open that project's file | port |
 | ced85c64ff | #35076 | thread | fix(client): a message the host never answers fails after 60 seconds instead of spinning forever | port |
