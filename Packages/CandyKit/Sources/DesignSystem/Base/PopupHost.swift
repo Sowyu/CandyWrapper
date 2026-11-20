@@ -453,6 +453,7 @@ public final class PopupHost: DSView {
     /// Routes a key to the topmost popup. Unhandled Escape closes it and returns focus to its trigger.
     @discardableResult
     public func handleKey(_ key: PopupKey) -> Bool {
+        guard !isCoveredByModal else { return false }
         // A passive list that rides on a focused field (pull request @ and # completion) sees keys first.
         for p in popups.reversed() where p.isPassive && p.content.popupHandleKey(key) { return true }
         guard let top = popups.last(where: { !$0.isPassive }) ?? popups.last else { return false }
@@ -465,7 +466,7 @@ public final class PopupHost: DSView {
     /// click should not reach the view under it.
     @discardableResult
     public func handleMouseDown(at point: CGPoint) -> Bool {
-        guard !popups.isEmpty else { return false }
+        guard !popups.isEmpty, !isCoveredByModal else { return false }
         if popups.contains(where: { $0.container.frame.contains(point) }) { return false }
         func onTrigger(_ p: OpenPopup) -> Bool {
             guard let t = p.trigger, t.window === window else { return false }
@@ -481,6 +482,14 @@ public final class PopupHost: DSView {
         closeAll()
         // A press on the trigger closes the popup; the trigger must not reopen it in the same click.
         return swallow || onPressedTrigger
+    }
+
+    /// A dialog presented after these popups (the Unrestricted confirm from the access menu) sits above them.
+    /// base-ui makes everything outside an open dialog inert, so the popups leave its keys and clicks to it.
+    /// A popup opened from inside the dialog raises this host above it again.
+    var isCoveredByModal: Bool {
+        guard let siblings = superview?.subviews, let index = siblings.firstIndex(where: { $0 === self }) else { return false }
+        return siblings[(index + 1)...].contains { ($0 as? ModalHost)?.isClosing == false }
     }
 
     // MARK: Events
