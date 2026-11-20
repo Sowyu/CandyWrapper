@@ -1524,6 +1524,7 @@ final class ComposerController {
         // (`followUpBehavior`, ChatComposer.tsx:2286-2292).
         composer.steerByDefault = followUpSteers || !requests.approvals.isEmpty
         composer.placeholderInput = placeholder
+        updatePromptSuggestion()
         updateRequests()
         syncSendBlock()
         syncAttachmentViews()
@@ -2535,6 +2536,57 @@ final class ComposerController {
             banner.onAction = { [weak self] index in if index == nil { self?.disarmFreshSession(shown) } }
         }
         panel.freshSessionKey = shown
+    }
+
+    // MARK: Prompt suggestions (#28047, #33706)
+
+    private var suggestionSubscription: Task<Void, Never>?
+    private var suggestionThread: ThreadId?
+    private var suggestion: ComposerPromptSuggestion.Suggestion?
+
+    /// `usePromptSuggestion` (usePromptSuggestion.ts:55-88 at 4928): one stream for the open thread once it has a run,
+    /// while the server's `promptSuggestionsEnabled` is on. Older servers lack the setting, so true also proves the method.
+    private func updatePromptSuggestionSubscription() {
+        let enabled = serverConfig.settings.raw["promptSuggestionsEnabled"]?.boolValue == true
+        let thread = enabled && shellThread?.latestRunId != nil ? openThreadId : nil
+        guard thread != suggestionThread else { return }
+        suggestionSubscription?.cancel()
+        suggestionSubscription = nil
+        suggestionThread = thread
+        suggestion = nil
+        guard let thread, let supervisor = shell?.supervisor else { return }
+        suggestionSubscription = supervisor.subscribe("orchestration.subscribePromptSuggestion", payload: {
+            .object(["threadId": .string(thread.localId.rawValue)])
+        }, handler: { [weak self] event in
+            guard case .value(let value) = event else { return }
+            let next = ComposerPromptSuggestion.decode(value)
+            await MainActor.run {
+                guard let self, self.suggestionThread == thread, self.suggestion != next else { return }
+                self.suggestion = next
+                self.updatePromptSuggestion()
+            }
+        })
+    }
+
+    /// `offeredPromptSuggestion` (ChatComposer.tsx:2375-2386 at 4928): only where the default placeholder would show,
+    /// never while a turn runs, a send is busy, `/clear` is armed or context is attached.
+    private func updatePromptSuggestion() {
+        updatePromptSuggestionSubscription()
+        var text: String?
+        if let thread = suggestionThread, thread == openThreadId, let env = thread.environmentId,
+           let offered = ComposerPromptSuggestion.offered(suggestion, latestRunId: shellThread?.latestRunId, runs: projection?.runs ?? []),
+           !ComposerPromptSuggestion.dismissed.contains(ComposerPromptSuggestion.key(environmentId: env, runId: offered.runId)),
+           !composer.runState.running, !composer.isBusy, queuedEdit == nil, questionRequestId == nil,
+           draftKey.map({ freshSessionArms[$0] == nil && replyTargets[$0] == nil }) ?? false,
+           currentAttachments.isEmpty, requests.activeApproval == nil, requests.userInputs.isEmpty,
+           !composer.placeholderInput.noProvider, !composer.placeholderInput.projectRequired {
+            text = offered.text
+            composer.onDismissSuggestion = { [weak self] in
+                ComposerPromptSuggestion.dismissed.insert(ComposerPromptSuggestion.key(environmentId: env, runId: offered.runId))
+                self?.updatePromptSuggestion()
+            }
+        }
+        composer.promptSuggestion = text
     }
 
     // MARK: Reply to a response (#33124)

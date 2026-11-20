@@ -612,8 +612,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| b24959d579 | #28047 | composer | feat: Labs option to suggest your next prompt after Claude and Codex turns | left: needs `orchestration.subscribePromptSuggestion {threadId}` (stream of `{runId, text} | null`, rpc.ts:2121 at 4928) when server settings `promptSuggestionsEnabled` is true, ghost text in the empty composer that Tab accepts and Escape dismisses per run (usePromptSuggestion.ts, composerCommandKey.ts), and the Labs switch in Settings |
-| b48b8ea2a0 | #33706 | thread | fix(web): prompt suggestions show after a steered turn | left: with #28047, `offeredPromptSuggestion` skips a steered run that never started |
+| b24959d579 | #28047 | composer | feat: Labs option to suggest your next prompt after Claude and Codex turns | left: needs `orchestration.subscribePromptSuggestion {threadId}` (stream of `{runId, text} | ported: on a server whose settings have `promptSuggestionsEnabled`, the open thread subscribes to `orchestration.subscribePromptSuggestion` once it has a run; the suggestion takes the default placeholder's place with an outline `⇥ Tab` (KbdView `outline`, new kbd-outline reference), Tab in the empty prompt takes it and Escape dismisses it per run (ComposerPromptSuggestion, ComposerView `promptSuggestion`, ComposerController). Left: the Labs switch in Settings, which writes the server setting (Features/Settings) |
+| b48b8ea2a0 | #33706 | thread | fix(web): prompt suggestions show after a steered turn | ported with #28047: a steered run that never started is skipped (ComposerPromptSuggestion.offered) |
 
 ## New feature text-generators (1)
 

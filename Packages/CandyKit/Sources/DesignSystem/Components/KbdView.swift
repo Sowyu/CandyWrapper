@@ -10,6 +10,14 @@ public final class KbdView: DSView {
     /// Overrides for parents that restyle keys, such as the command footer (`bg-foreground/8 text-foreground`).
     public var fillOverride: NSColor? { didSet { needsDisplay = true } }
     public var textOverride: NSColor? { didSet { applyColors() } }
+    /// `variant="outline"`: a physical key, `border border-b-2 border-foreground/15 px-1.5` with no fill (kbd.tsx at 4928).
+    public var outline = false { didSet { outlineLayer.isHidden = !outline; invalidateIntrinsicContentSize(); needsLayout = true; needsDisplay = true } }
+    private lazy var outlineLayer: CAShapeLayer = {
+        let l = CAShapeLayer()
+        l.fillRule = .evenOdd
+        layer?.addSublayer(l)
+        return l
+    }()
     /// Off inside glass popups, whose text Chromium draws without subpixel smoothing.
     public var smoothsFont: Bool {
         get { label.smoothsFont }
@@ -36,7 +44,7 @@ public final class KbdView: DSView {
         // `min-w-5 px-1`; content is the text advance or a 12px icon (`gap-1` between them).
         var content = keys.isEmpty ? 0 : label.textWidth
         if iconView != nil { content += 12 + (keys.isEmpty ? 0 : 4) }
-        return NSSize(width: max(20, content + 8), height: 20)
+        return NSSize(width: max(20, content + (outline ? 14 : 8)), height: 20)
     }
 
     public override func layout() {
@@ -49,10 +57,22 @@ public final class KbdView: DSView {
             x += 16
         }
         label.frame = NSRect(x: x, y: (bounds.height - 16) / 2, width: textWidth, height: 16)
+        if outline {
+            // The border box: 1px on three sides, 2px at the bottom, so the text centers 0.5px high (`items-center`).
+            label.frame.origin.y -= 0.5
+            let path = CGMutablePath()
+            path.addRoundedRect(in: bounds, cornerWidth: radius, cornerHeight: radius)
+            path.addRoundedRect(in: CGRect(x: 1, y: 1, width: bounds.width - 2, height: bounds.height - 3), cornerWidth: radius - 1, cornerHeight: radius - 1)
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            outlineLayer.frame = bounds
+            outlineLayer.path = path
+            CATransaction.commit()
+        }
     }
 
     public override func updateLayer() {
-        layer?.backgroundColor = (fillOverride ?? (DesignGeometry.usesClassic(self) ? Themed.color(\.muted) : Themed.color(\.contrastForeground, 0.07))).cgColor(in: self)
+        layer?.backgroundColor = outline ? nil : (fillOverride ?? (DesignGeometry.usesClassic(self) ? Themed.color(\.muted) : Themed.color(\.contrastForeground, 0.07))).cgColor(in: self)
+        if outline { outlineLayer.fillColor = Themed.color(\.foreground, 0.15).cgColor(in: self) }
         layer?.cornerRadius = radius
     }
 
