@@ -971,7 +971,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | de2b1d3358 | #23745 | files | fix(web): keep HTML prototype selection rings visible | n/a (panels-3): HTML prototype selection rings belong to T3's design-mode overlay, which CandyWrapper's HTML preview does not have |
-| f06dd4bbf5 | #25737 | files | feat(web): allow resizing the file explorer | left (panels-3): a resizable Files tree needs a drag handle in FilesPanelView between tree and file (160-560pt, file at least 256pt) |
+| f06dd4bbf5 | #25737 | files | feat(web): allow resizing the file explorer | ported (panels-6): beside an open file the Files explorer starts at 256 and drags from its left edge (FileListResizeHandle, keyboard Left, Right, Home and End), 160 to 560 with the file kept at 256, saved in t3code.fileExplorerWidth (FileListWidth.Sizing.filesExplorer) |
 | 78f1ba8285 | #25555 | files | fix(web): preserve PDF scroll and zoom across autoreloads | skip (panels-3): PDFs open in Quick Look in CandyWrapper, which keeps its own scroll and zoom |
 | 461df465ab | #26579 | files | fix(web): file context menu actions respond to pointer clicks | n/a (panels-3): base-ui pointer handling; CandyWrapper's context menus are AppKit menus |
 | 433bff1e30 | #28521 | files | fix(web): clicking a file in the Files tree keeps focus on that row | left (panels-3): not checked on screen; a clicked file row should keep keyboard focus in FileTreeView |
