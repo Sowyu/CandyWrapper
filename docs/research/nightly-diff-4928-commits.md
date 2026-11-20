@@ -686,7 +686,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | 7d32075e37 | #36680 | settings | feat(web): themes can use full-size background images | ported (settings-4): ThemeBackground mints environment-theme-background through assets.createUrl on the primary environment, decodes once, retries at 1, 2, 4 and 8 s and shows it behind the main panel while the theme's CSS uses var(--theme-background-image); App/Sources/ThemeBackgroundController.swift |
-| b75424062a | #37843 | settings | fix(web): retry a failed theme wallpaper download when back online | partly (settings-4): failed downloads retry on the next theme change and when the window shows again; no network-online hook yet |
+| b75424062a | #37843 | settings | fix(web): retry a failed theme wallpaper download when back online | ported (settings-5): PlatformSignals posts NetworkSignals.online on an offline-to-online path change and ThemeBackground.networkOnline retries a download that gave up; no timer |
 | 49c3ab8632 | #37981 | settings | fix(web): published background no longer shows under a saved theme with the same id | ported (settings-4): ThemeBackground mints environment-theme-background through assets.createUrl on the primary environment, decodes once, retries at 1, 2, 4 and 8 s and shows it behind the main panel while the theme's CSS uses var(--theme-background-image); App/Sources/ThemeBackgroundController.swift |
 | 28d2262083 | #38132 | pr/git | fix(web): theme wallpaper stays in the live preview when connectivity returns | port |
 

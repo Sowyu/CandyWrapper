@@ -5,7 +5,8 @@ import DesignSystem
 /// The image published beside an environment theme (themeBackground.ts, T3 4928). The primary environment mints
 /// a signed URL for `environment-theme-background`, the image downloads once per revision, decodes once and
 /// shows behind the main panel (`ThemeBackgroundView`). A failed download retries after 1, 2, 4 and 8 seconds,
-/// then waits for the next change. Hiding the window drops the image and any download; showing it loads again.
+/// then waits for the next change or for the network to come back. Hiding the window drops the image and any download;
+/// showing it loads again.
 @MainActor
 public final class ThemeBackground {
     public static let shared = ThemeBackground()
@@ -57,6 +58,12 @@ public final class ThemeBackground {
             self?.loading = nil
             self?.shownKey = nil
         }
+    }
+
+    /// Coming back online retries a download that failed (themeBackground.ts at 4928, PR #37843). A shown image or a
+    /// download in progress is left alone, since its key still matches.
+    public func networkOnline() {
+        apply(environmentId: wanted.environmentId, themeId: wanted.themeId, revision: wanted.revision)
     }
 
     /// The window hid or came back. Hidden, the image and any download are dropped.
