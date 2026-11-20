@@ -131,6 +131,9 @@ public enum PullRequestListLogic {
         var labels: [[String]] = []
         var excluded: [String] = []
         var filters = PullRequestListFilters()
+        // Two different logins name no author: GitHub ORs them, the contract carries one (4928 pullRequestQuery.ts, #30150).
+        var author: String??
+        let authorKey = { (login: String) in login.lowercased() == "@me" ? "me" : login.lowercased() }
         for m in tokenRegex.matches(in: raw, range: NSRange(raw.startIndex..., in: raw)) {
             let token = String(raw[Range(m.range, in: raw)!])
             let q = qualifierRegex.firstMatch(in: token, range: NSRange(token.startIndex..., in: token))
@@ -145,14 +148,25 @@ public enum PullRequestListLogic {
                 let names = boundedNames(splitQualifierList(rawValue))
                 if !names.isEmpty { if negated { excluded += names } else { labels.append(names) }; consumed = true }
             case "author":
-                if !negated { filters.author = String(value.prefix(200)).trimmingCharacters(in: .whitespaces); consumed = true }
+                if !negated {
+                    let login = String(value.prefix(200)).trimmingCharacters(in: .whitespaces)
+                    switch author {
+                    case .none: author = .some(login)
+                    case .some(let a?) where authorKey(a) == authorKey(login): break
+                    default: author = .some(nil)
+                    }
+                    consumed = true
+                }
             case "draft":
                 let v = value.lowercased()
-                if !negated, v == "true" || v == "false" { filters.draft = v == "true" ? "only" : "hide"; consumed = true }
+                if v == "true" || v == "false" { filters.draft = (v == "true") != negated ? "only" : "hide"; consumed = true }
             case "review":
                 if !negated, let d = reviewValues[value.lowercased()] { filters.review = d; consumed = true }
             case "status", "checks":
                 if !negated, let s = checksValues[value.lowercased()] { filters.checks = s; consumed = true }
+            // GitHub's own search qualifiers, not labels: the list sets scope and order itself (#30150).
+            case "is", "archived", "state", "repo", "org", "user", "sort":
+                consumed = true
             case "":
                 break
             default:
@@ -165,7 +179,8 @@ public enum PullRequestListLogic {
         }
         if !labels.isEmpty { filters.labels = Array(labels.prefix(10)) }
         if !excluded.isEmpty { filters.excludedLabels = Array(excluded.prefix(10)) }
-        return (text.joined(separator: " "), filters)
+        if case .some(let a?) = author { filters.author = a }
+        return (String(text.joined(separator: " ").prefix(200)).trimmingCharacters(in: .whitespaces), filters)
     }
 
     /// `applyPullRequestDraftFilterChange` (pullRequestQuery.ts:115-137): the Draft menu shows a typed `draft:`,

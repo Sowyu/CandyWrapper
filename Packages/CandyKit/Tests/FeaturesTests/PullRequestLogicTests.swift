@@ -561,3 +561,14 @@ struct MenuSearch4928Tests {
         #expect(menu.popupHandleKey(.down) == true && menu.highlightedIndex == 0)
     }
 }
+
+/// 4928 pullRequestQuery.ts (#30150): a query pasted from github.com.
+struct PullRequestQuery4928Tests {
+    @Test func githubQualifiersAreIgnoredAndTwoAuthorsNameNone() {
+        let r = PullRequestListLogic.parseQuery("is:pr state:open archived:false repo:org/repo org:org user:alice sort:updated-desc -repo:org/fork -state:closed fix")
+        #expect(r.text == "fix" && r.filters.isEmpty)
+        #expect(PullRequestListLogic.parseQuery("author:ann author:bob").filters.author == nil)
+        #expect(PullRequestListLogic.parseQuery("author:@me author:ME").filters.author == "@me")
+        #expect(PullRequestListLogic.parseQuery("-draft:true").filters.draft == "hide")
+    }
+}
