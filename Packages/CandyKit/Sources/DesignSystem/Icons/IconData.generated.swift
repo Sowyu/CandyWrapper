@@ -113,6 +113,8 @@ public enum IconName: String, CaseIterable, Sendable {
     case lightbulb
     case link
     case link2
+    case link2Off
+    case atSign
     case listChecks
     case listFilter
     case listOrdered
@@ -245,6 +247,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case brandGit
     case brandGitHub
     case brandGitLab
+    case brandLinear
     case brandKiro
     case brandLinux
     case brandOpenAI
@@ -369,6 +372,8 @@ extension IconName {
         case .lightbulb: return "lightbulb"
         case .link: return "link"
         case .link2: return "link-2"
+        case .link2Off: return "link-2-off"
+        case .atSign: return "at-sign"
         case .listChecks: return "list-checks"
         case .listFilter: return "list-filter"
         case .listOrdered: return "list-ordered"
@@ -1211,6 +1216,18 @@ extension IconName {
                 IconElement(.path(d: "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71")),
                 IconElement(.path(d: "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71")),
             ])
+        case .atSign:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.circle(cx: 12, cy: 12, r: 4)),
+                IconElement(.path(d: "M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8")),
+            ])
+        case .link2Off:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M9 17H7A5 5 0 0 1 7 7")),
+                IconElement(.path(d: "M15 7h2a5 5 0 0 1 4 8")),
+                IconElement(.line(x1: 8, y1: 12, x2: 12, y2: 12)),
+                IconElement(.line(x1: 2, y1: 2, x2: 22, y2: 22)),
+            ])
         case .link2:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "M9 17H7A5 5 0 0 1 7 7h2")),
@@ -2031,6 +2048,10 @@ extension IconName {
         case .brandGitHub:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 16, height: 16), elements: [
                 IconElement(.path(d: "M8 0C3.58 0 0 3.58 0 8C0 11.54 2.29 14.53 5.47 15.59C5.87 15.66 6.02 15.42 6.02 15.21C6.02 15.02 6.01 14.39 6.01 13.72C4 14.09 3.48 13.23 3.32 12.78C3.23 12.55 2.84 11.84 2.5 11.65C2.22 11.5 1.82 11.13 2.49 11.12C3.12 11.11 3.57 11.7 3.72 11.94C4.44 13.15 5.59 12.81 6.05 12.6C6.12 12.08 6.33 11.73 6.56 11.53C4.78 11.33 2.92 10.64 2.92 7.58C2.92 6.71 3.23 5.99 3.74 5.43C3.66 5.23 3.38 4.41 3.82 3.31C3.82 3.31 4.49 3.1 6.02 4.13C6.66 3.95 7.34 3.86 8.02 3.86C8.7 3.86 9.38 3.95 10.02 4.13C11.55 3.09 12.22 3.31 12.22 3.31C12.66 4.41 12.38 5.23 12.3 5.43C12.81 5.99 13.12 6.7 13.12 7.58C13.12 10.65 11.25 11.33 9.47 11.53C9.76 11.78 10.01 12.26 10.01 13.01C10.01 14.08 10 14.94 10 15.21C10 15.42 10.15 15.67 10.55 15.59C13.71 14.53 16 11.53 16 8C16 3.58 12.42 0 8 0Z"), IconPaint(fill: .current, stroke: .none, evenOdd: true)),
+            ])
+        case .brandLinear:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 100, height: 100), elements: [
+                IconElement(.path(d: "M1.225 61.523c-.222-.949.908-1.546 1.597-.857l36.512 36.512c.69.69.092 1.82-.857 1.597C20.15 94.612 5.388 79.85 1.225 61.523ZM.002 46.889a.99.99 0 0 0 .29.76l52.062 52.061a.99.99 0 0 0 .76.29c2.765-.169 5.47-.559 8.1-1.152.75-.169 1.014-1.084.47-1.63L2.784 38.32c-.545-.545-1.46-.28-1.63.47A50.229 50.229 0 0 0 .002 46.89ZM4.472 29.34a.99.99 0 0 0 .208 1.104l64.878 64.877a.99.99 0 0 0 1.104.208 50.293 50.293 0 0 0 5.807-3.132.99.99 0 0 0 .154-1.53L9.135 23.38a.99.99 0 0 0-1.53.154 50.29 50.29 0 0 0-3.132 5.807ZM12.293 18.229c-.309-.309-.334-.803-.045-1.13C21.376 6.626 34.637 0 49.45 0 76.869 0 99.1 22.231 99.1 49.65c0 14.813-6.626 28.074-17.099 37.202-.327.29-.821.264-1.13-.045L12.293 18.23Z"), IconPaint(fill: .current, stroke: .none)),
             ])
         case .brandGitLab:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 32, height: 32), elements: [

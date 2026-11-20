@@ -30,6 +30,21 @@ final class SidebarCommands {
         c.container.onEscape = { [weak self] in self?.goBack() }
         return c
     }()
+    /// The Issues page, made on first open and kept for the session (`ISSUES_PANEL_REF`).
+    private lazy var issuesPage: IssuesPageController = {
+        let c = IssuesPageController(sidebar: sidebar!, environments: environments, capabilities: threads.pullRequests.capabilities)
+        c.container.onEscape = { [weak self] in self?.goBack() }
+        c.onSearchThreads = { [weak self] url in self?.onSearchThreads?(url) }
+        return c
+    }()
+    /// `useIssuesSupported`: some connected server has the `issues` capability.
+    var issuesSupported: Bool {
+        let caps = threads.pullRequests.capabilities
+        let ids = Set((sidebar?.snapshot?.projects ?? []).compactMap { $0.id.environmentId }).union([environments.primaryId].compactMap { $0 })
+        return ids.contains { environments.session($0) != nil && caps.has($0, "issues") }
+    }
+    /// The issue panel's linked-threads count: the palette opens on the issue's URL.
+    var onSearchThreads: ((String) -> Void)?
     private var usageModal: AppRouteModalView?
     private var recordUsageModalClose = true
     private var utilityKind: UtilityPage?
@@ -90,6 +105,7 @@ final class SidebarCommands {
         sidebar.actions.undo = { [weak self] in self?.ledger.undoLatest() }
         sidebar.actions.addProject = { [weak self] in self?.addProject() }
         sidebar.actions.openPullRequests = { [weak self] in self?.openUtilityPage(.pullRequests) }
+        sidebar.actions.openIssues = { [weak self] in self?.openUtilityPage(.issues) }
         sidebar.actions.openUsage = { [weak self] in self?.openUtilityPage(.usage) }
         sidebar.actions.back = { [weak self] in self?.closeUtilityPage() }
         sidebar.actions.rename = { [weak self] id, title, original in self?.commitRename(id, title: title, original: original) }
@@ -986,7 +1002,10 @@ final class SidebarCommands {
 
     // MARK: Pull Requests and Usage
 
-    enum UtilityPage { case pullRequests, usage, orchestrator }
+    enum UtilityPage { case pullRequests, issues, usage, orchestrator }
+
+    /// The sidebar offers Issues once a connected server can list them (SidebarChrome.tsx:296).
+    func syncIssuesEntry() { sidebar?.showsIssues = issuesSupported }
 
     /// The Orchestrator's pane left the main area (Redesign).
     var onOrchestratorHidden: () -> Void = {}
@@ -1023,8 +1042,9 @@ final class SidebarCommands {
             return
         }
         if let usageModal { recordUsageModalClose = false; usageModal.close(animated: false) }
-        let view: NSView = custom ?? pullRequestsPage.container
+        let view: NSView = custom ?? (page == .issues ? issuesPage.container : pullRequestsPage.container)
         if utilityKind == .pullRequests && page != .pullRequests { pullRequestsPage.didHide() }
+        if utilityKind == .issues && page != .issues { issuesPage.didHide() }
         if utilityKind == .orchestrator && utilityPage != nil && page != .orchestrator { onOrchestratorHidden() }
         utilityPage?.removeFromSuperview()
         threads.panel.removeFromSuperview()
@@ -1039,6 +1059,10 @@ final class SidebarCommands {
             pullRequestsPage.didShow()
             window?.makeFirstResponder(pullRequestsPage.container)
         }
+        if page == .issues {
+            issuesPage.didShow()
+            window?.makeFirstResponder(issuesPage.container)
+        }
         onRouteChange?()
     }
 
@@ -1048,6 +1072,7 @@ final class SidebarCommands {
         if let usageModal { recordUsageModalClose = record; usageModal.close(animated: record); return }
         guard let layout, let page = utilityPage else { return }
         if utilityKind == .pullRequests { pullRequestsPage.didHide() }
+        if utilityKind == .issues { issuesPage.didHide() }
         let wasOrchestrator = utilityKind == .orchestrator
         page.removeFromSuperview()
         utilityPage = nil

@@ -54,6 +54,8 @@ public struct SidebarActions {
     public var newThreadInProject: (ProjectShell) -> Void = { _ in }
     public var openSettings: () -> Void = {}
     public var openPullRequests: () -> Void = {}
+    /// The Issues page (4928 SidebarChrome.tsx:250-253).
+    public var openIssues: () -> Void = {}
     public var openUsage: () -> Void = {}
     /// Dither's nav row: Settings, Scheduled tasks.
     public var openAutomations: () -> Void = {}
@@ -92,6 +94,9 @@ public final class SidebarContentView: DSView {
     let settingsButton = SidebarContentView.footerButton(.settings, "Settings")
     let pullRequestsButton = SidebarContentView.footerButton(.gitPullRequestArrow, "Pull Requests")
     let usageButton = SidebarContentView.footerButton(.chartNoAxesColumn, "Usage")
+    /// Issues, beside Pull requests, once a server has the `issues` capability (SidebarChrome.tsx:296-302).
+    let issuesButton = SidebarContentView.footerButton(.circleDot, "Issues")
+    let issuesNavRow = SidebarNavRowView(.circleDot, "Issues")
     /// Dither (after Capy): nav rows under the search field.
     let navRows = [SidebarNavRowView(.squarePen, "New thread"), SidebarNavRowView(.gitPullRequestArrow, "Pull requests"),
                    SidebarNavRowView(.calendarClock, "Automations"), SidebarNavRowView(.settings, "Settings")]
@@ -212,6 +217,8 @@ public final class SidebarContentView: DSView {
     /// The items the sidebar shows, in builder order: what Settle's forward navigation and the menus walk.
     public var shownItems: [SidebarItem] { list.items }
     public var showsPullRequests = true { didSet { needsLayout = true } }
+    /// `useIssuesSupported`: some connected server has the `issues` capability.
+    public var showsIssues = false { didSet { if showsIssues != oldValue { needsLayout = true } } }
     /// On Pull Requests or Usage the footer shows only Back (`isSidebarUtilityPage`).
     /// Those pages have no route thread or draft, so no row is active (Sidebar.tsx:2490-2494), whoever sets one.
     public var isOnUtilityPage = false { didSet { if isOnUtilityPage { clearActiveRows() }; needsLayout = true } }
@@ -283,7 +290,7 @@ public final class SidebarContentView: DSView {
         undoNotice.isHidden = true
         undoNotice.shortcut = undoShortcut
         backButton.isHidden = true
-        for v in [search, filterButton, addProjectButton, newThreadButton, settingsButton, pullRequestsButton, usageButton,
+        for v in [search, filterButton, addProjectButton, newThreadButton, settingsButton, pullRequestsButton, issuesButton, usageButton,
                   backButton, undoNotice, providerUpdatePill, updatePill] as [NSView] {
             addSubview(v)
         }
@@ -440,6 +447,8 @@ public final class SidebarContentView: DSView {
         pullRequestsButton.action = { [weak self] in self?.actions.openPullRequests() }
         navRows[0].action = { [weak self] in self?.actions.newThread() }
         navRows[1].action = { [weak self] in self?.actions.openPullRequests() }
+        issuesButton.action = { [weak self] in self?.actions.openIssues() }
+        issuesNavRow.action = { [weak self] in self?.actions.openIssues() }
         navRows[2].action = { [weak self] in self?.actions.openAutomations() }
         navRows[3].action = { [weak self] in self?.actions.openSettings() }
         accountRow.onOpenSettings = { [weak self] in self?.actions.openSettings() }
@@ -1079,9 +1088,9 @@ public final class SidebarContentView: DSView {
         }
         let capy = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         var listTop: CGFloat = capyBrand ? rowY + searchHeight + 2 : 100
-        for (i, row) in navRows.enumerated() {
+        for row in [navRows[0], navRows[1], issuesNavRow, navRows[2], navRows[3]] {
             if row.superview == nil { addSubview(row) }
-            row.isHidden = !capy || i == 1 && !showsPullRequests
+            row.isHidden = !capy || row === navRows[1] && !showsPullRequests || row === issuesNavRow && !showsIssues
             if row.isHidden { continue }
             row.frame = NSRect(x: 8, y: listTop, width: max(0, w - 16), height: SidebarNavRowView.height)
             listTop += SidebarNavRowView.height + 2
@@ -1108,9 +1117,9 @@ public final class SidebarContentView: DSView {
             listTop += 16 + 6
         }
         var fx: CGFloat = 8
-        for b in [settingsButton, pullRequestsButton, usageButton] {
-            // Dither's nav rows hold Settings and Pull requests.
-            b.isHidden = isOnUtilityPage || b === pullRequestsButton && !showsPullRequests || capy && b !== usageButton
+        for b in [settingsButton, pullRequestsButton, issuesButton, usageButton] {
+            // Dither's nav rows hold Settings, Pull requests and Issues.
+            b.isHidden = isOnUtilityPage || b === pullRequestsButton && !showsPullRequests || b === issuesButton && !showsIssues || capy && b !== usageButton
             if b.isHidden { continue }
             b.frame = NSRect(x: fx, y: menuTop, width: 32, height: 32)
             fx += 36
@@ -1122,7 +1131,7 @@ public final class SidebarContentView: DSView {
         }
         accountRow.isHidden = !accountFooter
         if accountFooter {
-            for b in [settingsButton, pullRequestsButton, usageButton] { b.isHidden = true }
+            for b in [settingsButton, pullRequestsButton, issuesButton, usageButton] { b.isHidden = true }
             // The update button sits inside the row at its right, a quiet 28pt control (the user, 2026-10-22).
             accountRow.trailingReserve = updatePill.isHidden ? 0 : 28 + 4
             accountRow.frame = NSRect(x: SidebarAccountRowView.inset, y: menuTop, width: max(0, w - 2 * SidebarAccountRowView.inset),

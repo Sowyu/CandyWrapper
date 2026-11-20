@@ -111,6 +111,8 @@ public final class PullRequestsPageView: DSView {
     let filtersButton = ButtonView("Filters", icon: .listFilter, variant: .outline).menuTrigger()
     let filterCount = CountPill()
     let providerButton = ButtonView("All", icon: .plug2, variant: .outline).menuTrigger()
+    /// Saved filter views (4928 SavedViewsMenu, `PULL_REQUEST_SAVED_VIEWS`, #37963).
+    public let views = SavedViewsMenuController(kind: .pullRequests)
     let refreshButton = ButtonView(nil, icon: .refreshCw, variant: .outline, size: .icon)
     private let document = Document()
     private let scroll: ScrollAreaView
@@ -141,7 +143,8 @@ public final class PullRequestsPageView: DSView {
         sortButton.setAccessibilityLabel("Sort pull requests")
         providerButton.setAccessibilityLabel("Filter by provider")
         refreshButton.setAccessibilityLabel("Refresh pull requests")
-        for v in [search, sortButton, filtersButton, providerButton, refreshButton, footerLabel, loadMoreButton, banner] as [NSView] { document.addSubview(v) }
+        for v in [search, sortButton, filtersButton, views.button, providerButton, refreshButton, footerLabel, loadMoreButton, banner] as [NSView] { document.addSubview(v) }
+        views.onResize = { [weak self] in self?.needsLayout = true }
         footerLabel.lineHeight = 16
         footerLabel.alignment = .center
         sortButton.action = { [weak self] in self?.showSortMenu() }
@@ -189,8 +192,27 @@ public final class PullRequestsPageView: DSView {
         }
         refreshButton.isEnabled = !m.refreshing
         refreshButton.setAccessibilityLabel(m.refreshing ? "Refreshing pull requests" : "Refresh pull requests")
+        views.preferences = preferences
         rebuildBody(old: old)
         needsLayout = true
+    }
+
+    /// The list controls a saved view keeps (`pullRequestListPreferences`).
+    public var preferences: [String: JSONValue] {
+        let m = model
+        var p: [String: JSONValue] = ["involvement": .string(m.involvement), "state": .string(m.state)]
+        if let k = m.projectKey { p["project"] = .string(k) }
+        if let h = m.host { p["host"] = .string(h) }
+        let q = search.input.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !q.isEmpty { p["q"] = .string(q) }
+        let f = m.menuFilters
+        for (key, value) in [("draft", f.draft), ("review", f.review), ("checks", f.checks), ("author", f.author)] {
+            if let value { p[key] = .string(value) }
+        }
+        let labels = (f.labels ?? []).flatMap { $0 }
+        if !labels.isEmpty { p["labels"] = .array(labels.map { .string($0) }) }
+        if m.sort != "ready" { p["sort"] = .string(m.sort) }
+        return p
     }
 
     private func rebuildBody(old: Model?) {
@@ -438,7 +460,7 @@ public final class PullRequestsPageView: DSView {
         let w = max(0, container - 48)
         var y: CGFloat = 24
         // Controls: `flex flex-wrap gap-2`; the search takes its own line under `@lg` (512).
-        let buttons: [ButtonView] = [sortButton, filtersButton, providerButton, refreshButton]
+        let buttons: [ButtonView] = [sortButton, filtersButton, views.button, providerButton, refreshButton]
         let widths = buttons.map { ceil($0.intrinsicContentSize.width) }
         let buttonsWidth = widths.reduce(0, +) + CGFloat(buttons.count - 1) * 8
         if w >= 512 {
@@ -986,7 +1008,9 @@ final class ButtonRow: DSView {
 final class BannerView: DSView {
     private let label = TextBlockView()
     let retry = ButtonView("Retry", variant: .outline, size: .xs)
-    var text = "" { didSet { label.text = text + " Showing the last pull requests loaded."; needsLayout = true } }
+    /// The words after the error; the Issues page says "Showing the issues that loaded." (IssuesPage.tsx:508).
+    var suffix = " Showing the last pull requests loaded."
+    var text = "" { didSet { label.text = text + suffix; needsLayout = true } }
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         layer?.cornerRadius = 10

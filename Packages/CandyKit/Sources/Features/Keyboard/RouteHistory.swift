@@ -11,6 +11,8 @@ public final class RouteHistory {
         case draft(String)
         case settings(SettingsSection)
         case pullRequests
+        /// The 4928 Issues page.
+        case issues
         case usage
         /// Redesign's Orchestrator pane, CandyWrapper's own.
         case orchestrator

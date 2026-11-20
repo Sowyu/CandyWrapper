@@ -694,28 +694,28 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 85dcfa61ca | #19260 | issues | feat(web): add the Issues page and issue detail panel | port |
+| 85dcfa61ca | #19260 | issues | feat(web): add the Issues page and issue detail panel | ported 39a3ad7d, 0a5ca190: the page, the panel, the issue tab |
 | 0597b9edcd | #19270 | issues | feat(issues): link issues to threads and expose issue tools to agents | port; needs wire: issue links and tools |
-| 86863beede | #19274 | issues | feat(issues): add Linear as a standalone issue tracker | port |
-| 60f7e5d9b1 | #37760 | issues | feat(issues): filter the issue list by label and assignee, and sort it | port |
-| bb29ee3e71 | #37963 | issues | feat(issues): save named filter views on web and mobile | port |
-| b78914e4f3 | #37971 | issues | fix(client-runtime): Linear filters keep their choices when a search has no matches | port |
-| 983654b3b2 | #38190 | issues | fix(web): an invalid host filter in an Issues link no longer crashes the page | port |
-| b4dfd75624 | #38205 | issues | fix(client-runtime): issues held by two environments list once | port |
-| e3949714e3 | #38309 | issues | fix(web): restore the Issues right panel shortcut | port |
-| b648395fa5 | #38489 | issues | fix(web): older comments no longer reappear after refreshing an issue | port |
-| 1c41c5ed89 | #38508 | issues | fix(azure-devops): issue lists reuse each project's states and survive a refresh while loading | port |
-| 2d558c4dad | #38537 | issues | fix(web): the issue viewer shows why a refresh failed | port |
-| 6a29d58d14 | #38493 | issues | fix(client-runtime): closed issue searches no longer build up in memory | port |
+| 86863beede | #19274 | issues | feat(issues): add Linear as a standalone issue tracker | partly: Linear rows, mark and panel; connecting Linear and binding projects (`issueTrackers.*`, IssueTrackerSettings) left |
+| 60f7e5d9b1 | #37760 | issues | feat(issues): filter the issue list by label and assignee, and sort it | ported 39a3ad7d: label and assignee filters and the sort; the candidate submenus have no search field |
+| bb29ee3e71 | #37963 | issues | feat(issues): save named filter views on web and mobile | ported 39a3ad7d, 1aafa321: saved views on Issues and Pull Requests |
+| b78914e4f3 | #37971 | issues | fix(client-runtime): Linear filters keep their choices when a search has no matches | ported 39a3ad7d: chosen labels lead the menu |
+| 983654b3b2 | #38190 | issues | fix(web): an invalid host filter in an Issues link no longer crashes the page | ported 0a5ca190: a remembered host stays a menu choice, preferences bounded |
+| b4dfd75624 | #38205 | issues | fix(client-runtime): issues held by two environments list once | ported 39a3ad7d: rows dedupe by URL |
+| e3949714e3 | #38309 | issues | fix(web): restore the Issues right panel shortcut | ported 0a5ca190 at the default Mod+Alt+B |
+| b648395fa5 | #38489 | issues | fix(web): older comments no longer reappear after refreshing an issue | ported 0a5ca190: older pages reset on a refresh that moves the cursor |
+| 1c41c5ed89 | #38508 | issues | fix(azure-devops): issue lists reuse each project's states and survive a refresh while loading | n/a: server side; the page keeps rows while a refresh loads |
+| 2d558c4dad | #38537 | issues | fix(web): the issue viewer shows why a refresh failed | ported 39a3ad7d: "Could not refresh this issue" |
+| 6a29d58d14 | #38493 | issues | fix(client-runtime): closed issue searches no longer build up in memory | n/a: client-runtime cache internals; CandyWrapper holds one answer per environment |
 | f1d64aa0b6 | #38263 | pr/git | fix(azure-devops): legacy and project-less remotes list their work items | port |
 | 378584a760 | #38294 | issues | feat(web): hovering an issue link shows its preview card | port |
-| b6a0fd6d62 | #38771 | issues | feat(issues): an issue shows every thread it is linked to | port |
-| c350ee7e15 | #38256 | issues | feat(web): filter the issues list by project | port |
+| b6a0fd6d62 | #38771 | issues | feat(issues): an issue shows every thread it is linked to | ported 0a5ca190: the linked-threads count opens the palette on the issue URL |
+| c350ee7e15 | #38256 | issues | feat(web): filter the issues list by project | ported 39a3ad7d: the Project filter |
 | 2e3d9fccdd | #38282 | issues | feat(web): show linked issues beside thread pull requests | ported 9a0153d1 in the sidebar: generic issue glyph, no state tint or hover list until CW has issues |
-| 63899c16b9 | #38654 | issues | fix(web): retrying a failed Issues list no longer restarts another environment's read | port |
+| 63899c16b9 | #38654 | issues | fix(web): retrying a failed Issues list no longer restarts another environment's read | ported 0a5ca190: Retry reads every environment again in one generation |
 | 966bdc74f3 | #38854 | issues | fix(client): Linear issue links in messages open in the issue panel | port |
-| 60e54867fc | #38986 | issues | fix(azure-devops): refreshing Issues reads each project's current finished states | port |
-| 1d5ebe3f8e | #39000 | issues | fix(client-runtime): a failed issue refresh keeps older comments already loaded | port |
+| 60e54867fc | #38986 | issues | fix(azure-devops): refreshing Issues reads each project's current finished states | n/a: server side |
+| 1d5ebe3f8e | #39000 | issues | fix(client-runtime): a failed issue refresh keeps older comments already loaded | ported 0a5ca190: a failed refresh keeps the loaded comments |
 
 ## New feature pr-saved-views (1)
 

@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import T3Protocol
 import T3Store
 
 /// The inline right panel (RightPanelTabs.tsx, PreviewPanelShell.tsx): a 52px tab bar (`pl-2`,
@@ -31,6 +32,8 @@ final class RightPanelView: DSView {
     /// A `pull-request` tab's surface and the thread's linked pull requests.
     let lazyPullRequest = LazyView { PullRequestDetailView() }
     let lazyLinkedPullRequests = LazyView { ThreadPullRequestsListView() }
+    /// An `issue` tab's surface (4928 IssueDetailPanel).
+    let lazyIssue = LazyView { IssueDetailView() }
     var diff: DiffPanelView { lazyDiff.view }
     var files: FilesPanelView { lazyFiles.view }
     var file: FileSurfaceView { lazyFile.view }
@@ -53,6 +56,8 @@ final class RightPanelView: DSView {
     var browserFavicons: [String: NSImage] = [:] { didSet { if browserFavicons != oldValue { apply(state) } } }
     /// The state a pull request tab's glyph wears, by surface id (`PullRequestSurfaceIcon`).
     var pullRequestStatus: [String: PullRequestStateTone] = [:] { didSet { if pullRequestStatus != oldValue { apply(state) } } }
+    /// The state an issue tab's glyph wears, once its detail is read (`IssueSurfaceIcon`, RightPanelTabs.tsx:786-812).
+    var issueStatus: [String: IssueState] = [:] { didSet { if issueStatus != oldValue { apply(state) } } }
     let add = ButtonView(nil, icon: .plus, variant: .ghostMuted, size: .iconXs).menuTrigger()
     private var tabs: [PanelTabView] = []
     /// The tab list (`ScrollArea` with hidden scrollbars): clips at `pr-28`, the room the window's
@@ -125,7 +130,7 @@ final class RightPanelView: DSView {
         tabs = state.surfaces.map { surface in
             let favicon = browserFavicons[surface.id]
             let tab = PanelTabView(title: browserTitles[surface.id] ?? terminalTitles[surface.id] ?? surface.title, identity: icon(for: surface),
-                                   tinted: surface.kind != .file && surface.kind != .pullRequest && favicon == nil)
+                                   tinted: surface.kind != .file && surface.kind != .pullRequest && surface.kind != .issue && favicon == nil)
             tab.isActive = surface.id == state.activeSurfaceId
             tab.onSelect = { [weak self] in self?.onActivate?(surface.id) }
             if surface.deviceTarget != nil {
@@ -147,12 +152,13 @@ final class RightPanelView: DSView {
         if shown == .files { show(lazyFiles, true) } else if let files = lazyFiles.loaded, files.superview === self { files.removeFromSuperview() }
         show(lazyPullRequest, shown == .pullRequest)
         show(lazyLinkedPullRequests, shown == .pullRequests)
+        show(lazyIssue, shown == .issue)
         show(lazyLauncher, state.isOpen && active == nil)
         if !state.isOpen {
             // A closed panel gives back what its surfaces hold; their controllers refill a rebuilt
             // one. The diff keeps its selected turn, so it stays.
             // ponytail: the diff panel stays built after its first use; release it once it can restore its turn selection
-            [lazyFile.release, lazyFiles.release, lazyPullRequest.release, lazyLinkedPullRequests.release, lazyLauncher.release].forEach { $0() }
+            [lazyFile.release, lazyFiles.release, lazyPullRequest.release, lazyLinkedPullRequests.release, lazyIssue.release, lazyLauncher.release].forEach { $0() }
         }
         if active?.kind == .browser { if browser.superview !== self { addSubview(browser) } } else { browser.removeFromSuperview() }
         if active?.kind == .terminal { if terminal.superview !== self { addSubview(terminal) } } else { terminal.removeFromSuperview() }
@@ -171,6 +177,11 @@ final class RightPanelView: DSView {
             let tone = pullRequestStatus[surface.id]
             return IconView(name: tone.map(PullRequestStyle.icon) ?? .gitPullRequestArrow, size: 12,
                             strokeColor: tone.map(PullRequestStyle.color) ?? Themed.color(\.mutedForeground))
+        }
+        if case .issue = surface {
+            let status = issueStatus[surface.id]
+            return IconView(name: status.map(IssueListLogic.icon) ?? .circleDot, size: 12,
+                            strokeColor: status.map(IssueListLogic.color) ?? Themed.color(\.foreground))
         }
         if let image = browserFavicons[surface.id] {
             // `size-3 rounded-sm object-contain`.
@@ -194,6 +205,7 @@ final class RightPanelView: DSView {
         case .attachment(let a): FileTypeIcon.view(for: a.name, size: 12)
         case .pullRequest: IconView(name: .gitPullRequestArrow, size: 12, strokeColor: Themed.color(\.mutedForeground))
         case .pullRequests: IconView(name: .link2, size: 12, strokeColor: Themed.color(\.foreground))
+        case .issue: IconView(name: .circleDot, size: 12, strokeColor: Themed.color(\.foreground))
         case .browser: IconView(name: .globe2, size: 12, strokeColor: Themed.color(\.foreground))
         case .terminal: IconView(name: .terminalSquare, size: 12, strokeColor: Themed.color(\.foreground))
         }
@@ -422,6 +434,7 @@ final class RightPanelView: DSView {
         lazyFile.loaded?.frame = content
         lazyPullRequest.loaded?.frame = content
         lazyLinkedPullRequests.loaded?.frame = content
+        lazyIssue.loaded?.frame = content
         browser.frame = content
         terminal.frame = content
         device.frame = content

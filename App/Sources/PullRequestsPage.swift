@@ -119,6 +119,28 @@ final class PullRequestsPageController {
             self?.toast("Link copied", url, .success)
         }
         page.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
+        page.views.onApply = { [weak self] p in self?.applyView(p) }
+    }
+
+    /// A saved view replaces the list scope, its absent controls cleared (`pullRequestSavedViewPatch`).
+    private func applyView(_ p: [String: JSONValue]) {
+        involvement = p["involvement"]?.stringValue ?? "all"
+        state = p["state"]?.stringValue ?? "open"
+        projectKey = p["project"]?.stringValue
+        host = p["host"]?.stringValue
+        query = p["q"]?.stringValue ?? ""
+        sentQuery = query
+        page.search.input.text = query
+        var f = PullRequestListFilters()
+        f.draft = p["draft"]?.stringValue
+        f.review = p["review"]?.stringValue
+        f.checks = p["checks"]?.stringValue
+        f.author = p["author"]?.stringValue
+        if case .array(let names)? = p["labels"] { let l = names.compactMap(\.stringValue); f.labels = l.isEmpty ? nil : l.map { [$0] } }
+        menuFilters = f
+        sort = p["sort"]?.stringValue ?? "ready"
+        savePrefs()
+        reload()
     }
 
     private func savePrefs() {

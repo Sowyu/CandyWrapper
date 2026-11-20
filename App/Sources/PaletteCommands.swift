@@ -117,7 +117,8 @@ final class PaletteCommands {
 
     // MARK: Open and close
 
-    func open(newThreadIn: Bool = false) {
+    /// `query`: open on a search, as the issue panel's linked-threads count does (`openCommandPalette({query})`).
+    func open(newThreadIn: Bool = false, query: String? = nil) {
         guard let window, overlay == nil else { return }
         let controller = CommandPaletteController(source: makeSource())
         let overlay = CommandPaletteOverlay(controller: controller)
@@ -135,6 +136,7 @@ final class PaletteCommands {
         self.overlay = overlay
         if newThreadIn, let page = newThreadInPage() { controller.push(page) }
         overlay.present(in: window)
+        if let query { controller.replaceQuery(query) }
     }
 
     /// Go to file (ProjectFilePicker.tsx): the palette in "files" mode.
@@ -525,6 +527,12 @@ final class PaletteCommands {
             actions.append(PaletteEntry(value: "action:pull-requests", searchTerms: ["pull requests", "prs", "pr", "github", "review", "merge", "branch"],
                                         title: "Open pull requests", icon: .gitPullRequestArrow,
                                         action: .run({ [weak self] in self?.openUtility(.pullRequests) }, keepOpen: false)))
+        }
+        // `action:issues` (CommandPalette.tsx:1693-1708), once a server has the `issues` capability.
+        if sidebar?.showsIssues == true {
+            actions.append(PaletteEntry(value: "action:issues", searchTerms: ["issues", "issue", "bugs", "tracker", "github", "triage"],
+                                        title: "Open issues", icon: .circleDot,
+                                        action: .run({ [weak self] in self?.openUtility(.issues) }, keepOpen: false)))
         }
         actions.append(PaletteEntry(value: "action:usage", searchTerms: ["usage", "use", "tokens", "cost", "spend", "limits", "stats", "analytics"],
                                     title: "Open usage", icon: .chartNoAxesColumn, shortcutCommand: "usage.open",

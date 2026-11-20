@@ -8,7 +8,8 @@ import T3Protocol
 /// a change shows as the row's check turning over. The caller reads the candidates once it opens
 /// and narrows them with `PullRequestWriteLogic.filterLabels` or `filterReviewers`.
 public final class PullRequestCandidatePickerView: DSView, PickerPopupBody {
-    public enum Kind: Sendable { case labels, reviewers }
+    /// `issueLabels` and `issueAssignees` are the issue panel's pickers (4928 IssueDetailPanel.tsx:173-191, 289-307).
+    public enum Kind: Sendable { case labels, reviewers, issueLabels, issueAssignees }
     public enum State: Equatable, Sendable { case loading, failed(String), loaded }
 
     /// One row: a label or a person.
@@ -57,6 +58,10 @@ public final class PullRequestCandidatePickerView: DSView, PickerPopupBody {
         case .reviewers: ("Search people with access", "Nobody else has access to this repository.", "Nobody with access matches that.",
                           "The people with access could not be read.",
                           "This repository has more people with access than are listed here. Ask for the rest on the host.")
+        case .issueLabels: ("Search labels", "This tracker has no labels.", "No label matches that.", "The labels could not be read.",
+                            "More labels exist than are listed here.")
+        case .issueAssignees: ("Search people", "Nobody can be assigned here.", "Nobody matches that.", "The people could not be read.",
+                               "More people exist than are listed here.")
         }
     }
 

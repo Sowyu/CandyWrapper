@@ -27,6 +27,13 @@ public final class ThreadPullRequestsListView: DSView {
     private let emptyButton = ButtonView("Link pull request", icon: .plus, variant: .outline, size: .sm)
     private var lines: [ThreadPullRequests.Line] = []
     public var onOpen: ((ThreadPullRequestLink) -> Void)?
+    /// A linked issue pressed (4928 ThreadPullRequestsPanel.tsx:544-560): it opens in the panel.
+    public var onOpenIssue: ((ThreadIssueLink) -> Void)?
+    private var issues: [ThreadIssueLink] = []
+    private var issueRows: [IssueRowView] = []
+    private let issuesHeading = LabelView("Issues", font: DSFont.ui(12, weight: .medium))
+    private let pullRequestsHeading = LabelView("Pull requests", font: DSFont.ui(12, weight: .medium))
+    private let headingRule = CALayer()
     public var onLink: (() -> Void)?
     public var onUnlink: ((ThreadPullRequestLink) -> Void)?
     public var onCopy: ((String) -> Void)?
@@ -49,6 +56,12 @@ public final class ThreadPullRequestsListView: DSView {
         linkButton.iconSize = 14
         emptyButton.iconSize = 14
         [scroll, footerLabel, linkButton, emptyIcon, emptyTitle, emptyText, emptyButton].forEach(addSubview)
+        issuesHeading.lineHeight = 16
+        pullRequestsHeading.lineHeight = 16
+        headingRule.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        document.layer?.addSublayer(headingRule)
+        document.addSubview(issuesHeading)
+        document.addSubview(pullRequestsHeading)
         linkButton.action = { [weak self] in self?.onLink?() }
         emptyButton.action = { [weak self] in self?.onLink?() }
         let clip = scroll.scrollView.contentView
@@ -72,10 +85,33 @@ public final class ThreadPullRequestsListView: DSView {
         let open = shown.filter { $0.snapshot == nil || $0.snapshot?.state == .open }.count
         let synced = shown.compactMap { $0.snapshot?.syncedAt }.max { ($0.epochMs ?? 0) < ($1.epochMs ?? 0) }
         footerLabel.text = "\(open) open · \(shown.count) linked" + (synced.map { " · synced \(TimestampFormat.formatRelativeTimeLabel($0.raw, nowMs: nowMs))" } ?? "")
-        let empty = shown.isEmpty
+        let empty = shown.isEmpty && issues.isEmpty
         [scroll, footerLabel, linkButton].forEach { $0.isHidden = empty }
         [emptyIcon, emptyTitle, emptyText, emptyButton].forEach { $0.isHidden = !empty }
         needsLayout = true
+    }
+
+    /// The thread's linked issues, above its pull requests, each in its live state once read.
+    public func setIssues(_ links: [ThreadIssueLink], states: [String: IssueState]) {
+        issues = links
+        issueRows.forEach { $0.removeFromSuperview() }
+        issueRows = links.map { link in
+            let row = IssueRowView()
+            row.configure(link: link, state: states[link.issueKey.normalized])
+            row.onSelect = { [weak self] _ in self?.onOpenIssue?(link) }
+            document.addSubview(row)
+            return row
+        }
+        let empty = shownLinks.isEmpty && issues.isEmpty
+        [scroll, footerLabel, linkButton].forEach { $0.isHidden = empty }
+        [emptyIcon, emptyTitle, emptyText, emptyButton].forEach { $0.isHidden = !empty }
+        needsLayout = true
+    }
+
+    /// The Issues section's height: `px-2 py-1` heading, the rows, then `mt-2 border-t pt-2 pb-1` over the pull requests.
+    private var issuesHeight: CGFloat {
+        guard !issues.isEmpty else { return 0 }
+        return 24 + CGFloat(issues.count) * IssueRowView.panelHeight + (lines.isEmpty ? 0 : 8 + 1 + 8 + 16 + 4)
     }
 
     /// The row's menu: Copy link, Open, watch, Unlink (or Dismiss for a stack member).
@@ -110,7 +146,23 @@ public final class ThreadPullRequestsListView: DSView {
         let footer: CGFloat = 36
         scroll.frame = NSRect(x: 0, y: 0, width: w, height: max(0, h - footer))
         document.frame = NSRect(x: 0, y: 0, width: scroll.bounds.width,
-                                height: max(scroll.bounds.height, 12 + CGFloat(lines.count) * PullRequestRowView.panelHeight))
+                                height: max(scroll.bounds.height, 12 + issuesHeight + CGFloat(lines.count) * PullRequestRowView.panelHeight))
+        issuesHeading.isHidden = issues.isEmpty
+        pullRequestsHeading.isHidden = issues.isEmpty || lines.isEmpty
+        var iy: CGFloat = 6
+        if !issues.isEmpty {
+            issuesHeading.frame = NSRect(x: 6 + 8, y: iy + 4, width: 200, height: 16)
+            iy += 24
+            for row in issueRows {
+                row.frame = NSRect(x: 6, y: iy, width: max(0, scroll.bounds.width - 12), height: IssueRowView.panelHeight)
+                iy += IssueRowView.panelHeight
+            }
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            headingRule.isHidden = lines.isEmpty
+            headingRule.frame = CGRect(x: 6, y: iy + 8, width: max(0, scroll.bounds.width - 12), height: 1)
+            CATransaction.commit()
+            pullRequestsHeading.frame = NSRect(x: 6 + 12, y: iy + 8 + 1 + 8, width: 200, height: 16)
+        } else { headingRule.isHidden = true }
         scroll.layoutSubtreeIfNeeded()
         updateVisibleRows()
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -145,8 +197,9 @@ public final class ThreadPullRequestsListView: DSView {
         // ThreadPullRequestsPanel.tsx at d5139979d: mount the viewport and a small overscan.
         let clip = scroll.scrollView.contentView.bounds
         let height = PullRequestRowView.panelHeight
-        let first = min(lines.count, max(0, Int(floor((clip.minY - 6 - 200) / height))))
-        let end = min(lines.count, max(first, Int(ceil((clip.maxY - 6 + 200) / height))))
+        let top = 6 + issuesHeight
+        let first = min(lines.count, max(0, Int(floor((clip.minY - top - 200) / height))))
+        let end = min(lines.count, max(first, Int(ceil((clip.maxY - top + 200) / height))))
         for index in Array(rows.keys) where !(first..<end).contains(index) {
             let row = rows.removeValue(forKey: index)!
             row.removeFromSuperview()
@@ -163,7 +216,7 @@ public final class ThreadPullRequestsListView: DSView {
                 rows[index] = row
                 document.addSubview(row)
             }
-            row.frame = NSRect(x: 6, y: 6 + CGFloat(index) * height,
+            row.frame = NSRect(x: 6, y: top + CGFloat(index) * height,
                                width: max(0, scroll.bounds.width - 12), height: height)
         }
         // A resize to a shorter viewport should release the excess, too.
@@ -172,6 +225,9 @@ public final class ThreadPullRequestsListView: DSView {
 
     public override func updateLayer() {
         footerRule.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
+        headingRule.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
+        issuesHeading.color = Themed.color(\.mutedForeground)
+        pullRequestsHeading.color = Themed.color(\.mutedForeground)
         footerLabel.color = Themed.color(\.mutedForeground)
         emptyIcon.strokeColor = Themed.color(\.mutedForeground, 0.6)
         emptyTitle.color = Themed.color(\.foreground)

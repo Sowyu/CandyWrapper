@@ -57,6 +57,7 @@
 		A35346E84F4C99825C662E3B /* WelcomeOnboardingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA598ADFC895B496C79E89EE /* WelcomeOnboardingController.swift */; };
 		A46F1CC7B194DF1C04596508 /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 2223614E5F50DD4B20DCA9AC /* DesignSystem */; };
 		A7EF5B31A6D5CD4E006AA901 /* RunningThreadKeepAlive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67881179B1757F1808884AA9 /* RunningThreadKeepAlive.swift */; };
+		AFE677104992F4FF28ABCF00 /* IssueDetailBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B203518F0AB803FCD7D931E /* IssueDetailBinding.swift */; };
 		B0FD8497FA26F3D6AFA57D77 /* SettingsLinkedEnvironments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 918DCEC947F90301FC26C9DA /* SettingsLinkedEnvironments.swift */; };
 		B41DB44EA6F4544C9B9E24BE /* Features in Frameworks */ = {isa = PBXBuildFile; productRef = 54CB6DADB388C03EE21F5713 /* Features */; };
 		B423C6F5B35C38DA8DE052DC /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9180310B966F99CABD99C1F5 /* UpdateController.swift */; };
@@ -74,6 +75,7 @@
 		EB86443F1218E9073AE558A0 /* T3ConnectController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B1A20A927434B822A78FBE /* T3ConnectController.swift */; };
 		EDCEDD28D34C606C2F67CDED /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 0DD18B055E5BF454B9B77F4B /* AppIcon.icon */; };
 		F5114B7703115945AB79EA89 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 360B9D001D2A45C506332714 /* Sparkle */; };
+		FA9395D49D4C669E1AC1D6AE /* IssuesPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5221FE8A89F8B7C0DD3E9D74 /* IssuesPage.swift */; };
 		FD527A8A503C35A242372CD0 /* Shortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 527913F33E671EBA3009A953 /* Shortcuts.swift */; };
 /* End PBXBuildFile section */
 
@@ -96,6 +98,8 @@
 		3D6AC148A6FC62F574C41E70 /* StallMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StallMonitor.swift; sourceTree = "<group>"; };
 		3FB28D3B3DDFE3381D8B0971 /* DevicePanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePanelController.swift; sourceTree = "<group>"; };
 		3FD3D942C50CAEEB238FC95F /* SnapShotController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapShotController.swift; sourceTree = "<group>"; };
+		4B203518F0AB803FCD7D931E /* IssueDetailBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueDetailBinding.swift; sourceTree = "<group>"; };
+		5221FE8A89F8B7C0DD3E9D74 /* IssuesPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssuesPage.swift; sourceTree = "<group>"; };
 		527913F33E671EBA3009A953 /* Shortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shortcuts.swift; sourceTree = "<group>"; };
 		53CA0D184BBD9C9A87D29CE0 /* FakeT3Connect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeT3Connect.swift; sourceTree = "<group>"; };
 		55FB4EFB4DBDAF423D7789DC /* GitController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitController.swift; sourceTree = "<group>"; };
@@ -206,6 +210,8 @@
 				614592DC5412B5847C711810 /* GuestShareController.swift */,
 				5CEE730F143C640FB3EE85DE /* HelperController.swift */,
 				31C34F45503302E5FDFE2CAD /* HiddenTerminal.swift */,
+				4B203518F0AB803FCD7D931E /* IssueDetailBinding.swift */,
+				5221FE8A89F8B7C0DD3E9D74 /* IssuesPage.swift */,
 				6C34A11F5C95E15EC5E6FFAC /* LegacyThreadMigrationToast.swift */,
 				92A5E63032239ADD1C5F8E1C /* main.swift */,
 				37909056866A108B1B58D3C6 /* MainWindow.swift */,
@@ -405,6 +411,8 @@
 				3C1F1FA126739922739F3BF9 /* GuestShareController.swift in Sources */,
 				04ECF7F57E1454A8D356EB34 /* HelperController.swift in Sources */,
 				8B5000EC121D76409EE8339E /* HiddenTerminal.swift in Sources */,
+				AFE677104992F4FF28ABCF00 /* IssueDetailBinding.swift in Sources */,
+				FA9395D49D4C669E1AC1D6AE /* IssuesPage.swift in Sources */,
 				1E09C034649033BE9342F193 /* LegacyThreadMigrationToast.swift in Sources */,
 				54C4D215B2B1BC4CFEDB0F22 /* MainWindow.swift in Sources */,
 				083F1349CB27E53849FF66AD /* MenuBarController.swift in Sources */,

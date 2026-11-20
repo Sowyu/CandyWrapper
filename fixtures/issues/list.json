@@ -1,0 +1,36 @@
+{
+  "viewers": {"github.com": "octo-reader"},
+  "trackers": [
+    {"tracker": "github", "host": "github.com", "projectCount": 2,
+     "capabilities": {"create": true, "edit": true, "comment": true, "labels": true, "assignees": true, "reactions": true,
+                      "templates": true, "linkedPullRequests": true, "events": true, "search": true},
+     "configured": true, "detail": null},
+    {"tracker": "linear", "host": "linear.app", "projectCount": 1, "capabilities": null, "configured": false,
+     "detail": "This tracker has no working credentials."}
+  ],
+  "entries": [
+    {"tracker": "github", "host": "github.com", "scope": "acme/demo-repo", "key": "42", "displayKey": "#42",
+     "title": "Sidebar badge opens the wrong panel", "url": "https://github.com/acme/demo-repo/issues/42",
+     "author": {"login": "octo-reader", "name": "Octo Reader", "avatarUrl": null},
+     "state": {"category": "open", "name": "Open"},
+     "createdAt": "2026-11-10T09:00:00.000Z", "updatedAt": "2026-11-18T09:00:00.000Z", "closedAt": null,
+     "assignees": [{"login": "octo-reader"}, {"login": "hubot", "isBot": true}],
+     "labels": [{"name": "bug", "color": "d73a4a"}, {"name": "sidebar", "color": "0e8a16"}],
+     "commentCount": 3, "projectId": "demo", "projectTitle": "demo-repo"},
+    {"tracker": "github", "host": "github.com", "scope": "acme/demo-repo", "key": "40", "displayKey": "#40",
+     "title": "Document the greet command", "url": "https://github.com/acme/demo-repo/issues/40",
+     "author": null,
+     "state": {"category": "closed", "name": "Closed", "closeReason": "completed"},
+     "createdAt": "2026-11-01T09:00:00.000Z", "updatedAt": "2026-11-12T09:00:00.000Z", "closedAt": "2026-11-12T09:00:00.000Z",
+     "assignees": [], "labels": [], "commentCount": 0, "projectId": "demo", "projectTitle": "demo-repo"},
+    {"tracker": "github", "host": "github.com", "scope": "acme/demo-repo", "key": "38", "displayKey": "#38",
+     "title": "Drop the legacy palette", "url": "https://github.com/acme/demo-repo/issues/38",
+     "author": {"login": "someone"},
+     "state": {"category": "closed", "name": "Closed as not planned", "closeReason": "not_planned"},
+     "createdAt": "2026-10-20T09:00:00.000Z", "updatedAt": "2026-11-15T09:00:00.000Z", "closedAt": "2026-11-15T09:00:00.000Z",
+     "assignees": [], "labels": [{"name": "wontfix"}], "commentCount": 1, "projectId": "demo", "projectTitle": "demo-repo"}
+  ],
+  "errors": [{"projectId": "other", "projectTitle": "other-repo", "message": "gh is not signed in."}],
+  "nextCursors": {"github.com acme/demo-repo": "Y3Vyc29yOjM="},
+  "scopes": [{"projectId": "demo", "tracker": "github", "host": "github.com", "scope": "acme/demo-repo"}]
+}

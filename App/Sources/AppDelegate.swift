@@ -283,6 +283,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environments.onSshFailure = { [weak settings] title, message in settings?.toast(title, message, .error) }
         self.settings = settings
         let commands = SidebarCommands(sidebar: sidebar, window: window, layout: layout, environments: environments, threads: threads)
+        // Issues shows in the sidebar and palette once a connected server has the capability.
+        let capabilityChange = threads.pullRequests.capabilities.onChange
+        threads.pullRequests.capabilities.onChange = { [weak commands] in capabilityChange?(); commands?.syncIssuesEntry() }
+        _ = environments.observe { [weak commands] in commands?.syncIssuesEntry() }
         threads.composer.openUsagePage = { [weak commands] in commands?.openUtilityPage(.usage) }
         threads.panel.lazyDetailsCard.configure { [weak composer = threads.composer] _ in
             DispatchQueue.main.async { composer?.refreshDetailsUsage() }
@@ -541,6 +545,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             palette?.openProjectFaviconPicker(environmentId: env, cwd: cwd, projectName: name, external: external, onSelect: onSelect)
         }
         commands.openProjectSettings = { [weak palette] key in palette?.openProjectSettings(key) }
+        commands.onSearchThreads = { [weak palette] url in palette?.open(query: url) }
         // The header's new-thread button: with several projects the palette's "New thread in..." (Sidebar.tsx:4944-4962).
         sidebar.actions.newThread = { [weak palette] in palette?.newThreadFromSidebar(shift: NSEvent.modifierFlags.contains(.shift)) }
         commands.openAddProject = { [weak palette] in palette?.openAddProject() }
@@ -587,6 +592,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let page = commands?.openUtilityKind {
                 switch page {
                 case .pullRequests: return .pullRequests
+                case .issues: return .issues
                 case .usage: return .usage
                 case .orchestrator: return .orchestrator
                 }
@@ -641,6 +647,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 settings.open(); settings.show(section)
             case .pullRequests:
                 settings.close(); commands.openUtilityPage(.pullRequests)
+            case .issues:
+                guard commands.issuesSupported else { return false }
+                settings.close(); commands.openUtilityPage(.issues)
             case .usage:
                 settings.close(); commands.openUtilityPage(.usage)
             case .orchestrator:
