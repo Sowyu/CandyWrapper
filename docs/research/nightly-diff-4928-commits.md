@@ -490,7 +490,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | 58e60bf5e8 | #26767 | thread | feat: turn a No project thread into a project | ported (sidebar-2): projects.createFromThread behind threadProjectFromScratch; thread menu Turn into project with its toasts |
-| 84e69da395 | #34788 | pr/git | fix(web): No project threads offer no Initialize Git, and their linked PRs show and act in the thread | left (composer-4, checked): nothing on the sidebar side; the commit changes ThreadDetailsPanel and ThreadDetailsPrRow(s) (Features/Thread), BranchToolbarBranchSelector (Features/Git) and PullRequestDetailPanel (Features/PullRequests) composer-5: rechecked, the reason holds (that area's agent is still working there). |
+| 84e69da395 | #34788 | pr/git | fix(web): No project threads offer no Initialize Git, and their linked PRs show and act in the thread | ported (panels-5): `offersGit` on ThreadDetailsCardView hides the branch, git actions and Initialize Git for a scratch-root thread, and linked PR rows show without a branch selector; Redesign pill too. Left: the rows' Fix and Resolve writing to the composer, with the PR handoff prompts |
 
 ## New feature fleet-channel (1)
 
