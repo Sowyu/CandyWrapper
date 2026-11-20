@@ -273,8 +273,15 @@ final class ThreadSession {
         guard let shell else { return false }
         var http = shell.http
         http.timeout = 6
-        let store = self.store, token = shell.token
-        return await withTaskGroup(of: Bool.self) { group in
+        return await Self.loadDeferredWork(anchors, store: store, http: http, token: shell.token)
+    }
+
+    /// Nonisolated so the task group's children run off the main actor and capture only Sendable values.
+    /// The pages merge in the store actor; session state stays on the main actor in the caller.
+    nonisolated private static func loadDeferredWork(
+        _ anchors: [String], store: ThreadStore, http: EnvironmentHTTP, token: String
+    ) async -> Bool {
+        await withTaskGroup(of: Bool.self) { group in
             for anchor in anchors {
                 group.addTask {
                     let anchorId = TurnItemId(anchor)
