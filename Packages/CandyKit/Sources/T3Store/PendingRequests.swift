@@ -114,10 +114,13 @@ public struct UserInputQuestion: Hashable, Sendable, Decodable {
         public var label: String
         public var description: String
         public var value: String?
-        public init(label: String, description: String, value: String? = nil) {
+        /// What the option would do, shown under it (`preview`, orchestrationV2.ts:1451 at 4928; Claude's AskUserQuestion).
+        public var preview: String?
+        public init(label: String, description: String, value: String? = nil, preview: String? = nil) {
             self.label = label
             self.description = description
             self.value = value
+            self.preview = preview
         }
         /// What the answer carries: `value ?? label`.
         public var identity: String { value ?? label }

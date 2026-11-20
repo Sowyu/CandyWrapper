@@ -261,6 +261,9 @@ final class ComposerController {
     private var restoredUploads: [String: DraftAttachmentRecord.Pending] = [:]
     /// Restored files whose upload the server has not confirmed yet: they keep their upload id when saved.
     private var unverifiedUploads: Set<String> = []
+    /// #32910: ready uploads checked against the server for the send in progress, by attachment id and when.
+    private var sendVerified: [String: Date] = [:]
+    private var verifyingForSend: Set<String> = []
     private var savedDraftAttachments: [DraftAttachmentRecord] = []
     private var draftAttachments: [String: [ComposerAttachment]] = [:]
     private var attachmentTasks: [String: Task<Void, Never>] = [:]
@@ -271,6 +274,8 @@ final class ComposerController {
     /// `/clear` armed per thread key (freshSessionArms.ts at 4928): the next message starts a fresh provider session.
     /// The value tells a send's arm from one made while it was in flight.
     private var freshSessionArms: [String: UUID] = [:]
+    /// The response each thread's draft replies to (`replyTo` in composerDraftStore.ts at 4928), saved to `composer.replyTo.v1`.
+    private var replyTargets: [String: JSONValue] = [:]
     /// A send made while images were being prepared, by draft key; it goes with the composer's text once they join.
     private var sendAfterPreparing: [String: (mode: ComposerLogic.SendMode, background: Bool)] = [:]
     /// Uploaded attachment ids to their local file, so a sent image shows before the server copy is fetched.
@@ -306,6 +311,7 @@ final class ComposerController {
         self.environments = environments
         let defaults = UserDefaults.standard
         prompts = defaults.dictionary(forKey: Self.promptsKey) as? [String: String] ?? [:]
+        replyTargets = defaults.data(forKey: "composer.replyTo.v1").flatMap { try? JSONDecoder().decode([String: JSONValue].self, from: $0) } ?? [:]
         func decode(_ key: String) -> [String: DraftSession]? {
             defaults.data(forKey: key).flatMap { try? JSONDecoder().decode([String: DraftSession].self, from: $0) }
         }
@@ -1404,6 +1410,7 @@ final class ComposerController {
         UserDefaults.standard.set(try? JSONEncoder().encode(reviews), forKey: "composer.reviewComments.v1")
         let identities = ComposerContext.persistedIdentityRecords(prompts: Array(prompts.values), records: menuState.records)
         UserDefaults.standard.set(try? JSONEncoder().encode(identities), forKey: "composer.identities.v1")
+        UserDefaults.standard.set(try? JSONEncoder().encode(replyTargets), forKey: "composer.replyTo.v1")
         syncSidebarDrafts()
     }
 
@@ -1523,6 +1530,7 @@ final class ComposerController {
         // (`followUpBehavior`, ChatComposer.tsx:2286-2292).
         composer.steerByDefault = followUpSteers || !requests.approvals.isEmpty
         composer.placeholderInput = placeholder
+        updatePromptSuggestion()
         updateRequests()
         syncSendBlock()
         syncAttachmentViews()
@@ -1669,9 +1677,12 @@ final class ComposerController {
     /// An option pick replaced typed text: it goes to the end of the thread's prompt (ChatView.tsx:10253-10270).
     private func carryDisplaced(_ text: String) {
         guard let key = draftKey else { return }
-        let next = UserInputAnswers.carryDisplaced(prompts[key] ?? "", text)
+        let current = prompts[key] ?? ""
+        let next = UserInputAnswers.carryDisplaced(current, text)
         prompts[key] = next.isEmpty ? nil : next
         scheduleSave()
+        // #24331 (usePendingThreadRequests.ts at 4928): the moved text is out of sight until the question is answered.
+        if next != current { toast(.info, "Your typed text was set aside", "It will be back in the composer once the question is answered.") }
     }
 
     /// `runtime-request.respond` or `thread.user-input.dismiss` (ChatView.tsx:10114-10230). The
@@ -1858,6 +1869,12 @@ final class ComposerController {
             updatePickers()
         }
         guard let shell, pendingMessageId == nil, let target else { return }
+        // The reply leads the message, so its card sits above the text it is about (useComposerSend.ts:785-792 at 4928).
+        if queuedEdit == nil, case .thread = target, replyAvailable, let key = draftKey, let reply = replyTargets[key],
+           let id = reply["contextId"]?.stringValue {
+            menuState.records[id] = reply
+            text = ComposerReply.prompt(text, replyingTo: reply)
+        }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if let edit = queuedEdit { if !trimmed.isEmpty { saveEdit(edit, text: trimmed) }; return }
         let attachments = currentAttachments
@@ -1885,6 +1902,20 @@ final class ComposerController {
             // `retryAttachmentUpload` (attachmentUploadQueue.ts:556-572) deletes the failed server copy first.
             for a in failed { retryAttachment(a.id) }
             return
+        }
+        // A long-lived draft can outlive the server's upload sweep, so a send first checks each ready upload
+        // (`refreshExpiredAttachmentUploads`, attachmentUploadQueue.ts at 4928, f2c944947d #32910).
+        if let key = draftKey {
+            let now = Date()
+            let unchecked = attachments.filter { a in
+                a.status == .ready && a.attachmentId != nil && !unverifiedUploads.contains(a.id)
+                    && (sendVerified[a.id].map { now.timeIntervalSince($0) > 60 } ?? true)
+            }
+            if !unchecked.isEmpty {
+                sendAfterRetry[key] = (sentText, mode, background)
+                for a in unchecked { verifyUploadBeforeSend(a.id, key: key) }
+                return
+            }
         }
         // A plain send waits for running uploads and goes once they land (#33092, useComposerSend.ts:838-916 at
         // 4928); an approval redirect needs them first. Interrupted files block.
@@ -2044,7 +2075,10 @@ final class ComposerController {
         pendingMessageId = messageId
         for a in attachments { if let id = a.attachmentId { sentFiles[id] = a.fileURL } }
         // The draft's attachments leave with the message; the server claims their uploads.
-        if let key = draftKey { draftAttachments[key] = nil }
+        if let key = draftKey {
+            draftAttachments[key] = nil
+            if replyTargets.removeValue(forKey: key) != nil { updateReplyBanner() }
+        }
         composer.text = ""
         remember("")
         // `deriveThreadTitleSeed` (ChatView.tsx:5538-5542); records ride as `context`.
@@ -2400,6 +2434,13 @@ final class ComposerController {
     /// empty, and show the server's message (transport errors stay silent).
     /// `planFollowUp`: the plan card's refine or implement send (`onSubmitPlanFollowUp`, ChatView.tsx:10508-10516).
     private func sendFailed(_ error: Error, messageId: MessageId, text: String, draft: DraftSession?, key: String?, planFollowUp: Bool = false) {
+        // The reply returns above the composer, not in its text (`draftText`, ChatView.logic.ts at 4928).
+        var text = text
+        if let key, let reply = ComposerContext.referencedIds(text).compactMap({ menuState.records[$0] }).first(where: { $0["kind"]?.stringValue == "response" }),
+           let id = reply["contextId"]?.stringValue {
+            text = ComposerReply.draftText(text, contextId: id)
+            if replyTargets[key] == nil { replyTargets[key] = reply; scheduleSave(); updateReplyBanner() }
+        }
         optimistic.removeAll { $0.id == messageId }
         if pendingMessageId == messageId { pendingMessageId = nil }
         if let draft, target == .draft(draft) || target == nil {
@@ -2518,6 +2559,137 @@ final class ComposerController {
             banner.onAction = { [weak self] index in if index == nil { self?.disarmFreshSession(shown) } }
         }
         panel.freshSessionKey = shown
+    }
+
+    // MARK: Provider fallback (#26164)
+
+    private var dismissedFallbackWindow: String?
+
+    /// `modelFallbackBannerItem` (ComposerUsageLimits.tsx:80-126 at 4928) on a new thread that starts on the fallback
+    /// because its default provider is out of usage (ChatView.tsx:2635-2680): "Use <default>" switches back.
+    private func updateFallbackBanner() {
+        var key: String?
+        if case .draft = target, pickers.currentMultiple == nil, let fallback = pickers.current.fallback {
+            let window = fallback.provider.instanceId.rawValue + ":" + (fallback.resetsAt ?? "")
+            if window != dismissedFallbackWindow {
+                key = window
+                let providers = serverConfig.providers
+                let fallbackName = providers.first { $0.instanceId == fallback.selection.instanceId }?.models
+                    .first { $0.slug == fallback.selection.model }?.name ?? fallback.selection.model
+                let defaultModel = fallback.provider.models.first { $0.slug == fallback.defaultSelection.model }?.name ?? fallback.defaultSelection.model
+                let providerName = fallback.provider.displayName ?? fallback.provider.driver
+                let resets = fallback.resetsAt.map { UsageLimitsView.upcoming($0, nowMs: Int64(Date().timeIntervalSince1970 * 1000)) }
+                let banner = panel.lazyFallbackBanner.view
+                banner.apply(.init(variant: .neutral, icon: .gauge, title: "Using \(fallbackName)",
+                                   description: resets.map { "\(providerName) is out of usage · resets \($0)" } ?? "\(providerName) is out of usage",
+                                   actions: ["Use \(defaultModel)"], dismissLabel: "Dismiss fallback model notice"))
+                let selection = fallback.defaultSelection
+                banner.onAction = { [weak self] index in
+                    guard let self else { return }
+                    if index == 0 { pickers.select(selection.instanceId, model: selection.model) } else { dismissedFallbackWindow = window }
+                    updateFallbackBanner()
+                }
+            }
+        }
+        panel.fallbackKey = key
+    }
+
+    // MARK: Prompt suggestions (#28047, #33706)
+
+    private var suggestionSubscription: Task<Void, Never>?
+    private var suggestionThread: ThreadId?
+    private var suggestion: ComposerPromptSuggestion.Suggestion?
+
+    /// `usePromptSuggestion` (usePromptSuggestion.ts:55-88 at 4928): one stream for the open thread once it has a run,
+    /// while the server's `promptSuggestionsEnabled` is on. Older servers lack the setting, so true also proves the method.
+    private func updatePromptSuggestionSubscription() {
+        let enabled = serverConfig.settings.raw["promptSuggestionsEnabled"]?.boolValue == true
+        let thread = enabled && shellThread?.latestRunId != nil ? openThreadId : nil
+        guard thread != suggestionThread else { return }
+        suggestionSubscription?.cancel()
+        suggestionSubscription = nil
+        suggestionThread = thread
+        suggestion = nil
+        guard let thread, let supervisor = shell?.supervisor else { return }
+        suggestionSubscription = supervisor.subscribe("orchestration.subscribePromptSuggestion", payload: {
+            .object(["threadId": .string(thread.localId.rawValue)])
+        }, handler: { [weak self] event in
+            guard case .value(let value) = event else { return }
+            let next = ComposerPromptSuggestion.decode(value)
+            await MainActor.run {
+                guard let self, self.suggestionThread == thread, self.suggestion != next else { return }
+                self.suggestion = next
+                self.updatePromptSuggestion()
+            }
+        })
+    }
+
+    /// `offeredPromptSuggestion` (ChatComposer.tsx:2375-2386 at 4928): only where the default placeholder would show,
+    /// never while a turn runs, a send is busy, `/clear` is armed or context is attached.
+    private func updatePromptSuggestion() {
+        updatePromptSuggestionSubscription()
+        var text: String?
+        if let thread = suggestionThread, thread == openThreadId, let env = thread.environmentId,
+           let offered = ComposerPromptSuggestion.offered(suggestion, latestRunId: shellThread?.latestRunId, runs: projection?.runs ?? []),
+           !ComposerPromptSuggestion.dismissed.contains(ComposerPromptSuggestion.key(environmentId: env, runId: offered.runId)),
+           !composer.runState.running, !composer.isBusy, queuedEdit == nil, questionRequestId == nil,
+           draftKey.map({ freshSessionArms[$0] == nil && replyTargets[$0] == nil }) ?? false,
+           currentAttachments.isEmpty, requests.activeApproval == nil, requests.userInputs.isEmpty,
+           !composer.placeholderInput.noProvider, !composer.placeholderInput.projectRequired {
+            text = offered.text
+            composer.onDismissSuggestion = { [weak self] in
+                ComposerPromptSuggestion.dismissed.insert(ComposerPromptSuggestion.key(environmentId: env, runId: offered.runId))
+                self?.updatePromptSuggestion()
+            }
+        }
+        composer.promptSuggestion = text
+    }
+
+    // MARK: Reply to a response (#33124)
+
+    /// A 4928 server reads `response` records; 3824 rejects an unknown kind without `payload`.
+    // ponytail: no capability names response records, so this keys on serverUpdateStaging (2026-11-14, after #33124 on 2026-11-12). Use a dedicated flag if T3 adds one
+    private var replyAvailable: Bool { serverConfig.capabilities.contains("serverUpdateStaging") }
+
+    /// `replyToResponse` (ChatComposer.tsx at 4928) behind `replyToResponseStable` (ChatView.tsx): an open question
+    /// owns the composer and its answer would not carry the reply, so the reply waits with a toast.
+    private func replyToResponse(_ message: ChatMessage, _ projected: ProjectedTurnItem) {
+        guard replyAvailable, case .thread(let threadId) = target, let key = draftKey, let env = threadId.environmentId else { return }
+        guard requests.userInputs.isEmpty, questionRequestId == nil, queuedEdit == nil else {
+            toast(.warning, "The composer is not ready", "Try replying after the connection or pending input is resolved.")
+            return
+        }
+        let subagents = projection.map { projection in
+            ComposerReply.subagents(projection, itemId: projected.sourceItemId) { [weak self] env, thread in
+                self?.sidebar?.snapshot?.threads.first { $0.id.localId.rawValue == thread && (env == nil || $0.id.environmentId == env) }?.title
+            }
+        } ?? []
+        guard let record = ComposerReply.record(environmentId: env, threadId: threadId.localId.rawValue, messageId: message.id.rawValue,
+                                                text: message.text, itemId: projected.sourceItemId.rawValue, subagents: subagents) else { return }
+        replyTargets[key] = record
+        scheduleSave()
+        updateReplyBanner()
+        composer.focus()
+    }
+
+    /// `replyBannerItems` (ChatComposer.tsx at 4928): "Replying to", the response's opening as a link to it, and Cancel reply.
+    private func updateReplyBanner() {
+        let key = draftKey
+        let record = key.flatMap { replyTargets[$0] }
+        let shown = record.flatMap { $0["contextId"]?.stringValue }
+        if let record, let shown, let key, panel.replyKey != shown, let citation = ComposerReply.citation(record) {
+            let banner = panel.lazyReplyBanner.view
+            banner.apply(.init(variant: .neutral, icon: .reply, title: ComposerReply.bannerTitle(record), dismissLabel: "Cancel reply",
+                               descriptionParts: [.init(text: citation.label, link: citation.label)]))
+            banner.onLink = { _ in MarkdownView.onOpenCitation?(citation) }
+            banner.onAction = { [weak self] index in
+                guard index == nil, let self else { return }
+                self.replyTargets[key] = nil
+                self.scheduleSave()
+                self.updateReplyBanner()
+            }
+        }
+        panel.replyKey = shown
     }
 
     /// #31739: a model or effort pick on a started thread saves on the thread at once, so the next turn from any
@@ -3086,6 +3258,10 @@ extension ComposerController {
         }
         menus.onPick = { [weak self] item in self?.picked(item) }
         composer.chipLook = { [weak self] token in self?.chipLook(token) ?? ComposerChipLook.basic(token) }
+        // `modelMentionKeysAtom` (ModelMentionChip.tsx at 4928): a reference chips while the server lists its model.
+        composer.knownModel = { [weak self] instance, model in
+            self?.serverConfig.providers.contains { $0.instanceId.rawValue == instance && $0.models.contains { $0.slug == model } } ?? false
+        }
         composer.recordsForCopy = { [weak self] ids in
             guard let self, let env = targetEnvironmentId else { return nil }
             let records = contextRecords(for: ids)
@@ -3239,7 +3415,9 @@ extension ComposerController {
                 environments: composerLinkedNames.sorted { $0.key < $1.key }.map {
                     .init(id: $0.key, label: $0.value, machine: environments.machine($0.key) ?? "server")
                 }, excluding: targetEnvironmentId ?? "")
-            return .init(items: machines + threads + ComposerMenus.pathItems(entries), emptyText: ComposerMenus.emptyText(kind: .path, loading: loading))
+            // Models follow threads and machines, before files (useComposerMenuItems.ts:237-241 at 4928).
+            let models = ComposerModelMentions.items(query: trigger.query, entries: pickers.context.catalog.entries)
+            return .init(items: machines + threads + models + ComposerMenus.pathItems(entries), emptyText: ComposerMenus.emptyText(kind: .path, loading: loading))
         case .pullRequest:
             let env = targetEnvironmentId ?? ""
             let linked = ThreadPullRequests.visible(shellThread?.pullRequests ?? [])
@@ -3526,7 +3704,12 @@ extension ComposerController {
                   let shell = threads.first(where: { $0.id.rawValue == EnvironmentScope.key(record["environmentId"]?.stringValue ?? env, local) }),
                   let project = projects.first(where: { $0.id == shell.projectId }) else { return nil }
             return ProjectIconSource(project)
-        }, environment: { id in (environments.label(id), environments.machine(id)) })
+        }, environment: { id in (environments.label(id), environments.machine(id)) }, model: { [serverConfig] instance, slug in
+            // `modelMentionPresentationAtom`: the model's display name and its instance's driver.
+            guard let provider = serverConfig.providers.first(where: { $0.instanceId.rawValue == instance }),
+                  let model = provider.models.first(where: { $0.slug == slug }) else { return nil }
+            return (ModelNames.display(model), provider.driver)
+        })
     }
 }
 
@@ -3640,6 +3823,7 @@ extension ComposerController {
         composer.imageShelf.onExpand = { [weak self] id in self?.expandDraftImage(id) }
         panel.model.onOpenAttachment = { [weak self] file, download in self?.openSentAttachment(file, download: download) }
         panel.model.onRollbackCheckpoint = { [weak self] checkpoint, scope in self?.rollBack(checkpointId: checkpoint, scopeId: scope) }
+        panel.model.onReplyToResponse = { [weak self] message, projected in self?.replyToResponse(message, projected) }
         panel.model.attachmentMediaURL = { [weak self] id in
             await self?.mediaAttachmentURL(id)
         }
@@ -4181,6 +4365,46 @@ extension ComposerController {
         }
     }
 
+    /// One ready upload at send time (#32910): kept when the server still mints its URL, uploaded again from the local
+    /// copy when the server swept it, and failed with T3's reason otherwise. The held send resumes after.
+    private func verifyUploadBeforeSend(_ id: String, key: String) {
+        guard let a = draftAttachments[key]?.first(where: { $0.id == id }), let attachmentId = a.attachmentId,
+              let shell = environments.session(a.environmentId) else { sendVerified[id] = Date(); return }
+        let supervisor = shell.supervisor
+        verifyingForSend.insert(id)
+        Task { [weak self] in
+            var missing = false, failed = false
+            do {
+                _ = try await supervisor.request("assets.createUrl", payload: .object([
+                    "resource": .object(["_tag": .string("attachment"), "attachmentId": .string(attachmentId)])]))
+            } catch let error as RPCClientError where error.typedError?.tag == "AssetAttachmentNotFoundError" {
+                missing = true
+            } catch {
+                failed = true
+            }
+            guard let self else { return }
+            verifyingForSend.remove(id)
+            // Removed or replaced while the check ran.
+            guard draftAttachments[key]?.first(where: { $0.id == id })?.attachmentId == attachmentId else { resumeSendAfterRetry(key); return }
+            if missing, FileManager.default.fileExists(atPath: a.fileURL.path) {
+                sendVerified[id] = Date()
+                updateAttachment(id, key: key) { $0.attachmentId = nil; $0.status = .uploading(0) }
+                startUpload(id, key: key)
+                return
+            }
+            if missing {
+                updateAttachment(id, key: key) { f in
+                    f.attachmentId = nil; f.needsReattach = true; f.status = .failed("Uploaded attachment expired. Remove it and attach it again.")
+                }
+            } else if failed {
+                updateAttachment(id, key: key) { $0.status = .failed("Uploaded attachment could not be verified. Retry when the server reconnects.") }
+            } else {
+                sendVerified[id] = Date()
+            }
+            resumeSendAfterRetry(key)
+        }
+    }
+
     /// The held send goes once no image is being prepared, if its draft is still the open one.
     private func resumeSendAfterPreparing(_ key: String) {
         guard (preparingImages[key] ?? 0) == 0, let pending = sendAfterPreparing.removeValue(forKey: key), key == draftKey else { return }
@@ -4191,6 +4415,7 @@ extension ComposerController {
     private func resumeSendAfterRetry(_ key: String) {
         guard let pending = sendAfterRetry[key], let list = draftAttachments[key] else { sendAfterRetry[key] = nil; return }
         if list.contains(where: { if case .uploading = $0.status { true } else { false } }) { return }
+        if list.contains(where: { verifyingForSend.contains($0.id) }) { return }
         sendAfterRetry[key] = nil
         guard key == draftKey else { return }
         guard ComposerAttachmentRules.retryableFailures(list).isEmpty else {
@@ -4694,7 +4919,11 @@ extension ComposerController {
             toast(.info, "Still bringing a pasted attachment into this message.", "Stash again once its chip resolves.")
             return
         }
-        let prompt = composer.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPrompt = composer.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A trailing chip parses only with whitespace after it, so one space stays to restore it (#28352 at 4928).
+        let trimmedEnd = (String(composer.text.reversed().drop(while: \.isWhitespace).reversed()) as NSString).length
+        let endsWithChip = ComposerInlineTokens.collect(composer.text).last.map { NSMaxRange($0.range) == trimmedEnd } ?? false
+        let prompt = endsWithChip ? trimmedPrompt + " " : trimmedPrompt
         let attachments = currentAttachments
         let images = attachments.filter { $0.kind == .image }, files = attachments.filter { $0.kind == .file }
         if prompt.isEmpty, attachments.isEmpty {
@@ -5303,6 +5532,8 @@ extension ComposerController {
 
     private func updateThreadBanners() {
         updateFreshSessionBanner()
+        updateReplyBanner()
+        updateFallbackBanner()
         let thread = shellThread
         panel.showsGoal = thread?.goal != nil
         if let goal = thread?.goal {

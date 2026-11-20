@@ -59,8 +59,15 @@ final class ComposerPermissionsView: DSView {
         let w = bounds.width - 16
         heading.frame = NSRect(x: 8, y: 6, width: w, height: 16)
         track.frame = NSRect(x: 8, y: 28, width: w, height: 28)
-        let bw = (w - 4 - CGFloat(max(0, buttons.count - 1)) * 2) / CGFloat(max(1, buttons.count))
-        for (i, button) in buttons.enumerated() { button.frame = NSRect(x: 2 + CGFloat(i) * (bw + 2), y: 2, width: bw, height: 24) }
+        // No gaps; only the outer ends round (`first:rounded-l-md last:rounded-r-md`, #26514 at 4928).
+        let bw = (w - 4) / CGFloat(max(1, buttons.count))
+        for (i, button) in buttons.enumerated() {
+            button.frame = NSRect(x: 2 + CGFloat(i) * bw, y: 2, width: bw, height: 24)
+            var corners: CACornerMask = []
+            if i == 0 { corners.formUnion([.layerMinXMinYCorner, .layerMinXMaxYCorner]) }
+            if i == buttons.count - 1 { corners.formUnion([.layerMaxXMinYCorner, .layerMaxXMaxYCorner]) }
+            button.layer?.maskedCorners = corners
+        }
         title.frame = NSRect(x: 8, y: 62, width: w, height: 20)
         detail.frame = NSRect(x: 8, y: 84, width: w, height: 32)
     }

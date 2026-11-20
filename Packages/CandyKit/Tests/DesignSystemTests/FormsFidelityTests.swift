@@ -22,6 +22,7 @@ struct FormsFidelityTests {
         "input-group": .init(0.035),
         "input-group-hover": .init(0.03),
         "kbd": .init(0.05),
+        "kbd-outline": .init(0.03),
         "label": .init(0.1),
         "separator": .init(0.02),
         "skeleton": .init(0.02),
@@ -137,6 +138,15 @@ struct FormsFidelityTests {
         try Self.run("kbd", title: "Kbd") { n, _, _ in
             if let group = n["group"] { return KbdGroupView(keys: group.split(separator: ",").map(String.init)) }
             return KbdView(n["keys"] ?? "", icon: n["icon"].flatMap(IconName.init(rawValue:)))
+        }
+    }
+
+    /// The prompt suggestion's `⇥ Tab` hint (#28047 at 4928), `variant="outline"`.
+    @Test func kbdOutline() throws {
+        try Self.run("kbd-outline", title: "Kbd outline") { n, _, _ in
+            let kbd = KbdView(n["keys"] ?? "")
+            kbd.outline = n["outline"] != nil
+            return kbd
         }
     }
 

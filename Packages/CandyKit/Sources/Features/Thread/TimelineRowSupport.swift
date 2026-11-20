@@ -263,6 +263,13 @@ final class TimelineContext {
         let source = projected.sourceThreadId
         return { onFork(source, run) }
     }
+
+    /// `AssistantReplyButton` (TimelineAssistantRows.tsx:256-258, :279-283 at 4928): a finished message with text and a projected item.
+    func replyAction(_ message: ChatMessage, projected: ProjectedTurnItem?) -> (() -> Void)? {
+        guard let projected, !message.streaming, let onReply = model?.onReplyToResponse,
+              !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return { onReply(message, projected) }
+    }
 }
 
 extension TimelineItem {

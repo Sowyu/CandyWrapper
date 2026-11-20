@@ -172,6 +172,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case radioTower
     case redo2
     case refreshCw
+    case reply
     case rocket
     case rotateCcw
     case rotateCw
@@ -427,6 +428,7 @@ extension IconName {
         case .radioTower: return "radio-tower"
         case .redo2: return "redo-2"
         case .refreshCw: return "refresh-cw"
+        case .reply: return "reply"
         case .rocket: return "rocket"
         case .rotateCcw: return "rotate-ccw"
         case .rotateCw: return "rotate-cw"
@@ -1592,6 +1594,11 @@ extension IconName {
                 IconElement(.path(d: "M21 3v5h-5")),
                 IconElement(.path(d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16")),
                 IconElement(.path(d: "M8 16H3v5")),
+            ])
+        case .reply:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M20 18v-2a4 4 0 0 0-4-4H4")),
+                IconElement(.path(d: "m9 17-5-5 5-5")),
             ])
         case .rocket:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [

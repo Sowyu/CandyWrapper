@@ -51,10 +51,14 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     var onModifierChange: ((Bool) -> Void)?
     /// Asked first for ArrowUp, ArrowDown, Return, Tab and Escape; true when the menu took the key.
     var onMenuKey: ((MenuKey) -> Bool)?
+    /// Tab (true) or Escape (false) in an empty prompt with no menu: accepts or dismisses the prompt suggestion.
+    var onSuggestionKey: ((Bool) -> Bool)?
     /// The caret or selection moved (the menu trigger follows it).
     var onSelectionChange: (() -> Void)?
     /// The look for a token's chip; nil keeps tokens as plain text.
     var chipLook: ((ComposerInlineToken) -> ComposerChipLook)?
+    /// Whether a `model:<instance>/<slug>` reference names a model the server lists; nil keeps them text (#31207).
+    var knownModel: ((String, String) -> Bool)?
     /// Copy: the records behind the copied context ids, and the environment they come from.
     var recordsForCopy: (([String]) -> (records: [JSONValue], environmentId: String)?)?
     /// Paste: records from the clipboard fragment for the pasted links.
@@ -437,7 +441,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         guard let storage = textStorage, let chipLook else { return }
         let display = string as NSString
         // A token that already holds a chip character is left alone.
-        let tokens = ComposerInlineTokens.collect(string).filter { !display.substring(with: $0.range).contains("\u{FFFC}") && storage.attribute(.composerCodeBlock, at: $0.range.location, effectiveRange: nil) == nil && !ComposerRichTextStyler.marks(storage.attribute(.composerMarks, at: $0.range.location, effectiveRange: nil)).contains(.code) }
+        let tokens = ComposerInlineTokens.collect(string, knownModel: knownModel).filter { !display.substring(with: $0.range).contains("\u{FFFC}") && storage.attribute(.composerCodeBlock, at: $0.range.location, effectiveRange: nil) == nil && !ComposerRichTextStyler.marks(storage.attribute(.composerMarks, at: $0.range.location, effectiveRange: nil)).contains(.code) }
         guard !tokens.isEmpty else { return }
         let wasChipifying = isChipifying
         isChipifying = true
@@ -918,6 +922,10 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             }
             if let key, onMenuKey(key) { return }
         }
+        // composerCommandKey.ts:240-282 at 4928: after the menu, a bare Tab takes the suggestion and Escape dismisses it.
+        if let onSuggestionKey, !hasMarkedText(), string.isEmpty,
+           (event.keyCode == 48 && event.modifierFlags.intersection([.shift, .option, .command, .control]).isEmpty) || event.keyCode == 53,
+           onSuggestionKey(event.keyCode == 48) { return }
         if event.keyCode == 48, codeFenceAtCaret != nil, !hasMarkedText(),
            event.modifierFlags.intersection([.option, .command, .control]).isEmpty {
             if event.modifierFlags.contains(.shift) {

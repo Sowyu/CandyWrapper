@@ -36,9 +36,9 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 861a51a6c4 | #26164 | usage | feat(server,web,mobile): fall back when the default provider is out of usage | left: provider fallback needs the fallback settings in Settings > Project defaults (not this task's area), the usage-limit check in packages/shared/src/usageLimits.ts and the new-thread hero line; 19 files at 4928 |
-| cb1de7ba23 | #27593 | settings | fix(web): configure reasoning for the fallback model | left: provider fallback needs the fallback settings in Settings > Project defaults (not this task's area), the usage-limit check in packages/shared/src/usageLimits.ts and the new-thread hero line; 19 files at 4928 |
-| bc448b8697 | #27859 | composer | fix(web): composer fallback keeps the effort of a model saved under an alias | left: provider fallback needs the fallback settings in Settings > Project defaults (not this task's area), the usage-limit check in packages/shared/src/usageLimits.ts and the new-thread hero line; 19 files at 4928 |
+| 861a51a6c4 | #26164 | usage | feat(server,web,mobile): fall back when the default provider is out of usage | ported, composer and store side: a new draft without its own pick starts on the server's `fallbackModelSelection` while its default provider is out of usage for its model (T3Store UsageFallback, ComposerSelectionStore.resolve), and the draft shows "Using <model>" with "<provider> is out of usage · resets <time>", "Use <default>" and a dismiss per window (ComposerController `updateFallbackBanner`, ThreadPanelView slot). Left for the Settings agent: the Fallback model row in Settings > Project defaults that writes `fallbackModelSelection` |
+| cb1de7ba23 | #27593 | settings | fix(web): configure reasoning for the fallback model | left for the Settings agent: the fallback model's effort is picked in Settings > Project defaults; the composer already starts the fallback with the options saved in `fallbackModelSelection` |
+| bc448b8697 | #27859 | composer | fix(web): composer fallback keeps the effort of a model saved under an alias | ported with #26164: the fallback starts with its saved options as they are, so an effort saved under a model alias stays (ComposerSelectionStore.resolve) |
 
 ## Port group usage-meter (3)
 
@@ -221,7 +221,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| af54fe2344 | #30421 | thread | fix(web): make styled composer Markdown markers editable | left: 4928 reveals a styled range's Markdown as editable text while the caret is in it (composer-markdown-source.ts, 593 lines); CW keeps markers beside the styled words |
+| af54fe2344 | #30421 | thread | fix(web): make styled composer Markdown markers editable | left (not reached in composer-3): 4928 reveals a styled range's Markdown as editable text while the caret is in it (composer-markdown-source.ts, 593 lines); CW keeps markers beside the styled words |
 
 ## Port group snooze-requests (1)
 
@@ -337,7 +337,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| ad9e87111f | #33092 | thread | feat(web): send messages while attachments upload | ported: Send stays enabled while uploads run and the send goes once they land; approval redirects still wait (ComposerAttachmentRules `sendBlockReason`). The message shows only once it sends, not as sending meanwhile |
+| ad9e87111f | #33092 | thread | feat(web): send messages while attachments upload | ported: Send stays enabled while uploads run and the send goes once they land; approval redirects still wait (ComposerAttachmentRules `sendBlockReason`). The message shows only once it sends, not as sending meanwhile. Left in composer-3: the timeline's sending state needs send() to echo and clear before uploads land and wait in its dispatch Task (chatViewSend.ts awaitAttachmentUploads), with each upload's outcome kept after the draft lets go of its attachments |
 
 ## Port group design-icons (1)
 
@@ -612,8 +612,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| b24959d579 | #28047 | composer | feat: Labs option to suggest your next prompt after Claude and Codex turns | left: needs `orchestration.subscribePromptSuggestion {threadId}` (stream of `{runId, text} | null`, rpc.ts:2121 at 4928) when server settings `promptSuggestionsEnabled` is true, ghost text in the empty composer that Tab accepts and Escape dismisses per run (usePromptSuggestion.ts, composerCommandKey.ts), and the Labs switch in Settings |
-| b48b8ea2a0 | #33706 | thread | fix(web): prompt suggestions show after a steered turn | left: with #28047, `offeredPromptSuggestion` skips a steered run that never started |
+| b24959d579 | #28047 | composer | feat: Labs option to suggest your next prompt after Claude and Codex turns | left: needs `orchestration.subscribePromptSuggestion {threadId}` (stream of `{runId, text} | ported: on a server whose settings have `promptSuggestionsEnabled`, the open thread subscribes to `orchestration.subscribePromptSuggestion` once it has a run; the suggestion takes the default placeholder's place with an outline `⇥ Tab` (KbdView `outline`, new kbd-outline reference), Tab in the empty prompt takes it and Escape dismisses it per run (ComposerPromptSuggestion, ComposerView `promptSuggestion`, ComposerController). Left: the Labs switch in Settings, which writes the server setting (Features/Settings) |
+| b48b8ea2a0 | #33706 | thread | fix(web): prompt suggestions show after a steered turn | ported with #28047: a steered run that never started is skipped (ComposerPromptSuggestion.offered) |
 
 ## New feature text-generators (1)
 
@@ -625,7 +625,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 88109cea46 | #31207 | composer | feat(web,mobile): @-mention a model to name it for the agent | left: @-mention a model needs a model chip kind in ComposerInlineTokens and the editor, model rows in the @ menu (composerModelMentions.ts), provider chip icons and a context record; about 900 lines at 4928 |
+| 88109cea46 | #31207 | composer | feat(web,mobile): @-mention a model to name it for the agent | ported: `@` lists up to 8 models of ready instances whose names start a word for every query word, after machines and threads (ComposerModelMentions.items); a pick writes `model:<instance>/<slug>`, and the editor chips a reference the server lists, followed by whitespace, with the provider logo and the model accent in the logo's hue (ComposerChipLook `.model`). Left: the chip's popover, chips in sent messages (ChatMarkdown, Features/Thread) and skipping `$…$` math (no composer math ranges in CW yet) |
 
 ## New feature mcp-client-setup (3)
 
@@ -663,7 +663,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| c0f85e7f79 | #33124 | thread | feat(web): reply to an assistant response from its hover actions | left: reply to a response starts in the assistant row's hover actions (Features/Thread, another agent's area) and adds a `replyTo` draft field, a quote chip above the composer and a context record on send (composerContextRecords.ts, composerContext.ts) |
+| c0f85e7f79 | #33124 | thread | feat(web): reply to an assistant response from its hover actions | ported: a finished assistant message gets Reply (TimelineMessageRows `AssistantMetaContent`), the composer shows "Replying to" with the response's opening as a link and Cancel reply, and the send leads with a `response` reference and record carrying its subagents (ComposerReply, ComposerController `replyToResponse`); behind `serverUpdateStaging` since 3824 rejects the kind. Left: the sent message's reply card (`ResponseReplyCard`, Features/Thread) and the stash keeping a reply |
 
 ## New feature agent-theming (5)
 
@@ -756,123 +756,123 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 4453f537ff | #26929 | composer | fix(web): Antigravity effort no longer shows a speedometer in the composer | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
-| 88ab83e8bc | #26958 | composer | fix(web): reconnecting notice no longer shifts the new thread composer | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| 4b7a347ca9 | #23174 | composer | fix(composer): retry expired catalogs after failed discovery | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
+| 4453f537ff | #26929 | composer | fix(web): Antigravity effort no longer shows a speedometer in the composer | left: not reached in composer-3; T3 changes TraitsPicker.tsx, threadExecution.ts (15 lines), still unchecked against CW |
+| 88ab83e8bc | #26958 | composer | fix(web): reconnecting notice no longer shifts the new thread composer | left: not reached in composer-3; T3 changes ChatView.tsx, ComposerBanner.tsx, ComposerBannerStack.tsx and more (69 lines), still unchecked against CW |
+| 4b7a347ca9 | #23174 | composer | fix(composer): retry expired catalogs after failed discovery | left: not reached in composer-3; T3 changes providerSkills.ts (21 lines), still unchecked against CW |
 | e836ab1275 | #21508 | composer | fix(web): right panel launcher letters work on non-Latin keyboard layouts | left: belongs with the right panel launcher keys, outside the composer; not checked this session |
-| dcf051e861 | #21537 | composer | fix(composer): copied context with an apostrophe survives the HTML clipboard | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
-| b665f0b11c | #23446 | composer | fix(web): recognize plain text aliases in code fences | left: rich text editing; not checked against CW in the composer-rest pass |
-| 42ca5d560d | #23447 | composer | fix(web): keep deleted clipboard attachments out of the draft | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
-| 2274ff9a5d | #27033 | composer | fix(web): Compact chip fits on narrow composers | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| 7c90d51d61 | #23957 | composer | fix(web): composer keeps the picked effort when it falls back to another instance | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
-| 7917ac895b | #24697 | composer | fix(web): Resume keeps its thread's model when you switch threads | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
+| dcf051e861 | #21537 | composer | fix(composer): copied context with an apostrophe survives the HTML clipboard | ported: the clipboard fragment ends only at its own quote style (ComposerContext `fragmentAttribute`) |
+| b665f0b11c | #23446 | composer | fix(web): recognize plain text aliases in code fences | ported: `plaintext` and `txt` fences read as Plain text (ComposerCodeLanguages.aliases) |
+| 42ca5d560d | #23447 | composer | fix(web): keep deleted clipboard attachments out of the draft | left: not reached in composer-3; T3 changes ChatComposer.tsx, useComposerContextImport.ts (18 lines), still unchecked against CW |
+| 2274ff9a5d | #27033 | composer | fix(web): Compact chip fits on narrow composers | ported: at 480pt and under the Compact chip shows its count alone (ComposerCompactPill `narrow`) |
+| 7c90d51d61 | #23957 | composer | fix(web): composer keeps the picked effort when it falls back to another instance | left: not reached in composer-3; T3 changes ChatView.logic.ts, useComposerProviderModel.ts, composerDraftStore.ts (78 lines), still unchecked against CW |
+| 7917ac895b | #24697 | composer | fix(web): Resume keeps its thread's model when you switch threads | already in CandyWrapper: Resume reads the model selection before its first await (ComposerController `resume`) |
 | 6e1bec50d5 | #26470 | composer | fix(web): prevent permissions label from shrinking on click | skip: adds `aria-haspopup` to the strip control only |
-| 7d7db0cbc3 | #26514 | composer | fix(web): remove gaps between permission options | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| 00b2d0e271 | #26559 | composer | fix(web): the prompt box follows the interface font size | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| e00f98fde2 | #22236 | composer | fix(web): stacked composer notices line up their details buttons | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| a0aefbee11 | #23784 | composer | fix(shared): give attached threads a canonical read call | left: composer chrome and menus; not checked against CW in the composer-rest pass |
+| 7d7db0cbc3 | #26514 | composer | fix(web): remove gaps between permission options | ported: the permission segments touch, and only the outer ends round (ComposerPermissionsView.layout) |
+| 00b2d0e271 | #26559 | composer | fix(web): the prompt box follows the interface font size | left: not reached in composer-3; T3 changes appInit.tsx, appearanceFonts.ts, useLocalStorage.ts (76 lines), still unchecked against CW |
+| e00f98fde2 | #22236 | composer | fix(web): stacked composer notices line up their details buttons | ported: a notice's actions take at least 48pt, so stacked notices line up their details buttons (ComposerNoticeBannerView.layout) |
+| a0aefbee11 | #23784 | composer | fix(shared): give attached threads a canonical read call | free with the runtime: the server formats the thread record's read call (packages/shared composerContextReferences.ts runs in ProviderTurnStartService) |
 | 8003dd8c7b | #27016 | composer | fix(web): Shift+Tab moves a nested composer list item back out | ported: Shift+Tab lifts a nested item to its parent indent and renumbers the parent list (ComposerListContinuation `outdent`) |
-| 8b74a69019 | #28446 | composer | fix(web): background command details open above their button | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| cedf8b4c1c | #23940 | composer | fix(web): format inline code when the opening backtick is typed last | left: rich text editing; not checked against CW in the composer-rest pass |
-| 16233e7529 | #24331 | composer | fix(web): typed answer moved to the draft by an option click is announced | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| 1ad78611ba | #25511 | composer | fix(web): keep the default instance's draft model off custom instances | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
-| 868524f259 | #27384 | composer | fix(web): Backspace no longer re-nests a checkbox under a bullet | left: rich text editing; not checked against CW in the composer-rest pass |
+| 8b74a69019 | #28446 | composer | fix(web): background command details open above their button | left: not reached in composer-3; T3 changes ComposerBannerStack.tsx, ThreadActivityBanners.tsx, threadExecution.ts (24 lines), still unchecked against CW |
+| cedf8b4c1c | #23940 | composer | fix(web): format inline code when the opening backtick is typed last | left: not reached in composer-3; T3 changes composer-rich-text-doc.ts (37 lines), still unchecked against CW |
+| 16233e7529 | #24331 | composer | fix(web): typed answer moved to the draft by an option click is announced | ported: an option click that moves typed text into the draft toasts "Your typed text was set aside" (ComposerController `carryDisplaced`) |
+| 1ad78611ba | #25511 | composer | fix(web): keep the default instance's draft model off custom instances | n/a: CandyWrapper keys draft models by instance and never had driver-keyed drafts |
+| 868524f259 | #27384 | composer | fix(web): Backspace no longer re-nests a checkbox under a bullet | left: not reached in composer-3; T3 changes composer-rich-text-doc.ts (5 lines), still unchecked against CW |
 | e71f414cb0 | #27472 | composer | fix(web): Esc in the theme color picker restores the previous color | left: belongs with Settings, the theme color picker, outside the composer; not checked this session |
 | 6dddccb244 | #27837 | composer | fix(shared): /Model with a query still opens the model picker | skip: superseded; 4928 composerTrigger.ts has no `/model <query>` trigger left |
-| 71d52eb61b | #28083 | composer | fix(web): align composer context icons and space their labels | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| dc102e5062 | #28209 | composer | fix(web): skill menus show loading while project skills arrive | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| ce48e45900 | #28499 | composer | fix(web): prevent composer image thumbnail flicker | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
-| 4ff9a32bad | #27457 | composer | fix(web): format inline code typed with a dead-key backtick | left: rich text editing; not checked against CW in the composer-rest pass |
-| 3f695422ae | #24684 | composer | fix(web): a failed plan follow-up no longer overwrites the next draft | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
+| 71d52eb61b | #28083 | composer | fix(web): align composer context icons and space their labels | left: the context strip's branch, worktree and environment triggers take `gap-1.5` and the cap-aligned label in every display mode (BranchToolbarBranchSelector.tsx, BranchToolbarEnvModeSelector.tsx, BranchToolbarEnvironmentSelector.tsx, ComposerContextLabel.tsx); needs ComposerContextStripView spacing and a composer-footer recapture check |
+| dc102e5062 | #28209 | composer | fix(web): skill menus show loading while project skills arrive | left: not reached in composer-3; T3 changes ChatComposer.tsx, ComposerCommandMenu.tsx, useComposerMenuItems.ts and more (77 lines), still unchecked against CW |
+| ce48e45900 | #28499 | composer | fix(web): prevent composer image thumbnail flicker | left: not reached in composer-3; T3 changes ComposerImageThumbnail.tsx (86 lines), still unchecked against CW |
+| 4ff9a32bad | #27457 | composer | fix(web): format inline code typed with a dead-key backtick | left: not reached in composer-3; T3 changes composer-rich-text-doc.ts (80 lines), still unchecked against CW |
+| 3f695422ae | #24684 | composer | fix(web): a failed plan follow-up no longer overwrites the next draft | already in CandyWrapper: a failed send, plan follow-up included, restores its text only into a draft with no newer prompt (ComposerController.sendFailed) |
 | ab06e2a265 | #29165 | composer | fix(clients): attachment sizes just under 1 MB no longer read "1024 KB" | ported: ComposerFileRow.formatSize picks the unit after rounding |
-| d1e5044c67 | #29158 | composer | fix(shared): context chip labels no longer split an emoji at the 200-character cap | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| 228e289506 | #29828 | composer | fix(web): drafts saved by older versions load instead of being wiped | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
-| 92388d5a08 | #29789 | composer | fix(web): picking a custom model named like a Codex alias keeps that model | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
-| 03dbb2fb48 | #24990 | composer | fix(web): adding to the composer no longer drops earlier findings and selections | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
+| d1e5044c67 | #29158 | composer | fix(shared): context chip labels no longer split an emoji at the 200-character cap | ported: the 200-unit label cap never splits a surrogate pair (ComposerContext.sanitizeLabel) |
+| 228e289506 | #29828 | composer | fix(web): drafts saved by older versions load instead of being wiped | left: not reached in composer-3; T3 changes composerDraftStore.ts (29 lines), still unchecked against CW |
+| 92388d5a08 | #29789 | composer | fix(web): picking a custom model named like a Codex alias keeps that model | left: not reached in composer-3; T3 changes composerDraftStore.ts (12 lines), still unchecked against CW |
+| 03dbb2fb48 | #24990 | composer | fix(web): adding to the composer no longer drops earlier findings and selections | left: not reached in composer-3; T3 changes ThreadDetailsPrRow.tsx, PullRequestDetailPanel.tsx, pullRequestDetail.logic.ts and more (238 lines), still unchecked against CW |
 | ecea300d3c | #28016 | composer | fix(web): sidebar search results can be dragged onto the composer | left: belongs with the sidebar search rows, outside the composer; not checked this session |
 | 3fa57b92a2 | #26724 | composer | fix(web): boring sidebar threads drag onto the composer again | left: belongs with the boring sidebar rows, outside the composer; not checked this session |
-| 50e176dba5 | #29018 | composer | fix(web): banner button hover follows the banner's rounded corners | left: composer chrome and menus; not checked against CW in the composer-rest pass |
+| 50e176dba5 | #29018 | composer | fix(web): banner button hover follows the banner's rounded corners | left: not reached in composer-3; T3 changes ComposerBanner.tsx (15 lines), still unchecked against CW |
 | f06bfa69c7 | #33990 | composer | fix(web): drag command palette threads into the composer | left: belongs with the command palette rows, outside the composer; not checked this session |
 | 1d80047048 | #34113 | composer | fix(web): scroll project picker to top on first result | left: belongs with the project picker, outside the composer; not checked this session |
 | 31bf2f7f34 | #32681 | composer | fix(client-runtime): pasted repository page URLs clone the repository into its own folder | left: belongs with add project from a repository URL, outside the composer; not checked this session |
-| a0efdaeb89 | #33783 | composer | fix: new threads move from draft to Working in one step | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| 2828f28145 | #16546 | composer | fix(web): composer follows an optionless thread instead of the settings default | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
-| d56b82c708 | #22193 | composer | fix(web): keep saved default model when changing effort | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
-| 6700cf6f89 | #21968 | composer | fix(web): reveal expanded work rows hidden behind the composer | left: composer chrome and menus; not checked against CW in the composer-rest pass |
+| a0efdaeb89 | #33783 | composer | fix: new threads move from draft to Working in one step | left: not reached in composer-3; T3 changes Sidebar.tsx, SidebarThreadRow.tsx, composerDraftStore.ts and more (61 lines), still unchecked against CW |
+| 2828f28145 | #16546 | composer | fix(web): composer follows an optionless thread instead of the settings default | ported: a started thread's options, even none, outrank the project's (T3Store ComposerSelectionStore.resolve `optionSources`) |
+| d56b82c708 | #22193 | composer | fix(web): keep saved default model when changing effort | left: not reached in composer-3; T3 changes ProviderModelPicker.logic.ts, ProviderModelPicker.tsx, ProjectDefaultsSettings.logic.ts and more (106 lines), still unchecked against CW |
+| 6700cf6f89 | #21968 | composer | fix(web): reveal expanded work rows hidden behind the composer | left: not reached in composer-3; T3 changes CommandOutputPanel.tsx, MessagesTimeline.tsx, TimelineWorkEntryRow.tsx and more (186 lines), still unchecked against CW |
 | cbc68c9dc1 | #20809 | composer | fix(web): Stop shows a pending state and repeat clicks no longer resume | ported in abe98edb, without the second Stop button beside Send while typing |
-| 8f4166b28c | #22997 | composer | fix(web): convert composer list markers completed later | left: rich text editing; not checked against CW in the composer-rest pass |
+| 8f4166b28c | #22997 | composer | fix(web): convert composer list markers completed later | left: not reached in composer-3; T3 changes composer-rich-text-doc.ts (149 lines), still unchecked against CW |
 | 9d7384d096 | #23289 | composer | fix(client-runtime): reopening a folder picker refreshes its listing | left: belongs with the add-project folder picker, outside the composer; not checked this session |
 | 21a9aa1d79 | #14870 | composer | fix(web): wrapping a selection in backticks formats it as code | ported: a backtick typed over a one-line selection makes it code, `*` or `_` italic (ComposerEditor `surroundSelection`); T3 also checks the span reparses the same, which CW skips |
-| a02bc75737 | #34572 | composer | fix(web): keep background toast Open button inline | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| 6a5d6085ba | #32959 | composer | fix(web): prompt links work for encoded thread IDs | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| 3de3c9ffff | #34307 | composer | fix(web): keep a leading blank line selected when indenting code | left: rich text editing; not checked against CW in the composer-rest pass |
+| a02bc75737 | #34572 | composer | fix(web): keep background toast Open button inline | left: not reached in composer-3; T3 changes useComposerSend.ts (28 lines), still unchecked against CW |
+| 6a5d6085ba | #32959 | composer | fix(web): prompt links work for encoded thread IDs | left: not reached in composer-3; T3 changes threadRoutes.ts (14 lines), still unchecked against CW |
+| 3de3c9ffff | #34307 | composer | fix(web): keep a leading blank line selected when indenting code | n/a: Tab in a CandyWrapper code block indents at the caret only and never indents a selection |
 | ea3e20a0e2 | #27287 | composer | fix(web): double-clicking another thread in the sidebar renames it instead of focusing its composer | left: belongs with the sidebar rename, outside the composer; not checked this session |
 | 4e6924753c | #27280 | composer | fix(web): pasted CRLF text keeps its blank lines and caret in the composer | ported: pasted CRLF and CR read as LF before the paste is handled (ComposerPasteboard `normalizedLineBreaks`) |
 | 6a03ef6568 | #34493 | composer | fix(web): app keybindings on Mod+B, Mod+I and Mod+E win over composer formatting | already in CandyWrapper: App/Sources/ComposerController.swift:789 lets a bound app command beat the editor formatting, and Mod+B over selected text still bolds as in 4928 AppSidebarLayout.tsx:342-350 |
-| 4ae66e2e86 | #24585 | composer | fix(opencode): project-defined models appear in that project's picker | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
+| 4ae66e2e86 | #24585 | composer | fix(opencode): project-defined models appear in that project's picker | left: not reached in composer-3; T3 changes ChatView.tsx, ChatComposer.tsx, ComposerControlsBar.tsx and more (82 lines), still unchecked against CW |
 | d9a54ec645 | #34724 | composer | fix(web): file breadcrumbs keep backslashes in POSIX folder names | left: belongs with the file breadcrumbs, outside the composer; not checked this session |
-| 1a1f9ac18e | #34810 | composer | fix(web): Ctrl/Cmd+Enter sends new threads when the send shortcut needs it | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| 7fc9aa6ed9 | #34816 | composer | fix(shared): typing after a skill chip no longer reparses the prompt as math | left: rich text editing; not checked against CW in the composer-rest pass |
-| 2b07556d71 | #28352 | composer | fix(web): a stashed prompt ending in a skill or file chip restores as a chip | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
+| 1a1f9ac18e | #34810 | composer | fix(web): Ctrl/Cmd+Enter sends new threads when the send shortcut needs it | ported: with a send that needs a modifier, Mod+Enter `composer.sendBackground` reads as Mod+Shift+Enter too (T3Protocol Keybindings.shortcut) |
+| 7fc9aa6ed9 | #34816 | composer | fix(shared): typing after a skill chip no longer reparses the prompt as math | left: not reached in composer-3; T3 changes markdownMath.ts (21 lines), still unchecked against CW |
+| 2b07556d71 | #28352 | composer | fix(web): a stashed prompt ending in a skill or file chip restores as a chip | ported: a stashed prompt ending in a chip keeps one space so it restores as a chip (ComposerController `stashCurrentPrompt`) |
 | 002dc9b644 | #35075 | composer | fix(web): file names with a backslash no longer split into folders in the Changes card | left: belongs with the Changes card in the thread, outside the composer; not checked this session |
 | cb931fcbe2 | #35110 | composer | fix(web): a save in one tab no longer erases what another tab saved | skip: a cross-tab storage race; CW is one process with one draft store |
 | 1c9d32fe3c | #35137 | composer | fix(shared): composer # suggestions sort by update instant, not timestamp text | ported: `#` suggestions sort by update instant (ComposerMenus.pullRequestItems) |
-| 0cd6a73433 | #35265 | composer | fix(web): pasting an image the draft already has no longer flashes a preparing tile | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
-| 86ff9d073c | #35454 | composer | fix(web): Prompt Stash shrinks above the composer when vertical space is short | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| 9b242e4d07 | #27414 | composer | fix(web): reveal full composer command descriptions | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| 05089062d4 | #29179 | composer | fix(web): restore composer focus when returning to a thread | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| a98bc69676 | #24872 | composer | fix(web): Cursor threads keep a stored model the catalog doesn't list | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
-| 0bb6eaa546 | #35658 | composer | fix(web): auto-balanced drafts recheck machine load before sending | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
-| d7a0b5371f | #33782 | composer | fix(web,mobile): triage follows the draft when you switch machines | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
-| 96a4d2f012 | #36363 | composer | fix(web): pasted URLs and paths keep their underscores | left: rich text editing; not checked against CW in the composer-rest pass |
+| 0cd6a73433 | #35265 | composer | fix(web): pasting an image the draft already has no longer flashes a preparing tile | left: not reached in composer-3; T3 changes ChatComposer.tsx, composerAttachmentFiles.ts, preparingComposerImages.ts and more (78 lines), still unchecked against CW |
+| 86ff9d073c | #35454 | composer | fix(web): Prompt Stash shrinks above the composer when vertical space is short | left: not reached in composer-3; T3 changes ComposerStashMenu.tsx (8 lines), still unchecked against CW |
+| 9b242e4d07 | #27414 | composer | fix(web): reveal full composer command descriptions | left: not reached in composer-3; T3 changes ComposerCommandMenu.tsx (29 lines), still unchecked against CW |
+| 05089062d4 | #29179 | composer | fix(web): restore composer focus when returning to a thread | left: not reached in composer-3; T3 changes ChatView.tsx, ThreadTerminalDrawer.tsx, useFocusComposerOnThreadOpen.ts and more (118 lines), still unchecked against CW |
+| a98bc69676 | #24872 | composer | fix(web): Cursor threads keep a stored model the catalog doesn't list | left: not reached in composer-3; T3 changes ModelPickerContent.tsx, TraitsPicker.tsx, composerProviderState.tsx and more (36 lines), still unchecked against CW |
+| 0bb6eaa546 | #35658 | composer | fix(web): auto-balanced drafts recheck machine load before sending | left: not reached in composer-3; T3 changes ChatView.tsx, useComposerSend.ts, useDraftEnvironmentRouting.ts and more (125 lines), still unchecked against CW |
+| d7a0b5371f | #33782 | composer | fix(web,mobile): triage follows the draft when you switch machines | left: not reached in composer-3; T3 changes DraftHeroHeadline.tsx, useDraftEnvironmentRouting.ts, useStartTriage.ts and more (115 lines), still unchecked against CW |
+| 96a4d2f012 | #36363 | composer | fix(web): pasted URLs and paths keep their underscores | left: not reached in composer-3; T3 changes composer-rich-text.ts, composer-undo-grouping.ts (58 lines), still unchecked against CW |
 | 2d689687f5 | #36435 | composer | fix(web): bare @ in the composer lists workspace files | ported: a bare `@` searches the workspace with an empty query, which 3824 and 4928 accept (ComposerController `startSearches`) |
-| 2dd6cddbc3 | #36504 | composer | fix(shared): @ mentions complete display names in any script | left: rich text editing; not checked against CW in the composer-rest pass |
-| 7847ec9386 | #35741 | composer | fix(web): preserve queued project settings changes | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| ac180919a6 | #24619 | composer | fix(web): seeded models yield to started thread selections | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
-| 3fe0fbb69f | #36572 | composer | fix(web): keep file uploads when returning a draft to its environment | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
+| 2dd6cddbc3 | #36504 | composer | fix(shared): @ mentions complete display names in any script | skip: belongs with the pull request composer's `@` and `#` trigger (pullRequestComposerTrigger.ts), Features/PullRequests |
+| 7847ec9386 | #35741 | composer | fix(web): preserve queued project settings changes | left: not reached in composer-3; T3 changes scopedSettings.ts, useScopedSettings.ts (178 lines), still unchecked against CW |
+| ac180919a6 | #24619 | composer | fix(web): seeded models yield to started thread selections | left: not reached in composer-3; T3 changes ChatView.logic.ts, ChatView.tsx, CommandPalette.tsx and more (136 lines), still unchecked against CW |
+| 3fe0fbb69f | #36572 | composer | fix(web): keep file uploads when returning a draft to its environment | n/a: CandyWrapper keeps no per-file upload stamp on scratch drafts to restore |
 | fd0ffd0b0a | #36574 | composer | fix(web): a stale tab no longer erases finalized stashed images | skip: a cross-tab storage race; CW is one process with one draft store |
-| 5e06246d24 | #36578 | composer | fix(web): recovered queued edits keep their mentions and context | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
-| 820f620e3d | #36621 | composer | fix(web): model picks no longer inherit another model’s traits | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
-| fd6d0ea022 | #28308 | composer | fix(web): stashing waits for pasted images to finish compressing | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
-| 5e27bae22e | #28780 | composer | fix(web): a stashed prompt keeps its machine mentions | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
-| f84ad6f30b | #36732 | composer | fix(web): discarded drafts stay discarded after image compression | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
+| 5e06246d24 | #36578 | composer | fix(web): recovered queued edits keep their mentions and context | left: not reached in composer-3; T3 changes queuedMessageEdit.ts, composerDraftStore.ts (108 lines), still unchecked against CW |
+| 820f620e3d | #36621 | composer | fix(web): model picks no longer inherit another model’s traits | left: not reached in composer-3; T3 changes composerDraftStore.ts (50 lines), still unchecked against CW |
+| fd6d0ea022 | #28308 | composer | fix(web): stashing waits for pasted images to finish compressing | already in CandyWrapper: stashing while a pasted image is prepared toasts and waits (ComposerController `stashCurrentPrompt`) |
+| 5e27bae22e | #28780 | composer | fix(web): a stashed prompt keeps its machine mentions | left: not reached in composer-3; T3 changes useComposerStash.ts (26 lines), still unchecked against CW |
+| f84ad6f30b | #36732 | composer | fix(web): discarded drafts stay discarded after image compression | left: not reached in composer-3; T3 changes preparingComposerImages.ts, discardComposerDraft.ts (16 lines), still unchecked against CW |
 | 081a5d92bf | #29617 | composer | fix(clients): the folder picker finds folders with accented names on macOS | left: belongs with the add-project folder picker, outside the composer; not checked this session |
 | 4954322f02 | #27458 | composer | fix(web): don't send completion notifications for snoozed threads | left: belongs with notifications, outside the composer; not checked this session |
 | f751c8488f | #29846 | composer | fix(web): the new-thread project picker follows the manual project order | left: belongs with the project picker, outside the composer; not checked this session |
-| 1f45f14ae8 | #33298 | composer | fix(web): queued images open in the image viewer | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
-| 619c652d25 | #35176 | composer | fix(web): retain custom model drafts until saved | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
-| ec01233fb6 | #35528 | composer | fix(web): pasted images stay at their original insertion point | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
+| 1f45f14ae8 | #33298 | composer | fix(web): queued images open in the image viewer | left: not reached in composer-3; T3 changes ChatView.tsx, QueuedRunsControl.tsx (68 lines), still unchecked against CW |
+| 619c652d25 | #35176 | composer | fix(web): retain custom model drafts until saved | left: not reached in composer-3; T3 changes ProviderInstanceCard.tsx, ProviderModelsSection.tsx, ProviderSettingsPanel.tsx (41 lines), still unchecked against CW |
+| ec01233fb6 | #35528 | composer | fix(web): pasted images stay at their original insertion point | left: not reached in composer-3; T3 changes ComposerPromptEditorTiptap.tsx, ChatComposer.tsx, useComposerAttachmentIntake.ts and more (93 lines), still unchecked against CW |
 | 1ea5e4b42d | #35122 | composer | fix(web): typing in the file editor no longer jumps to the prompt | left: belongs with the file editor, outside the composer; not checked this session |
 | 37c266d25a | #34537 | composer | fix(web): showing a composer banner no longer makes the page restyle everything until reload | skip: browser style recalculation after a banner mounts; no AppKit counterpart |
 | cbdf35f2f0 | #23166 | composer | fix(web): enable Send when the composer holds only a thread context | already in CandyWrapper: thread and machine contexts are chips in the prompt text, so the prompt is never empty and Send stays enabled |
-| 62405fce57 | #30583 | composer | fix(web): preserve thread identity across composer pastes | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
-| 2b7fc890de | #30947 | composer | fix(web): a send that finishes after you leave its thread no longer blanks the open thread's composer | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
-| 3c8f3f2c3d | #31314 | composer | fix(web): up-arrow recall keeps thread and machine mentions | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
-| 6f8144b5c4 | #37010 | composer | fix(web): overlapping image pastes keep their prompt order | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
-| 617c6c74f6 | #31541 | composer | fix(web): thread chips in the composer can no longer be dragged out as links | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| ed6cb97f07 | #31880 | composer | fix(web): reopened composer drafts keep quote spacing and show the caret | left: rich text editing; not checked against CW in the composer-rest pass |
+| 62405fce57 | #30583 | composer | fix(web): preserve thread identity across composer pastes | left: not reached in composer-3; T3 changes useComposerContextImport.ts (19 lines), still unchecked against CW |
+| 2b7fc890de | #30947 | composer | fix(web): a send that finishes after you leave its thread no longer blanks the open thread's composer | already in CandyWrapper: a send clears the editor synchronously on the thread it sends from, before any await (ComposerController.send) |
+| 3c8f3f2c3d | #31314 | composer | fix(web): up-arrow recall keeps thread and machine mentions | left: not reached in composer-3; T3 changes ChatComposer.tsx, composerCommandKey.ts, composerPromptHistory.ts (100 lines), still unchecked against CW |
+| 6f8144b5c4 | #37010 | composer | fix(web): overlapping image pastes keep their prompt order | left: not reached in composer-3; T3 changes composerAttachmentInsertion.ts (31 lines), still unchecked against CW |
+| 617c6c74f6 | #31541 | composer | fix(web): thread chips in the composer can no longer be dragged out as links | n/a: CandyWrapper's chips are text attachments, not links, so they never drag out as URLs |
+| ed6cb97f07 | #31880 | composer | fix(web): reopened composer drafts keep quote spacing and show the caret | left: not reached in composer-3; T3 changes ComposerPromptEditorTiptap.tsx, composer-rich-text-doc.ts (30 lines), still unchecked against CW |
 | 1cec1043eb | #31593 | composer | fix(shared): file mentions of __init__.py keep their name as the label | ported: file link labels escape `*` and `_` too (ComposerInlineTokens.fileLink) |
 | 189290cbf0 | #24082 | composer | fix(web): [NIT] SF Pro label no longer renders in a serif in the font picker | left: belongs with Settings, the font picker, outside the composer; not checked this session |
-| f52fba48d9 | #32683 | composer | fix(web): stacked composer banners no longer show dark seam bands | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| 8e06750a08 | #32709 | composer | fix(web): draft images keep their order after a reload | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
+| f52fba48d9 | #32683 | composer | fix(web): stacked composer banners no longer show dark seam bands | left: CW draws the seam shade per banner (ComposerBannerView `seam`); whether stacked cards band needs an on-screen check in dark mode before changing it |
+| 8e06750a08 | #32709 | composer | fix(web): draft images keep their order after a reload | left: not reached in composer-3; T3 changes composerImagePersistence.ts (14 lines), still unchecked against CW |
 | ca31ab64a4 | #32732 | composer | fix(web): an image-only send that fails behind a new draft now says so | skip: CW has no "Message not sent, your new draft was kept" toast for a send that fails behind a newer draft; a failed send restores the draft and shows the thread error banner |
-| 2dc5ebd52f | #33090 | composer | fix(web): switching providers no longer drops the thread's stored effort | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
-| f2c944947d | #32910 | composer | fix(web): recover expired composer uploads before sending | left: needs a per-send attachment check (`assets.createUrl` per ready upload) and a forced re-upload before dispatch; CW checks expiry only when restoring a stash |
-| 7d9c365e17 | #37116 | composer | fix(web): keep distinct images with matching attachment metadata | left: draft and attachment persistence; not checked against CW in the composer-rest pass |
-| 0b489dada1 | #37208 | composer | fix(web): switching a draft’s machine keeps its selected models | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
-| 256dce7f1f | #37243 | composer | fix(web,mobile): @ picker finds older settled threads on linked machines | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| 3cf00c3e8b | #37495 | composer | fix(web): composer drafts keep underscores in non-Latin names | left: composer chrome and menus; not checked against CW in the composer-rest pass |
-| 506a0438a3 | #37528 | composer | fix(web): keep Pi and ACP model selections during catalog gaps | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
-| 50b885e036 | #37593 | composer | fix(web): switching a draft's machine uses that machine's default model | left: model selection and provider fallbacks; not checked against CW in the composer-rest pass |
+| 2dc5ebd52f | #33090 | composer | fix(web): switching providers no longer drops the thread's stored effort | left: not reached in composer-3; T3 changes useComposerSelection.ts, composerDraftStore.ts (95 lines), still unchecked against CW |
+| f2c944947d | #32910 | composer | fix(web): recover expired composer uploads before sending | ported: a send first asks `assets.createUrl` for each ready upload; a swept one uploads again from its local copy and the send goes after, one without a copy fails with "Uploaded attachment expired. Remove it and attach it again.", and a failed check with T3's retry reason (ComposerController `verifyUploadBeforeSend`). Skipped: T3's branch for sessions without the orchestration read scope, which CW sessions always have |
+| 7d9c365e17 | #37116 | composer | fix(web): keep distinct images with matching attachment metadata | left: not reached in composer-3; T3 changes ChatView.logic.ts, composerAttachmentFiles.ts, useComposerAttachmentIntake.ts and more (110 lines), still unchecked against CW |
+| 0b489dada1 | #37208 | composer | fix(web): switching a draft’s machine keeps its selected models | left: not reached in composer-3; T3 changes useDraftEnvironmentRouting.ts (31 lines), still unchecked against CW |
+| 256dce7f1f | #37243 | composer | fix(web,mobile): @ picker finds older settled threads on linked machines | left: not reached in composer-3; T3 changes useComposerMenuItems.ts (9 lines), still unchecked against CW |
+| 3cf00c3e8b | #37495 | composer | fix(web): composer drafts keep underscores in non-Latin names | left: not reached in composer-3; T3 changes composer-rich-text.ts (11 lines), still unchecked against CW |
+| 506a0438a3 | #37528 | composer | fix(web): keep Pi and ACP model selections during catalog gaps | left: not reached in composer-3; T3 changes ModelPickerContent.tsx, TraitsPicker.tsx, composerProviderState.tsx and more (66 lines), still unchecked against CW |
+| 50b885e036 | #37593 | composer | fix(web): switching a draft's machine uses that machine's default model | left: not reached in composer-3; T3 changes AddProjectToMachineDialog.tsx, DraftHeroHeadline.tsx, useDraftEnvironmentRouting.ts and more (109 lines), still unchecked against CW |
 | bcb0604581 | #37661 | composer | fix(web): model picker options no longer jump a pixel on hover | skip: Chromium re-snaps text after the popover scale-in at fractional zoom; AppKit draws the rows at fixed positions |
 | 6f5838f9bc | #37691 | composer | fix(client-runtime): a relative "Add project starts in" opens the picker under home | left: belongs with the add-project folder picker, outside the composer; not checked this session |
-| caef8c3847 | #32912 | composer | fix(composer): show local command actions while running | left: composer chrome and menus; not checked against CW in the composer-rest pass |
+| caef8c3847 | #32912 | composer | fix(composer): show local command actions while running | left: not reached in composer-3; T3 changes ChatComposer.tsx, composerDispatch.ts (47 lines), still unchecked against CW |
 | c69f4b780b | #31590 | composer | fix(web): model picker lists a model reported twice once | ported: ModelPickerSections lists a model reported twice once |
-| 750e492ed6 | #37771 | composer | feat(web): copy snapshots into another composer | left: composer chrome and menus; not checked against CW in the composer-rest pass |
+| 750e492ed6 | #37771 | composer | feat(web): copy snapshots into another composer | left: not reached in composer-3; T3 changes ComposerPromptEditorTiptap.tsx, ChatComposer.tsx, ComposerAttachmentStrip.tsx and more (212 lines), still unchecked against CW |
 | e514c36f3c | #31174 | composer | fix(web): project picker jump shortcuts follow the filtered rows | left: belongs with the project picker, outside the composer; not checked this session |
-| f39ecd3df8 | #29663 | composer | fix(web): a rule typed under a line stays a rule when sent | left: rich text editing; not checked against CW in the composer-rest pass |
+| f39ecd3df8 | #29663 | composer | fix(web): a rule typed under a line stays a rule when sent | left: not reached in composer-3; T3 changes ComposerPromptEditorTiptap.tsx, composer-rich-text-doc.ts (58 lines), still unchecked against CW |
 | 8753e4d36b | #31283 | composer | fix(web,mobile): Send now tells you why it could not send | ported: a failed Send now on a queued message shows "Could not send queued message" with the reason (ComposerFeedback `queueSendNow`) |
-| 3e1b7c4e93 | #38414 | composer | fix(web): a line typed after a composer list is sent after the list | left: rich text editing; not checked against CW in the composer-rest pass |
+| 3e1b7c4e93 | #38414 | composer | fix(web): a line typed after a composer list is sent after the list | left: not reached in composer-3; T3 changes composer-rich-text-doc.ts (33 lines), still unchecked against CW |
 | 01cfac429d | #38475 | composer | fix(web): Paste as Text pastes text when the clipboard also holds an image | ported: Paste as Text skips the image attachment when the clipboard also holds text (ComposerEditor `paste`) |
 | ad77fd88e2 | #37547 | composer | fix(web): Enter during image compression sends once it finishes | ported: Enter while an image is being prepared holds the send and sends the composer once it joins (ComposerController `sendAfterPreparing`) |
 | a5090a7576 | #38684 | composer | fix(web): Default effort no longer shows as the lowest bar | ported: ComposerEffortGlyph names Default |
@@ -1032,7 +1032,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 3a873e8faf | #23475 | pr/git | fix(web): disable conflict checkout without required permissions | port |
 | a2e4524d51 | #21579 | pr/git | fix(web): preview address bar no longer ligates "://" | port |
 | e123ac644e | #26073 | pr/git | fix(web): a failed review guide keeps Try again reachable | port |
-| 7cdbb8ef59 | #27114 | pr/git | fix(web): show the worktree picker in the composer strip at default width | left: from @xl (576pt) T3 shows the wide strip layout, machine, separator and the worktree picker (`BranchToolbarEnvModeSelector`), which CW has no control for yet; needs a 4928 reference capture |
+| 7cdbb8ef59 | #27114 | pr/git | fix(web): show the worktree picker in the composer strip at default width | left (not reached in composer-3): from @xl (576pt) T3 shows the wide strip layout, machine, separator and the worktree picker (`BranchToolbarEnvModeSelector`), which CW has no control for yet; needs a 4928 reference capture |
 | 45d29b45fe | #22382 | pr/git | fix(web): a refused review shows GitHub's reason | port |
 | 1c8ada5023 | #22974 | pr/git | fix(web): composer notices no longer flicker next to a floating preview | port |
 | a24ec905c8 | #28070 | pr/git | fix(web): machine label no longer shifts between one and many machines | port |
@@ -1551,7 +1551,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 101e5f99a2 | #34855 | thread | fix(web): review comments in question answers reach the agent with their text | port |
 | 204b140073 | #34846 | thread | fix(web): context row under the composer hides chat text scrolling behind it | port |
 | 415e1cabe6 | #34883 | thread | fix(web): html render images open with the rest of their page in the viewer | ported in d1f3d2fc |
-| d8b0a05a74 | #34784 | thread | fix(clients): Claude question option previews are shown under their option | left: needs the option `preview` field decoded and a MarkdownView under each option in QuestionPanelView (`ps-9 pe-2 pb-1.5 text-xs text-foreground/70`), outside the option button |
+| d8b0a05a74 | #34784 | thread | fix(clients): Claude question option previews are shown under their option | ported: the option `preview` decodes (T3Store UserInputQuestion.Option) and shows under its option, outside the button, at `ps-8 pe-2 pb-1.5`, 12/16 in foreground/70 (QuestionPanelView `previews`). Plain text with its line breaks; T3 renders it as ChatMarkdown, which needs a 12px MarkdownView |
 | efd683ccc3 | #35102 | thread | fix(web): a failed send leaves the timeline when a new draft was typed | port |
 | 3d6ece2b29 | #35036 | thread | fix(web): file links the agent cited from another project open that project's file | port |
 | ced85c64ff | #35076 | thread | fix(client): a message the host never answers fails after 60 seconds instead of spinning forever | port |

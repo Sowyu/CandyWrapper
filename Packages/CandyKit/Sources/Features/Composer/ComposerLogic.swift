@@ -100,7 +100,9 @@ public enum ComposerLogic {
     }
 
     /// `composerPlaceholder.ts:1-2` and the rule list in I-composer-flow 7.2. The plan follow-up row is skipped (no plan mode yet).
-    public static func placeholder(_ s: PlaceholderInput, modern: Bool = false) -> String {
+    /// `suggestion` is the offered prompt suggestion (#28047): it takes the default placeholder's place only, so it
+    /// never hides a pending question (ChatComposer.tsx:3745 at 4928).
+    public static func placeholder(_ s: PlaceholderInput, modern: Bool = false, suggestion: String? = nil) -> String {
         // A send declines the approvals and redirects the agent (ChatComposer.tsx:6175-6177, a93b03c8a5).
         if s.approvalPending {
             return s.approvalFeedback ? "Send feedback to decline this request" : "Send a message to decline and redirect the agent"
@@ -110,6 +112,7 @@ public enum ComposerLogic {
         }
         if s.projectRequired { return "Choose a project above to start a thread" }
         if s.noProvider { return "Enable a provider in Settings to send a message" }
+        if let suggestion { return suggestion }
         if modern { return "Ask anything. @ files, $ skills, / commands" }
         if s.disconnected { return "Ask for changes, send follow-ups, or attach images" }
         return "Ask anything, @tag files/folders, $use skills, or / for commands"

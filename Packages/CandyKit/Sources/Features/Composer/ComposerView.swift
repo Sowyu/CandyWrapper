@@ -461,6 +461,12 @@ public final class ComposerView: DSView {
         editor.onTextChange = { [weak self] in self?.textChanged() }
         editor.onSelectionChange = { [weak self] in self?.onCaretChange?() }
         editor.chipLook = chipLook
+        editor.onSuggestionKey = { [weak self] accept in
+            guard let self, suggestionOffered, let suggestion = promptSuggestion else { return false }
+            // `applyPromptReplacement(0, 0, promptSuggestion)`: the text goes in as typed, so menus and chips follow.
+            if accept { editor.insertText(suggestion, replacementRange: editor.selectedRange()) } else { onDismissSuggestion?() }
+            return true
+        }
         editor.onSubmitKey = { [weak self] key in self?.submitKey(key) ?? false }
         editor.onHistoryKey = { [weak self] backward in self?.navigateHistory(backward: backward) ?? false }
         editor.onModifierChange = { [weak self] held in
@@ -511,6 +517,31 @@ public final class ComposerView: DSView {
     public var chipLook: (ComposerInlineToken) -> ComposerChipLook = ComposerChipLook.basic {
         didSet { editor.chipLook = chipLook; editor.refreshChips() }
     }
+    /// The provider's predicted next prompt (#28047 at 4928): it shows in place of the default placeholder with an
+    /// outline `⇥ Tab` after it. Tab in the empty prompt takes it, Escape calls `onDismissSuggestion`.
+    public var promptSuggestion: String? { didSet { if promptSuggestion != oldValue { refresh() } } }
+    public var onDismissSuggestion: (() -> Void)?
+    private var suggestionKbd: KbdView?
+    private var suggestionOffered = false
+
+    /// `ml-2 inline-flex align-[1px]` after the placeholder's last word, or on the next line when it doesn't fit.
+    private func layoutSuggestionKbd() {
+        guard let kbd = suggestionKbd else { return }
+        kbd.isHidden = !suggestionOffered || !editor.string.isEmpty || placeholder.isHidden
+        guard !kbd.isHidden else { return }
+        let size = kbd.intrinsicContentSize
+        let length = (placeholder.text as NSString).length
+        guard length > 0, let last = placeholder.runRects(NSRange(location: length - 1, length: 1), width: placeholder.bounds.width).last else { return }
+        var x = last.rect.maxX + 8, y = last.rect.midY
+        if x + size.width > placeholder.bounds.width, placeholder.maxLines != 1 { x = 0; y += placeholder.resolvedLineHeight }
+        kbd.frame = NSRect(x: placeholder.frame.minX + min(x, max(0, placeholder.bounds.width - size.width)),
+                           y: placeholder.frame.minY + y - size.height / 2 - 1, width: size.width, height: size.height)
+    }
+
+    /// Which `model:` references chip (#31207 at 4928): the server's models, read only when the prompt has one.
+    public var knownModel: ((String, String) -> Bool)? {
+        didSet { editor.knownModel = knownModel }
+    }
     /// Rebuilds the chips after their data changed (skills, records, thread titles).
     public func refreshChips() { editor.refreshChips() }
     /// Copy: the records behind context ids and their environment; paste: records from the clipboard.
@@ -552,7 +583,19 @@ public final class ComposerView: DSView {
     func refresh() {
         defer { invalidateHeightIfNeeded() }
         // ChatComposer.tsx:7489-7490.
-        let placeholderText = planFollowUp ? "Add feedback to refine the plan, or leave this blank to implement it" : ComposerLogic.placeholder(placeholderInput, modern: modern || capy)
+        let placeholderText = planFollowUp ? "Add feedback to refine the plan, or leave this blank to implement it"
+            : ComposerLogic.placeholder(placeholderInput, modern: modern || capy, suggestion: promptSuggestion)
+        let offersSuggestion = !planFollowUp && promptSuggestion != nil && placeholderText == promptSuggestion
+        if offersSuggestion != suggestionOffered {
+            suggestionOffered = offersSuggestion
+            if offersSuggestion, suggestionKbd == nil {
+                let kbd = KbdView("⇥ Tab")
+                kbd.outline = true
+                addSubview(kbd, positioned: .above, relativeTo: placeholder)
+                suggestionKbd = kbd
+            }
+            layoutSuggestionKbd()
+        }
         if placeholder.text != placeholderText {
             placeholder.text = placeholderText
             editor.setAccessibilityPlaceholderValue(placeholderText)
@@ -683,6 +726,7 @@ public final class ComposerView: DSView {
         // Any edit ends browsing, even one later undone by hand.
         if historyPosition?.recalled != prompt { historyPosition = nil }
         placeholder.isHidden = !editor.string.isEmpty
+        layoutSuggestionKbd()
         refresh()
         relayoutHeight()
         onTextChange?(prompt)
@@ -937,6 +981,7 @@ public final class ComposerView: DSView {
             placeholder.maxLines = 1
             placeholder.frame = NSRect(x: 17, y: rowY + 4, width: textWidth - 8, height: ComposerEditor.lineHeight)
             placeholder.isHidden = !editor.string.isEmpty
+            layoutSuggestionKbd()
             restingImages.isHidden = images == 0
             restingImages.frame = NSRect(x: 13 + textWidth, y: rowY, width: images, height: 32)
             primary.frame = NSRect(x: w - 49, y: h - 41, width: 32, height: 32)
@@ -969,6 +1014,7 @@ public final class ComposerView: DSView {
         placeholder.frame = NSRect(x: Self.inset + Self.pad, y: textTop, width: textWidth,
                                    height: capy ? ComposerEditor.lineHeight : placeholder.height(forWidth: textWidth))
         placeholder.isHidden = !editor.string.isEmpty
+        layoutSuggestionKbd()
 
         // ponytail: the length message overlaps the footer's top edge; T3 grows the box for it (ComposerPromptLengthValidation)
         validation.frame = NSRect(x: Self.inset + Self.pad, y: textTop + editorHeight - 16, width: textWidth, height: 16)
@@ -1030,6 +1076,7 @@ public final class ComposerView: DSView {
         compactPill.isHidden = !showsCompactPill || splitCompact
         if !compactPill.isHidden {
             // `flex items-center gap-2` with the send button.
+            compactPill.narrow = bounds.width <= 480
             let pw = compactPill.intrinsicContentSize.width
             compactPill.frame = NSRect(x: actionsLeft - 8 - pw, y: midY - 14, width: pw, height: 28)
             actionsLeft = compactPill.frame.minX

@@ -50,6 +50,8 @@ public struct ComposerSelectionContext: Sendable {
     public var supportsProviderHandoff: Bool
     /// The client setting `planModeEnabled` (default false). Off means interaction mode is always `default`.
     public var planModeEnabled: Bool
+    /// The clock the usage fallback reads; nil is now.
+    public var now: Date?
 
     public init(catalog: ProviderCatalog, thread: ThreadShell? = nil, projectDefaultModel: ModelSelection? = nil,
                 projectDefaultRuntimeMode: RuntimeMode? = nil, serverDefaults: ServerThreadDefaults = ServerThreadDefaults(),
@@ -88,6 +90,8 @@ public struct ResolvedComposerSelection: Sendable {
     /// `message.dispatch.interactionMode`; always `default` unless plan mode is on.
     public let interactionMode: InteractionMode
     public let interactionModeToPersist: InteractionMode?
+    /// Set when a new thread starts on the fallback because the default's provider is out of usage (#26164).
+    public var fallback: UsageFallback.Resolution? = nil
 
     /// The model trigger's label (`triggerTitle`, ProviderModelPicker.tsx:85-91).
     public var triggerLabel: String { modelTriggerLabel(spoken: true) }
@@ -184,6 +188,16 @@ public final class ComposerSelectionStore {
         var candidates: [ProviderInstanceId?] = [draft.activeInstance, thread?.providerInstanceId,
                                                  thread?.modelSelection.instanceId, ctx.projectDefaultModel?.instanceId]
         if isNew { candidates += [sticky.activeInstance, ctx.serverDefaults.defaultModelSelection?.instanceId] }
+        // A new draft without a pick of its own starts on the fallback while the default's provider is out of usage
+        // (useHandleNewThread.ts:171-189 at 4928): the configured default, else, without a sticky provider, the first
+        // instance's default model.
+        var fallback: UsageFallback.Resolution?
+        if isNew, draft.activeInstance == nil, let backup = ctx.serverDefaults.fallbackModelSelection {
+            let configured = ctx.projectDefaultModel ?? ctx.serverDefaults.defaultModelSelection
+            let byDefault = configured ?? (sticky.activeInstance == nil ? UsageFallback.providerDefault(ctx.catalog) : nil)
+            fallback = UsageFallback.resolve(defaultSelection: byDefault, fallback: backup, catalog: ctx.catalog, now: ctx.now ?? Date())
+            if fallback != nil { candidates = [backup.instanceId] }
+        }
         let entry = ctx.catalog.resolveInstance(candidates)
 
         var slug: String?, options: [ProviderOptionSelection]?
@@ -196,10 +210,15 @@ public final class ComposerSelectionStore {
             }
             sources += [from(thread?.modelSelection), from(ctx.projectDefaultModel)]
             if isNew { sources += [sticky.modelByInstance[id], from(ctx.serverDefaults.defaultModelSelection)] }
+            // The fallback's own model and options: an effort saved under an alias stays (#27859).
+            if let fallback { sources = [from(fallback.selection)] }
             let found = sources.compactMap { $0 }
             slug = found.first?.model ?? entry?.defaultModel
-            // Options follow the same chain but only from sources naming this model.
-            options = found.first { $0.model == slug && $0.options != nil }?.options
+            // Options follow the same chain but only from sources naming this model. A started thread's options, even
+            // none, outrank the project's (#16546 at 4928, modelSelection.ts `selectionsByInstance(thread ?? project)`).
+            let optionSources = fallback != nil || thread == nil ? found
+                : ([draft.selectionByInstance[id], from(thread?.modelSelection)]).compactMap { $0 }
+            options = optionSources.first { $0.model == slug && $0.options != nil }?.options
         }
         let model = slug.flatMap { entry?.model($0) }
         let descriptors = ModelTraits.descriptors(model, selections: options)
@@ -218,7 +237,8 @@ public final class ComposerSelectionStore {
         return ResolvedComposerSelection(entry: entry, instanceId: entry?.id, modelSlug: slug, model: model, options: options,
                                          descriptors: descriptors, modelSelection: selection, runtimeMode: shown,
                                          runtimeModeOptions: modes, runtimeModeToPersist: persistMode,
-                                         interactionMode: interaction, interactionModeToPersist: persistInteraction)
+                                         interactionMode: interaction, interactionModeToPersist: persistInteraction,
+                                         fallback: entry?.id == fallback?.selection.instanceId ? fallback : nil)
     }
 
     // MARK: Picks

@@ -849,7 +849,7 @@ final class AssistantMessageRowView: TimelineRowView {
         }
         markdown.document = document
         meta.isHidden = !showMeta
-        meta.configure(m, projected: projected, showCopy: showCopy, streaming: copyStreaming, now: context.now(), fork: context.forkAction(projected))
+        meta.configure(m, projected: projected, showCopy: showCopy, streaming: copyStreaming, now: context.now(), fork: context.forkAction(projected), reply: context.replyAction(m, projected: projected))
         needsLayout = true
     }
 
@@ -905,6 +905,9 @@ final class AssistantMetaContent: DSView {
     /// `AssistantForkButton` (:2795-2838): `xs ghost`, a 12pt git-fork, "Fork from this response".
     private let forkButton = ButtonView(nil, icon: .gitFork, variant: .ghost, size: .xs)
     private var fork: (() -> Void)?
+    /// `AssistantReplyButton` (TimelineAssistantRows.tsx:279-327 at 4928): `xs ghost-muted`, a 12pt reply, after Fork.
+    private let replyButton = ButtonView(nil, icon: .reply, variant: .ghostMuted, size: .xs)
+    private var reply: (() -> Void)?
     private let time = LabelView("", font: TL.tabular(12), color: TL.c(\.mutedForeground))
     private var text = ""
 
@@ -927,6 +930,12 @@ final class AssistantMetaContent: DSView {
         }
         forkButton.isHidden = true
         addSubview(forkButton)
+        replyButton.iconSize = 12
+        replyButton.setAccessibilityLabel("Reply to this response")
+        _ = TooltipController.attach(to: replyButton, text: "Reply to this response", placement: PopupPlacement(side: .top, align: .center, sideOffset: 4))
+        replyButton.action = { [weak self] in self?.reply?() }
+        replyButton.isHidden = true
+        addSubview(replyButton)
         time.lineHeight = 16
         addSubview(time)
         copyButton.action = { [weak self] in
@@ -935,8 +944,10 @@ final class AssistantMetaContent: DSView {
         }
     }
 
-    func configure(_ m: ChatMessage, projected: ProjectedTurnItem?, showCopy: Bool, streaming: Bool, now: Date, fork: (() -> Void)? = nil) {
+    func configure(_ m: ChatMessage, projected: ProjectedTurnItem?, showCopy: Bool, streaming: Bool, now: Date, fork: (() -> Void)? = nil, reply: (() -> Void)? = nil) {
         self.fork = fork
+        self.reply = reply
+        replyButton.isHidden = reply == nil
         forkButton.isHidden = fork == nil
         forkButton.isEnabled = true
         text = m.text
@@ -968,6 +979,11 @@ final class AssistantMetaContent: DSView {
             forkButton.frame = NSRect(x: x, y: 0, width: size.width, height: 24)
             x += size.width + 8
         }
+        if !replyButton.isHidden {
+            let size = replyButton.intrinsicContentSize
+            replyButton.frame = NSRect(x: x, y: 0, width: size.width, height: 24)
+            x += size.width + 8
+        }
         time.frame = NSRect(x: x, y: 4, width: ceil(time.textWidth) + 1, height: 16)
     }
 }
@@ -984,7 +1000,7 @@ final class AssistantMetaRowView: TimelineRowView {
     override func configure(_ item: TimelineItem) {
         super.configure(item)
         guard case .assistantMeta(let m, let projected, let showCopy, let streaming) = item.row.kind else { return }
-        meta.configure(m, projected: projected, showCopy: showCopy, streaming: streaming, now: context.now(), fork: context.forkAction(projected))
+        meta.configure(m, projected: projected, showCopy: showCopy, streaming: streaming, now: context.now(), fork: context.forkAction(projected), reply: context.replyAction(m, projected: projected))
     }
 
     override func height(forWidth width: CGFloat) -> CGFloat { 2 + 24 + 16 }

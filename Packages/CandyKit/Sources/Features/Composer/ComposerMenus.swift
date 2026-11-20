@@ -263,6 +263,8 @@ public struct ComposerMenuItem: Equatable, Sendable {
         /// A thread to attach: its scoped id and title.
         case thread(id: String, title: String)
         case environment(id: String, label: String, machine: String)
+        /// A model to name for the agent (#31207): its instance, slug, driver and the instance's name.
+        case model(instanceId: String, model: String, driver: String, providerName: String)
     }
     public var id: String
     public var kind: Kind
@@ -530,6 +532,7 @@ public enum ComposerMenus {
         case .pullRequest(let pr): return ComposerContext.reference(ComposerContext.pullRequestReference(pr)) + " "
         case .environment(let id, let label, _): return ComposerContext.reference(ComposerContext.environmentReference(environmentId: id, label: label)) + " "
         case .thread(let id, let title): return ComposerContext.reference(ComposerContext.threadReference(threadId: EnvironmentScope.localId(of: id), title: title)) + " "
+        case .model(let instance, let model, _, _): return ComposerModelMentions.format(instanceId: instance, model: model) + " "
         }
     }
 }
@@ -544,6 +547,8 @@ public struct ComposerInlineToken: Equatable, Sendable {
         case citation(ThreadAssistantCitation)
         /// `[label](t3-context://v1/<kind>/<id>)`.
         case context(kind: String, contextId: String, label: String)
+        /// `model:<instance>/<slug>` naming a model the server lists (composer-editor-mentions.ts at 4928).
+        case model(instanceId: String, model: String)
     }
     public var kind: Kind
     /// The token's text in the prompt.
@@ -597,7 +602,9 @@ public enum ComposerInlineTokens {
         return ns as String
     }
 
-    public static func collect(_ text: String) -> [ComposerInlineToken] {
+    /// `knownModel` adds the editor's model references (`collectModelTokens`, composer-editor-mentions.ts at 4928): one the
+    /// server lists, followed by whitespace like `$skill`, outside other tokens and math. Nil leaves them text.
+    public static func collect(_ text: String, knownModel: ((_ instanceId: String, _ model: String) -> Bool)? = nil) -> [ComposerInlineToken] {
         // An empty prompt has no tokens; returning early keeps the regexes uncompiled until typing.
         guard !text.isEmpty else { return [] }
         let ns = text as NSString
@@ -644,6 +651,17 @@ public enum ComposerInlineTokens {
         }
         if !links.isEmpty {
             tokens = tokens.filter { t in !links.contains { NSIntersectionRange($0.range, t.range).length > 0 } }
+        }
+        if let knownModel, text.contains("model:") {
+            let taken = tokens + links
+            // ponytail: T3 also skips references inside `$…$` math (composerMathRanges); CW's composer tokens have no math ranges yet. Add them with #34816
+            for m in ComposerModelMentions.collect(text) {
+                let end = NSMaxRange(m.range)
+                guard end < ns.length, let next = Unicode.Scalar(ns.character(at: end)), CharacterSet.whitespacesAndNewlines.contains(next),
+                      knownModel(m.instanceId, m.model),
+                      !taken.contains(where: { NSIntersectionRange($0.range, m.range).length > 0 }) else { continue }
+                tokens.append(ComposerInlineToken(kind: .model(instanceId: m.instanceId, model: m.model), source: ns.substring(with: m.range), range: m.range))
+            }
         }
         // Overlapping matches keep the earliest (splitPromptTextIntoComposerSegments skips the rest).
         var out: [ComposerInlineToken] = []
@@ -697,7 +715,11 @@ public enum ComposerContext {
         let cleaned = label.replacingOccurrences(of: #"[\[\]\\\r\n]"#, with: " ", options: .regularExpression)
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
-        let cut = String((cleaned as NSString).substring(to: min(200, (cleaned as NSString).length)))
+        // The 200-unit cap never splits a surrogate pair (#29158 at 4928).
+        let ns = cleaned as NSString
+        var end = min(200, ns.length)
+        if end < ns.length, end > 0, (0xD800...0xDBFF).contains(ns.character(at: end - 1)), (0xDC00...0xDFFF).contains(ns.character(at: end)) { end -= 1 }
+        let cut = ns.substring(to: end)
         return cut.isEmpty ? kind : cut
     }
 
@@ -909,7 +931,8 @@ public enum ComposerContext {
         return s
     }()
 
-    private static let fragmentAttribute = try! NSRegularExpression(pattern: #"data-t3-context-fragment=["']([^"']+)["']"#)
+    /// `encodeURIComponent` leaves `'` as is, so each quote style ends only at its own quote (#21537 at 4928).
+    private static let fragmentAttribute = try! NSRegularExpression(pattern: #"data-t3-context-fragment=(?:"([^"]+)"|'([^']+)')"#)
 
     /// `decodeComposerContextClipboardHtml` plus `readPastedComposerContext`: the version-1
     /// fragment's records whose ids the pasted text references. Clipboard data is untrusted, so
@@ -917,7 +940,7 @@ public enum ComposerContext {
     public static func pastedRecords(html: String, pastedText: String) -> [String: JSONValue] {
         guard html.count <= 16_000_000 * 9 + 4096,
               let m = fragmentAttribute.firstMatch(in: html, range: NSRange(location: 0, length: (html as NSString).length)),
-              let raw = (html as NSString).substring(with: m.range(at: 1)).removingPercentEncoding,
+              let raw = (html as NSString).substring(with: m.range(at: 1).location != NSNotFound ? m.range(at: 1) : m.range(at: 2)).removingPercentEncoding,
               let fragment = try? JSONDecoder().decode(JSONValue.self, from: Data(raw.utf8)),
               case .number(1)? = fragment["version"], case .array(let records)? = fragment["records"] else { return [:] }
         let ids = Set(referencedIds(pastedText))
