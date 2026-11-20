@@ -89,6 +89,9 @@ public struct MenuItem {
         item.onToggle = onToggle
         return item
     }
+    /// A filter field over this submenu's rows (`MenuSearchInput`); it replaces them as the query changes.
+    public var submenuSearch: MenuSearch?
+
     public static func submenu(_ title: String, icon: IconName? = nil, _ items: [MenuItem]) -> MenuItem {
         MenuItem(title, icon: icon, kind: .submenu(items))
     }
@@ -103,6 +106,17 @@ public struct MenuItem {
 
 /// The popup list behind Menu, Select, Combobox and Autocomplete. The styles differ only in the
 /// surface and the fills for highlighted and selected rows.
+/// `MenuSearchInput` (4928 ui/menu.tsx:76-111): a menu's filter field, drawn like the pickers' search.
+/// `filter` gives the rows for a query, empty at first; letters go to the field, arrows, Return and
+/// Escape to the menu.
+public struct MenuSearch {
+    public var placeholder: String
+    public var filter: @MainActor (String) -> [MenuItem]
+    public init(placeholder: String, filter: @escaping @MainActor (String) -> [MenuItem]) {
+        self.placeholder = placeholder; self.filter = filter
+    }
+}
+
 public final class MenuPopupView: DSView, PopupContent, PressDragMenu, HoverSyncPointerClient {
     public enum Style: Sendable {
         case menu, select, combobox, autocomplete
@@ -149,6 +163,54 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu, HoverSync
     private var lastPointer: CGPoint?
     private var openSubmenu: (popup: OpenPopup, index: Int)?
     public weak var hostPopup: OpenPopup?
+
+    // MARK: Search field
+
+    /// The filter field over the rows; set it before the menu shows.
+    public var search: MenuSearch? { didSet { setUpSearch() } }
+    private var searchInput: InputView?
+    private let searchIcon = IconView(name: .search, size: 16)
+    private let searchRule = CALayer()
+    /// `px-2 pt-1.5 pb-1` around a 26pt field with `pb-1.5` and a 1px rule.
+    static let searchHeight: CGFloat = 6 + 26 + 6 + 1 + 4
+    private var headerHeight: CGFloat { searchInput == nil ? 0 : Self.searchHeight }
+
+    private func setUpSearch() {
+        searchInput?.removeFromSuperview(); searchInput = nil
+        searchIcon.removeFromSuperview(); searchRule.removeFromSuperlayer()
+        guard let search else { return }
+        let input = InputView(placeholder: search.placeholder, size: .sm)
+        input.unstyled = true
+        input.paddingOverride = (20, 0)
+        input.setAccessibilityLabel(search.placeholder)
+        input.onChange = { [weak self] text in
+            guard let self, let search = self.search else { return }
+            self.setItems(search.filter(text))
+            self.highlightedIndex = nil
+            self.hostPopup.map { ($0.container.superview as? PopupHost)?.reposition($0) }
+        }
+        input.onStateChange = { [weak self] _ in self?.needsDisplay = true }
+        searchRule.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        clip.layer?.addSublayer(searchRule)
+        clip.addSubview(input)
+        clip.addSubview(searchIcon)
+        searchInput = input
+        setItems(search.filter(""))
+    }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // `autoFocus`.
+        if let searchInput, let window { window.makeFirstResponder(searchInput) }
+    }
+
+    public override var wantsUpdateLayer: Bool { true }
+    public override func updateLayer() {
+        super.updateLayer()
+        guard let searchInput else { return }
+        searchRule.backgroundColor = (searchInput.state.focused ? Themed.color(\.ring) : Themed.color(\.border, 0.7)).cgColor(in: self)
+        searchIcon.strokeColor = Themed.color(\.contrastMutedForeground, 0.55)
+    }
 
     public init(items: [MenuItem], style: Style = .menu) {
         self.style = style
@@ -235,8 +297,8 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu, HoverSync
     static let inset: CGFloat = 5
 
     var contentHeight: CGFloat {
-        if let emptyLabel { return emptyLabel.intrinsicContentSize.height + 16 }
-        return rows.reduce(0) { $0 + $1.height }
+        if let emptyLabel { return headerHeight + emptyLabel.intrinsicContentSize.height + 16 }
+        return headerHeight + rows.reduce(0) { $0 + $1.height }
     }
 
     public override var intrinsicContentSize: NSSize {
@@ -257,12 +319,20 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu, HoverSync
         dropShadow.update(boxSize: bounds.size)
         clip.frame = bounds.insetBy(dx: 1, dy: 1)
         var y = Self.inset - 1 - scrollOffset
+        if let searchInput {
+            // `-translate-y-px` on the field's box.
+            let w = clip.bounds.width - 2 * (Self.inset - 1) - 16
+            searchInput.frame = NSRect(x: Self.inset - 1 + 8, y: y + 6 - 1, width: w, height: 26)
+            searchIcon.frame = NSRect(x: Self.inset - 1 + 8, y: y + 6 - 1 + 5, width: 16, height: 16)
+            searchRule.frame = CGRect(x: Self.inset - 1 + 8, y: y + 6 - 1 + 26 + 6, width: w, height: 1)
+            y += Self.searchHeight
+        }
         for row in rows {
             row.frame = NSRect(x: Self.inset - 1, y: y, width: clip.bounds.width - 2 * (Self.inset - 1), height: row.height)
             y += row.height
         }
         if let emptyLabel {
-            emptyLabel.frame = NSRect(x: Self.inset + 7, y: Self.inset + 7, width: clip.bounds.width - 2 * (Self.inset + 7), height: 20)
+            emptyLabel.frame = NSRect(x: Self.inset + 7, y: Self.inset + 7 + headerHeight, width: clip.bounds.width - 2 * (Self.inset + 7), height: 20)
         }
     }
 
@@ -270,7 +340,7 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu, HoverSync
 
     private func scrollToHighlight() {
         guard let i = highlightedIndex, i < rows.count, bounds.height > 0 else { return }
-        let top = rows[..<i].reduce(0) { $0 + $1.height }
+        let top = headerHeight + rows[..<i].reduce(0) { $0 + $1.height }
         let visible = bounds.height - 2 * Self.inset
         if top < scrollOffset { scrollOffset = top } else if top + rows[i].height > scrollOffset + visible { scrollOffset = top + rows[i].height - visible }
         needsLayout = true
@@ -292,6 +362,13 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu, HoverSync
 
     public func popupHandleKey(_ key: PopupKey) -> Bool {
         if key == .escape, let escapeOverride, escapeOverride() { return true }
+        // The filter field keeps letters and caret keys from typeahead and submenu moves.
+        if searchInput != nil {
+            switch key {
+            case .character, .space, .left, .right, .home, .end, .tab: return false
+            default: break
+            }
+        }
         switch key {
         case .down: move(1); return true
         case .up: move(-1); return true
@@ -424,6 +501,7 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu, HoverSync
               let host = popup.container.superview as? PopupHost else { return }
         if openSubmenu?.index == i { return }
         let sub = MenuPopupView(items: children, style: .menu)
+        sub.search = items[i].submenuSearch
         // Submenu triggers get `data-popup-open` only, not `data-pressed`.
         let child = host.open(sub, trigger: rows[i], placement: .submenu, pressesTrigger: false, returnsFocus: false, parent: popup)
         sub.hostPopup = child

@@ -3,6 +3,7 @@ import Testing
 @testable import T3Protocol
 @testable import Features
 import T3Store
+@testable import DesignSystem
 
 struct PullRequestSurfaceTests {
     /// `getFileViewedRange` (pullRequestDiff.logic.test.ts, T3 3824 #26349).
@@ -543,5 +544,20 @@ struct DelimitedPreview4928Tests {
         let exact = String(repeating: "c", count: 2000)
         let e = DelimitedTable.parse(exact, delimiter: ",")
         #expect(!e.truncated && e.rows[0][0].count == 2000)
+    }
+}
+
+/// `MenuSearchInput` (4928 ui/menu.tsx:76-111) in MenuPopupView.
+@MainActor
+struct MenuSearch4928Tests {
+    @Test func searchRowFiltersRowsAndKeepsLetters() {
+        let all = ["bug", "docs", "debt"]
+        let menu = MenuPopupView(items: [])
+        menu.search = MenuSearch(placeholder: "Search labels") { q in all.filter { q.isEmpty || $0.contains(q) }.map { MenuItem($0) } }
+        #expect(menu.items.map(\.title) == all)
+        let expected: CGFloat = MenuPopupView.searchHeight + 84 + 2 * MenuPopupView.inset
+        #expect(menu.intrinsicContentSize.height == expected)
+        #expect(menu.popupHandleKey(.character("d")) == false)
+        #expect(menu.popupHandleKey(.down) == true && menu.highlightedIndex == 0)
     }
 }

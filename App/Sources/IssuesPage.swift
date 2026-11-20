@@ -165,13 +165,13 @@ final class IssuesPageController {
                 if !wasLive, self.liveTimer != nil { self.reload(keepRows: true) }
             }
         }
-        // Mod+F focuses the search; `rightPanel.toggle` (Mod+Alt+B by default) toggles the panel (#38309).
-        // ponytail: reads the default Mod+Alt+B, not a rebound `rightPanel.toggle`; resolve it through the keybindings once the page joins the app's shortcut table
+        // Mod+F focuses the search; `rightPanel.toggle`, as the keybindings bind it, toggles the panel
+        // (IssuesPage.tsx:453, #38309).
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.visible, self.page.window?.isKeyWindow == true else { return event }
             let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if mods == .command, event.charactersIgnoringModifiers == "f" { self.page.focusSearch(); return nil }
-            if mods == [.command, .option], event.charactersIgnoringModifiers?.lowercased() == "b" || event.keyCode == 11 {
+            if ActiveKeymap.resolve(event, context: KeybindingContext()) == "rightPanel.toggle" {
                 if !event.isARepeat { self.togglePanel() }
                 return nil
             }
