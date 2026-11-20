@@ -189,12 +189,13 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu, HoverSync
             self.highlightedIndex = nil
             self.hostPopup.map { ($0.container.superview as? PopupHost)?.reposition($0) }
         }
-        input.onStateChange = { [weak self] _ in self?.needsDisplay = true }
+        input.onStateChange = { [weak self] _ in self?.styleSearch() }
         searchRule.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
         clip.layer?.addSublayer(searchRule)
         clip.addSubview(input)
         clip.addSubview(searchIcon)
         searchInput = input
+        styleSearch()
         setItems(search.filter(""))
     }
 
@@ -204,9 +205,8 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu, HoverSync
         if let searchInput, let window { window.makeFirstResponder(searchInput) }
     }
 
-    public override var wantsUpdateLayer: Bool { true }
-    public override func updateLayer() {
-        super.updateLayer()
+    /// The rule turns ring-colored while the field has focus (`focus-within:border-ring`).
+    private func styleSearch() {
         guard let searchInput else { return }
         searchRule.backgroundColor = (searchInput.state.focused ? Themed.color(\.ring) : Themed.color(\.border, 0.7)).cgColor(in: self)
         searchIcon.strokeColor = Themed.color(\.contrastMutedForeground, 0.55)
@@ -356,6 +356,7 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu, HoverSync
         decoration.setNeedsDisplay()
         dropShadow.update(boxSize: bounds.size)
         applySurface()
+        styleSearch()
     }
 
     // MARK: Keyboard (base-ui menu navigation: loop, skip disabled, typeahead)
