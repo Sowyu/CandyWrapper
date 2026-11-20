@@ -625,7 +625,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 88109cea46 | #31207 | composer | feat(web,mobile): @-mention a model to name it for the agent | left: @-mention a model needs a model chip kind in ComposerInlineTokens and the editor, model rows in the @ menu (composerModelMentions.ts), provider chip icons and a context record; about 900 lines at 4928 |
+| 88109cea46 | #31207 | composer | feat(web,mobile): @-mention a model to name it for the agent | ported: `@` lists up to 8 models of ready instances whose names start a word for every query word, after machines and threads (ComposerModelMentions.items); a pick writes `model:<instance>/<slug>`, and the editor chips a reference the server lists, followed by whitespace, with the provider logo and the model accent in the logo's hue (ComposerChipLook `.model`). Left: the chip's popover, chips in sent messages (ChatMarkdown, Features/Thread) and skipping `$…$` math (no composer math ranges in CW yet) |
 
 ## New feature mcp-client-setup (3)
 

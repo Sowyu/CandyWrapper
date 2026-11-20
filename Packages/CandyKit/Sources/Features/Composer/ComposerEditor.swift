@@ -55,6 +55,8 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     var onSelectionChange: (() -> Void)?
     /// The look for a token's chip; nil keeps tokens as plain text.
     var chipLook: ((ComposerInlineToken) -> ComposerChipLook)?
+    /// Whether a `model:<instance>/<slug>` reference names a model the server lists; nil keeps them text (#31207).
+    var knownModel: ((String, String) -> Bool)?
     /// Copy: the records behind the copied context ids, and the environment they come from.
     var recordsForCopy: (([String]) -> (records: [JSONValue], environmentId: String)?)?
     /// Paste: records from the clipboard fragment for the pasted links.
@@ -437,7 +439,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         guard let storage = textStorage, let chipLook else { return }
         let display = string as NSString
         // A token that already holds a chip character is left alone.
-        let tokens = ComposerInlineTokens.collect(string).filter { !display.substring(with: $0.range).contains("\u{FFFC}") && storage.attribute(.composerCodeBlock, at: $0.range.location, effectiveRange: nil) == nil && !ComposerRichTextStyler.marks(storage.attribute(.composerMarks, at: $0.range.location, effectiveRange: nil)).contains(.code) }
+        let tokens = ComposerInlineTokens.collect(string, knownModel: knownModel).filter { !display.substring(with: $0.range).contains("\u{FFFC}") && storage.attribute(.composerCodeBlock, at: $0.range.location, effectiveRange: nil) == nil && !ComposerRichTextStyler.marks(storage.attribute(.composerMarks, at: $0.range.location, effectiveRange: nil)).contains(.code) }
         guard !tokens.isEmpty else { return }
         let wasChipifying = isChipifying
         isChipifying = true

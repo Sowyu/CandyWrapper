@@ -23,6 +23,8 @@ public struct ComposerChipLook: Equatable, Sendable {
         /// A terminal excerpt (`TerminalContextInlineChip`).
         case reviewComment
         case terminal
+        /// A model reference (`ModelMentionChip`, #31207): the instance's driver picks the logo and its tint.
+        case model(driver: String)
         case unresolved
     }
     public var kind: Kind
@@ -61,8 +63,12 @@ public struct ComposerChipLook: Equatable, Sendable {
     public static func look(for token: ComposerInlineToken, skillLabel: (String) -> String,
                             record: (String) -> JSONValue?, threadTitle: (JSONValue) -> String? = { _ in nil },
                             threadProject: (JSONValue) -> ProjectIconSource? = { _ in nil },
-                            environment: (String) -> (label: String?, machine: String?) = { _ in (nil, nil) }) -> ComposerChipLook {
+                            environment: (String) -> (label: String?, machine: String?) = { _ in (nil, nil) },
+                            model: (_ instanceId: String, _ model: String) -> (label: String, driver: String)? = { _, _ in nil }) -> ComposerChipLook {
         switch token.kind {
+        case .model(let instance, let slug):
+            let found = model(instance, slug)
+            return ComposerChipLook(kind: .model(driver: found?.driver ?? ""), label: found?.label ?? slug)
         case .mention(let path):
             let base = path.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? path
             return ComposerChipLook(kind: .mention(path: path), label: base.isEmpty ? path : base)
@@ -88,6 +94,10 @@ public struct ComposerChipLook: Equatable, Sendable {
         }
     }
 
+    /// OKLCH chroma and hue of the logos with a color of their own (`BUNDLED_LOGO_COLOR_BY_PROVIDER`,
+    /// ProviderInstanceIcon.tsx:50-53 at 4928): Claude #d97757 and Antigravity #5b87bf.
+    static let logoHueChroma: [String: (CGFloat, CGFloat)] = ["claudeAgent": (0.1308, 38.76), "antigravity": (0.0984, 254.96)]
+
     /// T3's name for the kind's accent (`CONTEXT_CHIP_ACCENTS`, lib/contextChipAccents.ts at 4928).
     var accentName: String? {
         switch kind {
@@ -101,6 +111,7 @@ public struct ComposerChipLook: Equatable, Sendable {
         case .thread: "thread"
         case .reviewComment: "review-comment"
         case .terminal: "terminal"
+        case .model: "model"
         case .pullRequest(let state): state.flatMap { ["open", "draft", "merged", "closed"].contains($0) ? "pr-" + $0 : nil } ?? "pull-request"
         case .unresolved: nil
         }
@@ -109,6 +120,12 @@ public struct ComposerChipLook: Equatable, Sendable {
     /// `--context-chip-accent` per kind. The default themes take T3's solved `--context-chip-*` colors.
     var accent: NSColor? {
         if let accentOverride, !ComposerDesign.current { return accentOverride }
+        // `kind="neutral"` with the logo's hue and chroma at the model accent's solved lightness, or the text color for
+        // logos that swap black and white (ModelMentionChip.tsx `logoAccent`, themePalette.ts `contextChipAccentWithHueOf`).
+        if case .model(let driver) = kind {
+            guard let (c, h) = Self.logoHueChroma[driver] else { return Themed.color(\.foreground) }
+            return ComposerDesign.current ? Themed.pick(light: OKLab.oklch(0.4974, c, h), dark: OKLab.oklch(0.6404, c, h)) : OKLab.oklch(0.62, c, h)
+        }
         if ComposerDesign.current, let name = accentName, let solved = ContextChipAccents.standard(name) { return solved }
         return switch kind {
         case .mention: OKLab.oklch(0.62, 0.11, 215)
@@ -121,6 +138,7 @@ public struct ComposerChipLook: Equatable, Sendable {
         case .thread: OKLab.oklch(0.62, 0.12, 190)
         case .reviewComment: OKLab.oklch(0.62, 0.16, 292)
         case .terminal: OKLab.oklch(0.62, 0.134, 163)
+        case .model: nil
         case .pullRequest(let state):
             switch state {
             case "open": OKLab.oklch(0.62, 0.134, 163)
@@ -149,6 +167,18 @@ public struct ComposerChipLook: Equatable, Sendable {
         case .video: return (IconName.film.definition, nil)
         case .environment(let machine): return (EnvironmentMachineIcon.definition(machine), nil)
         case .thread: return (IconName.messagesSquare.definition, nil)
+        case .model(let driver):
+            switch driver {
+            case "claudeAgent": return (IconName.brandClaudeAI.definition, nil)
+            case "codex": return (IconName.brandOpenAI.definition, nil)
+            case "cursor": return (IconName.brandCursor.definition, nil)
+            case "grok": return (ProviderPackageIcons.grok, nil)
+            case "fx": return (ProviderPackageIcons.fx, nil)
+            case "pi": return (ProviderPackageIcons.pi, nil)
+            case "acpRegistry": return (IconName.brandACPRegistry.definition, nil)
+            // ponytail: drivers drawn as initials or remote ACP icons in the picker get a bot glyph here; draw initials if a chip needs them
+            default: return (IconName.bot.definition, nil)
+            }
         case .reviewComment: return (IconName.messageSquare.definition, nil)
         case .terminal: return (IconName.terminal.definition, nil)
         case .pullRequest(let state):

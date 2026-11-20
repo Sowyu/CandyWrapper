@@ -3150,6 +3150,10 @@ extension ComposerController {
         }
         menus.onPick = { [weak self] item in self?.picked(item) }
         composer.chipLook = { [weak self] token in self?.chipLook(token) ?? ComposerChipLook.basic(token) }
+        // `modelMentionKeysAtom` (ModelMentionChip.tsx at 4928): a reference chips while the server lists its model.
+        composer.knownModel = { [weak self] instance, model in
+            self?.serverConfig.providers.contains { $0.instanceId.rawValue == instance && $0.models.contains { $0.slug == model } } ?? false
+        }
         composer.recordsForCopy = { [weak self] ids in
             guard let self, let env = targetEnvironmentId else { return nil }
             let records = contextRecords(for: ids)
@@ -3303,7 +3307,9 @@ extension ComposerController {
                 environments: composerLinkedNames.sorted { $0.key < $1.key }.map {
                     .init(id: $0.key, label: $0.value, machine: environments.machine($0.key) ?? "server")
                 }, excluding: targetEnvironmentId ?? "")
-            return .init(items: machines + threads + ComposerMenus.pathItems(entries), emptyText: ComposerMenus.emptyText(kind: .path, loading: loading))
+            // Models follow threads and machines, before files (useComposerMenuItems.ts:237-241 at 4928).
+            let models = ComposerModelMentions.items(query: trigger.query, entries: pickers.context.catalog.entries)
+            return .init(items: machines + threads + models + ComposerMenus.pathItems(entries), emptyText: ComposerMenus.emptyText(kind: .path, loading: loading))
         case .pullRequest:
             let env = targetEnvironmentId ?? ""
             let linked = ThreadPullRequests.visible(shellThread?.pullRequests ?? [])
@@ -3590,7 +3596,12 @@ extension ComposerController {
                   let shell = threads.first(where: { $0.id.rawValue == EnvironmentScope.key(record["environmentId"]?.stringValue ?? env, local) }),
                   let project = projects.first(where: { $0.id == shell.projectId }) else { return nil }
             return ProjectIconSource(project)
-        }, environment: { id in (environments.label(id), environments.machine(id)) })
+        }, environment: { id in (environments.label(id), environments.machine(id)) }, model: { [serverConfig] instance, slug in
+            // `modelMentionPresentationAtom`: the model's display name and its instance's driver.
+            guard let provider = serverConfig.providers.first(where: { $0.instanceId.rawValue == instance }),
+                  let model = provider.models.first(where: { $0.slug == slug }) else { return nil }
+            return (ModelNames.display(model), provider.driver)
+        })
     }
 }
 

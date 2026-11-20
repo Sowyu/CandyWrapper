@@ -511,6 +511,10 @@ public final class ComposerView: DSView {
     public var chipLook: (ComposerInlineToken) -> ComposerChipLook = ComposerChipLook.basic {
         didSet { editor.chipLook = chipLook; editor.refreshChips() }
     }
+    /// Which `model:` references chip (#31207 at 4928): the server's models, read only when the prompt has one.
+    public var knownModel: ((String, String) -> Bool)? {
+        didSet { editor.knownModel = knownModel }
+    }
     /// Rebuilds the chips after their data changed (skills, records, thread titles).
     public func refreshChips() { editor.refreshChips() }
     /// Copy: the records behind context ids and their environment; paste: records from the clipboard.

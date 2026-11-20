@@ -118,7 +118,7 @@ private final class MenuRowView: DSView {
     var isActive = false { didSet { if isActive != oldValue { needsDisplay = true; restyle() } } }
     var onHover: (() -> Void)?
     var onClick: (() -> Void)?
-    private var icon: IconView?
+    private var icon: NSView?
     private let label = glassLabel(font: DSFont.ui(12, weight: .medium), color: Themed.color(\.foreground), lineHeight: 16)
     /// `/skill:` before a skill's name in the `/` menu.
     private let prefix = glassLabel(font: DSFont.ui(12, weight: .medium), color: Themed.color(\.secondaryLabel), lineHeight: 16)
@@ -139,6 +139,9 @@ private final class MenuRowView: DSView {
             icon = IconView(definition: EnvironmentMachineIcon.definition(machine), size: 16, color: Themed.color(\.secondaryLabel))
         case .thread:
             icon = IconView(name: .messagesSquare, size: 16, strokeColor: Themed.color(\.secondaryLabel))
+        case .model(_, _, let driver, let providerName):
+            // `ProviderInstanceIcon` at `size-4` (ComposerCommandMenu.tsx at 4928).
+            icon = ProviderIcon.make(driver: driver, displayName: providerName, size: 16, color: Themed.color(\.secondaryLabel), model: true)
         case .pullRequest(let pr):
             let (name, color): (IconName, NSColor) = switch pr.displayState {
             // `PULL_REQUEST_STATE_PRESENTATION` tones.
