@@ -416,6 +416,7 @@ final class IssueGroupView: DSView {
         if next != trackerIcon {
             trackerIcon = next
             icon.removeFromSuperview()
+            iconView?.removeFromSuperview()
             let v = IconView(name: next, size: 14, strokeColor: Themed.color(\.mutedForeground))
             addSubview(v)
             iconView = v
