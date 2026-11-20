@@ -38,6 +38,19 @@ public final class RouteHistory {
     public func record(_ route: Route?) {
         defer { if !moving { onChange?() } }
         guard !moving, let route, index < 0 || entries[index] != route else { return }
+        // mainAppLocation.ts (#36437): closing Settings back to the page it opened over drops its entries,
+        // so Back and Forward never stop on a closed Settings.
+        if index >= 0, case .settings = entries[index] {
+            if case .settings = route {} else {
+                var k = index
+                while k >= 0, case .settings = entries[k] { k -= 1 }
+                if k >= 0, entries[k] == route {
+                    entries.removeSubrange((k + 1)...)
+                    index = k
+                    return
+                }
+            }
+        }
         entries.removeSubrange((index + 1)...)
         entries.append(route)
         if entries.count > Self.limit { entries.removeFirst(entries.count - Self.limit) }

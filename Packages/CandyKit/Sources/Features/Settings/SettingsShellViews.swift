@@ -646,7 +646,8 @@ final class SettingsSearchResultRow: ControlView {
     override func layout() {
         super.layout()
         decoration.layout(boxSize: bounds.size)
-        icon.frame = NSRect(x: 8, y: dither ? 11 : 8, width: dither ? 14 : 16, height: dither ? 14 : 16)
+        // SettingsSidebarNav.tsx (#38944): the 16pt icon sits in a 20pt box, centered on the title's line.
+        icon.frame = NSRect(x: 8, y: dither ? 11 : 10, width: dither ? 14 : 16, height: dither ? 14 : 16)
         let textX: CGFloat = dither ? 30 : 32
         title.frame = NSRect(x: textX, y: 8, width: max(0, bounds.width - textX - 8), height: 20)
         subtitle.frame = NSRect(x: textX, y: 28, width: max(0, bounds.width - textX - 8), height: 16)

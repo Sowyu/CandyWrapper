@@ -11,7 +11,16 @@ import T3Protocol
 /// keybinding, Open keybindings.json), the new-binding row, then one section per command area. Rows come
 /// from the primary environment's resolved rules merged with T3's defaults; saves and removals go to every
 /// connected environment in the scope (`server.upsertKeybinding`, `server.removeKeybinding`).
-public final class KeybindingsSettingsView: SettingsPageBase {
+public final class KeybindingsSettingsView: SettingsPageBase, RouteModalEscapeHandler {
+    /// KeybindingsSettings.tsx (#35161): Esc in a search with text clears it; an empty one lets Settings close.
+    func takeRouteModalEscape() -> Bool {
+        guard !query.isEmpty, let editor = window?.firstResponder as? NSTextView, (editor.delegate as? NSView)?.isDescendant(of: search) == true
+        else { return false }
+        search.input.text = ""
+        query = ""
+        return true
+    }
+
     private let sentence: SettingsScopeSentenceView
     let search = InputGroupView(placeholder: "Search keybindings", leading: .icon(.search))
     private let addButton = ButtonView("Add keybinding", icon: .plus, variant: .outline)
@@ -226,7 +235,15 @@ final class KeybindingPillButton: ControlView {
 /// The capture input (`Input size="sm" font="mono" w-44`): while focused it records the next shortcut
 /// (`keybindingFromKeyboardEvent`); Escape restores the old value; typing edits the text directly is not
 /// supported, as recording takes every key.
-final class ShortcutRecorderView: ControlView, ShortcutCaptureResponder {
+final class ShortcutRecorderView: ControlView, ShortcutCaptureResponder, RouteModalEscapeHandler {
+    /// KeybindingsSettings.tsx (#27151): Esc while recording cancels the recording, Settings stays.
+    func takeRouteModalEscape() -> Bool {
+        guard isCapturing else { return false }
+        onCancel?()
+        window?.makeFirstResponder(superview)
+        return true
+    }
+
     private let decoration = BoxDecorationLayer()
     private let label = LabelView("", font: DSFont.mono(14), color: Themed.color(\.contrastForeground))
     var value = "" { didSet { sync() } }
@@ -576,7 +593,11 @@ final class KeybindingRowView: DSView, SettingsGroupRow, FocusWithinObserver {
             self.update()
         }
         let pop = PopoverView(content: editor, padding: .default, width: .auto)
-        _ = pop.show(from: when.trigger, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 6))
+        // KeybindingsSettings.tsx (#24488): closing drops an unparsed draft and keeps the last valid value, so Save comes back.
+        pop.show(from: when.trigger, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 6))?.onClose = { [weak self] in
+            self?.whenValid = true
+            self?.update()
+        }
         window?.makeFirstResponder(editor.input)
     }
 
@@ -665,7 +686,10 @@ final class NewKeybindingRowView: DSView, SettingsGroupRow {
             if valid { self.whenDraft = node }
             self.update()
         }
-        _ = PopoverView(content: editor).show(from: when.trigger, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 6))
+        PopoverView(content: editor).show(from: when.trigger, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 6))?.onClose = { [weak self] in
+            self?.whenValid = true
+            self?.update()
+        }
         window?.makeFirstResponder(editor.input)
     }
 
