@@ -21,8 +21,11 @@ final class ComposerPermissionsView: DSView {
     var onUnrestricted: ((Bool) -> Void)?
     private var focused: Int?
     private var turnOff: ButtonView?
-    /// The "Turn off Unrestricted" row under the description while it is on.
-    var extraHeight: CGFloat { turnOff == nil ? 0 : 32 }
+    /// The "Turn off Unrestricted" row under the description while it is on, plus the description's lines past two.
+    var extraHeight: CGFloat { turnOff == nil ? 0 : detailHeight }
+    /// The description's height. Two lines, or with the Turn off row as many lines as Unrestricted's hint takes at
+    /// the menu's narrowest width (296 less padding), so the row sits below its last line.
+    private var detailHeight: CGFloat = 32
 
     init(modes: [RuntimeMode], selected: RuntimeMode, unrestricted: UnrestrictedAccess.State? = nil) {
         self.modes = modes; self.selected = selected
@@ -47,6 +50,7 @@ final class ComposerPermissionsView: DSView {
             addSubview(button); turnOff = button
         }
         preview(nil)
+        if turnOff != nil { detailHeight = max(32, detail.layout(forWidth: 272).height) }
     }
     static func info(_ mode: RuntimeMode?, unrestricted: UnrestrictedAccess.State?) -> ComposerPickers.ModeInfo {
         guard let mode else {
@@ -97,8 +101,8 @@ final class ComposerPermissionsView: DSView {
             button.layer?.maskedCorners = corners
         }
         title.frame = NSRect(x: 8, y: 62, width: w, height: 20)
-        detail.frame = NSRect(x: 8, y: 84, width: w, height: 32)
-        if let turnOff { turnOff.frame = NSRect(x: 8, y: 120, width: turnOff.intrinsicContentSize.width, height: 24) }
+        detail.frame = NSRect(x: 8, y: 84, width: w, height: detailHeight)
+        if let turnOff { turnOff.frame = NSRect(x: 8, y: 88 + detailHeight, width: turnOff.intrinsicContentSize.width, height: 24) }
     }
 }
 

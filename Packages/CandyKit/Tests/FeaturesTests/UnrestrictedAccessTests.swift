@@ -172,4 +172,18 @@ struct UnrestrictedAccessTests {
         p.chooseFullAccess()
         #expect(p.isUnrestricted && p.current.runtimeMode == .fullAccess)
     }
+
+    /// Screen pass 3, item 2: the Turn off row sat at a fixed y over the hint's third line and past the menu's end.
+    @Test func turnOffRowSitsBelowTheWholeHint() {
+        let view = ComposerPermissionsView(modes: [.approvalRequired, .autoAcceptEdits, .auto, .fullAccess], selected: .fullAccess,
+                                           unrestricted: .init(on: true))
+        view.frame = NSRect(x: 0, y: 0, width: 288, height: 122 + view.extraHeight)
+        view.layoutSubtreeIfNeeded()
+        let detail = view.subviews.compactMap { $0 as? TextBlockView }.first { $0.text == UnrestrictedAccess.description }
+        let button = view.subviews.compactMap { $0 as? ButtonView }.first
+        guard let detail, let button else { Issue.record("missing hint or button"); return }
+        #expect(detail.layout(forWidth: detail.bounds.width).height > 32)
+        #expect(button.frame.minY >= detail.frame.minY + detail.layout(forWidth: detail.bounds.width).height)
+        #expect(button.frame.maxY <= view.bounds.height)
+    }
 }
