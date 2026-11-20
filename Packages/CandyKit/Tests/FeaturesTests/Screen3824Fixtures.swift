@@ -9,20 +9,28 @@ import T3Store
 enum Screen3824Fixtures {
     static func sidebar(dark: Bool) -> ShellSnapshot {
         let p = "project-demo"
-        // The rows of reference-4928/02-sidebar-populated.dark.png, newest first.
-        let rows: [(String, SidebarPreview.Kind, Double)] = [
-            ("Lighthouse Story", .read, 1),
-            ("Lighthouse Story", .read, 4),
-            ("Scratch idea", .read, 3),
-            ("Document greet and update notes", .done, 5),
-            ("Create Approval File", .approval, 6),
-            ("CLI Tool Clarification", .input, 7),
-            ("Run Shell Commands", .read, 17),
-            ("Markdown Response Formatting Request", .read, 17),
+        // The rows of reference-4928/02-sidebar-populated, newest first, with the ages each theme's capture shows.
+        let rows: [(String, SidebarPreview.Kind, Double, Double)] = [
+            ("Lighthouse Story", .read, 1, 7),
+            ("Lighthouse Story", .read, 4, 10),
+            ("Scratch idea", .read, 3, 9),
+            ("Document greet and update notes", .done, 5, 11),
+            ("Create Approval File", .approval, 6, 12),
+            ("CLI Tool Clarification", .input, 7, 13),
+            ("Run Shell Commands", .read, 17, 23),
+            ("Markdown Response Formatting Request", .read, 17, 23),
         ]
-        return SidebarPreview.snapshot(projects: [SidebarPreview.project(p, "demo-repo")], threads: rows.enumerated().map { i, row in
-            SidebarPreview.thread("t\(i)", row.0, project: p, kind: row.1, minutesAgo: row.2)
-        })
+        var threads = rows.enumerated().map { i, row in
+            // Every seeded thread but "Scratch idea" ran on main.
+            SidebarPreview.thread("t\(i)", row.0, project: p, kind: row.1, minutesAgo: dark ? row.2 : row.3,
+                                  extra: row.0 == "Scratch idea" ? [:] : ["branch": "main"])
+        }
+        // The footer's Snoozed 1 and Settled 1: "Tidy the README" snoozed until 2027-01-04, "Plan release notes" settled.
+        threads.append(SidebarPreview.thread("t8", "Tidy the README", project: p, kind: .waiting, minutesAgo: 30,
+                                             extra: ["snoozedUntil": "2027-01-04T09:00:00.000Z", "snoozedAt": SidebarPreview.iso(30)]))
+        threads.append(SidebarPreview.thread("t9", "Plan release notes", project: p, kind: .waiting, minutesAgo: 30,
+                                             extra: ["settledOverride": "settled", "settledAt": SidebarPreview.iso(30)]))
+        return SidebarPreview.snapshot(projects: [SidebarPreview.project(p, "demo-repo")], threads: threads)
     }
 
     static func pickers(draft: Bool = false) throws -> ComposerPickers {
