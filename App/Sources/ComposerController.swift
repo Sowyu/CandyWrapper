@@ -259,6 +259,9 @@ final class ComposerController {
     private var restoredUploads: [String: DraftAttachmentRecord.Pending] = [:]
     /// Restored files whose upload the server has not confirmed yet: they keep their upload id when saved.
     private var unverifiedUploads: Set<String> = []
+    /// #32910: ready uploads checked against the server for the send in progress, by attachment id and when.
+    private var sendVerified: [String: Date] = [:]
+    private var verifyingForSend: Set<String> = []
     private var savedDraftAttachments: [DraftAttachmentRecord] = []
     private var draftAttachments: [String: [ComposerAttachment]] = [:]
     private var attachmentTasks: [String: Task<Void, Never>] = [:]
@@ -1893,6 +1896,20 @@ final class ComposerController {
             // `retryAttachmentUpload` (attachmentUploadQueue.ts:556-572) deletes the failed server copy first.
             for a in failed { retryAttachment(a.id) }
             return
+        }
+        // A long-lived draft can outlive the server's upload sweep, so a send first checks each ready upload
+        // (`refreshExpiredAttachmentUploads`, attachmentUploadQueue.ts at 4928, f2c944947d #32910).
+        if let key = draftKey {
+            let now = Date()
+            let unchecked = attachments.filter { a in
+                a.status == .ready && a.attachmentId != nil && !unverifiedUploads.contains(a.id)
+                    && (sendVerified[a.id].map { now.timeIntervalSince($0) > 60 } ?? true)
+            }
+            if !unchecked.isEmpty {
+                sendAfterRetry[key] = (sentText, mode, background)
+                for a in unchecked { verifyUploadBeforeSend(a.id, key: key) }
+                return
+            }
         }
         // A plain send waits for running uploads and goes once they land (#33092, useComposerSend.ts:838-916 at
         // 4928); an approval redirect needs them first. Interrupted files block.
@@ -4309,6 +4326,46 @@ extension ComposerController {
         }
     }
 
+    /// One ready upload at send time (#32910): kept when the server still mints its URL, uploaded again from the local
+    /// copy when the server swept it, and failed with T3's reason otherwise. The held send resumes after.
+    private func verifyUploadBeforeSend(_ id: String, key: String) {
+        guard let a = draftAttachments[key]?.first(where: { $0.id == id }), let attachmentId = a.attachmentId,
+              let shell = environments.session(a.environmentId) else { sendVerified[id] = Date(); return }
+        let supervisor = shell.supervisor
+        verifyingForSend.insert(id)
+        Task { [weak self] in
+            var missing = false, failed = false
+            do {
+                _ = try await supervisor.request("assets.createUrl", payload: .object([
+                    "resource": .object(["_tag": .string("attachment"), "attachmentId": .string(attachmentId)])]))
+            } catch let error as RPCClientError where error.typedError?.tag == "AssetAttachmentNotFoundError" {
+                missing = true
+            } catch {
+                failed = true
+            }
+            guard let self else { return }
+            verifyingForSend.remove(id)
+            // Removed or replaced while the check ran.
+            guard draftAttachments[key]?.first(where: { $0.id == id })?.attachmentId == attachmentId else { resumeSendAfterRetry(key); return }
+            if missing, FileManager.default.fileExists(atPath: a.fileURL.path) {
+                sendVerified[id] = Date()
+                updateAttachment(id, key: key) { $0.attachmentId = nil; $0.status = .uploading(0) }
+                startUpload(id, key: key)
+                return
+            }
+            if missing {
+                updateAttachment(id, key: key) { f in
+                    f.attachmentId = nil; f.needsReattach = true; f.status = .failed("Uploaded attachment expired. Remove it and attach it again.")
+                }
+            } else if failed {
+                updateAttachment(id, key: key) { $0.status = .failed("Uploaded attachment could not be verified. Retry when the server reconnects.") }
+            } else {
+                sendVerified[id] = Date()
+            }
+            resumeSendAfterRetry(key)
+        }
+    }
+
     /// The held send goes once no image is being prepared, if its draft is still the open one.
     private func resumeSendAfterPreparing(_ key: String) {
         guard (preparingImages[key] ?? 0) == 0, let pending = sendAfterPreparing.removeValue(forKey: key), key == draftKey else { return }
@@ -4319,6 +4376,7 @@ extension ComposerController {
     private func resumeSendAfterRetry(_ key: String) {
         guard let pending = sendAfterRetry[key], let list = draftAttachments[key] else { sendAfterRetry[key] = nil; return }
         if list.contains(where: { if case .uploading = $0.status { true } else { false } }) { return }
+        if list.contains(where: { verifyingForSend.contains($0.id) }) { return }
         sendAfterRetry[key] = nil
         guard key == draftKey else { return }
         guard ComposerAttachmentRules.retryableFailures(list).isEmpty else {
