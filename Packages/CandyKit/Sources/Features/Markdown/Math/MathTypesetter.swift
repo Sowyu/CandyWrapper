@@ -818,11 +818,17 @@ enum MathRenderer {
     static func layout(_ tex: String, display: Bool, textSize: CGFloat) -> MathLayout? {
         let key = "\(display ? "d" : "i")\(textSize):\(tex)"
         if let hit = lock.withLock({ cache[key] }) { return hit }
-        let result: MathLayout? = {
+        func typeset(_ tex: String) -> MathLayout? {
             guard let font = MathFont.shared, let nodes = try? TeXParser.parse(tex.trimmingCharacters(in: .whitespacesAndNewlines)),
                   !nodes.isEmpty, let (box, tag) = try? MathTypesetter.layout(nodes, display: display, em: textSize * scale, font: font),
                   box.width.isFinite, box.height.isFinite, box.depth.isFinite, box.width < 20_000 else { return nil }
             return MathLayout(box, tag: tag)
+        }
+        // TeX that fails only because a `%` after text started a comment, as in `\text{3.18% yield}`, gets one more try
+        // with those escaped (MathTypeset.tsx at 4928, #29511).
+        let result = typeset(tex) ?? {
+            let repaired = escapeLiteralPercents(tex)
+            return repaired == tex ? nil : typeset(repaired)
         }()
         lock.withLock {
             if cache.updateValue(result, forKey: key) == nil { order.append(key) }
@@ -830,4 +836,42 @@ enum MathRenderer {
         }
         return result
     }
+}
+
+/// `escapeLiteralPercents` (MathTypeset.logic.ts at 4928): escapes each `%` written right after other text. A `%` at a
+/// line start or after whitespace stays a comment. Skips escapes and `\verb` as KaTeX's lexer does, in one pass.
+func escapeLiteralPercents(_ tex: String) -> String {
+    let c = Array(tex)
+    var out = ""
+    var copied = 0, i = 0
+    while i < c.count {
+        let ch = c[i]
+        if ch == "\\" {
+            if i + 5 <= c.count, String(c[i..<(i + 5)]) == "\\verb" {
+                let starred = i + 5 < c.count && c[i + 5] == "*"
+                let at = i + (starred ? 6 : 5)
+                if at < c.count, starred || !(c[at] == "*" || (c[at].isASCII && c[at].isLetter)) {
+                    let delimiter = c[at]
+                    var close = at + 1
+                    while close < c.count, c[close] != delimiter, c[close] != "\n", c[close] != "\r" { close += 1 }
+                    // KaTeX rejects a \verb that does not close on its own line.
+                    guard close < c.count, c[close] == delimiter else { return tex }
+                    i = close + 1
+                    continue
+                }
+            }
+            // A control symbol such as `\%` or `\\` is two characters.
+            i += 2
+        } else if ch == "%", i > 0, !c[i - 1].isWhitespace {
+            out += String(c[copied..<i]) + "\\%"
+            i += 1
+            copied = i
+        } else if ch == "%" {
+            while i < c.count, c[i] != "\n" { i += 1 }
+            i += 1
+        } else {
+            i += 1
+        }
+    }
+    return copied == 0 ? tex : out + String(c[copied...])
 }

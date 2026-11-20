@@ -1597,12 +1597,14 @@ private struct Builder {
         }.joined(separator: "\n")
     }
 
-    /// "Copy as Markdown" for a table.
+    /// "Copy as Markdown" for a table. GFM splits a row at every unescaped pipe, but its math-aware parse keeps a
+    /// formula's pipes in the cell, so formula source stays unescaped (markdown-clipboard.ts at 4928, #22875).
     static func markdown(_ table: MarkdownTable) -> String {
         func row(_ cells: [[InlineRun]]) -> String {
             "| " + cells.map { runs in
                 runs.map { run in
-                    var text = run.text.replacingOccurrences(of: "\n", with: " ")
+                    if let math = run.math { return math.copySource.replacingOccurrences(of: "\n", with: " ") }
+                    var text = run.text.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "|", with: "\\|")
                     if run.code {
                         let fence = text.contains("`") ? "``" : "`"
                         text = fence + text + fence
@@ -1612,7 +1614,7 @@ private struct Builder {
                     if run.strikethrough { text = "~~" + text + "~~" }
                     if let link = run.link { text = "[" + text + "](" + link.absoluteString + ")" }
                     return text
-                }.joined().trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "|", with: "\\|")
+                }.joined().trimmingCharacters(in: .whitespacesAndNewlines)
             }.joined(separator: " | ") + " |"
         }
         let rule = "| " + table.alignments.map { a -> String in

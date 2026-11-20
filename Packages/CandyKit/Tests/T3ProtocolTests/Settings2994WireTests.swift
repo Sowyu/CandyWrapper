@@ -32,6 +32,14 @@ struct Settings2994WireTests {
         #expect(StorageCleanupReport.formatBytes(1536) == "1.50 KB")
         #expect(StorageCleanupReport.formatBytes(15 * 1024) == "15.0 KB")
         #expect(StorageCleanupReport.formatBytes(150 * 1024 * 1024) == "150 MB")
+        // #26067 (formatBytes.test.ts at 4928): the unit is picked after rounding.
+        #expect(StorageCleanupReport.formatBytes(1_047_552) == "1023 KB")
+        #expect(StorageCleanupReport.formatBytes(1_048_576) == "1.00 MB")
+        #expect(StorageCleanupReport.formatBytes(5 * pow(1024, 4)) == "5.00 TB")
+        #expect(StorageCleanupReport.formatBytes(2048 * pow(1024, 4)) == "2048 TB")
+        #expect(StorageCleanupReport.formatBytes(1_023.6) == "1.00 KB")
+        #expect(StorageCleanupReport.formatBytes(1_048_100) == "1.00 MB")
+        #expect(StorageCleanupReport.formatBytes(1_073_217_536) == "1.00 GB")
     }
 
     @Test func otlpEndpointCheckDecodesAndLabels() {

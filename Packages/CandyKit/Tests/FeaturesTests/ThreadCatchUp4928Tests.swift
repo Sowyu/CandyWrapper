@@ -90,4 +90,39 @@ struct ThreadCatchUp4928Tests {
         #expect(links("https://example.com/a~") == ["https://example.com/a~"])
         #expect(links("[x](https://a.com/b)_c") == ["https://a.com/b"])
     }
+
+    /// #29759: find in thread matches a word typed with a straight apostrophe against a curly one.
+    @Test func findFoldsCurlyApostrophes() {
+        #expect(ThreadFindText.count("It’s done, isn‘t it", "it's") == 1)
+        #expect(ThreadFindText.count("It’s done", "it’s") == 1)
+        #expect(ThreadFindText.count("plain text", "it's") == 0)
+    }
+
+    /// #29511: TeX that fails only because of an unescaped percent typesets after escaping it (MathTypeset.logic.test.ts).
+    @Test func literalPercentsEscape() {
+        let cases: [(String, String)] = [
+            (#"\text{3.18% yield}"#, #"\text{3.18\% yield}"#),
+            (#"\text{100%% yield}"#, #"\text{100\%\% yield}"#),
+            (#"6\% + 2\%"#, #"6\% + 2\%"#),
+            (#"x\\%"#, #"x\\\%"#),
+            ("x % note\n+ 1", "x % note\n+ 1"),
+            ("% note\n\\text{2%}", "% note\n\\text{2\\%}"),
+            ("x &= 1 % +9%\n\\text{2%}", "x &= 1 % +9%\n\\text{2\\%}"),
+            (#"\verb|50%|+\text{2%}"#, #"\verb|50%|+\text{2\%}"#),
+            (#"\verb*%a%b%+c%"#, #"\verb*%a%b\%+c\%"#),
+            (#"\verb|50%+\text{2%}"#, #"\verb|50%+\text{2%}"#),
+        ]
+        for (tex, expected) in cases { #expect(escapeLiteralPercents(tex) == expected, "\(tex)") }
+    }
+
+    /// #22875: "Copy as Markdown" for a table escapes a cell's pipes but keeps a formula's.
+    @Test func copiedTablesKeepFormulaPipes() throws {
+        let doc = MarkdownDocument(parsing: "| a | b |\n| --- | --- |\n| x\\|y | $|v|$ |", math: true)
+        guard case .table(let table)? = doc.blocks.first else { Issue.record("no table"); return }
+        let copied = MarkdownLayout.tableMarkdown(table)
+        #expect(copied.contains(#"x\|y"#))
+        // CandyWrapper copies a formula as `\(...\)`, its own pipes left alone.
+        #expect(copied.contains(#"\(|v|\)"#) && !copied.contains(#"\|v\|"#))
+    }
 }
+

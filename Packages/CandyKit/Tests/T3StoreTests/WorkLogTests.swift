@@ -225,6 +225,18 @@ private func dynamicTool(_ name: String, input: String) -> TurnItem {
             $0.structuredPayload = turnItem(#"{"id":"c","type":"command_execution","input":"make","exitCode":2}"#)
         }
         #expect(WorkLog.displayIndicatesFailure(exit))
+        // #23351: a zero exit code outranks failure text in the output and the command.
+        for (n, output) in ["logs/app.log:12: Error: ENOENT: no such file or directory", "fixtures/ci.txt:3: Process exited with exit code 2"].enumerated() {
+            let search = entry {
+                $0.id = "search-\(n)"
+                $0.itemType = .commandExecution
+                $0.command = "rg -n error logs fixtures"
+                $0.detail = output
+                $0.toolLifecycleStatus = .completed
+                $0.structuredPayload = turnItem(#"{"id":"s-\#(n)","type":"command_execution","input":"rg","exitCode":0,"output":"\#(output)","updatedAt":"2026-01-02T00:00:0\#(n)Z"}"#)
+            }
+            #expect(!WorkLog.indicatesFailure(search) && !WorkLog.displayIndicatesFailure(search))
+        }
         let clean = entry { $0.itemType = .commandExecution; $0.command = "ls"; $0.toolLifecycleStatus = .completed }
         #expect(WorkLog.indicatesSuccess(clean) && !WorkLog.indicatesNeutral(clean))
         // 3315: a reasoning row's prose is not tool output, but an explicit failure still counts.
