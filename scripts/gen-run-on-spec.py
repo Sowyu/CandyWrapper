@@ -26,15 +26,17 @@ def machine(kind, cls):
                 f'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="{cls}"><rect width="20" height="8" x="2" y="8" rx="2"></rect><path d="M6 12h.01"></path></svg>')
     return lucide(kind, cls)
 
-# ComposerControl.tsx composerControlClassName, size xs, plus the selector's `min-w-0 max-w-full`.
-CONTROL_XS = ("relative inline-flex shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-(--control-radius) border border-transparent text-base outline-none hover:bg-accent data-pressed:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 data-disabled:pointer-events-none data-disabled:opacity-64 pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 [&:active:not([aria-haspopup])]:scale-[0.97] [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:-mx-0.5 [&_svg[data-composer-control-icon]]:mx-0 "
-              "h-7 gap-1 px-1.75 font-normal text-foreground/70 text-sm hover:text-foreground dark:text-muted-foreground sm:h-6 sm:text-xs [&_svg:not([class*='size-'])]:size-4 sm:[&_svg:not([class*='size-'])]:size-3.5 [&_svg[data-composer-control-chevron]]:ms-0 [&_svg[data-composer-control-chevron]]:-me-1 "
+# ComposerControl.tsx:10-18 composerControlClassName at 4928, size xs (#28083: `has-[[data-composer-label]]:gap-1.5`
+# and `[&_svg]:mx-0`), plus the selector's `min-w-0 max-w-full`.
+CONTROL_XS = ("relative inline-flex shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-(--control-radius) border border-transparent text-base outline-none hover:bg-accent data-pressed:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 data-disabled:pointer-events-none data-disabled:opacity-64 pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 [&:active:not([aria-haspopup])]:scale-[0.97] [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:-mx-0.5 [&_svg[data-composer-control-icon]]:mx-0 "
+              "[&_:is([data-composer-control-label],[data-chat-provider-model-picker-label])]:[text-box:trim-both_cap_alphabetic] supports-[text-box:trim-both_cap_alphabetic]:[&_:is([data-composer-control-label],[data-chat-provider-model-picker-label])]:py-1.5 "
+              "h-7 gap-1 has-[[data-composer-label]]:gap-1.5 px-1.75 font-normal text-foreground/70 text-sm hover:text-foreground dark:text-muted-foreground sm:h-6 sm:text-xs [&_svg:not([class*='size-'])]:size-4 sm:[&_svg:not([class*='size-'])]:size-3.5 [&_svg]:mx-0 [&_svg[data-composer-control-chevron]]:ms-0 [&_svg[data-composer-control-chevron]]:-me-1 "
               "aria-pressed:bg-accent aria-pressed:text-accent-foreground aria-pressed:hover:bg-accent/80 min-w-0 max-w-full")
 CHEVRON = lucide("chevron-down", "shrink-0 size-3 text-current", stroke="2.25", extra=" data-composer-control-chevron")
 
-def context_label(text):  # ComposerContextLabel.tsx, toolbar mode
+def context_label(text):  # ComposerContextLabel.tsx at 4928, toolbar mode, with THREAD_DETAILS_PANEL_LABEL_CLASS (#28083)
     return ('<span data-composer-label class="min-w-0 max-w-[240px] group-data-[compact]/composer-context:max-w-0">'
-            '<span data-composer-label-motion class="block w-full min-w-0 truncate max-w-[240px] transition-opacity duration-180 ease-drawer group-data-[compact]/composer-context:opacity-0 motion-reduce:transition-none">'
+            '<span data-composer-label-motion class="block w-full min-w-0 truncate [text-box:trim-both_cap_alphabetic] overflow-x-clip overflow-y-visible max-w-[240px] transition-opacity duration-180 ease-drawer group-data-[compact]/composer-context:opacity-0 motion-reduce:transition-none">'
             f'{text}</span></span>')
 
 def picker(kind, label):
@@ -43,7 +45,8 @@ def picker(kind, label):
             f'{machine(kind, "size-3 shrink-0")}{context_label(value)}</button>')
 
 def locked(kind, label):
-    return ('<span class="inline-flex h-7 min-w-0 max-w-full items-center gap-1 border border-transparent px-1.75 font-normal text-foreground/70 text-xs dark:text-muted-foreground sm:h-6">'
+    # BranchToolbarEnvironmentSelector.tsx:72-82 at 4928.
+    return ('<span class="inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 border border-transparent px-1.75 font-normal text-muted-foreground/70 text-sm sm:h-6 sm:text-xs" data-composer-context-control>'
             f'{machine(kind, "size-3 shrink-0")}{context_label(label)}</span>')
 
 # ui/select.tsx SelectPopup (alignItemWithTrigger off), SelectGroupLabel and SelectItem.
