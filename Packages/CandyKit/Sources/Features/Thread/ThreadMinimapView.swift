@@ -62,7 +62,7 @@ public struct ThreadMinimapItem: Equatable, Sendable {
     }
 }
 
-/// TimelineMinimap.tsx (T3 3824). The strip redraws only after a scroll, content or hover change. Every theme draws
+/// TimelineMinimap.tsx (T3 4928). The strip redraws only after a scroll, content or hover change. Every theme draws
 /// T3's default strip, Redesign included (the user, 2026-10-29).
 public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
     public var threadTitle: ((String) -> String?)?
@@ -99,12 +99,14 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
     private func tickY(_ i: Int) -> CGFloat { CGFloat(i) / CGFloat(max(1, items.count - 1)) * max(0, bounds.height - 2) }
     /// Each arrow fades in under its own pointer, not the strip's (`hover:opacity-100` on the arrow, :303-307).
     private var hoveredArrow: ButtonView? { didSet { if hoveredArrow !== oldValue { updateNavigation() } } }
-    private let previous = ButtonView(icon: .chevronUp, variant: .ghost, size: .iconXs)
-    private let next = ButtonView(icon: .chevronDown, variant: .ghost, size: .iconXs)
+    /// `size="icon-micro" variant="ghost-muted"` with a `size-4 text-foreground/90` chevron (TimelineMinimap.tsx:296-308 at 4928).
+    private let previous = ButtonView(icon: .chevronUp, variant: .ghostMuted, size: .iconMicro)
+    private let next = ButtonView(icon: .chevronDown, variant: .ghostMuted, size: .iconMicro)
     private weak var previewPopup: OpenPopup?
     public override init(frame: NSRect) {
         super.init(frame: frame)
         addSubview(previous); addSubview(next)
+        previous.iconColor = Themed.color(\.foreground, 0.9); next.iconColor = Themed.color(\.foreground, 0.9)
         previous.toolTip = "Previous turn"; next.toolTip = "Next turn"
         previous.setAccessibilityLabel("Previous turn"); next.setAccessibilityLabel("Next turn")
         previous.action = { [weak self] in self?.navigate(-1) }
@@ -124,8 +126,9 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
     }
     public override func layout() {
         super.layout()
-        previous.frame = NSRect(x: -8, y: -26, width: 24, height: 24)
-        next.frame = NSRect(x: -8, y: bounds.height + 2, width: 24, height: 24)
+        // `left-1 -translate-x-1/2`, 6pt past each end (`bottom-[calc(100%+6px)]`, `top-[calc(100%+6px)]`, :287-291).
+        previous.frame = NSRect(x: -6, y: -26, width: 20, height: 20)
+        next.frame = NSRect(x: -6, y: bounds.height + 6, width: 20, height: 20)
     }
     public override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
@@ -251,28 +254,46 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
         // The strip redraws whenever the current turn changes while scrolling. With 2,500 turns, a themed color and an
         // NSBezierPath per mark took 18% of the main thread in a long scroll; resolve the colors once and fill each
         // mark straight into the context, in the same order, so overlapping marks blend as before.
-        let current = Themed.color(\.foreground, ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 0.55 : 0.9).cgColor
-        let near = Themed.color(\.mutedForeground, ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 0.6 : 0.75).cgColor
-        let base = Themed.color(\.mutedForeground, ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 0.25 : 0.35).cgColor
-        // The guide under the strips, `left-3 w-px bg-border/15` (:216).
-        let guide = CGRect(x: 12, y: 0, width: 1, height: bounds.height)
-        if guide.intersects(dirtyRect) { ctx.setFillColor(Themed.color(\.border, 0.15).cgColor); ctx.fill(guide) }
+        // T3's strip (TimelineMinimap.tsx:194-214 at 4928): `bg-muted-foreground/25`, `/60` on the hovered strip, and
+        // `after:bg-foreground/55` over it while its turn is on screen. 4928 has no guide line under the strips (#35577).
+        // Over Redesign's picture or Glass's frost each state is one opaque color with T3's contrast ratios instead.
+        let backdrop = Self.backdropColors(dark: effectiveAppearance.isDark)
+        let current = (backdrop?[2] ?? Themed.color(\.foreground, 0.55)).cgColor
+        let near = (backdrop?[1] ?? Themed.color(\.mutedForeground, 0.6)).cgColor
+        let base = (backdrop?[0] ?? Themed.color(\.mutedForeground, 0.25)).cgColor
+        let nearCurrent = backdrop?[3].cgColor
         for i in items.indices {
             let distance = hovered.map { abs(i - $0) }
             let width: CGFloat = distance == 0 ? 24 : distance == 1 ? 16 : distance == 2 ? 10 : 8
             let rect = CGRect(x: 0, y: tickY(i), width: width, height: 2)
             guard rect.intersects(dirtyRect) else { continue }
             let path = CGPath(roundedRect: rect, cornerWidth: 1, cornerHeight: 1, transform: nil)
+            if let nearCurrent, inView.contains(i) {
+                ctx.setFillColor(distance == 0 ? nearCurrent : current)
+                ctx.addPath(path)
+                ctx.fillPath()
+                continue
+            }
             ctx.setFillColor(distance == 0 ? near : base)
             ctx.addPath(path)
             ctx.fillPath()
-            if inView.contains(i) {
+            if backdrop == nil, inView.contains(i) {
                 ctx.setFillColor(current)
                 ctx.addPath(path)
                 ctx.fillPath()
             }
         }
     }
+}
+
+extension ThreadMinimapView {
+    /// T3's four strip states: resting, hovered, on screen, and hovered on screen. The first three keep T3's ratios;
+    /// the hovered on-screen strip is the brightest and may stop at white.
+    static let strips: [[BackdropMarks.Layer]] = [
+        [.init(\.mutedForeground, 0.25)], [.init(\.mutedForeground, 0.6)],
+        [.init(\.mutedForeground, 0.25), .init(\.foreground, 0.55)], [.init(\.mutedForeground, 0.6), .init(\.foreground, 0.55)],
+    ]
+    static func backdropColors(dark: Bool) -> [NSColor]? { BackdropMarks.colors(strips, keep: 3, dark: dark) }
 }
 
 /// Holds the rail's hover area where HoverSync can find it. It draws nothing and lets every click through.
