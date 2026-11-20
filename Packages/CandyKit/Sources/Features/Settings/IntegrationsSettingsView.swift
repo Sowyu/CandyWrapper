@@ -16,6 +16,9 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
             let sources = DeviceSourcesSection(context: context)
             deviceSources = sources
             anchors["device-sources"] = sources.section
+            // Device hosts became rows of Device sources; its old anchor lands there. Both keys are in the Devices
+            // slice (ConcernSettingsView), since the slice filter keys the section by either.
+            anchors["device-hosts"] = sources.section
             body.append(sources.section)
             binder.add { [weak self] in
                 guard let self, let sources = self.deviceSources else { return }
