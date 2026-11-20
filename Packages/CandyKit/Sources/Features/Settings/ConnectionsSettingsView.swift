@@ -190,6 +190,8 @@ public struct ConnectionsActions {
     public var forgetLink: (String, String) -> Void = { _, _ in }
     /// A machine's "Update" (`ServerUpdateAction`) by environment id, and "Update all".
     public var updateServer: (String) -> Void = { _ in }
+    /// "Get more tunnels", "Link T3 Chat", "Upgrade on T3 Chat" (true) or "Manage tunnels" (false).
+    public var manageTunnels: (_ chat: Bool) -> Void = { _ in }
     public var updateAll: () -> Void = {}
     public init() {}
 }
@@ -477,6 +479,14 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         row.status = r.status
         row.statusIsError = r.statusIsError
         row.statusLink = r.statusMoreInfoURL.flatMap(URL.init(string:)).map { url in ("More info", { NSWorkspace.shared.open(url) }) }
+        if let tunnel = r.tunnel, !tunnel.isEmpty {
+            let view = (row.footer as? TunnelUsageView) ?? TunnelUsageView()
+            view.configure(tunnel)
+            view.onAction = { [weak self] chat in self?.actions.manageTunnels(chat) }
+            if row.footer !== view { row.footer = view } else { row.invalidateIntrinsicContentSize(); row.needsLayout = true }
+        } else if row.footer is TunnelUsageView {
+            row.footer = nil
+        }
         switch r.control {
         case .none:
             row.control = nil

@@ -277,12 +277,14 @@ extension SettingsController {
             : reachability?.status == "reachable" ? "This environment is available to your other devices through T3 Connect."
             : "T3 Connect is on. Reachability has not been checked yet."
         let unreachable = linkError == nil && reachability?.status == "unreachable"
+        // SavedEnvironmentRows.tsx:765-767 (#26369, #27442): the tunnel meter under the row once signed in.
         rows.append(.init(id: "t3-connect", title: "T3 Connect",
                           detail: detail,
                           status: linkError ?? reachability?.statusLine,
                           statusIsError: unreachable,
                           statusMoreInfoURL: unreachable ? reachability?.helpURL : nil,
-                          control: .toggle(.init(isOn: tunnel, isEnabled: false, tooltip: reason ?? Self.bridgeTooltip, label: "Enable T3 Connect"))))
+                          control: .toggle(.init(isOn: tunnel, isEnabled: false, tooltip: reason ?? Self.bridgeTooltip, label: "Enable T3 Connect")),
+                          tunnel: signedIn ? t3.tunnelUsage : nil))
         // Publishing alone needs a publish-only link; with the tunnel up it is a preference the server sets.
         rows.append(.init(id: "publish-agent-activity", title: "Publish agent activity",
                           detail: "Send activity to mobile notifications and Live Activities without T3 Connect.",

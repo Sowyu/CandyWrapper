@@ -106,6 +106,28 @@ struct RelayOkResponse: Codable, Sendable {
     var ok: Bool
 }
 
+/// `GET /v1/client/t3chat-link`: `RelayT3ChatLinkResponse` (relay.ts:972-987). `available` is false when this
+/// relay has no T3 Chat secret; `maxTunnelsOverride` is a manual cap that replaces the plan's.
+public struct RelayT3ChatLinkResponse: Codable, Sendable, Equatable {
+    public struct Link: Codable, Sendable, Equatable {
+        public var email: String
+        /// `free`, `pro` or `premier`.
+        public var plan: String
+        public init(email: String, plan: String) { self.email = email; self.plan = plan }
+    }
+    public var available: Bool
+    public var link: Link?
+    public var maxTunnelsOverride: Double?
+    public init(available: Bool, link: Link? = nil, maxTunnelsOverride: Double? = nil) {
+        self.available = available; self.link = link; self.maxTunnelsOverride = maxTunnelsOverride
+    }
+}
+
+/// `POST /v1/client/t3chat-link-requests`: the T3 Chat page that finishes linking (relay.ts:989-991).
+struct RelayT3ChatLinkRequestResponse: Codable, Sendable {
+    var url: String
+}
+
 /// Relay DPoP access-token scopes (relay.ts:733-741). `t3-web` may ask for the first two only
 /// (infra/relay/src/auth/RelayTokens.ts:63-73).
 public enum RelayScope {

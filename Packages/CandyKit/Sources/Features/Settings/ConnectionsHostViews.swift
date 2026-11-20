@@ -40,10 +40,12 @@ extension ConnectionsPageModel {
         public var control: Control
         /// `ServerUpdateProgress` in place of the description while an update runs or after it failed.
         public var progress: ServerUpdateState?
+        /// The T3 Connect row's tunnel meter and limit alert (SavedEnvironmentRows.tsx:765-767).
+        public var tunnel: TunnelUsageState?
         public init(id: String, title: String, detail: String? = nil, status: String? = nil, statusIsError: Bool = false,
-                    statusMoreInfoURL: String? = nil, control: Control = .none, progress: ServerUpdateState? = nil) {
+                    statusMoreInfoURL: String? = nil, control: Control = .none, progress: ServerUpdateState? = nil, tunnel: TunnelUsageState? = nil) {
             self.id = id; self.title = title; self.detail = detail; self.status = status; self.statusIsError = statusIsError; self.control = control
-            self.progress = progress; self.statusMoreInfoURL = statusMoreInfoURL
+            self.progress = progress; self.statusMoreInfoURL = statusMoreInfoURL; self.tunnel = tunnel
         }
 
         /// The `Version` row: `<version> · <url>` and `Up to date`.
