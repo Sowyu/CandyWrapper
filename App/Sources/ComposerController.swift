@@ -1491,6 +1491,8 @@ final class ComposerController {
         }
         composer.text = ""
         remember("")
+        // The text may already be empty, so redraw the attachment chips here (useComposerSend.ts:631-636).
+        refresh()
         Task { [weak self] in
             let started = await onSideChat(message)
             guard let self else { return }
