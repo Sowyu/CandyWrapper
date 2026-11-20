@@ -459,7 +459,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| d27002bf99 | #28687 | settings | feat(web): unassign default keyboard shortcuts | port |
+| d27002bf99 | #28687 | settings | feat(web): unassign default keyboard shortcuts | ported (settings-4928): Unassign on default rows, the Unassigned button and note, conflicts and the restored condition |
 
 ## Port group browser (1)
 
