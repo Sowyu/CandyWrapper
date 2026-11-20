@@ -1,5 +1,7 @@
 # Connectors tab
 
+> Removed on 2026-11-21 at the user's request, with the CandyWrapper Helper. This file is history; see `docs/research/connectors-removal-2026-11-21.md`. The MCP servers and skills it set up stay in each machine's Claude and Codex configuration.
+
 Redesign's Settings > Connectors lists the MCP servers and skills that Claude Code and Codex use on each machine, and turns them on or off, adds servers and removes them. T3 has no RPC for any of this: skills come read-only in the provider snapshot (`packages/contracts/src/server.ts:108`), and T3 adds its own `t3-code` server to every thread at run time, so the tab shows that one as "Always on". Built 2026-10-25.
 
 ## How a machine is read and changed

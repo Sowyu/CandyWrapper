@@ -15,8 +15,6 @@ let package = Package(
         .library(name: "T3Client", targets: ["T3Client"]),
         .library(name: "T3Store", targets: ["T3Store"]),
         .library(name: "Features", targets: ["Features"]),
-        .library(name: "AgentConfig", targets: ["AgentConfig"]),
-        .executable(name: "candywrapper-helper", targets: ["CandyHelper"]),
     ],
     dependencies: [
         // SwiftTerm v1.19.0, vendored (Packages/SwiftTerm/README.md says why).
@@ -32,13 +30,8 @@ let package = Package(
         .target(name: "T3Client", dependencies: ["T3Protocol", "T3Transport"], swiftSettings: sizeOptimized),
         // Normalized state and reducers fed by T3Client streams.
         .target(name: "T3Store", dependencies: ["T3Protocol"], swiftSettings: sizeOptimized),
-        // Reads and edits the MCP servers and skills of Claude Code and Codex in a home folder. Foundation only, so the
-        // Linux helper's `config` command and the app share it.
-        .target(name: "AgentConfig", swiftSettings: sizeOptimized),
-        // The helper for macOS and Linux: the Connectors tab's `config` command (docs/connectors.md). Foundation only.
-        .executableTarget(name: "CandyHelper", dependencies: ["AgentConfig"], swiftSettings: sizeOptimized),
         // Screens built from DesignSystem components and fed by T3Store (sidebar, timeline, composer...).
-        .target(name: "Features", dependencies: ["DesignSystem", "T3Store", "T3Protocol", "AgentConfig", .product(name: "SwiftTerm", package: "SwiftTerm")], resources: [.copy("Resources/candy-town.gray"), .copy("Resources/pele.global.js.lzma"), .copy("Resources/LICENSE-pele.txt"), .copy("Resources/native-licenses.json"),
+        .target(name: "Features", dependencies: ["DesignSystem", "T3Store", "T3Protocol", .product(name: "SwiftTerm", package: "SwiftTerm")], resources: [.copy("Resources/candy-town.gray"), .copy("Resources/pele.global.js.lzma"), .copy("Resources/LICENSE-pele.txt"), .copy("Resources/native-licenses.json"),
                          .copy("Resources/SymbolsNerdFontMono-Regular.ttf"), .copy("Resources/LICENSE-symbols-nerd-font.txt"),
                          .copy("Resources/latinmodern-math.otf"), .copy("Resources/mcp-logos"), .copy("Resources/LICENSE-latin-modern-math.txt")],
                 swiftSettings: sizeOptimized),
@@ -46,7 +39,6 @@ let package = Package(
         .testTarget(name: "T3ProtocolTests", dependencies: ["T3Protocol"]),
         .testTarget(name: "T3ClientTests", dependencies: ["T3Client", "T3Transport"]),
         .testTarget(name: "T3StoreTests", dependencies: ["T3Store"]),
-        .testTarget(name: "AgentConfigTests", dependencies: ["AgentConfig"]),
         .testTarget(name: "FeaturesTests", dependencies: ["Features", "DesignSystem", "T3Store", "T3Protocol", .product(name: "SwiftTerm", package: "SwiftTerm")], exclude: ["Fixtures"]),
     ]
 )

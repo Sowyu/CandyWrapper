@@ -1,17 +1,8 @@
 import Foundation
 
-/// What a CandyWrapper client types into a hidden T3 terminal to run the helper's `config` command (docs/connectors.md)
-/// or remove an old Orchestrator relay helper, and how it reads the answer.
+/// What a CandyWrapper client types into a hidden T3 terminal to remove an old Orchestrator relay helper, and how it
+/// reads the answer. The helper itself was removed with Connectors (docs/research/connectors-removal-2026-11-21.md).
 public enum HelperInstall {
-    /// A helper build: its version, where its downloads live and each platform's SHA-256 (scripts/build-helper).
-    public struct Release: Codable, Equatable, Sendable {
-        public var version: String
-        public var baseURL: URL
-        /// `darwin-universal`, `linux-x86_64` and `linux-aarch64` to the hex SHA-256 of that tarball.
-        public var sums: [String: String]
-        public init(version: String, baseURL: URL, sums: [String: String]) { self.version = version; self.baseURL = baseURL; self.sums = sums }
-    }
-
     /// The label the old relay helper's sessions carried, "CandyWrapper Helper <version> on <machine>".
     public static func sessionLabel(version: String, home: String) -> String { "CandyWrapper Helper \(version) on \(home)" }
 
@@ -21,43 +12,10 @@ public enum HelperInstall {
         return String(label[label.index(label.startIndex, offsetBy: "CandyWrapper Helper ".count)..<on.lowerBound])
     }
 
-    /// One line for whatever shell the terminal runs: everything inside `sh -c '…'`, which zsh, bash and fish all
-    /// accept, and a leading space keeps it out of history where the shell honours that. The markers are built from
-    /// parts, so the shell echoing this line never reads as a result. `testHome` sets `CANDY_HELPER_HOME`.
-    ///
-    /// Runs `candywrapper-helper config get|set` from this release's folder on any machine, downloading and checking
-    /// that version first when it isn't there, without installing a service (docs/connectors.md). `configHome` sets
-    /// `--config-home` for a test home.
-    public static func configCommand(_ release: Release, set: Bool, testHome: String? = nil, configHome: String? = nil) -> String {
-        let home = configHome.map { " --config-home \(quoteless($0))" } ?? ""
-        let reuse = "if [ ! -x \"$d/versions/$v/candywrapper-helper\" ];then "
-        return " sh -c '\(fetch(release, testHome: testHome, prefix: reuse))fi;exec \"$d/versions/$v/candywrapper-helper\" config \(set ? "set" : "get")\(home)'\n"
-    }
-
-    /// The script up to a checked, unpacked `$f/candywrapper-helper` for this machine. `prefix` goes between finding
-    /// the folder and downloading, so a caller can skip the download.
-    static func fetch(_ release: Release, testHome: String?, prefix: String = "") -> String {
-        func sum(_ p: String) -> String { release.sums[p] ?? "missing" }
-        let data = testHome.map { "d=\(quoteless($0));export CANDY_HELPER_HOME=\"$d\";" } ?? ""
-        return """
-        set -eu;R=CWH-RES;R=${R}ULT;v=\(quoteless(release.version));b=\(quoteless(release.baseURL.absoluteString));\
-        case "$(uname -s)-$(uname -m)" in \
-        Darwin-*) p=darwin-universal;s=\(sum("darwin-universal"));d="$HOME/Library/Application Support/CandyWrapper Helper";; \
-        Linux-x86_64) p=linux-x86_64;s=\(sum("linux-x86_64"));d="${XDG_DATA_HOME:-$HOME/.local/share}/candywrapper-helper";; \
-        Linux-aarch64|Linux-arm64) p=linux-aarch64;s=\(sum("linux-aarch64"));d="${XDG_DATA_HOME:-$HOME/.local/share}/candywrapper-helper";; \
-        *) echo "$R failed this machine ($(uname -sm)) has no helper build";exit 1;; esac;\(data)\(prefix)\
-        f="$d/versions/$v";mkdir -p "$f";t="$f/download.tgz";u="$b/candywrapper-helper-$v-$p.tar.gz";\
-        if command -v curl >/dev/null 2>&1;then curl -fsSL "$u" -o "$t" || { echo "$R failed the download from $u did not work";exit 1; };\
-        elif command -v wget >/dev/null 2>&1;then wget -qO "$t" "$u" || { echo "$R failed the download from $u did not work";exit 1; };\
-        else echo "$R failed this machine has neither curl nor wget";exit 1;fi;\
-        h=$( (sha256sum "$t" 2>/dev/null || shasum -a 256 "$t") | cut -d" " -f1);\
-        [ "$h" = "$s" ] || { rm -f "$t";echo "$R failed the checksum of the download did not match";exit 1; };\
-        tar xzf "$t" -C "$f";rm -f "$t";
-        """
-    }
-
     /// Removes an Orchestrator relay helper that CandyWrapper 1.14 or older installed, through that installed binary's own
-    /// `uninstall` (it stops the service and deletes its tokens and files), or says it wasn't there.
+    /// `uninstall` (it stops the service and deletes its tokens and files), or says it wasn't there. One line for any
+    /// shell inside `sh -c '…'`, and a leading space keeps it out of history. The markers are built from parts, so the
+    /// shell echoing this line never reads as a result. `testHome` sets `CANDY_HELPER_HOME`.
     public static func uninstallCommand(testHome: String? = nil) -> String {
         let data = testHome.map { "d=\(quoteless($0));export CANDY_HELPER_HOME=\"$d\";" }
             ?? #"case "$(uname -s)" in Darwin) d="$HOME/Library/Application Support/CandyWrapper Helper";; *) d="${XDG_DATA_HOME:-$HOME/.local/share}/candywrapper-helper";; esac;"#
@@ -65,15 +23,9 @@ public enum HelperInstall {
         return " sh -c '\(script)'\n"
     }
 
-
     public enum Line: Equatable, Sendable {
-        /// `config set` turned echo off and waits for the changes.
-        case ready
         case ok(String)
         case failed(String)
-        case warning(String)
-        /// `config` printed a machine's MCP servers and skills: base64 JSON, `ConfigWire` in AgentConfig.
-        case config(String)
     }
 
     /// The marker lines in a stretch of terminal output, colours and carriage returns removed. Only lines that start
@@ -82,9 +34,7 @@ public enum HelperInstall {
         let plain = output.replacingOccurrences(of: #"\x{1B}\[[0-9;?]*[ -/]*[@-~]|\x{1B}\][^\x{07}]*\x{07}"#, with: "", options: .regularExpression)
         return plain.split(whereSeparator: \.isNewline).compactMap { raw -> Line? in
             let line = raw.trimmingCharacters(in: .whitespaces)
-            if line == "CWH-READY" { return .ready }
-            if line.hasPrefix("CWH-CONFIG ") { return .config(String(line.dropFirst("CWH-CONFIG ".count))) }
-            for (prefix, make) in [("CWH-RESULT ok", Line.ok), ("CWH-RESULT failed", Line.failed), ("CWH-WARNING", Line.warning)] as [(String, (String) -> Line)]
+            for (prefix, make) in [("CWH-RESULT ok", Line.ok), ("CWH-RESULT failed", Line.failed)] as [(String, (String) -> Line)]
             where line.hasPrefix(prefix) {
                 return make(line.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces))
             }
@@ -93,7 +43,7 @@ public enum HelperInstall {
     }
 
     /// Collects the marker lines of a terminal's output as it arrives. Each finished line is scanned once and only the
-    /// unfinished one is kept, so a `CWH-CONFIG` line of any length survives (audit OH-1: a 64K-character tail lost it).
+    /// unfinished one is kept, so a marker split across chunks still counts.
     public struct MarkerReader: Sendable {
         public private(set) var lines: [Line] = []
         public private(set) var started = false
@@ -103,7 +53,7 @@ public enum HelperInstall {
         public mutating func append(_ chunk: String) {
             started = started || !chunk.isEmpty
             guard let cut = chunk.lastIndex(where: \.isNewline) else {
-                // ponytail: a line past 16M characters is dropped; a config that large would be dropped by base64 decode anyway
+                // ponytail: a line past 16M characters is dropped; markers are short, raise it only if one ever isn't
                 partial = partial.count + chunk.count > 16_000_000 ? "" : partial + chunk
                 return
             }

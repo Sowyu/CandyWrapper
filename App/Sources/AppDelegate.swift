@@ -31,7 +31,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var welcomeOnboarding: WelcomeOnboardingController?
     private var snapShots: SnapShotController?
     private var openIn: OpenInController?
-    private var connectors: ConnectorsController?
     /// Removes what the deleted Orchestrator left behind, once (`OrchestratorCleanup`).
     private var orchestratorCleanup: OrchestratorCleanupRunner?
     /// Built on the first Cmd+Q hold.
@@ -306,9 +305,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             commands?.showThreadMenu(id, event: event, view: view, anchor: anchor, rename: { [weak threads] in threads?.panel.header.beginTitleRename() })
         }
         orchestratorCleanup = OrchestratorCleanupRunner(environments: environments)
-        let connectors = ConnectorsController(environments: environments)
-        self.connectors = connectors
-        connectors.toast = { [weak settings] title, message, kind in settings?.toast(title, message, kind) }
         sidebar.actions.openSettings = { [weak settings] in settings?.open() }
         sidebar.accountRow.onOpenMachines = { [weak settings] in settings?.open(.connections) }
         sidebar.actions.openAutomations = { [weak settings] in settings?.show(.scheduledTasks) }

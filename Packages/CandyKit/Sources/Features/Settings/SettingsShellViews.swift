@@ -6,8 +6,6 @@ import DesignSystem
 public enum SettingsSection: String, CaseIterable, Sendable {
     case general, appearance, chat, diffs, keybindings, voice, snapShots, providers, threads, browser, devices, scheduledTasks, projects, sourceControl, worktrees, connections, access, maintenance, beta, about, archive
     case integrations, storage
-    /// Redesign's Connectors tab, CandyWrapper's own; never in T3's nav.
-    case connectors
     /// CandyWrapper's own experimental switches, so it sits last in T3's nav too.
     case experimental
     /// CandyWrapper's own: the Redesign switch and every Redesign-only setting, beside Experimental.
@@ -40,7 +38,6 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .connections: "Environments"
         case .beta: "Labs"
         case .archive: "Archive"
-        case .connectors: "Connectors"
         case .experimental: "Experimental"
         case .redesign: "Redesign"
         case .diagnostics: "Diagnostics"
@@ -73,7 +70,6 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .connections: .server
         case .beta: .flaskConical
         case .archive: .archive
-        case .connectors: .plug2
         case .experimental: .flaskConical
         case .redesign: .paintbrush
         case .diagnostics: .activity
@@ -136,13 +132,6 @@ public final class SettingsSidebarView: DSView {
     private var groupLabels: [String: LabelView] = [:]
     private let navDocument = DSView()
     private lazy var navScroll = ScrollAreaView(documentView: navDocument)
-    private var shownGroups: [(label: String?, sections: [SettingsSection])] {
-        var groups = SettingsSection.navGroups
-        if isDither {
-            groups[1].sections.insert(.connectors, at: 1)
-        }
-        return groups
-    }
     let ditherBack = DitherSettingsNavRow("Back", icon: .arrowLeft)
     let ditherSignIn = DitherSettingsNavRow("Sign in to T3 Connect", icon: .logIn)
     private let searchFill = CALayer()
@@ -257,7 +246,7 @@ public final class SettingsSidebarView: DSView {
                 navDocument.addSubview(label)
             }
         }
-        for section in SettingsSection.navSections + [.connectors] {
+        for section in SettingsSection.navSections {
             let row = DitherSettingsNavRow(section.label, icon: section.icon)
             row.action = { [weak self] in self?.select(section) }
             concernRows[section] = row
@@ -501,7 +490,7 @@ public final class SettingsSidebarView: DSView {
     private func layoutConcernNavigation(top: CGFloat, bottom: CGFloat, dither: Bool) {
         navScroll.frame = NSRect(x: 0, y: top, width: bounds.width, height: max(0, bottom - top))
         var y: CGFloat = 0
-        for (index, group) in shownGroups.enumerated() {
+        for (index, group) in SettingsSection.navGroups.enumerated() {
             if index > 0 { y += dither ? 12 : 16 }
             if let title = group.label, let label = groupLabels[title] {
                 // Nightly 3754 SettingsSidebarNav.tsx:368-380: 16px heading, then gap-1.

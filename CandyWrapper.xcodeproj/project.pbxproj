@@ -48,7 +48,6 @@
 		86490D7A879DABA1B452C9CA /* SettingsPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3AD2B66BFFAE98BD79A1639 /* SettingsPages.swift */; };
 		87959F581610CF381EEC6C11 /* UsageController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35F79E1B4BAC92B09DE28732 /* UsageController.swift */; };
 		8B5000EC121D76409EE8339E /* HiddenTerminal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31C34F45503302E5FDFE2CAD /* HiddenTerminal.swift */; };
-		8EF4E37990764D849AAC2FCA /* ConnectorsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33B41C0351125703267D7257 /* ConnectorsController.swift */; };
 		92244318ECA32C3BFA0848DD /* UpdateTrackSwitch.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACD8432E2FFEEF1BC89F1116 /* UpdateTrackSwitch.swift */; };
 		940F19905C851EDA3FE6A6C9 /* PeerLinkDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DFD350D71DAD207A7E9B05B /* PeerLinkDialog.swift */; };
 		95C9CA154F0B56C69199D763 /* ComposerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56396DA448A1952FDC05BF3E /* ComposerController.swift */; };
@@ -64,7 +63,7 @@
 		B0FD8497FA26F3D6AFA57D77 /* SettingsLinkedEnvironments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 918DCEC947F90301FC26C9DA /* SettingsLinkedEnvironments.swift */; };
 		B41DB44EA6F4544C9B9E24BE /* Features in Frameworks */ = {isa = PBXBuildFile; productRef = 54CB6DADB388C03EE21F5713 /* Features */; };
 		B423C6F5B35C38DA8DE052DC /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9180310B966F99CABD99C1F5 /* UpdateController.swift */; };
-		BDA16E87CBD63885B93ACFBC /* AgentConfig in Frameworks */ = {isa = PBXBuildFile; productRef = EC8A3EA1E208175FE308C2B6 /* AgentConfig */; };
+		BDA16E87CBD63885B93ACFBC /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 360B9D001D2A45C506332714 /* Sparkle */; };
 		BDDAD381D146759DB3794FBE /* snap-shot-click.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 2F5325F9CBCE93872073AE32 /* snap-shot-click.mp3 */; };
 		BF1F29DA6CF47B45F5F97BB4 /* notification-input.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 162121B8686607C8F5B9672C /* notification-input.mp3 */; };
 		C96452D36BFF7AE73672A212 /* T3Client in Frameworks */ = {isa = PBXBuildFile; productRef = C7D08B4D8BE9EBFA3061FF4B /* T3Client */; };
@@ -77,7 +76,6 @@
 		E1C507709202FD4039E66D29 /* CodexAuthCallbackReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08F7F6C5F7484632BD71DBDD /* CodexAuthCallbackReceiver.swift */; };
 		EB86443F1218E9073AE558A0 /* T3ConnectController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B1A20A927434B822A78FBE /* T3ConnectController.swift */; };
 		EDCEDD28D34C606C2F67CDED /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 0DD18B055E5BF454B9B77F4B /* AppIcon.icon */; };
-		F5114B7703115945AB79EA89 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 360B9D001D2A45C506332714 /* Sparkle */; };
 		FA9395D49D4C669E1AC1D6AE /* IssuesPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5221FE8A89F8B7C0DD3E9D74 /* IssuesPage.swift */; };
 		FD527A8A503C35A242372CD0 /* Shortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 527913F33E671EBA3009A953 /* Shortcuts.swift */; };
 /* End PBXBuildFile section */
@@ -93,7 +91,6 @@
 		2926272AC3C094AAEFF9248C /* PullRequestsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PullRequestsPage.swift; sourceTree = "<group>"; };
 		2F5325F9CBCE93872073AE32 /* snap-shot-click.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "snap-shot-click.mp3"; sourceTree = "<group>"; };
 		31C34F45503302E5FDFE2CAD /* HiddenTerminal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiddenTerminal.swift; sourceTree = "<group>"; };
-		33B41C0351125703267D7257 /* ConnectorsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectorsController.swift; sourceTree = "<group>"; };
 		34FA0C9EAFA2AAF296BE7988 /* UpdateEverything.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateEverything.swift; sourceTree = "<group>"; };
 		35F79E1B4BAC92B09DE28732 /* UsageController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageController.swift; sourceTree = "<group>"; };
 		37909056866A108B1B58D3C6 /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
@@ -163,8 +160,7 @@
 				C96452D36BFF7AE73672A212 /* T3Client in Frameworks */,
 				7C70E3ADB96731F3DE5963C8 /* T3Store in Frameworks */,
 				B41DB44EA6F4544C9B9E24BE /* Features in Frameworks */,
-				BDA16E87CBD63885B93ACFBC /* AgentConfig in Frameworks */,
-				F5114B7703115945AB79EA89 /* Sparkle in Frameworks */,
+				BDA16E87CBD63885B93ACFBC /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -205,7 +201,6 @@
 				B45A4AF73DCE28967A5B7B5E /* BrowserController.swift */,
 				08F7F6C5F7484632BD71DBDD /* CodexAuthCallbackReceiver.swift */,
 				56396DA448A1952FDC05BF3E /* ComposerController.swift */,
-				33B41C0351125703267D7257 /* ConnectorsController.swift */,
 				E6328A5E8DA411428DDB1363 /* DesktopManagedController.swift */,
 				3FB28D3B3DDFE3381D8B0971 /* DevicePanelController.swift */,
 				F3F9CF3EEFBA5031F1DD6EF6 /* DitherTabsController.swift */,
@@ -316,7 +311,6 @@
 				C7D08B4D8BE9EBFA3061FF4B /* T3Client */,
 				8A26017E3FA14E25E7143DA8 /* T3Store */,
 				54CB6DADB388C03EE21F5713 /* Features */,
-				EC8A3EA1E208175FE308C2B6 /* AgentConfig */,
 				360B9D001D2A45C506332714 /* Sparkle */,
 			);
 			productName = CandyWrapper;
@@ -409,7 +403,6 @@
 				237342D7C8F16250C670D589 /* BrowserController.swift in Sources */,
 				E1C507709202FD4039E66D29 /* CodexAuthCallbackReceiver.swift in Sources */,
 				95C9CA154F0B56C69199D763 /* ComposerController.swift in Sources */,
-				8EF4E37990764D849AAC2FCA /* ConnectorsController.swift in Sources */,
 				DA045A39A44D87162AAD179E /* DesktopManagedController.swift in Sources */,
 				CC7E68D849C3162650E6B75F /* DevicePanelController.swift in Sources */,
 				80DAB922301CBC091192A970 /* DitherTabsController.swift in Sources */,
@@ -711,10 +704,6 @@
 		C7D08B4D8BE9EBFA3061FF4B /* T3Client */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = T3Client;
-		};
-		EC8A3EA1E208175FE308C2B6 /* AgentConfig */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = AgentConfig;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

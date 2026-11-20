@@ -2,34 +2,29 @@ import Foundation
 import Testing
 @testable import T3Store
 
-/// What a client types to run the helper's `config` or remove an old relay helper, and how it reads the terminal back.
+/// What a client types to remove an old relay helper, and how it reads the terminal back.
 @Suite struct HelperInstallTests {
-    let release = HelperInstall.Release(version: "1.14.0", baseURL: URL(string: "https://github.com/Sowyu/CandyWrapper/releases/download/v1.14.0")!,
-                                        sums: ["darwin-universal": "aa", "linux-x86_64": "bb", "linux-aarch64": "cc"])
-
-    /// Audit OH-1: a config line longer than the old 64K-character tail keeps its marker, however the output is cut.
-    @Test func aLongConfigLineSurvivesEveryChunkSize() {
-        let config = String(repeating: "QUJDRA==", count: 110_840 / 8)
-        let output = "$ candywrapper-helper config get\r\n\u{1B}[0mCWH-CONFIG \(config)\r\nCWH-RESULT ok\r\n$ "
-        for width in [256, 4_096, 1_000_000] {
+    /// A result line split across output chunks still reads as one marker.
+    @Test func aMarkerSurvivesEveryChunkSize() {
+        let output = "$ sh -c '…'\r\n\u{1B}[0mstopped the service\r\nCWH-RESULT ok removed\r\n$ "
+        for width in [1, 7, 4_096] {
             var reader = HelperInstall.MarkerReader()
             var rest = Substring(output)
             while !rest.isEmpty { reader.append(String(rest.prefix(width))); rest = rest.dropFirst(width) }
             #expect(reader.started)
-            #expect(reader.lines == [.config(config), .ok("")], "chunk width \(width)")
+            #expect(reader.lines == [.ok("removed")], "chunk width \(width)")
         }
     }
 
     /// The terminal echoes the typed line, which must never read as a result.
     @Test func theEchoedCommandCarriesNoMarker() {
-        #expect(HelperInstall.scan(HelperInstall.configCommand(release, set: true)).isEmpty)
         #expect(HelperInstall.scan(HelperInstall.uninstallCommand()).isEmpty)
     }
 
     @Test func readsMarkersThroughColoursAndCarriageReturns() {
-        let output = "% sh -c '…'\r\n\u{1B}[0mCWH-READY\r\npaired miniko\r\nCWH-WARNING Lingering is off\r\n\u{1B}[1mCWH-RESULT ok 1.14.0 loopback http://127.0.0.1:3773\u{1B}[0m\r\n"
-        #expect(HelperInstall.scan(output) == [.ready, .warning("Lingering is off"), .ok("1.14.0 loopback http://127.0.0.1:3773")])
-        #expect(HelperInstall.scan("CWH-RESULT failed the checksum of the download did not match\n") == [.failed("the checksum of the download did not match")])
+        let output = "% sh -c '…'\r\n\u{1B}[0mstopped com.sowyu.candywrapper.helper\r\n\u{1B}[1mCWH-RESULT ok removed\u{1B}[0m\r\n"
+        #expect(HelperInstall.scan(output) == [.ok("removed")])
+        #expect(HelperInstall.scan("CWH-RESULT failed launchctl bootout returned 5\n") == [.failed("launchctl bootout returned 5")])
     }
 
     @Test func theSessionLabelCarriesTheVersion() {
@@ -38,15 +33,9 @@ import Testing
         #expect(HelperInstall.version(fromSessionLabel: "CandyWrapper on MacBook") == nil)
     }
 
-    @Test func noValueCanBreakOutOfTheQuotes() {
-        let command = HelperInstall.configCommand(release, set: false, testHome: "/tmp/x'; rm -rf ~; '", configHome: "~'$(id)'")
-        let body = command.dropFirst(" sh -c '".count).dropLast("'\n".count)
-        #expect(!body.contains("'"))
-    }
-
-    /// Both commands parse as POSIX sh.
+    /// The uninstall line parses as POSIX sh, with or without a test home.
     @Test func theCommandsAreValidShell() throws {
-        for command in [HelperInstall.configCommand(release, set: true, testHome: "/tmp/x y", configHome: "/tmp/h"), HelperInstall.uninstallCommand()] {
+        for command in [HelperInstall.uninstallCommand(testHome: "/tmp/x y"), HelperInstall.uninstallCommand()] {
             let body = String(command.dropFirst(" sh -c '".count).dropLast("'\n".count))
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
