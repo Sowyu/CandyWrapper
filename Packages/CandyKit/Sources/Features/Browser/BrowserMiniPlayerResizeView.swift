@@ -19,7 +19,9 @@ enum BrowserMiniPlayerResizeDirection: CaseIterable {
         let desired = (west || east) && (north || south)
             ? (desiredWidth + desiredHeight / aspect) / (1 + 1 / (aspect * aspect))
             : (west || east) ? desiredWidth : desiredHeight * aspect
-        let width = min(max(desired, 240, 150 * aspect), max(1, maxWidth), max(1, maxHeight * aspect)).rounded()
+        // A player already under the minimum does not grow on an inward drag (previewMiniPlayerLayout.ts:314-319, #26027).
+        let minimum = min(start.width, max(240, 150 * aspect))
+        let width = min(max(desired, minimum), max(1, maxWidth), max(1, maxHeight * aspect)).rounded()
         let size = CGSize(width: width, height: (width / aspect).rounded())
         let origin = CGPoint(x: west ? start.maxX - size.width : start.minX, y: north ? start.maxY - size.height : start.minY)
         return BrowserMiniPlayerView.frame(size: size, origin: origin, container: CGRect(origin: .zero, size: container))

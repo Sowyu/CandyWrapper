@@ -733,24 +733,24 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 8f6c9b7144 | #23338 | browser | fix(web): preserve typed dimensions with the aspect ratio locked | left (panels-2): not checked |
-| 083c903950 | #26233 | browser | fix(web): right panel's tab bar no longer slides under the title bar controls | left (panels-2): not checked |
-| cde3620577 | #26633 | browser | fix(web): forward native Copy and Cut from server browser tabs | left (panels-2): not checked |
-| 9cb59bf858 | #22328 | browser | fix(web): mod+L focuses the browser address bar from a focused page | left (panels-2): not checked |
-| 17948307cc | #28064 | browser | fix(client): the folder browser shows folders added or removed while T3 runs | left (panels-2): not checked |
+| 8f6c9b7144 | #23338 | browser | fix(web): preserve typed dimensions with the aspect ratio locked | already in CandyWrapper (panels-3): with the lock on, BrowserDeviceToolbarView.edit keeps the typed field's text and rewrites only the other field |
+| 083c903950 | #26233 | browser | fix(web): right panel's tab bar no longer slides under the title bar controls | left (panels-3): the right panel's close motion lives in Features/Thread RightPanelView, another agent's area; needs an on-screen check of the tab bar against the title bar controls |
+| cde3620577 | #26633 | browser | fix(web): forward native Copy and Cut from server browser tabs | ported (panels-3): Edit menu Copy and Cut send Control+C or X to a server tab the user controls, ServerBrowserView.copy/cut |
+| 9cb59bf858 | #22328 | browser | fix(web): mod+L focuses the browser address bar from a focused page | already in CandyWrapper (panels-3): the shortcut registry runs preview.focusUrl whatever has focus (BrowserController.swift:907-911); on-screen check wanted with the page focused |
+| 17948307cc | #28064 | browser | fix(client): the folder browser shows folders added or removed while T3 runs | already in CandyWrapper (panels-3): PaletteAddProject drops its folder listings each time the palette closes (reset(), browseCache), so a reopened browser reads folders fresh |
 | 6717d92cf3 | #28243 | browser | fix(web): Tab completes folder names in the add-project browser | ported (panels-2): Tab opens the highlighted or only folder, or extends to the common prefix, Mode.onTab in CommandPaletteController |
-| b5d9f85b9a | #26027 | browser | fix(web): keep inward mini browser resizes from growing | left (panels-2): not checked |
-| 1436c4571f | #29347 | browser | fix(client-runtime): connect to the primary environment while the browser reports offline | left (panels-2): not checked |
-| 350ecd63be | #32569 | browser | fix(web): closing the right panel returns focus to where it was | left (panels-2): not checked |
-| 7c76c9ddc2 | #30882 | browser | fix(web): mouse back/forward over the right panel no longer moves the main chat | left (panels-2): not checked |
-| 2e18418abf | #34859 | browser | fix(web): Incognito browser visits stay out of project history | left (panels-2): not checked |
-| e6119fdf68 | #35143 | browser | fix(web): browser settings changed in project scope no longer overwrite the global default | left (panels-2): not checked |
-| ff1eead6f4 | #35947 | browser | fix(web): zoom shortcuts work while a desktop browser page has focus | left (panels-2): not checked |
-| 0f13d638af | #29475 | browser | fix(browser): Stop cancels loading pages | left (panels-2): not checked |
-| be5f805964 | #34943 | browser | fix(web): new desktop browser tabs open at the default zoom and appearance | left (panels-2): not checked |
-| 651accb100 | #25874 | browser | fix(web): new browser tabs open at your default zoom and appearance | left (panels-2): not checked |
-| 675fb1d9a7 | #36846 | browser | fix(web): show Browser device preferences read-only for projects | left (panels-2): not checked |
-| 6fc2fb192c | #35299 | browser | fix(web): desktop browser tabs show native navigation immediately | left (panels-2): not checked |
+| b5d9f85b9a | #26027 | browser | fix(web): keep inward mini browser resizes from growing | ported (panels-3): an inward drag keeps a player already under the 240pt minimum, BrowserMiniPlayerResizeDirection.resized |
+| 1436c4571f | #29347 | browser | fix(client-runtime): connect to the primary environment while the browser reports offline | already in CandyWrapper (panels-3): a loopback primary ignores offline reports (ConnectionSupervisor ignoresOffline, RouteKind.isLoopback) |
+| 350ecd63be | #32569 | browser | fix(web): closing the right panel returns focus to where it was | left (panels-3): returning focus when the right panel closes belongs to Features/Thread RightPanelView, another agent's area |
+| 7c76c9ddc2 | #30882 | browser | fix(web): mouse back/forward over the right panel no longer moves the main chat | ported (panels-3): the mouse's back and forward buttons over a server tab move its history and nothing else, ServerBrowserView.onThumbNavigate; CandyWrapper's chat has no thumb navigation to move |
+| 2e18418abf | #34859 | browser | fix(web): Incognito browser visits stay out of project history | ported (panels-3): an address bar visit in an Incognito tab stays out of the project's history, BrowserController onSubmit |
+| e6119fdf68 | #35143 | browser | fix(web): browser settings changed in project scope no longer overwrite the global default | left (panels-3): browser settings in project scope live in Features/Settings, held for the Settings agent |
+| ff1eead6f4 | #35947 | browser | fix(web): zoom shortcuts work while a desktop browser page has focus | already in CandyWrapper (panels-3): zoom shortcuts go through the same registry as preview.focusUrl, so a focused page keeps them; on-screen check wanted |
+| 0f13d638af | #29475 | browser | fix(browser): Stop cancels loading pages | ported (panels-3): the refresh button stops a loading page and its tooltip says Stop; sends `stopLoading`, which 3824 servers ignore |
+| be5f805964 | #34943 | browser | fix(web): new desktop browser tabs open at the default zoom and appearance | n/a (panels-3): desktop (Electron) tabs; CandyWrapper's server tabs get the same defaults through #25874 |
+| 651accb100 | #25874 | browser | fix(web): new browser tabs open at your default zoom and appearance | ported (panels-3): preview.open carries browserDefaultZoomFactor and browserDefaultAppearance, PreviewRPC.openPayload |
+| 675fb1d9a7 | #36846 | browser | fix(web): show Browser device preferences read-only for projects | left (panels-3): Browser device preferences read-only for projects is a Features/Settings change, held for the Settings agent |
+| 6fc2fb192c | #35299 | browser | fix(web): desktop browser tabs show native navigation immediately | n/a (panels-3): Electron tab navigation state; CandyWrapper has only server tabs |
 
 ## Small fixes, composer (120)
 
