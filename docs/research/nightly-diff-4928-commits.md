@@ -145,10 +145,10 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 4ac97be2b6 | #28104 | settings | feat(scheduler): run a scheduled task once at a specific date and time | port |
-| 4aab23cd72 | #30326 | settings | feat: scheduled tasks can run in one thread with a fresh session each run | port |
-| 4a087861d0 | #31764 | settings | feat(scheduled-tasks): tasks link to their thread | port |
-| 8e6a732305 | #31379 | settings | feat(web,mobile): move a scheduled task to another thread | port |
+| 4ac97be2b6 | #28104 | settings | feat(scheduler): run a scheduled task once at a specific date and time | ported (settings-4928): Once with a calendar date and a time field |
+| 4aab23cd72 | #30326 | settings | feat: scheduled tasks can run in one thread with a fresh session each run | ported (settings-4928): Destination mode select and notes, threadMode sent behind scheduledTaskThreadModes |
+| 4a087861d0 | #31764 | settings | feat(scheduled-tasks): tasks link to their thread | ported (settings-4928): bound tasks link to their thread from the row |
+| 8e6a732305 | #31379 | settings | feat(web,mobile): move a scheduled task to another thread | ported (settings-4928): Destination thread menu, move and unbind rules; no thread search yet |
 
 ## Port group subagent-approvals (1)
 
@@ -285,7 +285,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| c864b1c1e1 | #22160 | sidebar | feat(web): delete archived threads from the archive page | port |
+| c864b1c1e1 | #22160 | sidebar | feat(web): delete archived threads from the archive page | already in CandyWrapper: Features/Settings/ArchiveSettingsView.swift:185 deletes archived threads |
 
 ## Port group questions (1)
 
@@ -1259,7 +1259,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | ab9e6a2792 | #36437 | settings | fix(web): closing Settings no longer leaves it as a back/forward stop | port |
 | 62ba72fa15 | #36477 | settings | fix(web): onboarding rechecks an agent when its install command finishes | port |
 | a81ec88f58 | #24641 | settings | fix(clients): allow portable provider handoffs after detach | port |
-| fe873f82c1 | #23578 | settings | fix(web): confirm before deleting scheduled tasks | port |
+| fe873f82c1 | #23578 | settings | fix(web): confirm before deleting scheduled tasks | ported (settings-4928): Delete asks first |
 | b2259d3c6c | #23590 | settings | fix(web): show working state while provider sessions start | port |
 | 000d82dc67 | #25130 | settings | fix(web): Esc closes the theme editor, not Settings | port |
 | b4c1bd106d | #35612 | settings | fix(web): re-picking the current model in Settings keeps its traits | port |

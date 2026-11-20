@@ -612,6 +612,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         sidebar.actions.goHome = goHome
         settings.onHome = goHome
+        settings.onOpenThread = { [weak settings, weak commands, weak threads] id in
+            settings?.close(); commands?.closeUtilityPage(); threads?.open(id)
+        }
         (window as? MainWindow)?.onUnhandledEscape = { [weak settings, weak window] in
             guard let settings, settings.isOpen, settings.modal == nil else { return false }
             // Only from Settings itself: an overlay or dialog elsewhere in the window keeps its Escape.

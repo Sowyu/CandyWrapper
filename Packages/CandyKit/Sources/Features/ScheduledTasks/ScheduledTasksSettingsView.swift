@@ -109,7 +109,13 @@ public final class ScheduledTasksSettingsView: ScopedSettingsPage {
                 items.append(MenuItem("Run now", icon: .play) { [weak self] in self?.act(env, t, "scheduledTasks.runNow", .object(["id": .string(t.id)])) })
             }
             items.append(.separator)
-            items.append(MenuItem("Delete", icon: .trash2) { [weak self] in self?.act(env, t, "scheduledTasks.delete", .object(["id": .string(t.id)])) })
+            // Deleting asks first (ScheduledTasksSettings.tsx:810-816, #23578).
+            items.append(MenuItem("Delete", icon: .trash2) { [weak self] in
+                guard let self else { return }
+                let delete: @MainActor () -> Void = { [weak self] in self?.act(env, t, "scheduledTasks.delete", .object(["id": .string(t.id)])) }
+                guard let confirm = self.context.confirm else { return delete() }
+                confirm("Delete \"\(t.title)\"?\nThis cannot be undone.", true, delete)
+            })
             MenuPopupView.show(items, from: more, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))
         }
         let controls = DSView()
@@ -120,7 +126,15 @@ public final class ScheduledTasksSettingsView: ScopedSettingsPage {
         toggle.frame = NSRect(x: 0, y: (28 - ts.height) / 2, width: ts.width, height: ts.height)
         more.frame = NSRect(x: ts.width + 8, y: 0, width: 28, height: 28)
         let row = SettingsRowView(title: t.title, detail: nil, control: UsageFixedSizeView(controls))
-        row.detailView = ScheduledTaskDetailView(task: t, nowMs: nowMs)
+        // A task bound to a thread links to it (ScheduledTasksSettings.tsx:792-794, 855-873, #31764).
+        var link: ScheduledTaskThreadLink?
+        if let threadId = t.threadId, t.effectiveThreadMode != "new_thread" {
+            let title = context.schedulableThreads?(env).first { $0.id == threadId }?.title.trimmingCharacters(in: .whitespaces) ?? ""
+            let l = ScheduledTaskThreadLink(title.isEmpty ? "Open thread" : title)
+            l.action = { [weak self] in self?.context.openThread?(env, threadId) }
+            link = l
+        }
+        row.detailView = ScheduledTaskDetailView(task: t, nowMs: nowMs, link: link)
         return row
     }
 
@@ -214,15 +228,45 @@ final class ScheduledTasksListView: DSView, SettingsGroupRow {
     }
 }
 
+/// The bound thread's title as a link, `underline underline-offset-2 hover:text-foreground` in the
+/// row's muted 12pt (ScheduledTasksSettings.tsx:855-873).
+final class ScheduledTaskThreadLink: ControlView {
+    private let label: LabelView
+
+    init(_ title: String) {
+        label = LabelView(title, font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+        super.init(frame: .zero)
+        scalesWhenPressed = false
+        label.lineHeight = 16
+        label.underlineDecoration = (offset: 2, thickness: 1)
+        addSubview(label)
+        setAccessibilityRole(.link)
+        setAccessibilityLabel(title)
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    var preferredWidth: CGFloat { ceil(label.textWidth) + 1 }
+    override var acceptsFirstResponder: Bool { false }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    override func stateDidChange(from old: State) {
+        super.stateDidChange(from: old)
+        label.color = Themed.color(state.hovered ? \.foreground : \.mutedForeground)
+    }
+    override func layout() { super.layout(); label.frame = bounds }
+}
+
 /// A task row's description and status: the prompt (two lines), then `schedule · Next run in 5m`, the last run
 /// badge and its error (`flex flex-wrap items-center gap-2`).
 final class ScheduledTaskDetailView: DSView {
     private let prompt = TextBlockView()
     private let status: LabelView
     private let badge: BadgeView?
+    private let link: ScheduledTaskThreadLink?
     private let error: LabelView?
 
-    init(task t: ScheduledTask, nowMs: Int64) {
+    init(task t: ScheduledTask, nowMs: Int64, link: ScheduledTaskThreadLink? = nil) {
+        self.link = link
         let when = !t.enabled ? "Paused" : t.schedule.isWebhook ? "Listening"
             : t.nextRunAt != nil ? "Next run \(ScheduledTaskLogic.relativeLabel(t.nextRunAt, nowMs: nowMs))" : "Not scheduled"
         status = LabelView("\(ScheduledTaskLogic.scheduleLabel(t.schedule)) · \(when)", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
@@ -237,6 +281,7 @@ final class ScheduledTaskDetailView: DSView {
         prompt.maxLines = 2
         for v in [prompt, status] as [NSView] { addSubview(v) }
         badge.map(addSubview)
+        link.map(addSubview)
         error.map(addSubview)
         frame.size = NSSize(width: 576, height: promptHeight(576) + 6 + 18)
     }
@@ -264,11 +309,29 @@ final class ScheduledTaskDetailView: DSView {
             badge.frame = NSRect(x: x, y: y + (18 - s.height) / 2, width: s.width, height: s.height)
             x += s.width + 8
         }
+        if let link {
+            // `max-w-64 truncate`.
+            let lw = min(link.preferredWidth, 256, max(0, w - x))
+            link.frame = NSRect(x: x, y: y + 1, width: lw, height: 16)
+            x += lw + 8
+        }
         error?.frame = NSRect(x: x, y: y + 1, width: max(0, w - x), height: 16)
     }
 }
 
 // MARK: - Editor
+
+/// A thread a scheduled task can run in: listed and not archived, from the environment's shell.
+public struct ScheduledTaskThreadOption: Equatable, Sendable {
+    public var id: String
+    public var projectId: String
+    public var title: String
+    /// ISO, compared as text as T3 does (`localeCompare`).
+    public var updatedAt: String
+    public init(id: String, projectId: String, title: String, updatedAt: String) {
+        self.id = id; self.projectId = projectId; self.title = title; self.updatedAt = updatedAt
+    }
+}
 
 /// `ScheduledTaskEditorDialog`: Runs on, Name, Project and Workspace, base branch or checkout path, Prompt,
 /// Model, the schedule (At a time with weekdays, Every interval, On webhook with URL, age limit and signature),
@@ -314,6 +377,26 @@ final class ScheduledTaskEditor {
         context.scope.projects.flatMap(\.members).filter { $0.environmentId == environmentId
             && ScheduledTaskScope.matches(context.scope, environmentId: environmentId, projectId: $0.projectId) }
     }
+
+    /// The bound thread's title, else what the first run does (ScheduledTasksSettings.tsx:1320-1325).
+    var destinationLabel: String {
+        if !draft.threadId.isEmpty {
+            let title = context.schedulableThreads?(environmentId).first { $0.id == draft.threadId }?.title.trimmingCharacters(in: .whitespaces) ?? ""
+            return title.isEmpty ? "Thread \(draft.threadId)" : title
+        }
+        return draft.threadMode == "new_thread" ? "New thread each run" : "Started by the first run"
+    }
+
+    /// `scheduledTaskDestinationThreads` (logic.ts:402-423): the project's other listed, unarchived threads, newest first.
+    var destinationThreads: [ScheduledTaskThreadOption] {
+        let project = selectedProjectId
+        return (context.schedulableThreads?(environmentId) ?? [])
+            .filter { $0.projectId == project && $0.id != draft.threadId }
+            .sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    /// The server saves and runs `threadMode` (environment.ts:200-201).
+    var offersThreadModes: Bool { context.configs[environmentId]?.capabilities.contains("scheduledTaskThreadModes") == true }
 
     var selectedProjectId: String { draft.projectId.isEmpty ? projects.first?.projectId ?? "" : draft.projectId }
 
@@ -403,7 +486,8 @@ final class ScheduledTaskEditor {
     private func save() {
         guard !saving, !editingTaskMissing, connected, let request = context.request else { return }
         let input = ScheduledTaskLogic.upsertInput(draft, projectId: selectedProjectId, projectExists: projects.contains { $0.projectId == selectedProjectId },
-                                                   selection: activeSelection, storedSecret: liveTask?.webhook?.hasSecret == true)
+                                                   selection: activeSelection, storedSecret: liveTask?.webhook?.hasSecret == true,
+                                                   threadModes: offersThreadModes)
         switch input {
         case .failure(let e): report(e)
         case .success(let payload):
@@ -549,10 +633,18 @@ final class ScheduledTaskFormView: DSView {
         name.onChange = { [weak e] t in e?.draft.title = t }
         nameInput = name
         rows.append(field("Name", name, height: 32))
+        // Destination (ScheduledTasksSettings.tsx:1296-1450): the thread mode where the server has them,
+        // then the thread a bound task runs in, then what each run does.
+        let destination = ScheduledTaskDestinationField(editor: e)
+        rows.append((destination, destination.height))
         // Project and Workspace, side by side.
         let projects = e.projects
         let project = SelectView(options: projects.map(\.title), selected: projects.firstIndex { $0.projectId == e.selectedProjectId }, placeholder: "Select a project", size: .sm)
-        project.onChange = { [weak e] i in e?.draft.projectId = projects[i].projectId; e?.changed() }
+        project.onChange = { [weak e] i in
+            guard let e else { return }
+            e.draft = ScheduledTaskLogic.changeProject(e.draft, to: projects[i].projectId)
+            e.changed()
+        }
         let modes: [ScheduledTaskDraft.WorkspaceMode] = [.worktree, .root, .existingWorktree]
         let workspace = SelectView(options: modes.map(ScheduledTaskLogic.workspaceLabel), selected: modes.firstIndex(of: d.workspaceMode), size: .sm)
         workspace.onChange = { [weak e] i in e?.draft.workspaceMode = modes[i]; e?.changed() }
@@ -804,6 +896,89 @@ final class ScheduledTaskPairView: DSView {
 }
 
 /// A fixed-width control in an inline row.
+/// `ScheduledTaskDestination`: the mode select, a thread trigger that opens the project's threads (New
+/// thread each run first, then the current one, then by update), and the notes.
+// ponytail: the thread menu has no search field and lists the loaded shells only; T3 searches older settled threads too (useThreadSearch)
+final class ScheduledTaskDestinationField: DSView {
+    private weak var editor: ScheduledTaskEditor?
+    private let label = FormLabel.make("Destination")
+    private var mode: SelectView?
+    private var thread: ButtonView?
+    private let notes = TextBlockView()
+
+    init(editor: ScheduledTaskEditor) {
+        self.editor = editor
+        super.init(frame: .zero)
+        addSubview(label)
+        let d = editor.draft
+        if editor.offersThreadModes {
+            let modes = ScheduledTaskLogic.threadModes
+            let select = SelectView(options: modes.map(\.label), selected: modes.firstIndex { $0.mode == d.threadMode }, size: .sm)
+            select.setAccessibilityLabel("Destination")
+            select.onChange = { [weak editor] i in
+                guard let editor else { return }
+                let m = modes[i].mode
+                var next = m == "new_thread" ? ScheduledTaskLogic.unbind(editor.draft) : editor.draft
+                next.threadMode = m
+                editor.draft = next
+                editor.changed()
+            }
+            mode = select
+            addSubview(select)
+        }
+        if !editor.offersThreadModes || d.threadMode != "new_thread" {
+            let current = editor.destinationLabel
+            let b = ButtonView(current, icon: .messageSquare, variant: .outline, size: .sm)
+            b.trailingIcon = .chevronDown
+            b.justifiesBetween = true
+            b.setAccessibilityLabel(editor.offersThreadModes ? "Destination thread" : "Destination")
+            b.isEnabled = editor.connected
+            b.action = { [weak self, weak b] in if let b { self?.showThreads(from: b) } }
+            thread = b
+            addSubview(b)
+        }
+        notes.text = ScheduledTaskLogic.destinationNotes(mode: d.threadMode, bound: !d.threadId.isEmpty).joined(separator: "\n")
+        notes.font = DSFont.ui(14)
+        notes.lineHeight = 20
+        notes.color = Themed.color(\.mutedForeground)
+        addSubview(notes)
+    }
+
+    var height: CGFloat {
+        22 + (mode == nil ? 0 : 28 + 8) + (thread == nil ? 0 : 28 + 8) + notes.height(forWidth: 528)
+    }
+
+    private func showThreads(from trigger: NSView) {
+        guard let e = editor else { return }
+        let d = e.draft
+        var items: [MenuItem] = [MenuItem.radio("New thread each run", checked: d.threadId.isEmpty && d.threadMode == "new_thread") { [weak e] _ in
+            guard let e else { return }
+            var next = ScheduledTaskLogic.unbind(e.draft)
+            next.threadMode = "new_thread"
+            e.draft = next
+            e.changed()
+        }]
+        if !d.threadId.isEmpty { items.append(.radio(e.destinationLabel, checked: true)) }
+        for t in e.destinationThreads {
+            items.append(.radio(t.title.isEmpty ? "Untitled thread" : t.title, checked: false) { [weak e] _ in
+                guard let e else { return }
+                e.draft = ScheduledTaskLogic.move(e.draft, toThread: t.id, projectId: t.projectId)
+                e.changed()
+            })
+        }
+        MenuPopupView.show(items, from: trigger, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4))
+    }
+
+    override func layout() {
+        super.layout()
+        label.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 16)
+        var y: CGFloat = 22
+        if let mode { mode.frame = NSRect(x: 0, y: y, width: bounds.width, height: 28); y += 36 }
+        if let thread { thread.frame = NSRect(x: 0, y: y, width: bounds.width, height: 28); y += 36 }
+        notes.frame = NSRect(x: 0, y: y, width: bounds.width, height: notes.height(forWidth: bounds.width))
+    }
+}
+
 /// The `datetime-local` field of `Once`: a date button that opens the calendar, then the `HH:MM` time.
 /// `onChange` gets the local `YYYY-MM-DDTHH:MM`, or a partial value that fails `onceError` on save.
 final class ScheduledTaskRunOnField: DSView {

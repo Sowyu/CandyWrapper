@@ -92,6 +92,10 @@ public final class SettingsPageContext {
     public var deleteProjects: ((_ members: [SettingsScopeProject.Member], _ leave: Bool) -> Void)?
     /// Active threads of a project on an environment (environment id, project id), for the removal prompt.
     public var threadCount: ((String, String) -> Int)?
+    /// Listed, unarchived threads of an environment, for a scheduled task's Destination (4928 #31379).
+    public var schedulableThreads: ((String) -> [ScheduledTaskThreadOption])?
+    /// Leaves Settings for a thread (environment id, the server's thread id).
+    public var openThread: ((String, String) -> Void)?
     /// Runs project action writes in order; returns the first error message, or nil.
     public var saveActions: (([ProjectActionsLogic.Write]) async -> String?)?
     /// Each environment's live scheduled task list (`scheduledTasks.subscribe`), filled by the app while watched.

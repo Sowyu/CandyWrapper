@@ -52,6 +52,8 @@ final class SettingsController {
     var onRouteChange: (() -> Void)?
     /// The nav's brand link to "/".
     var onHome: () -> Void = {}
+    /// Closes Settings and opens a thread (a scheduled task's thread link).
+    var onOpenThread: ((ThreadId) -> Void)?
     /// Runs before Settings shows: a floating Usage closes, as T3 routes from `/usage` to `/settings`.
     var willOpen: () -> Void = {}
     /// The local environment's descriptor, read when the page opens (label, machine, version).

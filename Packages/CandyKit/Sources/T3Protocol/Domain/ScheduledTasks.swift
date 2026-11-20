@@ -226,6 +226,8 @@ public struct ScheduledTaskDraft: Equatable, Sendable {
     public var weekdays: Set<Int> = [1, 2, 3, 4, 5]
     public var projectId = ""
     public var threadId = ""
+    /// `new_thread`, `continue` or `fresh_session` (4928 #30326, logic.ts:72).
+    public var threadMode = "new_thread"
     public var workspaceMode = WorkspaceMode.worktree
     public var baseRef = "main"
     public var startFromOrigin = true
@@ -479,6 +481,7 @@ public enum ScheduledTaskLogic {
         }
         d.projectId = t.projectId
         d.threadId = t.threadId ?? ""
+        d.threadMode = t.effectiveThreadMode
         let strategy = t.workspaceStrategy
         d.workspaceMode = ScheduledTaskDraft.WorkspaceMode(rawValue: strategy["type"]?.stringValue ?? "root") ?? .root
         d.baseRef = d.workspaceMode == .worktree ? strategy["baseRef"]?.stringValue ?? "main" : "main"
@@ -489,6 +492,51 @@ public enum ScheduledTaskLogic {
         d.interactionMode = t.interactionMode
         d.baseModelSelection = t.modelSelection
         return d
+    }
+
+    /// `THREAD_MODE_LABELS` (ScheduledTasksSettings.tsx, 4928 #30326), in T3's order.
+    public static let threadModes: [(mode: String, label: String)] = [
+        ("new_thread", "New thread each run"),
+        ("continue", "One thread, continuing the conversation"),
+        ("fresh_session", "One thread, fresh session each run"),
+    ]
+
+    /// `moveDraftToThread` (logic.ts:372-382): the thread's project comes along, and New thread becomes Continue.
+    public static func move(_ d: ScheduledTaskDraft, toThread id: String, projectId: String) -> ScheduledTaskDraft {
+        var d = d
+        d.threadId = id
+        d.projectId = projectId
+        if d.threadMode == "new_thread" { d.threadMode = "continue" }
+        return d
+    }
+
+    /// `unbindDraftFromThread` (logic.ts:385-394): leaves the thread, keeps the mode, and moves a
+    /// project-root workspace to a worktree, so new threads stay out of the shared checkout.
+    public static func unbind(_ d: ScheduledTaskDraft) -> ScheduledTaskDraft {
+        guard !d.threadId.isEmpty else { return d }
+        var d = d
+        d.threadId = ""
+        if d.workspaceMode == .root { d.workspaceMode = .worktree; d.startFromOrigin = true }
+        return d
+    }
+
+    /// `changeDraftProject` (logic.ts:396-399).
+    public static func changeProject(_ d: ScheduledTaskDraft, to projectId: String) -> ScheduledTaskDraft {
+        guard projectId != d.projectId else { return d }
+        var d = unbind(d)
+        d.projectId = projectId
+        return d
+    }
+
+    /// The Destination field's notes (ScheduledTasksSettings.tsx:1349-1362, 1440-1446).
+    public static func destinationNotes(mode: String, bound: Bool) -> [String] {
+        let detail = mode == "new_thread" ? "Each run starts a new thread with the workspace and model below."
+            : !bound ? (mode == "continue"
+                ? "The first run starts a thread with the workspace and model below. Later runs continue that conversation."
+                : "The first run starts a thread with the workspace and model below. Later runs post there, each in a fresh session without earlier runs' context.")
+            : mode == "continue" ? "Each run continues this conversation, in its workspace and with its current model."
+            : "Each run starts a fresh session in this thread, without earlier runs' context."
+        return mode == "new_thread" ? [detail] : [detail, "Deleting the thread also deletes this task."]
     }
 
     /// `toDateTimeLocalValue` (scheduledTasksSettings.logic.ts:163-167): local `YYYY-MM-DDTHH:MM`.
@@ -575,8 +623,9 @@ public enum ScheduledTaskLogic {
 
     /// The `scheduledTasks.upsert` input `submit` builds (ScheduledTasksSettings.tsx:856-944), or the first problem.
     /// `selection` is the picked or default model; `storedSecret` whether the live task already has a signing secret.
+    /// `threadModes`: the server has `scheduledTaskThreadModes`, so `threadMode` is sent (ScheduledTasksSettings.tsx, #30326).
     public static func upsertInput(_ d: ScheduledTaskDraft, projectId: String, projectExists: Bool, selection: (instanceId: String, model: String)?,
-                                   storedSecret: Bool, creationSource: String = "web") -> Result<JSONValue, ValidationError> {
+                                   storedSecret: Bool, creationSource: String = "web", threadModes: Bool = false) -> Result<JSONValue, ValidationError> {
         let title = d.title.trimmingCharacters(in: .whitespacesAndNewlines), prompt = d.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, !prompt.isEmpty, projectExists, let selection else { return .failure(.incomplete) }
         if d.scheduleMode == .webhook, case .failure(let e) = parseFilterDrafts(d.filters) { return .failure(.invalidFilter(e.message)) }
@@ -612,6 +661,7 @@ public enum ScheduledTaskLogic {
             "workspaceStrategy": strategy, "modelSelection": model, "runtimeMode": .string(d.runtimeMode),
             "interactionMode": .string(d.interactionMode), "creationSource": .string(creationSource),
         ]
+        if threadModes { input["threadMode"] = .string(d.threadMode) }
         if let id = d.editingId { input["id"] = .string(id); input["requireExisting"] = .bool(true) }
         return .success(.object(input))
     }

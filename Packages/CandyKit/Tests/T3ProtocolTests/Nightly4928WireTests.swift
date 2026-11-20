@@ -107,6 +107,26 @@ struct Nightly4928WireTests {
         } else { Issue.record("an empty run time must not save") }
     }
 
+    /// Destination: thread modes, moving to a thread and leaving it (logic.ts:372-399, #30326, #31379).
+    @Test func destinationMovesAndUnbindsTheDraft() throws {
+        var d = ScheduledTaskDraft()
+        d.title = "T"; d.prompt = "P"; d.projectId = "p1"; d.workspaceMode = .root
+        let moved = ScheduledTaskLogic.move(d, toThread: "t9", projectId: "p2")
+        #expect(moved.threadId == "t9" && moved.projectId == "p2" && moved.threadMode == "continue")
+        var fresh = moved; fresh.threadMode = "fresh_session"
+        #expect(ScheduledTaskLogic.move(fresh, toThread: "t8", projectId: "p2").threadMode == "fresh_session")
+        let left = ScheduledTaskLogic.unbind(moved)
+        #expect(left.threadId == "" && left.threadMode == "continue" && left.workspaceMode == .worktree && left.startFromOrigin)
+        #expect(ScheduledTaskLogic.changeProject(moved, to: "p3").threadId == "")
+        #expect(ScheduledTaskLogic.changeProject(moved, to: "p2").threadId == "t9")
+        #expect(ScheduledTaskLogic.destinationNotes(mode: "new_thread", bound: false).count == 1)
+        #expect(ScheduledTaskLogic.destinationNotes(mode: "continue", bound: true)
+                == ["Each run continues this conversation, in its workspace and with its current model.", "Deleting the thread also deletes this task."])
+        let sent = try ScheduledTaskLogic.upsertInput(moved, projectId: "p2", projectExists: true, selection: ("c", "m"),
+                                                      storedSecret: false, threadModes: true).get()
+        #expect(sent["threadMode"] == .string("continue") && sent["threadId"] == .string("t9"))
+    }
+
     /// Section 5: closed enums now keep values a newer server sends.
     @Test func closedEnumsAcceptUnknownValues() throws {
         func dec<T: Decodable>(_ t: T.Type, _ s: String) throws -> T { try JSONDecoder().decode(T.self, from: Data(s.utf8)) }
