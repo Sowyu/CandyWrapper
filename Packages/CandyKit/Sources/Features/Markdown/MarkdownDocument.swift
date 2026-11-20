@@ -382,7 +382,9 @@ public struct MarkdownDocument: Sendable, Equatable {
     /// `★ Insight ───` line opens a quote that a `───` line at the same indent closes. The quote is marked as an
     /// insight alert. Code fences inside or outside never open or close one, and quotes outside never open one.
     /// Text without the marker comes back as is after one byte search.
-    // ponytail: protects fences and `>` lines, not list items as T3's parsed ranges do; parse ranges if a list ever holds one
+    /// Lists protect an opening line too, as T3's parsed list ranges do: a marker line, its indented or lazy lines,
+    /// and blank lines until an unindented line follows one.
+    // ponytail: a code span over several lines (`` `a`` then ``b` ``) does not protect its lines; track paragraph backticks if one ever holds a marker
     public static func rewritingInsights(_ text: String) -> String {
         let found = text.utf8.withContiguousStorageIfAvailable { bytes in
             insightMarker.withUnsafeBufferPointer { memmem(bytes.baseAddress, bytes.count, $0.baseAddress, $0.count) != nil }
@@ -392,11 +394,19 @@ public struct MarkdownDocument: Sendable, Equatable {
         var indent: Substring?
         var fence: (char: Character, count: Int)?
         var opened = false
+        var inList = false, afterBlank = false
         for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
             let value = line.hasSuffix("\r") ? line.dropLast() : line
             let lead = value.prefix { $0 == " " }
-            let body = value.dropFirst(lead.count)
-            let blocked = fence != nil || (indent == nil && lead.count <= 3 && body.hasPrefix(">"))
+            var body = value.dropFirst(lead.count)
+            if indent == nil, fence == nil {
+                let blank = body.allSatisfy { $0 == " " || $0 == "\t" }
+                let item = lead.count <= 3 ? listItemContent(body) : nil
+                if let item { inList = true; body = item }
+                else if inList, !blank, lead.isEmpty, afterBlank { inList = false }
+                afterBlank = blank
+            }
+            let blocked = fence != nil || (indent == nil && (inList || lead.count <= 3 && body.hasPrefix(">")))
             if lead.count <= 3, let mark = body.first, mark == "`" || mark == "~" {
                 let run = body.prefix { $0 == mark }.count
                 if let open = fence {
@@ -413,6 +423,7 @@ public struct MarkdownDocument: Sendable, Equatable {
             } else if let open = indent, !blocked, lead.count <= 3, body.first == "─" || body.first == "`",
                       let match = value.wholeMatch(of: insightClosing), match.output.1 == open {
                 indent = nil
+                inList = false
                 out.append("")
             } else if indent != nil {
                 out.append("> " + line)
@@ -421,6 +432,18 @@ public struct MarkdownDocument: Sendable, Equatable {
             }
         }
         return opened ? out.joined(separator: "\n") : text
+    }
+    /// The text after a list item's marker (`-`, `*`, `+`, `1.` or `1)` and a space or the line's end), or nil.
+    private static func listItemContent(_ body: Substring) -> Substring? {
+        var rest = body
+        if let first = rest.first, "-*+".contains(first) { rest = rest.dropFirst() }
+        else {
+            let digits = rest.prefix { $0.isASCII && $0.isNumber }
+            guard (1...9).contains(digits.count), let mark = rest.dropFirst(digits.count).first, mark == "." || mark == ")" else { return nil }
+            rest = rest.dropFirst(digits.count + 1)
+        }
+        guard rest.isEmpty || rest.first == " " || rest.first == "\t" else { return nil }
+        return rest.drop { $0 == " " || $0 == "\t" }
     }
     private static let insightMarker = Array("★ Insight".utf8)
     nonisolated(unsafe) private static let insightOpening = /( {0,3})(`?)★ Insight[ \t]+─{3,}\2[ \t]*/

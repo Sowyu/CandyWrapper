@@ -30,6 +30,29 @@ struct Markdown4928Tests {
         guard case .blockquote = MarkdownDocument(parsing: "> [!insight]\n> x").blocks.first else { Issue.record("written insight alert"); return }
     }
 
+    /// T3's own cases (shared/src/markdownPipeline.test.ts:302-345 at 4928): both fence forms open a callout, and
+    /// literal or nested examples stay as written.
+    @Test func insightFencesMatchT3Cases() {
+        let rule = String(repeating: "─", count: 20)
+        func fence(_ body: String, _ wrap: String = "") -> String { ["\(wrap)★ Insight \(rule)\(wrap)", body, "\(wrap)\(rule)\(wrap)"].joined(separator: "\n") }
+        for wrap in ["", "`"] {
+            let blocks = parse(["Before **bold**.", "", fence("- Also this.", wrap), "", "After."].joined(separator: "\n"))
+            #expect(blocks.count == 3, "wrap \(wrap)")
+            guard case .alert(.insight, _) = blocks[1] else { Issue.record("no insight for wrap \(wrap): \(blocks)"); continue }
+        }
+        for literal in [["```text", "★ Insight " + rule, "literal", rule, "```"].joined(separator: "\n"),
+                        ["- ```text", "  ★ Insight " + rule, "  literal", "  " + rule, "  ```"].joined(separator: "\n"),
+                        ["    ★ Insight " + rule, "    literal", "    " + rule].joined(separator: "\n"),
+                        ["Paragraph.", "    ★ Insight " + rule, "    literal", "    " + rule].joined(separator: "\n"),
+                        fence("quoted").split(separator: "\n").map { "> " + $0 }.joined(separator: "\n"),
+                        ["- item", "★ Insight " + rule, "lazy", rule].joined(separator: "\n")] {
+            #expect(MarkdownDocument.rewritingInsights(literal) == literal, "\(literal)")
+        }
+        // A list closed by a blank line and an unindented line no longer protects the fence after it.
+        let afterList = parse(["- item", "", "Text.", "", fence("Body.")].joined(separator: "\n"))
+        guard case .alert(.insight, _)? = afterList.last else { Issue.record("no insight after a list: \(afterList)"); return }
+    }
+
     /// A streaming insight that has not closed yet still draws as one; a closing line inside its code does not close it.
     @Test func openInsightAndFencedClosingLine() {
         let blocks = parse("★ Insight ─────\nText\n```\n─────\n```\nMore")

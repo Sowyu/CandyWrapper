@@ -39,7 +39,10 @@ struct MarkdownFidelityTests {
                 let ref = try #require(NSBitmapImageRep(data: Data(contentsOf: refDir.appendingPathComponent(file))))
                 let view = MarkdownView(frame: .zero)
                 view.cwd = native["cwd"]
-                view.setMarkdown(native["markdown"]!)
+                // As the assistant row does (TimelineAssistantRows.tsx:68 `renderInsights`): Claude's insight fences
+                // become callouts and keep their line breaks (shared/src/markdownPipeline.ts:754-835).
+                let markdown = native["markdown"]!
+                view.setMarkdown(MarkdownDocument.rewritingInsights(markdown), preservesLineBreaks: TL.preservesAssistantLineBreaks(markdown))
                 if name == "table" { view.toggleTable(0) }
                 let height = view.height(forWidth: width)
                 let canvas = Canvas(frame: .zero)
