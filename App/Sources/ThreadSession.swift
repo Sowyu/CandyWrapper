@@ -177,7 +177,6 @@ final class ThreadSession {
         panel.timeline.historyCursor = update.history.historyCursor
         panel.timeline.historyLoading = update.history.loading
         panel.timeline.historyFailed = update.history.error != nil
-        panel.composer.contextWindowMeter.hasEarlierHistory = update.history.hasMoreHistory
         let (projectTitle, workspaceRoot) = place(update.projection)
         OpenTiming.measure("panel setProjection") {
             panel.setProjection(update.projection, projectTitle: projectTitle, workspaceRoot: workspaceRoot, onlyStreamingText: onlyStreamingText)
