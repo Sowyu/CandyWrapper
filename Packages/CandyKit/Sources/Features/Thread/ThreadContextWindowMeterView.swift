@@ -15,6 +15,11 @@ public struct ThreadContextWindowUsage: Equatable, Sendable {
     public var updatedAt: Date? = nil
     /// The provider's prompt cache lifetime, on a live report from 2994 servers (c727d1219, orchestrationV2.ts:1066).
     public var promptCacheTtlMs: Double? = nil
+    /// The latest request's prompt, the part of it read from the prompt cache, and its reply, as the provider
+    /// reported them on a live report (`OrchestrationV2ProviderTurnTokenUsage`, orchestrationV2.ts:232-243).
+    public var inputTokens: Double? = nil
+    public var cachedInputTokens: Double? = nil
+    public var outputTokens: Double? = nil
     public var percentage: Double? { maximum.flatMap { $0 > 0 ? min(100, max(0, used / $0 * 100)) : nil } }
     public static func derive(_ projection: ThreadProjection?) -> Self? {
         guard let projection else { return nil }
@@ -26,7 +31,11 @@ public struct ThreadContextWindowUsage: Equatable, Sendable {
                         cost: live ? nil : (json["cost"]?.doubleValue ?? json["cost"]?["amount"]?.doubleValue),
                         currency: json["cost"]?["currency"]?.stringValue ?? "USD",
                         autoCompactThreshold: json["autoCompactThreshold"]?.doubleValue, automatically: live || json["compactsAutomatically"]?.boolValue == true,
-                        updatedAt: updatedAt, promptCacheTtlMs: live ? json["promptCacheTtlMs"]?.doubleValue : nil)
+                        updatedAt: updatedAt, promptCacheTtlMs: live ? json["promptCacheTtlMs"]?.doubleValue : nil,
+                        // `contextUsage` counts these over the whole thread, so only a live report's describe the window.
+                        inputTokens: live ? json["inputTokens"]?.doubleValue : nil,
+                        cachedInputTokens: live ? json["cachedInputTokens"]?.doubleValue : nil,
+                        outputTokens: live ? json["outputTokens"]?.doubleValue : nil)
         }
         // `latestProviderTurnTokenUsage` (lib/contextWindow.ts:29-41 in 2994): the newest report by
         // `updatedAt`, ties to the later entry, since live upserts append.
@@ -66,6 +75,16 @@ public struct ThreadContextWindowUsage: Equatable, Sendable {
         }?["sourceTokenUsage"]
     }
 
+    /// What fills the window, split only by the provider's own counts: Claude and Codex report `usedTokens` as
+    /// the latest request's input plus its output (ClaudeAdapterV2.ts:322, CodexAdapterV2.ts:220), cache reads
+    /// being part of the input. Nil unless those counts add up to `used` exactly; nothing here is estimated.
+    public var breakdown: [(name: String, value: Double)]? {
+        guard let input = inputTokens, let output = outputTokens, input >= 0, output >= 0, input + output == used else { return nil }
+        let cached = cachedInputTokens ?? 0
+        guard cached >= 0, cached <= input else { return nil }
+        return [("Prompt read from cache", cached), ("Rest of the prompt", input - cached), ("Latest reply", output)]
+    }
+
     public static func tokens(_ value: Double) -> String {
         guard value.isFinite else { return "0" }
         if value < 1_000 { return String(Int(value.rounded())) }
@@ -89,7 +108,7 @@ public final class ThreadContextWindowMeterView: ControlView {
         setAccessibilityLabel(summary)
         setAccessibilityValue(usage?.percentage.map { NSNumber(value: $0) })
         setAccessibilityElement(usage != nil)
-        if usage == nil { closeDetails() } else { refreshDetails() }
+        if usage == nil, !(capy && reserved) { closeDetails() } else { refreshDetails() }
         // Under Dither the panel places the ring, so it lays out again when the ring comes or goes.
         if (usage == nil) != (oldValue == nil) { superview?.needsLayout = true }
     } }
@@ -101,30 +120,16 @@ public final class ThreadContextWindowMeterView: ControlView {
     private var hoverWork: DispatchWorkItem?
     private var pointerInDetails = false
     public var modelDisplayName: String?
-    /// The open thread, read only when Redesign's popover opens, to estimate what fills the window.
-    public var projection: ThreadProjection?
-    /// The thread's history window starts after its first item, so the estimate can't see all of the context.
-    public var hasEarlierHistory = false
-    private var estimateCache: (key: String, value: ThreadContextEstimate?)?
-    /// One estimate per thread revision and report, so the popover's refreshes reuse it.
-    // ponytail: runs on the main thread when the popover opens, one pass over the items; move it off the main
-    // thread if long threads stall the popover.
-    private func estimate(_ usage: ThreadContextWindowUsage) -> ThreadContextEstimate? {
-        guard capy else { return nil }
-        let p = projection
-        let key = "\(p?.thread.id.rawValue ?? "") \(p?.updatedAt.description ?? "") \(p?.visibleTurnItems.count ?? 0) "
-            + "\(p?.visibleTurnItems.last?.item.updatedAt.description ?? "") \(usage.used) \(hasEarlierHistory)"
-        if let estimateCache, estimateCache.key == key { return estimateCache.value }
-        let value = ThreadContextEstimate.estimate(projection, used: usage.used, hasEarlierHistory: hasEarlierHistory)
-        estimateCache = (key, value)
-        return value
-    }
     /// The Compact context button is disabled; `compactDisabledReason` shows under it when set.
     public var compactDisabled = false
     public var compactDisabledReason: String?
     /// `ContextWindowMeterPlaceholder` (ContextWindowMeter.tsx:177-180): with no usage yet, the composer
     /// still holds the meter's 28pt slot so the attach button does not move when it arrives.
-    public var reserved = false { didSet { if reserved != oldValue { superview?.needsLayout = true; needsDisplay = true } } }
+    public var reserved = false { didSet {
+        guard reserved != oldValue else { return }
+        superview?.needsLayout = true; needsDisplay = true
+        if usage == nil { closeDetails() }
+    } }
     /// Dither: Capy's ring (measured in Capy 2026-10-22), a 13pt circle with a 1.5pt stroke in a 28pt pill under the
     /// composer, opened by a click into Capy's Context popover.
     var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
@@ -262,8 +267,8 @@ public final class ThreadContextWindowMeterView: ControlView {
     /// Shows what changed in an open popup: the button turns disabled with its reason once a compact
     /// starts, as T3's popover re-renders while it stays open.
     private func refreshDetails() {
-        guard let open = detailsPopup, let usage, let content = detailsView else { return }
-        guard content.configure(usage: usage, capy: capy, estimate: estimate(usage), model: modelDisplayName, compactOffered: compactOffered,
+        guard let open = detailsPopup, let content = detailsView else { return }
+        guard content.configure(usage: usage, capy: capy, model: modelDisplayName, compactOffered: compactOffered,
                                 disabled: compactDisabled, reason: compactDisabledReason) else { return }
         open.content.invalidateIntrinsicContentSize()
         open.content.popupHost?.reposition(open)
@@ -271,10 +276,11 @@ public final class ThreadContextWindowMeterView: ControlView {
 
     func showDetails() {
         hoverWork?.cancel()
-        guard detailsPopup == nil, let usage, let host = popupHost else { return }
+        // Redesign's ring shows before any report, so a click on it says there is none yet.
+        guard detailsPopup == nil, usage != nil || (capy && reserved), let host = popupHost else { return }
         let content = ThreadContextWindowDetailsView()
         let capy = self.capy
-        _ = content.configure(usage: usage, capy: capy, estimate: estimate(usage), model: modelDisplayName, compactOffered: compactOffered,
+        _ = content.configure(usage: usage, capy: capy, model: modelDisplayName, compactOffered: compactOffered,
                               disabled: compactDisabled, reason: compactDisabledReason)
         content.onPointerInside = { [weak self] inside in
             guard let self, !self.capy else { return }
@@ -317,22 +323,23 @@ final class ThreadContextWindowDetailsView: DSView {
     static let inset: CGFloat = 12, width: CGFloat = 256 - 2 - 2 * 12
     /// Dither: Capy's Context popover (measured in Capy 2026-10-22), 286 wide: "Context" with "used / max used (n%)"
     /// at the right, a 5pt bar split by category, a legend row per category (7pt dot, name, count at the right) and a
-    /// bordered "Compact at threshold / max" box. Capy splits by system prompt, tools and conversation; T3 reports
-    /// only the total, so the categories are `ThreadContextEstimate`'s, with a muted line saying so. Without a
-    /// threshold the box reads "Max", and Compact context sits under it as a quiet button.
+    /// bordered "Compact at threshold / max" box. Capy splits by system prompt, tools and conversation; T3 has no such
+    /// split, so the legend shows only `ThreadContextWindowUsage.breakdown`, the provider's own counts for its latest
+    /// request, and no legend when it has none. Before any report it says so. Without a threshold the box reads
+    /// "Max", and Compact context sits under it as a quiet button.
     private var capy = false
     private var segments: [(view: FillView, share: CGFloat)] = []
     private var dots: [FillView] = []
-    /// Capy's legend colors, sampled from its popover, in `ThreadContextEstimate.categories` order: gray, blue, teal,
-    /// violet, pink.
+    /// Capy's legend colors, sampled from its popover, in `ThreadContextWindowUsage.breakdown` order: gray, blue, teal.
     static let partColors: [NSColor] = [NSColor(srgbRed: 0.53, green: 0.53, blue: 0.55, alpha: 1), NSColor(srgbRed: 0.18, green: 0.51, blue: 0.96, alpha: 1),
-                                        NSColor(srgbRed: 0.29, green: 0.62, blue: 0.56, alpha: 1), NSColor(srgbRed: 0.55, green: 0.40, blue: 0.96, alpha: 1),
-                                        NSColor(srgbRed: 0.87, green: 0.33, blue: 0.56, alpha: 1)]
-    static func legend(_ estimate: ThreadContextEstimate) -> [(name: String, value: Double, color: NSColor)] {
-        zip(estimate.categories, partColors).map { ($0.name, $0.value, $1) }.filter { $0.value >= 0.5 }
+                                        NSColor(srgbRed: 0.29, green: 0.62, blue: 0.56, alpha: 1)]
+    /// The legend rows: reported counts only, empty when the provider gave no split.
+    static func legend(_ usage: ThreadContextWindowUsage?) -> [(name: String, value: Double, color: NSColor)] {
+        zip(usage?.breakdown ?? [], partColors).map { ($0.name, $0.value, $1) }.filter { $0.value > 0 }
     }
-    private let estimateNote = TextBlockView("Estimated from this thread; T3 reports only the total.", font: DSFont.ui(12), lineHeight: 16,
-                                             color: Themed.color(\.contrastMutedForeground))
+    static let breakdownNote = "As the provider reported its latest request."
+    static let unreportedNote = "No usage reported for this thread yet."
+    private let sourceNote = TextBlockView(breakdownNote, font: DSFont.ui(12), lineHeight: 16, color: Themed.color(\.contrastMutedForeground))
     static let capyWidth: CGFloat = 286 - 2 - 2 * 12
     private let compactBox = DSView()
     private let compactLabel = LabelView("Compact at", font: DSFont.ui(13), color: Themed.color(\.contrastForeground))
@@ -341,7 +348,7 @@ final class ThreadContextWindowDetailsView: DSView {
     private var contentWidth: CGFloat { capy ? Self.capyWidth : Self.width }
 
     private struct Model: Equatable {
-        var usage: ThreadContextWindowUsage, capy: Bool, estimate: ThreadContextEstimate?, model: String?, compactOffered: Bool, disabled: Bool, reason: String?
+        var usage: ThreadContextWindowUsage?, capy: Bool, model: String?, compactOffered: Bool, disabled: Bool, reason: String?
     }
 
     override init(frame frameRect: NSRect) {
@@ -355,8 +362,8 @@ final class ThreadContextWindowDetailsView: DSView {
         note.balanced = true
         reasonText.balanced = true
         button.action = { [weak self] in self?.onCompact?() }
-        estimateNote.isHidden = true
-        for v in [note, estimateNote, button, reasonText] as [NSView] { addSubview(v) }
+        sourceNote.isHidden = true
+        for v in [note, sourceNote, button, reasonText] as [NSView] { addSubview(v) }
         compactBox.layer?.borderWidth = 0.5
         compactBox.layer?.cornerRadius = DitherChrome.controlRadius
         compactBox.isHidden = true
@@ -372,12 +379,14 @@ final class ThreadContextWindowDetailsView: DSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     /// Fills the popup; false when nothing changed.
-    func configure(usage: ThreadContextWindowUsage, capy: Bool = false, estimate: ThreadContextEstimate? = nil, model name: String?,
+    /// `usage` is nil only for Redesign's ring before the first report.
+    func configure(usage reported: ThreadContextWindowUsage?, capy: Bool = false, model name: String?,
                    compactOffered: Bool, disabled: Bool, reason: String?) -> Bool {
-        let next = Model(usage: usage, capy: capy, estimate: estimate, model: name, compactOffered: compactOffered, disabled: disabled, reason: reason)
+        let next = Model(usage: reported, capy: capy, model: name, compactOffered: compactOffered, disabled: disabled, reason: reason)
         guard next != model else { return false }
         model = next
         self.capy = capy
+        let usage = reported ?? ThreadContextWindowUsage(used: 0, automatically: false)
         // Capy writes token counts with capital units and a decimal under 100K: 37.3K, 400K, 1.1M.
         func tokens(_ value: Double) -> String {
             guard capy else { return ThreadContextWindowUsage.tokens(value) }
@@ -390,7 +399,9 @@ final class ThreadContextWindowDetailsView: DSView {
         figure.font = capy ? SB.tabular(12) : SB.tabular(11)
         figure.color = Themed.color(capy ? \.contrastMutedForeground : \.contrastSecondaryLabel)
         for l in [title, figure] { l.lineHeight = capy ? 18 : 16 }
-        if capy {
+        if reported == nil {
+            figure.text = ""
+        } else if capy {
             figure.text = usage.maximum.map { "\(tokens(usage.used)) / \(tokens($0)) used" + (usage.percentageLabel.map { " (\($0))" } ?? "") }
                 ?? "\(tokens(usage.used)) used"
         } else if let maximum = usage.maximum, let percent = usage.percentageLabel {
@@ -400,7 +411,7 @@ final class ThreadContextWindowDetailsView: DSView {
         }
         track.fill = capy ? Themed.color(\.contrastForeground, 0.1) : Themed.color(\.muted, 0.6)
         fraction = CGFloat(min(100, max(0, usage.percentage ?? 0)) / 100)
-        let showsBar = usage.maximum != nil
+        let showsBar = reported != nil && usage.maximum != nil
         track.isHidden = !showsBar
         bar.isHidden = !showsBar
         bar.fill = (usage.percentage ?? 0) > 90 ? Themed.color(\.destructive) : capy ? Themed.color(\.contrastForeground, 0.72) : Themed.color(\.mutedForeground, 0.72)
@@ -419,10 +430,10 @@ final class ThreadContextWindowDetailsView: DSView {
         }
         if capy {
             // One segment and one legend row per category, each segment its share of the window.
-            let legend = estimate.map(Self.legend) ?? []
+            let legend = Self.legend(reported)
             let maximum = usage.maximum ?? 0
             for part in legend {
-                row(part.name, "~" + tokens(part.value))
+                row(part.name, tokens(part.value))
                 let dot = FillView(), segment = FillView()
                 dot.radius = RedesignTokens.Radius.capsule(7)
                 for v in [dot, segment] { v.fill = part.color; v.setAccessibilityElement(false) }
@@ -430,19 +441,18 @@ final class ThreadContextWindowDetailsView: DSView {
                 track.addSubview(segment)
                 dots.append(dot); segments.append((segment, maximum > 0 ? CGFloat(min(1, part.value / maximum)) : 0))
             }
-            // Without a thread to estimate from, the single bar.
+            // Without a reported split, the single bar.
             bar.isHidden = !showsBar || !legend.isEmpty
             track.clipsToBounds = true
         }
-        estimateNote.isHidden = !capy || dots.isEmpty
-        estimateNote.text = estimate?.includesEarlier == true ? "Estimated from the loaded messages; T3 reports only the total."
-            : "Estimated from this thread; T3 reports only the total."
+        sourceNote.isHidden = !capy || (dots.isEmpty && reported != nil)
+        sourceNote.text = reported == nil ? Self.unreportedNote : Self.breakdownNote
         if !capy, let total = usage.total, total > 0 { row("Total processed", tokens(total)) }
         // `formatContextWindowCost` (ContextWindowMeter.logic.ts:139-145).
         if !capy, let cost = usage.cost { row("Cost", usage.currency + " " + String(format: abs(cost) > 0 && abs(cost) < 0.01 ? "%.4f" : "%.2f", cost)) }
         // Capy's "Compact at" box: the threshold, then the window it sits in.
         let threshold = usage.autoCompactThreshold.flatMap { $0 > 0 && $0 < 9e15 ? $0 : nil }
-        let boxed = capy && (threshold != nil || usage.maximum != nil)
+        let boxed = capy && reported != nil && (threshold != nil || usage.maximum != nil)
         for v in [compactBox, compactLabel, compactValue, compactMaximum] as [NSView] { v.isHidden = !boxed }
         compactBox.layer?.borderColor = Themed.color(\.contrastForeground, 0.1).cgColor(in: self)
         if boxed {
@@ -453,7 +463,7 @@ final class ThreadContextWindowDetailsView: DSView {
         }
         note.font = capy ? DSFont.ui(12) : DSFont.ui(11, weight: .medium)
         note.color = Themed.color(capy ? \.contrastMutedForeground : \.contrastSecondaryLabel)
-        note.isHidden = !usage.automatically || capy
+        note.isHidden = reported == nil || !usage.automatically || capy
         // `formatContextWindowCompactionMessage` (ContextWindowMeter.logic.ts:100-110).
         if let threshold = usage.autoCompactThreshold, threshold > 0, threshold < 9e15 {
             note.text = "Compacts automatically at about " + Int(threshold).formatted(.number.locale(Locale(identifier: "en_US"))) + " tokens."
@@ -512,10 +522,10 @@ final class ThreadContextWindowDetailsView: DSView {
             put(v, NSRect(x: x + w - vw, y: y, width: vw, height: line))
             y += line
         }
-        if !estimateNote.isHidden {
+        if !sourceNote.isHidden {
             y += 6
-            let h = estimateNote.height(forWidth: w)
-            put(estimateNote, NSRect(x: x, y: y, width: w, height: h))
+            let h = sourceNote.height(forWidth: w)
+            put(sourceNote, NSRect(x: x, y: y, width: w, height: h))
             y += h
         }
         if !compactBox.isHidden {

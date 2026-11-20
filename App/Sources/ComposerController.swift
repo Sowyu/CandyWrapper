@@ -1772,7 +1772,6 @@ final class ComposerController {
         panel.tasksView.steps = ThreadTaskStep.derive(projection)
         contextWindow = ThreadContextWindowUsage.derive(projection)
         refreshDetailsUsage()
-        composer.contextWindowMeter.projection = projection
         composer.contextWindowMeter.usage = meterEnabled ? contextWindow : nil
         composer.needsLayout = true
         let runs = projection?.runs ?? []
