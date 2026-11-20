@@ -21,7 +21,7 @@ let package = Package(
         .package(path: "../SwiftTerm"),
     ],
     targets: [
-        .target(name: "DesignSystem", exclude: ["Icons/LICENSE-lucide.txt", "Icons/LICENSE-hugeicons.txt"], resources: [.copy("Resources/surface-grain.rgba")], swiftSettings: sizeOptimized),
+        .target(name: "DesignSystem", exclude: ["Icons/LICENSE-lucide.txt", "Icons/LICENSE-tabler.txt"], resources: [.copy("Resources/surface-grain.rgba")], swiftSettings: sizeOptimized),
         // Wire and domain types from docs/protocol.md. No I/O.
         .target(name: "T3Protocol", swiftSettings: sizeOptimized),
         // Bearer HTTP and the WebSocket RPC session, Foundation only.
