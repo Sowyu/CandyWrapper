@@ -101,6 +101,9 @@ struct ProviderSetupTests {
         #expect(V.serverIsBehind("development", client: "0.0.46"))
         #expect(V.serverIsBehind("+", client: "0.0.46"))
         #expect(V.manualCommand(target: "1.2.3", installation: .object(["kind": .string("pnpm-dlx")])) == "pnpm dlx t3@1.2.3")
+        #expect(V.manualCommand(target: "1.2.3", installation: .object(["kind": .string("t3-launcher"), "launcher": .string("/opt/t3's/t3"),
+                                                                        "baseDir": .string("/srv/t3")]))
+                == "'/opt/t3'\\''s/t3' update --base-dir '/srv/t3' 1.2.3")
         #expect(V.manualCommand(target: "1.2.3", installation: .object(["kind": .string("npm-global"), "prefix": .string("/path with spaces")])) == "npm install --global --prefix '/path with spaces' t3@1.2.3")
     }
     @MainActor @Test func managedAccountIsSeparateAndDoesNotStartAuth() {

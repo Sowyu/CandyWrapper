@@ -379,8 +379,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| a74ee4cc7c | #27275 | connections | fix(client-runtime): server updates stop waiting 32 minutes when the host returns without this update's outcome | left (settings-2): stop waiting for a server update's outcome when the host returns without it (client-runtime serverUpdate) |
-| 5958d00ede | #35346 | settings | perf(web): Update everything downloads a server's update while providers install | left (settings-2): Update everything's sequence starts each server's download while providers install |
+| a74ee4cc7c | #27275 | connections | fix(client-runtime): server updates stop waiting 32 minutes when the host returns without this update's outcome | ported (settings-3): ServerUpdater reads the accepting process ready.at before a launcher update; another process ends the wait, and only this update outcome counts (ServerUpdate.swift matchesResume, failure) |
+| 5958d00ede | #35346 | settings | perf(web): Update everything downloads a server's update while providers install | ported (settings-3): Update everything stages each server with stageOnly while providers install, only on servers with serverUpdateStaging (ServerUpdates.stage) |
 
 ## Port group rewind (1)
 
@@ -496,7 +496,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| f2943ee90e | #26288 | connections | feat(updates): switch your whole fleet between Stable and Nightly in one step | left (settings-2): UpdateTrackSwitchDialog.tsx:43 and sidebar/updateEverything.logic.ts; ServerUpdateViews.swift and UpdateController need the fleet-wide track switch |
+| f2943ee90e | #26288 | connections | feat(updates): switch your whole fleet between Stable and Nightly in one step | left (settings-3): wire ready (ServerNpmRelease, ServerUpdateLogic.input channel/targetDatabaseMigration); needs UpdateTrackSwitchDialog.tsx:43-227 as a native dialog, updateTrackSwitch.logic.ts and the Sparkle reinstall for this app |
 
 ## New feature secrets (10)
 
@@ -909,7 +909,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 42d645ae9e | #32924 | connections | fix(web): update Retry stops re-sending servers already on the target version | port |
 | 7eca0ed885 | #29462 | connections | fix(web): hand-started t3 servers get an update command that updates them | port |
 | 6790f85f53 | #27692 | connections | fix(web): point pairing copy at Sharing & access | port |
-| fa9d85fad5 | #35327 | connections | fix(web): a server updated with the app reconnects as soon as it is ready | left (settings-2): the client half landed in task connection; Update everything still needs to reconnect on the server's ready signal |
+| fa9d85fad5 | #35327 | connections | fix(web): a server updated with the app reconnects as soon as it is ready | n/a (settings-3): CandyWrapper has no relaunch handoff of server updates; ServerUpdater.run already retries the connection every second while a server restarts |
 | 00f617db4e | #24400 | connections | fix(client-runtime): recover subscriptions that stop on a healthy connection | port |
 | cbf0f0a83f | #36445 | connections | fix(web): screen readers read the Update everything machine list as a table | port |
 | 757f71a7f6 | #29788 | connections | fix(client-runtime): new T3 Connect machines appear without signing in again | port |
@@ -923,7 +923,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | a6765d41d5 | #33795 | connections | fix(web): audio and server spinners respect reduced motion | port |
 | e1458f25e2 | #32048 | connections | fix(web): track switch no longer blocked when Local environment is off | port |
 | 1672b51630 | #32157 | connections | fix(web): Add Environment drops the old tab's error when switching mode | port |
-| 399ea10f4e | #37490 | connections | fix(web): Update everything no longer offers a Nightly build to a Stable desktop app | left (settings-2): with #26288 |
+| 399ea10f4e | #37490 | connections | fix(web): Update everything no longer offers a Nightly build to a Stable desktop app | ported (settings-3): UpdateEverythingLogic.serverTargets skips a Stable desktop host for a Nightly target |
 | 27411651a4 | #37825 | connections | fix(auth): bind automatic pairing codes to peer links | port |
 | c48825322d | #38442 | connections | fix(web): pairing links never use the desktop app's t3code:// address | port |
 | dcaff67177 | #38980 | connections | fix(web): removing a connection withdraws its permission update notice | port |
@@ -1229,7 +1229,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 7f7bf263a8 | #32409 | settings | fix(web): recover ACP settings when projects change | port |
 | 8395f20124 | #29851 | settings | fix(web): editing a scheduled task shows its saved time when the hour has one digit | port |
 | 8913a4a254 | #30115 | settings | fix(web): keep typed unpublished variable rows across settings re-deliveries | port |
-| e85e0094dd | #33538 | settings | fix(web): checking for updates finds provider updates on every machine | left (settings-2): Check for updates asks every connected machine's providers, not only the primary |
+| e85e0094dd | #33538 | settings | fix(web): checking for updates finds provider updates on every machine | already (settings-3): UpdateEverything.check refreshes providers with refreshModels on every connected machine; the providers:manage filter and the failure toast are not ported |
 | 25da7ebca6 | #33730 | settings | fix(web): reclaim notice says the machine will be offline | port |
 | 7389423507 | #32576 | settings | fix(web): screen readers hear the add-project submit shortcut | port |
 | f7b81e1d11 | #33395 | settings | fix(web): settings search shortcuts follow the physical key on non-US layouts | port |

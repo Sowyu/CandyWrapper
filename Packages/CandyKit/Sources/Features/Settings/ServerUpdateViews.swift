@@ -46,7 +46,7 @@ public enum ServerUpdateCopy {
 
     public static func manual(targetVersion: String, installation: JSONValue?, serverLabel: String) -> Manual {
         let command = ServerVersionSkewLogic.manualCommand(target: targetVersion, installation: installation)
-        if installation?["kind"]?.stringValue == "npm-global" {
+        if ["npm-global", "t3-launcher"].contains(installation?["kind"]?.stringValue) {
             return Manual(command: command, label: "Copy update command", toastTitle: "Update command copied",
                           toastDescription: "Run `\(command)` on \(serverLabel), then restart t3 with your usual options.")
         }

@@ -68,4 +68,33 @@ struct ServerUpdateWireTests {
         let running = ServerUpdateState.running(stage: .downloading, fromVersion: "1.0.0", targetVersion: "2.0.0")
         #expect(running.forServerVersion("2.0.0") == running)
     }
+
+    /// #27275: a launcher host that comes back as another process ends the wait; only this update's outcome counts.
+    @Test func acceptingProcessEndsTheWait() {
+        let result = ServerSelfUpdateResult(targetVersion: "2.0.0", method: "boot-service", updateId: "u1")
+        let same = ServerLifecycleReady(serverVersion: "1.0.0", at: "t0")
+        let other = ServerLifecycleReady(serverVersion: "1.0.0", at: "t1")
+        #expect(!ServerUpdateLogic.matchesResume(result, same, acceptedAt: "t0"))
+        #expect(ServerUpdateLogic.matchesResume(result, other, acceptedAt: "t0"))
+        #expect(!ServerUpdateLogic.matchesResume(result, other))
+        let foreign = ServerLifecycleReady(serverVersion: "1.0.0", updateOutcome: .init(id: "u0", fromVersion: "1.0.0", targetVersion: "1.5.0",
+                                                                                        status: "rolled-back", reason: "old reason"), at: "t1")
+        #expect(ServerUpdateLogic.failure(result, foreign) == "The service launcher resumed without committing the requested server version.")
+        let ready = ServerLifecycleReady(.object(["type": .string("ready"), "payload": .object([
+            "at": .string("2026-11-19T00:00:00.000Z"), "environment": .object(["serverVersion": .string("2.0.0")])])]))
+        #expect(ready?.at == "2026-11-19T00:00:00.000Z")
+    }
+
+    @Test func npmRelease() throws {
+        #expect(ServerNpmRelease.input(spec: "nightly") == .object(["spec": .string("nightly")]))
+        #expect(ServerNpmRelease.input(spec: "0.0.51-nightly.20261101.4") != nil)
+        #expect(ServerNpmRelease.input(spec: "beta") == nil)
+        #expect(ServerNpmRelease.spec(channel: "stable") == "latest")
+        let release = try JSONValue.object(["version": .string("0.0.51"), "databaseMigration": .number(42)]).decode(as: ServerNpmRelease.self)
+        #expect(release == ServerNpmRelease(version: "0.0.51", databaseMigration: 42))
+        let caps = ServerUpdateCapabilities(["serverUpdateStaging": .bool(true), "npmReleaseLookup": .bool(true)])
+        #expect(caps.staging && caps.npmReleaseLookup)
+        #expect(ServerUpdateLogic.input(targetVersion: "1", continueRunningThreads: false, channel: "nightly", targetDatabaseMigration: 3, stageOnly: true)
+                == .object(["targetVersion": .string("1"), "channel": .string("nightly"), "targetDatabaseMigration": .number(3), "stageOnly": .bool(true)]))
+    }
 }

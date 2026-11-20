@@ -36,10 +36,17 @@ public enum ServerVersionSkewLogic {
         }
         return a.pre.count < b.pre.count
     }
+    private static func quote(_ value: String) -> String { "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'" }
+
     public static func manualCommand(target: String = clientVersion, installation: JSONValue? = nil) -> String {
         let kind = installation?["kind"]?.stringValue
         if kind == "npm-global", let prefix = installation?["prefix"]?.stringValue {
             return "npm install --global --prefix '" + prefix.replacingOccurrences(of: "'", with: "'\\''") + "' t3@" + target
+        }
+        // versionSkew.ts:112-115 (Nightly 4928): the launcher updates its own base dir, so an inherited
+        // T3CODE_HOME cannot send the update elsewhere.
+        if kind == "t3-launcher", let launcher = installation?["launcher"]?.stringValue, let baseDir = installation?["baseDir"]?.stringValue {
+            return quote(launcher) + " update --base-dir " + quote(baseDir) + " " + target
         }
         let runner = kind == "pnpm-dlx" ? "pnpm dlx" : kind == "bunx" ? "bunx" : "npx"
         return runner + " t3@" + target

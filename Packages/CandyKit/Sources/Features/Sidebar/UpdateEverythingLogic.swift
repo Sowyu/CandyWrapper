@@ -52,7 +52,11 @@ public enum UpdateEverythingLogic {
             if m.ownServer { targets.append(m); continue }
             guard let path = m.capabilities.selfUpdate else { skip("needs a manual update"); continue }
             if path == .desktopManaged, !m.capabilities.desktopAppUpdate { skip("needs a newer desktop app"); continue }
-            if path != .desktopManaged, let v = m.serverVersion, channel(v) != channel(target) { skip("on the \(channel(v)) channel"); continue }
+            // A desktop app installs its own track's newest release. Nightly builds run ahead of Stable, so a Nightly
+            // host behind a Stable target has something newer; a Stable one may not (updateEverything.logic.ts, #37490).
+            if let v = m.serverVersion, channel(v) != channel(target), path != .desktopManaged || channel(v) == "stable" {
+                skip("on the \(channel(v)) channel"); continue
+            }
             targets.append(m)
         }
         return (targets, skipped)
