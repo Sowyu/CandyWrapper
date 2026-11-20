@@ -932,16 +932,16 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| a3df6044a4 | #21430 | device | fix(web): preserve the active pointer in the flat Device view | left (panels-2): not checked |
-| 9bd5e12242 | #24106 | device | fix(web): restored Device view waits for device state before setup | left (panels-2): not checked |
-| 43b56b1790 | #23339 | device | fix(device): forward numeric keypad keys to iOS simulators | left (panels-2): not checked |
-| 09ace626bb | #28323 | device | fix(web): device tools keep the typed text when a command fails | left (panels-2): not checked |
-| a821f039c1 | #29352 | device | fix(client-runtime): connection diagnosis no longer blames the host while this device's sign-in loads | left (panels-2): not checked |
-| 3ee55151e0 | #29912 | device | fix(web): device host checks show the error without a stack trace | left (panels-2): not checked |
-| 202d5b5616 | #25971 | device | fix(devices): keep devices listed when simulator discovery fails | left (panels-2): not checked |
-| f475de2f75 | #27030 | device | fix(web): device tool update buttons fit their popovers | left (panels-2): not checked |
-| aa37097093 | #35664 | device | fix(web): streamed device toolbar starts at the panel size | left (panels-2): not checked |
-| 9e32c95576 | #33199 | device | fix(client-runtime): show routes whose host refused this device's sign-in | left (panels-2): not checked |
+| a3df6044a4 | #21430 | device | fix(web): preserve the active pointer in the flat Device view | already in CandyWrapper (panels-3): AppKit sends every drag to the view that took the mouse-down, so DevicePanelStreamView keeps the touch (DevicePanelView.swift:255-261) |
+| 9bd5e12242 | #24106 | device | fix(web): restored Device view waits for device state before setup | skip (panels-3): restoring a Device view needs a live device host to check; the sandbox has no simulator runtime or Android SDK (parity-checklist Device panel) |
+| 43b56b1790 | #23339 | device | fix(device): forward numeric keypad keys to iOS simulators | ported (panels-3): the numeric keypad's keys map to HID usages 0x54-0x63 and 0x67 on iOS, DevicePanelStreamClient.key |
+| 09ace626bb | #28323 | device | fix(web): device tools keep the typed text when a command fails | already in CandyWrapper (panels-3): DeviceToolsDrawerView never clears a field after a command, so a failure keeps the text; T3 also clears it after success, which CW does not |
+| a821f039c1 | #29352 | device | fix(client-runtime): connection diagnosis no longer blames the host while this device's sign-in loads | left (panels-3): diagnosis while this device's sign-in loads lives in Features/Settings ConnectionDiagnosis.swift, held for the Settings agent |
+| 3ee55151e0 | #29912 | device | fix(web): device host checks show the error without a stack trace | n/a (panels-3): CandyWrapper shows the server's message for a host check, never an Effect cause with a stack |
+| 202d5b5616 | #25971 | device | fix(devices): keep devices listed when simulator discovery fails | skip (panels-3): the discovery warning popover with Retry needs a device host whose discovery fails to check; the sandbox has no device runtime |
+| f475de2f75 | #27030 | device | fix(web): device tool update buttons fit their popovers | n/a (panels-3): CandyWrapper has no device tool update buttons yet (parity-checklist Device tools drawer, tool versions remain) |
+| aa37097093 | #35664 | device | fix(web): streamed device toolbar starts at the panel size | n/a (panels-3): a streamed browser tab in CandyWrapper sizes from its own view's bounds, not a published panel rect |
+| 9e32c95576 | #33199 | device | fix(client-runtime): show routes whose host refused this device's sign-in | left (panels-3): routes a host refused this device's sign-in need the connection driver's refusal state and Settings EnvironmentRoutesList, held for the Settings agent |
 
 ## Small fixes, diff (18)
 
