@@ -212,8 +212,9 @@ final class UserMessageRowView: TimelineRowView {
         addSubview(attribution)
         addSubview(marker)
         addSubview(bubble)
-        // `text-foreground` on the bubble, where assistant markdown sits at 80%.
-        markdown.bodyColor = TL.c(\.foreground)
+        // `text-message-foreground` on the bubble (TimelineUserMessageRow.tsx at 4928, #26888), where assistant
+        // markdown sits at 80% of the foreground. The default themes give both the same color.
+        markdown.bodyColor = TL.c(\.messageForeground)
         bubble.addSubview(markdown)
         // Over the bubble, not in it: the bubble takes no clicks (`FillView`), the images do.
         addSubview(attachments)

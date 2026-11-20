@@ -128,6 +128,16 @@ struct ThreadCatchUp4928Part4Tests {
         guard case .paragraph(let runs)? = MarkdownDocument(parsing: "run `~x~` and ~/a", preservesLineBreaks: true).blocks.first else { Issue.record("no paragraph"); return }
         #expect(runs.map(\.text).joined() == "run ~x~ and ~/a")
     }
+
+    /// #37284: a code block's Copy drops the fence's trailing newline. #30367 and #35701: labels never split an emoji.
+    @Test func copiedCodeAndCitationLabels() {
+        #expect(MarkdownCodeCopy.text("let a = 1\n") == "let a = 1")
+        #expect(MarkdownCodeCopy.text("x") == "x")
+        let text = String(repeating: "a", count: 63) + "😀 tail"
+        let label = ThreadAssistantCitation(environmentId: "e", threadId: "t", messageId: "m", text: text, start: 0, end: 1,
+                                            prefix: "", suffix: "", comment: nil).label
+        #expect(label == String(repeating: "a", count: 63) + "…")
+    }
 }
 
 private extension NSView {

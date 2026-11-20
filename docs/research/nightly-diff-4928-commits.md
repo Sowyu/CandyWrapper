@@ -1565,7 +1565,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | c0df40aa54 | #33405 | thread | fix(web): queued message preview keeps inline image labels in place | port |
 | 9c7618ba1c | #35603 | thread | fix(web): gitignore fences in the rich-text composer highlight as ini, as chat does | port |
 | 451e3756a5 | #33953 | thread | fix(web): keep later navigation when thread deletion completes | port |
-| b63d3c5923 | #26888 | thread | fix(web): sent messages honor their theme foreground | port |
+| b63d3c5923 | #26888 | thread | fix(web): sent messages honor their theme foreground | ported (thread-4): sent message text uses messageForeground, which equals the foreground in the default themes. Left: inline code in sent messages tinted from the message foreground (10% fill, index.css), which needs a per-view chip fill in MarkdownLayout |
 | dfded9d759 | #27436 | thread | fix(web): keep the child thread open when its remote parent was deleted | port |
 | 9ac4535b06 | #35634 | thread | fix(shared): token counts just below a unit boundary use the next unit | ported: token counts pick their unit after rounding, so 999,999 reads 1M (thread-2, T3Store `formatTokens`) |
 | c6b18c4741 | #33353 | thread | fix(web,mobile): keep line breaks in pending question text | port |
@@ -1600,7 +1600,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | a4723422e7 | #26692 | thread | fix(web): screen readers no longer say "Message" twice entering the composer | port |
 | 31d9b3bcd6 | #34569 | thread | fix(web): edited HTML previews outside the workspace no longer turn white | port |
 | 2c61677d59 | #36250 | thread | fix(web): overlays close on a click over the desktop header | port |
-| 8656cdb3a9 | #35701 | thread | fix(web): reply labels no longer cut an emoji in half | port |
+| 8656cdb3a9 | #35701 | thread | fix(web): reply labels no longer cut an emoji in half | already in CandyWrapper (thread-4): ComposerReply cuts the label at 64 Characters, never inside an emoji; the quote chip's label (ThreadAssistantCitation.label) now cuts at a composed character too |
 | cf60628ef9 | #25213 | thread | fix(client-runtime): cache running threads when their view closes | port |
 | 33372a25a2 | #23506 | thread | fix(pi): info notifications no longer render as warnings | port |
 | 947c056894 | #23666 | thread | fix(web): a context submenu near the right edge no longer covers its parent menu | port |
@@ -1645,7 +1645,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 79e47e9096 | #32402 | thread | fix(shared): inline code paths like `docker/Dockerfile` become file chips | ported in 93df13b9 |
 | b35c9702f9 | #36997 | thread | fix(acp): optional text questions can be left blank | port |
 | 8897a6ebe1 | #37183 | thread | fix(web): keep thread mentions when editing sent messages | port |
-| 598296e850 | #37284 | thread | fix(web): copied code blocks drop the fence's trailing newline | port |
+| 598296e850 | #37284 | thread | fix(web): copied code blocks drop the fence's trailing newline | ported (thread-4): a code block's Copy drops the fence's trailing newline (MarkdownCodeCopy) |
 | 58b6e1c5ba | #37395 | thread | fix(web): a disabled Merge back button shows why it is disabled | port |
 | 1b84e72a6d | #37507 | thread | fix(web): Cmd+Enter on an edited queued message steers it into the running turn | port |
 | 56f41466f5 | #37557 | thread | fix(web): sending a new thread's first message no longer scrolls the sidebar | port |

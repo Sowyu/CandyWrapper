@@ -20,7 +20,10 @@ public struct ThreadAssistantCitation: Equatable, Sendable {
         let value = (comment?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? text
         let compact = value.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         let ns = compact as NSString
-        return ns.length > 64 ? ns.substring(to: 64) + "…" : compact
+        // A cut never splits a surrogate pair or a composed character (#30367, #35701).
+        guard ns.length > 64 else { return compact }
+        let last = ns.rangeOfComposedCharacterSequence(at: 63)
+        return ns.substring(to: last.upperBound <= 64 ? 64 : last.location) + "…"
     }
     public static func parse(_ href: String) -> Self? {
         // Ids may run to 4,096 characters (ASSISTANT_CITATION_MAX_ID_LENGTH, #28084); the cap is T3's

@@ -627,6 +627,12 @@ private struct Context {
     var olDepth = 0
 }
 
+/// The code a block's Copy puts on the pasteboard: without the fence's trailing newline (MarkdownCodeBlock.tsx at
+/// 4928, #37284).
+enum MarkdownCodeCopy {
+    static func text(_ code: String) -> String { code.hasSuffix("\n") ? String(code.utf8.dropLast()) ?? code : code }
+}
+
 private struct Builder {
     let unwrapped: Set<Int>
     let wrapsCode: Bool
@@ -1418,7 +1424,7 @@ private struct Builder {
         }
         box.controls.append(.init(frame: CGRect(x: x - 26, y: 1 + 6, width: 24, height: 24), icon: .textWrap,
                                   variant: wraps ? .secondary : .ghostMuted, action: .toggleWrap(codeIndex - 1)))
-        box.controls.append(.init(frame: CGRect(x: copyX, y: 1 + 6, width: 24, height: 24), icon: .copy, variant: .ghostMuted, action: .copy(code)))
+        box.controls.append(.init(frame: CGRect(x: copyX, y: 1 + 6, width: 24, height: 24), icon: .copy, variant: .ghostMuted, action: .copy(MarkdownCodeCopy.text(code))))
         let body = CGRect(x: 1, y: 1 + MarkdownStyle.codeHeader, width: width - 2, height: height - 2 - MarkdownStyle.codeHeader)
         if !wraps { box.items.append(.scroll(codeIndex: codeIndex - 1, viewport: body, contentWidth: overflows ? contentWidth : body.width)) }
         box.items.append(.text(textBox, CGPoint(x: 1 + p.x, y: 1 + MarkdownStyle.codeHeader + p.y)))
@@ -1462,7 +1468,7 @@ private struct Builder {
         box.controls.append(.init(frame: CGRect(x: width - 1 - 6 - 24 - 2 - 24, y: 1 + 6, width: 24, height: 24), icon: .code,
                                   variant: .ghostMuted, action: .toggleDiagram(index)))
         box.controls.append(.init(frame: CGRect(x: width - 1 - 6 - 24, y: 1 + 6, width: 24, height: 24), icon: .copy, variant: .ghostMuted,
-                                  action: .copy(code)))
+                                  action: .copy(MarkdownCodeCopy.text(code))))
         let top: CGFloat = 1 + 6 + 24, inner = max(0, width - 2)
         var y: CGFloat = 0
         switch onMain({ MermaidDiagrams.shared.result(code, palette: palette, width: inner) }) {
