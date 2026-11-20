@@ -17,13 +17,14 @@ final class ThreadLineageWorkflowMemberView: ControlView {
     private let fill = CALayer()
 
     init(_ member: SubagentWorkflowGroup.Member, coordinator: ProjectedSubagent, driver: String?, providerName: String,
-         available: Bool, nowMs: Int64) {
+         available: Bool, nowMs: Int64, badge: ProviderBadge? = nil, dotOnTop: Bool = false) {
         self.member = member
         super.init(frame: .zero)
         fill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
         fill.cornerRadius = 10
         layer?.addSublayer(fill)
-        icon.configure(driver: driver, displayName: providerName, fallback: .bot, status: member.status)
+        // The coordinator's account badge, and the dot on top while any instance shows one (ThreadLineageWorkflowRow.tsx at 4928, #24833).
+        icon.configure(driver: driver, displayName: providerName, fallback: .bot, status: member.status, badge: badge, dotOnTop: dotOnTop)
         title.text = member.title
         title.lineHeight = 16
         elapsed.lineHeight = 16

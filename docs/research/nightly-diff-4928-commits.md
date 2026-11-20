@@ -1443,7 +1443,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | f2cd7a1e63 | #25199 | thread | fix(web): show complete tooltip labels when opening | n/a: CSS tooltip entry animation; AppKit tooltips draw whole |
 | 09ac55639a | #26716 | thread | fix(web): popovers fade out in place instead of jumping after a pick | port |
 | eef35b0262 | #26762 | thread | fix(clients): stop loading thread families when opening chats | port |
-| 0343c83aa6 | #24833 | thread | fix(web,mobile): lineage and agent rows show which account a subagent runs on | ported: lineage rows draw the subagent's instance badge on its glyph and lift the status dot to the top corner while any instance shows one (thread-2, ThreadRelationshipIconView). Left: workflow member rows |
+| 0343c83aa6 | #24833 | thread | fix(web,mobile): lineage and agent rows show which account a subagent runs on | ported: lineage rows draw the subagent's instance badge on its glyph and lift the status dot to the top corner while any instance shows one (thread-2, ThreadRelationshipIconView). Workflow member rows wear the coordinator's badge with the dot on top too (thread-4, ThreadLineageWorkflowMemberView) |
 | 2c59bf66c7 | #24898 | thread | fix(web,mobile): subagent cards show which account each subagent runs on | ported: subagent cards draw the instance badge on the avatar's glyph and lift the dot the same way (thread-2, SubagentCardLinkView, ThreadViewModel `providerBadge`) |
 | bfd37b774b | #27310 | thread | fix(web): Queued messages can be edited during Compact and send | port |
 | b0aa468aa1 | #23621 | thread | fix(web): copy and save images embedded as data URLs | already in CandyWrapper: copy and save use the loader's decoded image, and MarkdownImages.decodeData reads data URLs |
