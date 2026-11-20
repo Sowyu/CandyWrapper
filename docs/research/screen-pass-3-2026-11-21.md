@@ -45,6 +45,43 @@ Both are in `d7e2b7be`.
 | 11 | The Diff scope menu keeps "Changes" lit while the pointer is on another row, so two rows look hovered | wrong | `Features/Diff/DiffPanelView.swift:875` and the DS menu's selected row | Base UI highlight follows the pointer |
 | 12 | A truncated slash command description gets its tooltip from the keyboard but not from the pointer | wrong | `Features/Composer/Panels/ComposerCommandMenuView.swift` | `ComposerCommandMenu.tsx:211-217, 282`, active row by pointer or keys |
 
+## Verdicts after screen-fixes-3
+
+Branch `screen-fixes-3` from `catchup-4928` (560b1f0f). Each fix was checked in a real window on the 4928 sandbox, in default dark and Redesign dark where the surface exists in both. Crops are in `~/CandyWrapper-research/sandbox/screen-fixes-3-2026-11-21/`, written `$F/` here.
+
+| # | New verdict | Cause and fix | Image |
+|---|---|---|---|
+| 1 | fixed | `PopupHost`'s key and click monitors kept routing Return and Escape to the menu under a dialog. The host now yields while a `ModalHost` sits above it, so every dialog opened from a popup owns the keyboard | `$F/item1-*` |
+| 2 | fixed | The hint had a fixed 32pt frame and the button a fixed y. The hint now measures its lines and the button sits below them | `$F/item2-*` |
+| 3 | fixed | `ComposerController` set the strip label only in `updatePickers`. The pickers' `onChange` now updates it too | `$F/item3-*` |
+| 4 | fixed | The routed Source control page (`ConcernSettingsView` slices) never listed the `issue-trackers` group, so the section from 9c9bdc1e never showed against a server. The server and its `issues` capability were fine | `$F/item4-*` |
+| 5 | fixed | The rewrite blocked any non-ASCII byte before a scheme. It now blocks only an ASCII letter, as micromark's `previousProtocol` does; `www.` keeps the word boundary | `$F/item5-*` |
+| 6 | fixed | Auto uses `.shieldCheck` | `$F/item6-*` |
+| 7 | fixed for the rows the app draws | The generator skips rows through `UNPORTED_IDS` and `UNPORTED_PATHS`. Two-line folder rows and Screen reader window title now exist and are searchable. 26 stay out: Screen reader announcements, Keep awake, Simlock hosts, Fast worktree checkout, Clone into host folders, Welcome page, Text generators, Device sources, the 15 Voice rows and the 2 Secrets rows, because CandyWrapper has no such row or page | `$F/item7-*` |
+| 8 | fixed | Chat now has T3's Screen reader section with the window title switch. With it on, the title reads "Unknown Subject - demo-repo" | `$F/item8-*` |
+| 9 | fixed | The sidebar's client settings observer ignored `boringSidebarMultilineRows`, so the switch took effect only after a relaunch. Rows with a branch go to two lines at once; a row without one keeps one line, as T3's `metaLineEmpty` does | `$F/item9-*` |
+| 10 | fixed | `DiffPanelView.folds` keeps each thread and section's folds for the session (T3's `collapsedFileKeysByScopeKey`), and reloads apply them over `diffFilesCollapsed` | `$F/item10-*` |
+| 11 | not a bug | T3's `MenuRadioItem` fills the checked row with `foreground/8%` (`menu.tsx:239`) while `data-highlighted` uses `--accent`, white 4% in dark (`index.css:1205`). T3 shows the same two lit rows | |
+| 12 | not reproduced | The tooltip showed from the pointer with stepped moves, a single jump, entry from either side and a return to a row already shown. The earlier pass likely moved the pointer without a mouse-moved event | |
+| "or start without a project" | fixed | The link opens the scratch project as the draft's project and keeps the typed text (`DraftHeroHeadline.tsx:189-203`). It hides when no machine offers a scratch folder. T3 then focuses the project trigger; here the composer keeps focus | `$F/start-without-project-after-click-default-dark.png` |
+
+Dialogs and menus that shared the flaw:
+
+- Item 1's cause sat in the shared popup host, so any `ModalHost` presented while a popup stays open had it, and the fix covers them all. On screen I found one such path, the Unrestricted confirm over the model picker. I did not drive every other menu-opened dialog.
+- Item 11 needs no change in any menu.
+
+Still wrong, found during the fixes:
+
+- The draft hero gets no mouse-moved events on screen, so neither the project name's solid underline nor the new link's hover shows. It predates this branch. The hover drawing works offscreen (`ThreadPanelChromeTests.startWithoutAProjectIsAButton`).
+- A Settings search for "issue trackers" opens Source control at its top, since the section loads after the scroll.
+
+Earlier "not reached" items:
+
+- The Diff panel restore fix (d7e2b7be) works on screen: a refresh followed at once by a thread switch, in both directions, three times, always showed the files, `$F/d7e2b7be-diff-restored-after-switch-during-load-default-dark.png`.
+- The wide context strip, model chip popover, stacked banners, pasted images, queued thumbnail viewer, Zen's live line, child approvals, the full-screen HTML card, Show full message, quote card copy, issue badge colors, "vs main" and the theme background image stay not reached. Each needs a long message, a slow turn, a linked issue, a branch checkout or a fixture that this pass's turn budget and sandbox did not have.
+
+Unrestricted is off on both sandboxes: `providerInstances.claudeAgent` reads `{"driver": "claudeAgent"}` on each, and no turn ran while it was on.
+
 ## Smoke tests
 
 | Server | State | Verdict | Image |
