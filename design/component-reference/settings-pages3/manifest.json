@@ -8,7 +8,7 @@
     "width" : 764
   },
   "connections.load-balancing" : {
-    "height" : 195,
+    "height" : 197,
     "width" : 796
   },
   "provider.advisory" : {
@@ -16,7 +16,7 @@
     "width" : 320
   },
   "provider.environment" : {
-    "height" : 254,
+    "height" : 358,
     "width" : 492
   }
 }

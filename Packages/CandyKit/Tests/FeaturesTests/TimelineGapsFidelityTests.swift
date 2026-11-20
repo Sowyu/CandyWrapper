@@ -120,6 +120,8 @@ struct TimelineGapsFidelityTests {
         try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
         var lines: [(String, Double)] = [], images = ""
         for c in spec["cases"] as! [[String: Any]] {
+            // Retired cases stay in the spec for the record; T3 removed what they draw (nightly-4928-fidelity.md).
+            if c["retired"] != nil { continue }
             let name = c["name"] as! String, native = c["native"] as! [String: String]
             for theme in spec["themes"] as! [String] {
                 let base = "\(name).rest.\(theme)"

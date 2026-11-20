@@ -19,7 +19,7 @@ def source_file(relative):
     if os.environ.get("CANDY_T3_SOURCE"):
         return open(os.path.join(os.environ["CANDY_T3_SOURCE"], relative)).read()
     return subprocess.check_output(["git", "-C", os.path.expanduser("~/CandyWrapper-research/t3code"), "show",
-        "v0.1.4-nightly.20261028.3824:apps/web/src/" + relative], text=True)
+        "v0.1.11-nightly.20261119.4928:apps/web/src/" + relative], text=True)
 
 def load(name, until):
     src = open(os.path.join(ROOT, "scripts", name)).read()
@@ -57,10 +57,13 @@ for name, value in re.findall(r"const (THREAD_DETAILS_\w+) =\s*([`\"].*?[`\"]);"
     S[name] = re.sub(r"\$\{(\w+)\}", lambda m: S[m.group(1)], value[1:-1])
 
 # ThreadDetailsControl.tsx: the panel control's base classes.
+# ThreadDetailsControl.tsx:58 (4928).
 CTRL = ("relative inline-flex shrink-0 cursor-pointer items-center whitespace-nowrap border outline-none transition-[box-shadow,scale] "
-        "[&:active:not([aria-haspopup])]:scale-[0.97] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 "
-        "focus-visible:ring-offset-background pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 "
-        "pointer-coarse:after:min-w-11 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 disabled:pointer-events-none "
+        "[&:not([aria-haspopup]):not(:disabled):not([aria-disabled=true])]:will-change-[scale] [&:active:not([aria-haspopup])]:scale-[0.97] "
+        "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background "
+        "pointer-coarse:after:absolute pointer-coarse:after:top-1/2 pointer-coarse:after:left-1/2 pointer-coarse:after:size-full "
+        "pointer-coarse:after:min-h-8 pointer-coarse:after:min-w-8 pointer-coarse:after:-translate-x-1/2 pointer-coarse:after:-translate-y-1/2 "
+        "[&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 disabled:pointer-events-none "
         "disabled:opacity-64 aria-disabled:cursor-not-allowed aria-disabled:opacity-64 [&_svg]:shrink-0")
 PARTS = {"row": S["THREAD_DETAILS_PANEL_ROW_CLASS"], "select": S["THREAD_DETAILS_PANEL_SELECT_ROW_CLASS"],
          "primary": S["THREAD_DETAILS_PANEL_SPLIT_PRIMARY_CLASS"], "secondary": S["THREAD_DETAILS_PANEL_SPLIT_SECONDARY_CLASS"]}
@@ -89,9 +92,11 @@ def card(machine_kind, env_label, branch, quick_label, quick_icon, plus, minus):
              + control("primary", f'{lucide(quick_icon, ICON)}<span class="not-sr-only ml-0 truncate">{quick_label}</span>')
              + f'<span aria-hidden="true" class="{S["THREAD_DETAILS_PANEL_SPLIT_SEPARATOR_CLASS"]}"></span>'
              + control("secondary", lucide("chevron-down", CHEVRON_PANEL)) + '</div>')
-    changes = control("row", f'{lucide("file-diff", ICON)}<span class="flex-1 text-left">Changes</span>'
-                      f'<span class="flex items-center gap-1.5 font-mono text-xs tabular-nums"><span class="{"text-diff-addition-foreground" if plus else "text-muted-foreground"}">+{plus}</span>'
-                      f'<span class="{"text-diff-deletion-foreground" if minus else "text-muted-foreground"}">-{minus}</span></span>')
+    # GitActionsControl.tsx:1620-1660 (4928): base label (Uncommitted for a working tree diff, :1143) and counts in one row.
+    changes = control("row", f'{lucide("file-diff", ICON)}<span class="flex min-w-0 flex-1 items-baseline gap-1.5"><span class="shrink-0">Changes</span>'
+                      '<span class="pointer-events-auto min-w-0 truncate font-normal text-muted-foreground">Uncommitted</span>'
+                      f'<span class="ml-auto flex shrink-0 items-baseline gap-2 ps-2 font-mono tabular-nums"><span class="{"text-diff-addition-foreground" if plus else "text-muted-foreground"}">+{plus}</span>'
+                      f'<span class="{"text-diff-deletion-foreground" if minus else "text-muted-foreground"}">-{minus}</span></span></span>')
     section = "px-2 pt-2 pb-2.5"
     return ('<div class="dropdown-glass isolate contain-paint grid max-h-full grid-rows-[minmax(0,1fr)] overflow-hidden rounded-3xl" '
             'style="width:264px"><div><div>'
@@ -148,7 +153,7 @@ def commit_dialog(branch, default_branch):
     message = ('<div class="space-y-1"><p class="text-sm font-medium">Commit message (optional)</p>'
                f'{textarea_html("sm", placeholder="Leave empty to auto-generate")}</div>')
     header = ('<div class="flex flex-col gap-2 p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-panel])]:pb-3 max-sm:pb-4" data-slot="dialog-header">'
-              '<h2 class="wrap-anywhere font-semibold text-xl leading-none" data-slot="dialog-title">Commit changes</h2>'
+              '<h2 class="wrap-anywhere font-semibold text-xl leading-snug" data-slot="dialog-title">Commit changes</h2>'
               '<p class="text-muted-foreground text-sm" data-slot="dialog-description">Review and confirm your commit. Leave the message blank to auto-generate one.</p></div>')
     panel = ('<div class="space-y-4 p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-header])]:pt-1 '
              'in-[[data-slot=dialog-popup]:has([data-slot=dialog-footer]:not(.border-t))]:pb-1" data-slot="dialog-panel">'

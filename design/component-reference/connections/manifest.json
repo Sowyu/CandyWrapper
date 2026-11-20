@@ -1,22 +1,22 @@
 {
   "add-dialog" : {
-    "height" : 357,
+    "height" : 364.5,
     "width" : 768
   },
   "add-dialog.error" : {
-    "height" : 389,
+    "height" : 396.5,
     "width" : 768
   },
   "add-dialog.route" : {
-    "height" : 377,
+    "height" : 384.5,
     "width" : 768
   },
   "add-dialog.ssh" : {
-    "height" : 391,
+    "height" : 398.5,
     "width" : 768
   },
   "add-dialog.ssh-error" : {
-    "height" : 449,
+    "height" : 456.5,
     "width" : 768
   },
   "authorized-clients" : {
@@ -24,11 +24,11 @@
     "width" : 796
   },
   "authorized-clients.open" : {
-    "height" : 239,
+    "height" : 241,
     "width" : 796
   },
   "create-link-dialog" : {
-    "height" : 1215,
+    "height" : 1222.5,
     "width" : 448
   },
   "environments.empty" : {
@@ -44,7 +44,7 @@
     "width" : 796
   },
   "environments.rows" : {
-    "height" : 208,
+    "height" : 210,
     "width" : 796
   },
   "header" : {
@@ -56,19 +56,19 @@
     "width" : 255
   },
   "nav.back" : {
-    "height" : 40,
+    "height" : 44,
     "width" : 255
   },
   "this-machine" : {
-    "height" : 154,
+    "height" : 106,
     "width" : 796
   },
   "this-machine.full" : {
-    "height" : 728,
+    "height" : 486,
     "width" : 796
   },
   "this-machine.permissions" : {
-    "height" : 964,
+    "height" : 722,
     "width" : 796
   }
 }

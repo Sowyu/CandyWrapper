@@ -18,7 +18,7 @@ def source_file(relative):
     if os.environ.get("CANDY_T3_SOURCE"):
         return open(os.path.join(os.environ["CANDY_T3_SOURCE"], relative)).read()
     return subprocess.check_output(["git", "-C", os.path.expanduser("~/CandyWrapper-research/t3code"), "show",
-        "v0.1.4-nightly.20261028.3824:apps/web/src/" + relative], text=True)
+        "v0.1.11-nightly.20261119.4928:apps/web/src/" + relative], text=True)
 
 def load(name, until):
     src = open(os.path.join(ROOT, "scripts", name)).read()
@@ -177,7 +177,7 @@ detail_html = (f'<div class="relative flex w-full flex-col bg-background" style=
 
 # Link pull request (`max-w-xl`), with "#42" typed and resolved against the thread's repository.
 header = ('<div class="flex flex-col gap-2 p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-panel])]:pb-3 max-sm:pb-4" data-slot="dialog-header">'
-          '<h2 class="wrap-anywhere font-semibold text-xl leading-none" data-slot="dialog-title">Link pull request</h2>'
+          '<h2 class="wrap-anywhere font-semibold text-xl leading-snug" data-slot="dialog-title">Link pull request</h2>'
           '<p class="text-muted-foreground text-sm" data-slot="dialog-description">Attach a pull request to this thread by its URL, or by its number for this thread\'s repository.</p></div>')
 panel = ('<div class="space-y-4 p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-header])]:pt-1 '
          'in-[[data-slot=dialog-popup]:has([data-slot=dialog-footer]:not(.border-t))]:pb-1" data-slot="dialog-panel">'

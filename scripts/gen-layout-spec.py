@@ -67,13 +67,13 @@ for name, offset, fade, visible in [("faded.middle", 40, True, True), ("faded.to
 write("scroll-area", "apps/web/src/components/ui/scroll-area.tsx", ["rest", "hover"], cases)
 
 # SettingsSection and SettingsRow (3824 settingsLayout.tsx:235,467-499, #24865), SettingsGroup.tsx.
-GROUP = "relative overflow-visible text-foreground rounded-xl border border-border/60 bg-card/40 shadow-xs/5 [&>*+*]:border-t [&>*+*]:border-border/50 [&>[data-slot=settings-row]]:rounded-none"
+GROUP = "relative overflow-visible text-foreground rounded-xl border border-border/60 bg-card/40 shadow-xs/5 *:not-first:border-t *:not-first:border-border/50 [&>[data-slot=settings-row]]:rounded-none"
 ROW = "@container/settings-row rounded-xl px-3 sm:px-4 aria-disabled:opacity-64 aria-disabled:[&_*]:text-muted-foreground py-3"
 
 def row(title, desc, control):
-    d = f'<p class="max-w-2xl text-balance text-xs leading-normal text-muted-foreground">{desc}</p>' if desc else ""
+    d = f'<p class="max-w-2xl text-pretty text-xs leading-normal text-muted-foreground">{desc}</p>' if desc else ""
     return (f'<div data-slot="settings-row" class="{ROW}"><div class="flex flex-col gap-3 @min-[32rem]/settings-row:grid '
-            '@min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">'
+            '@min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_auto] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">'
             f'<div class="min-w-0 flex-1 space-y-1"><div class="flex min-h-5 items-center gap-1.5"><h3 class="text-sm font-medium text-foreground">{title}</h3>'
             '<span class="inline-flex h-5 w-5 shrink-0 items-center justify-center"></span></div>'
             f'{d}</div><div class="flex w-full min-w-0 shrink-0 items-center gap-2 @min-[32rem]/settings-row:w-auto @min-[32rem]/settings-row:justify-end">{control}</div></div></div>')
@@ -84,7 +84,7 @@ ROWS = [("Theme", "Choose how T3 Code looks on this device.", "System"),
 
 def section(title, rows):
     body = "".join(row(t, d, button("outline", "sm", c)) for t, d, c in rows)
-    return (f'<section class="space-y-2.5"><div class="flex min-h-7 items-start justify-between gap-4 px-3 sm:px-4">'
+    return (f'<section class="space-y-2.5"><div class="flex min-h-7 flex-wrap items-start justify-between gap-x-4 gap-y-1 px-3 sm:px-4">'
             f'<div class="flex min-w-0 items-center gap-1"><h2 class="flex min-h-7 items-center gap-2 text-base font-semibold text-foreground">{title}</h2></div>'
             f'<div class="flex min-h-7 min-w-7 items-center justify-end"></div></div><div class="{GROUP}">{body}</div></section>')
 
@@ -206,7 +206,7 @@ def split(value, tail=None):
 
 def middle(value):
     s = split(value)
-    inner = (f'<span class="peer min-w-0 overflow-hidden">{s[0]}</span><span class="shrink-0 peer-data-overflow:before:content-[\'…\']">{s[1]}</span>' if s
+    inner = (f'<span class="peer min-w-0 overflow-hidden whitespace-pre">{s[0]}</span><span class="shrink-0 whitespace-pre peer-data-overflow:before:content-[\'…\']">{s[1]}</span>' if s
              else f'<span class="min-w-0 truncate">{value}</span>')
     return f'<span class="inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground" title="{value}">{inner}</span>'
 

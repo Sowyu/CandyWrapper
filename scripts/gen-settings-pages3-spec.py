@@ -64,15 +64,16 @@ def bitbucket(method):
             + f'<div class="flex shrink-0 gap-2">{save}</div></div></form>')
 
 
-# --- Environment (ProviderInstanceCard.tsx:381-470), one sensitive and one plain variable.
+# --- Environment (ProviderInstanceCard.tsx:466-560 at 4928), one sensitive and one plain variable.
+# Each variable is a bordered card: name and remove on the first line, value and the lock toggle on the
+# second. With no secret sources, SecretSourceInput's source part is null (SecretSourceInput.tsx:251-252).
 def var_row(index, name, value, sensitive):
     lock = button("ghost-muted", "icon-micro", lucide("lock" if sensitive else "lock-open", "size-3"))
     remove = button("ghost-destructive", "icon-micro", lucide("x", "size-3"))
     value_input = text_input("sm", "value", value, mono=True, password=sensitive, cls="min-w-0 flex-1")
-    return ('<div class="flex min-w-0 flex-wrap items-center gap-1.5">'
-            + text_input("sm", "VARIABLE_NAME", name, mono=True, cls="w-full min-w-0 sm:w-44 sm:shrink-0")
-            + '<span class="hidden text-xs text-muted-foreground sm:inline" aria-hidden="">=</span>'
-            + value_input + lock + remove + '</div>')
+    return ('<div class="flex min-w-0 flex-col gap-1.5 rounded-lg border p-2"><div class="flex min-w-0 items-center gap-1.5">'
+            + text_input("sm", "VARIABLE_NAME", name, mono=True, cls="min-w-0 flex-1") + remove + '</div>'
+            + '<div class="flex min-w-0 items-start gap-1.5">' + value_input + lock + '</div></div>')
 
 
 add = button("outline", "sm", lucide("plus", "size-3") + "Add variable")
@@ -116,11 +117,11 @@ def lb_row(kind, label, subtitle, value):
 
 
 lb_chevron = lucide("chevron-right", "size-4 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none rotate-90")
-lb_header = ('<div class="flex items-center gap-4 px-3 sm:px-4"><button type="button" class="flex min-h-11 min-w-0 flex-1 items-center gap-2 py-2 text-left outline-none rounded-md">'
+lb_header = ('<div class="flex flex-wrap items-center gap-x-4 px-3 sm:px-4"><button type="button" class="flex min-h-11 min-w-0 flex-1 basis-40 items-center gap-2 py-2 text-left outline-none rounded-md">'
              f'{lb_chevron}<span class="shrink-0 text-sm font-medium">Load balancing</span>'
              '<span class="min-w-0 truncate text-xs text-muted-foreground">Studio prefer</span></button>'
-             f'<div class="flex shrink-0 items-center">{pages["switch"]("default", "on", False)}</div></div>')
-lb_panel = ('<div class="border-t border-border/50 [&>*+*]:border-t [&>*+*]:border-border/50">'
+             f'<div class="ms-auto flex max-w-full items-center py-1.5">{pages["switch"]("default", "on", False)}</div></div>')
+lb_panel = ('<div class="border-t border-border/50 *:not-first:border-t *:not-first:border-border/50">'
             '<p class="px-3 py-2.5 text-xs text-muted-foreground sm:px-4">New threads in shared projects start on the machine with the most free CPU and memory, weighted by each machine\'s preference.</p>'
             + lb_row("mac-mini", "miniko", "This machine", "Normal") + lb_row("server", "Studio", "192.168.1.20:3773", "Prefer") + "</div>")
 load_balancing = f'<section><div class="{FOLD}">{lb_header}{lb_panel}</div></section>'

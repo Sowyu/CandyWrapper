@@ -22,7 +22,7 @@ def source_file(relative):
     if os.environ.get("CANDY_T3_SOURCE"):
         return open(os.path.join(os.environ["CANDY_T3_SOURCE"], relative)).read()
     return subprocess.check_output(["git", "-C", os.path.expanduser("~/CandyWrapper-research/t3code"), "show",
-        "v0.1.4-nightly.20261028.3824:apps/web/src/" + relative], text=True)
+        "v0.1.11-nightly.20261119.4928:apps/web/src/" + relative], text=True)
 LUCIDE = os.path.join(RESEARCH, "downloads/lucide-static-0.564.0/package/icons")
 ASSETS = os.path.join(RESEARCH, "t3-client-assets")
 
@@ -72,7 +72,7 @@ def entry_icon(path, cls="size-3"):
             f'<svg aria-hidden="true" class="{cls} shrink-0 pi-{token}" viewBox="{box}" fill="currentColor">{body}</svg>')
 
 # --- Pierre tree --------------------------------------------------------------------------------
-bundle = open(glob.glob(os.path.join(ASSETS, "fileTreeExpansion-*.js"))[0], encoding="utf-8").read()
+bundle = open(glob.glob(os.path.join(ASSETS, "FileExplorerPane-*.js"))[0], encoding="utf-8").read()
 def literal(start):
     j, out = start + 1, []
     while bundle[j] != "`":

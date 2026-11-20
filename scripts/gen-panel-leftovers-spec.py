@@ -16,7 +16,7 @@ cases = []
 # DiffCommentAnnotation.tsx:100-145.
 html = ('<div style="width:480px;height:114px" class="bg-background text-foreground px-3 py-2 font-sans">'
         + textarea_html('sm', placeholder='Add a comment…') +
-        '<div class="mt-1.5 flex items-center gap-1"><span class="mr-auto text-3xs text-muted-foreground/70">⌘/Ctrl Enter to send</span>'
+        '<div class="mt-1.5 flex flex-wrap items-center gap-1"><span class="mr-auto text-3xs text-muted-foreground/70">⌘/Ctrl Enter to send</span>'
         + button('ghost-muted', 'xs', 'Cancel') + button('default', 'xs', 'Comment', extra='opacity-50') + '</div></div>')
 cases.append({'name': 'review-draft', 'html': html, 'native': {'case': 'review-draft'}, 'wrapperStyle': 'display:block;width:480px'})
 # DeviceHostEditor.tsx:79-153. Field widths and vertical spacing copied from the editor.

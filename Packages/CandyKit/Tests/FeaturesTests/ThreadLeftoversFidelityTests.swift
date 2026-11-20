@@ -17,6 +17,8 @@ struct ThreadLeftoversFidelityTests {
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         var differences: [(String, Double)] = []
         for c in spec["cases"] as! [[String: Any]] {
+            // Retired cases stay in the spec for the record; T3 removed what they draw (nightly-4928-fidelity.md).
+            if c["retired"] != nil { continue }
             let name = c["name"] as! String, n = c["native"] as! [String: Any]
             for theme in ["light", "dark"] {
                 let ref = try #require(NSBitmapImageRep(data: Data(contentsOf: refDir.appendingPathComponent("\(name).rest.\(theme).png"))))

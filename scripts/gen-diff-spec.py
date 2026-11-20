@@ -19,11 +19,8 @@ RESEARCH = os.environ.get("CANDY_RESEARCH") or os.path.expanduser("~/CandyWrappe
 T3 = os.environ.get("CANDY_T3_SOURCE") or os.path.join(RESEARCH, "t3code/apps/web/src")
 
 def source_file(relative):
-    """Read the design tag without changing the shared checkout."""
-    if os.environ.get("CANDY_T3_SOURCE"):
-        return open(os.path.join(os.environ["CANDY_T3_SOURCE"], relative)).read()
-    return subprocess.check_output(["git", "-C", os.path.expanduser("~/CandyWrapper-research/t3code"), "show",
-        "v0.1.4-nightly.20261028.3824:apps/web/src/" + relative], text=True)
+    """Read T3's web source at the checked-out tag (Nightly 4928)."""
+    return open(os.path.join(T3, relative)).read()
 LUCIDE = os.path.join(RESEARCH, "downloads/lucide-static-0.564.0/package/icons")
 ASSETS = os.path.join(RESEARCH, "t3-client-assets")
 
@@ -124,47 +121,42 @@ for style in ["unified", "split"]:
         case(f"{key}.{style}", PATCHES[key], style, width=460 if style == "unified" else 700)
 case("collapsed", PATCHES["modified"] + PATCHES["added"] + PATCHES["deleted"], "unified", collapsed=True)
 
-diff_children = glob.glob(os.path.join(ASSETS, "renderDiffChildren-*.js"))[0]
+# Nightly 4928 chunks (client/assets of the 4928 runtime, copied to t3-client-assets).
+# FileDiff `r` is pierre's virtualized FileDiff; its superclass is the vanilla FileDiff class, which
+# the chunk does not export. diffRendering `s` is T3's getRenderablePatch (diffRendering.ts:160).
+# Importing main runs readableSyntaxTheme.ts:68, which registers t3-light; DiffPanel.tsx:1554-1561
+# passes resolveDiffThemeName(theme) (diffRendering.ts:10-19) with the Highlights highlighter.
+diff_children = glob.glob(os.path.join(ASSETS, "FileDiff-*.js"))[0]
 diff_rendering = glob.glob(os.path.join(ASSETS, "diffRendering-*.js"))[0]
-# Export names at this T3 version: renderDiffChildren `r` is pierre's vanilla FileDiff,
-# diffRendering `c` is T3's getRenderablePatch (parsePatchFiles plus T3's fallbacks).
+main_chunk = glob.glob(os.path.join(ASSETS, "main-*.js"))[0]
 PREPARE = """(async () => { try {
   // Importing the client chunks runs T3's theme bootstrap, which rewrites the root class.
   const failures = [];
   window.addEventListener('unhandledrejection', e => failures.push(String(e.reason?.stack ?? e.reason)));
   const rootClass = document.documentElement.className;
   const dark = rootClass.includes('dark');
+  // useTheme.ts:162-172: the stored appearance mode decides which palette main applies to the root.
+  localStorage.setItem('t3code:theme-appearance-mode', dark ? 'dark' : 'light');
   const fd = await import('file://DIFF_CHILDREN');
   const dr = await import('file://DIFF_RENDERING');
+  const main = await import('file://MAIN_CHUNK');
+  // Without a highlighter already loaded for these languages, the first FileDiff stalls the page
+  // in this harness. getSyntaxHighlighterPromise (syntaxHighlighting.ts:26-35) loads the same way;
+  // main `eo` is pierre's getSharedHighlighter at 4928.
+  await main.eo({themes: ['t3-light', 'pierre-dark'], langs: ['typescript', 'json', 'markdown', 'python', 'text'], preferredHighlighter: 'highlights'});
   await new Promise(r => setTimeout(r, 300));
   document.documentElement.className = rootClass;
-  // Nightly 3824 readableSyntaxTheme.ts: darken syntax, preserving the editor palette.
-  const readable = color => {
-    if (!/^#[0-9a-f]{6}$/i.test(color)) return color;
-    let rgb = [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16));
-    const minimum = ['#1ca1c7', '#636363', '#1a85d4'].includes(color.toLowerCase()) ? 6 : 4.5;
-    const contrast = () => {
-      const c = rgb.map(v => v / 255).map(v => v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4);
-      return .74 / (.2126 * c[0] + .7152 * c[1] + .0722 * c[2] + .05);
-    };
-    while (contrast() < minimum) rgb = rgb.map(v => Math.floor(v * .96));
-    return '#' + rgb.map(v => v.toString(16).padStart(2, '0')).join('');
-  };
-  await dr.g({themes: ['pierre-light', 'pierre-dark'], langs: []});
-  const baseTheme = dr.S.getResolvedTheme('pierre-light');
-  dr.S.registerThemeIfAbsent('t3-light', async () => ({...baseTheme, name: 't3-light',
-    settings: baseTheme.settings.map(t => ({...t, settings: {...t.settings,
-      ...(t.settings.foreground ? {foreground: readable(t.settings.foreground)} : {})}}))}));
+  const FileDiff = Object.getPrototypeOf(fd.r);
   const prefix = PREFIX_JSON, copy = COPY_JSON, unsafe = UNSAFE_JSON;
   const el = h => { const t = document.createElement('template'); t.innerHTML = h.trim(); return t.content.firstChild; };
   const known = new Set(['new', 'deleted', 'change', 'rename-pure', 'rename-changed']);
   let count = 0;
   for (const host of document.querySelectorAll('[data-patch]')) {
-    const patch = dr.c(host.dataset.patch, 'diff-panel');
+    const patch = dr.s(host.dataset.patch, 'diff-panel');
     for (const fileDiff of patch.files) {
       const collapsed = host.dataset.collapsed === '1';
-      const view = new fd.r({
-        theme: { light: 't3-light', dark: 'pierre-dark' }, themeType: dark ? 'dark' : 'light',
+      const view = new FileDiff({
+        theme: dark ? 'pierre-dark' : 't3-light', preferredHighlighter: 'highlights', themeType: dark ? 'dark' : 'light',
         diffStyle: host.dataset.style, lineDiffType: 'none', overflow: 'wrap', stickyHeaders: true,
         collapsed, unsafeCSS: unsafe,
         renderHeaderPrefix: f => el(prefix[(known.has(f.type) ? f.type : 'other') + (collapsed ? '.chevron-right' : '.chevron-down')]),
@@ -187,7 +179,7 @@ PREPARE = """(async () => { try {
     throw new Error('Empty diff render: ' + failures.join('; ') + ' ' + document.querySelector('[data-patch]').innerHTML.slice(0, 1200));
   return count + ' files rendered';
 } catch (e) { throw e; } })()"""
-PREPARE = (PREPARE.replace("DIFF_CHILDREN", diff_children).replace("DIFF_RENDERING", diff_rendering)
+PREPARE = (PREPARE.replace("DIFF_CHILDREN", diff_children).replace("DIFF_RENDERING", diff_rendering).replace("MAIN_CHUNK", main_chunk)
            .replace("PREFIX_JSON", json.dumps(PREFIX)).replace("COPY_JSON", json.dumps(COPY)).replace("UNSAFE_JSON", json.dumps(unsafe)))
 
 # Pierre lays out in the code font at --diffs-font-size, which T3 sets on the root at runtime

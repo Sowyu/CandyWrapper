@@ -67,19 +67,20 @@ FOLDER = lucide("folder", "size-4 text-icon-muted")
 PR_OPEN = lucide("git-pull-request-arrow", "size-4 shrink-0 text-emerald-600 dark:text-emerald-300/90")
 PR_MERGED = lucide("git-merge", "size-4 shrink-0 text-violet-600 dark:text-violet-300/90")
 
-# ContextChip.tsx with a kind's accent, inside the editor's node view wrapper (ComposerPromptEditorTiptap.tsx:233).
+# ContextChip.tsx:8-50 (4928) with a kind class over T3's runtime --context-chip-* colors (themePalette.ts:736, written
+# by main, which the prepare imports), inside the editor's node view wrapper (ComposerPromptEditorTiptap.tsx:233).
 CHIP = ("inline-flex max-w-full items-center gap-[0.2em] font-medium leading-[normal] text-(--context-chip-ink) "
-        "[--context-chip-ink:var(--context-chip-accent)] [--document-icon-stroke:var(--context-chip-ink)] "
+        "[--context-chip-ink:var(--context-chip-message-ink,var(--context-chip-accent))] [--document-icon-stroke:var(--context-chip-ink)] "
         "[&_svg]:block [&_svg]:size-[1em] [&_svg]:shrink-0 [&_svg]:self-center rounded-sm")
 WRAP = "relative inline-flex select-none items-center align-middle leading-none"
 def chip(accent, icon, label):
-    return (f'<span class="{WRAP}"><span class="{CHIP}" style="--context-chip-accent:{accent.replace(chr(95), chr(32))}" data-slot="context-chip">{icon}'
+    return (f'<span class="{WRAP}"><span class="{CHIP} [--context-chip-accent:var(--context-chip-{accent})]" data-slot="context-chip">{icon}'
             f'<span class="block min-w-0 self-baseline overflow-x-clip text-ellipsis whitespace-nowrap underline decoration-transparent decoration-1 underline-offset-[0.2em]" data-slot="context-chip-label">{html.escape(label)}</span></span></span>')
 SKILL_ICON = lucide("package", "", stroke="1.85")
-chips = (f'<p class="text-sm leading-relaxed text-foreground">Use {chip("oklch(0.62_0.16_322)", SKILL_ICON, "Pdf Tools")} on '
-         f'{chip("oklch(0.62_0.11_215)", pierre("typescript", ""), "api.ts")} and '
-         f'{chip("oklch(0.62_0.12_190)", lucide("messages-square", ""), "Fix login")} '
-         f'{chip("oklch(0.62_0.134_163)", lucide("git-pull-request-arrow", ""), "#42")}</p>')
+chips = (f'<p class="text-sm leading-relaxed text-foreground">Use {chip("skill", SKILL_ICON, "Pdf Tools")} on '
+         f'{chip("mention", pierre("typescript", ""), "api.ts")} and '
+         f'{chip("thread", lucide("messages-square", ""), "Fix login")} '
+         f'{chip("pr-open", lucide("git-pull-request-arrow", ""), "#42")}</p>')
 
 cases = [
     {"name": "slash", "html": menu([
@@ -105,8 +106,13 @@ cases = [
     {"name": "empty", "html": empty("No matching files or folders."), "native": {"case": "empty"}},
     {"name": "chips", "html": chips, "native": {"case": "chips"}, "wrapperStyle": "display:block;width:560px"},
 ]
-PREPARE = "(document.querySelectorAll('svg[data-light]').forEach(s => s.style.color = document.documentElement.classList.contains('dark') ? s.dataset.dark : s.dataset.light), 'ok')"
-spec = {"sourceVersion": "v0.1.4-nightly.20261028.3824", "component": "composer-menu", "source": "apps/web/src/components/chat/ComposerCommandMenu.tsx, ContextChip.tsx",
+import glob
+MAIN_CHUNK = glob.glob(os.path.expanduser("~/CandyWrapper-research/t3-client-assets/main-*.js"))[0]
+# The stored appearance mode keeps the dark page dark when main applies its palette (useTheme.ts:162-172).
+PREPARE = ("(document.querySelectorAll('svg[data-light]').forEach(s => s.style.color = document.documentElement.classList.contains('dark') ? s.dataset.dark : s.dataset.light), "
+           "localStorage.setItem('t3code:theme-appearance-mode', document.documentElement.classList.contains('dark') ? 'dark' : 'light'), "
+           f"import('file://{MAIN_CHUNK}').then(() => new Promise(r => setTimeout(r, 300))).then(() => 'ok'))")
+spec = {"sourceVersion": "v0.1.11-nightly.20261119.4928", "component": "composer-menu", "source": "apps/web/src/components/chat/ComposerCommandMenu.tsx, ContextChip.tsx",
         "states": ["rest"], "themes": ["light", "dark"], "prepare": PREPARE,
         "cases": [dict({"wrapperStyle": "display:block;width:692px"}, **c) for c in cases]}
 with open(os.path.join(ROOT, "design/component-reference/composer-menu.json"), "w") as f:

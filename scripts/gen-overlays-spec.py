@@ -39,7 +39,7 @@ def dialog(kind, footer, panel, title=TITLE, desc=DESC):
         header_cls = "flex flex-col gap-2 p-6 text-center max-sm:pb-4 sm:text-left"
     footer_base = "flex flex-col-reverse gap-2 px-6 sm:flex-row sm:justify-end sm:rounded-b-[calc(var(--radius-2xl)-1px)]"
     footer_cls = footer_base + (" border-t bg-muted/72 py-4" if footer == "default" else (" pb-6" if kind == "alert-dialog" else " py-4"))
-    body = (f'<div class="{header_cls}" data-slot="{kind}-header"><h2 class="wrap-anywhere font-semibold text-xl leading-none" data-slot="{kind}-title">{title}</h2>'
+    body = (f'<div class="{header_cls}" data-slot="{kind}-header"><h2 class="wrap-anywhere font-semibold text-xl leading-snug" data-slot="{kind}-title">{title}</h2>'
             f'<p class="text-muted-foreground text-sm" data-slot="{kind}-description">{desc}</p></div>')
     if panel:
         body += (f'<div class="space-y-4 p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-header])]:pt-1 in-[[data-slot=dialog-popup]:has([data-slot=dialog-footer]:not(.border-t))]:pb-1" data-slot="dialog-panel">'
@@ -67,7 +67,7 @@ INSET = "before:hidden sm:rounded-2xl sm:border sm:before:rounded-[calc(var(--ra
 S_TITLE, S_DESC = "Thread settings", "Model, runtime and worktree for this thread."
 def sheet(side, inset):
     head = (f'<div class="flex flex-col gap-2 p-6 in-[[data-slot=sheet-popup]:has([data-slot=sheet-panel])]:pb-3 max-sm:pb-4" data-slot="sheet-header">'
-            f'<h2 class="font-semibold text-xl leading-none" data-slot="sheet-title">{S_TITLE}</h2><p class="text-muted-foreground text-sm" data-slot="sheet-description">{S_DESC}</p></div>')
+            f'<h2 class="font-semibold text-xl leading-snug" data-slot="sheet-title">{S_TITLE}</h2><p class="text-muted-foreground text-sm" data-slot="sheet-description">{S_DESC}</p></div>')
     return f'<div role="dialog" data-slot="sheet-popup" class="{SHEET} {SIDES[side]}{" " + INSET if inset else ""}">{head}{CLOSE}</div>'
 specs["sheet"] = {"source": "apps/web/src/components/ui/sheet.tsx", "cases": [
     {"name": f"{side}{'.inset' if inset else ''}", "html": sheet(side, inset),

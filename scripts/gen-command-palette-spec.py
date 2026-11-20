@@ -32,7 +32,7 @@ ADDON = ("[&_svg]:-mx-0.5 pointer-events-none has-[button]:pointer-events-auto a
 PANEL = "relative min-h-0 overflow-hidden rounded-t-xl bg-transparent max-h-[min(28rem,70vh)]"
 FOOTER = ("relative flex items-center justify-between gap-2 rounded-b-[calc(var(--radius-2xl)-1px)] border-t border-foreground/[0.07] bg-foreground/[0.025] px-[var(--command-content-inset)] py-2.5 font-medium text-sm text-muted-foreground "
           "[&_[data-slot=kbd-group]]:font-sans [&_[data-slot=kbd]]:bg-foreground/[0.08] [&_[data-slot=kbd]]:text-foreground [&_[data-slot=kbd]]:ring-0")
-KBD = "pointer-events-none inline-flex h-5 min-w-5 select-none items-center justify-center gap-1 rounded bg-foreground/[0.07] px-1 font-medium font-sans text-muted-foreground text-xs [&_svg:not([class*='size-'])]:size-3"
+KBD = "pointer-events-none inline-flex h-5 min-w-5 select-none items-center justify-center gap-1 rounded px-1 font-medium font-sans text-muted-foreground text-xs [&_svg:not([class*='size-'])]:size-3 bg-foreground/[0.07]"
 ITEM = ("flex min-h-8 select-none items-center gap-2 rounded-sm px-2 text-base outline-none data-disabled:pointer-events-none data-disabled:opacity-64 sm:min-h-7 sm:text-sm [&_svg:not([class*='text-'])]:text-muted-foreground "
         "py-1.5 cursor-pointer hover:bg-transparent hover:text-inherit")
 LABEL = "px-2 py-1.5 font-medium text-muted-foreground text-xs"
@@ -69,7 +69,7 @@ def results(groups):
     for i, (label, items) in enumerate(groups):
         rows += f'<div class="{"pt-1.5" if i else ""}"><div class="{LABEL}" data-slot="command-group-label">{label}</div></div>' + "".join(items)
     return ('<div class="flex max-h-[inherit] flex-col size-full min-w-0" data-slot="command-list">'
-            f'<div class="min-h-0 scroll-py-6 overflow-x-hidden overscroll-y-contain py-2"><div class="px-2">{rows}</div></div></div>')
+            f'<div class="min-h-0 scroll-py-6 overflow-x-hidden overscroll-y-contain [&::-webkit-scrollbar-track]:my-2" style="padding-top:8px;padding-bottom:8px"><div class="px-2">{rows}</div></div></div>')
 
 def footer(back, action="Select", trailing=""):
     def hint(keys, text):

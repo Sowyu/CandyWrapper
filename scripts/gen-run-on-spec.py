@@ -66,7 +66,7 @@ def cn_strings(src, start, end):
     body = src[src.index(start):src.index(end, src.index(start))]
     return " ".join(re.findall(r'"([^"]*)"', body))
 
-surface = subprocess.check_output(["git", "-C", os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(T3)))), "show", "v0.1.4-nightly.20261028.3824:apps/web/src/components/chat/ComposerSurface.tsx"], text=True)
+surface = subprocess.check_output(["git", "-C", os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(T3)))), "show", "v0.1.11-nightly.20261119.4928:apps/web/src/components/chat/ComposerSurface.tsx"], text=True)
 SHELL = cn_strings(surface, '"@container/composer-surface', "className,\n")
 OUTLINE = cn_strings(surface, "const outlineClasses", ";\n")
 SEAM = ""
@@ -91,7 +91,7 @@ cases = [
     {"name": "popup.remote", "html": popup(ENVS, "env2"), "native": {"kind": "popup", "selected": "env2"}},
     {"name": "strip.remote", "html": strip("server", "sandbox-env2"), "native": {"kind": "strip", "selected": "env2"}},
 ]
-spec = {"sourceVersion": "v0.1.4-nightly.20261028.3824", "component": "run-on", "states": ["rest", "hover"], "themes": ["light", "dark"], "cases": cases}
+spec = {"sourceVersion": "v0.1.11-nightly.20261119.4928", "component": "run-on", "states": ["rest", "hover"], "themes": ["light", "dark"], "cases": cases}
 with open(os.path.join(ROOT, "design/component-reference/run-on.json"), "w") as f:
     json.dump(spec, f, indent=1, ensure_ascii=False)
 print(f"wrote {len(cases)} cases")

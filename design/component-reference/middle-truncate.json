@@ -11,7 +11,7 @@
  "cases": [
   {
    "name": "path",
-   "html": "<span class=\"inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground\" title=\"/Users/mrm/Projects/candywrapper/Sources/ScrollAreaView.swift\"><span class=\"peer min-w-0 overflow-hidden\">/Users/mrm/Projects/candywrapper/Sources/ScrollAreaView.</span><span class=\"shrink-0 peer-data-overflow:before:content-['\u2026']\">swift</span></span>",
+   "html": "<span class=\"inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground\" title=\"/Users/mrm/Projects/candywrapper/Sources/ScrollAreaView.swift\"><span class=\"peer min-w-0 overflow-hidden whitespace-pre\">/Users/mrm/Projects/candywrapper/Sources/ScrollAreaView.</span><span class=\"shrink-0 whitespace-pre peer-data-overflow:before:content-['\u2026']\">swift</span></span>",
    "wrapperStyle": "display:flex;width:180px",
    "native": {
     "value": "/Users/mrm/Projects/candywrapper/Sources/ScrollAreaView.swift"
@@ -19,7 +19,7 @@
   },
   {
    "name": "branch",
-   "html": "<span class=\"inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground\" title=\"fix/cache-main-20260918-180825\"><span class=\"peer min-w-0 overflow-hidden\">fix/cache-main-20260918-</span><span class=\"shrink-0 peer-data-overflow:before:content-['\u2026']\">180825</span></span>",
+   "html": "<span class=\"inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground\" title=\"fix/cache-main-20260918-180825\"><span class=\"peer min-w-0 overflow-hidden whitespace-pre\">fix/cache-main-20260918-</span><span class=\"shrink-0 whitespace-pre peer-data-overflow:before:content-['\u2026']\">180825</span></span>",
    "wrapperStyle": "display:flex;width:180px",
    "native": {
     "value": "fix/cache-main-20260918-180825"
@@ -27,7 +27,7 @@
   },
   {
    "name": "sha-long",
-   "html": "<span class=\"inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground\" title=\"t3code-worktree-3b6af0b2c41d9e\"><span class=\"peer min-w-0 overflow-hidden\">t3code-worktree-</span><span class=\"shrink-0 peer-data-overflow:before:content-['\u2026']\">3b6af0b2c41d9e</span></span>",
+   "html": "<span class=\"inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap text-sm text-foreground\" title=\"t3code-worktree-3b6af0b2c41d9e\"><span class=\"peer min-w-0 overflow-hidden whitespace-pre\">t3code-worktree-</span><span class=\"shrink-0 whitespace-pre peer-data-overflow:before:content-['\u2026']\">3b6af0b2c41d9e</span></span>",
    "wrapperStyle": "display:flex;width:180px",
    "native": {
     "value": "t3code-worktree-3b6af0b2c41d9e"

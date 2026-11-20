@@ -4,7 +4,7 @@ Each case pairs a markdown source (`native.markdown`, what MarkdownView renders)
 T3's ChatMarkdown renders for it: react-markdown's tags plus the component overrides and class strings
 in apps/web/src/components/ChatMarkdown.tsx at the tag in T3_VERSION (code block frame, alerts, table
 container, image slot, task list inputs). Code blocks are highlighted in the page by T3's own bundled
-Shiki (getSharedHighlighter from the installed client's diffRendering chunk, pierre-light and
+Highlights highlighter (getSharedHighlighter from the 4928 client's main chunk, t3-light and
 pierre-dark), through the spec's `prepare` hook, so the token colors are T3's.
 
 Deviations from T3, on both sides of the comparison:
@@ -15,12 +15,13 @@ Deviations from T3, on both sides of the comparison:
 - `--font-size-code` is set to 13px, the default that T3 writes on the root at runtime (appearanceFonts.ts).
 
 Usage: /usr/bin/python3 -I scripts/gen-markdown-spec.py
-Needs the installed T3 app (for its client assets) and lucide-static (for icon markup).
+Needs the 4928 client assets in ~/CandyWrapper-research/t3-client-assets (a copy of the runtime's
+client/assets) and lucide-static 0.564.0 under ~/CandyWrapper-research/downloads.
 """
 import glob, html, json, os, struct
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RESEARCH = os.environ.get("CANDY_RESEARCH") or os.path.join(os.path.dirname(ROOT), "CandyWrapper-research")
+RESEARCH = os.environ.get("CANDY_RESEARCH") or os.path.expanduser("~/CandyWrapper-research")
 ASAR = os.path.join(RESEARCH, "apps/T3 Code (Nightly).app/Contents/Resources/app.asar")
 LUCIDE = os.path.join(RESEARCH, "downloads/lucide-static-0.564.0/package/icons")
 ASSETS = os.path.join(RESEARCH, "t3-client-assets")  # outside the repo, re-extracted when missing
@@ -79,7 +80,8 @@ def code_block(language, code):
     actions = (button("secondary", "text-wrap", ' aria-pressed="true" aria-label="Disable line wrap"')
                + button("ghost-muted", "copy", ' aria-label="Copy code"'))
     return (
-        '<div class="chat-markdown-codeblock my-[0.65rem] overflow-hidden rounded-lg border border-border/70 bg-secondary '
+        # MarkdownCodeBlockFrame, chat/MarkdownCodeBlock.tsx:64-70 (4928).
+        '<div dir="ltr" class="chat-markdown-codeblock my-[0.65rem] text-start overflow-hidden rounded-lg border border-border/70 bg-secondary '
         f'leading-snug dark:border-transparent dark:bg-input/32" data-language="{language}" data-wrap="true">'
         '<div data-thread-find-ignore="true" class="chat-markdown-codeblock-header flex items-center justify-between gap-2 pt-1.5 pr-1.5 pb-0 pl-3 select-none">'
         f'<span class="inline-flex min-w-0 items-center gap-1.5 font-mono text-2xs">{code_title(language)}</span>'
@@ -87,6 +89,8 @@ def code_block(language, code):
         f'<div class="chat-markdown-shiki"><pre data-shiki-lang="{language}" data-code="{html.escape(code + chr(10))}"></pre></div></div>')
 
 ALERTS = {
+    # ChatMarkdown.tsx:377-382 (4928): Claude's insight fence renders as this callout.
+    "insight": ("Insight", "star", "border-info", "text-info"),
     "note": ("Note", "info", "border-blue-500/70", "text-blue-600 dark:text-blue-400"),
     "tip": ("Tip", "lightbulb", "border-emerald-500/70", "text-emerald-600 dark:text-emerald-400"),
     "important": ("Important", "message-square-warning", "border-purple-500/70", "text-purple-600 dark:text-purple-400"),
@@ -95,8 +99,9 @@ ALERTS = {
 }
 def alert(kind, body):
     label, icon, border, title = ALERTS[kind]
-    return (f'<div role="note" class="my-1 border-l-2 pl-3 {border}">'
-            f'<p data-thread-find-ignore="true" class="flex items-center gap-1.5 font-medium {title}">{lucide(icon, "size-3.5 shrink-0")}{label}</p>\n'
+    # ChatMarkdown.tsx:1121-1142 (4928): logical border and padding, data-markdown-alert attributes.
+    return (f'<div role="note" data-markdown-alert="{kind}" class="my-1 border-s-2 ps-3 {border}">'
+            f'<p data-thread-find-ignore="true" data-markdown-alert-label="" class="flex items-center gap-1.5 font-medium {title}">{lucide(icon, "size-3.5 shrink-0")}{label}</p>\n'
             f'<p>{body}</p>\n</div>')
 
 TABLE_VIEWPORT = ("h-full max-h-[inherit] overflow-auto overscroll-contain rounded-[inherit] outline-none transition-shadow "
@@ -211,6 +216,13 @@ soft line break as a space.</p>
 """ + "\n".join(alert(k, b) for k, b in [("note", "Useful information."), ("tip", "A better way to do it."),
     ("important", "Key information."), ("warning", "Needs attention."), ("caution", "Risky outcome.")]))
 
+# The insight callout (#22239): remarkAssistantInsights turns Claude's ★ Insight fence into an alert
+# (markdownStreamBlocks.ts:9-11, ChatMarkdown.tsx:377-382).
+case("insight", """`★ Insight ─────────────────────────────────────`
+Caching the parsed config saves one disk read per request.
+`─────────────────────────────────────────────────`""",
+alert("insight", "Caching the parsed config saves one disk read per request."))
+
 case("table", """| Process | Status | CPU | Notes |
 |---|:---:|---:|:---|
 | t3 serve | running | 0.4% | idle most of the time |
@@ -265,14 +277,15 @@ After the rule, an image:
 <p>After the rule, an image:</p>
 <p><span class="inline-block! aspect-video w-full overflow-hidden bg-muted/60 max-w-[min(100%,30rem)] rounded-lg border border-border/40 relative" role="status" aria-label="Loading image"></span></p>""")
 
-# File chips: MarkdownFileLink renders a ContextChip kind="mention" (ContextChip.tsx) around FileTagChipContent
+# File chips: MarkdownFileLink renders a ContextChip kind="mention" with dir=ltr (MarkdownFileLink.tsx:333-373 at 4928;
+# the mention color is T3's runtime --context-chip-mention, which main writes) around FileTagChipContent
 # (chat/FileTagChip.tsx): lucide folder at text-icon-muted for paths without an extension, else the pierre icon
 # tinted per theme (PierreEntryIcon.tsx; the prepare hook below picks the theme's color).
 CHIP = ("inline-flex max-w-full items-center gap-[0.2em] font-medium leading-[normal] text-(--context-chip-ink) "
-        "[--context-chip-ink:var(--context-chip-accent)] [--document-icon-stroke:var(--context-chip-ink)] "
+        "[--context-chip-ink:var(--context-chip-message-ink,var(--context-chip-accent))] [--document-icon-stroke:var(--context-chip-ink)] "
         "[&_svg]:block [&_svg]:size-[1em] [&_svg]:shrink-0 [&_svg]:self-center "
         "[button&,a&,[data-popup-open]&]:cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 "
-        "focus-visible:outline-current rounded-sm disabled:cursor-default [--context-chip-accent:oklch(0.62_0.11_215)] chat-markdown-file-link")
+        "focus-visible:outline-current rounded-sm disabled:cursor-default [--context-chip-accent:var(--context-chip-mention)] chat-markdown-file-link")
 
 extract_assets()
 PIERRE = open(glob.glob(os.path.join(ASSETS, "pierre-icons-*.js"))[0], encoding="utf-8").read()
@@ -284,7 +297,7 @@ def pierre(token):
     return (f'<svg aria-hidden="true" data-light="{light}" data-dark="{dark}" class="size-4 shrink-0" '
             f'viewBox="{m.group(1)}">{m.group(2)}</svg>')
 def chip(href, icon, label):
-    return (f'<a href="{html.escape(href)}" class="{CHIP}" data-slot="context-chip">{icon}'
+    return (f'<a href="{html.escape(href)}" dir="ltr" class="{CHIP}" data-slot="context-chip">{icon}'
             f'<span class="block min-w-0 self-baseline overflow-x-clip text-ellipsis whitespace-nowrap underline decoration-transparent decoration-1 underline-offset-[0.2em]" data-slot="context-chip-label">{html.escape(label)}</span></a>')
 FOLDER = lucide("folder", "size-4 text-icon-muted")
 
@@ -295,12 +308,17 @@ f"""<p>Created {chip("/tmp/cw-approval-demo", FOLDER, "cw-approval-demo")}.</p>
 <p>The entry point is {chip("/repo/src/main.ts:12", pierre("typescript"), "main.ts · L12")}, see <span>the manifest {chip("/repo/package.json", pierre("npm"), "package.json")}</span> and run <code>npm test</code> before you ship it.</p>""",
 cwd="/repo")
 
-diff_rendering = glob.glob(os.path.join(ASSETS, "diffRendering-*.js"))[0]
-# getSharedHighlighter is exported as `g` from the diffRendering chunk at this T3 version.
-PREPARE = f"""(document.querySelectorAll('svg[data-light]').forEach(s => s.style.color = document.documentElement.classList.contains('dark') ? s.dataset.dark : s.dataset.light), import('file://{diff_rendering}')).then(async m => {{
+main_chunk = glob.glob(os.path.join(ASSETS, "main-*.js"))[0]
+# Nightly 4928: main `eo` is pierre's getSharedHighlighter. A finished block renders
+# highlighter.codeToHtml(code, {lang, theme}) (chat/MarkdownCodeBlock.tsx:353-357) with the Highlights
+# highlighter and DIFF_THEME_NAMES (syntaxHighlighting.ts:26-35, diffRendering.ts:10-13). Importing
+# main registers t3-light (readableSyntaxTheme.ts:68).
+# useTheme.ts:162-172: the stored appearance mode decides which palette main applies to the root, so
+# it is set before the import. Without it main switches a dark page to light.
+PREPARE = f"""(document.querySelectorAll('svg[data-light]').forEach(s => s.style.color = document.documentElement.classList.contains('dark') ? s.dataset.dark : s.dataset.light), localStorage.setItem('t3code:theme-appearance-mode', document.documentElement.classList.contains('dark') ? 'dark' : 'light'), import('file://{main_chunk}')).then(async m => {{
   const pres = [...document.querySelectorAll('pre[data-shiki-lang]')];
-  const h = await m.g({{themes: ['pierre-light', 'pierre-dark'], langs: [...new Set(pres.map(p => p.dataset.shikiLang))], preferredHighlighter: 'shiki-wasm'}});
-  const theme = document.documentElement.classList.contains('dark') ? 'pierre-dark' : 'pierre-light';
+  const h = await m.eo({{themes: ['t3-light', 'pierre-dark'], langs: [...new Set(pres.map(p => p.dataset.shikiLang))], preferredHighlighter: 'highlights'}});
+  const theme = document.documentElement.classList.contains('dark') ? 'pierre-dark' : 't3-light';
   for (const pre of pres) pre.outerHTML = h.codeToHtml(pre.dataset.code, {{lang: pre.dataset.shikiLang, theme}});
   return pres.length + ' code blocks highlighted';
 }})"""

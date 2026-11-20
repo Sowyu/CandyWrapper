@@ -60,9 +60,9 @@ LAYERS = button("ghost-muted", "icon-micro", lucide("layers", "size-3"))
 
 def row(title, desc, control, server=False, desc_html=None, title_html=None):
     spans = (SPAN.format(LAYERS).replace('class="inline-flex', 'class="opacity-0 inline-flex', 1) if server else "") + SPAN.format("")
-    d = desc_html if desc_html is not None else f'<p class="max-w-2xl text-balance text-xs leading-normal text-muted-foreground">{desc}</p>'
+    d = desc_html if desc_html is not None else f'<p class="max-w-2xl text-pretty text-xs leading-normal text-muted-foreground">{desc}</p>'
     return (f'<div data-slot="settings-row" class="{ROW}"><div class="flex flex-col gap-3 @min-[32rem]/settings-row:grid '
-            '@min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">'
+            '@min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_auto] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">'
             f'<div class="min-w-0 flex-1 space-y-1"><div class="flex min-h-5 items-center gap-1.5"><h3 class="text-sm font-medium text-foreground">{title_html or title}</h3>'
             f'{spans}</div>{d}</div>'
             f'<div class="flex w-full min-w-0 shrink-0 items-center gap-2 @min-[32rem]/settings-row:w-auto @min-[32rem]/settings-row:justify-end">{control}</div></div></div>')
@@ -74,7 +74,7 @@ def select(value, width_cls):
 
 
 def section(title, rows):
-    return (f'<section class="space-y-2.5"><div class="flex min-h-7 items-start justify-between gap-4 px-3 sm:px-4">'
+    return (f'<section class="space-y-2.5"><div class="flex min-h-7 flex-wrap items-start justify-between gap-x-4 gap-y-1 px-3 sm:px-4">'
             f'<div class="flex min-w-0 items-center gap-1"><h2 class="flex min-h-7 items-center gap-2 text-base font-semibold text-foreground">{title}</h2></div>'
             f'<div class="flex min-h-7 min-w-7 items-center justify-end"></div></div><div class="{GROUP}">{rows}</div></section>')
 
@@ -98,7 +98,7 @@ def kbds(parts):
 def binding(label, parts, when):
     variant = "ghost" if when else "ghost-muted"
     trigger = button(variant, "micro", f'<span class="truncate font-mono">{when or "Always"}</span>{lucide("chevron-down", "size-3.5 shrink-0 opacity-60")}', "min-w-0 shrink")
-    desc = ('<p class="max-w-2xl text-balance text-xs leading-normal text-muted-foreground"><span class="flex h-6 items-center gap-1.5">'
+    desc = ('<p class="max-w-2xl text-pretty text-xs leading-normal text-muted-foreground"><span class="flex h-6 items-center gap-1.5">'
             f'<span class="text-xs leading-none text-muted-foreground/70">When</span>{trigger}</span></p>')
     control = ('<div class="flex flex-wrap items-center justify-end gap-1.5"><span class="flex items-center opacity-0"></span>'
                f'<button type="button" class="{PILL}">{kbds(parts)}</button></div>')

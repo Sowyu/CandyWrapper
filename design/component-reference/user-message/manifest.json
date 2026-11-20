@@ -1,0 +1,30 @@
+{
+  "burst" : {
+    "height" : 97.5,
+    "width" : 640
+  },
+  "file-card" : {
+    "height" : 52,
+    "width" : 640
+  },
+  "media.above-text" : {
+    "height" : 242.75,
+    "width" : 640
+  },
+  "media.collage" : {
+    "height" : 192,
+    "width" : 640
+  },
+  "media.image-only" : {
+    "height" : 192,
+    "width" : 640
+  },
+  "model-switch" : {
+    "height" : 40,
+    "width" : 640
+  },
+  "quote-card" : {
+    "height" : 104.75,
+    "width" : 640
+  }
+}

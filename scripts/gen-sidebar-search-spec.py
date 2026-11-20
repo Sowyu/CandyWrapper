@@ -85,7 +85,8 @@ def status(text, search):
     return f'<div class="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">{text}</div>'
 
 # The scope popup (Sidebar.tsx:5035-5120) built from combobox.tsx:109-237 and input.tsx, at a fixed 200px width.
-ITEM = "flex min-h-8 in-data-[side=none]:min-w-[calc(var(--anchor-width)+1.25rem)] cursor-pointer items-center rounded-sm px-2 py-1 text-base outline-none not-data-disabled:hover:bg-foreground/[0.09] data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-selected:bg-foreground/[0.06] data-selected:text-foreground data-highlighted:bg-foreground/[0.09] data-highlighted:text-accent-foreground [&[data-highlighted][data-selected]]:bg-foreground/[0.09] [&[data-highlighted][data-selected]]:text-accent-foreground data-disabled:opacity-64 sm:min-h-7 sm:text-sm [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+# combobox.tsx:199-205 (4928): the selected fill is the default selectedFill class.
+ITEM = "flex min-h-8 in-data-[side=none]:min-w-[calc(var(--anchor-width)+1.25rem)] cursor-pointer items-center rounded-sm px-2 py-1 text-base outline-none not-data-disabled:hover:bg-foreground/[0.09] data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-selected:text-foreground data-highlighted:bg-foreground/[0.09] data-highlighted:text-accent-foreground [&[data-highlighted][data-selected]]:bg-foreground/[0.09] [&[data-highlighted][data-selected]]:text-accent-foreground data-disabled:opacity-64 sm:min-h-7 sm:text-sm [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0 data-selected:bg-foreground/[0.06]"
 # button.tsx base + ghost-muted + icon-xs (as in scripts/gen-button-spec.py), then the row's `ml-auto`.
 GHOST_MUTED_ICON_XS = ("[--control-icon-color:currentColor] [&_svg]:-mx-0.5 relative inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[var(--control-radius)] border font-medium text-base outline-none transition-[box-shadow,scale] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--control-radius)-1px)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background sm:text-sm [&_svg:not([class*='text-'])]:text-[var(--control-icon-color)] [&_svg]:pointer-events-none [&_svg]:shrink-0 "
                        "border-transparent text-muted-foreground data-pressed:bg-accent [:hover,[data-pressed]]:bg-accent [:hover,[data-pressed]]:text-foreground "
@@ -113,8 +114,8 @@ def scope_popup(query, items):
     body = "".join(items) if items else ""
     lst = (f'<div class="not-empty:scroll-py-1 not-empty:px-1 not-empty:py-1" data-slot="combobox-list">{body}</div>' if items
            else '<div class="not-empty:p-2 text-center text-base text-muted-foreground sm:text-sm" data-slot="combobox-empty">No matching projects.</div>')
-    return ('<span class="dropdown-glass relative flex max-h-full origin-(--transform-origin) rounded-lg shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)] max-w-[min(18rem,var(--available-width))] overflow-hidden" style="width:200px">'
-            f'<div class="flex min-w-0 max-h-[min(var(--available-height),23rem)] flex-1 flex-col overflow-hidden text-foreground" data-slot="combobox-popup">{search}{lst}</div></span>')
+    return ('<span class="dropdown-glass relative flex max-h-full origin-(--transform-origin) rounded-lg shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)] w-[min(18rem,var(--available-width))] overflow-hidden" style="width:200px">'
+            f'<div class="flex min-w-0 max-h-[min(var(--available-height),23rem)] flex-1 flex-col overflow-hidden text-foreground [-webkit-app-region:no-drag]" data-slot="combobox-popup">{search}{lst}</div></span>')
 
 cases = []
 def add(name, html, native, box=True, target=None):

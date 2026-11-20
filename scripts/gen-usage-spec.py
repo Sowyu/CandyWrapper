@@ -154,13 +154,13 @@ MORE = button("ghost", "icon-sm", lucide("ellipsis", "size-4"))
 
 
 def task_row(title, prompt, status, badge, enabled):
-    desc = (f'<p class="max-w-2xl text-balance text-xs leading-normal text-muted-foreground"><span class="line-clamp-2">{prompt}</span></p>'
+    desc = (f'<p class="max-w-2xl text-pretty text-xs leading-normal text-muted-foreground"><span class="line-clamp-2">{prompt}</span></p>'
             f'<div class="pt-0.5 text-xs text-muted-foreground"><div class="flex flex-wrap items-center gap-2"><span>{status}</span>{badge}</div></div>')
     return row(title, "", f'<div class="flex items-center gap-2">{switch("default", "on" if enabled else "off", False)}{MORE}</div>', desc_html=desc)
 
 
 NEW_TASK = button("ghost-muted", "xs", lucide("plus", "size-3") + "New task")
-tasks = ('<section class="space-y-2.5"><div class="flex min-h-7 items-start justify-between gap-4 px-3 sm:px-4">'
+tasks = ('<section class="space-y-2.5"><div class="flex min-h-7 flex-wrap items-start justify-between gap-x-4 gap-y-1 px-3 sm:px-4">'
          '<div class="flex min-w-0 items-center gap-1"><h2 class="flex min-h-7 items-center gap-2 text-base font-semibold text-foreground">Scheduled tasks</h2></div>'
          f'<div class="flex min-h-7 min-w-7 items-center justify-end">{NEW_TASK}</div></div>'
          '<div class="relative overflow-visible text-foreground space-y-1"><div class="space-y-8"><section><h2 class="sr-only">host</h2>'
