@@ -403,6 +403,7 @@ final class ThreadController {
     private(set) var automations: ThreadAutomationsController!
     private var checkoutStatus: SidebarCheckoutStatus!
     private(set) var lineage: ThreadLineageController!
+    private(set) var sideChats: SideChatController!
     /// Signed inline URLs of HTML renders and MCP Apps, by attachment id.
     private var webAssets: [String: (url: URL, expires: Date)] = [:]
     /// Runs whose Retry is in flight: one retry per failed run (ChatView.tsx:4047-4058).
@@ -468,6 +469,7 @@ final class ThreadController {
         addToMachine = AddProjectToMachineController(panel: panel, sidebar: sidebar, environments: environments, composer: composer, clones: clones)
         composer.onTargetChange = { [weak self] in
             self?.hideNoActiveThread(); self?.git.refresh(); self?.automations.sync(); self?.clones.syncBanner(); self?.updateServerUpdateNotice()
+            self?.sideChats?.sync()
             self?.onRouteChange?()
         }
         // The hover card's provider row (Sidebar.tsx:1354-1369, 466-469): the model's trigger label, with the
@@ -494,6 +496,8 @@ final class ThreadController {
             if sidebar.state.hiddenThreadTags[env] != tags { sidebar.state.hiddenThreadTags[env] = tags }
         }
         lineage = ThreadLineageController(panel: panel)
+        sideChats = SideChatController(panel: panel, sidebar: sidebar, environments: environments, composer: composer)
+        sideChats.parentId = { [weak self] in self?.openThreadId }
         gallery = ThreadImageGalleryController(pill: panel.header.pill)
         gallery.onOpen = { [weak self] in self?.readSubagentCosts() }
         gallery.onOpenInThread = { [weak self] image in
@@ -1045,6 +1049,13 @@ final class ThreadController {
     var opensElsewhere: ((ThreadId) -> Bool)?
 
     func open(_ id: ThreadId, force: Bool = false) {
+        // A side chat opens as its parent with its tab shown (`resolveThreadOpenRoute`, lib/sideChatPane.ts:22-35).
+        let route = SideChats.openRoute(id, shell: sidebar?.snapshot?.threads.first { $0.id == id })
+        if let side = route.sideChat {
+            open(route.open, force: force)
+            if openThreadId == route.open { panel.mutatePanel { $0.openSideChat(side.localId); return [] } }
+            return
+        }
         panel.model.environmentId = id.environmentId
         // A forced open reloads the thread already showing, as after a reconnect.
         if !force, opensElsewhere?(id) == true { return }
@@ -1652,6 +1663,7 @@ final class ThreadController {
         scripts.refresh()
         pullRequests.sync()
         lineage.sync()
+        sideChats.sync()
         if let perf = perfOpen {
             perfOpen = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + perf.delay) { [weak self] in

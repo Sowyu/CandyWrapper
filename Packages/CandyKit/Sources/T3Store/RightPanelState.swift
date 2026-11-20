@@ -26,6 +26,8 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
     /// `attachment:<id>`: a sent file shown with `AttachmentFilePreview` (rightPanelStore.ts:237-244, a `file`
     /// surface carrying the attachment).
     case attachment(SentAttachmentSurface)
+    /// `side-chat:<threadId>`: a side chat of this thread (4928 rightPanelStore.ts:99), the local thread id.
+    case sideChat(ThreadId)
 
     public var id: String {
         switch self {
@@ -40,10 +42,11 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         case .browser(let tabId): "browser:" + (tabId ?? "new")
         case .terminal(let t): "terminal:" + t.resourceId
         case .attachment(let a): "attachment:" + a.id
+        case .sideChat(let t): "side-chat:" + t.rawValue
         }
     }
 
-    public enum Kind: String, Sendable { case diff, files, file, pullRequest, pullRequests, issue, browser, terminal, device }
+    public enum Kind: String, Sendable { case diff, files, file, pullRequest, pullRequests, issue, browser, terminal, device, sideChat }
     public var kind: Kind {
         switch self {
         case .device, .deviceTarget: .device
@@ -55,6 +58,7 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         case .issue: .issue
         case .browser: .browser
         case .terminal: .terminal
+        case .sideChat: .sideChat
         }
     }
 
@@ -77,6 +81,8 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         // The app shows the server's label for the active terminal when it knows one.
         case .terminal(let t): return TerminalLabels.label(t.activeTerminalId)
         case .attachment(let a): return a.name
+        // The tab shows the side chat's own title once its shell is known (RightPanelTabs.tsx:615-616, :968).
+        case .sideChat: return "Side chat"
         }
     }
 
@@ -105,6 +111,10 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
 
     public var issue: IssueSurfaceTarget? {
         if case .issue(let target) = self { return target }
+        return nil
+    }
+    public var sideChatThreadId: ThreadId? {
+        if case .sideChat(let t) = self { return t }
         return nil
     }
     public var terminal: TerminalPanelSurface? {
@@ -240,6 +250,11 @@ public struct RightPanelState: Codable, Sendable, Equatable {
         if activate { activeSurfaceId = surface.id }
     }
 
+    /// `openSideChat` (rightPanelStore.ts:819-823): the side chat's tab, added at the end and shown.
+    public mutating func openSideChat(_ threadId: ThreadId) {
+        upsert(.sideChat(threadId))
+    }
+
     public mutating func openDevice(_ target: DevicePanelSurface) {
         let surface = RightPanelSurface.deviceTarget(target)
         let existing = surfaces.first { $0.id == surface.id }
@@ -263,7 +278,7 @@ public struct RightPanelState: Codable, Sendable, Equatable {
         case .files: upsert(.files)
         case .pullRequests: upsert(.pullRequests)
         case .browser: upsert(surfaces.first { $0.kind == .browser } ?? .browser(tabId: nil))
-        case .file, .pullRequest, .issue, .terminal: break
+        case .file, .pullRequest, .issue, .terminal, .sideChat: break
         }
     }
 
@@ -514,6 +529,7 @@ public struct ClosedPanelTabs: Codable, Sendable, Equatable {
         case .deviceTarget: state.upsert(surface)
         case .attachment(let a): state.openAttachment(a)
         case .terminal: break
+        case .sideChat: state.upsert(surface)
         }
     }
 
