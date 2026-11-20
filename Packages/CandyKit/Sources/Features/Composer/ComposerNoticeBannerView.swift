@@ -227,6 +227,13 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         dotView?.frame = NSRect(x: 4 + 9, y: rowY + 9, width: 6, height: 6)
         var right = bounds.width - 4
         let actionViews = [dismiss].filter { !$0.isHidden } + buttons.reversed()
+        // The last action's hover takes the card's corner: its top unless joined to a banner above, and a detached
+        // card's bottom too (ComposerBanner.tsx at 4928, #29018). Redesign's pills keep their own shape.
+        for b in actionViews { b.cornerRadii = nil }
+        if let last = actionViews.first, !ditherFloating {
+            let top: CGFloat = joinsAbove && placement == .attached ? 0 : 12
+            last.cornerRadii = (0, top, 0, placement == .floating ? 12 : 0)
+        }
         for b in actionViews {
             let s = b.intrinsicContentSize
             right -= s.width
